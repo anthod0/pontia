@@ -69,6 +69,12 @@ impl EventIngestService {
 
         let mut tx = self.pool.begin().await?;
         let payload = serde_json::to_string(&event.payload)?;
+        let occurred_at = event
+            .occurred_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .map_err(|err| {
+                crate::error::Error::Domain(format!("invalid event timestamp: {err}"))
+            })?;
 
         sqlx::query(
             r#"INSERT INTO events
@@ -81,7 +87,7 @@ impl EventIngestService {
         .bind(event.source.to_string())
         .bind(&event.client_type)
         .bind(event.event_type.to_string())
-        .bind(event.occurred_at.to_string())
+        .bind(occurred_at)
         .bind(event.seq)
         .bind(payload)
         .execute(&mut *tx)
@@ -169,7 +175,7 @@ impl EventIngestService {
 
     pub async fn list_events(&self, session_id: &str) -> Result<Vec<DomainEvent>> {
         let rows = sqlx::query(
-            r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, seq, payload
+            r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload
                FROM events WHERE session_id = ? ORDER BY created_at, event_id"#,
         )
         .bind(session_id)
@@ -177,6 +183,52 @@ impl EventIngestService {
         .await?;
 
         rows.into_iter().map(row_to_event).collect()
+    }
+
+    pub async fn sequence_warnings(&self, event: &DomainEvent) -> Result<Vec<String>> {
+        let Some(seq) = event.seq else {
+            return Ok(Vec::new());
+        };
+
+        let max_seq: Option<i64> = sqlx::query_scalar(
+            "SELECT MAX(seq) FROM events WHERE session_id = ? AND seq IS NOT NULL",
+        )
+        .bind(&event.session_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let Some(max_seq) = max_seq else {
+            return Ok(Vec::new());
+        };
+
+        let warning = if seq <= max_seq {
+            Some(format!(
+                "non-monotonic sequence: received seq {seq} after max seq {max_seq}"
+            ))
+        } else if seq > max_seq + 1 {
+            Some(format!(
+                "sequence gap: received seq {seq} after max seq {max_seq}"
+            ))
+        } else {
+            None
+        };
+
+        Ok(warning.into_iter().collect())
+    }
+
+    pub async fn record_warnings(&self, event: &DomainEvent, warnings: &[String]) -> Result<()> {
+        for warning in warnings {
+            sqlx::query(
+                "INSERT INTO ingest_warnings (event_id, session_id, warning) VALUES (?, ?, ?)",
+            )
+            .bind(&event.event_id)
+            .bind(&event.session_id)
+            .bind(warning)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
     }
 
     async fn existing_event_state_version(
@@ -254,6 +306,7 @@ fn row_to_event(row: sqlx::sqlite::SqliteRow) -> Result<DomainEvent> {
     let payload: String = row.try_get("payload")?;
     let source: String = row.try_get("source")?;
     let event_type: String = row.try_get("event_type")?;
+    let occurred_at: String = row.try_get("occurred_at")?;
 
     Ok(DomainEvent {
         event_id: row.try_get("event_id")?,
@@ -262,7 +315,11 @@ fn row_to_event(row: sqlx::sqlite::SqliteRow) -> Result<DomainEvent> {
         source: EventSource::from_str(&source)?,
         client_type: row.try_get("client_type")?,
         event_type: EventType::from_str(&event_type)?,
-        occurred_at: crate::time::utc_now(),
+        occurred_at: time::OffsetDateTime::parse(
+            &occurred_at,
+            &time::format_description::well_known::Rfc3339,
+        )
+        .map_err(|err| crate::error::Error::Domain(format!("invalid event timestamp: {err}")))?,
         seq: row.try_get("seq")?,
         payload: serde_json::from_str(&payload)?,
     })

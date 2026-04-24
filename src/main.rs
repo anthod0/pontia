@@ -7,12 +7,12 @@ async fn main() -> llmparty::error::Result<()> {
     init_tracing();
 
     let config = AppConfig::from_env()?;
-    let _state = application::initialize(&config).await?;
+    let state = application::initialize(&config).await?;
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     info!(addr = %config.bind_addr, "starting llmparty control plane");
 
-    axum::serve(listener, http::router())
+    axum::serve(listener, http::router(state))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 

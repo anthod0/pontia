@@ -1,6 +1,6 @@
 # llmparty
 
-`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes Milestone 1: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, and reducer-driven state projections.
+`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes Milestone 2: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, reducer-driven state projections, and Internal Event API v1.
 
 ## Requirements
 
@@ -44,6 +44,25 @@ Then verify the baseline HTTP transport:
 ```bash
 curl http://127.0.0.1:8080/healthz
 # {"status":"ok"}
+```
+
+Post an internal domain event:
+
+```bash
+curl -X POST http://127.0.0.1:8080/internal/v1/events \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "event_id":"evt_example",
+    "session_id":"sess_example",
+    "turn_id":null,
+    "source":"agent_adapter",
+    "client_type":"generic",
+    "type":"session.created",
+    "time":"2026-04-24T12:00:00Z",
+    "seq":1,
+    "payload":{}
+  }'
+# {"accepted":true,"duplicate":false,"event_id":"evt_example",...}
 ```
 
 ## Project structure
