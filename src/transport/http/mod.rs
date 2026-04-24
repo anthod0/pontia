@@ -13,7 +13,10 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(health::healthz))
         .route("/internal/v1/events", post(internal::post_event))
-        .route("/external/v1/sessions", get(external::list_sessions))
+        .route(
+            "/external/v1/sessions",
+            get(external::list_sessions).post(external::create_session),
+        )
         .route(
             "/external/v1/sessions/{session_id}",
             get(external::get_session),

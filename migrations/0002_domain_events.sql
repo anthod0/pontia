@@ -75,3 +75,11 @@ CREATE TABLE ingest_warnings (
     warning TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+CREATE TABLE idempotency_keys (
+    operation TEXT NOT NULL,
+    key TEXT NOT NULL,
+    response TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY(operation, key)
+);

@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::{
-    application::{AppState, ExternalQueryService},
+    application::{AppState, CreateSessionRequest, ExternalQueryService, SessionCommandService},
     error::Error,
 };
 
@@ -23,6 +23,25 @@ pub struct ApiResponse<T: Serialize> {
 struct ApiErrorBody {
     code: &'static str,
     message: String,
+}
+
+pub async fn create_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CreateSessionRequest>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
+    let service = SessionCommandService::new(state.db);
+    let outcome = service.create_session(request, idempotency_key).await?;
+    let status = if outcome.duplicate {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    Ok((status, ok(outcome.data)).into_response())
 }
 
 pub async fn list_sessions(

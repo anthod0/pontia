@@ -1,6 +1,6 @@
 # llmparty
 
-`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes Milestone 3: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, reducer-driven state projections, Internal Event API v1, and the authenticated External API read-only query surface.
+`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes Milestone 4: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, reducer-driven state projections, Internal Event API v1, the authenticated External API query surface, and session creation/startup through a minimal generic runtime binding.
 
 ## Requirements
 
@@ -65,10 +65,17 @@ curl -X POST http://127.0.0.1:8080/internal/v1/events \
 # {"accepted":true,"duplicate":false,"event_id":"evt_example",...}
 ```
 
-Query External API state with a configured bearer token:
+Create and query External API state with a configured bearer token:
 
 ```bash
 LLMPARTY_EXTERNAL_API_TOKEN=dev-token cargo run
+curl -X POST http://127.0.0.1:8080/external/v1/sessions \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: demo-session-1' \
+  -d '{"client_type":"generic","workspace":"/repo","initial_task":{"input":"Start here"}}'
+# {"data":{"session":{...},"initial_turn":{...}},"meta":{},"error":null}
+
 curl http://127.0.0.1:8080/external/v1/sessions \
   -H 'Authorization: Bearer dev-token'
 # {"data":{"sessions":[...]},"meta":{},"error":null}

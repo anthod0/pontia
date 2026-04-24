@@ -417,6 +417,11 @@ impl ProjectionState {
             });
 
         session.state = state;
+        if event.event_type == EventType::SessionCreated
+            && let Some(metadata) = event.payload.get("metadata")
+        {
+            session.metadata = metadata.clone();
+        }
         if state.is_terminal() {
             session.current_turn_id = None;
         }
@@ -460,6 +465,11 @@ impl ProjectionState {
             });
 
         turn.state = new_state;
+        if event.event_type == EventType::TurnCreated
+            && let Some(metadata) = event.payload.get("metadata")
+        {
+            turn.metadata = metadata.clone();
+        }
         turn.state_version += 1;
 
         let session = self
