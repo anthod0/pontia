@@ -1,6 +1,6 @@
 # llmparty
 
-`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation is Milestone 0: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, and development commands.
+`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes Milestone 1: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, and reducer-driven state projections.
 
 ## Requirements
 
@@ -55,8 +55,8 @@ src/config.rs        Environment-based configuration boundary
 src/error.rs         Shared error and Result types
 src/ids.rs           UUID v7 based external ID helpers
 src/time.rs          UTC time helper boundary
-src/application/     Application use-case orchestration boundary
-src/domain/          HTTP-free domain boundary placeholder
+src/application/     Application use-case orchestration and event ingest service
+src/domain/          HTTP-free domain models and reducer
 src/storage/         SQLite / SQLx storage boundary
 src/transport/http/  Axum HTTP transport layer
 src/runtime/         Runtime control boundary placeholder
@@ -69,4 +69,4 @@ spec/                Product and architecture source-of-truth specs
 
 ## Architecture notes
 
-Axum is restricted to `src/transport/http/` and `src/main.rs`. Domain, storage, application, runtime, and adapter modules do not depend on Axum transport types. The Web UI under `apps/web/` should use the External HTTP API only. The initial migration exists to validate migration wiring; session, turn, event, and artifact tables are intentionally deferred to later milestones.
+Axum is restricted to `src/transport/http/` and `src/main.rs`. Domain, storage, application, runtime, and adapter modules do not depend on Axum transport types. The Web UI under `apps/web/` should use the External HTTP API only. Session and turn states are reducer-driven from persisted domain events; runtime bindings and artifacts are auxiliary state and do not drive the primary domain projection.
