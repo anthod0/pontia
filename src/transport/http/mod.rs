@@ -57,5 +57,9 @@ pub fn router(state: AppState) -> Router {
             "/external/v1/artifacts/{artifact_id}",
             get(external::get_artifact),
         )
+        .route(
+            "/external/v1/artifacts/{artifact_id}/content",
+            get(external::get_artifact_content),
+        )
         .with_state(state)
 }

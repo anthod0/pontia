@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -106,6 +106,72 @@ pub struct ArtifactView {
     pub preview: Option<String>,
     pub created_at: String,
     pub metadata: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactContent {
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Clone)]
+pub struct ArtifactContentService {
+    pool: SqlitePool,
+}
+
+impl ArtifactContentService {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn read_content(&self, artifact_id: &str) -> Result<ArtifactContent> {
+        let row = sqlx::query("SELECT source_ref, size_bytes FROM artifacts WHERE artifact_id = ?")
+            .bind(artifact_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("artifact {artifact_id} not found")))?;
+
+        let source_ref: String = row.try_get("source_ref")?;
+        let expected_size: Option<i64> = row.try_get("size_bytes")?;
+        let path = artifact_file_path(&source_ref)?;
+        let bytes = std::fs::read(&path).map_err(|err| {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                Error::NotFound(format!(
+                    "artifact {artifact_id} content not found at registered source"
+                ))
+            } else {
+                Error::Io(err)
+            }
+        })?;
+
+        if let Some(expected_size) = expected_size
+            && expected_size >= 0
+            && bytes.len() as i64 != expected_size
+        {
+            return Err(Error::StateConflict(format!(
+                "artifact {artifact_id} metadata size {expected_size} does not match content size {}",
+                bytes.len()
+            )));
+        }
+
+        Ok(ArtifactContent { bytes })
+    }
+}
+
+fn artifact_file_path(source_ref: &str) -> Result<PathBuf> {
+    let Some(path) = source_ref.strip_prefix("file://") else {
+        return Err(Error::Domain(
+            "artifact content source is not a registered readable file source".to_string(),
+        ));
+    };
+
+    let path = PathBuf::from(path);
+    if !path.is_absolute() {
+        return Err(Error::Domain(
+            "artifact file source must use an absolute path".to_string(),
+        ));
+    }
+
+    Ok(path)
 }
 
 #[derive(Clone)]
