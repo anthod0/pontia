@@ -19,7 +19,15 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/external/v1/sessions/{session_id}",
-            get(external::get_session),
+            get(external::get_session).delete(external::terminate_session),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/interrupt",
+            post(external::interrupt_session),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/restart",
+            post(external::restart_session),
         )
         .route(
             "/external/v1/sessions/{session_id}/turns",
@@ -28,6 +36,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/external/v1/sessions/{session_id}/turns/{turn_id}",
             get(external::get_turn),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/turns/{turn_id}/interrupt",
+            post(external::interrupt_turn),
         )
         .route(
             "/external/v1/sessions/{session_id}/events",

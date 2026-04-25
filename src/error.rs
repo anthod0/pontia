@@ -22,6 +22,9 @@ pub enum Error {
     #[error("state conflict: {0}")]
     StateConflict(String),
 
+    #[error("capability unavailable: {0}")]
+    CapabilityUnavailable(String),
+
     #[error("not found: {0}")]
     NotFound(String),
 

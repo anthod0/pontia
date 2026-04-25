@@ -1,6 +1,6 @@
 # llmparty
 
-`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes Milestone 5: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, reducer-driven state projections, Internal Event API v1, the authenticated External API query surface, session creation/startup through a minimal generic runtime binding, and External API turn submission with event-driven execution projection.
+`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes Milestone 6: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, reducer-driven state projections, Internal Event API v1, the authenticated External API query surface, session creation/startup through a minimal generic runtime binding, External API turn submission with event-driven execution projection, and runtime lifecycle controls for interrupt, terminate, and restart.
 
 ## Requirements
 
@@ -86,6 +86,20 @@ curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/turns \
   -H 'Idempotency-Key: demo-turn-1' \
   -d '{"input":"Continue with the next task","metadata":{"source":"demo"}}'
 # {"data":{"turn":{..."state":"queued"...}},"meta":{},"error":null}
+
+curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/interrupt \
+  -H 'Authorization: Bearer dev-token'
+# generic runtime returns {"error":{"code":"capability_unavailable",...}}
+
+curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/restart \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'Idempotency-Key: demo-restart-1'
+# {"data":{"session":{..."state":"idle"...}},"meta":{},"error":null}
+
+curl -X DELETE http://127.0.0.1:8080/external/v1/sessions/sess_example \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'Idempotency-Key: demo-terminate-1'
+# {"data":{"session":{..."state":"exited"...}},"meta":{},"error":null}
 ```
 
 ## Project structure

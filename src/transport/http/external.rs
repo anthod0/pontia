@@ -9,8 +9,8 @@ use serde_json::{Value, json};
 
 use crate::{
     application::{
-        AppState, CreateSessionRequest, ExternalQueryService, SessionCommandService,
-        SubmitTurnRequest, TurnCommandService,
+        AppState, CreateSessionRequest, ExternalQueryService, RuntimeControlService,
+        SessionCommandService, SubmitTurnRequest, TurnCommandService,
     },
     error::Error,
 };
@@ -91,6 +91,70 @@ pub async fn submit_turn(
         StatusCode::CREATED
     };
     Ok((status, ok(outcome.data)).into_response())
+}
+
+pub async fn interrupt_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
+    let service = RuntimeControlService::new(state.db);
+    let outcome = service
+        .interrupt_current_turn(&session_id, idempotency_key)
+        .await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
+
+pub async fn terminate_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
+    let service = RuntimeControlService::new(state.db);
+    let outcome = service
+        .terminate_session(&session_id, idempotency_key)
+        .await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
+
+pub async fn restart_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
+    let service = RuntimeControlService::new(state.db);
+    let outcome = service
+        .restart_session(&session_id, idempotency_key)
+        .await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
+
+pub async fn interrupt_turn(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((session_id, turn_id)): Path<(String, String)>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
+    let service = RuntimeControlService::new(state.db);
+    let outcome = service
+        .interrupt_turn(&session_id, &turn_id, idempotency_key)
+        .await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
 pub async fn list_turns(
@@ -246,12 +310,21 @@ impl ExternalApiError {
             message: message.into(),
         }
     }
+
+    fn capability_unavailable(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            code: "capability_unavailable",
+            message: message.into(),
+        }
+    }
 }
 
 impl From<Error> for ExternalApiError {
     fn from(error: Error) -> Self {
         match error {
             Error::StateConflict(message) => Self::state_conflict(message),
+            Error::CapabilityUnavailable(message) => Self::capability_unavailable(message),
             Error::NotFound(message) => Self::not_found(message),
             Error::Domain(message) => Self {
                 status: StatusCode::BAD_REQUEST,

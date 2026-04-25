@@ -50,6 +50,14 @@ impl GenericRuntimeManager {
     pub fn submit_input(&self, _input: AgentInput) -> Result<()> {
         Ok(())
     }
+
+    pub fn terminate_session(&self, _session_id: &str) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn restart_session(&self, request: RuntimeStartRequest) -> RuntimeStartResult {
+        self.start_session(request)
+    }
 }
 
 impl RuntimeStartResult {
