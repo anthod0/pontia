@@ -27,9 +27,9 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ---
 
-# - [ ] Milestone 0：pi Client Adapter 最小闭环
+# - [x] Milestone 0：pi Client Adapter 最小闭环
 
-**状态：未开始**
+**状态：已完成**
 
 ## 目标
 
@@ -57,28 +57,28 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ## 交付物
 
-- 一个 pi adapter 模块或边界实现
-- session 创建时可以选择或配置 `client_type = "pi"`
-- Control Plane 分配的 `session_id` / `turn_id` 能传递给 pi adapter
-- External API 提交 turn 后，任务能下发到 pi
-- pi adapter 可以回传至少以下事件：
-  - `turn.started`
-  - `turn.output` 或等价输出事件
-  - `turn.completed`
-  - `turn.failed`
-- pi adapter 可以注册至少一种 artifact source
-- External API 能读取 pi 产生的 artifact metadata 和 content
-- README 或独立文档说明本地如何运行 pi adapter 验收流程
+- [x] 一个 pi adapter 模块或边界实现
+- [x] session 创建时可以选择或配置 `client_type = "pi"`
+- [x] Control Plane 分配的 `session_id` / `turn_id` 能传递给 pi adapter
+- [x] External API 提交 turn 后，任务能下发到 pi RPC 边界
+- [x] pi adapter 可以回传至少以下事件：
+  - [x] `turn.started`
+  - [x] `turn.output` 或等价输出事件
+  - [x] `turn.completed`
+  - [x] `turn.failed`
+- [x] pi adapter 可以注册至少一种 artifact source
+- [x] External API 能读取 pi 产生的 artifact metadata 和 content
+- [x] README 或独立文档说明本地如何运行 pi adapter 验收流程
 
 ## 验收门槛
 
-- Orchestrator 不需要理解 pi 的内部状态或文件结构
-- `client_type = "generic"` 的既有测试和行为不回退
-- `client_type = "pi"` 可以完成最小 session + turn 闭环
-- pi-specific 字段只存在于 adapter / runtime 内部边界，不能污染统一领域事件语义
-- pi adapter 不能伪造无法确认的领域事实
-- 不支持的 capability 返回明确降级，而不是假装成功
-- 至少有一个可重复验证的端到端测试或本地验收脚本
+- [x] Orchestrator 不需要理解 pi 的内部状态或文件结构
+- [x] `client_type = "generic"` 的既有测试和行为不回退
+- [x] `client_type = "pi"` 可以完成最小 session + turn 闭环
+- [x] pi-specific 字段只存在于 adapter / runtime 内部边界，不能污染统一领域事件语义
+- [x] pi adapter 不能伪造无法确认的领域事实
+- [x] 不支持的 capability 返回明确降级，而不是假装成功
+- [x] 至少有一个可重复验证的端到端测试或本地验收脚本
 
 ---
 

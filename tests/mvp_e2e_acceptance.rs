@@ -349,7 +349,7 @@ async fn external_api_has_stable_error_semantics_and_idempotency() {
         "/external/v1/sessions",
         Some(TOKEN),
         None,
-        Some(json!({"client_type":"pi"})),
+        Some(json!({"client_type":"unsupported"})),
     )
     .await;
     assert_eq!(invalid_status, StatusCode::BAD_REQUEST);

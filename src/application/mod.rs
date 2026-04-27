@@ -1,4 +1,9 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    io::Write,
+    path::PathBuf,
+    process::{Command, Stdio},
+    str::FromStr,
+};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -486,7 +491,7 @@ impl SessionCommandService {
         request: CreateSessionRequest,
         idempotency_key: Option<&str>,
     ) -> Result<CreateSessionOutcome> {
-        if request.client_type != "generic" {
+        if !matches!(request.client_type.as_str(), "generic" | "pi") {
             return Err(crate::error::Error::Domain(format!(
                 "unsupported client_type: {}",
                 request.client_type
@@ -759,11 +764,13 @@ impl TurnCommandService {
         }
 
         let turn_id = new_turn_id().to_string();
-        self.runtime.submit_input(AgentInput {
-            session_id: session_id.to_string(),
-            turn_id: turn_id.clone(),
-            input: request.input.clone(),
-        })?;
+        if session.client_type == "generic" {
+            self.runtime.submit_input(AgentInput {
+                session_id: session_id.to_string(),
+                turn_id: turn_id.clone(),
+                input: request.input.clone(),
+            })?;
+        }
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
@@ -786,11 +793,21 @@ impl TurnCommandService {
                 session_id.to_string(),
                 Some(turn_id.clone()),
                 EventSource::ExternalApi,
-                session.client_type,
+                session.client_type.clone(),
                 EventType::TurnQueued,
                 json!({}),
             ))
             .await?;
+
+        if session.client_type == "pi" {
+            self.run_pi_turn(
+                session_id,
+                &turn_id,
+                &request.input,
+                session.workspace.as_deref(),
+            )
+            .await?;
+        }
 
         let mut turn = query
             .get_turn(session_id, &turn_id)
@@ -808,6 +825,191 @@ impl TurnCommandService {
             data,
             duplicate: false,
         })
+    }
+
+    async fn run_pi_turn(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        input: &str,
+        workspace: Option<&str>,
+    ) -> Result<()> {
+        let ingest = EventIngestService::new(self.pool.clone());
+        let mut child = pi_command()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|err| Error::Domain(format!("pi rpc spawn failed: {err}")))?;
+
+        let prompt = json!({ "type": "prompt", "message": input }).to_string();
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| Error::Domain("pi rpc stdin unavailable".to_string()))?;
+        writeln!(stdin, "{prompt}")?;
+
+        let output = child.wait_with_output()?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let mut started = false;
+        let mut saw_output = false;
+        let mut summary = String::new();
+
+        for line in stdout.lines().filter(|line| !line.trim().is_empty()) {
+            let event: Value = match serde_json::from_str(line) {
+                Ok(event) => event,
+                Err(err) => {
+                    self.fail_pi_turn(
+                        session_id,
+                        turn_id,
+                        &format!("pi rpc emitted malformed JSON event: {err}"),
+                    )
+                    .await?;
+                    return Ok(());
+                }
+            };
+            match event.get("type").and_then(Value::as_str) {
+                Some("agent_start") if !started => {
+                    ingest
+                        .ingest_event(DomainEvent::new(
+                            new_event_id().to_string(),
+                            session_id.to_string(),
+                            Some(turn_id.to_string()),
+                            EventSource::AgentAdapter,
+                            "pi".to_string(),
+                            EventType::TurnStarted,
+                            json!({}),
+                        ))
+                        .await?;
+                    started = true;
+                }
+                Some("message_update") => {
+                    let assistant_event = event.get("assistantMessageEvent");
+                    if assistant_event
+                        .and_then(|value| value.get("type"))
+                        .and_then(Value::as_str)
+                        == Some("text_delta")
+                        && let Some(delta) = assistant_event
+                            .and_then(|value| value.get("delta"))
+                            .and_then(Value::as_str)
+                    {
+                        summary.push_str(delta);
+                        saw_output = true;
+                    }
+                }
+                Some("agent_end") => {}
+                _ => {}
+            }
+        }
+
+        if !started {
+            ingest
+                .ingest_event(DomainEvent::new(
+                    new_event_id().to_string(),
+                    session_id.to_string(),
+                    Some(turn_id.to_string()),
+                    EventSource::AgentAdapter,
+                    "pi".to_string(),
+                    EventType::TurnStarted,
+                    json!({}),
+                ))
+                .await?;
+        }
+
+        if !output.status.success() {
+            self.fail_pi_turn(
+                session_id,
+                turn_id,
+                &format!(
+                    "pi rpc process exited unsuccessfully: {} {}",
+                    output.status, stderr
+                ),
+            )
+            .await?;
+            return Ok(());
+        }
+
+        if saw_output {
+            ingest
+                .ingest_event(DomainEvent::new(
+                    new_event_id().to_string(),
+                    session_id.to_string(),
+                    Some(turn_id.to_string()),
+                    EventSource::AgentAdapter,
+                    "pi".to_string(),
+                    EventType::TurnOutput,
+                    json!({ "output": { "summary": summary } }),
+                ))
+                .await?;
+        }
+
+        let artifact_id = self
+            .register_pi_artifact(session_id, turn_id, workspace, &summary)
+            .await?;
+
+        ingest
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.to_string(),
+                Some(turn_id.to_string()),
+                EventSource::AgentAdapter,
+                "pi".to_string(),
+                EventType::TurnCompleted,
+                json!({ "output": { "summary": summary, "artifact_ids": [artifact_id] } }),
+            ))
+            .await?;
+
+        Ok(())
+    }
+
+    async fn fail_pi_turn(&self, session_id: &str, turn_id: &str, message: &str) -> Result<()> {
+        EventIngestService::new(self.pool.clone())
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.to_string(),
+                Some(turn_id.to_string()),
+                EventSource::AgentAdapter,
+                "pi".to_string(),
+                EventType::TurnFailed,
+                json!({ "failure": { "message": message } }),
+            ))
+            .await?;
+
+        Ok(())
+    }
+
+    async fn register_pi_artifact(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        workspace: Option<&str>,
+        content: &str,
+    ) -> Result<String> {
+        let artifact_id = format!("art_{}", uuid::Uuid::now_v7().simple());
+        let root = workspace
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("llmparty-pi-artifacts"));
+        let artifact_dir = root.join(".llmparty").join("pi-artifacts");
+        std::fs::create_dir_all(&artifact_dir)?;
+        let artifact_path = artifact_dir.join(format!("{artifact_id}.txt"));
+        std::fs::write(&artifact_path, content)?;
+        let source_ref = format!("file://{}", artifact_path.display());
+
+        ArtifactRegistrationService::new(self.pool.clone())
+            .register(ArtifactRegistration {
+                artifact_id: artifact_id.clone(),
+                session_id: session_id.to_string(),
+                turn_id: Some(turn_id.to_string()),
+                kind: "transcript".to_string(),
+                name: "pi-output.txt".to_string(),
+                source_ref,
+                size_bytes: Some(content.len() as i64),
+                metadata: json!({ "preview": content }),
+            })
+            .await?;
+
+        Ok(artifact_id)
     }
 
     async fn idempotency_response(&self, operation: &str, key: &str) -> Result<Option<Value>> {
@@ -1187,6 +1389,14 @@ impl RuntimeControlService {
 
 fn default_client_type() -> String {
     "generic".to_string()
+}
+
+fn pi_command() -> Command {
+    let command = std::env::var("LLMPARTY_PI_COMMAND").unwrap_or_else(|_| "pi".to_string());
+    let mut process = Command::new(command);
+    let args = std::env::var("LLMPARTY_PI_ARGS").unwrap_or_else(|_| "--mode rpc".to_string());
+    process.args(args.split_whitespace());
+    process
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

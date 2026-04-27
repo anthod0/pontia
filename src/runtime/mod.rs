@@ -52,10 +52,15 @@ impl From<AdapterCapabilities> for SessionCapabilities {
 
 impl GenericRuntimeManager {
     pub fn start_session(&self, request: RuntimeStartRequest) -> RuntimeStartResult {
+        let capabilities = match request.client_type.as_str() {
+            "generic" => GenericTestAdapter.capabilities(),
+            "pi" => AdapterCapabilities::pi_m0_default(),
+            _ => AdapterCapabilities::default(),
+        };
         RuntimeStartResult {
-            runtime_kind: request.client_type,
-            runtime_ref: format!("generic:{}", request.session_id),
-            capabilities: GenericTestAdapter.capabilities().into(),
+            runtime_kind: request.client_type.clone(),
+            runtime_ref: format!("{}:{}", request.client_type, request.session_id),
+            capabilities: capabilities.into(),
         }
     }
 

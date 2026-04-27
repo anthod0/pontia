@@ -34,6 +34,18 @@ impl AdapterCapabilities {
             artifact_sources: false,
         }
     }
+
+    pub fn pi_m0_default() -> Self {
+        Self {
+            accept_task: true,
+            report_turn_started: true,
+            report_turn_finished: true,
+            interrupt: false,
+            stream_output: true,
+            heartbeat: false,
+            artifact_sources: true,
+        }
+    }
 }
 
 pub trait AgentInputSink {
