@@ -102,7 +102,7 @@ async fn create_session_with_key(state: AppState, key: &str) -> (StatusCode, Val
         "/external/v1/sessions",
         Some(TOKEN),
         Some(key),
-        Some(json!({"client_type":"generic","workspace":"/tmp/llmparty-m9"})),
+        Some(json!({"client_type":"generic","workspace":"/tmp/llmparty-mvp"})),
     )
     .await
 }
@@ -119,7 +119,7 @@ async fn submit_turn_with_key(
         &format!("/external/v1/sessions/{session_id}/turns"),
         Some(TOKEN),
         Some(key),
-        Some(json!({"input": input, "metadata": {"scenario":"m9"}})),
+        Some(json!({"input": input, "metadata": {"scenario":"mvp"}})),
     )
     .await
 }
@@ -160,9 +160,9 @@ fn file_url(path: &Path) -> String {
 
 #[tokio::test]
 async fn orchestrator_can_complete_backend_only_http_polling_flow() {
-    let state = test_state("m9_e2e").await;
+    let state = test_state("mvp_e2e").await;
 
-    let (create_status, create_body) = create_session_with_key(state.clone(), "m9-session").await;
+    let (create_status, create_body) = create_session_with_key(state.clone(), "mvp-session").await;
     assert_eq!(create_status, StatusCode::CREATED);
     let session_id = create_body["data"]["session"]["session_id"]
         .as_str()
@@ -175,7 +175,7 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
     );
 
     let (turn_status, turn_body) =
-        submit_turn_with_key(state.clone(), &session_id, "m9-turn", "produce artifact").await;
+        submit_turn_with_key(state.clone(), &session_id, "mvp-turn", "produce artifact").await;
     assert_eq!(turn_status, StatusCode::CREATED);
     let turn_id = turn_body["data"]["turn"]["turn_id"]
         .as_str()
@@ -196,7 +196,7 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
         "POST",
         &format!("/external/v1/sessions/{session_id}/interrupt"),
         Some(TOKEN),
-        Some("m9-interrupt"),
+        Some("mvp-interrupt"),
         None,
     )
     .await;
@@ -204,18 +204,18 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
     assert_eq!(interrupt_body["error"]["code"], "capability_unavailable");
 
     for (event_id, event_type, seq, payload) in [
-        ("evt_m9_started", "turn.started", 10, json!({})),
+        ("evt_mvp_started", "turn.started", 10, json!({})),
         (
-            "evt_m9_output",
+            "evt_mvp_output",
             "turn.output",
             11,
-            json!({"output":{"summary":"artifact ready","artifact_ids":["art_m9_result"]}}),
+            json!({"output":{"summary":"artifact ready","artifact_ids":["art_mvp_result"]}}),
         ),
         (
-            "evt_m9_completed",
+            "evt_mvp_completed",
             "turn.completed",
             12,
-            json!({"output":{"summary":"done","artifact_ids":["art_m9_result"]}}),
+            json!({"output":{"summary":"done","artifact_ids":["art_mvp_result"]}}),
         ),
     ] {
         let (status, body) = post_internal_event(
@@ -233,17 +233,17 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
 
     let dir = tempfile::tempdir().expect("artifact dir");
     let artifact_path = dir.path().join("result.txt");
-    fs::write(&artifact_path, "M9 artifact content").expect("write artifact");
+    fs::write(&artifact_path, "MVP artifact content").expect("write artifact");
     ArtifactRegistrationService::new(state.db.clone())
         .register(ArtifactRegistration {
-            artifact_id: "art_m9_result".to_string(),
+            artifact_id: "art_mvp_result".to_string(),
             session_id: session_id.clone(),
             turn_id: Some(turn_id.clone()),
             kind: "file".to_string(),
             name: "result.txt".to_string(),
             source_ref: file_url(&artifact_path),
-            size_bytes: Some(19),
-            metadata: json!({"preview":"M9 artifact content","source_ref":"must not leak"}),
+            size_bytes: Some(20),
+            metadata: json!({"preview":"MVP artifact content","source_ref":"must not leak"}),
         })
         .await
         .expect("register artifact");
@@ -265,7 +265,7 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
     );
     assert_eq!(
         get_turn_body["data"]["turn"]["output"]["artifact_ids"][0],
-        "art_m9_result"
+        "art_mvp_result"
     );
 
     let (events_status, events_body) = request_json(
@@ -302,24 +302,24 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
     .await;
     assert_eq!(artifacts_status, StatusCode::OK);
     let artifact = &artifacts_body["data"]["artifacts"][0];
-    assert_eq!(artifact["artifact_id"], "art_m9_result");
+    assert_eq!(artifact["artifact_id"], "art_mvp_result");
     assert!(artifact.get("source_ref").is_none());
     assert!(artifact["metadata"].get("source_ref").is_none());
 
     let (content_status, content) = get_bytes(
         state.clone(),
-        "/external/v1/artifacts/art_m9_result/content",
+        "/external/v1/artifacts/art_mvp_result/content",
     )
     .await;
     assert_eq!(content_status, StatusCode::OK);
-    assert_eq!(content, b"M9 artifact content");
+    assert_eq!(content, b"MVP artifact content");
 
     let (terminate_status, terminate_body) = request_json(
         state.clone(),
         "DELETE",
         &format!("/external/v1/sessions/{session_id}"),
         Some(TOKEN),
-        Some("m9-terminate"),
+        Some("mvp-terminate"),
         None,
     )
     .await;
@@ -329,7 +329,7 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
 
 #[tokio::test]
 async fn external_api_has_stable_error_semantics_and_idempotency() {
-    let state = test_state("m9_errors").await;
+    let state = test_state("mvp_errors").await;
 
     let (unauth_status, unauth_body) = request_json(
         state.clone(),
@@ -368,9 +368,9 @@ async fn external_api_has_stable_error_semantics_and_idempotency() {
     assert_eq!(not_found_body["error"]["code"], "not_found");
 
     let (first_create_status, first_create_body) =
-        create_session_with_key(state.clone(), "m9-idempotent-session").await;
+        create_session_with_key(state.clone(), "mvp-idempotent-session").await;
     let (second_create_status, second_create_body) =
-        create_session_with_key(state.clone(), "m9-idempotent-session").await;
+        create_session_with_key(state.clone(), "mvp-idempotent-session").await;
     assert_eq!(first_create_status, StatusCode::CREATED);
     assert_eq!(second_create_status, StatusCode::OK);
     let session_id = first_create_body["data"]["session"]["session_id"]
@@ -382,10 +382,20 @@ async fn external_api_has_stable_error_semantics_and_idempotency() {
         session_id
     );
 
-    let (first_turn_status, first_turn_body) =
-        submit_turn_with_key(state.clone(), &session_id, "m9-idempotent-turn", "one turn").await;
-    let (second_turn_status, second_turn_body) =
-        submit_turn_with_key(state.clone(), &session_id, "m9-idempotent-turn", "one turn").await;
+    let (first_turn_status, first_turn_body) = submit_turn_with_key(
+        state.clone(),
+        &session_id,
+        "mvp-idempotent-turn",
+        "one turn",
+    )
+    .await;
+    let (second_turn_status, second_turn_body) = submit_turn_with_key(
+        state.clone(),
+        &session_id,
+        "mvp-idempotent-turn",
+        "one turn",
+    )
+    .await;
     assert_eq!(first_turn_status, StatusCode::CREATED);
     assert_eq!(second_turn_status, StatusCode::OK);
     let turn_id = first_turn_body["data"]["turn"]["turn_id"]
@@ -397,7 +407,7 @@ async fn external_api_has_stable_error_semantics_and_idempotency() {
     let (conflict_status, conflict_body) = submit_turn_with_key(
         state.clone(),
         &session_id,
-        "m9-conflicting-turn",
+        "mvp-conflicting-turn",
         "second active turn",
     )
     .await;
@@ -409,7 +419,7 @@ async fn external_api_has_stable_error_semantics_and_idempotency() {
         "POST",
         &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/interrupt"),
         Some(TOKEN),
-        Some("m9-capability"),
+        Some("mvp-capability"),
         None,
     )
     .await;

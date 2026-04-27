@@ -1,6 +1,6 @@
 # Post-MVP Milestones
 
-本文档描述 `llmparty` 在 MVP 完成后的推荐演进路线。旧版 MVP milestone 已完成并归档于 git 历史中，本文件只保留 Post-MVP 阶段的目标、顺序、交付物和验收门槛。
+本文档描述 `llmparty` 在 MVP 完成后的推荐演进路线，只保留后续阶段的目标、顺序、交付物和验收门槛。
 
 当前基线：
 

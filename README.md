@@ -104,7 +104,7 @@ curl -X DELETE http://127.0.0.1:8080/external/v1/sessions/sess_example \
 
 ## MVP end-to-end acceptance
 
-The MVP end-to-end acceptance coverage lives in `tests/milestone9_mvp_e2e.rs`. The test drives the Control Plane through the same backend-only HTTP polling model expected from an upper Orchestrator:
+The MVP end-to-end acceptance coverage lives in `tests/mvp_e2e_acceptance.rs`. The test drives the Control Plane through the same backend-only HTTP polling model expected from an upper Orchestrator:
 
 1. create a session through `POST /external/v1/sessions`
 2. submit a turn through `POST /external/v1/sessions/{session_id}/turns`
