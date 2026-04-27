@@ -329,7 +329,7 @@ impl ExternalApiError {
 
     fn capability_unavailable(message: impl Into<String>) -> Self {
         Self {
-            status: StatusCode::CONFLICT,
+            status: StatusCode::UNPROCESSABLE_ENTITY,
             code: "capability_unavailable",
             message: message.into(),
         }

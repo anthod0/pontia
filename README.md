@@ -1,6 +1,6 @@
 # llmparty
 
-`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes Milestone 8: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, reducer-driven state projections, Internal Event API v1, the authenticated External API query surface, session creation/startup through a minimal generic runtime binding, External API turn submission with event-driven execution projection, runtime lifecycle controls for interrupt/terminate/restart, artifact content reads, and a generic client adapter contract validation substitute.
+`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes Milestone 9: Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, reducer-driven state projections, Internal Event API v1, the authenticated External API query surface, session creation/startup through a minimal generic runtime binding, External API turn submission with event-driven execution projection, runtime lifecycle controls for interrupt/terminate/restart, artifact content reads, a generic client adapter contract validation substitute, and repeatable end-to-end MVP orchestration acceptance tests.
 
 ## Requirements
 
@@ -89,7 +89,7 @@ curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/turns \
 
 curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/interrupt \
   -H 'Authorization: Bearer dev-token'
-# generic runtime returns {"error":{"code":"capability_unavailable",...}}
+# generic runtime returns HTTP 422 with {"error":{"code":"capability_unavailable",...}}
 
 curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/restart \
   -H 'Authorization: Bearer dev-token' \
@@ -102,6 +102,18 @@ curl -X DELETE http://127.0.0.1:8080/external/v1/sessions/sess_example \
 # {"data":{"session":{..."state":"exited"...}},"meta":{},"error":null}
 ```
 
+## MVP end-to-end acceptance
+
+Milestone 9 is covered by `tests/milestone9_mvp_e2e.rs`. The test drives the Control Plane through the same backend-only HTTP polling model expected from an upper Orchestrator:
+
+1. create a session through `POST /external/v1/sessions`
+2. submit a turn through `POST /external/v1/sessions/{session_id}/turns`
+3. simulate the generic adapter returning facts through `POST /internal/v1/events`
+4. poll turn, event, artifact metadata, and artifact content through External API
+5. verify unsupported generic runtime interrupt degrades with `capability_unavailable`
+6. terminate the session through `DELETE /external/v1/sessions/{session_id}`
+
+The same acceptance test also verifies stable External API error envelopes for authentication failure, invalid requests, missing resources, state conflicts, and unavailable capabilities. Idempotency is verified for retried session and turn creation requests using `Idempotency-Key`.
 
 ## Generic adapter contract
 

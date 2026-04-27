@@ -316,7 +316,7 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
         json!({}),
     )
     .await;
-    assert_eq!(interrupt_status, StatusCode::CONFLICT);
+    assert_eq!(interrupt_status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(interrupt_body["error"]["code"], "capability_unavailable");
 
     let (events_status, events_body) = get_json(
