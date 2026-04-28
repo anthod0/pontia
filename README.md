@@ -116,6 +116,26 @@ The MVP end-to-end acceptance coverage lives in `tests/mvp_e2e_acceptance.rs`. T
 
 The same acceptance test also verifies stable External API error envelopes for authentication failure, invalid requests, missing resources, state conflicts, and unavailable capabilities. Idempotency is verified for retried session and turn creation requests using `Idempotency-Key`.
 
+## M2 artifact discovery validation
+
+Milestone 2 adds explicit workspace artifact discovery. Orchestrators can trigger a safe rescan of a session workspace:
+
+```bash
+curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/artifacts/discover \
+  -H 'Authorization: Bearer dev-token'
+```
+
+Discovery scans only the canonical session workspace, skips `.llmparty`, does not follow symlinks that escape the workspace, and upserts registered `file://` artifacts. It enriches metadata with `relative_path`, `modified_at`, `content_fingerprint`, inferred `kind`, `size_bytes`, and a small text `preview`. Discovery is auxiliary indexing only: it does not emit domain events and does not change session or turn state.
+
+Artifact content reads remain limited to registered sources. Metadata size mismatches return `state_conflict`, unsupported source schemes return `invalid_request`, and files larger than the current content API limit return an explicit `invalid_request` instead of loading the file into a response.
+
+Run the automated M2 coverage with:
+
+```bash
+cargo test --test artifact_discovery_api
+cargo test --test artifact_content_api
+```
+
 ## M1 tmux runtime validation
 
 Milestone 1 makes real `tmux` the runtime authority for Control Plane sessions. Creating a `generic` or `pi` session creates a long-lived tmux session, stores internal binding metadata (`backend`, `tmux_session`, `workspace`, `log_path`, `started_at`, `restart_count`), and keeps External API session state derived from domain events rather than tmux state.

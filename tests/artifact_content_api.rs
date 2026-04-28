@@ -199,6 +199,40 @@ async fn artifact_metadata_and_content_size_are_consistent() {
 }
 
 #[tokio::test]
+async fn large_artifact_content_returns_explicit_error_instead_of_loading_bytes() {
+    let state = test_state("m2_large_content").await;
+    seed_idle_session(&state).await;
+    let dir = tempfile::tempdir().expect("artifact dir");
+    let artifact_path = dir.path().join("large.log");
+    let large_content = vec![b'x'; 1024 * 1024 + 1];
+    fs::write(&artifact_path, &large_content).expect("write artifact");
+    insert_artifact(
+        &state,
+        "art_m2_large",
+        &file_url(&artifact_path),
+        large_content.len() as i64,
+    )
+    .await;
+
+    let (status, body, _content_type) = request(
+        state,
+        "/external/v1/artifacts/art_m2_large/content",
+        Some(TOKEN),
+    )
+    .await;
+    let json: Value = serde_json::from_slice(&body).expect("json error body");
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_request");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("too large")
+    );
+}
+
+#[tokio::test]
 async fn empty_artifact_source_list_does_not_break_session_turn_flow() {
     let state = test_state("m7_empty_list").await;
     seed_idle_session(&state).await;

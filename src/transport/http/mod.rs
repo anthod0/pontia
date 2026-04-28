@@ -54,6 +54,10 @@ pub fn router(state: AppState) -> Router {
             get(external::list_artifacts),
         )
         .route(
+            "/external/v1/sessions/{session_id}/artifacts/discover",
+            post(external::discover_artifacts),
+        )
+        .route(
             "/external/v1/artifacts/{artifact_id}",
             get(external::get_artifact),
         )

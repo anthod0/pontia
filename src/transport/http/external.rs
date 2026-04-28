@@ -9,8 +9,9 @@ use serde_json::{Value, json};
 
 use crate::{
     application::{
-        AppState, ArtifactContentService, CreateSessionRequest, ExternalQueryService,
-        RuntimeControlService, SessionCommandService, SubmitTurnRequest, TurnCommandService,
+        AppState, ArtifactContentService, ArtifactDiscoveryService, CreateSessionRequest,
+        ExternalQueryService, RuntimeControlService, SessionCommandService, SubmitTurnRequest,
+        TurnCommandService,
     },
     error::Error,
 };
@@ -222,6 +223,17 @@ pub async fn list_artifacts(
     ensure_session_exists(&service, &session_id).await?;
     let artifacts = service.list_artifacts(&session_id).await?;
     Ok(ok(json!({ "artifacts": artifacts })))
+}
+
+pub async fn discover_artifacts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = ArtifactDiscoveryService::new(state.db);
+    let outcome = service.discover(&session_id).await?;
+    Ok(ok(json!({ "artifacts": outcome.artifacts })))
 }
 
 pub async fn get_artifact(

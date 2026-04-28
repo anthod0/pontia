@@ -163,9 +163,9 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ---
 
-# - [ ] Milestone 2：Artifact Discovery 与 Filesystem Adapter 增强
+# - [x] Milestone 2：Artifact Discovery 与 Filesystem Adapter 增强
 
-**状态：未开始**
+**状态：已完成（第一阶段：显式 workspace discovery；大文件采用明确错误策略，range / 下载留待后续增强）**
 
 ## 目标
 
@@ -173,14 +173,14 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ## 主要范围
 
-- workspace artifact discovery
-- allowlist / sandbox 路径限制
-- artifact metadata 刷新
-- artifact preview 生成
-- artifact kind 推断
-- 大文件读取限制
-- 内容一致性校验
-- artifact 与 session / turn 的关联策略
+- [x] workspace artifact discovery
+- [x] allowlist / sandbox 路径限制
+- [x] artifact metadata 刷新
+- [x] artifact preview 生成
+- [x] artifact kind 推断
+- [x] 大文件读取限制
+- [x] 内容一致性校验
+- [x] artifact 与 session / turn 的关联策略（第一阶段按 session/workspace 关联，turn 级自动归因留待 client hook/显式输入扩展）
 
 ## 依赖
 
@@ -189,19 +189,19 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ## 交付物
 
-- 可配置 artifact root / workspace root
-- 自动或半自动 artifact registration 流程
-- artifact metadata 能表达文件类型、大小、更新时间、preview
-- artifact content 读取继续限制在已注册 source 内
-- 大文件有明确错误或分页 / 下载策略
+- [x] 可配置 artifact root / workspace root（使用 session workspace 作为显式 root）
+- [x] 自动或半自动 artifact registration 流程（External API 显式 discover）
+- [x] artifact metadata 能表达文件类型、大小、更新时间、preview
+- [x] artifact content 读取继续限制在已注册 source 内
+- [x] 大文件有明确错误或分页 / 下载策略（当前为明确错误）
 
 ## 验收门槛
 
-- External API 不能读取未授权路径
-- artifact discovery 不改变 session / turn 主状态
-- artifact metadata 与实际 content 保持一致
-- pi adapter 产生的常见文件可以被发现和读取
-- 大文件不会进入 event payload
+- [x] External API 不能读取未授权路径
+- [x] artifact discovery 不改变 session / turn 主状态
+- [x] artifact metadata 与实际 content 保持一致
+- [x] pi adapter 产生的常见文件可以被发现和读取
+- [x] 大文件不会进入 event payload
 
 ---
 
