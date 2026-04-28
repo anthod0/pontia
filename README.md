@@ -6,6 +6,7 @@
 
 - Rust toolchain with Cargo
 - SQLite is embedded through SQLx / `libsqlite3-sys`
+- `tmux` for the M1 runtime manager and runtime lifecycle tests
 
 ## Local configuration
 
@@ -114,6 +115,18 @@ The MVP end-to-end acceptance coverage lives in `tests/mvp_e2e_acceptance.rs`. T
 6. terminate the session through `DELETE /external/v1/sessions/{session_id}`
 
 The same acceptance test also verifies stable External API error envelopes for authentication failure, invalid requests, missing resources, state conflicts, and unavailable capabilities. Idempotency is verified for retried session and turn creation requests using `Idempotency-Key`.
+
+## M1 tmux runtime validation
+
+Milestone 1 makes real `tmux` the runtime authority for Control Plane sessions. Creating a `generic` or `pi` session creates a long-lived tmux session, stores internal binding metadata (`backend`, `tmux_session`, `workspace`, `log_path`, `started_at`, `restart_count`), and keeps External API session state derived from domain events rather than tmux state.
+
+Runtime lifecycle coverage uses real tmux, not a fake tmux command:
+
+```bash
+cargo test --test tmux_runtime_m1 -- --test-threads=1
+```
+
+The M1 tests verify session creation, terminate, restart, crash observation, active-turn failure on runtime crash, and pi session tmux binding. If `tmux -V` does not work in the environment, these tests fail because tmux is a required runtime dependency.
 
 ## pi adapter M0 validation
 

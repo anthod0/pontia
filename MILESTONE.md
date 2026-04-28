@@ -82,9 +82,9 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ---
 
-# - [ ] Milestone 1：Runtime Manager Hardening
+# - [x] Milestone 1：Runtime Manager Hardening
 
-**状态：未开始**
+**状态：已完成**
 
 ## 目标
 
@@ -108,20 +108,20 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ## 交付物
 
-- RuntimeManager 支持真实进程启动 / 停止 / 重启
-- session 与 runtime binding 的生命周期一致性校验
-- runtime crash 能产生明确 session / turn 事件
-- terminate 能实际停止对应 runtime
-- restart 能创建新的 runtime 周期并通过事件反映状态变化
-- 运行日志可以用于内部诊断，但不直接成为 External API 状态源
+- [x] RuntimeManager 支持真实进程启动 / 停止 / 重启
+- [x] session 与 runtime binding 的生命周期一致性校验
+- [x] runtime crash 能产生明确 session / turn 事件
+- [x] terminate 能实际停止对应 runtime
+- [x] restart 能创建新的 runtime 周期并通过事件反映状态变化
+- [x] 运行日志可以用于内部诊断，但不直接成为 External API 状态源
 
 ## 验收门槛
 
-- runtime 进程异常退出不会让 session 永久停留在错误的非终态
-- terminate 后没有遗留对应 runtime 进程
-- restart 后 session 能回到可接受 turn 的状态或明确失败
-- runtime 细节不泄露到 External API View Model
-- generic 和 pi client 的 runtime 行为都有测试覆盖
+- [x] runtime 进程异常退出不会让 session 永久停留在错误的非终态
+- [x] terminate 后没有遗留对应 runtime 进程
+- [x] restart 后 session 能回到可接受 turn 的状态或明确失败
+- [x] runtime 细节不泄露到 External API View Model
+- [x] generic 和 pi client 的 runtime 行为都有测试覆盖
 
 ---
 

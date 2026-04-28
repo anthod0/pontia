@@ -540,7 +540,7 @@ impl SessionCommandService {
             session_id: session_id.clone(),
             client_type: request.client_type.clone(),
             workspace: request.workspace.clone(),
-        });
+        })?;
         self.upsert_runtime_binding(&session_id, &runtime).await?;
         self.update_session_workspace(&session_id, request.workspace.as_deref())
             .await?;
@@ -1054,6 +1054,71 @@ pub struct ControlCommandOutcome {
 }
 
 #[derive(Clone)]
+pub struct RuntimeObservationService {
+    pool: SqlitePool,
+    runtime: GenericRuntimeManager,
+}
+
+impl RuntimeObservationService {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self {
+            pool,
+            runtime: GenericRuntimeManager,
+        }
+    }
+
+    pub async fn observe_session(&self, session_id: &str) -> Result<()> {
+        let query = ExternalQueryService::new(self.pool.clone());
+        let session = query
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        if matches!(session.state.as_str(), "exited" | "error") {
+            return Ok(());
+        }
+
+        let runtime_ref: Option<String> =
+            sqlx::query_scalar("SELECT runtime_ref FROM runtime_bindings WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        let Some(runtime_ref) = runtime_ref else {
+            return Ok(());
+        };
+        if self.runtime.is_alive(&runtime_ref) {
+            return Ok(());
+        }
+
+        let ingest = EventIngestService::new(self.pool.clone());
+        if let Some(turn_id) = session.current_turn_id.clone() {
+            ingest
+                .ingest_event(DomainEvent::new(
+                    new_event_id().to_string(),
+                    session_id.to_string(),
+                    Some(turn_id),
+                    EventSource::RuntimeManager,
+                    session.client_type.clone(),
+                    EventType::TurnFailed,
+                    json!({ "failure": { "message": "runtime tmux session is not alive" } }),
+                ))
+                .await?;
+        }
+        ingest
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.to_string(),
+                None,
+                EventSource::RuntimeManager,
+                session.client_type,
+                EventType::SessionError,
+                json!({ "failure": { "message": "runtime tmux session is not alive" } }),
+            ))
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
 pub struct RuntimeControlService {
     pool: SqlitePool,
     runtime: GenericRuntimeManager,
@@ -1217,7 +1282,9 @@ impl RuntimeControlService {
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
         if !matches!(session.state.as_str(), "exited" | "error") {
-            self.runtime.terminate_session(session_id)?;
+            if let Some(runtime_ref) = self.runtime_ref(session_id).await? {
+                self.runtime.terminate_session(&runtime_ref)?;
+            }
             EventIngestService::new(self.pool.clone())
                 .ingest_event(DomainEvent::new(
                     new_event_id().to_string(),
@@ -1273,6 +1340,11 @@ impl RuntimeControlService {
             )));
         }
 
+        let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
+        if let Some(runtime_ref) = self.runtime_ref(session_id).await? {
+            self.runtime.terminate_session(&runtime_ref)?;
+        }
+
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
             .ingest_event(DomainEvent::new(
@@ -1285,11 +1357,14 @@ impl RuntimeControlService {
                 json!({}),
             ))
             .await?;
-        let runtime = self.runtime.restart_session(RuntimeStartRequest {
-            session_id: session_id.to_string(),
-            client_type: session.client_type.clone(),
-            workspace: session.workspace.clone(),
-        });
+        let runtime = self.runtime.start_session_with_restart_count(
+            RuntimeStartRequest {
+                session_id: session_id.to_string(),
+                client_type: session.client_type.clone(),
+                workspace: session.workspace.clone(),
+            },
+            prior_restart_count + 1,
+        )?;
         self.upsert_runtime_binding(session_id, &runtime).await?;
         ingest
             .ingest_event(DomainEvent::new(
@@ -1327,6 +1402,29 @@ impl RuntimeControlService {
             data,
             duplicate: false,
         })
+    }
+
+    async fn runtime_ref(&self, session_id: &str) -> Result<Option<String>> {
+        sqlx::query_scalar("SELECT runtime_ref FROM runtime_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn restart_count(&self, session_id: &str) -> Result<Option<i64>> {
+        let metadata: Option<String> =
+            sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        metadata
+            .map(|metadata| {
+                serde_json::from_str::<Value>(&metadata)
+                    .map(|value| value["restart_count"].as_i64().unwrap_or(0))
+            })
+            .transpose()
+            .map_err(Into::into)
     }
 
     async fn idempotency_response(&self, operation: &str, key: &str) -> Result<Option<Value>> {
