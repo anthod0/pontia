@@ -104,6 +104,23 @@ pub struct EventView {
     pub payload: Value,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EventStreamItem {
+    pub rowid: i64,
+    pub event: EventView,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventStreamScope<'a> {
+    Session {
+        session_id: &'a str,
+    },
+    Turn {
+        session_id: &'a str,
+        turn_id: &'a str,
+    },
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ArtifactView {
     pub artifact_id: String,
@@ -520,6 +537,79 @@ impl ExternalQueryService {
         .await?;
 
         rows.into_iter().map(row_to_event_view).collect()
+    }
+
+    pub async fn resolve_event_cursor(
+        &self,
+        scope: EventStreamScope<'_>,
+        after_event_id: &str,
+    ) -> Result<i64> {
+        let row = match scope {
+            EventStreamScope::Session { session_id } => {
+                sqlx::query("SELECT rowid FROM events WHERE session_id = ? AND event_id = ?")
+                    .bind(session_id)
+                    .bind(after_event_id)
+                    .fetch_optional(&self.pool)
+                    .await?
+            }
+            EventStreamScope::Turn {
+                session_id,
+                turn_id,
+            } => sqlx::query(
+                "SELECT rowid FROM events WHERE session_id = ? AND turn_id = ? AND event_id = ?",
+            )
+            .bind(session_id)
+            .bind(turn_id)
+            .bind(after_event_id)
+            .fetch_optional(&self.pool)
+            .await?,
+        };
+
+        let Some(row) = row else {
+            return Err(Error::Domain(format!(
+                "event cursor {after_event_id} is not valid for requested stream"
+            )));
+        };
+
+        Ok(row.try_get("rowid")?)
+    }
+
+    pub async fn list_event_stream_items_after(
+        &self,
+        scope: EventStreamScope<'_>,
+        after_rowid: i64,
+        limit: i64,
+    ) -> Result<Vec<EventStreamItem>> {
+        let rows = match scope {
+            EventStreamScope::Session { session_id } => {
+                sqlx::query(
+                    r#"SELECT rowid, event_id, session_id, turn_id, source, event_type, occurred_at, payload
+                       FROM events WHERE session_id = ? AND rowid > ? ORDER BY rowid LIMIT ?"#,
+                )
+                .bind(session_id)
+                .bind(after_rowid)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            EventStreamScope::Turn {
+                session_id,
+                turn_id,
+            } => {
+                sqlx::query(
+                    r#"SELECT rowid, event_id, session_id, turn_id, source, event_type, occurred_at, payload
+                       FROM events WHERE session_id = ? AND turn_id = ? AND rowid > ? ORDER BY rowid LIMIT ?"#,
+                )
+                .bind(session_id)
+                .bind(turn_id)
+                .bind(after_rowid)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await?
+            }
+        };
+
+        rows.into_iter().map(row_to_event_stream_item).collect()
     }
 
     pub async fn list_artifacts(&self, session_id: &str) -> Result<Vec<ArtifactView>> {
@@ -2002,6 +2092,12 @@ fn row_to_event_view(row: sqlx::sqlite::SqliteRow) -> Result<EventView> {
         time: row.try_get("occurred_at")?,
         payload: serde_json::from_str(&payload)?,
     })
+}
+
+fn row_to_event_stream_item(row: sqlx::sqlite::SqliteRow) -> Result<EventStreamItem> {
+    let rowid = row.try_get("rowid")?;
+    let event = row_to_event_view(row)?;
+    Ok(EventStreamItem { rowid, event })
 }
 
 fn row_to_artifact_view(row: sqlx::sqlite::SqliteRow) -> Result<ArtifactView> {

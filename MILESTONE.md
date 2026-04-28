@@ -205,9 +205,9 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ---
 
-# - [ ] Milestone 3：External Event Stream API
+# - [x] Milestone 3：External Event Stream API
 
-**状态：未开始**
+**状态：已完成（SSE；不做 WebSocket；基于 event store 的轻量 polling stream，支持 event_id cursor resume）**
 
 ## 目标
 
@@ -215,13 +215,13 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ## 主要范围
 
-- SSE 或 WebSocket 技术选择
-- session event stream
-- turn event stream
-- event cursor / resume
-- reconnect 语义
-- backpressure / buffer 策略
-- 认证与错误语义
+- [x] SSE 或 WebSocket 技术选择（选择 SSE，不做 WebSocket）
+- [x] session event stream
+- [x] turn event stream
+- [x] event cursor / resume
+- [x] reconnect 语义
+- [x] backpressure / buffer 策略（channel buffer + 分批查询；后续可增强为 broadcast）
+- [x] 认证与错误语义
 
 ## 依赖
 
@@ -230,19 +230,19 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ## 交付物
 
-- 一个稳定的 External Event Stream API
-- 支持从指定 cursor 继续读取事件
-- 连接断开后可以恢复，不需要读取 runtime 内部日志
-- 与现有 event store / projection 语义一致
-- 文档说明 polling 与 streaming 的关系
+- [x] 一个稳定的 External Event Stream API
+- [x] 支持从指定 cursor 继续读取事件
+- [x] 连接断开后可以恢复，不需要读取 runtime 内部日志
+- [x] 与现有 event store / projection 语义一致
+- [x] 文档说明 polling 与 streaming 的关系
 
 ## 验收门槛
 
-- polling API 继续可用且语义不变
-- stream 事件顺序与 event store 一致
-- 未认证请求被拒绝
-- reconnect 不重复造成状态变化
-- stream API 不引入新的领域状态源
+- [x] polling API 继续可用且语义不变
+- [x] stream 事件顺序与 event store 一致
+- [x] 未认证请求被拒绝
+- [x] reconnect 不重复造成状态变化
+- [x] stream API 不引入新的领域状态源
 
 ---
 

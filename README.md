@@ -1,6 +1,6 @@
 # llmparty
 
-`llmparty` is an MVP backend-only, HTTP-only Coding Agent Control Plane. The current implementation includes the Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, reducer-driven state projections, Internal Event API v1, the authenticated External API query surface, session creation/startup through a minimal generic runtime binding, External API turn submission with event-driven execution projection, runtime lifecycle controls for interrupt/terminate/restart, artifact content reads, a generic client adapter contract validation substitute, and repeatable end-to-end MVP orchestration acceptance tests.
+`llmparty` is an MVP backend-only Coding Agent Control Plane. The current implementation includes the Rust project skeleton, SQLite/SQLx wiring, configuration, health check, domain session/turn/event models, event store, reducer-driven state projections, Internal Event API v1, the authenticated External API query surface, session creation/startup through a minimal generic runtime binding, External API turn submission with event-driven execution projection, runtime lifecycle controls for interrupt/terminate/restart, artifact content reads, SSE event streams, a generic client adapter contract validation substitute, and repeatable end-to-end MVP orchestration acceptance tests.
 
 ## Requirements
 
@@ -115,6 +115,29 @@ The MVP end-to-end acceptance coverage lives in `tests/mvp_e2e_acceptance.rs`. T
 6. terminate the session through `DELETE /external/v1/sessions/{session_id}`
 
 The same acceptance test also verifies stable External API error envelopes for authentication failure, invalid requests, missing resources, state conflicts, and unavailable capabilities. Idempotency is verified for retried session and turn creation requests using `Idempotency-Key`.
+
+## M3 SSE event stream validation
+
+Milestone 3 adds read-only External Event Stream API endpoints using Server-Sent Events (SSE). Polling remains supported and keeps the same semantics; streams are a realtime read optimization over the same persisted event store.
+
+```bash
+curl -N http://127.0.0.1:8080/external/v1/sessions/sess_example/events/stream \
+  -H 'Authorization: Bearer dev-token'
+
+curl -N 'http://127.0.0.1:8080/external/v1/sessions/sess_example/events/stream?after=evt_last_seen' \
+  -H 'Authorization: Bearer dev-token'
+
+curl -N http://127.0.0.1:8080/external/v1/sessions/sess_example/turns/turn_example/events/stream \
+  -H 'Authorization: Bearer dev-token'
+```
+
+Each SSE message uses `id: <event_id>`, `event: domain_event`, and JSON `data` matching `EventView`. Clients can reconnect with `?after=<last received SSE id>` to resume after the last processed event. Invalid or out-of-scope cursors return `400 invalid_request`; unauthenticated requests return `401 authentication_failed`. The stream never reads runtime logs or client internals as a state source.
+
+Run the automated M3 coverage with:
+
+```bash
+cargo test --test external_event_stream_api
+```
 
 ## M2 artifact discovery validation
 

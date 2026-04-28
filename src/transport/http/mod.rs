@@ -42,8 +42,16 @@ pub fn router(state: AppState) -> Router {
             post(external::interrupt_turn),
         )
         .route(
+            "/external/v1/sessions/{session_id}/events/stream",
+            get(external::stream_session_events),
+        )
+        .route(
             "/external/v1/sessions/{session_id}/events",
             get(external::list_session_events),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/turns/{turn_id}/events/stream",
+            get(external::stream_turn_events),
         )
         .route(
             "/external/v1/sessions/{session_id}/turns/{turn_id}/events",
