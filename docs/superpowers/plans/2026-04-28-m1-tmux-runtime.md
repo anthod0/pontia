@@ -4,7 +4,7 @@
 
 **Goal:** Complete Milestone 1 by making the runtime manager use real tmux sessions for session lifecycle, termination, restart, logs, workspace/env metadata, and crash observation.
 
-**Architecture:** The Control Plane keeps External API state event-driven. RuntimeManager owns real tmux session lifecycle and internal binding metadata. pi/generic session runtimes are long-lived tmux sessions; M0 pi RPC shortcut must not be the M1 runtime authority.
+**Architecture:** The Control Plane keeps External API state event-driven. RuntimeManager owns real tmux session lifecycle and internal binding metadata. pi/generic session runtimes are long-lived tmux sessions; M0 legacy pi subprocess shortcut must not be the M1 runtime authority.
 
 **Tech Stack:** Rust 2024, Axum, SQLx/SQLite, real `tmux` CLI, integration tests, TDD.
 
@@ -19,7 +19,7 @@
   - Store richer runtime binding metadata.
   - Add runtime observation service that maps missing tmux runtime to `session.error` and active `turn.failed`.
   - Ensure terminate/restart call real tmux behavior.
-  - Stop treating pi RPC as session runtime authority; leave M0 turn shortcut only if needed for existing M0 behavior.
+  - Stop treating legacy pi subprocess as session runtime authority; leave M0 turn shortcut only if needed for existing M0 behavior.
 - Modify: `.worktrees/m1-tmux-runtime/src/config.rs`
   - Add runtime env vars only if implementation needs configurable tmux command/client command/workspace root.
 - Create: `.worktrees/m1-tmux-runtime/tests/tmux_runtime_m1.rs`
@@ -191,7 +191,7 @@ Expected: FAIL until pi start path uses tmux runtime.
 
 - [ ] **Step 3: Implement minimal code**
 
-Ensure `RuntimeManager::start_session` uses tmux for all supported client types and only varies capabilities/client command. Keep M0 fake pi tests working while runtime lifecycle comes from tmux.
+Ensure `RuntimeManager::start_session` uses tmux for all supported client types and only varies capabilities/client command. Keep M0 fake subprocess tests working while runtime lifecycle comes from tmux.
 
 - [ ] **Step 4: Run test and M0 pi tests**
 

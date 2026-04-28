@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::path::Path;
 
 use axum::{
     body::Body,
@@ -15,8 +15,6 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
-
-static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 async fn test_state(name: &str) -> AppState {
     GenericTestAdapter::clear_recorded_inputs();
@@ -56,29 +54,6 @@ async fn request_json(
     response_json(response).await
 }
 
-async fn get_bytes(state: AppState, uri: &str) -> (StatusCode, Vec<u8>) {
-    let response = http::router(state)
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(uri)
-                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    let status = response.status();
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .expect("body")
-        .to_bytes()
-        .to_vec();
-    (status, body)
-}
-
 async fn response_json(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let body = response
@@ -107,37 +82,9 @@ async fn create_pi_session(state: AppState, workspace: &Path) -> (String, Value)
     (session_id, body)
 }
 
-fn write_fake_pi(dir: &Path, body: &str) -> std::path::PathBuf {
-    let path = dir.join("fake-pi.sh");
-    fs::write(
-        &path,
-        format!("#!/usr/bin/env bash\nset -euo pipefail\nread line\n{body}\n"),
-    )
-    .expect("write fake pi");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod fake pi");
-    }
-    path
-}
-
 #[tokio::test]
-#[allow(
-    clippy::await_holding_lock,
-    reason = "tests serialize process-wide env overrides"
-)]
 async fn pi_session_creation_exposes_m0_capabilities() {
-    let _guard = ENV_LOCK.lock().expect("env lock");
     let temp = tempfile::tempdir().expect("tempdir");
-    let fake = write_fake_pi(
-        temp.path(),
-        "echo '{\"type\":\"agent_end\",\"messages\":[]}'",
-    );
-    unsafe {
-        std::env::set_var("LLMPARTY_PI_COMMAND", fake.display().to_string());
-        std::env::remove_var("LLMPARTY_PI_ARGS");
-    }
     let state = test_state("m0_pi_caps").await;
 
     let (_session_id, body) = create_pi_session(state, temp.path()).await;
@@ -156,40 +103,29 @@ async fn pi_session_creation_exposes_m0_capabilities() {
 }
 
 #[tokio::test]
-#[allow(
-    clippy::await_holding_lock,
-    reason = "tests serialize process-wide env overrides"
-)]
-async fn pi_turn_runs_through_fake_rpc_and_projects_completed_state() {
-    let _guard = ENV_LOCK.lock().expect("env lock");
+async fn pi_turn_submit_stays_queued_until_adapter_events_arrive() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let fake = write_fake_pi(
-        temp.path(),
-        r#"echo '{"type":"agent_start"}'
-echo '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"hello "}}'
-echo '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"from fake pi"}}'
-echo '{"type":"agent_end","messages":[]}'"#,
-    );
-    unsafe {
-        std::env::set_var("LLMPARTY_PI_COMMAND", fake.display().to_string());
-        std::env::remove_var("LLMPARTY_PI_ARGS");
-    }
-    let state = test_state("m0_pi_turn").await;
+    let state = test_state("m0_pi_turn_queued").await;
     let (session_id, _) = create_pi_session(state.clone(), temp.path()).await;
 
     let (status, body) = request_json(
         state.clone(),
         "POST",
         &format!("/external/v1/sessions/{session_id}/turns"),
-        Some(json!({"input":"run fake pi"})),
+        Some(json!({"input":"queue pi turn"})),
     )
     .await;
 
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
     let turn = &body["data"]["turn"];
     let turn_id = turn["turn_id"].as_str().expect("turn id");
-    assert_eq!(turn["state"], "completed");
-    assert_eq!(turn["output"]["summary"], "hello from fake pi");
+    assert_eq!(turn["state"], "queued");
+    assert!(turn["output"]["summary"].is_null());
+    assert!(
+        turn["output"]["artifact_ids"]
+            .as_array()
+            .is_none_or(Vec::is_empty)
+    );
     assert!(GenericTestAdapter::recorded_inputs().is_empty());
 
     let (events_status, events_body) = request_json(
@@ -206,113 +142,9 @@ echo '{"type":"agent_end","messages":[]}'"#,
         .iter()
         .map(|event| event["type"].as_str().unwrap())
         .collect();
-    assert!(event_types.contains(&"turn.started"));
-    assert!(event_types.contains(&"turn.output"));
-    assert!(event_types.contains(&"turn.completed"));
-    assert!(
-        events_body["data"]["events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|event| event["payload"].get("pi").is_none())
-    );
-}
-
-#[tokio::test]
-#[allow(
-    clippy::await_holding_lock,
-    reason = "tests serialize process-wide env overrides"
-)]
-async fn pi_artifact_is_registered_and_readable() {
-    let _guard = ENV_LOCK.lock().expect("env lock");
-    let temp = tempfile::tempdir().expect("tempdir");
-    let fake = write_fake_pi(
-        temp.path(),
-        r#"echo '{"type":"agent_start"}'
-echo '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"artifact text"}}'
-echo '{"type":"agent_end","messages":[]}'"#,
-    );
-    unsafe {
-        std::env::set_var("LLMPARTY_PI_COMMAND", fake.display().to_string());
-        std::env::remove_var("LLMPARTY_PI_ARGS");
-    }
-    let state = test_state("m0_pi_artifact").await;
-    let (session_id, _) = create_pi_session(state.clone(), temp.path()).await;
-
-    let (status, body) = request_json(
-        state.clone(),
-        "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
-        Some(json!({"input":"write artifact"})),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn = &body["data"]["turn"];
-    let turn_id = turn["turn_id"].as_str().expect("turn id");
-    let artifact_id = turn["output"]["artifact_ids"][0]
-        .as_str()
-        .expect("artifact id");
-
-    let (metadata_status, metadata_body) = request_json(
-        state.clone(),
-        "GET",
-        &format!("/external/v1/artifacts/{artifact_id}"),
-        None,
-    )
-    .await;
-    assert_eq!(metadata_status, StatusCode::OK);
-    assert_eq!(metadata_body["data"]["artifact"]["session_id"], session_id);
-    assert_eq!(metadata_body["data"]["artifact"]["turn_id"], turn_id);
-    assert_eq!(
-        metadata_body["data"]["artifact"]["preview"],
-        "artifact text"
-    );
-    assert!(
-        metadata_body["data"]["artifact"]["metadata"]
-            .get("source_ref")
-            .is_none()
-    );
-
-    let (content_status, content) = get_bytes(
-        state,
-        &format!("/external/v1/artifacts/{artifact_id}/content"),
-    )
-    .await;
-    assert_eq!(content_status, StatusCode::OK);
-    assert_eq!(content, b"artifact text");
-}
-
-#[tokio::test]
-#[allow(
-    clippy::await_holding_lock,
-    reason = "tests serialize process-wide env overrides"
-)]
-async fn pi_rpc_failure_projects_turn_failed() {
-    let _guard = ENV_LOCK.lock().expect("env lock");
-    let temp = tempfile::tempdir().expect("tempdir");
-    let fake = write_fake_pi(
-        temp.path(),
-        r#"echo '{"type":"agent_start"}'
-echo 'not json'
-exit 7"#,
-    );
-    unsafe {
-        std::env::set_var("LLMPARTY_PI_COMMAND", fake.display().to_string());
-        std::env::remove_var("LLMPARTY_PI_ARGS");
-    }
-    let state = test_state("m0_pi_failure").await;
-    let (session_id, _) = create_pi_session(state.clone(), temp.path()).await;
-
-    let (status, body) = request_json(
-        state,
-        "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
-        Some(json!({"input":"fail fake pi"})),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn = &body["data"]["turn"];
-    assert_eq!(turn["state"], "failed");
-    assert!(turn["failure"].as_str().unwrap().contains("pi rpc"));
+    assert!(event_types.contains(&"turn.created"));
+    assert!(event_types.contains(&"turn.queued"));
+    assert!(!event_types.contains(&"turn.started"));
+    assert!(!event_types.contains(&"turn.output"));
+    assert!(!event_types.contains(&"turn.completed"));
 }

@@ -18,7 +18,7 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 ## Post-MVP 总体原则
 
 - **先接真实 client，再扩展体验层**：优先证明 Control Plane 可以驱动真实 coding agent，而不是先做 UI 或复杂实时层。
-- **先最小闭环，后能力完整**：pi adapter 第一阶段只追求创建 session、提交 turn、回传事件、读取 artifact 的端到端闭环。
+- **先正确边界，后能力完整**：pi adapter 第一阶段只建立 `client_type = "pi"`、runtime binding、capability 与 queued turn 语义；真实 turn dispatch 必须通过后续 adapter bridge 完成。
 - **保持统一领域模型**：pi / Claude Code / Codex 等 client-specific 状态不得污染 session / turn / event 的统一语义。
 - **所有对外状态仍来自 Control Plane**：External API 不直接读取 pi 内部状态、日志文件或 workspace 文件作为权威状态。
 - **能力显式声明和降级**：interrupt、streaming、heartbeat、artifact discovery 等能力必须通过 capability model 表达。
@@ -42,12 +42,11 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 - pi adapter 边界定义
 - pi runtime 启动或绑定策略
 - session 创建时建立 pi runtime binding
-- turn input 下发给 pi
-- pi 执行状态映射为 Internal Event API 事件
-- pi 输出 / 结束 / 失败的最小事件回传
-- pi artifact source 的最小注册与读取
+- pi turn 提交后的 queued 语义
 - pi capability model 映射到 External API SessionView
 - 集成测试或可重复本地验收脚本
+
+不包含：真实 pi turn dispatch、pi 执行事件桥接、pi artifact discovery。这些能力由 Milestone 1.5 / Milestone 2 补齐。
 
 ## 依赖
 
@@ -59,22 +58,16 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 - [x] 一个 pi adapter 模块或边界实现
 - [x] session 创建时可以选择或配置 `client_type = "pi"`
-- [x] Control Plane 分配的 `session_id` / `turn_id` 能传递给 pi adapter
-- [x] External API 提交 turn 后，任务能下发到 pi RPC 边界
-- [x] pi adapter 可以回传至少以下事件：
-  - [x] `turn.started`
-  - [x] `turn.output` 或等价输出事件
-  - [x] `turn.completed`
-  - [x] `turn.failed`
-- [x] pi adapter 可以注册至少一种 artifact source
-- [x] External API 能读取 pi 产生的 artifact metadata 和 content
-- [x] README 或独立文档说明本地如何运行 pi adapter 验收流程
+- [x] Control Plane 分配的 `session_id` / `turn_id` 能保留在 queued pi turn 中
+- [x] External API 提交 pi turn 后产生 `turn.created` / `turn.queued`
+- [x] pi turn 不通过临时 subprocess 或其他非 runtime-authority 路径执行
+- [x] README 或独立文档说明当前 pi adapter 验收流程
 
 ## 验收门槛
 
 - [x] Orchestrator 不需要理解 pi 的内部状态或文件结构
 - [x] `client_type = "generic"` 的既有测试和行为不回退
-- [x] `client_type = "pi"` 可以完成最小 session + turn 闭环
+- [x] `client_type = "pi"` 可以完成最小 session + queued turn 闭环
 - [x] pi-specific 字段只存在于 adapter / runtime 内部边界，不能污染统一领域事件语义
 - [x] pi adapter 不能伪造无法确认的领域事实
 - [x] 不支持的 capability 返回明确降级，而不是假装成功
@@ -122,6 +115,47 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 - [x] restart 后 session 能回到可接受 turn 的状态或明确失败
 - [x] runtime 细节不泄露到 External API View Model
 - [x] generic 和 pi client 的 runtime 行为都有测试覆盖
+
+---
+
+# - [ ] Milestone 1.5：pi Adapter Bridge 与 Turn Dispatch
+
+**状态：未开始**
+
+## 目标
+
+在不引入临时 subprocess shortcut 的前提下，补齐真实 pi turn 流转。Control Plane 只负责创建 turn、投递任务、接收 adapter 回传事实；turn 主状态仍由 event store / projection 推导。
+
+## 主要范围
+
+- pi runtime 内的 adapter bridge 启动策略
+- Control Plane 到 pi runtime 的 turn dispatch 通道
+- adapter bridge 到 Internal Event API 的事实回传
+- `turn.started` / `turn.output` / `turn.completed` / `turn.failed` 事件映射
+- turn 与 session runtime binding 的一致性校验
+- dispatch 失败、runtime 不可用、adapter 回传异常的错误语义
+- 真实 pi 执行能力的本地验收脚本或集成测试策略
+
+## 依赖
+
+- Milestone 0
+- Milestone 1
+
+## 交付物
+
+- 一个明确的 pi adapter bridge 进程 / 协议 / 投递机制设计
+- External API 提交 pi turn 后，任务能进入对应 pi runtime
+- pi adapter bridge 通过 Internal Event API 回传确认过的领域事实
+- queued pi turn 能基于真实 adapter 事件进入 started / completed / failed
+- README 或独立文档说明真实 pi turn dispatch 的本地验收流程
+
+## 验收门槛
+
+- 不使用临时 subprocess 路径绕过 runtime / adapter bridge
+- External API 不直接读取 pi 内部状态作为权威状态
+- adapter 不能伪造未确认的 turn 事实
+- runtime crash / dispatch failure 能产生明确 session / turn 事件
+- generic client 行为不回退
 
 ---
 

@@ -130,16 +130,15 @@ The M1 tests verify session creation, terminate, restart, crash observation, act
 
 ## pi adapter M0 validation
 
-Milestone 0 adds `client_type = "pi"` as the first real-client adapter boundary. Automated tests do **not** start a real pi agent, require provider credentials, or call an LLM. Instead, `tests/pi_adapter_m0.rs` launches a fake pi RPC executable as a real subprocess and exercises the same stdin/stdout JSONL boundary used by `pi --mode rpc`.
+Milestone 0 adds `client_type = "pi"` as the first real-client adapter boundary. The current pi path intentionally does **not** execute turns directly. A submitted pi turn is recorded as `turn.created` / `turn.queued` and remains queued until a real adapter bridge reports facts through the Internal Event API.
 
 The M0 pi path validates that the Control Plane can:
 
 1. create a pi session and runtime binding through External API
 2. expose explicit pi capabilities in `SessionView`
-3. submit Control Plane-assigned `session_id` / `turn_id` input to a pi RPC process
-4. map pi-like RPC events to unified domain events (`turn.started`, `turn.output`, `turn.completed`, `turn.failed`)
-5. register a readable transcript artifact through the existing artifact API
-6. preserve generic adapter behavior and avoid leaking pi-specific fields into External API events
+3. preserve Control Plane-assigned `session_id` / `turn_id` on queued pi turns
+4. preserve generic adapter behavior without using the generic test adapter for pi turns
+5. avoid leaking client-specific fields into External API events
 
 Run the automated M0 coverage with:
 
@@ -147,16 +146,7 @@ Run the automated M0 coverage with:
 cargo test --test pi_adapter_m0
 ```
 
-For optional local validation against the real pi executable, install and authenticate pi, then run the backend with the default command (`pi --mode rpc`) or override it:
-
-```bash
-LLMPARTY_PI_COMMAND=pi \
-LLMPARTY_PI_ARGS="--mode rpc" \
-LLMPARTY_EXTERNAL_API_TOKEN=dev-token \
-cargo run
-```
-
-Then create a pi session and submit a turn through the existing External API. Real-pi validation is intentionally manual because it depends on local authentication, model/provider availability, network access, and cost-bearing LLM execution.
+Real pi turn dispatch is intentionally deferred to the pi adapter bridge milestone. Until that bridge exists, local validation should cover session/runtime lifecycle and queued turn semantics only.
 
 ## Generic adapter contract
 
