@@ -116,6 +116,23 @@ The MVP end-to-end acceptance coverage lives in `tests/mvp_e2e_acceptance.rs`. T
 
 The same acceptance test also verifies stable External API error envelopes for authentication failure, invalid requests, missing resources, state conflicts, and unavailable capabilities. Idempotency is verified for retried session and turn creation requests using `Idempotency-Key`.
 
+## M4 minimal Web Dashboard
+
+Milestone 4 adds a zero-build Web Dashboard served by the backend at `/dashboard`. It is a browser consumer of the existing External API only; it does not read SQLite, runtime internals, client logs, or workspace files directly.
+
+```bash
+LLMPARTY_EXTERNAL_API_TOKEN=dev-token cargo run
+# open http://127.0.0.1:8080/dashboard and enter dev-token
+```
+
+The dashboard supports session listing and creation, session detail, turn submission/history, event timeline, artifact discovery/browsing/content reads, and interrupt/restart/terminate controls.
+
+Run the automated M4 coverage with:
+
+```bash
+cargo test --test web_dashboard
+```
+
 ## M3 SSE event stream validation
 
 Milestone 3 adds read-only External Event Stream API endpoints using Server-Sent Events (SSE). Polling remains supported and keeps the same semantics; streams are a realtime read optimization over the same persisted event store.

@@ -5,6 +5,7 @@ use axum::{
 
 use crate::application::AppState;
 
+pub mod dashboard;
 pub mod external;
 pub mod health;
 pub mod internal;
@@ -12,6 +13,7 @@ pub mod internal;
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(health::healthz))
+        .route("/dashboard", get(dashboard::dashboard))
         .route("/internal/v1/events", post(internal::post_event))
         .route(
             "/external/v1/sessions",

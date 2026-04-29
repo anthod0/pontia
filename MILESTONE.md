@@ -246,9 +246,9 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ---
 
-# - [ ] Milestone 4：Minimal Web Dashboard
+# - [x] Milestone 4：Minimal Web Dashboard
 
-**状态：未开始**
+**状态：已完成（零构建 `/dashboard`；vanilla HTML/CSS/JS；只消费 External API）**
 
 ## 目标
 
@@ -273,17 +273,17 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ## 交付物
 
-- 最小可运行 Web UI
-- 能通过现有 External API 完成基础操作
-- 能展示 session / turn / event / artifact 状态
-- 不直接读取数据库、runtime 或 workspace 文件
+- [x] 最小可运行 Web UI
+- [x] 能通过现有 External API 完成基础操作
+- [x] 能展示 session / turn / event / artifact 状态
+- [x] 不直接读取数据库、runtime 或 workspace 文件
 
 ## 验收门槛
 
-- Web UI 只是 External API 的消费者
-- UI 不引入新的控制面语义
-- 后端 API 仍可被非 UI Orchestrator 独立使用
-- 常见错误能在 UI 中清晰展示
+- [x] Web UI 只是 External API 的消费者
+- [x] UI 不引入新的控制面语义
+- [x] 后端 API 仍可被非 UI Orchestrator 独立使用
+- [x] 常见错误能在 UI 中清晰展示
 
 ---
 
