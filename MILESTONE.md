@@ -287,9 +287,63 @@ Post-MVP 的核心目标是：从 generic / test adapter 闭环推进到真实 c
 
 ---
 
-# - [ ] Milestone 5：Operational Readiness
+# - [ ] Milestone 4.5：WebUI Functional Validation 与真实 pi 回复闭环
 
 **状态：未开始**
+
+## 目标
+
+暂停进入 M5 前，先验证真实 pi session 能通过 WebUI 完成连续 turn 工作流：WebUI 提交 turn 后，真实 pi 完成任务，pi hook 通过 Internal Event API 回传 `turn.output` / `turn.completed` / `turn.failed`，Control Plane 更新投影，WebUI 展示回复并允许提交下一轮 turn。
+
+该阶段不追求部署、OpenAPI、metrics 或 CI 完整性；重点是证明当前系统的真实功能闭环可用。
+
+## 主要范围
+
+- [ ] pi turn context 写入：dispatch pi turn 时写入 `.llmparty/current-turn.json`
+- [ ] runtime 环境注入：为 pi runtime 提供 `LLMPARTY_INTERNAL_EVENT_URL`
+- [ ] 真实 pi hook：任务完成后调用 `POST /internal/v1/events` 上报领域事实
+- [ ] WebUI SSE 消费：通过 External Event Stream API 实时展示 turn 输出和终态
+- [ ] WebUI busy / active turn 提示：session 忙碌时明确说明为什么不能提交下一轮
+- [ ] hook / 上报失败诊断：至少写入 `.llmparty/pi-hook.log` 或等价诊断信息
+- [ ] 人工本地验收流程：使用真实 pi 和 WebUI 验证两轮连续 turn
+
+不包含：fake pi 验收工具、JSONL outbox observer 增强、Docker、OpenAPI、metrics、CI、release checklist。
+
+## 依赖
+
+- Milestone 1.5
+- Milestone 3
+- Milestone 4
+
+## 交付物
+
+- [ ] pi dispatch 时生成当前 turn context 文件，包含 `session_id` / `turn_id` / `input` / Internal Event API URL
+- [ ] pi runtime 环境中包含 hook 上报所需变量
+- [ ] 一个真实 pi hook / wrapper 集成方式，能向 Internal Event API 上报：
+  - `turn.output`
+  - `turn.completed`
+  - `turn.failed`
+- [ ] WebUI 能实时展示 `turn.output` 作为回复内容
+- [ ] WebUI 在 `turn.completed` / `turn.failed` 后刷新 session / turn 状态
+- [ ] completed / failed 后同一 session 可以继续提交下一轮 turn
+- [ ] README 或独立文档说明真实 pi hook 配置与 WebUI 人工验收步骤
+
+## 验收门槛
+
+- [ ] 不解析 pi TUI 屏幕作为权威状态
+- [ ] 不以 tmux 进程退出判断 turn 完成
+- [ ] turn 终态必须来自 pi hook 通过 Internal Event API 上报的明确领域事实
+- [ ] WebUI submit 一个真实 pi turn 后可以看到回复输出
+- [ ] 第一个 turn completed / failed 后可以提交第二个 turn
+- [ ] 如果 turn 长时间 running，WebUI 能提示当前 active turn 和可能的 hook / event 上报问题
+- [ ] External API / event projection 仍是 WebUI 唯一状态来源
+- [ ] 既有 JSONL outbox 能力不作为 M4.5 主路径要求，除非后续重新决定启用 fallback
+
+---
+
+# - [ ] Milestone 5：Operational Readiness
+
+**状态：未开始（M4.5 完成前暂停）**
 
 ## 目标
 
@@ -347,6 +401,8 @@ Milestone 3  External Event Stream API
       ↓
 Milestone 4  Minimal Web Dashboard
       ↓
+Milestone 4.5 WebUI Functional Validation 与真实 pi 回复闭环
+      ↓
 Milestone 5  Operational Readiness
 ```
 
@@ -370,6 +426,12 @@ Milestone 1 和 Milestone 2 可以在 Milestone 0 后部分并行。Milestone 3 
 - 真实 runtime 生命周期可控。
 - pi client 的常见输出和 artifact 能稳定暴露给 Orchestrator。
 - crash、terminate、restart、artifact discovery 等真实运行场景有明确行为。
+
+完成 Milestone 0 至 Milestone 4.5 后，应满足：
+
+- 真实 pi turn 可以通过 WebUI 提交、完成、展示回复，并继续下一轮。
+- pi turn 的 output / completed / failed 来自 pi hook 通过 Internal Event API 上报的明确领域事实。
+- WebUI 能解释 busy / active turn 状态，避免用户误判为“无法继续工作”。
 
 完成 Milestone 0 至 Milestone 5 后，应满足：
 
