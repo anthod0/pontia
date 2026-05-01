@@ -25,7 +25,7 @@ async fn test_state() -> AppState {
 }
 
 #[tokio::test]
-async fn dashboard_serves_minimal_web_control_panel() {
+async fn dashboard_serves_built_svelte_entrypoint() {
     let response = http::router(test_state().await)
         .oneshot(
             Request::builder()
@@ -54,18 +54,14 @@ async fn dashboard_serves_minimal_web_control_panel() {
     let html = std::str::from_utf8(&body).expect("utf8 html");
 
     assert!(html.contains("llmparty Dashboard"));
-    assert!(html.contains("API token"));
-    assert!(html.contains("Create session"));
-    assert!(html.contains("Submit turn"));
-    assert!(html.contains("Event timeline"));
-    assert!(html.contains("Artifact browser"));
-    assert!(html.contains("/external/v1/sessions"));
-    assert!(html.contains("localStorage"));
+    assert!(html.contains("id=\"app\""));
+    assert!(html.contains("/dashboard/assets/"));
+    assert!(!html.contains("openEventStream"));
 }
 
 #[tokio::test]
-async fn dashboard_contains_m45_realtime_and_busy_turn_ui() {
-    let response = http::router(test_state().await)
+async fn dashboard_serves_built_frontend_assets() {
+    let entry_response = http::router(test_state().await)
         .oneshot(
             Request::builder()
                 .uri("/dashboard")
@@ -73,22 +69,36 @@ async fn dashboard_contains_m45_realtime_and_busy_turn_ui() {
                 .expect("request"),
         )
         .await
-        .expect("response");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let body = response
+        .expect("entry response");
+    let entry_body = entry_response
         .into_body()
         .collect()
         .await
-        .expect("body")
+        .expect("entry body")
         .to_bytes();
-    let html = std::str::from_utf8(&body).expect("utf8 html");
+    let html = std::str::from_utf8(&entry_body).expect("utf8 html");
+    let asset_start = html.find("/dashboard/assets/").expect("asset path");
+    let asset_end = html[asset_start..]
+        .find('"')
+        .map(|offset| asset_start + offset)
+        .expect("asset end");
+    let asset_path = &html[asset_start..asset_end];
 
-    assert!(html.contains("Active turn"));
-    assert!(html.contains("session is busy"));
-    assert!(html.contains("openEventStream"));
-    assert!(html.contains("/events/stream"));
-    assert!(html.contains("turn.output"));
-    assert!(html.contains("turn.completed"));
-    assert!(html.contains("turn.failed"));
+    let response = http::router(test_state().await)
+        .oneshot(
+            Request::builder()
+                .uri(asset_path)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .expect("content-type");
+    assert!(content_type.contains("javascript"));
 }

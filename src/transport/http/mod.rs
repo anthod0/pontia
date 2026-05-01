@@ -14,6 +14,8 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(health::healthz))
         .route("/dashboard", get(dashboard::dashboard))
+        .route("/dashboard/", get(dashboard::dashboard))
+        .route("/dashboard/assets/{*path}", get(dashboard::dashboard_asset))
         .route("/internal/v1/events", post(internal::post_event))
         .route(
             "/external/v1/sessions",

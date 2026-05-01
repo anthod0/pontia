@@ -1,5 +1,6 @@
 /target/
 node_modules/
+apps/web/dist/
 /.worktrees/
 /data/
 .env
