@@ -136,12 +136,12 @@ Goal: replace the embedded Rust-string dashboard with a real Svelte + Vite + Typ
 
 ## Phase 7: Implement artifact browser
 
-- [ ] Implement `ArtifactBrowser.svelte`.
-- [ ] Implement `ArtifactContentViewer.svelte`.
-- [ ] Add artifact discover button.
-- [ ] Load artifact list for selected session.
-- [ ] Load artifact content via External API.
-- [ ] Show text content when possible; show safe fallback for binary/large/error cases.
+- [x] Implement `ArtifactBrowser.svelte`.
+- [x] Implement `ArtifactContentViewer.svelte`.
+- [x] Add artifact discover button.
+- [x] Load artifact list for selected session.
+- [x] Load artifact content via External API.
+- [x] Show text content when possible; show safe fallback for binary/large/error cases.
 - [ ] Manual verification:
   - discover artifacts
   - select artifact
@@ -151,12 +151,12 @@ Goal: replace the embedded Rust-string dashboard with a real Svelte + Vite + Typ
 
 ## Phase 8: Replace old embedded dashboard
 
-- [ ] Remove or simplify `src/transport/http/dashboard.rs` so it no longer contains the old full HTML/JS app.
-- [ ] Ensure `/dashboard` serves the built Svelte app.
-- [ ] Ensure asset paths work after `pnpm --dir apps/web build`.
-- [ ] Update `src/transport/http/mod.rs` if routes need static asset handling.
-- [ ] Update `tests/web_dashboard.rs` assertions to match new app shell, not old embedded strings.
-- [ ] Verify:
+- [x] Remove or simplify `src/transport/http/dashboard.rs` so it no longer contains the old full HTML/JS app.
+- [x] Ensure `/dashboard` serves the built Svelte app.
+- [x] Ensure asset paths work after `pnpm --dir apps/web build`.
+- [x] Update `src/transport/http/mod.rs` if routes need static asset handling.
+- [x] Update `tests/web_dashboard.rs` assertions to match new app shell, not old embedded strings.
+- [x] Verify:
   - `pnpm --dir apps/web build`
   - `cargo test --test web_dashboard`
 
@@ -164,25 +164,25 @@ Goal: replace the embedded Rust-string dashboard with a real Svelte + Vite + Typ
 
 ## Phase 9: Documentation and cleanup
 
-- [ ] Update `apps/web/README.md` for Svelte/Vite workflow.
-- [ ] Update root `README.md` dashboard section if commands change.
-- [ ] Document dev mode:
+- [x] Update `apps/web/README.md` for Svelte/Vite workflow.
+- [x] Update root `README.md` dashboard section if commands change.
+- [x] Document dev mode:
   - backend: `LLMPARTY_EXTERNAL_API_TOKEN=dev-token cargo run`
   - frontend: `pnpm --dir apps/web dev`
-- [ ] Document built mode:
+- [x] Document built mode:
   - `pnpm --dir apps/web build`
   - `LLMPARTY_EXTERNAL_API_TOKEN=dev-token cargo run`
   - open `/dashboard`
-- [ ] Remove stale references to zero-build dashboard.
-- [ ] Check no generated build artifacts are accidentally committed unless intentionally required.
+- [x] Remove stale references to zero-build dashboard.
+- [x] Check no generated build artifacts are accidentally committed unless intentionally required.
 
 ---
 
 ## Phase 10: Final verification
 
-- [ ] Run frontend checks:
+- [x] Run frontend checks:
   - `pnpm --dir apps/web build`
-- [ ] Run Rust checks:
+- [x] Run Rust checks:
   - `cargo fmt --check`
   - `cargo test --test web_dashboard`
   - `cargo test`

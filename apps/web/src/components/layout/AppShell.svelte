@@ -7,6 +7,7 @@
   import LatestReply from '../turns/LatestReply.svelte';
   import TurnHistory from '../turns/TurnHistory.svelte';
   import EventTimeline from '../events/EventTimeline.svelte';
+  import ArtifactBrowser from '../artifacts/ArtifactBrowser.svelte';
 </script>
 
 <StatusBar />
@@ -19,5 +20,6 @@
     <LatestReply />
     <TurnHistory />
     <EventTimeline />
+    <ArtifactBrowser />
   </section>
 </main>

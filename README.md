@@ -118,9 +118,22 @@ The same acceptance test also verifies stable External API error envelopes for a
 
 ## M4/M4.5 Web Dashboard and real pi reply loop
 
-Milestone 4 adds a zero-build Web Dashboard served by the backend at `/dashboard`. It is a browser consumer of the existing External API only; it does not read SQLite, runtime internals, client logs, or workspace files directly.
+The Web Dashboard is a Svelte + Vite app under `apps/web/` served by the backend at `/dashboard` after a frontend build. It is a browser consumer of the existing External API only; it does not read SQLite, runtime internals, client logs, or workspace files directly.
+
+Development mode runs the backend and Vite dev server separately:
 
 ```bash
+LLMPARTY_EXTERNAL_API_TOKEN=dev-token \
+LLMPARTY_INTERNAL_EVENT_URL=http://127.0.0.1:8080/internal/v1/events \
+cargo run
+pnpm --dir apps/web dev
+# open the Vite URL and enter dev-token
+```
+
+Built mode serves the compiled app from the Rust backend:
+
+```bash
+pnpm --dir apps/web build
 LLMPARTY_EXTERNAL_API_TOKEN=dev-token \
 LLMPARTY_INTERNAL_EVENT_URL=http://127.0.0.1:8080/internal/v1/events \
 cargo run

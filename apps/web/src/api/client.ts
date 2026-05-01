@@ -90,9 +90,22 @@ export async function getArtifactContent(artifactId: string): Promise<ArtifactCo
   const bearer = get(token).trim();
   if (bearer) headers.set('Authorization', `Bearer ${bearer}`);
   const response = await fetch(`${API_BASE}/artifacts/${artifactId}/content`, { headers });
-  const bytes = await response.arrayBuffer();
-  if (!response.ok) throw new ApiError(response.statusText, 'request_failed', response.status);
   const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
+  const bytes = await response.arrayBuffer();
+  if (!response.ok) {
+    const text = new TextDecoder().decode(bytes);
+    try {
+      const envelope = JSON.parse(text) as ApiEnvelope<unknown>;
+      throw new ApiError(
+        envelope.error?.message ?? response.statusText,
+        envelope.error?.code ?? 'request_failed',
+        response.status,
+      );
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(text || response.statusText, 'request_failed', response.status);
+    }
+  }
   return { artifactId, contentType, bytes, text: new TextDecoder().decode(bytes) };
 }
 
