@@ -18,7 +18,7 @@ use crate::{
         TurnProjection, TurnState,
     },
     error::{Error, Result},
-    ids::{new_event_id, new_session_id, new_turn_id},
+    ids::{new_event_id, new_session_id, new_task_id, new_turn_id, new_workspace_id},
     runtime::{AgentInput, GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult},
     storage::sqlite::{connect_sqlite, run_migrations},
 };
@@ -59,11 +59,41 @@ pub struct SessionView {
     pub client_type: String,
     pub state: String,
     pub current_turn_id: Option<String>,
+    pub workspace_id: Option<String>,
     pub workspace: Option<String>,
     pub capabilities: SessionCapabilities,
     pub created_at: String,
     pub updated_at: String,
     pub metadata: Value,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct WorkspaceView {
+    pub workspace_id: String,
+    pub canonical_path: String,
+    pub display_path: String,
+    pub name: Option<String>,
+    pub state: String,
+    pub metadata: Value,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_used_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct TaskView {
+    pub task_id: String,
+    pub state: String,
+    pub input: String,
+    pub workspace_id: Option<String>,
+    pub session_id: Option<String>,
+    pub turn_id: Option<String>,
+    pub routing_state: String,
+    pub routing_reason: Option<String>,
+    pub routing_confidence: Option<f64>,
+    pub metadata: Value,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -146,6 +176,66 @@ pub struct ArtifactDiscoveryOutcome {
 
 const ARTIFACT_PREVIEW_BYTES: usize = 1024;
 const MAX_ARTIFACT_CONTENT_BYTES: i64 = 1024 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkspaceRecord {
+    workspace_id: String,
+    canonical_path: String,
+}
+
+async fn upsert_workspace(pool: &SqlitePool, workspace: &str) -> Result<WorkspaceRecord> {
+    let input_path = PathBuf::from(workspace);
+    std::fs::create_dir_all(&input_path)?;
+    let canonical_path = std::fs::canonicalize(&input_path)?.display().to_string();
+    let display_path = canonical_path.clone();
+    let name = Path::new(&canonical_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(ToString::to_string);
+
+    if let Some(row) =
+        sqlx::query("SELECT workspace_id, canonical_path FROM workspaces WHERE canonical_path = ?")
+            .bind(&canonical_path)
+            .fetch_optional(pool)
+            .await?
+    {
+        let workspace_id: String = row.try_get("workspace_id")?;
+        sqlx::query(
+            r#"UPDATE workspaces
+               SET display_path = ?, name = COALESCE(name, ?), state = 'active',
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                   last_used_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE workspace_id = ?"#,
+        )
+        .bind(&display_path)
+        .bind(&name)
+        .bind(&workspace_id)
+        .execute(pool)
+        .await?;
+        return Ok(WorkspaceRecord {
+            workspace_id,
+            canonical_path,
+        });
+    }
+
+    let workspace_id = new_workspace_id().to_string();
+    sqlx::query(
+        r#"INSERT INTO workspaces
+           (workspace_id, canonical_path, display_path, name, last_used_at)
+           VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#,
+    )
+    .bind(&workspace_id)
+    .bind(&canonical_path)
+    .bind(&display_path)
+    .bind(&name)
+    .execute(pool)
+    .await?;
+
+    Ok(WorkspaceRecord {
+        workspace_id,
+        canonical_path,
+    })
+}
 
 #[derive(Clone)]
 pub struct ArtifactDiscoveryService {
@@ -436,9 +526,12 @@ impl ExternalQueryService {
 
     pub async fn list_sessions(&self) -> Result<Vec<SessionView>> {
         let rows = sqlx::query(
-            r#"SELECT session_id, client_type, state, current_turn_id, workspace_ref,
-                      metadata, created_at, updated_at
-               FROM sessions ORDER BY created_at, session_id"#,
+            r#"SELECT s.session_id, s.client_type, s.state, s.current_turn_id, s.workspace_id,
+                      COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                      s.metadata, s.created_at, s.updated_at
+               FROM sessions s
+               LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+               ORDER BY s.created_at, s.session_id"#,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -455,9 +548,12 @@ impl ExternalQueryService {
 
     pub async fn get_session(&self, session_id: &str) -> Result<Option<SessionView>> {
         let row = sqlx::query(
-            r#"SELECT session_id, client_type, state, current_turn_id, workspace_ref,
-                      metadata, created_at, updated_at
-               FROM sessions WHERE session_id = ?"#,
+            r#"SELECT s.session_id, s.client_type, s.state, s.current_turn_id, s.workspace_id,
+                      COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                      s.metadata, s.created_at, s.updated_at
+               FROM sessions s
+               LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+               WHERE s.session_id = ?"#,
         )
         .bind(session_id)
         .fetch_optional(&self.pool)
@@ -469,6 +565,45 @@ impl ExternalQueryService {
         let mut session = row_to_session_view(row)?;
         self.enrich_session_view(&mut session).await?;
         Ok(Some(session))
+    }
+
+    pub async fn list_workspaces(&self) -> Result<Vec<WorkspaceView>> {
+        let rows = sqlx::query(
+            r#"SELECT workspace_id, canonical_path, display_path, name, state, metadata,
+                      created_at, updated_at, last_used_at
+               FROM workspaces ORDER BY last_used_at DESC, created_at DESC, workspace_id"#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_workspace_view).collect()
+    }
+
+    pub async fn list_tasks(&self) -> Result<Vec<TaskView>> {
+        let rows = sqlx::query(
+            r#"SELECT task_id, state, input, workspace_id, session_id, turn_id,
+                      routing_state, routing_reason, routing_confidence, metadata,
+                      created_at, updated_at
+               FROM tasks ORDER BY created_at DESC, task_id"#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_task_view).collect()
+    }
+
+    pub async fn get_task(&self, task_id: &str) -> Result<Option<TaskView>> {
+        let row = sqlx::query(
+            r#"SELECT task_id, state, input, workspace_id, session_id, turn_id,
+                      routing_state, routing_reason, routing_confidence, metadata,
+                      created_at, updated_at
+               FROM tasks WHERE task_id = ?"#,
+        )
+        .bind(task_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_task_view).transpose()
     }
 
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnView>> {
@@ -783,6 +918,15 @@ impl SessionCommandService {
             });
         }
 
+        let workspace_record = if let Some(workspace) = request.workspace.as_deref() {
+            Some(upsert_workspace(&self.pool, workspace).await?)
+        } else {
+            None
+        };
+        let runtime_workspace = workspace_record
+            .as_ref()
+            .map(|workspace| workspace.canonical_path.clone());
+
         let session_id = new_session_id().to_string();
         let ingest = EventIngestService::new(self.pool.clone());
 
@@ -795,7 +939,7 @@ impl SessionCommandService {
                 request.client_type.clone(),
                 EventType::SessionCreated,
                 json!({
-                    "workspace": request.workspace,
+                    "workspace": runtime_workspace,
                     "metadata": request.metadata,
                 }),
             ))
@@ -815,10 +959,10 @@ impl SessionCommandService {
         let runtime = self.runtime.start_session(RuntimeStartRequest {
             session_id: session_id.clone(),
             client_type: request.client_type.clone(),
-            workspace: request.workspace.clone(),
+            workspace: runtime_workspace.clone(),
         })?;
         self.upsert_runtime_binding(&session_id, &runtime).await?;
-        self.update_session_workspace(&session_id, request.workspace.as_deref())
+        self.update_session_workspace(&session_id, workspace_record.as_ref())
             .await?;
 
         ingest
@@ -959,13 +1103,245 @@ impl SessionCommandService {
     async fn update_session_workspace(
         &self,
         session_id: &str,
-        workspace: Option<&str>,
+        workspace: Option<&WorkspaceRecord>,
     ) -> Result<()> {
-        sqlx::query("UPDATE sessions SET workspace_ref = ? WHERE session_id = ?")
-            .bind(workspace)
+        sqlx::query("UPDATE sessions SET workspace_ref = ?, workspace_id = ? WHERE session_id = ?")
+            .bind(workspace.map(|workspace| workspace.canonical_path.as_str()))
+            .bind(workspace.map(|workspace| workspace.workspace_id.as_str()))
             .bind(session_id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct CreateTaskRequest {
+    pub input: String,
+    pub workspace: Option<String>,
+    #[serde(default = "default_client_type")]
+    pub client_type: String,
+    #[serde(default)]
+    pub metadata: Value,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateTaskOutcome {
+    pub data: Value,
+}
+
+#[derive(Clone)]
+pub struct TaskCommandService {
+    pool: SqlitePool,
+}
+
+impl TaskCommandService {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn create_task(&self, request: CreateTaskRequest) -> Result<CreateTaskOutcome> {
+        if !matches!(request.client_type.as_str(), "generic" | "pi") {
+            return Err(Error::Domain(format!(
+                "unsupported client_type: {}",
+                request.client_type
+            )));
+        }
+
+        let task_id = new_task_id().to_string();
+        sqlx::query(
+            r#"INSERT INTO tasks (task_id, state, input, routing_state, metadata)
+               VALUES (?, 'created', ?, 'pending', ?)"#,
+        )
+        .bind(&task_id)
+        .bind(&request.input)
+        .bind(serde_json::to_string(&request.metadata)?)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(&task_id, "task.created", json!({}))
+            .await?;
+
+        let Some(workspace) = request.workspace.as_deref() else {
+            sqlx::query(
+                r#"UPDATE tasks
+                   SET state = 'needs_confirmation', routing_state = 'ambiguous',
+                       routing_reason = 'workspace is required until automatic routing is implemented',
+                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                   WHERE task_id = ?"#,
+            )
+            .bind(&task_id)
+            .execute(&self.pool)
+            .await?;
+            self.record_task_event(
+                &task_id,
+                "task.routing_ambiguous",
+                json!({"reason":"workspace is required until automatic routing is implemented"}),
+            )
+            .await?;
+            let task = ExternalQueryService::new(self.pool.clone())
+                .get_task(&task_id)
+                .await?
+                .ok_or_else(|| Error::Domain("created task missing".to_string()))?;
+            return Ok(CreateTaskOutcome {
+                data: json!({ "task": task }),
+            });
+        };
+
+        sqlx::query(
+            r#"UPDATE tasks
+               SET state = 'routing', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(&task_id)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(&task_id, "task.routing_started", json!({}))
+            .await?;
+
+        let workspace_record = upsert_workspace(&self.pool, workspace).await?;
+        sqlx::query(
+            r#"UPDATE tasks
+               SET workspace_id = ?, routing_state = 'matched', routing_confidence = 1.0,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(&workspace_record.workspace_id)
+        .bind(&task_id)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(
+            &task_id,
+            "task.workspace_matched",
+            json!({"workspace_id": workspace_record.workspace_id, "canonical_path": workspace_record.canonical_path}),
+        )
+        .await?;
+
+        let session_id = self
+            .find_idle_session(&workspace_record.workspace_id, &request.client_type)
+            .await?;
+        let session_id = if let Some(session_id) = session_id {
+            self.record_task_event(
+                &task_id,
+                "task.session_selected",
+                json!({"session_id": session_id}),
+            )
+            .await?;
+            session_id
+        } else {
+            let session_outcome = SessionCommandService::new(self.pool.clone())
+                .create_session(
+                    CreateSessionRequest {
+                        client_type: request.client_type.clone(),
+                        workspace: Some(workspace_record.canonical_path.clone()),
+                        metadata: json!({"created_for_task_id": task_id}),
+                        initial_task: None,
+                    },
+                    None,
+                )
+                .await?;
+            let session_id = session_outcome.data["session"]["session_id"]
+                .as_str()
+                .ok_or_else(|| {
+                    Error::Domain("created session response missing session_id".to_string())
+                })?
+                .to_string();
+            self.record_task_event(
+                &task_id,
+                "task.session_created",
+                json!({"session_id": session_id}),
+            )
+            .await?;
+            session_id
+        };
+
+        sqlx::query(
+            r#"UPDATE tasks
+               SET state = 'queued', session_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(&session_id)
+        .bind(&task_id)
+        .execute(&self.pool)
+        .await?;
+
+        let turn_outcome = TurnCommandService::new(self.pool.clone())
+            .submit_turn(
+                &session_id,
+                SubmitTurnRequest {
+                    input: request.input,
+                    metadata: request.metadata,
+                },
+                None,
+            )
+            .await?;
+        let turn_id = turn_outcome.data["turn"]["turn_id"]
+            .as_str()
+            .ok_or_else(|| Error::Domain("created turn response missing turn_id".to_string()))?
+            .to_string();
+        let turn_state = turn_outcome.data["turn"]["state"]
+            .as_str()
+            .unwrap_or("queued");
+        let task_state = if turn_state == "running" {
+            "running"
+        } else {
+            "queued"
+        };
+        sqlx::query(
+            r#"UPDATE tasks
+               SET state = ?, turn_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(task_state)
+        .bind(&turn_id)
+        .bind(&task_id)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(&task_id, "task.turn_created", json!({"turn_id": turn_id}))
+            .await?;
+
+        let task = ExternalQueryService::new(self.pool.clone())
+            .get_task(&task_id)
+            .await?
+            .ok_or_else(|| Error::Domain("created task missing".to_string()))?;
+        Ok(CreateTaskOutcome {
+            data: json!({ "task": task }),
+        })
+    }
+
+    async fn find_idle_session(
+        &self,
+        workspace_id: &str,
+        client_type: &str,
+    ) -> Result<Option<String>> {
+        sqlx::query_scalar(
+            r#"SELECT session_id FROM sessions
+               WHERE workspace_id = ? AND client_type = ? AND state IN ('idle', 'interrupted')
+                 AND current_turn_id IS NULL
+               ORDER BY updated_at DESC, session_id LIMIT 1"#,
+        )
+        .bind(workspace_id)
+        .bind(client_type)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn record_task_event(
+        &self,
+        task_id: &str,
+        event_type: &str,
+        payload: Value,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
+               VALUES (?, ?, ?, ?)"#,
+        )
+        .bind(new_event_id().to_string())
+        .bind(task_id)
+        .bind(event_type)
+        .bind(serde_json::to_string(&payload)?)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }
@@ -2073,11 +2449,47 @@ fn row_to_session_view(row: sqlx::sqlite::SqliteRow) -> Result<SessionView> {
         client_type: row.try_get("client_type")?,
         state: row.try_get("state")?,
         current_turn_id: row.try_get("current_turn_id")?,
+        workspace_id: row.try_get("workspace_id")?,
         workspace: row.try_get("workspace_ref")?,
         capabilities: SessionCapabilities::default(),
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
         metadata: serde_json::from_str(&metadata)?,
+    })
+}
+
+fn row_to_workspace_view(row: sqlx::sqlite::SqliteRow) -> Result<WorkspaceView> {
+    let metadata: String = row.try_get("metadata")?;
+
+    Ok(WorkspaceView {
+        workspace_id: row.try_get("workspace_id")?,
+        canonical_path: row.try_get("canonical_path")?,
+        display_path: row.try_get("display_path")?,
+        name: row.try_get("name")?,
+        state: row.try_get("state")?,
+        metadata: serde_json::from_str(&metadata)?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+        last_used_at: row.try_get("last_used_at")?,
+    })
+}
+
+fn row_to_task_view(row: sqlx::sqlite::SqliteRow) -> Result<TaskView> {
+    let metadata: String = row.try_get("metadata")?;
+
+    Ok(TaskView {
+        task_id: row.try_get("task_id")?,
+        state: row.try_get("state")?,
+        input: row.try_get("input")?,
+        workspace_id: row.try_get("workspace_id")?,
+        session_id: row.try_get("session_id")?,
+        turn_id: row.try_get("turn_id")?,
+        routing_state: row.try_get("routing_state")?,
+        routing_reason: row.try_get("routing_reason")?,
+        routing_confidence: row.try_get("routing_confidence")?,
+        metadata: serde_json::from_str(&metadata)?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
     })
 }
 

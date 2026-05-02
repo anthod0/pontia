@@ -28,6 +28,13 @@ describe("loadTurnContext", () => {
     );
   });
 
+  test("falls back to system temp directory when runtime directory is missing", () => {
+    const fallbackDir = join(tmpdir(), "llmparty", "pi-runtime-fallback");
+
+    expect(defaultCurrentTurnFile({ LLMPARTY_WORKSPACE: "/project" })).toBe(join(fallbackDir, "current-turn.json"));
+    expect(defaultHookLogFile({ LLMPARTY_WORKSPACE: "/project" })).toBe(join(fallbackDir, "pi-hook.log"));
+  });
+
   test("loads required turn ids and lets environment event URL override file URL", async () => {
     const workspace = await tempWorkspace();
     const contextFile = join(workspace, "turn.json");

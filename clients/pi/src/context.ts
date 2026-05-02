@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendDiagnostic } from "./diagnostics.js";
 
@@ -16,13 +17,17 @@ export type LoadTurnContextResult =
 
 export type EnvLike = Record<string, string | undefined>;
 
+function fallbackRuntimeDir(): string {
+  return join(tmpdir(), "llmparty", "pi-runtime-fallback");
+}
+
 export function defaultCurrentTurnFile(env: EnvLike = process.env): string {
-  const runtimeDir = env.LLMPARTY_RUNTIME_DIR ?? process.cwd();
+  const runtimeDir = env.LLMPARTY_RUNTIME_DIR ?? fallbackRuntimeDir();
   return join(runtimeDir, "current-turn.json");
 }
 
 export function defaultHookLogFile(env: EnvLike = process.env): string {
-  const runtimeDir = env.LLMPARTY_RUNTIME_DIR ?? process.cwd();
+  const runtimeDir = env.LLMPARTY_RUNTIME_DIR ?? fallbackRuntimeDir();
   return join(runtimeDir, "pi-hook.log");
 }
 

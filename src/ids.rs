@@ -35,6 +35,14 @@ pub fn new_artifact_id() -> ExternalId {
     prefixed_id("art")
 }
 
+pub fn new_workspace_id() -> ExternalId {
+    prefixed_id("wks")
+}
+
+pub fn new_task_id() -> ExternalId {
+    prefixed_id("task")
+}
+
 fn prefixed_id(prefix: &str) -> ExternalId {
     ExternalId(format!("{prefix}_{}", Uuid::now_v7()))
 }

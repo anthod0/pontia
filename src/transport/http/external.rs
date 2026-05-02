@@ -17,8 +17,8 @@ use tokio_stream::{Stream, wrappers::ReceiverStream};
 use crate::{
     application::{
         AppState, ArtifactContentService, ArtifactDiscoveryService, CreateSessionRequest,
-        EventStreamScope, ExternalQueryService, RuntimeControlService, SessionCommandService,
-        SubmitTurnRequest, TurnCommandService,
+        CreateTaskRequest, EventStreamScope, ExternalQueryService, RuntimeControlService,
+        SessionCommandService, SubmitTurnRequest, TaskCommandService, TurnCommandService,
     },
     error::Error,
 };
@@ -82,6 +82,51 @@ pub async fn get_session(
         .await?
         .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
     Ok(ok(json!({ "session": session })))
+}
+
+pub async fn list_workspaces(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = ExternalQueryService::new(state.db);
+    let workspaces = service.list_workspaces().await?;
+    Ok(ok(json!({ "workspaces": workspaces })))
+}
+
+pub async fn create_task(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CreateTaskRequest>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = TaskCommandService::new(state.db);
+    let outcome = service.create_task(request).await?;
+    Ok((StatusCode::CREATED, ok(outcome.data)).into_response())
+}
+
+pub async fn list_tasks(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = ExternalQueryService::new(state.db);
+    let tasks = service.list_tasks().await?;
+    Ok(ok(json!({ "tasks": tasks })))
+}
+
+pub async fn get_task(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = ExternalQueryService::new(state.db);
+    let task = service
+        .get_task(&task_id)
+        .await?
+        .ok_or_else(|| ExternalApiError::not_found(format!("task {task_id} not found")))?;
+    Ok(ok(json!({ "task": task })))
 }
 
 pub async fn submit_turn(

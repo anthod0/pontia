@@ -21,6 +21,12 @@ pub fn router(state: AppState) -> Router {
             "/external/v1/sessions",
             get(external::list_sessions).post(external::create_session),
         )
+        .route("/external/v1/workspaces", get(external::list_workspaces))
+        .route(
+            "/external/v1/tasks",
+            get(external::list_tasks).post(external::create_task),
+        )
+        .route("/external/v1/tasks/{task_id}", get(external::get_task))
         .route(
             "/external/v1/sessions/{session_id}",
             get(external::get_session).delete(external::terminate_session),
