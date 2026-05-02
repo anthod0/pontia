@@ -23,9 +23,10 @@ The extension reads configuration from environment variables:
 | Variable | Required | Default |
 | --- | --- | --- |
 | `LLMPARTY_WORKSPACE` | recommended | pi process cwd |
-| `LLMPARTY_CURRENT_TURN_FILE` | recommended | `$LLMPARTY_WORKSPACE/.llmparty/current-turn.json` |
+| `LLMPARTY_RUNTIME_DIR` | recommended | pi process cwd |
+| `LLMPARTY_CURRENT_TURN_FILE` | recommended | `$LLMPARTY_RUNTIME_DIR/current-turn.json` |
 | `LLMPARTY_INTERNAL_EVENT_URL` | required unless present in context file | none |
-| `LLMPARTY_PI_HOOK_LOG` | recommended | `$LLMPARTY_WORKSPACE/.llmparty/pi-hook.log` |
+| `LLMPARTY_PI_HOOK_LOG` | recommended | `$LLMPARTY_RUNTIME_DIR/pi-hook.log` |
 
 Expected `current-turn.json`:
 
@@ -52,14 +53,15 @@ The extension does not parse TUI screen contents and does not infer completion f
 
 ## Manual validation
 
-When pi is launched by an M4.5 llmparty `client_type = "pi"` runtime, the Control Plane writes `.llmparty/current-turn.json` before each dispatch and exports `LLMPARTY_CURRENT_TURN_FILE`, `LLMPARTY_INTERNAL_EVENT_URL`, and `LLMPARTY_PI_HOOK_LOG` for the hook. The steps below are useful for standalone plugin validation.
+When pi is launched by llmparty `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `LLMPARTY_RUNTIME_DIR`, `LLMPARTY_CURRENT_TURN_FILE`, `LLMPARTY_INTERNAL_EVENT_URL`, and `LLMPARTY_PI_HOOK_LOG` for the hook. The steps below are useful for standalone plugin validation.
 
 1. Start llmparty so `/internal/v1/events` is reachable.
-2. Create the current turn file in the workspace:
+2. Create the current turn file in a runtime directory:
 
    ```bash
-   mkdir -p .llmparty
-   cat > .llmparty/current-turn.json <<'JSON'
+   export LLMPARTY_RUNTIME_DIR="$HOME/.local/share/llmparty/runtimes/manual-pi"
+   mkdir -p "$LLMPARTY_RUNTIME_DIR"
+   cat > "$LLMPARTY_RUNTIME_DIR/current-turn.json" <<'JSON'
    {
      "session_id": "sess_xxx",
      "turn_id": "turn_xxx",
@@ -74,9 +76,9 @@ When pi is launched by an M4.5 llmparty `client_type = "pi"` runtime, the Contro
 
    ```bash
    export LLMPARTY_WORKSPACE="$PWD"
-   export LLMPARTY_CURRENT_TURN_FILE="$PWD/.llmparty/current-turn.json"
+   export LLMPARTY_CURRENT_TURN_FILE="$LLMPARTY_RUNTIME_DIR/current-turn.json"
    export LLMPARTY_INTERNAL_EVENT_URL="http://127.0.0.1:8080/internal/v1/events"
-   export LLMPARTY_PI_HOOK_LOG="$PWD/.llmparty/pi-hook.log"
+   export LLMPARTY_PI_HOOK_LOG="$LLMPARTY_RUNTIME_DIR/pi-hook.log"
    ```
 
 4. Run a real pi session:
@@ -90,5 +92,5 @@ When pi is launched by an M4.5 llmparty `client_type = "pi"` runtime, the Contro
 6. If reporting fails, inspect diagnostics:
 
    ```bash
-   tail -f .llmparty/pi-hook.log
+   tail -f "$LLMPARTY_RUNTIME_DIR/pi-hook.log"
    ```

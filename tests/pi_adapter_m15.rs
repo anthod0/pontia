@@ -1,5 +1,5 @@
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     time::Duration,
 };
@@ -143,11 +143,11 @@ async fn pi_runtime_binding_exposes_adapter_event_log() {
     let adapter_event_log = metadata["adapter_event_log"]
         .as_str()
         .expect("adapter event log");
+    assert!(!workspace.path().join(".llmparty").exists());
     assert_eq!(
         adapter_event_log,
-        workspace
-            .path()
-            .join(".llmparty/adapter-events.jsonl")
+        PathBuf::from(metadata["runtime_dir"].as_str().expect("runtime_dir"))
+            .join("adapter-events.jsonl")
             .display()
             .to_string()
     );
@@ -381,7 +381,13 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
     let turn_id = body["data"]["turn"]["turn_id"].as_str().expect("turn id");
 
-    let context_path = workspace.path().join(".llmparty/current-turn.json");
+    assert!(!workspace.path().join(".llmparty").exists());
+    let context_path = PathBuf::from(
+        metadata["current_turn_file"]
+            .as_str()
+            .expect("current_turn_file metadata"),
+    );
+    assert!(context_path.starts_with(metadata["runtime_dir"].as_str().expect("runtime_dir")));
     let context: Value = serde_json::from_str(
         &std::fs::read_to_string(&context_path).expect("current-turn context file"),
     )
@@ -409,14 +415,18 @@ async fn pi_runtime_exports_real_hook_environment() {
         .expect("tmux session")
         .to_string();
 
-    let runtime_script = std::fs::read_to_string(workspace.path().join(".llmparty/runtime.sh"))
+    assert!(!workspace.path().join(".llmparty").exists());
+    let runtime_dir = metadata["runtime_dir"].as_str().expect("runtime_dir");
+    let runtime_script = std::fs::read_to_string(PathBuf::from(runtime_dir).join("runtime.sh"))
         .expect("runtime script");
     assert!(runtime_script.contains("export LLMPARTY_CURRENT_TURN_FILE="));
-    assert!(runtime_script.contains(".llmparty/current-turn.json"));
+    assert!(runtime_script.contains("/runtimes/"));
+    assert!(runtime_script.contains("current-turn.json"));
+    assert!(runtime_script.contains("export LLMPARTY_RUNTIME_DIR="));
     assert!(runtime_script.contains("export LLMPARTY_INTERNAL_EVENT_URL="));
     assert!(runtime_script.contains("http://127.0.0.1:8080/internal/v1/events"));
     assert!(runtime_script.contains("export LLMPARTY_PI_HOOK_LOG="));
-    assert!(runtime_script.contains(".llmparty/pi-hook.log"));
+    assert!(runtime_script.contains("pi-hook.log"));
 
     cleanup_tmux(&tmux_session);
 }

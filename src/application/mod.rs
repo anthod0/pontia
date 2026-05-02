@@ -1199,9 +1199,9 @@ fn write_pi_current_turn_context(metadata: &Value, input: &AgentInput) -> Result
         .as_str()
         .map(PathBuf::from)
         .or_else(|| {
-            metadata["workspace"]
+            metadata["runtime_dir"]
                 .as_str()
-                .map(|workspace| Path::new(workspace).join(".llmparty/current-turn.json"))
+                .map(|runtime_dir| Path::new(runtime_dir).join("current-turn.json"))
         })
         .ok_or_else(|| {
             Error::Domain("pi runtime metadata missing current_turn_file".to_string())

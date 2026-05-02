@@ -1,4 +1,18 @@
-use llmparty::storage::sqlite::{connect_sqlite, run_migrations};
+use llmparty::storage::sqlite::{connect_sqlite, normalize_sqlite_database_url, run_migrations};
+
+#[test]
+fn expands_tilde_sqlite_database_urls_before_connecting() {
+    let normalized = normalize_sqlite_database_url(
+        "sqlite://~/.local/share/llmparty/llmparty.db",
+        "/home/alice",
+    )
+    .expect("normalize");
+
+    assert_eq!(
+        normalized,
+        "sqlite:///home/alice/.local/share/llmparty/llmparty.db"
+    );
+}
 
 #[tokio::test]
 async fn connects_to_sqlite_and_runs_migrations() {

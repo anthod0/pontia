@@ -18,10 +18,14 @@ async function tempWorkspace() {
 }
 
 describe("loadTurnContext", () => {
-  test("derives default context and log paths from LLMPARTY_WORKSPACE", async () => {
-    const workspace = await tempWorkspace();
-    expect(defaultCurrentTurnFile({ LLMPARTY_WORKSPACE: workspace })).toBe(join(workspace, ".llmparty", "current-turn.json"));
-    expect(defaultHookLogFile({ LLMPARTY_WORKSPACE: workspace })).toBe(join(workspace, ".llmparty", "pi-hook.log"));
+  test("derives default context and log paths from LLMPARTY_RUNTIME_DIR", async () => {
+    const runtimeDir = await tempWorkspace();
+    expect(defaultCurrentTurnFile({ LLMPARTY_RUNTIME_DIR: runtimeDir, LLMPARTY_WORKSPACE: "/project" })).toBe(
+      join(runtimeDir, "current-turn.json"),
+    );
+    expect(defaultHookLogFile({ LLMPARTY_RUNTIME_DIR: runtimeDir, LLMPARTY_WORKSPACE: "/project" })).toBe(
+      join(runtimeDir, "pi-hook.log"),
+    );
   });
 
   test("loads required turn ids and lets environment event URL override file URL", async () => {

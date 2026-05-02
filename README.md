@@ -125,14 +125,14 @@ cargo run
 LLMPARTY_PI_TUI_COMMAND='pi -e /absolute/path/to/llmparty/clients/pi'
 ```
 
-pi session 运行时，llmparty 会在 workspace 下维护：
+pi session 运行时，llmparty 会在全局 runtime 目录下维护自身状态文件：
 
 ```text
-.llmparty/current-turn.json
-.llmparty/pi-hook.log
+~/.local/share/llmparty/runtimes/<session_id>/current-turn.json
+~/.local/share/llmparty/runtimes/<session_id>/pi-hook.log
 ```
 
-如果 Dashboard 没有收到 pi 的输出或完成事件，可以先查看 `pi-hook.log`。
+workspace 仅作为 runtime cwd，不再创建项目内 `.llmparty/`。如果 Dashboard 没有收到 pi 的输出或完成事件，可以先查看对应 runtime 目录中的 `pi-hook.log`。
 
 ## 使用 HTTP API
 
@@ -214,7 +214,7 @@ curl -X DELETE http://127.0.0.1:8080/external/v1/sessions/sess_example \
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `LLMPARTY_BIND_ADDR` | `127.0.0.1:8080` | 服务监听地址 |
-| `LLMPARTY_DATABASE_URL` | `sqlite://./data/llmparty.db` | SQLite 数据库地址 |
+| `LLMPARTY_DATABASE_URL` | `sqlite://~/.local/share/llmparty/llmparty.db` | SQLite 数据库地址 |
 | `LLMPARTY_EXTERNAL_API_TOKEN` | 未设置 | Dashboard 和 External API 的 Bearer token |
 | `LLMPARTY_RUN_MIGRATIONS` | `true` | 启动时自动执行数据库迁移 |
 | `LLMPARTY_INTERNAL_EVENT_URL` | 自动推导或手动设置 | agent / hook 回传事件的地址 |

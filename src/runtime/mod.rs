@@ -72,16 +72,23 @@ impl GenericRuntimeManager {
         let capabilities = capabilities_for_client(&request.client_type);
         let tmux_session = tmux_session_name(&request.session_id);
         let workspace = workspace_path(&request)?;
-        let llmparty_dir = workspace.join(".llmparty");
-        std::fs::create_dir_all(&llmparty_dir)?;
-        let log_path = llmparty_dir.join("runtime.log");
-        let adapter_event_log = llmparty_dir.join("adapter-events.jsonl");
-        let current_turn_file = llmparty_dir.join("current-turn.json");
-        let pi_hook_log = llmparty_dir.join("pi-hook.log");
+        let runtime_dir = runtime_dir(&request.session_id)?;
+        std::fs::create_dir_all(&runtime_dir)?;
+        let log_path = runtime_dir.join("runtime.log");
+        let adapter_event_log = runtime_dir.join("adapter-events.jsonl");
+        let current_turn_file = runtime_dir.join("current-turn.json");
+        let pi_hook_log = runtime_dir.join("pi-hook.log");
         let internal_event_url = internal_event_url();
         std::fs::File::create(&log_path)?;
-        let script_path = llmparty_dir.join("runtime.sh");
-        write_runtime_script(&script_path, &log_path, &request)?;
+        let script_path = runtime_dir.join("runtime.sh");
+        let runtime_paths = RuntimePaths {
+            runtime_dir: &runtime_dir,
+            log_path: &log_path,
+            adapter_event_log: &adapter_event_log,
+            current_turn_file: &current_turn_file,
+            pi_hook_log: &pi_hook_log,
+        };
+        write_runtime_script(&script_path, &workspace, &runtime_paths, &request)?;
 
         let status = Command::new("tmux")
             .args([
@@ -105,6 +112,7 @@ impl GenericRuntimeManager {
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
         let workspace = workspace.display().to_string();
+        let runtime_dir = runtime_dir.display().to_string();
         let log_path = log_path.display().to_string();
         let adapter_event_log = adapter_event_log.display().to_string();
         let current_turn_file = current_turn_file.display().to_string();
@@ -117,6 +125,8 @@ impl GenericRuntimeManager {
                 "backend": "tmux",
                 "tmux_session": tmux_session,
                 "workspace": workspace,
+                "runtime_dir": runtime_dir,
+                "runtime_log": log_path,
                 "log_path": log_path,
                 "adapter_event_log": adapter_event_log,
                 "current_turn_file": current_turn_file,
@@ -247,18 +257,43 @@ fn workspace_path(request: &RuntimeStartRequest) -> Result<PathBuf> {
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             std::env::temp_dir()
-                .join("llmparty-runtimes")
+                .join("llmparty-workspaces")
                 .join(&request.session_id)
         });
     std::fs::create_dir_all(&path)?;
     Ok(path)
 }
 
-fn write_runtime_script(path: &Path, log_path: &Path, request: &RuntimeStartRequest) -> Result<()> {
-    let workspace = path
-        .parent()
-        .and_then(|path| path.parent())
-        .ok_or_else(|| Error::Domain("runtime script path missing workspace".to_string()))?;
+fn runtime_dir(session_id: &str) -> Result<PathBuf> {
+    Ok(llmparty_data_dir()?.join("runtimes").join(session_id))
+}
+
+fn llmparty_data_dir() -> Result<PathBuf> {
+    if let Ok(path) = std::env::var("LLMPARTY_DATA_DIR") {
+        return Ok(PathBuf::from(path));
+    }
+
+    let home = std::env::var("HOME").map_err(|_| Error::InvalidConfig {
+        key: "HOME",
+        message: "required to derive llmparty data directory".to_string(),
+    })?;
+    Ok(PathBuf::from(home).join(".local/share/llmparty"))
+}
+
+struct RuntimePaths<'a> {
+    runtime_dir: &'a Path,
+    log_path: &'a Path,
+    adapter_event_log: &'a Path,
+    current_turn_file: &'a Path,
+    pi_hook_log: &'a Path,
+}
+
+fn write_runtime_script(
+    path: &Path,
+    workspace: &Path,
+    runtime_paths: &RuntimePaths<'_>,
+    request: &RuntimeStartRequest,
+) -> Result<()> {
     let (log_setup, runtime_body) = if request.client_type == "pi" {
         let pi_command =
             std::env::var("LLMPARTY_PI_TUI_COMMAND").unwrap_or_else(|_| "pi".to_string());
@@ -277,6 +312,7 @@ fn write_runtime_script(path: &Path, log_path: &Path, request: &RuntimeStartRequ
 export LLMPARTY_SESSION_ID={}
 export LLMPARTY_CLIENT_TYPE={}
 export LLMPARTY_WORKSPACE={}
+export LLMPARTY_RUNTIME_DIR={}
 export LLMPARTY_RUNTIME_LOG={}
 export LLMPARTY_ADAPTER_EVENT_LOG={}
 export LLMPARTY_CURRENT_TURN_FILE={}
@@ -288,26 +324,12 @@ export LLMPARTY_PI_HOOK_LOG={}
         shell_quote(&request.session_id),
         shell_quote(&request.client_type),
         shell_quote(&workspace.display().to_string()),
-        shell_quote(&log_path.display().to_string()),
-        shell_quote(
-            &workspace
-                .join(".llmparty/adapter-events.jsonl")
-                .display()
-                .to_string()
-        ),
-        shell_quote(
-            &workspace
-                .join(".llmparty/current-turn.json")
-                .display()
-                .to_string()
-        ),
+        shell_quote(&runtime_paths.runtime_dir.display().to_string()),
+        shell_quote(&runtime_paths.log_path.display().to_string()),
+        shell_quote(&runtime_paths.adapter_event_log.display().to_string()),
+        shell_quote(&runtime_paths.current_turn_file.display().to_string()),
         shell_quote(&internal_event_url()),
-        shell_quote(
-            &workspace
-                .join(".llmparty/pi-hook.log")
-                .display()
-                .to_string()
-        ),
+        shell_quote(&runtime_paths.pi_hook_log.display().to_string()),
         log_setup,
         runtime_body,
     );

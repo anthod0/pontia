@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, net::SocketAddr};
 use crate::error::{Error, Result};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
-const DEFAULT_DATABASE_URL: &str = "sqlite://./data/llmparty.db";
+const DEFAULT_DATABASE_URL: &str = "sqlite://~/.local/share/llmparty/llmparty.db";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {

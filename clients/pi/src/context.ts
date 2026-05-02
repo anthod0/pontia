@@ -17,13 +17,13 @@ export type LoadTurnContextResult =
 export type EnvLike = Record<string, string | undefined>;
 
 export function defaultCurrentTurnFile(env: EnvLike = process.env): string {
-  const workspace = env.LLMPARTY_WORKSPACE ?? process.cwd();
-  return join(workspace, ".llmparty", "current-turn.json");
+  const runtimeDir = env.LLMPARTY_RUNTIME_DIR ?? process.cwd();
+  return join(runtimeDir, "current-turn.json");
 }
 
 export function defaultHookLogFile(env: EnvLike = process.env): string {
-  const workspace = env.LLMPARTY_WORKSPACE ?? process.cwd();
-  return join(workspace, ".llmparty", "pi-hook.log");
+  const runtimeDir = env.LLMPARTY_RUNTIME_DIR ?? process.cwd();
+  return join(runtimeDir, "pi-hook.log");
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

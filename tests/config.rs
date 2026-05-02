@@ -33,7 +33,10 @@ fn provides_development_defaults_for_optional_values() {
     let config = AppConfig::from_vars(&HashMap::<String, String>::new()).expect("defaults load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
-    assert_eq!(config.database_url, "sqlite://./data/llmparty.db");
+    assert_eq!(
+        config.database_url,
+        "sqlite://~/.local/share/llmparty/llmparty.db"
+    );
     assert_eq!(config.external_api_token, None);
     assert!(config.run_migrations);
 }
