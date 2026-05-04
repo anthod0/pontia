@@ -28,6 +28,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/external/v1/tasks/{task_id}", get(external::get_task))
         .route(
+            "/external/v1/tasks/{task_id}/confirm-workspace",
+            post(external::confirm_task_workspace),
+        )
+        .route(
             "/external/v1/tasks/{task_id}/events",
             get(external::list_task_events),
         )

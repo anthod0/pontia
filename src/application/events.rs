@@ -120,6 +120,10 @@ impl EventIngestService {
 
         tx.commit().await?;
 
+        TaskCommandService::new(self.pool.clone())
+            .sync_task_from_turn_event(&event)
+            .await?;
+
         Ok(EventIngestResult {
             accepted: true,
             duplicate: false,

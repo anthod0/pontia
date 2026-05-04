@@ -45,6 +45,42 @@ async fn post_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Valu
     json_response(response).await
 }
 
+async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
+    let response = http::router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/internal/v1/events")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    json_response(response).await
+}
+
+fn event_body(
+    event_id: &str,
+    event_type: &str,
+    session_id: &str,
+    turn_id: &str,
+    seq: i64,
+) -> Value {
+    json!({
+        "event_id": event_id,
+        "session_id": session_id,
+        "turn_id": turn_id,
+        "source": "agent_adapter",
+        "client_type": "generic",
+        "type": event_type,
+        "time": "2026-05-04T00:00:00Z",
+        "seq": seq,
+        "payload": {}
+    })
+}
+
 async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
     let response = http::router(state)
         .oneshot(
@@ -177,15 +213,15 @@ async fn task_events_endpoint_returns_task_lifecycle_history() {
     assert_eq!(status, StatusCode::CREATED);
     let task_id = body["data"]["task"]["task_id"].as_str().expect("task id");
 
-    let (status, body) = get_json(
-        state,
-        &format!("/external/v1/tasks/{task_id}/events"),
-    )
-    .await;
+    let (status, body) = get_json(state, &format!("/external/v1/tasks/{task_id}/events")).await;
 
     assert_eq!(status, StatusCode::OK);
     let events = body["data"]["events"].as_array().expect("events");
-    assert!(events.iter().any(|event| event["event_type"] == "task.created"));
+    assert!(
+        events
+            .iter()
+            .any(|event| event["event_type"] == "task.created")
+    );
     assert!(
         events
             .iter()
@@ -205,6 +241,172 @@ async fn task_events_endpoint_returns_not_found_for_missing_task() {
 
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"]["code"], "not_found");
+}
+
+#[tokio::test]
+async fn task_state_follows_turn_lifecycle() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+
+    let (status, body) = post_json(
+        state.clone(),
+        "/external/v1/tasks",
+        json!({
+            "input":"track lifecycle",
+            "workspace": workspace.path().display().to_string(),
+            "client_type":"generic"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let task_id = body["data"]["task"]["task_id"].as_str().unwrap();
+    let session_id = body["data"]["task"]["session_id"].as_str().unwrap();
+    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
+    let turn_id = body["data"]["task"]["turn_id"].as_str().unwrap();
+
+    let (status, _) = post_internal_event(
+        state.clone(),
+        event_body("evt_task_started", "turn.started", session_id, turn_id, 3),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = get_json(state.clone(), &format!("/external/v1/tasks/{task_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["task"]["state"], "running");
+
+    let (status, _) = post_internal_event(
+        state.clone(),
+        event_body(
+            "evt_task_completed",
+            "turn.completed",
+            session_id,
+            turn_id,
+            4,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = get_json(state.clone(), &format!("/external/v1/tasks/{task_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["task"]["state"], "completed");
+
+    let (status, body) = post_internal_event(
+        state.clone(),
+        event_body(
+            "evt_task_completed",
+            "turn.completed",
+            session_id,
+            turn_id,
+            4,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["duplicate"], true);
+
+    let (status, body) = get_json(state, &format!("/external/v1/tasks/{task_id}/events")).await;
+    assert_eq!(status, StatusCode::OK);
+    let events = body["data"]["events"].as_array().unwrap();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["event_type"] == "task.completed")
+            .count(),
+        1
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event["event_type"] == "task.running")
+    );
+}
+
+#[tokio::test]
+async fn confirm_workspace_dispatches_pending_task() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let canonical = std::fs::canonicalize(workspace.path()).expect("canonical");
+
+    let (status, body) = post_json(
+        state.clone(),
+        "/external/v1/tasks",
+        json!({"input":"confirm me", "client_type":"generic"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let task_id = body["data"]["task"]["task_id"].as_str().unwrap();
+    assert_eq!(body["data"]["task"]["state"], "needs_confirmation");
+
+    let (status, body) = post_json(
+        state.clone(),
+        &format!("/external/v1/tasks/{task_id}/confirm-workspace"),
+        json!({"workspace": workspace.path().display().to_string(), "client_type":"generic"}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let task = &body["data"]["task"];
+    let session_id = task["session_id"].as_str().expect("session id");
+    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
+    assert_eq!(task["state"], "queued");
+    assert_eq!(task["routing_state"], "confirmed");
+    assert!(task["workspace_id"].as_str().unwrap().starts_with("wks_"));
+    assert!(task["turn_id"].as_str().unwrap().starts_with("turn_"));
+
+    let (status, session_body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        session_body["data"]["session"]["workspace"],
+        canonical.display().to_string()
+    );
+
+    let (status, events_body) =
+        get_json(state, &format!("/external/v1/tasks/{task_id}/events")).await;
+    assert_eq!(status, StatusCode::OK);
+    let events = events_body["data"]["events"].as_array().unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event["event_type"] == "task.workspace_confirmed")
+    );
+}
+
+#[tokio::test]
+async fn confirm_workspace_rejects_already_dispatched_task() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+
+    let (status, body) = post_json(
+        state.clone(),
+        "/external/v1/tasks",
+        json!({
+            "input":"already dispatched",
+            "workspace": workspace.path().display().to_string(),
+            "client_type":"generic"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let task = &body["data"]["task"];
+    let task_id = task["task_id"].as_str().unwrap();
+    let session_id = task["session_id"].as_str().unwrap();
+    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
+
+    let (status, body) = post_json(
+        state,
+        &format!("/external/v1/tasks/{task_id}/confirm-workspace"),
+        json!({"workspace": workspace.path().display().to_string(), "client_type":"generic"}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "state_conflict");
 }
 
 #[tokio::test]

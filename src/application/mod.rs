@@ -48,7 +48,9 @@ pub use sessions::{
     CreateSessionOutcome, CreateSessionRequest, InitialTaskRequest, SessionCommandService,
 };
 pub use state::{AppState, initialize};
-pub use tasks::{CreateTaskOutcome, CreateTaskRequest, TaskCommandService};
+pub use tasks::{
+    ConfirmTaskWorkspaceRequest, CreateTaskOutcome, CreateTaskRequest, TaskCommandService,
+};
 pub use turns::{SubmitTurnOutcome, SubmitTurnRequest, TurnCommandService};
 pub use views::*;
 

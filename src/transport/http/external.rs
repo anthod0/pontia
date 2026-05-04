@@ -16,9 +16,10 @@ use tokio_stream::{Stream, wrappers::ReceiverStream};
 
 use crate::{
     application::{
-        AppState, ArtifactContentService, ArtifactDiscoveryService, CreateSessionRequest,
-        CreateTaskRequest, EventStreamScope, ExternalQueryService, RuntimeControlService,
-        SessionCommandService, SubmitTurnRequest, TaskCommandService, TurnCommandService,
+        AppState, ArtifactContentService, ArtifactDiscoveryService, ConfirmTaskWorkspaceRequest,
+        CreateSessionRequest, CreateTaskRequest, EventStreamScope, ExternalQueryService,
+        RuntimeControlService, SessionCommandService, SubmitTurnRequest, TaskCommandService,
+        TurnCommandService,
     },
     error::Error,
 };
@@ -103,6 +104,18 @@ pub async fn create_task(
     let service = TaskCommandService::new(state.db);
     let outcome = service.create_task(request).await?;
     Ok((StatusCode::CREATED, ok(outcome.data)).into_response())
+}
+
+pub async fn confirm_task_workspace(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(request): Json<ConfirmTaskWorkspaceRequest>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = TaskCommandService::new(state.db);
+    let outcome = service.confirm_workspace(&task_id, request).await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
 pub async fn list_tasks(
