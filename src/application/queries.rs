@@ -92,6 +92,18 @@ impl ExternalQueryService {
         row.map(row_to_task_view).transpose()
     }
 
+    pub async fn list_task_events(&self, task_id: &str) -> Result<Vec<TaskEventView>> {
+        let rows = sqlx::query(
+            r#"SELECT event_id, task_id, event_type, payload, created_at
+               FROM task_events WHERE task_id = ? ORDER BY created_at, event_id"#,
+        )
+        .bind(task_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_task_event_view).collect()
+    }
+
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnView>> {
         let rows = sqlx::query(
             r#"SELECT turn_id, session_id, state, input_summary, output_summary,

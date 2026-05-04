@@ -52,6 +52,18 @@ pub(crate) fn row_to_task_view(row: sqlx::sqlite::SqliteRow) -> Result<TaskView>
     })
 }
 
+pub(crate) fn row_to_task_event_view(row: sqlx::sqlite::SqliteRow) -> Result<TaskEventView> {
+    let payload: String = row.try_get("payload")?;
+
+    Ok(TaskEventView {
+        event_id: row.try_get("event_id")?,
+        task_id: row.try_get("task_id")?,
+        event_type: row.try_get("event_type")?,
+        payload: serde_json::from_str(&payload)?,
+        created_at: row.try_get("created_at")?,
+    })
+}
+
 pub(crate) fn row_to_turn_view(row: sqlx::sqlite::SqliteRow) -> Result<TurnView> {
     let metadata: String = row.try_get("metadata")?;
     let metadata_json: Value = serde_json::from_str(&metadata)?;

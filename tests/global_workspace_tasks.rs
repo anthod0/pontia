@@ -164,6 +164,50 @@ async fn create_task_without_workspace_persists_global_task_for_confirmation() {
 }
 
 #[tokio::test]
+async fn task_events_endpoint_returns_task_lifecycle_history() {
+    let state = test_state().await;
+
+    let (status, body) = post_json(
+        state.clone(),
+        "/external/v1/tasks",
+        json!({"input":"show my task events", "client_type":"generic"}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    let task_id = body["data"]["task"]["task_id"].as_str().expect("task id");
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/tasks/{task_id}/events"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let events = body["data"]["events"].as_array().expect("events");
+    assert!(events.iter().any(|event| event["event_type"] == "task.created"));
+    assert!(
+        events
+            .iter()
+            .any(|event| event["event_type"] == "task.routing_ambiguous")
+    );
+    assert_eq!(events[0]["task_id"], task_id);
+    assert!(events[0]["event_id"].as_str().unwrap().starts_with("evt_"));
+    assert!(events[0]["payload"].is_object());
+    assert!(events[0]["created_at"].as_str().is_some());
+}
+
+#[tokio::test]
+async fn task_events_endpoint_returns_not_found_for_missing_task() {
+    let state = test_state().await;
+
+    let (status, body) = get_json(state, "/external/v1/tasks/task_missing/events").await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "not_found");
+}
+
+#[tokio::test]
 async fn create_task_with_workspace_routes_to_session_and_links_created_turn() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");

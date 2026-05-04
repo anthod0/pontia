@@ -55,6 +55,15 @@ pub struct TaskView {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct TaskEventView {
+    pub event_id: String,
+    pub task_id: String,
+    pub event_type: String,
+    pub payload: Value,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct TurnInputView {
     pub summary: Option<String>,
     pub artifact_id: Option<String>,

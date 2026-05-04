@@ -28,6 +28,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/external/v1/tasks/{task_id}", get(external::get_task))
         .route(
+            "/external/v1/tasks/{task_id}/events",
+            get(external::list_task_events),
+        )
+        .route(
             "/external/v1/sessions/{session_id}",
             get(external::get_session).delete(external::terminate_session),
         )
