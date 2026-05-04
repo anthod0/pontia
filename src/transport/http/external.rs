@@ -101,9 +101,17 @@ pub async fn create_task(
     Json(request): Json<CreateTaskRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
     let service = TaskCommandService::new(state.db);
-    let outcome = service.create_task(request).await?;
-    Ok((StatusCode::CREATED, ok(outcome.data)).into_response())
+    let outcome = service.create_task(request, idempotency_key).await?;
+    let status = if outcome.duplicate {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    Ok((status, ok(outcome.data)).into_response())
 }
 
 pub async fn confirm_task_workspace(
@@ -113,8 +121,41 @@ pub async fn confirm_task_workspace(
     Json(request): Json<ConfirmTaskWorkspaceRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
     let service = TaskCommandService::new(state.db);
-    let outcome = service.confirm_workspace(&task_id, request).await?;
+    let outcome = service
+        .confirm_workspace(&task_id, request, idempotency_key)
+        .await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
+
+pub async fn interrupt_task(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
+    let service = TaskCommandService::new(state.db);
+    let outcome = service.interrupt_task(&task_id, idempotency_key).await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
+
+pub async fn cancel_task(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
+    let service = TaskCommandService::new(state.db);
+    let outcome = service.cancel_task(&task_id, idempotency_key).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 

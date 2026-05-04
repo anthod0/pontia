@@ -36,6 +36,14 @@ pub fn router(state: AppState) -> Router {
             get(external::list_task_events),
         )
         .route(
+            "/external/v1/tasks/{task_id}/interrupt",
+            post(external::interrupt_task),
+        )
+        .route(
+            "/external/v1/tasks/{task_id}/cancel",
+            post(external::cancel_task),
+        )
+        .route(
             "/external/v1/sessions/{session_id}",
             get(external::get_session).delete(external::terminate_session),
         )

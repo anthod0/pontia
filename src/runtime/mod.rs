@@ -6,7 +6,9 @@
 use std::{
     io::Write,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Command, ExitStatus, Stdio},
+    thread,
+    time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
@@ -90,17 +92,7 @@ impl GenericRuntimeManager {
         };
         write_runtime_script(&script_path, &workspace, &runtime_paths, &request)?;
 
-        let status = Command::new("tmux")
-            .args([
-                "new-session",
-                "-d",
-                "-s",
-                &tmux_session,
-                "-c",
-                &workspace.display().to_string(),
-                &format!("sh {}", shell_quote(&script_path.display().to_string())),
-            ])
-            .status()
+        let status = spawn_tmux_session(&tmux_session, &workspace, &script_path)
             .map_err(|err| Error::Domain(format!("tmux runtime spawn failed: {err}")))?;
         if !status.success() {
             return Err(Error::Domain(format!(
@@ -232,6 +224,34 @@ impl RuntimeStartResult {
         }
         metadata
     }
+}
+
+fn spawn_tmux_session(
+    tmux_session: &str,
+    workspace: &Path,
+    script_path: &Path,
+) -> std::io::Result<ExitStatus> {
+    let command = || {
+        Command::new("tmux")
+            .args([
+                "new-session",
+                "-d",
+                "-s",
+                tmux_session,
+                "-c",
+                &workspace.display().to_string(),
+                &format!("sh {}", shell_quote(&script_path.display().to_string())),
+            ])
+            .status()
+    };
+
+    let first = command()?;
+    if first.success() {
+        return Ok(first);
+    }
+
+    thread::sleep(Duration::from_millis(50));
+    command()
 }
 
 fn capabilities_for_client(client_type: &str) -> AdapterCapabilities {

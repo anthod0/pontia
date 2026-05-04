@@ -29,16 +29,26 @@ async fn test_state() -> AppState {
 }
 
 async fn post_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Value) {
+    post_json_with_idempotency(state, uri, body, None).await
+}
+
+async fn post_json_with_idempotency(
+    state: AppState,
+    uri: &str,
+    body: Value,
+    idempotency_key: Option<&str>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+    if let Some(idempotency_key) = idempotency_key {
+        builder = builder.header("Idempotency-Key", idempotency_key);
+    }
+
     let response = http::router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(uri)
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-                .body(Body::from(body.to_string()))
-                .expect("request"),
-        )
+        .oneshot(builder.body(Body::from(body.to_string())).expect("request"))
         .await
         .expect("response");
 
@@ -407,6 +417,155 @@ async fn confirm_workspace_rejects_already_dispatched_task() {
 
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["error"]["code"], "state_conflict");
+}
+
+#[tokio::test]
+async fn task_creation_idempotency_returns_same_task_for_replayed_key() {
+    let state = test_state().await;
+    let request = json!({"input":"retry-safe task", "client_type":"generic"});
+
+    let (status, first) = post_json_with_idempotency(
+        state.clone(),
+        "/external/v1/tasks",
+        request.clone(),
+        Some("task-retry-key"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, second) = post_json_with_idempotency(
+        state.clone(),
+        "/external/v1/tasks",
+        request,
+        Some("task-retry-key"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        first["data"]["task"]["task_id"],
+        second["data"]["task"]["task_id"]
+    );
+
+    let (status, body) = get_json(state, "/external/v1/tasks").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["tasks"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn invalid_task_client_type_returns_error_without_creating_task() {
+    let state = test_state().await;
+
+    let (status, body) = post_json(
+        state.clone(),
+        "/external/v1/tasks",
+        json!({"input":"bad client", "client_type":"unsupported"}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "invalid_request");
+
+    let (status, body) = get_json(state, "/external/v1/tasks").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["tasks"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn cancelling_pending_confirmation_task_marks_it_cancelled() {
+    let state = test_state().await;
+
+    let (status, body) = post_json(
+        state.clone(),
+        "/external/v1/tasks",
+        json!({"input":"cancel before routing", "client_type":"generic"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let task_id = body["data"]["task"]["task_id"].as_str().unwrap();
+
+    let (status, body) = post_json_with_idempotency(
+        state.clone(),
+        &format!("/external/v1/tasks/{task_id}/cancel"),
+        json!({}),
+        Some("cancel-task-key"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["task"]["state"], "cancelled");
+    assert_eq!(body["data"]["task"]["turn_id"], Value::Null);
+
+    let (status, events_body) =
+        get_json(state, &format!("/external/v1/tasks/{task_id}/events")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        events_body["data"]["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["event_type"] == "task.cancelled")
+    );
+}
+
+#[tokio::test]
+async fn task_interrupt_delegates_to_active_turn_and_updates_task_state() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+
+    let (status, body) = post_json(
+        state.clone(),
+        "/external/v1/tasks",
+        json!({
+            "input":"interrupt via task",
+            "workspace": workspace.path().display().to_string(),
+            "client_type":"generic"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let task = &body["data"]["task"];
+    let task_id = task["task_id"].as_str().unwrap();
+    let session_id = task["session_id"].as_str().unwrap();
+    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
+    let turn_id = task["turn_id"].as_str().unwrap();
+    let metadata: String =
+        sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&state.db)
+            .await
+            .expect("runtime binding metadata");
+    let mut metadata: Value = serde_json::from_str(&metadata).expect("metadata json");
+    metadata["capabilities"]["interrupt"] = Value::Bool(true);
+    sqlx::query("UPDATE runtime_bindings SET metadata = ? WHERE session_id = ?")
+        .bind(metadata.to_string())
+        .bind(session_id)
+        .execute(&state.db)
+        .await
+        .expect("enable interrupt capability");
+
+    let (status, _) = post_internal_event(
+        state.clone(),
+        event_body(
+            "evt_task_interrupt_started",
+            "turn.started",
+            session_id,
+            turn_id,
+            3,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = post_json_with_idempotency(
+        state,
+        &format!("/external/v1/tasks/{task_id}/interrupt"),
+        json!({}),
+        Some("interrupt-task-key"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["task"]["state"], "cancelled");
 }
 
 #[tokio::test]

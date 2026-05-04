@@ -20,6 +20,7 @@ pub struct ConfirmTaskWorkspaceRequest {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CreateTaskOutcome {
     pub data: Value,
+    pub duplicate: bool,
 }
 
 #[derive(Clone)]
@@ -32,12 +33,25 @@ impl TaskCommandService {
         Self { pool }
     }
 
-    pub async fn create_task(&self, request: CreateTaskRequest) -> Result<CreateTaskOutcome> {
+    pub async fn create_task(
+        &self,
+        request: CreateTaskRequest,
+        idempotency_key: Option<&str>,
+    ) -> Result<CreateTaskOutcome> {
         if !matches!(request.client_type.as_str(), "generic" | "pi") {
             return Err(Error::Domain(format!(
                 "unsupported client_type: {}",
                 request.client_type
             )));
+        }
+
+        if let Some(key) = idempotency_key
+            && let Some(response) = self.idempotency_response("create_task", key).await?
+        {
+            return Ok(CreateTaskOutcome {
+                data: response,
+                duplicate: true,
+            });
         }
 
         let task_id = new_task_id().to_string();
@@ -74,27 +88,44 @@ impl TaskCommandService {
                 .get_task(&task_id)
                 .await?
                 .ok_or_else(|| Error::Domain("created task missing".to_string()))?;
+            let data = json!({ "task": task });
+            if let Some(key) = idempotency_key {
+                self.store_idempotency_response("create_task", key, &data)
+                    .await?;
+            }
             return Ok(CreateTaskOutcome {
-                data: json!({ "task": task }),
+                data,
+                duplicate: false,
             });
         };
 
-        self.dispatch_task(
-            &task_id,
-            workspace,
-            &request.client_type,
-            request.input,
-            request.metadata,
-            DispatchRoutingUpdate::Matched,
-        )
-        .await?;
+        if let Err(error) = self
+            .dispatch_task(
+                &task_id,
+                workspace,
+                &request.client_type,
+                request.input,
+                request.metadata,
+                DispatchRoutingUpdate::Matched,
+            )
+            .await
+        {
+            self.mark_task_failed(&task_id, &error.to_string()).await?;
+            return Err(error);
+        }
 
         let task = ExternalQueryService::new(self.pool.clone())
             .get_task(&task_id)
             .await?
             .ok_or_else(|| Error::Domain("created task missing".to_string()))?;
+        let data = json!({ "task": task });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response("create_task", key, &data)
+                .await?;
+        }
         Ok(CreateTaskOutcome {
-            data: json!({ "task": task }),
+            data,
+            duplicate: false,
         })
     }
 
@@ -102,7 +133,19 @@ impl TaskCommandService {
         &self,
         task_id: &str,
         request: ConfirmTaskWorkspaceRequest,
+        idempotency_key: Option<&str>,
     ) -> Result<CreateTaskOutcome> {
+        if let Some(key) = idempotency_key
+            && let Some(response) = self
+                .idempotency_response(&format!("confirm_workspace:{task_id}"), key)
+                .await?
+        {
+            return Ok(CreateTaskOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+
         if !matches!(request.client_type.as_str(), "generic" | "pi") {
             return Err(Error::Domain(format!(
                 "unsupported client_type: {}",
@@ -130,22 +173,142 @@ impl TaskCommandService {
             )));
         }
 
-        self.dispatch_task(
-            task_id,
-            &request.workspace,
-            &request.client_type,
-            task.input,
-            task.metadata,
-            DispatchRoutingUpdate::Confirmed,
-        )
-        .await?;
+        if let Err(error) = self
+            .dispatch_task(
+                task_id,
+                &request.workspace,
+                &request.client_type,
+                task.input,
+                task.metadata,
+                DispatchRoutingUpdate::Confirmed,
+            )
+            .await
+        {
+            self.mark_task_failed(task_id, &error.to_string()).await?;
+            return Err(error);
+        }
 
         let task = ExternalQueryService::new(self.pool.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::Domain("confirmed task missing".to_string()))?;
+        let data = json!({ "task": task });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&format!("confirm_workspace:{task_id}"), key, &data)
+                .await?;
+        }
         Ok(CreateTaskOutcome {
-            data: json!({ "task": task }),
+            data,
+            duplicate: false,
+        })
+    }
+
+    pub async fn interrupt_task(
+        &self,
+        task_id: &str,
+        idempotency_key: Option<&str>,
+    ) -> Result<CreateTaskOutcome> {
+        if let Some(key) = idempotency_key
+            && let Some(response) = self
+                .idempotency_response(&format!("interrupt_task:{task_id}"), key)
+                .await?
+        {
+            return Ok(CreateTaskOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+
+        let task = ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
+        if is_terminal_task_state(&task.state) {
+            return Err(Error::StateConflict(format!(
+                "task {task_id} is already terminal"
+            )));
+        }
+        let session_id = task.session_id.ok_or_else(|| {
+            Error::StateConflict(format!("task {task_id} has no session to interrupt"))
+        })?;
+        let turn_id = task.turn_id.ok_or_else(|| {
+            Error::StateConflict(format!("task {task_id} has no turn to interrupt"))
+        })?;
+
+        RuntimeControlService::new(self.pool.clone())
+            .interrupt_turn(&session_id, &turn_id, idempotency_key)
+            .await?;
+        let task = ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await?
+            .ok_or_else(|| Error::Domain("interrupted task missing".to_string()))?;
+        let data = json!({ "task": task });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&format!("interrupt_task:{task_id}"), key, &data)
+                .await?;
+        }
+        Ok(CreateTaskOutcome {
+            data,
+            duplicate: false,
+        })
+    }
+
+    pub async fn cancel_task(
+        &self,
+        task_id: &str,
+        idempotency_key: Option<&str>,
+    ) -> Result<CreateTaskOutcome> {
+        if let Some(key) = idempotency_key
+            && let Some(response) = self
+                .idempotency_response(&format!("cancel_task:{task_id}"), key)
+                .await?
+        {
+            return Ok(CreateTaskOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+
+        let task = ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
+        if is_terminal_task_state(&task.state) {
+            return Err(Error::StateConflict(format!(
+                "task {task_id} is already terminal"
+            )));
+        }
+
+        if task.turn_id.is_some() {
+            return self.interrupt_task(task_id, idempotency_key).await;
+        }
+
+        sqlx::query(
+            r#"UPDATE tasks
+               SET state = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(task_id)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(
+            task_id,
+            "task.cancelled",
+            json!({"reason":"cancelled by user"}),
+        )
+        .await?;
+        let task = ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await?
+            .ok_or_else(|| Error::Domain("cancelled task missing".to_string()))?;
+        let data = json!({ "task": task });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&format!("cancel_task:{task_id}"), key, &data)
+                .await?;
+        }
+        Ok(CreateTaskOutcome {
+            data,
+            duplicate: false,
         })
     }
 
@@ -341,6 +504,56 @@ impl TaskCommandService {
         .fetch_optional(&self.pool)
         .await
         .map_err(Into::into)
+    }
+
+    async fn mark_task_failed(&self, task_id: &str, reason: &str) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE tasks
+               SET state = 'failed', routing_state = 'failed', routing_reason = ?,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(reason)
+        .bind(task_id)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(task_id, "task.failed", json!({"reason": reason}))
+            .await?;
+        Ok(())
+    }
+
+    async fn idempotency_response(&self, operation: &str, key: &str) -> Result<Option<Value>> {
+        let response: Option<String> = sqlx::query_scalar(
+            "SELECT response FROM idempotency_keys WHERE operation = ? AND key = ?",
+        )
+        .bind(operation)
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        response
+            .map(|value| serde_json::from_str(&value))
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    async fn store_idempotency_response(
+        &self,
+        operation: &str,
+        key: &str,
+        response: &Value,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"INSERT INTO idempotency_keys (operation, key, response)
+               VALUES (?, ?, ?)
+               ON CONFLICT(operation, key) DO NOTHING"#,
+        )
+        .bind(operation)
+        .bind(key)
+        .bind(serde_json::to_string(response)?)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     async fn record_task_event(
