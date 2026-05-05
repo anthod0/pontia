@@ -21,6 +21,7 @@ async fn test_state() -> AppState {
     AppState {
         db,
         external_api_token: Some("test-token".to_owned()),
+        planner: Default::default(),
     }
 }
 

@@ -22,6 +22,7 @@ async fn test_state() -> AppState {
     AppState {
         db,
         external_api_token: None,
+        planner: Default::default(),
     }
 }
 

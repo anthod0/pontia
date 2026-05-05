@@ -1,6 +1,9 @@
 use std::{collections::HashMap, env, net::SocketAddr};
 
-use crate::error::{Error, Result};
+use crate::{
+    application::PlannerRuntimeConfig,
+    error::{Error, Result},
+};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_DATABASE_URL: &str = "sqlite://~/.local/share/llmparty/llmparty.db";
@@ -11,6 +14,7 @@ pub struct AppConfig {
     pub database_url: String,
     pub external_api_token: Option<String>,
     pub run_migrations: bool,
+    pub planner: PlannerRuntimeConfig,
 }
 
 impl AppConfig {
@@ -42,11 +46,36 @@ impl AppConfig {
             None => true,
         };
 
+        let planner = PlannerRuntimeConfig {
+            enabled: match get(vars, "LLMPARTY_PLANNER_ENABLED") {
+                Some(value) => parse_bool("LLMPARTY_PLANNER_ENABLED", value)?,
+                None => false,
+            },
+            client_type: get(vars, "LLMPARTY_PLANNER_CLIENT_TYPE")
+                .unwrap_or("pi")
+                .to_string(),
+            timeout_ms: match get(vars, "LLMPARTY_PLANNER_TIMEOUT_MS") {
+                Some(value) => value.parse::<u64>().map_err(|err| Error::InvalidConfig {
+                    key: "LLMPARTY_PLANNER_TIMEOUT_MS",
+                    message: err.to_string(),
+                })?,
+                None => 30_000,
+            },
+            compatibility_direct_dispatch: match get(
+                vars,
+                "LLMPARTY_PLANNER_COMPAT_DIRECT_DISPATCH",
+            ) {
+                Some(value) => parse_bool("LLMPARTY_PLANNER_COMPAT_DIRECT_DISPATCH", value)?,
+                None => false,
+            },
+        };
+
         Ok(Self {
             bind_addr,
             database_url,
             external_api_token,
             run_migrations,
+            planner,
         })
     }
 }

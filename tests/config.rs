@@ -18,6 +18,19 @@ fn loads_config_from_key_value_source() {
             "dev-token".to_string(),
         ),
         ("LLMPARTY_RUN_MIGRATIONS".to_string(), "false".to_string()),
+        ("LLMPARTY_PLANNER_ENABLED".to_string(), "true".to_string()),
+        (
+            "LLMPARTY_PLANNER_CLIENT_TYPE".to_string(),
+            "generic".to_string(),
+        ),
+        (
+            "LLMPARTY_PLANNER_TIMEOUT_MS".to_string(),
+            "12000".to_string(),
+        ),
+        (
+            "LLMPARTY_PLANNER_COMPAT_DIRECT_DISPATCH".to_string(),
+            "true".to_string(),
+        ),
     ]);
 
     let config = AppConfig::from_vars(&vars).expect("config should load");
@@ -26,6 +39,10 @@ fn loads_config_from_key_value_source() {
     assert_eq!(config.database_url, "sqlite://./data/control-plane.db");
     assert_eq!(config.external_api_token.as_deref(), Some("dev-token"));
     assert!(!config.run_migrations);
+    assert!(config.planner.enabled);
+    assert_eq!(config.planner.client_type, "generic");
+    assert_eq!(config.planner.timeout_ms, 12_000);
+    assert!(config.planner.compatibility_direct_dispatch);
 }
 
 #[test]
@@ -39,4 +56,8 @@ fn provides_development_defaults_for_optional_values() {
     );
     assert_eq!(config.external_api_token, None);
     assert!(config.run_migrations);
+    assert!(!config.planner.enabled);
+    assert_eq!(config.planner.client_type, "pi");
+    assert_eq!(config.planner.timeout_ms, 30_000);
+    assert!(!config.planner.compatibility_direct_dispatch);
 }

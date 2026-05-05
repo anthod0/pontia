@@ -39,6 +39,7 @@ async fn test_state(name: &str) -> AppState {
     AppState {
         db,
         external_api_token: Some(TOKEN.to_string()),
+        planner: Default::default(),
     }
 }
 

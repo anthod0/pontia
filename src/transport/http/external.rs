@@ -18,8 +18,8 @@ use crate::{
     application::{
         AppState, ArtifactContentService, ArtifactDiscoveryService, ConfirmTaskWorkspaceRequest,
         CreateSessionRequest, CreateTaskRequest, EventStreamScope, ExternalQueryService,
-        RuntimeControlService, SessionCommandService, SubmitTurnRequest, TaskCommandService,
-        TurnCommandService,
+        RuntimeControlService, SessionCommandService, SubmitPlannerInputRequest, SubmitTurnRequest,
+        TaskCommandService, TurnCommandService,
     },
     error::Error,
 };
@@ -104,7 +104,7 @@ pub async fn create_task(
     let idempotency_key = headers
         .get("Idempotency-Key")
         .and_then(|value| value.to_str().ok());
-    let service = TaskCommandService::new(state.db);
+    let service = TaskCommandService::with_planner(state.db, state.planner);
     let outcome = service.create_task(request, idempotency_key).await?;
     let status = if outcome.duplicate {
         StatusCode::OK
@@ -124,9 +124,26 @@ pub async fn confirm_task_workspace(
     let idempotency_key = headers
         .get("Idempotency-Key")
         .and_then(|value| value.to_str().ok());
-    let service = TaskCommandService::new(state.db);
+    let service = TaskCommandService::with_planner(state.db, state.planner);
     let outcome = service
         .confirm_workspace(&task_id, request, idempotency_key)
+        .await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
+
+pub async fn submit_planner_input(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(request): Json<SubmitPlannerInputRequest>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|value| value.to_str().ok());
+    let service = TaskCommandService::with_planner(state.db, state.planner);
+    let outcome = service
+        .submit_planner_input(&task_id, request, idempotency_key)
         .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }

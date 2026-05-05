@@ -4,6 +4,7 @@ use super::*;
 pub struct AppState {
     pub db: sqlx::SqlitePool,
     pub external_api_token: Option<String>,
+    pub planner: PlannerRuntimeConfig,
 }
 
 pub async fn initialize(config: &AppConfig) -> Result<AppState> {
@@ -16,5 +17,6 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     Ok(AppState {
         db,
         external_api_token: config.external_api_token.clone(),
+        planner: config.planner.clone(),
     })
 }

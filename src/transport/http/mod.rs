@@ -32,6 +32,10 @@ pub fn router(state: AppState) -> Router {
             post(external::confirm_task_workspace),
         )
         .route(
+            "/external/v1/tasks/{task_id}/planner-input",
+            post(external::submit_planner_input),
+        )
+        .route(
             "/external/v1/tasks/{task_id}/events",
             get(external::list_task_events),
         )
