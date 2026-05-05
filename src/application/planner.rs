@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin};
+use std::{future::Future, path::PathBuf, pin::Pin, time::Duration};
 
 use super::*;
 
@@ -100,6 +100,25 @@ pub trait TaskPlanner: Send + Sync {
 #[derive(Debug, Default, Clone)]
 pub struct FakeTaskPlanner;
 
+#[derive(Debug, Clone)]
+pub struct PiTaskPlanner {
+    timeout: Duration,
+    runtime: GenericRuntimeManager,
+}
+
+impl PiTaskPlanner {
+    pub fn new(timeout: Duration) -> Self {
+        Self {
+            timeout,
+            runtime: GenericRuntimeManager,
+        }
+    }
+
+    pub async fn plan(&self, input: PlannerInput) -> Result<PlannerDecision> {
+        <Self as TaskPlanner>::plan(self, input).await
+    }
+}
+
 impl TaskPlanner for FakeTaskPlanner {
     fn plan<'a>(
         &'a self,
@@ -158,6 +177,221 @@ impl TaskPlanner for FakeTaskPlanner {
             })
         })
     }
+}
+
+impl TaskPlanner for PiTaskPlanner {
+    fn plan<'a>(
+        &'a self,
+        input: PlannerInput,
+    ) -> Pin<Box<dyn Future<Output = Result<PlannerDecision>> + Send + 'a>> {
+        Box::pin(async move { self.run_one_shot(input).await })
+    }
+}
+
+impl PiTaskPlanner {
+    async fn run_one_shot(&self, input: PlannerInput) -> Result<PlannerDecision> {
+        let session_id = new_session_id().to_string();
+        let turn_id = new_turn_id().to_string();
+        let workspace = std::env::temp_dir()
+            .join("llmparty-planner-workspaces")
+            .join(&session_id);
+        std::fs::create_dir_all(&workspace)?;
+
+        let runtime = self.runtime.start_session(RuntimeStartRequest {
+            session_id: session_id.clone(),
+            client_type: "pi".to_string(),
+            workspace: Some(workspace.display().to_string()),
+        })?;
+        let runtime_ref = runtime.runtime_ref.clone();
+        let result = async {
+            let prompt = build_pi_planner_prompt(&input);
+            write_planner_current_turn_context(
+                &runtime.metadata,
+                &session_id,
+                &turn_id,
+                &input,
+                &prompt,
+            )?;
+            self.runtime.dispatch_pi_turn(
+                &runtime_ref,
+                &AgentInput {
+                    session_id: session_id.clone(),
+                    turn_id: turn_id.clone(),
+                    input: prompt,
+                },
+            )?;
+            let output = wait_for_planner_output(&runtime.metadata, &turn_id, self.timeout).await?;
+            let json = extract_json_object(&output).ok_or_else(|| {
+                Error::Domain("pi planner output did not contain a JSON object".to_string())
+            })?;
+            serde_json::from_str::<PlannerDecision>(json).map_err(Into::into)
+        }
+        .await;
+        let _ = self.runtime.terminate_session(&runtime_ref);
+        result
+    }
+}
+
+fn build_pi_planner_prompt(input: &PlannerInput) -> String {
+    let context = json!({
+        "task_id": input.task_id,
+        "task_input": input.input,
+        "metadata": input.metadata,
+        "candidate_workspaces": input.candidate_workspaces,
+        "prior_planner_decisions": input.prior_decisions,
+        "user_planner_messages": input.user_messages,
+        "decision_schema": {
+            "status": "resolved | needs_input | failed",
+            "workspace": {"workspace_id": "optional", "canonical_path": "absolute path or null", "confidence": 0.0, "reason": "why"},
+            "needs_input": {"question": "required when status is needs_input", "suggested_candidates": []},
+            "reason": "required when failed; useful otherwise",
+            "evidence": []
+        }
+    });
+    format!(
+        "You are llmparty's workspace-resolution planner. Do not execute the user task. Your only goal is to resolve the workspace for this task, ask for necessary input, or fail recoverably. Return only valid JSON matching the provided schema; do not include markdown or commentary.\n\nPlanner context:\n{}",
+        serde_json::to_string_pretty(&context).unwrap_or_else(|_| "{}".to_string())
+    )
+}
+
+fn write_planner_current_turn_context(
+    metadata: &Value,
+    session_id: &str,
+    turn_id: &str,
+    input: &PlannerInput,
+    prompt: &str,
+) -> Result<()> {
+    let Some(path) = metadata
+        .get("current_turn_file")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+    else {
+        return Ok(());
+    };
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(
+        path,
+        serde_json::to_string(&json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "input": prompt,
+            "client_type": "pi",
+            "task_id": input.task_id,
+            "internal_event_url": metadata.get("internal_event_url").cloned().unwrap_or(Value::Null)
+        }))?,
+    )?;
+    Ok(())
+}
+
+async fn wait_for_planner_output(
+    metadata: &Value,
+    turn_id: &str,
+    timeout: Duration,
+) -> Result<String> {
+    let adapter_event_log = metadata
+        .get("adapter_event_log")
+        .and_then(Value::as_str)
+        .ok_or_else(|| Error::Domain("pi planner runtime missing adapter_event_log".to_string()))?;
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        if let Some(output) = read_planner_output(adapter_event_log, turn_id)? {
+            return Ok(output);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(Error::Domain(format!(
+                "pi planner timed out after {} ms",
+                timeout.as_millis()
+            )));
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+fn read_planner_output(path: &str, turn_id: &str) -> Result<Option<String>> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let mut latest_output = None;
+    for line in content.lines().filter(|line| !line.trim().is_empty()) {
+        let event: Value = match serde_json::from_str(line) {
+            Ok(event) => event,
+            Err(_) => continue,
+        };
+        if event
+            .get("turn_id")
+            .and_then(Value::as_str)
+            .is_some_and(|event_turn_id| event_turn_id != turn_id)
+        {
+            continue;
+        }
+        let event_type = event
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if !matches!(event_type, "turn.output" | "turn.completed") {
+            continue;
+        }
+        if let Some(output) = planner_output_from_event(&event) {
+            latest_output = Some(output);
+        }
+        if event_type == "turn.completed" && latest_output.is_some() {
+            return Ok(latest_output);
+        }
+    }
+    Ok(latest_output)
+}
+
+fn planner_output_from_event(event: &Value) -> Option<String> {
+    let payload = event.get("payload")?;
+    if let Some(decision) = payload.get("planner_decision") {
+        return Some(decision.to_string());
+    }
+    let output = payload.get("output").unwrap_or(payload);
+    if let Some(decision) = output.get("planner_decision") {
+        return Some(decision.to_string());
+    }
+    output
+        .get("summary")
+        .or_else(|| output.get("text"))
+        .or_else(|| output.get("content"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+}
+
+fn extract_json_object(output: &str) -> Option<&str> {
+    let bytes = output.as_bytes();
+    let start = bytes.iter().position(|byte| *byte == b'{')?;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (offset, byte) in bytes[start..].iter().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if *byte == b'\\' {
+                escaped = true;
+            } else if *byte == b'\"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match *byte {
+            b'\"' => in_string = true,
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return output.get(start..=start + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 #[derive(Clone)]

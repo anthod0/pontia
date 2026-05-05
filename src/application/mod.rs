@@ -43,8 +43,8 @@ pub use artifacts::{
 pub use events::{EventIngestResult, EventIngestService};
 pub(crate) use events::{nested_array_strings, nested_string, remove_internal_metadata_fields};
 pub use planner::{
-    FakeTaskPlanner, PlannerDecision, PlannerDecisionStatus, PlannerInput, PlannerRuntimeConfig,
-    SubmitPlannerInputRequest, TaskPlannerService,
+    FakeTaskPlanner, PiTaskPlanner, PlannerDecision, PlannerDecisionStatus, PlannerInput,
+    PlannerRuntimeConfig, SubmitPlannerInputRequest, TaskPlannerService,
 };
 pub use queries::ExternalQueryService;
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};

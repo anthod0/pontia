@@ -443,8 +443,7 @@ impl TaskCommandService {
         )
         .await?;
 
-        let planner = TaskPlannerService::new(self.pool.clone(), FakeTaskPlanner);
-        let decision = match planner.plan(input).await {
+        let decision = match self.plan_with_config(input).await {
             Ok(decision) => decision,
             Err(error) => {
                 self.apply_planner_failed(task_id, &error.to_string(), None)
@@ -500,6 +499,21 @@ impl TaskCommandService {
         }
 
         self.task_data(task_id).await
+    }
+
+    async fn plan_with_config(&self, input: PlannerInput) -> Result<PlannerDecision> {
+        if self.planner.client_type == "pi" {
+            TaskPlannerService::new(
+                self.pool.clone(),
+                PiTaskPlanner::new(std::time::Duration::from_millis(self.planner.timeout_ms)),
+            )
+            .plan(input)
+            .await
+        } else {
+            TaskPlannerService::new(self.pool.clone(), FakeTaskPlanner)
+                .plan(input)
+                .await
+        }
     }
 
     async fn apply_planner_resolved(
