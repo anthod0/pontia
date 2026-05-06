@@ -1,115 +1,115 @@
 # llmparty
 
-`llmparty` 是一个面向 Coding Agent 的控制台和控制平面。你可以用它启动并管理 agent session，向 agent 提交任务，查看执行过程、结果和产物，并在需要时中断、重启或终止 session。
+`llmparty` is a console and control plane for coding agents. It lets you start and manage agent sessions, submit tasks to agents, inspect execution progress, results, and artifacts, and interrupt, restart, or terminate sessions when needed.
 
-它适合这些场景：
+It is designed for scenarios such as:
 
-- 用浏览器统一操作本地或远程的 coding agent
-- 用 HTTP API 把 agent 接入自己的脚本、自动化流程或上层 Orchestrator
-- 用同一套 session / turn / event / artifact 模型管理不同 agent client
-- 通过 `tmux` 保持 agent runtime 长时间运行，而不是每次任务都临时启动一个进程
+- Operating local or remote coding agents from a browser
+- Integrating agents into scripts, automation workflows, or higher-level orchestrators via an HTTP API
+- Managing different agent clients with a shared session / turn / event / artifact model
+- Keeping agent runtimes alive for long-running work via `tmux`, instead of starting a temporary process for every task
 
-当前已支持 `generic` 测试 client 和 `pi` client。
+Currently supported clients are the `generic` test client and the `pi` client.
 
-## 功能概览
+## Feature Overview
 
-- 创建、查看和管理 agent session
-- 向 session 提交多轮任务 / prompt
-- 实时查看事件流和 turn 输出
-- 查看 session 产生的文件 artifact
-- 中断、重启、终止 session
-- Web Dashboard 浏览器界面
-- HTTP External API，方便脚本和系统集成
-- pi client 的本地运行和结果回传
+- Create, inspect, and manage agent sessions
+- Submit multi-turn tasks / prompts to a session
+- View event streams and turn output in real time
+- Browse file artifacts produced by a session
+- Interrupt, restart, and terminate sessions
+- Web Dashboard browser interface
+- HTTP External API for script and system integration
+- Local execution and result reporting for the pi client
 
-## 准备环境
+## Prerequisites
 
-需要安装：
+Install the following:
 
 - Rust / Cargo
 - tmux
-- pnpm（用于 Web Dashboard）
-- pi CLI（如果要使用 `client_type = "pi"`）
+- pnpm (for the Web Dashboard)
+- pi CLI (if you want to use `client_type = "pi"`)
 
-## 快速开始
+## Quick Start
 
-### 1. 配置环境变量
+### 1. Configure environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-默认配置会监听 `127.0.0.1:8080`，并使用 `dev-token` 作为访问 Dashboard 和 External API 的 token。
+The default configuration listens on `127.0.0.1:8080` and uses `dev-token` as the token for Dashboard and External API access.
 
-### 2. 安装并构建 Dashboard
+### 2. Install dependencies and build the Dashboard
 
 ```bash
 pnpm --dir apps/web install
 pnpm --dir apps/web build
 ```
 
-### 3. 启动 llmparty
+### 3. Start llmparty
 
 ```bash
 cargo run
 ```
 
-服务启动后可以检查健康状态：
+After the service starts, check its health status:
 
 ```bash
 curl http://127.0.0.1:8080/healthz
 ```
 
-返回：
+Expected response:
 
 ```json
-{"status":"ok"}
+{ "status": "ok" }
 ```
 
-### 4. 打开 Dashboard
+### 4. Open the Dashboard
 
-访问：
+Visit:
 
 ```text
 http://127.0.0.1:8080/dashboard
 ```
 
-在页面中输入 token，例如：
+Enter the token on the page, for example:
 
 ```text
 dev-token
 ```
 
-之后即可创建 session、提交任务、查看事件和结果。
+You can then create sessions, submit tasks, and view events and results.
 
-## 使用 Dashboard
+## Using the Dashboard
 
-Dashboard 是最推荐的本地使用方式。
+The Dashboard is the recommended way to use llmparty locally.
 
-常用流程：
+Common workflow:
 
-1. 打开 `/dashboard`
-2. 输入 External API token
-3. 创建一个 session
-4. 选择 client 类型：
-   - `generic`：用于验证流程和 API
-   - `pi`：使用真实 pi client
-5. 填写 workspace 路径
-6. 提交任务
-7. 在事件流和输出区域查看 agent 回答
-8. 如有需要，查看 artifacts、重启或终止 session
+1. Open `/dashboard`
+2. Enter the External API token
+3. Create a session
+4. Choose a client type:
+   - `generic`: for validating the workflow and API
+   - `pi`: for using the real pi client
+5. Enter the workspace path
+6. Submit a task
+7. View the agent response in the event stream and output areas
+8. If needed, inspect artifacts, restart the session, or terminate it
 
-如果一个 session 正在执行 turn，Dashboard 会暂时禁用新的提交，直到当前 turn 完成或失败。
+If a session is currently running a turn, the Dashboard temporarily disables new submissions until the current turn completes or fails.
 
-## 使用 pi client
+## Using the pi client
 
-使用 pi 前，请确认本机可以直接运行：
+Before using pi, make sure it can run directly on your machine:
 
 ```bash
 pi
 ```
 
-启动 llmparty 时建议显式配置内部事件上报地址：
+When starting llmparty, it is recommended to explicitly configure the internal event reporting URL:
 
 ```bash
 LLMPARTY_EXTERNAL_API_TOKEN=dev-token \
@@ -117,30 +117,30 @@ LLMPARTY_INTERNAL_EVENT_URL=http://127.0.0.1:8080/internal/v1/events \
 cargo run
 ```
 
-然后在 Dashboard 中创建 `client_type = "pi"` 的 session。
+Then create a session with `client_type = "pi"` in the Dashboard.
 
-如果需要让 llmparty 使用指定的 pi 命令或本地扩展，可以设置：
+If you need llmparty to use a specific pi command or local extension, set:
 
 ```bash
 LLMPARTY_PI_TUI_COMMAND='pi -e /absolute/path/to/llmparty/clients/pi'
 ```
 
-pi session 运行时，llmparty 会在全局 runtime 目录下维护自身状态文件：
+During a pi session, llmparty stores its runtime state files under the global runtime directory:
 
 ```text
 ~/.local/share/llmparty/runtimes/<session_id>/current-turn.json
 ~/.local/share/llmparty/runtimes/<session_id>/pi-hook.log
 ```
 
-workspace 仅作为 runtime cwd，不再创建项目内 `.llmparty/`。如果 Dashboard 没有收到 pi 的输出或完成事件，可以先查看对应 runtime 目录中的 `pi-hook.log`。
+The workspace is used only as the runtime current working directory; llmparty no longer creates an in-project `.llmparty/` directory. If the Dashboard does not receive pi output or completion events, first check the corresponding `pi-hook.log` file in the runtime directory.
 
-## 使用 HTTP API
+## Using the HTTP API
 
-所有对外 API 都在 `/external/v1/*` 下，需要 Bearer token。
+All external APIs are under `/external/v1/*` and require a Bearer token.
 
-下面示例假设服务运行在 `127.0.0.1:8080`，token 为 `dev-token`。
+The examples below assume the service is running at `127.0.0.1:8080` with token `dev-token`.
 
-### 创建 session
+### Create a session
 
 ```bash
 curl -X POST http://127.0.0.1:8080/external/v1/sessions \
@@ -150,58 +150,58 @@ curl -X POST http://127.0.0.1:8080/external/v1/sessions \
   -d '{
     "client_type":"generic",
     "workspace":"/tmp/llmparty-demo",
-    "initial_task":{"input":"请介绍一下当前项目"}
+    "initial_task":{"input":"Please introduce the current project"}
   }'
 ```
 
-### 查看 session 列表
+### List sessions
 
 ```bash
 curl http://127.0.0.1:8080/external/v1/sessions \
   -H 'Authorization: Bearer dev-token'
 ```
 
-### 提交下一轮任务
+### Submit the next turn
 
-把 `sess_example` 替换为实际返回的 session id。
+Replace `sess_example` with the actual returned session ID.
 
 ```bash
 curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/turns \
   -H 'Authorization: Bearer dev-token' \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-turn-1' \
-  -d '{"input":"继续完成下一步"}'
+  -d '{"input":"Continue with the next step"}'
 ```
 
-### 查看事件
+### View events
 
 ```bash
 curl http://127.0.0.1:8080/external/v1/sessions/sess_example/events \
   -H 'Authorization: Bearer dev-token'
 ```
 
-### 实时订阅事件流
+### Subscribe to the event stream in real time
 
 ```bash
 curl -N http://127.0.0.1:8080/external/v1/sessions/sess_example/events/stream \
   -H 'Authorization: Bearer dev-token'
 ```
 
-### 查看 artifacts
+### View artifacts
 
 ```bash
 curl http://127.0.0.1:8080/external/v1/sessions/sess_example/artifacts \
   -H 'Authorization: Bearer dev-token'
 ```
 
-### 扫描 workspace artifacts
+### Discover workspace artifacts
 
 ```bash
 curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/artifacts/discover \
   -H 'Authorization: Bearer dev-token'
 ```
 
-### 终止 session
+### Terminate a session
 
 ```bash
 curl -X DELETE http://127.0.0.1:8080/external/v1/sessions/sess_example \
@@ -209,18 +209,18 @@ curl -X DELETE http://127.0.0.1:8080/external/v1/sessions/sess_example \
   -H 'Idempotency-Key: demo-terminate-1'
 ```
 
-## 常用配置
+## Common Configuration
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `LLMPARTY_BIND_ADDR` | `127.0.0.1:8080` | 服务监听地址 |
-| `LLMPARTY_DATABASE_URL` | `sqlite://~/.local/share/llmparty/llmparty.db` | SQLite 数据库地址 |
-| `LLMPARTY_EXTERNAL_API_TOKEN` | 未设置 | Dashboard 和 External API 的 Bearer token |
-| `LLMPARTY_RUN_MIGRATIONS` | `true` | 启动时自动执行数据库迁移 |
-| `LLMPARTY_INTERNAL_EVENT_URL` | 自动推导或手动设置 | agent / hook 回传事件的地址 |
-| `LLMPARTY_PI_TUI_COMMAND` | `pi` | pi session 使用的启动命令 |
+| Variable                      | Default                                        | Description                                      |
+| ----------------------------- | ---------------------------------------------- | ------------------------------------------------ |
+| `LLMPARTY_BIND_ADDR`          | `127.0.0.1:8080`                               | Service bind address                             |
+| `LLMPARTY_DATABASE_URL`       | `sqlite://~/.local/share/llmparty/llmparty.db` | SQLite database URL                              |
+| `LLMPARTY_EXTERNAL_API_TOKEN` | Not set                                        | Bearer token for the Dashboard and External API  |
+| `LLMPARTY_RUN_MIGRATIONS`     | `true`                                         | Automatically run database migrations on startup |
+| `LLMPARTY_INTERNAL_EVENT_URL` | Auto-derived or manually set                   | URL used by agents / hooks to report events      |
+| `LLMPARTY_PI_TUI_COMMAND`     | `pi`                                           | Startup command used for pi sessions             |
 
-## 开发命令
+## Development Commands
 
 ```bash
 cargo build
@@ -230,5 +230,3 @@ cargo clippy --all-targets --all-features -- -D warnings
 pnpm --dir apps/web typecheck
 pnpm --dir apps/web build
 ```
-
-更多产品设计、API 契约和内部实现说明请查看 `spec/` 和 `docs/`。README 只保留对外使用所需的信息。
