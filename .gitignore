@@ -1,4 +1,5 @@
 /target/
+/.cache/
 node_modules/
 apps/web/dist/
 /.worktrees/

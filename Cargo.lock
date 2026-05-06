@@ -863,8 +863,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "kuzu"
-version = "0.11.1"
+name = "lazy_static"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+dependencies = [
+ "spin",
+]
+
+[[package]]
+name = "lbug"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c8b41c60b6c498f4743d2762a6d0bfef34f584c16300282adc239fd60db3dd9"
 dependencies = [
  "cmake",
  "cxx",
@@ -873,15 +884,6 @@ dependencies = [
  "rustversion",
  "time",
  "uuid",
-]
-
-[[package]]
-name = "lazy_static"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
-dependencies = [
- "spin",
 ]
 
 [[package]]
@@ -953,7 +955,7 @@ dependencies = [
  "axum",
  "dotenvy",
  "http-body-util",
- "kuzu",
+ "lbug",
  "serde",
  "serde_json",
  "sqlx",

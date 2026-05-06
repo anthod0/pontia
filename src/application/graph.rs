@@ -603,7 +603,8 @@ fn open_graph_connection(db_dir: PathBuf) -> Result<kuzu::Connection<'static>> {
     {
         std::fs::create_dir_all(parent)?;
     }
-    let db = kuzu::Database::new(db_dir, kuzu::SystemConfig::default())
+    let config = kuzu::SystemConfig::default().enable_multi_writes(true);
+    let db = kuzu::Database::new(db_dir, config)
         .map_err(|error| Error::Domain(format!("kuzu database open failed: {error}")))?;
     let db = Box::leak(Box::new(db));
     kuzu::Connection::new(db)
