@@ -5,12 +5,18 @@ import type {
   ApiEnvelope,
   ArtifactContent,
   ArtifactView,
+  ConfirmTaskWorkspaceInput,
   CreateSessionInput,
   CreateSessionResult,
+  CreateTaskInput,
   EventView,
   SessionView,
+  SubmitPlannerInput,
   SubmitTurnInput,
+  TaskEventView,
+  TaskView,
   TurnView,
+  WorkspaceView,
 } from './types';
 
 const API_BASE = '/external/v1';
@@ -55,6 +61,42 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
 export async function listSessions(): Promise<SessionView[]> {
   return (await request<{ sessions: SessionView[] }>('/sessions')).sessions;
+}
+
+export async function listWorkspaces(): Promise<WorkspaceView[]> {
+  return (await request<{ workspaces: WorkspaceView[] }>('/workspaces')).workspaces;
+}
+
+export async function listTasks(): Promise<TaskView[]> {
+  return (await request<{ tasks: TaskView[] }>('/tasks')).tasks;
+}
+
+export async function createTask(input: CreateTaskInput): Promise<TaskView> {
+  return (await request<{ task: TaskView }>('/tasks', { method: 'POST', body: input, mutating: true })).task;
+}
+
+export async function getTask(taskId: string): Promise<TaskView> {
+  return (await request<{ task: TaskView }>(`/tasks/${taskId}`)).task;
+}
+
+export async function confirmTaskWorkspace(taskId: string, input: ConfirmTaskWorkspaceInput): Promise<TaskView> {
+  return (await request<{ task: TaskView }>(`/tasks/${taskId}/confirm-workspace`, { method: 'POST', body: input, mutating: true })).task;
+}
+
+export async function submitPlannerInput(taskId: string, input: SubmitPlannerInput): Promise<TaskView> {
+  return (await request<{ task: TaskView }>(`/tasks/${taskId}/planner-input`, { method: 'POST', body: input, mutating: true })).task;
+}
+
+export async function listTaskEvents(taskId: string): Promise<TaskEventView[]> {
+  return (await request<{ events: TaskEventView[] }>(`/tasks/${taskId}/events`)).events;
+}
+
+export async function interruptTask(taskId: string): Promise<TaskView> {
+  return (await request<{ task: TaskView }>(`/tasks/${taskId}/interrupt`, { method: 'POST', mutating: true })).task;
+}
+
+export async function cancelTask(taskId: string): Promise<TaskView> {
+  return (await request<{ task: TaskView }>(`/tasks/${taskId}/cancel`, { method: 'POST', mutating: true })).task;
 }
 
 export async function createSession(input: CreateSessionInput): Promise<CreateSessionResult> {

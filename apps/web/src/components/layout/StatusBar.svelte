@@ -7,7 +7,7 @@
 <header>
   <div>
     <h1>llmparty Dashboard</h1>
-    <p>Svelte + Vite External API control panel</p>
+    <p>Svelte + Vite agent control-plane validation panel</p>
   </div>
   <label>
     API token
