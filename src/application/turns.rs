@@ -106,12 +106,21 @@ impl TurnCommandService {
             ))
             .await?;
 
-        if session.client_type == "pi" {
+        if matches!(session.client_type.as_str(), "pi" | "claude_code") {
             match self.runtime_binding_metadata(session_id).await? {
                 Some((runtime_ref, metadata)) => {
-                    match write_pi_current_turn_context(&metadata, &agent_input)
-                        .and_then(|()| self.runtime.dispatch_pi_turn(&runtime_ref, &agent_input))
-                    {
+                    match write_client_current_turn_context(
+                        &metadata,
+                        &agent_input,
+                        &session.client_type,
+                    )
+                    .and_then(|()| {
+                        self.runtime.dispatch_tui_turn(
+                            &runtime_ref,
+                            &session.client_type,
+                            &agent_input,
+                        )
+                    }) {
                         Ok(()) => {
                             ingest
                                 .ingest_event(DomainEvent::new(
@@ -149,7 +158,7 @@ impl TurnCommandService {
                             EventSource::RuntimeManager,
                             session.client_type.clone(),
                             EventType::TurnFailed,
-                            json!({ "failure": { "message": "pi runtime binding not found" } }),
+                            json!({ "failure": { "message": format!("{} runtime binding not found", session.client_type) } }),
                         ))
                         .await?;
                 }
@@ -224,7 +233,11 @@ impl TurnCommandService {
     }
 }
 
-fn write_pi_current_turn_context(metadata: &Value, input: &AgentInput) -> Result<()> {
+fn write_client_current_turn_context(
+    metadata: &Value,
+    input: &AgentInput,
+    client_type: &str,
+) -> Result<()> {
     let current_turn_file = metadata["current_turn_file"]
         .as_str()
         .map(PathBuf::from)
@@ -234,7 +247,9 @@ fn write_pi_current_turn_context(metadata: &Value, input: &AgentInput) -> Result
                 .map(|runtime_dir| Path::new(runtime_dir).join("current-turn.json"))
         })
         .ok_or_else(|| {
-            Error::Domain("pi runtime metadata missing current_turn_file".to_string())
+            Error::Domain(format!(
+                "{client_type} runtime metadata missing current_turn_file"
+            ))
         })?;
     if let Some(parent) = current_turn_file.parent() {
         std::fs::create_dir_all(parent)?;
@@ -246,7 +261,7 @@ fn write_pi_current_turn_context(metadata: &Value, input: &AgentInput) -> Result
         "session_id": input.session_id,
         "turn_id": input.turn_id,
         "input": input.input,
-        "client_type": "pi",
+        "client_type": client_type,
         "internal_event_url": internal_event_url,
     });
     std::fs::write(current_turn_file, serde_json::to_vec_pretty(&context)?)?;

@@ -31,7 +31,7 @@
 
 <section class="panel">
   <h2>Create session</h2>
-  <label>Client type <select bind:value={clientType}><option value="generic">generic</option><option value="pi">pi</option></select></label>
+  <label>Client type <select bind:value={clientType}><option value="generic">generic</option><option value="pi">pi</option><option value="claude_code">claude_code</option></select></label>
   <label>Workspace <input bind:value={workspace} placeholder="/path/to/workspace" /></label>
   <label>Initial task <textarea bind:value={initialTask} placeholder="Optional initial task"></textarea></label>
   <button disabled={creating} on:click={submit}>{creating ? 'Creating...' : 'Create session'}</button>

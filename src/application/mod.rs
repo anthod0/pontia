@@ -67,3 +67,7 @@ pub(crate) use workspaces::*;
 fn default_client_type() -> String {
     "generic".to_string()
 }
+
+fn is_supported_client_type(client_type: &str) -> bool {
+    matches!(client_type, "generic" | "pi" | "claude_code")
+}

@@ -35,7 +35,7 @@
 <section class="panel">
   <h2>Create task</h2>
   <p class="muted">Use the current control-plane task API. Leave workspace empty to validate manual routing / confirmation.</p>
-  <label>Client type <select bind:value={clientType}><option value="generic">generic</option><option value="pi">pi</option></select></label>
+  <label>Client type <select bind:value={clientType}><option value="generic">generic</option><option value="pi">pi</option><option value="claude_code">claude_code</option></select></label>
   <label>Workspace <input bind:value={workspace} placeholder="Optional /path/to/workspace" /></label>
   <label>Task <textarea bind:value={input} placeholder="Ask the agent control layer to do work"></textarea></label>
   <button disabled={creating || !input.trim()} on:click={submit}>{creating ? 'Creating...' : 'Create task'}</button>

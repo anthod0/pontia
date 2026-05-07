@@ -1,0 +1,9 @@
+{
+  "client_type": "claude_code",
+  "capabilities": {
+    "report_turn_started": false,
+    "report_turn_finished": true,
+    "stream_output": false,
+    "artifact_sources": false
+  }
+}

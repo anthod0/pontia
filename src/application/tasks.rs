@@ -64,7 +64,7 @@ impl TaskCommandService {
         request: CreateTaskRequest,
         idempotency_key: Option<&str>,
     ) -> Result<CreateTaskOutcome> {
-        if !matches!(request.client_type.as_str(), "generic" | "pi") {
+        if !is_supported_client_type(&request.client_type) {
             return Err(Error::Domain(format!(
                 "unsupported client_type: {}",
                 request.client_type
@@ -184,7 +184,7 @@ impl TaskCommandService {
             });
         }
 
-        if !matches!(request.client_type.as_str(), "generic" | "pi") {
+        if !is_supported_client_type(&request.client_type) {
             return Err(Error::Domain(format!(
                 "unsupported client_type: {}",
                 request.client_type
@@ -255,7 +255,7 @@ impl TaskCommandService {
             });
         }
 
-        if !matches!(request.client_type.as_str(), "generic" | "pi") {
+        if !is_supported_client_type(&request.client_type) {
             return Err(Error::Domain(format!(
                 "unsupported client_type: {}",
                 request.client_type

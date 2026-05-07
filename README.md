@@ -9,7 +9,7 @@ It is designed for scenarios such as:
 - Managing different agent clients with a shared session / turn / event / artifact model
 - Keeping agent runtimes alive for long-running work via `tmux`, instead of starting a temporary process for every task
 
-Currently supported clients are the `generic` test client and the `pi` client.
+Currently supported clients are the `generic` test client, the `pi` client, and the `claude_code` client.
 
 ## Feature Overview
 
@@ -94,6 +94,7 @@ Common workflow:
 4. Choose a client type:
    - `generic`: for validating the workflow and API
    - `pi`: for using the real pi client
+   - `claude_code`: for using Claude Code with the llmparty Claude Code plugin
 5. Enter the workspace path
 6. Submit a task
 7. View the agent response in the event stream and output areas

@@ -1,0 +1,14 @@
+{
+  "name": "llmparty",
+  "owner": {
+    "name": "llmparty"
+  },
+  "description": "llmparty first-party Claude Code plugins",
+  "plugins": [
+    {
+      "name": "llmparty-claude-code",
+      "source": "./clients/claude-code",
+      "description": "Reports Claude Code turn output and completion facts back to llmparty"
+    }
+  ]
+}

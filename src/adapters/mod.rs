@@ -46,6 +46,18 @@ impl AdapterCapabilities {
             artifact_sources: true,
         }
     }
+
+    pub fn claude_code_default() -> Self {
+        Self {
+            accept_task: true,
+            report_turn_started: false,
+            report_turn_finished: true,
+            interrupt: false,
+            stream_output: false,
+            heartbeat: false,
+            artifact_sources: false,
+        }
+    }
 }
 
 pub trait AgentInputSink {

@@ -80,6 +80,7 @@ impl GenericRuntimeManager {
         let adapter_event_log = runtime_dir.join("adapter-events.jsonl");
         let current_turn_file = runtime_dir.join("current-turn.json");
         let pi_hook_log = runtime_dir.join("pi-hook.log");
+        let claude_hook_log = runtime_dir.join("claude-hook.log");
         let internal_event_url = internal_event_url();
         std::fs::File::create(&log_path)?;
         let script_path = runtime_dir.join("runtime.sh");
@@ -89,6 +90,7 @@ impl GenericRuntimeManager {
             adapter_event_log: &adapter_event_log,
             current_turn_file: &current_turn_file,
             pi_hook_log: &pi_hook_log,
+            claude_hook_log: &claude_hook_log,
         };
         write_runtime_script(&script_path, &workspace, &runtime_paths, &request)?;
 
@@ -109,6 +111,7 @@ impl GenericRuntimeManager {
         let adapter_event_log = adapter_event_log.display().to_string();
         let current_turn_file = current_turn_file.display().to_string();
         let pi_hook_log = pi_hook_log.display().to_string();
+        let claude_hook_log = claude_hook_log.display().to_string();
         Ok(RuntimeStartResult {
             runtime_kind: "tmux".to_string(),
             runtime_ref: tmux_session.clone(),
@@ -124,6 +127,7 @@ impl GenericRuntimeManager {
                 "current_turn_file": current_turn_file,
                 "internal_event_url": internal_event_url,
                 "pi_hook_log": pi_hook_log,
+                "claude_hook_log": claude_hook_log,
                 "started_at": started_at,
                 "restart_count": restart_count,
             }),
@@ -135,9 +139,18 @@ impl GenericRuntimeManager {
     }
 
     pub fn dispatch_pi_turn(&self, runtime_ref: &str, input: &AgentInput) -> Result<()> {
+        self.dispatch_tui_turn(runtime_ref, "pi", input)
+    }
+
+    pub fn dispatch_tui_turn(
+        &self,
+        runtime_ref: &str,
+        client_type: &str,
+        input: &AgentInput,
+    ) -> Result<()> {
         if !self.is_alive(runtime_ref) {
             return Err(Error::Domain(format!(
-                "pi runtime {runtime_ref} is not alive"
+                "{client_type} runtime {runtime_ref} is not alive"
             )));
         }
 
@@ -258,6 +271,7 @@ fn capabilities_for_client(client_type: &str) -> AdapterCapabilities {
     match client_type {
         "generic" => GenericTestAdapter.capabilities(),
         "pi" => AdapterCapabilities::pi_m0_default(),
+        "claude_code" => AdapterCapabilities::claude_code_default(),
         _ => AdapterCapabilities::default(),
     }
 }
@@ -306,6 +320,7 @@ struct RuntimePaths<'a> {
     adapter_event_log: &'a Path,
     current_turn_file: &'a Path,
     pi_hook_log: &'a Path,
+    claude_hook_log: &'a Path,
 }
 
 fn write_runtime_script(
@@ -314,18 +329,27 @@ fn write_runtime_script(
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
 ) -> Result<()> {
-    let (log_setup, runtime_body) = if request.client_type == "pi" {
-        let pi_command =
-            std::env::var("LLMPARTY_PI_TUI_COMMAND").unwrap_or_else(|_| "pi".to_string());
-        (
-            "echo \"llmparty runtime started\" >> \"$LLMPARTY_RUNTIME_LOG\"".to_string(),
-            format!("exec sh -lc {}\n", shell_quote(&pi_command)),
-        )
-    } else {
-        (
+    let (log_setup, runtime_body) = match request.client_type.as_str() {
+        "pi" => {
+            let pi_command =
+                std::env::var("LLMPARTY_PI_TUI_COMMAND").unwrap_or_else(|_| "pi".to_string());
+            (
+                "echo \"llmparty runtime started\" >> \"$LLMPARTY_RUNTIME_LOG\"".to_string(),
+                format!("exec sh -lc {}\n", shell_quote(&pi_command)),
+            )
+        }
+        "claude_code" => {
+            let claude_command = std::env::var("LLMPARTY_CLAUDE_TUI_COMMAND")
+                .unwrap_or_else(|_| "claude".to_string());
+            (
+                "echo \"llmparty runtime started\" >> \"$LLMPARTY_RUNTIME_LOG\"".to_string(),
+                format!("exec sh -lc {}\n", shell_quote(&claude_command)),
+            )
+        }
+        _ => (
             "exec >> \"$LLMPARTY_RUNTIME_LOG\" 2>&1\necho \"llmparty runtime started\"".to_string(),
             "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
-        )
+        ),
     };
     let content = format!(
         r#"#!/usr/bin/env sh
@@ -338,6 +362,7 @@ export LLMPARTY_ADAPTER_EVENT_LOG={}
 export LLMPARTY_CURRENT_TURN_FILE={}
 export LLMPARTY_INTERNAL_EVENT_URL={}
 export LLMPARTY_PI_HOOK_LOG={}
+export LLMPARTY_CLAUDE_HOOK_LOG={}
 {}
 {}
 "#,
@@ -350,6 +375,7 @@ export LLMPARTY_PI_HOOK_LOG={}
         shell_quote(&runtime_paths.current_turn_file.display().to_string()),
         shell_quote(&internal_event_url()),
         shell_quote(&runtime_paths.pi_hook_log.display().to_string()),
+        shell_quote(&runtime_paths.claude_hook_log.display().to_string()),
         log_setup,
         runtime_body,
     );

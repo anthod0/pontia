@@ -42,7 +42,7 @@ impl SessionCommandService {
         request: CreateSessionRequest,
         idempotency_key: Option<&str>,
     ) -> Result<CreateSessionOutcome> {
-        if !matches!(request.client_type.as_str(), "generic" | "pi") {
+        if !is_supported_client_type(&request.client_type) {
             return Err(crate::error::Error::Domain(format!(
                 "unsupported client_type: {}",
                 request.client_type
