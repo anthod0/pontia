@@ -22,7 +22,7 @@
 
   let workspace = '';
   let plannerMessage = '';
-  let clientType = 'generic';
+  let clientType = 'claude_code';
   let busy = false;
 
   $: canConfirm = $task?.state === 'needs_confirmation';

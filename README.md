@@ -92,9 +92,8 @@ Common workflow:
 2. Enter the External API token
 3. Create a session
 4. Choose a client type:
-   - `generic`: for validating the workflow and API
-   - `pi`: for using the real pi client
    - `claude_code`: for using Claude Code with the llmparty Claude Code plugin
+   - `pi`: for using the real pi client
 5. Enter the workspace path
 6. Submit a task
 7. View the agent response in the event stream and output areas
@@ -149,7 +148,7 @@ curl -X POST http://127.0.0.1:8080/external/v1/sessions \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-session-1' \
   -d '{
-    "client_type":"generic",
+    "client_type":"claude_code",
     "workspace":"/tmp/llmparty-demo",
     "initial_task":{"input":"Please introduce the current project"}
   }'
