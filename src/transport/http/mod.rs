@@ -1,14 +1,58 @@
+use std::{
+    future::{Future, IntoFuture},
+    time::Duration,
+};
+
 use axum::{
     Router,
     routing::{get, post},
 };
+use tokio::sync::oneshot;
+use tracing::warn;
 
-use crate::application::AppState;
+use crate::{application::AppState, error::Result};
 
 pub mod dashboard;
 pub mod external;
 pub mod health;
 pub mod internal;
+
+pub async fn serve_with_shutdown_timeout<F>(
+    listener: tokio::net::TcpListener,
+    router: Router,
+    shutdown: F,
+    shutdown_timeout: Duration,
+) -> Result<()>
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    let (shutdown_started_tx, shutdown_started_rx) = oneshot::channel::<()>();
+    let server = axum::serve(listener, router)
+        .with_graceful_shutdown(async move {
+            shutdown.await;
+            let _ = shutdown_started_tx.send(());
+        })
+        .into_future();
+    tokio::pin!(server);
+
+    tokio::select! {
+        result = &mut server => {
+            result?;
+        }
+        _ = shutdown_started_rx => {
+            match tokio::time::timeout(shutdown_timeout, &mut server).await {
+                Ok(result) => {
+                    result?;
+                }
+                Err(_) => {
+                    warn!(timeout_ms = shutdown_timeout.as_millis(), "graceful shutdown timed out; forcing server stop");
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
 
 pub fn router(state: AppState) -> Router {
     Router::new()

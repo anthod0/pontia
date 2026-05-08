@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
@@ -10,6 +12,7 @@ use llmparty::{
     transport::http,
 };
 use serde_json::{Value, json};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
@@ -254,4 +257,57 @@ async fn event_stream_rejects_cursor_outside_requested_scope() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(body.contains("invalid_request"));
+}
+
+#[tokio::test]
+async fn graceful_shutdown_returns_after_timeout_when_event_stream_client_stays_open() {
+    let state = test_state("shutdown_with_stream").await;
+    seed_session_events(&state).await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let addr = listener.local_addr().expect("local addr");
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+    let server = tokio::spawn(http::serve_with_shutdown_timeout(
+        listener,
+        http::router(state),
+        async move {
+            let _ = shutdown_rx.await;
+        },
+        Duration::from_millis(100),
+    ));
+
+    let mut stream = tokio::net::TcpStream::connect(addr)
+        .await
+        .expect("connect sse client");
+    stream
+        .write_all(
+            b"GET /external/v1/sessions/sess_stream_1/events/stream HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer test-token\r\n\r\n",
+        )
+        .await
+        .expect("send request");
+
+    let mut response = Vec::new();
+    let mut buffer = [0_u8; 1024];
+    loop {
+        let read = stream.read(&mut buffer).await.expect("read response");
+        assert!(read > 0, "server closed stream before headers");
+        response.extend_from_slice(&buffer[..read]);
+        if response.windows(4).any(|window| window == b"\r\n\r\n") {
+            break;
+        }
+    }
+    assert!(
+        String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"),
+        "unexpected response: {}",
+        String::from_utf8_lossy(&response)
+    );
+
+    shutdown_tx.send(()).expect("send shutdown");
+    tokio::time::timeout(Duration::from_secs(1), server)
+        .await
+        .expect("server should stop after shutdown timeout")
+        .expect("server task")
+        .expect("server result");
 }

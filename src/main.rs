@@ -1,4 +1,6 @@
 use llmparty::{application, config::AppConfig, transport::http};
+use std::time::Duration;
+
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -12,9 +14,13 @@ async fn main() -> llmparty::error::Result<()> {
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     info!(addr = %config.bind_addr, "starting llmparty control plane");
 
-    axum::serve(listener, http::router(state))
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    http::serve_with_shutdown_timeout(
+        listener,
+        http::router(state),
+        shutdown_signal(),
+        Duration::from_secs(5),
+    )
+    .await?;
 
     Ok(())
 }
