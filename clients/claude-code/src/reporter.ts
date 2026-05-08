@@ -1,4 +1,3 @@
-import type { TurnContext } from "./context.js";
 import { appendDiagnostic } from "./diagnostics.js";
 import type { InternalEvent } from "./events.js";
 
@@ -18,7 +17,7 @@ export class EventReporter {
     this.logFile = options.logFile;
   }
 
-  async report(context: TurnContext, event: InternalEvent): Promise<boolean> {
+  async report(context: { internalEventUrl: string }, event: InternalEvent): Promise<boolean> {
     try {
       const response = await this.fetchImpl(context.internalEventUrl, {
         method: "POST",

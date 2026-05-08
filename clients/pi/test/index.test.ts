@@ -43,6 +43,41 @@ function install(overrides: Partial<Parameters<typeof createLlmpartyPiExtension>
 }
 
 describe("llmparty pi extension lifecycle", () => {
+  test("session_start startup reports one-time agent client ready from runtime env", async () => {
+    const { handlers, reported } = install({
+      env: {
+        LLMPARTY_SESSION_ID: "sess_ready",
+        LLMPARTY_RUNTIME_INSTANCE_ID: "rtinst_1",
+        LLMPARTY_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+      },
+    });
+
+    await handlers.session_start({ reason: "startup" }, {});
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_ready",
+      turn_id: null,
+      source: "agent_client",
+      client_type: "pi",
+      payload: { runtime_instance_id: "rtinst_1" },
+    });
+  });
+
+  test("session_start non-startup does not report ready", async () => {
+    const { handlers, reported } = install({
+      env: {
+        LLMPARTY_SESSION_ID: "sess_ready",
+        LLMPARTY_RUNTIME_INSTANCE_ID: "rtinst_1",
+        LLMPARTY_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+      },
+    });
+
+    await handlers.session_start({ reason: "reload" }, {});
+
+    expect(reported).toEqual([]);
+  });
+
   test("registers pi lifecycle handlers", () => {
     const { pi } = fakePi();
     createLlmpartyPiExtension(pi as any, {
@@ -52,6 +87,7 @@ describe("llmparty pi extension lifecycle", () => {
       logDiagnostic: vi.fn(),
     });
 
+    expect(pi.on).toHaveBeenCalledWith("session_start", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("agent_start", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_update", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_end", expect.any(Function));

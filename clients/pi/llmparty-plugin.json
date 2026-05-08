@@ -15,6 +15,8 @@
   },
   "requires": {
     "env": [
+      "LLMPARTY_SESSION_ID",
+      "LLMPARTY_RUNTIME_INSTANCE_ID",
       "LLMPARTY_CURRENT_TURN_FILE",
       "LLMPARTY_INTERNAL_EVENT_URL"
     ]

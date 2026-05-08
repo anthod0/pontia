@@ -1,6 +1,6 @@
 # @llmparty/pi-client-plugin
 
-First-party pi extension for reporting confirmed pi turn facts back to llmparty.
+First-party pi extension for reporting pi startup readiness and confirmed turn facts back to llmparty.
 
 ## Install locally
 
@@ -24,8 +24,10 @@ The extension reads configuration from environment variables:
 | --- | --- | --- |
 | `LLMPARTY_WORKSPACE` | recommended | pi process cwd |
 | `LLMPARTY_RUNTIME_DIR` | recommended | pi process cwd |
+| `LLMPARTY_SESSION_ID` | required for startup ready | none |
+| `LLMPARTY_RUNTIME_INSTANCE_ID` | required for startup ready | none |
 | `LLMPARTY_CURRENT_TURN_FILE` | recommended | `$LLMPARTY_RUNTIME_DIR/current-turn.json` |
-| `LLMPARTY_INTERNAL_EVENT_URL` | required unless present in context file | none |
+| `LLMPARTY_INTERNAL_EVENT_URL` | required for startup ready, required for turns unless present in context file | none |
 | `LLMPARTY_PI_HOOK_LOG` | recommended | `$LLMPARTY_RUNTIME_DIR/pi-hook.log` |
 
 Expected `current-turn.json`:
@@ -44,6 +46,7 @@ Expected `current-turn.json`:
 
 ## What the extension reports
 
+- On `session_start` with reason `startup`, it posts a one-time `session.ready` signal from `agent_client` with the current `runtime_instance_id`.
 - On `agent_start`, it reads the current turn context.
 - On assistant message updates/end events, it collects assistant-visible text from pi lifecycle event payloads.
 - On `agent_end`, it posts `turn.output` when text was collected, then posts `turn.completed`.
@@ -53,7 +56,7 @@ The extension does not parse TUI screen contents and does not infer completion f
 
 ## Manual validation
 
-When pi is launched by llmparty `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `LLMPARTY_RUNTIME_DIR`, `LLMPARTY_CURRENT_TURN_FILE`, `LLMPARTY_INTERNAL_EVENT_URL`, and `LLMPARTY_PI_HOOK_LOG` for the hook. The steps below are useful for standalone plugin validation.
+When pi is launched by llmparty `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `LLMPARTY_SESSION_ID`, `LLMPARTY_RUNTIME_INSTANCE_ID`, `LLMPARTY_RUNTIME_DIR`, `LLMPARTY_CURRENT_TURN_FILE`, `LLMPARTY_INTERNAL_EVENT_URL`, and `LLMPARTY_PI_HOOK_LOG` for the hook. The steps below are useful for standalone plugin validation.
 
 1. Start llmparty so `/internal/v1/events` is reachable.
 2. Create the current turn file in a runtime directory:
@@ -76,6 +79,8 @@ When pi is launched by llmparty `client_type = "pi"` runtime, the Control Plane 
 
    ```bash
    export LLMPARTY_WORKSPACE="$PWD"
+   export LLMPARTY_SESSION_ID="sess_xxx"
+   export LLMPARTY_RUNTIME_INSTANCE_ID="rtinst_xxx"
    export LLMPARTY_CURRENT_TURN_FILE="$LLMPARTY_RUNTIME_DIR/current-turn.json"
    export LLMPARTY_INTERNAL_EVENT_URL="http://127.0.0.1:8080/internal/v1/events"
    export LLMPARTY_PI_HOOK_LOG="$LLMPARTY_RUNTIME_DIR/pi-hook.log"

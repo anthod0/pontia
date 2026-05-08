@@ -1,11 +1,12 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, type InternalEvent } from "./events.js";
+import { buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, type InternalEvent } from "./events.js";
 import { EventReporter } from "./reporter.js";
+import { loadSessionContext } from "./session.js";
 
 interface ReporterLike {
-  report(context: TurnContext, event: InternalEvent): Promise<boolean>;
+  report(context: { internalEventUrl: string }, event: InternalEvent): Promise<boolean>;
 }
 
 export interface LlmpartyPiExtensionDependencies {
@@ -84,6 +85,27 @@ export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: Llmpar
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   let activeTurn: ActiveTurnState | undefined;
+  let readyReported = false;
+
+  pi.on("session_start", async (event) => {
+    if (readyReported) return;
+    const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
+    if (reason !== "startup") return;
+
+    try {
+      const loaded = await loadSessionContext(env);
+      if (!loaded.ok) return;
+      readyReported = await makeReporter(loaded.logFile).report(loaded.context, buildSessionReadyEvent(loaded.context));
+    } catch (error) {
+      const logFile = env.LLMPARTY_PI_HOOK_LOG ?? "pi-hook.log";
+      await logDiagnostic(logFile, {
+        level: "error",
+        code: "unexpected_extension_exception",
+        message: "failed to report llmparty ready signal",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 
   pi.on("agent_start", async (_event, ctx) => {
     try {

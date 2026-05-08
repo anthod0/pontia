@@ -45,6 +45,21 @@ function stringValue(value) {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+async function loadSessionContext() {
+  const sessionId = stringValue(env.LLMPARTY_SESSION_ID);
+  const runtimeInstanceId = stringValue(env.LLMPARTY_RUNTIME_INSTANCE_ID);
+  const internalEventUrl = stringValue(env.LLMPARTY_INTERNAL_EVENT_URL);
+  const errors = [];
+  if (!sessionId) errors.push("LLMPARTY_SESSION_ID is required");
+  if (!runtimeInstanceId) errors.push("LLMPARTY_RUNTIME_INSTANCE_ID is required");
+  if (!internalEventUrl) errors.push("LLMPARTY_INTERNAL_EVENT_URL is required");
+  if (errors.length) {
+    await appendDiagnostic({ level: "error", code: "invalid_session_context", message: errors.join("; ") });
+    return undefined;
+  }
+  return { sessionId, runtimeInstanceId, internalEventUrl };
+}
+
 async function loadContext() {
   const file = currentTurnFile();
   let parsed;
@@ -74,8 +89,8 @@ function event(context, type, payload) {
   return {
     event_id: `evt_${randomUUID()}`,
     session_id: context.sessionId,
-    turn_id: context.turnId,
-    source: "agent_adapter",
+    turn_id: type === "session.ready" ? null : context.turnId,
+    source: type === "session.ready" ? "agent_client" : "agent_adapter",
     client_type: "claude_code",
     type,
     time: new Date().toISOString(),
@@ -111,6 +126,12 @@ function failureMessage(payload) {
 
 try {
   const payload = await stdinJson();
+  if (command === "session-start") {
+    const context = await loadSessionContext();
+    if (context) await postEvent(context, event(context, "session.ready", { runtime_instance_id: context.runtimeInstanceId }));
+    process.exit(0);
+  }
+
   const context = await loadContext();
   if (context && command === "stop") {
     const output = typeof payload?.last_assistant_message === "string" ? payload.last_assistant_message.trim() : "";

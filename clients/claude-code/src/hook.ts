@@ -1,12 +1,13 @@
 import { loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, type InternalEvent } from "./events.js";
+import { buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, type InternalEvent } from "./events.js";
+import { loadSessionContext } from "./session.js";
 import { EventReporter } from "./reporter.js";
 
-export type ClaudeHookCommand = "prompt-submit" | "stop" | "stop-failure";
+export type ClaudeHookCommand = "prompt-submit" | "session-start" | "stop" | "stop-failure";
 
 interface ReporterLike {
-  report(context: TurnContext, event: InternalEvent): Promise<boolean>;
+  report(context: { internalEventUrl: string }, event: InternalEvent): Promise<boolean>;
 }
 
 export interface ClaudeHookDependencies {
@@ -38,6 +39,13 @@ export async function handleClaudeHook(
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
 
   try {
+    if (command === "session-start") {
+      const loaded = await loadSessionContext(env);
+      if (!loaded.ok) return 0;
+      await makeReporter(loaded.logFile).report(loaded.context, buildSessionReadyEvent(loaded.context));
+      return 0;
+    }
+
     const loaded = await contextLoader(env);
     if (!loaded.ok) return 0;
 

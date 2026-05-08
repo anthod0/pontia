@@ -28,6 +28,28 @@ function dependencies(reportResults: boolean[] = []) {
 }
 
 describe("handleClaudeHook", () => {
+  test("session-start reports one-time agent client ready from runtime env", async () => {
+    const { deps, reported } = dependencies();
+    deps.env = {
+      LLMPARTY_SESSION_ID: "sess_ready",
+      LLMPARTY_RUNTIME_INSTANCE_ID: "rtinst_1",
+      LLMPARTY_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+    };
+
+    const exitCode = await handleClaudeHook("session-start", { hook_event_name: "SessionStart", source: "startup" }, deps);
+
+    expect(exitCode).toBe(0);
+    expect(deps.loadContext).not.toHaveBeenCalled();
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_ready",
+      turn_id: null,
+      source: "agent_client",
+      client_type: "claude_code",
+      payload: { runtime_instance_id: "rtinst_1" },
+    });
+  });
+
   test("prompt-submit validates current turn context without reporting events", async () => {
     const { deps, reported } = dependencies();
 
