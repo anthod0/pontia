@@ -217,6 +217,9 @@ impl GenericRuntimeManager {
             )));
         }
         for attempt in 1..=2 {
+            if attempt > 1 && !self.is_alive(runtime_ref) {
+                return Ok(());
+            }
             let status = Command::new("tmux")
                 .args(["send-keys", "-t", runtime_ref, "C-c"])
                 .status()
