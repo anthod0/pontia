@@ -3,6 +3,8 @@
 //! The MVP generic runtime records a binding and immediately reports ready. This
 //! module stays independent from HTTP transport details.
 
+mod claude_code;
+
 use std::{
     io::Write,
     path::{Path, PathBuf},
@@ -17,7 +19,7 @@ use time::format_description::well_known::Rfc3339;
 
 use crate::{
     adapters::{AdapterCapabilities, AgentInputSink, GenericTestAdapter},
-    agent_clients::{self, DispatchMode},
+    agent_clients::{self, DispatchMode, StartupHook},
     application::SessionCapabilities,
     error::{Error, Result},
     ids::new_runtime_instance_id,
@@ -80,6 +82,7 @@ impl GenericRuntimeManager {
         let capabilities = client_spec.capabilities.clone();
         let tmux_session = tmux_session_name(&request.session_id);
         let workspace = workspace_path(&request)?;
+        run_startup_hooks(client_spec.startup_hooks, &workspace)?;
         let runtime_dir = runtime_dir(&request.session_id)?;
         std::fs::create_dir_all(&runtime_dir)?;
         let log_path = runtime_dir.join("runtime.log");
@@ -415,6 +418,17 @@ export LLMPARTY_CLAUDE_HOOK_LOG={}
 fn internal_event_url() -> String {
     std::env::var("LLMPARTY_INTERNAL_EVENT_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8080/internal/v1/events".to_string())
+}
+
+fn run_startup_hooks(hooks: &[StartupHook], workspace: &Path) -> Result<()> {
+    for hook in hooks {
+        match hook {
+            StartupHook::ClaudeCodeTrustWorkspace => {
+                claude_code::ensure_workspace_trusted(workspace)?
+            }
+        }
+    }
+    Ok(())
 }
 
 fn sanitize_tmux_identifier(value: &str) -> String {

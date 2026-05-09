@@ -22,13 +22,19 @@ const TOKEN: &str = "test-token";
 
 async fn test_state(name: &str) -> AppState {
     GenericTestAdapter::clear_recorded_inputs();
+    let dir = tempfile::tempdir().expect("tempdir");
     unsafe {
         std::env::set_var(
             "LLMPARTY_CLAUDE_TUI_COMMAND",
             "cat >> \"$LLMPARTY_WORKSPACE/claude-tui-input.log\"",
         );
+        // Test-only override consumed by src/runtime/claude_code.rs so these
+        // integration tests do not patch the developer's real ~/.claude.json.
+        std::env::set_var(
+            "LLMPARTY_CLAUDE_CONFIG_PATH",
+            dir.path().join("claude.json"),
+        );
     }
-    let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join(format!("{name}.db"));
     let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());

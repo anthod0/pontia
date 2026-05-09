@@ -13,6 +13,11 @@ pub enum ReadinessMode {
     AgentClientEvent,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupHook {
+    ClaudeCodeTrustWorkspace,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentClientSpec {
     pub client_type: &'static str,
@@ -21,6 +26,7 @@ pub struct AgentClientSpec {
     pub default_command: Option<&'static str>,
     pub dispatch_mode: DispatchMode,
     pub readiness_mode: ReadinessMode,
+    pub startup_hooks: &'static [StartupHook],
 }
 
 const GENERIC_CAPABILITIES: AdapterCapabilities = AdapterCapabilities {
@@ -61,6 +67,7 @@ pub const AGENT_CLIENTS: &[AgentClientSpec] = &[
         default_command: None,
         dispatch_mode: DispatchMode::GenericTestAdapter,
         readiness_mode: ReadinessMode::RuntimeManagerImmediate,
+        startup_hooks: &[],
     },
     AgentClientSpec {
         client_type: "pi",
@@ -69,6 +76,7 @@ pub const AGENT_CLIENTS: &[AgentClientSpec] = &[
         default_command: Some("pi"),
         dispatch_mode: DispatchMode::TmuxPaste,
         readiness_mode: ReadinessMode::AgentClientEvent,
+        startup_hooks: &[],
     },
     AgentClientSpec {
         client_type: "claude_code",
@@ -77,6 +85,7 @@ pub const AGENT_CLIENTS: &[AgentClientSpec] = &[
         default_command: Some("claude --dangerously-skip-permissions"),
         dispatch_mode: DispatchMode::TmuxPaste,
         readiness_mode: ReadinessMode::AgentClientEvent,
+        startup_hooks: &[StartupHook::ClaudeCodeTrustWorkspace],
     },
 ];
 
@@ -117,6 +126,10 @@ mod tests {
         assert_eq!(
             claude.default_command,
             Some("claude --dangerously-skip-permissions")
+        );
+        assert_eq!(
+            claude.startup_hooks,
+            &[StartupHook::ClaudeCodeTrustWorkspace]
         );
     }
 
