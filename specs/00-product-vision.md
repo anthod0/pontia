@@ -1,6 +1,6 @@
 # 统一 Coding Agent Control Plane：产品愿景
 
-**当前设计基线**：`llmparty` 已从 backend-only MVP 演进为可通过 Web Dashboard 和 HTTP External API 使用的 Coding Agent Control Plane。它以统一的 session / turn / event / artifact 模型管理不同 agent client，通过 tmux 承载长运行 runtime，并通过事件投影提供稳定的对外状态。
+**当前设计基线**：`llmparty` 是可通过 Web Dashboard 和 HTTP External API 使用的 Coding Agent Control Plane。它以统一的 task / workspace / session / turn / event / artifact 模型管理不同 agent client，通过 tmux 承载长运行 runtime，并通过事件投影和查询模型提供稳定的对外状态。
 
 ---
 
@@ -9,10 +9,10 @@
 本项目的目标是提供一个统一的 Coding Agent Control Plane，将不同 coding agent client 收敛到一组稳定的控制和观测能力：
 
 - 创建和管理 agent session
-- 向 session 提交任务 / prompt / turn
-- 查询 session、turn、event、artifact 状态
+- 提交全局 task，或直接向 session 提交 prompt / turn / inbox message
+- 查询 task、workspace、session、turn、event、artifact 状态
 - 实时观察 session 事件和 turn 输出
-- 控制 session 生命周期：interrupt、terminate、restart 等
+- 控制 task/session/turn 生命周期：cancel、interrupt、terminate、restart 等
 - 通过统一事件模型聚合 runtime 和 agent client 回传的事实
 - 让浏览器用户、脚本和上层 Orchestrator 都不需要直接理解具体 client 的运行细节
 
@@ -32,11 +32,14 @@
 - Web Dashboard
 - API token 认证
 - 创建、查询、终止、重启 session
-- 向 session 提交 turn
-- 查询 turn 历史和当前状态
+- 查询 workspace 列表
+- 创建和查询全局 task，支持 workspace 确认、planner input、task cancel/interrupt、task events 和 provenance 查询
+- 通过 session inbox 提交 message，支持 busy session 排队和可支持 client 的 interrupt-now 行为
+- 直接向 session 提交 turn 的 legacy API 仍保留
+- 查询 turn 列表和当前状态
 - 查询 session / turn 事件
 - 通过 SSE 订阅 session / turn 事件流
-- session / turn 状态由领域事件投影得到
+- session / turn 状态由领域事件投影得到，task 生命周期由 task 表和 task_events 记录
 - 写操作支持 `Idempotency-Key` 幂等语义
 - 稳定的 JSON 响应 envelope 和错误语义
 
@@ -45,8 +48,9 @@
 - 使用 `tmux` 承载长运行 runtime
 - runtime binding 作为辅助状态记录，不作为对外领域状态事实源
 - 支持 `generic` client，用于验证通用 adapter contract
-- 支持 `pi` client，包含 session 创建、turn dispatch、输出/完成/失败事实回传
-- capability model 显式表达 client 支持的能力
+- 支持 `pi` client，包含 session 创建、turn dispatch、输出/完成/失败事实回传和 artifact source 能力
+- 支持 `claude_code` client，包含 session 创建、turn dispatch、最终输出/完成/失败事实回传
+- capability model 显式表达 client 支持的能力，例如 interrupt、stream_output、artifact_sources
 - 不支持的能力返回明确降级错误，而不是伪造成功事件
 
 ### 2.3 Artifact 能力
@@ -58,13 +62,21 @@
 - artifact discovery 不改变 session / turn 主状态
 - External API 不直接暴露 runtime 内部路径作为权威状态来源
 
+### 2.4 Task / workspace / graph 能力
+
+- workspace 作为执行上下文和 artifact discovery 范围，不作为 llmparty 状态目录
+- task 是用户意图的一等对象，可以先于 workspace / session / turn 存在
+- task routing 可自动匹配 workspace，也可进入 `needs_confirmation` 等待用户确认
+- task dispatch 会选择或创建 session，并把 task 关联到实际 turn
+- task_events 提供 routing、dispatch、running、completed/failed/cancelled 等审计记录
+- 可选 graph projection 用于 task provenance；SQLite/event store 仍是执行事实的权威来源
+
 ---
 
 ## 3. 当前不包含的能力
 
 以下能力仍属于后续演进范围，不应被当前设计或 API consumer 假设为已存在：
 
-- WebSocket 实时通道
 - Approval / human-in-the-loop
 - RBAC / OAuth / 多租户权限体系
 - 多 turn 并发执行
@@ -75,7 +87,7 @@
 - 复杂事件补洞、修复和 replay API
 - artifact retention / compaction / 全文搜索
 
-这些能力可以在当前稳定模型上继续扩展，但不应改变 session / turn / event / artifact 的核心抽象。
+这些能力可以在当前稳定模型上继续扩展，但不应改变 task / workspace / session / turn / event / artifact 的核心抽象。
 
 ---
 
@@ -87,11 +99,11 @@
 User
   -> open /dashboard
   -> enter External API token
-  -> create/select session
-  -> submit turn
+  -> create/select task or session
+  -> submit task, session inbox message, or legacy turn
   -> observe events and latest output through SSE
-  -> browse artifacts
-  -> interrupt/restart/terminate session when needed
+  -> browse workspaces, task events, and artifacts
+  -> cancel/interrupt/restart/terminate when needed
 ```
 
 Dashboard 只消费 External API 和 SSE event stream。它不直接读取 SQLite、tmux、runtime binding、client 日志或 workspace 文件作为权威状态来源。
@@ -100,6 +112,10 @@ Dashboard 只消费 External API 和 SSE event stream。它不直接读取 SQLit
 
 ```text
 External Orchestrator
+  -> GET  /external/v1/workspaces
+  -> POST /external/v1/tasks
+  -> POST /external/v1/tasks/{task_id}/confirm-workspace
+  -> GET  /external/v1/tasks/{task_id}/events
   -> POST /external/v1/sessions
   -> POST /external/v1/sessions/{session_id}/inbox/messages
   -> GET  /external/v1/sessions/{session_id}/turns/{turn_id}
@@ -122,6 +138,7 @@ Control Plane 对外暴露的领域状态以自身投影为准。状态更新可
 - Runtime Manager
 - generic client adapter
 - pi client adapter / hook
+- Claude Code client hook
 - agent client 回传事件
 - filesystem / artifact adapter
 - system monitor
@@ -138,18 +155,18 @@ Control Plane 对外暴露的领域状态以自身投影为准。状态更新可
 
 ---
 
-## 6. 后续愿景
+## 6. 未来设计方向
 
-在当前 Control Plane、Dashboard、SSE 和 pi client 基线之上，后续可继续扩展：
+以下能力可以在当前统一 External API、事件模型和 projection 语义之上扩展：
 
 - Human-in-the-loop approval
 - 更丰富的 runtime diagnostics
 - terminal preview 或受控的 runtime 观察界面
-- Claude Code、Codex 等更多 client-specific adapter
+- Codex 等更多 client-specific adapter
 - client-native session resume
 - 多 session / 多 workspace 的更强管理体验
 - 更强的权限、安全和审计体系
 - WebSocket 或其他实时通道，如果 SSE 不再满足需求
 - Process pool / pre-warm，用于降低 session 启动延迟
 
-这些能力属于产品增强，应建立在当前统一 External API、事件模型和 projection 语义之上。
+这些能力属于产品增强，不应改变 task / workspace / session / turn / event / artifact 的核心抽象。

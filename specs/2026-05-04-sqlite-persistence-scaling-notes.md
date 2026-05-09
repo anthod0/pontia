@@ -1,8 +1,8 @@
 # SQLite Persistence Scaling Notes
 
-本文记录当前持久层在未来支持 20+ agent 并行运行时可能遇到的瓶颈，以及后续可以按优先级实施的 SQLite 优化方向。
+本文是性能优化 backlog，记录当前持久层在支持 20+ agent 并行运行时可能遇到的瓶颈，以及未来可以按优先级实施的 SQLite 优化方向。
 
-当前暂不实施这些优化，仅作为后续性能加固依据。
+当前暂不实施这些优化，仅作为性能加固依据。
 
 ## 背景
 
@@ -12,7 +12,7 @@
 - 文件系统存储 runtime 目录、adapter event outbox、current turn context、artifact 原始内容等。
 - 多个 agent session 会并行运行，并持续产生 session / turn / adapter 事件。
 
-未来如果 agent 数量超过 20 个，主要持久层风险来自并发写入和写入放大，而不是 SQLite 单机容量本身。
+agent 数量超过 20 个时，主要持久层风险来自并发写入和写入放大，而不是 SQLite 单机容量本身。
 
 ## 当前主要瓶颈
 
@@ -194,7 +194,7 @@ SQLite transaction
 - 将 session / turn projection 更新改成更定向的读写。
 - 对高频 `turn.output` 做合并或降采样策略。
 
-目标是让单条 event 写入成本接近 O(1)，避免随着历史数据增长而变慢。
+目标是让单条 event 写入成本接近 O(1)，避免随着 event 数据增长而变慢。
 
 ### 优先级 6：adapter outbox 增量消费
 
@@ -232,7 +232,7 @@ artifact discovery 后续可以优化为：
 - 减少 list sessions / list turns 的 N+1 enrich 查询。
 - 为 event stream 的 cursor 查询设计更匹配的索引或显式 offset 字段。
 - 降低空闲 SSE 轮询频率，或引入事件通知机制。
-- 对历史 events 做分页，避免一次性返回过大结果集。
+- 对 events 做分页，避免一次性返回过大结果集。
 
 ## 建议触发条件
 
@@ -248,7 +248,7 @@ artifact discovery 后续可以优化为：
 
 ## 推荐实施顺序
 
-如果未来开始优化，建议按以下顺序推进：
+开始优化时，建议按以下顺序推进：
 
 1. 开启 WAL、busy_timeout、synchronous=NORMAL，并限制 SQLite pool size。
 2. 抽象 `EventStore`，把 event ingest 作为明确持久层边界。

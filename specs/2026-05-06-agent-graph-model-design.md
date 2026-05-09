@@ -2,22 +2,24 @@
 
 日期：2026-05-06
 
+本文描述当前可选 graph projection 的模型边界和未来设计方向。Graph 是 feature-gated 能力；SQLite / event store 仍是执行事实的权威来源。
+
 ## 背景
 
-当前图数据库 schema 更像 SQLite 业务表的投影：`Task / Workspace / Session / Turn / Decision / Evidence`。这能做任务溯源，但与 SQLite 管理的 session、turn、event、runtime 状态高度重叠，不能很好表达多 agent 之间的协作关系，也不能作为规划系统使用。
+图数据库用于表达多 agent 协作、任务拆解、计划演化和 provenance 关系。它不承担 SQLite 业务表镜像职责，也不作为 session、turn、event、runtime 状态的权威来源。
 
-新的图模型目标是：
+图模型目标是：
 
 1. 表达一个顶层任务如何被拆解成一组可执行的规划节点。
 2. 表达 WorkItem 之间的串行、并行和计划演化关系。
 3. 表达哪些 Agent 被派发去执行哪些 WorkItem。
 4. 表达 WorkItem 之间通过 Artifact 形成输入/输出依赖。
 5. 表达用户、Agent 或系统产生的 Signal 如何改变规划。
-6. 保留旧计划路径用于溯源，不删除历史节点。
+6. 保留被 supersede 的计划路径用于溯源，不删除已存在的计划节点。
 
 ## 边界
 
-图数据库不再作为 SQLite 的完整镜像。
+图数据库不作为 SQLite 的完整镜像。
 
 职责划分：
 
@@ -46,9 +48,7 @@ git:<repo>:<commit>:<path>
 
 ## 核心模型
 
-一句话概括：
-
-> Task 触发一张可演化的 WorkItem 计划图；Agent 执行 WorkItem；Artifact 作为输入/输出在 WorkItem 之间流动；Signal 解释为什么计划发生变化；旧路径保留用于溯源。
+Task 触发一张可演化的 WorkItem 计划图；Agent 执行 WorkItem；Artifact 作为输入/输出在 WorkItem 之间流动；Signal 解释为什么计划发生变化；旧路径保留用于溯源。
 
 最小核心节点：
 
