@@ -164,6 +164,7 @@ impl Drop for TmuxSessionGuard {
 async fn post_turn_external_endpoint_is_removed() {
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
+    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
 
     let (status, _) = request(
         state,
