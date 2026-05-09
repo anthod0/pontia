@@ -100,18 +100,14 @@
     {
       "name": "llmparty_exit_session",
       "title": "Exit llmparty session",
-      "description": "Ask llmparty to terminate a session gracefully. Use this when the current agent session should stop running.",
+      "description": "Ask llmparty to terminate the current agent session gracefully. Use this when this agent session should stop running.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "session_id": {
-            "type": "string",
-            "description": "Session to terminate. Defaults to the current llmparty session. First-party clients should only allow the current session unless explicitly configured otherwise."
-          },
           "reason": {
             "type": "string",
-            "description": "Optional human-readable reason for requesting session exit."
+            "description": "Optional human-readable reason for requesting self-exit."
           }
         }
       },
