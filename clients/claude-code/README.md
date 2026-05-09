@@ -17,11 +17,13 @@ After installing or updating the plugin, reload plugins inside Claude Code if ne
 /reload-plugins
 ```
 
-When the plugin is installed from the marketplace, configure llmparty to launch Claude Code normally:
+When the plugin is installed from the marketplace, llmparty launches Claude Code with its default command:
 
 ```bash
-LLMPARTY_CLAUDE_TUI_COMMAND=claude
+claude --dangerously-skip-permissions
 ```
+
+To override the launch command, set `LLMPARTY_CLAUDE_TUI_COMMAND`.
 
 ## Local development
 

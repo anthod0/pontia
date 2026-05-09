@@ -74,7 +74,7 @@ pub const AGENT_CLIENTS: &[AgentClientSpec] = &[
         client_type: "claude_code",
         capabilities: CLAUDE_CODE_CAPABILITIES,
         command_env: Some("LLMPARTY_CLAUDE_TUI_COMMAND"),
-        default_command: Some("claude"),
+        default_command: Some("claude --dangerously-skip-permissions"),
         dispatch_mode: DispatchMode::TmuxPaste,
         readiness_mode: ReadinessMode::AgentClientEvent,
     },
@@ -114,7 +114,10 @@ mod tests {
         assert_eq!(claude.dispatch_mode, DispatchMode::TmuxPaste);
         assert_eq!(claude.readiness_mode, ReadinessMode::AgentClientEvent);
         assert_eq!(claude.command_env, Some("LLMPARTY_CLAUDE_TUI_COMMAND"));
-        assert_eq!(claude.default_command, Some("claude"));
+        assert_eq!(
+            claude.default_command,
+            Some("claude --dangerously-skip-permissions")
+        );
     }
 
     #[test]
