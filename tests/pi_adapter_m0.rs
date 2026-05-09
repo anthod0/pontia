@@ -248,14 +248,24 @@ async fn pi_turn_submit_dispatches_to_tui_and_starts_without_completion() {
     let (status, body) = request_json(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
         Some(json!({"input":"queue pi turn"})),
     )
     .await;
 
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn = &body["data"]["turn"];
-    let turn_id = turn["turn_id"].as_str().expect("turn id");
+    let turn_id = body["data"]["inbox_message"]["turn_id"]
+        .as_str()
+        .expect("turn id");
+    let (turn_status, turn_body) = request_json(
+        state.clone(),
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(turn_status, StatusCode::OK);
+    let turn = &turn_body["data"]["turn"];
     assert_eq!(turn["state"], "running");
     assert!(turn["output"]["summary"].is_null());
     assert!(

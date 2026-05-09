@@ -119,15 +119,32 @@ async fn submit_turn_with_key(
     key: &str,
     input: &str,
 ) -> (StatusCode, Value) {
-    request_json(
-        state,
+    let (status, body) = request_json(
+        state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
         Some(TOKEN),
         Some(key),
         Some(json!({"input": input, "metadata": {"scenario":"mvp"}})),
     )
-    .await
+    .await;
+    let Some(turn_id) = body["data"]["inbox_message"]["turn_id"].as_str() else {
+        return (status, body);
+    };
+    let (turn_status, turn_body) = request_json(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        Some(TOKEN),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(turn_status, StatusCode::OK);
+    (
+        status,
+        json!({ "data": { "turn": turn_body["data"]["turn"].clone() } }),
+    )
 }
 
 async fn post_internal_event(
@@ -437,15 +454,18 @@ async fn external_api_has_stable_error_semantics_and_idempotency() {
         .to_string();
     assert_eq!(second_turn_body["data"]["turn"]["turn_id"], turn_id);
 
-    let (conflict_status, conflict_body) = submit_turn_with_key(
+    let (queued_status, queued_body) = request_json(
         state.clone(),
-        &session_id,
-        "mvp-conflicting-turn",
-        "second active turn",
+        "POST",
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        Some(TOKEN),
+        Some("mvp-conflicting-turn"),
+        Some(json!({"input": "second active turn", "metadata": {"scenario":"mvp"}})),
     )
     .await;
-    assert_eq!(conflict_status, StatusCode::CONFLICT);
-    assert_eq!(conflict_body["error"]["code"], "state_conflict");
+    assert_eq!(queued_status, StatusCode::CREATED);
+    assert_eq!(queued_body["data"]["inbox_message"]["state"], "pending");
+    assert_eq!(queued_body["data"]["inbox_message"]["turn_id"], Value::Null);
 
     let (capability_status, capability_body) = request_json(
         state,

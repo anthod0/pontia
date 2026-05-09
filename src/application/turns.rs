@@ -1,18 +1,5 @@
 use super::*;
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct SubmitTurnRequest {
-    pub input: String,
-    #[serde(default)]
-    pub metadata: Value,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SubmitTurnOutcome {
-    pub data: Value,
-    pub duplicate: bool,
-}
-
 #[derive(Clone)]
 pub struct TurnCommandService {
     pool: SqlitePool,
@@ -25,64 +12,6 @@ impl TurnCommandService {
             pool,
             runtime: GenericRuntimeManager,
         }
-    }
-
-    pub async fn submit_turn(
-        &self,
-        session_id: &str,
-        request: SubmitTurnRequest,
-        idempotency_key: Option<&str>,
-    ) -> Result<SubmitTurnOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(response) = self
-                .idempotency_response(&format!("submit_turn:{session_id}"), key)
-                .await?
-        {
-            return Ok(SubmitTurnOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
-
-        let query = ExternalQueryService::new(self.pool.clone());
-        let session = query
-            .get_session(session_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-
-        if !matches!(session.state.as_str(), "idle" | "interrupted") {
-            return Err(Error::StateConflict(format!(
-                "session {session_id} in state {} cannot accept a new turn",
-                session.state
-            )));
-        }
-
-        if let Some(active_turn_id) = &session.current_turn_id {
-            return Err(Error::StateConflict(format!(
-                "session {session_id} already has active turn {active_turn_id}"
-            )));
-        }
-
-        if !session.capabilities.accept_task {
-            return Err(Error::Domain(format!(
-                "session {session_id} runtime cannot accept tasks"
-            )));
-        }
-
-        let turn = self
-            .create_and_dispatch_turn(session_id, request.input, request.metadata)
-            .await?;
-        let data = json!({ "turn": turn });
-
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(&format!("submit_turn:{session_id}"), key, &data)
-                .await?;
-        }
-
-        Ok(SubmitTurnOutcome {
-            data,
-            duplicate: false,
-        })
     }
 
     pub(crate) async fn create_and_dispatch_turn(
@@ -218,40 +147,6 @@ impl TurnCommandService {
             .ok_or_else(|| Error::Domain("submitted turn missing".to_string()))?;
         query.enrich_turn_view(&mut turn).await?;
         Ok(turn)
-    }
-
-    async fn idempotency_response(&self, operation: &str, key: &str) -> Result<Option<Value>> {
-        let response: Option<String> = sqlx::query_scalar(
-            "SELECT response FROM idempotency_keys WHERE operation = ? AND key = ?",
-        )
-        .bind(operation)
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        response
-            .map(|value| serde_json::from_str(&value))
-            .transpose()
-            .map_err(Into::into)
-    }
-
-    async fn store_idempotency_response(
-        &self,
-        operation: &str,
-        key: &str,
-        response: &Value,
-    ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO idempotency_keys (operation, key, response)
-               VALUES (?, ?, ?)
-               ON CONFLICT(operation, key) DO NOTHING"#,
-        )
-        .bind(operation)
-        .bind(key)
-        .bind(serde_json::to_string(response)?)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
     }
 
     async fn runtime_binding_metadata(&self, session_id: &str) -> Result<Option<(String, Value)>> {

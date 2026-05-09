@@ -811,16 +811,11 @@ impl TaskCommandService {
         .execute(&self.pool)
         .await?;
 
-        let turn_outcome = TurnCommandService::new(self.pool.clone())
-            .submit_turn(&session_id, SubmitTurnRequest { input, metadata }, None)
+        let turn = TurnCommandService::new(self.pool.clone())
+            .create_and_dispatch_turn(&session_id, input, metadata)
             .await?;
-        let turn_id = turn_outcome.data["turn"]["turn_id"]
-            .as_str()
-            .ok_or_else(|| Error::Domain("created turn response missing turn_id".to_string()))?
-            .to_string();
-        let turn_state = turn_outcome.data["turn"]["state"]
-            .as_str()
-            .unwrap_or("queued");
+        let turn_id = turn.turn_id;
+        let turn_state = turn.state.as_str();
         let task_state = if turn_state == "running" {
             "running"
         } else {

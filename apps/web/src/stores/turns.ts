@@ -1,6 +1,6 @@
 import { derived, writable } from 'svelte/store';
-import { listTurns, submitTurn as apiSubmitTurn } from '../api/client';
-import type { SubmitTurnInput, TurnView } from '../api/types';
+import { listTurns } from '../api/client';
+import type { TurnView } from '../api/types';
 
 export const turns = writable<TurnView[]>([]);
 export const turnsLoading = writable(false);
@@ -19,9 +19,4 @@ export async function loadTurns(sessionId: string): Promise<void> {
   } finally {
     turnsLoading.set(false);
   }
-}
-
-export async function submitTurn(sessionId: string, input: SubmitTurnInput): Promise<void> {
-  await apiSubmitTurn(sessionId, input);
-  await loadTurns(sessionId);
 }

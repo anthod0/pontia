@@ -49,7 +49,7 @@ MVP 只要求 External API 足够完整，使未来 Web UI 可以基于同一 HT
 
 - `GET /external/v1/sessions`
 - `GET /external/v1/sessions/{session_id}`
-- `POST /external/v1/sessions/{session_id}/turns`
+- `POST /external/v1/sessions/{session_id}/inbox/messages`
 - `GET /external/v1/sessions/{session_id}/turns`
 - `GET /external/v1/sessions/{session_id}/events`
 - `GET /external/v1/sessions/{session_id}/artifacts`

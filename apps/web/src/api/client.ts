@@ -14,7 +14,6 @@ import type {
   SessionView,
   SubmitInboxMessageInput,
   SubmitPlannerInput,
-  SubmitTurnInput,
   TaskEventView,
   TaskView,
   TurnView,
@@ -111,10 +110,6 @@ export async function getSession(sessionId: string): Promise<SessionView> {
 
 export async function listTurns(sessionId: string): Promise<TurnView[]> {
   return (await request<{ turns: TurnView[] }>(`/sessions/${sessionId}/turns`)).turns;
-}
-
-export async function submitTurn(sessionId: string, input: SubmitTurnInput): Promise<TurnView> {
-  return (await request<{ turn: TurnView }>(`/sessions/${sessionId}/turns`, { method: 'POST', body: input, mutating: true })).turn;
 }
 
 export async function listInboxMessages(sessionId: string): Promise<InboxMessageView[]> {

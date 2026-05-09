@@ -145,6 +145,29 @@ async fn binding_metadata(state: &AppState, session_id: &str) -> Value {
     serde_json::from_str(&metadata).expect("metadata json")
 }
 
+async fn submit_pi_turn(state: AppState, session_id: &str, input: &str) -> Value {
+    let (status, body) = request_json(
+        state.clone(),
+        "POST",
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        Some(json!({"input": input})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body:?}");
+    let turn_id = body["data"]["inbox_message"]["turn_id"]
+        .as_str()
+        .expect("turn id");
+    let (turn_status, turn_body) = request_json(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(turn_status, StatusCode::OK, "{turn_body:?}");
+    turn_body["data"]["turn"].clone()
+}
+
 fn cleanup_tmux(tmux_session: &str) {
     let _ = Command::new("tmux")
         .args(["kill-session", "-t", tmux_session])
@@ -284,16 +307,12 @@ async fn pi_turn_dispatch_failure_projects_failed_without_started() {
         .to_string();
     cleanup_tmux(&tmux_session);
 
-    let (status, body) = request_json(
+    let turn = submit_pi_turn(
         state.clone(),
-        "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
-        Some(json!({"input":"this dispatch cannot reach the pi tui"})),
+        &session_id,
+        "this dispatch cannot reach the pi tui",
     )
     .await;
-
-    assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn = &body["data"]["turn"];
     let turn_id = turn["turn_id"].as_str().expect("turn id");
     assert_eq!(turn["state"], "failed");
     assert!(
@@ -333,15 +352,13 @@ async fn pi_adapter_event_outbox_projects_output_and_completed() {
         .expect("tmux session")
         .to_string();
 
-    let (status, body) = request_json(
+    let turn = submit_pi_turn(
         state.clone(),
-        "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
-        Some(json!({"input":"dispatch and await outbox facts"})),
+        &session_id,
+        "dispatch and await outbox facts",
     )
     .await;
-    assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn_id = body["data"]["turn"]["turn_id"].as_str().expect("turn id");
+    let turn_id = turn["turn_id"].as_str().expect("turn id");
 
     let adapter_event_log = metadata["adapter_event_log"]
         .as_str()
@@ -418,15 +435,13 @@ async fn pi_adapter_event_outbox_reports_malformed_records_without_forging_turn_
         .expect("tmux session")
         .to_string();
 
-    let (status, body) = request_json(
+    let turn = submit_pi_turn(
         state.clone(),
-        "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
-        Some(json!({"input":"dispatch before malformed adapter event"})),
+        &session_id,
+        "dispatch before malformed adapter event",
     )
     .await;
-    assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn_id = body["data"]["turn"]["turn_id"].as_str().expect("turn id");
+    let turn_id = turn["turn_id"].as_str().expect("turn id");
 
     let adapter_event_log = metadata["adapter_event_log"]
         .as_str()
@@ -488,15 +503,8 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
         .expect("tmux session")
         .to_string();
 
-    let (status, body) = request_json(
-        state,
-        "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
-        Some(json!({"input":"write context for hook"})),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn_id = body["data"]["turn"]["turn_id"].as_str().expect("turn id");
+    let turn = submit_pi_turn(state, &session_id, "write context for hook").await;
+    let turn_id = turn["turn_id"].as_str().expect("turn id");
 
     assert!(!workspace.path().join(".llmparty").exists());
     let context_path = PathBuf::from(
@@ -565,16 +573,12 @@ async fn pi_turn_dispatches_to_long_running_tmux_tui_and_marks_started_only() {
         .expect("tmux session")
         .to_string();
 
-    let (status, body) = request_json(
+    let turn = submit_pi_turn(
         state.clone(),
-        "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
-        Some(json!({"input":"dispatch this to the long-running pi tui"})),
+        &session_id,
+        "dispatch this to the long-running pi tui",
     )
     .await;
-
-    assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn = &body["data"]["turn"];
     let turn_id = turn["turn_id"].as_str().expect("turn id");
     assert_eq!(turn["state"], "running");
     assert!(turn["started_at"].as_str().is_some());

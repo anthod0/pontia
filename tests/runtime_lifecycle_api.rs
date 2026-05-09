@@ -89,14 +89,14 @@ async fn submit_turn(state: AppState, session_id: &str) -> String {
     let (status, body) = request(
         state,
         "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
         Some(TOKEN),
         None,
         Some(json!({"input":"work"})),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    body["data"]["turn"]["turn_id"]
+    body["data"]["inbox_message"]["turn_id"]
         .as_str()
         .expect("turn id")
         .to_string()

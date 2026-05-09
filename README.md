@@ -161,15 +161,15 @@ curl http://127.0.0.1:8080/external/v1/sessions \
   -H 'Authorization: Bearer dev-token'
 ```
 
-### Submit the next turn
+### Submit the next message
 
-Replace `sess_example` with the actual returned session ID.
+Replace `sess_example` with the actual returned session ID. Messages submitted to the session inbox are dispatched as turns when the session is ready.
 
 ```bash
-curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/turns \
+curl -X POST http://127.0.0.1:8080/external/v1/sessions/sess_example/inbox/messages \
   -H 'Authorization: Bearer dev-token' \
   -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: demo-turn-1' \
+  -H 'Idempotency-Key: demo-message-1' \
   -d '{"input":"Continue with the next step"}'
 ```
 

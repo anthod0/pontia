@@ -19,8 +19,7 @@ use crate::{
         AppState, ArtifactContentService, ArtifactDiscoveryService, ConfirmTaskWorkspaceRequest,
         CreateSessionRequest, CreateTaskRequest, EventStreamScope, ExternalQueryService,
         GraphProjectionService, InboxCommandService, RuntimeControlService, SessionCommandService,
-        SubmitInboxMessageRequest, SubmitPlannerInputRequest, SubmitTurnRequest,
-        TaskCommandService, TurnCommandService,
+        SubmitInboxMessageRequest, SubmitPlannerInputRequest, TaskCommandService,
     },
     error::Error,
 };
@@ -230,28 +229,6 @@ pub async fn get_task_provenance(
         .task_provenance(&task_id)
         .await?;
     Ok(ok(json!(provenance)))
-}
-
-pub async fn submit_turn(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(session_id): Path<String>,
-    Json(request): Json<SubmitTurnRequest>,
-) -> Result<Response, ExternalApiError> {
-    authenticate(&state, &headers)?;
-    let idempotency_key = headers
-        .get("Idempotency-Key")
-        .and_then(|value| value.to_str().ok());
-    let service = TurnCommandService::new(state.db);
-    let outcome = service
-        .submit_turn(&session_id, request, idempotency_key)
-        .await?;
-    let status = if outcome.duplicate {
-        StatusCode::OK
-    } else {
-        StatusCode::CREATED
-    };
-    Ok((status, ok(outcome.data)).into_response())
 }
 
 pub async fn submit_inbox_message(

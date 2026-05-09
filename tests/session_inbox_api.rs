@@ -109,16 +109,16 @@ async fn create_session(state: AppState) -> String {
         .to_string()
 }
 
-async fn submit_legacy_turn(state: AppState, session_id: &str, input: &str) -> String {
+async fn submit_inbox_turn(state: AppState, session_id: &str, input: &str) -> String {
     let (status, body) = post_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/turns"),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input": input}),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    body["data"]["turn"]["turn_id"]
+    body["data"]["inbox_message"]["turn_id"]
         .as_str()
         .unwrap()
         .to_string()
@@ -203,7 +203,7 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
     let _guard = TmuxSessionGuard::for_session(&session_id);
-    let active_turn_id = submit_legacy_turn(state.clone(), &session_id, "first").await;
+    let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     let (started_status, _) = post_internal_event(
         state.clone(),
         event_body(
@@ -308,7 +308,7 @@ async fn cancel_pending_message_prevents_later_dispatch() {
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
     let _guard = TmuxSessionGuard::for_session(&session_id);
-    let active_turn_id = submit_legacy_turn(state.clone(), &session_id, "first").await;
+    let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
         state.clone(),
         event_body(
@@ -430,7 +430,7 @@ async fn interrupt_now_without_interrupt_capability_marks_message_failed() {
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
     let _guard = TmuxSessionGuard::for_session(&session_id);
-    let active_turn_id = submit_legacy_turn(state.clone(), &session_id, "first").await;
+    let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
         state.clone(),
         event_body(

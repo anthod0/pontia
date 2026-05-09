@@ -124,18 +124,27 @@ async fn create_session(state: AppState) -> String {
 
 async fn submit_turn(state: AppState, session_id: &str, input: &str) -> (String, Value) {
     let (status, body) = post_json(
-        state,
-        &format!("/external/v1/sessions/{session_id}/turns"),
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
         Some(TOKEN),
         json!({"input":input,"turn_id":"turn_client_must_be_ignored"}),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let turn_id = body["data"]["turn"]["turn_id"]
+    let turn_id = body["data"]["inbox_message"]["turn_id"]
         .as_str()
         .unwrap()
         .to_string();
-    (turn_id, body)
+    let (turn_status, turn_body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+    )
+    .await;
+    assert_eq!(turn_status, StatusCode::OK);
+    (
+        turn_id,
+        json!({ "data": { "turn": turn_body["data"]["turn"].clone() } }),
+    )
 }
 
 fn file_url(path: &Path) -> String {

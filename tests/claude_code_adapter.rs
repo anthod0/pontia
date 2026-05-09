@@ -175,15 +175,24 @@ async fn claude_code_turn_submit_writes_context_and_dispatches_to_tui() {
     let (status, body) = request_json(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
         Some(json!({"input":"hello claude"})),
     )
     .await;
 
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn = &body["data"]["turn"];
-    let turn_id = turn["turn_id"].as_str().expect("turn id");
-    assert_eq!(turn["state"], "running");
+    let turn_id = body["data"]["inbox_message"]["turn_id"]
+        .as_str()
+        .expect("turn id");
+    let (turn_status, turn_body) = request_json(
+        state.clone(),
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(turn_status, StatusCode::OK);
+    assert_eq!(turn_body["data"]["turn"]["state"], "running");
 
     let context_path = PathBuf::from(
         metadata["current_turn_file"]

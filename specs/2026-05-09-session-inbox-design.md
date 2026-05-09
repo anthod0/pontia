@@ -129,7 +129,7 @@ If immediate dispatch succeeds, the response may already show:
 POST /external/v1/sessions/{session_id}/turns
 ```
 
-This endpoint is deprecated. It is not extended with inbox behavior. The dashboard and new integrations should use the inbox API. The endpoint may remain with current behavior for compatibility and can be removed later.
+This endpoint has been removed from the External HTTP API. The dashboard and new integrations should use the inbox API.
 
 `GET /turns` remains the turn-history query API.
 

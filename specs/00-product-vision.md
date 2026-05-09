@@ -101,7 +101,7 @@ Dashboard 只消费 External API 和 SSE event stream。它不直接读取 SQLit
 ```text
 External Orchestrator
   -> POST /external/v1/sessions
-  -> POST /external/v1/sessions/{session_id}/turns
+  -> POST /external/v1/sessions/{session_id}/inbox/messages
   -> GET  /external/v1/sessions/{session_id}/turns/{turn_id}
   -> GET  /external/v1/sessions/{session_id}/events
   -> GET  /external/v1/sessions/{session_id}/events/stream
