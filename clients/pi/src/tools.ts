@@ -137,9 +137,12 @@ function createSessionTool(definition: SharedToolDefinition, env: EnvLike, fetch
         if (isToolResult(config)) return config;
 
         const initialMessage = optionalString(params.initial_message);
+        const handle = optionalString(params.handle);
+        if (!handle) return textResult(`${definition.name} failed: handle is required`, { ok: false });
         const body: Record<string, unknown> = {
           client_type: optionalString(params.client_type) ?? optionalString(env.LLMPARTY_CLIENT_TYPE) ?? "pi",
           workspace: optionalString(params.workspace) ?? optionalString(env.LLMPARTY_WORKSPACE),
+          handle,
         };
         if (initialMessage) body.initial_task = { input: initialMessage, metadata: {} };
         body.metadata = dataRecord(params.metadata);
@@ -163,15 +166,15 @@ function sendMessageTool(definition: SharedToolDefinition, env: EnvLike, fetchIm
         const config = runtimeConfig(env);
         if (isToolResult(config)) return config;
 
-        const sessionId = optionalString(params.session_id);
+        const handle = optionalString(params.handle);
         const message = optionalString(params.message);
-        if (!sessionId) return textResult("llmparty_send_message failed: session_id is required", { ok: false });
-        if (!message) return textResult("llmparty_send_message failed: message is required", { ok: false });
+        if (!handle) return textResult(`${definition.name} failed: handle is required`, { ok: false });
+        if (!message) return textResult(`${definition.name} failed: message is required`, { ok: false });
 
         const data = await postExternalApi(
           fetchImpl,
           config,
-          `/sessions/${encodeURIComponent(sessionId)}/inbox/messages`,
+          `/sessions/${encodeURIComponent(handle)}/inbox/messages`,
           {
             input: message,
             delivery_policy: optionalString(params.delivery_policy) ?? "after_idle",
@@ -198,7 +201,7 @@ function exitSessionTool(definition: SharedToolDefinition, env: EnvLike, fetchIm
         if (isToolResult(config)) return config;
 
         const sessionId = optionalString(env.LLMPARTY_SESSION_ID);
-        if (!sessionId) return textResult("llmparty_exit_session failed: LLMPARTY_SESSION_ID is required", { ok: false });
+        if (!sessionId) return textResult(`${definition.name} failed: LLMPARTY_SESSION_ID is required`, { ok: false });
 
         const data = await postExternalApi(
           fetchImpl,

@@ -38,9 +38,9 @@ describe("llmparty pi external API tools", () => {
     const { tools } = install({}, vi.fn() as any);
 
     expect(tools.map((tool) => tool.name)).toEqual([
-      "llmparty_create_session",
-      "llmparty_send_message",
-      "llmparty_exit_session",
+      "createSession",
+      "sendMessage",
+      "exit",
     ]);
     expect(tools[0].description).toContain("Start a new llmparty agent session");
     expect(tools[0].parameters).toMatchObject({ type: "object" });
@@ -63,7 +63,7 @@ describe("llmparty pi external API tools", () => {
       fetchImpl,
     );
 
-    const result = await tools[0].execute("call_1", { initial_message: "start work" });
+    const result = await tools[0].execute("call_1", { handle: "@worker", initial_message: "start work" });
 
     expect(fetchImpl).toHaveBeenCalledWith(
       "http://control/external/v1/sessions",
@@ -77,6 +77,7 @@ describe("llmparty pi external API tools", () => {
         body: JSON.stringify({
           client_type: "pi",
           workspace: "/workspace",
+          handle: "@worker",
           initial_task: { input: "start work", metadata: {} },
           metadata: {},
         }),
@@ -98,13 +99,13 @@ describe("llmparty pi external API tools", () => {
     );
 
     const result = await tools[1].execute("call_2", {
-      session_id: "sess_1",
+      handle: "@worker",
       message: "please continue",
       delivery_policy: "interrupt_now",
     });
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      "http://control/external/v1/sessions/sess_1/inbox/messages",
+      "http://control/external/v1/sessions/%40worker/inbox/messages",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ input: "please continue", delivery_policy: "interrupt_now", metadata: {} }),
@@ -137,7 +138,7 @@ describe("llmparty pi external API tools", () => {
     const fetchImpl = vi.fn() as any;
     const { tools } = install({}, fetchImpl);
 
-    const result = await tools[1].execute("call_4", { session_id: "sess_1", message: "hello" });
+    const result = await tools[1].execute("call_4", { handle: "@worker", message: "hello" });
 
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(result.content[0].text).toContain("LLMPARTY_EXTERNAL_API_URL is required");
