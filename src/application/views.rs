@@ -16,6 +16,8 @@ pub struct SessionView {
     pub session_id: String,
     pub client_type: String,
     pub handle: Option<String>,
+    pub role: Option<String>,
+    pub description: Option<String>,
     pub state: String,
     pub current_turn_id: Option<String>,
     pub workspace_id: Option<String>,

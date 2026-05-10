@@ -782,6 +782,8 @@ impl TaskCommandService {
                         workspace: Some(workspace_record.canonical_path.clone()),
                         workspace_id: None,
                         handle: None,
+                        role: None,
+                        description: None,
                         metadata: json!({"created_for_task_id": task_id}),
                         initial_task: None,
                     },

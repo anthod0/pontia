@@ -9,6 +9,8 @@ pub struct CreateSessionRequest {
     pub workspace: Option<String>,
     pub workspace_id: Option<String>,
     pub handle: Option<String>,
+    pub role: Option<String>,
+    pub description: Option<String>,
     #[serde(default)]
     pub metadata: Value,
     pub initial_task: Option<InitialTaskRequest>,
@@ -157,6 +159,8 @@ impl SessionCommandService {
                 json!({
                     "workspace": runtime_workspace,
                     "handle": request.handle,
+                    "role": request.role,
+                    "description": request.description,
                     "metadata": request.metadata,
                 }),
             ))

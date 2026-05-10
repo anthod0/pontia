@@ -311,6 +311,8 @@ pub struct SessionProjection {
     pub session_id: String,
     pub client_type: String,
     pub handle: Option<String>,
+    pub role: Option<String>,
+    pub description: Option<String>,
     pub state: SessionState,
     pub current_turn_id: Option<String>,
     pub state_version: i64,
@@ -436,6 +438,8 @@ impl ProjectionState {
                 session_id: event.session_id.clone(),
                 client_type: event.client_type.clone(),
                 handle: None,
+                role: None,
+                description: None,
                 state: SessionState::Created,
                 current_turn_id: None,
                 state_version: 0,
@@ -447,6 +451,16 @@ impl ProjectionState {
             session.handle = event
                 .payload
                 .get("handle")
+                .and_then(Value::as_str)
+                .map(ToString::to_string);
+            session.role = event
+                .payload
+                .get("role")
+                .and_then(Value::as_str)
+                .map(ToString::to_string);
+            session.description = event
+                .payload
+                .get("description")
                 .and_then(Value::as_str)
                 .map(ToString::to_string);
             if let Some(metadata) = event.payload.get("metadata") {
@@ -510,6 +524,8 @@ impl ProjectionState {
                 session_id: event.session_id.clone(),
                 client_type: event.client_type.clone(),
                 handle: None,
+                role: None,
+                description: None,
                 state: SessionState::Created,
                 current_turn_id: None,
                 state_version: 0,

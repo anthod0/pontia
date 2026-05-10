@@ -12,7 +12,7 @@ impl ExternalQueryService {
 
     pub async fn list_sessions(&self) -> Result<Vec<SessionView>> {
         let rows = sqlx::query(
-            r#"SELECT s.session_id, s.client_type, s.handle, s.state, s.current_turn_id, s.workspace_id,
+            r#"SELECT s.session_id, s.client_type, s.handle, s.role, s.description, s.state, s.current_turn_id, s.workspace_id,
                       COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                       s.metadata, s.created_at, s.updated_at
                FROM sessions s
@@ -34,7 +34,7 @@ impl ExternalQueryService {
 
     pub async fn get_session(&self, session_id: &str) -> Result<Option<SessionView>> {
         let row = sqlx::query(
-            r#"SELECT s.session_id, s.client_type, s.handle, s.state, s.current_turn_id, s.workspace_id,
+            r#"SELECT s.session_id, s.client_type, s.handle, s.role, s.description, s.state, s.current_turn_id, s.workspace_id,
                       COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                       s.metadata, s.created_at, s.updated_at
                FROM sessions s

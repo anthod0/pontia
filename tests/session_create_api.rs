@@ -232,6 +232,56 @@ async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
 }
 
 #[tokio::test]
+async fn create_session_accepts_role_and_description_and_exposes_them_on_session_views() {
+    let state = test_state().await;
+
+    let (status, body) = post_json(
+        state.clone(),
+        "/external/v1/sessions",
+        Some(TOKEN),
+        None,
+        json!({
+            "client_type":"generic",
+            "workspace":"/tmp",
+            "handle":"@reviewer",
+            "role":"reviewer",
+            "description":"Reviews Rust backend changes for event projection correctness."
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    let session = &body["data"]["session"];
+    let session_id = session["session_id"].as_str().expect("session id");
+    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
+    assert_eq!(session["role"], "reviewer");
+    assert_eq!(
+        session["description"],
+        "Reviews Rust backend changes for event projection correctness."
+    );
+
+    let (get_status, get_body) = get(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}"),
+    )
+    .await;
+    assert_eq!(get_status, StatusCode::OK);
+    assert_eq!(get_body["data"]["session"]["role"], "reviewer");
+    assert_eq!(
+        get_body["data"]["session"]["description"],
+        "Reviews Rust backend changes for event projection correctness."
+    );
+
+    let (list_status, list_body) = get(state, "/external/v1/sessions").await;
+    assert_eq!(list_status, StatusCode::OK);
+    assert_eq!(list_body["data"]["sessions"][0]["role"], "reviewer");
+    assert_eq!(
+        list_body["data"]["sessions"][0]["description"],
+        "Reviews Rust backend changes for event projection correctness."
+    );
+}
+
+#[tokio::test]
 async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_friendly_error() {
     let state = test_state().await;
 
