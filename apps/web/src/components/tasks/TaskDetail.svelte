@@ -19,8 +19,11 @@
   import { selectSession } from '../../stores/selection';
   import { loadWorkspaces } from '../../stores/workspaces';
   import { setStatus } from '../../stores/ui';
+  import WorkspaceSelector from '../workspaces/WorkspaceSelector.svelte';
+  import type { WorkspaceView } from '../../api/types';
 
-  let workspace = '';
+  let workspaceId = '';
+  let workspacePath = '';
   let plannerMessage = '';
   let clientType = 'claude_code';
   let busy = false;
@@ -28,6 +31,10 @@
   $: canConfirm = $task?.state === 'needs_confirmation';
   $: canCancel = $task && !['completed', 'failed', 'cancelled'].includes($task.state);
   $: canInterrupt = $task && ['queued', 'running'].includes($task.state);
+
+  function handleWorkspaceSelected(event: CustomEvent<WorkspaceView | null>) {
+    workspacePath = event.detail?.canonical_path ?? '';
+  }
 
   async function run(action: () => Promise<void>) {
     busy = true;
@@ -64,8 +71,8 @@
     </div>
 
     {#if canConfirm}
-      <label>Workspace confirmation <input bind:value={workspace} placeholder="/path/to/workspace" /></label>
-      <button disabled={busy || !workspace.trim()} on:click={() => run(async () => { await confirmTaskWorkspace($task!.task_id, { workspace: workspace.trim(), client_type: clientType }); await syncDispatchedSession(); workspace = ''; setStatus('Workspace confirmed.'); })}>Confirm workspace</button>
+      <WorkspaceSelector bind:selectedWorkspaceId={workspaceId} label="Workspace confirmation" on:selected={handleWorkspaceSelected} />
+      <button disabled={busy || !workspacePath} on:click={() => run(async () => { await confirmTaskWorkspace($task!.task_id, { workspace: workspacePath, client_type: clientType }); await syncDispatchedSession(); workspaceId = ''; workspacePath = ''; setStatus('Workspace confirmed.'); })}>Confirm workspace</button>
     {/if}
 
     <label>Planner input <textarea bind:value={plannerMessage} placeholder="Optional message for planner / routing"></textarea></label>
