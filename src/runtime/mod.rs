@@ -391,6 +391,8 @@ export LLMPARTY_RUNTIME_LOG={}
 export LLMPARTY_ADAPTER_EVENT_LOG={}
 export LLMPARTY_CURRENT_TURN_FILE={}
 export LLMPARTY_INTERNAL_EVENT_URL={}
+export LLMPARTY_EXTERNAL_API_URL={}
+export LLMPARTY_EXTERNAL_API_TOKEN={}
 export LLMPARTY_RUNTIME_INSTANCE_ID={}
 export LLMPARTY_PI_HOOK_LOG={}
 export LLMPARTY_CLAUDE_HOOK_LOG={}
@@ -405,6 +407,8 @@ export LLMPARTY_CLAUDE_HOOK_LOG={}
         shell_quote(&runtime_paths.adapter_event_log.display().to_string()),
         shell_quote(&runtime_paths.current_turn_file.display().to_string()),
         shell_quote(&internal_event_url()),
+        shell_quote(&external_api_url()),
+        shell_quote(&external_api_token()),
         shell_quote(runtime_instance_id),
         shell_quote(&runtime_paths.pi_hook_log.display().to_string()),
         shell_quote(&runtime_paths.claude_hook_log.display().to_string()),
@@ -418,6 +422,15 @@ export LLMPARTY_CLAUDE_HOOK_LOG={}
 fn internal_event_url() -> String {
     std::env::var("LLMPARTY_INTERNAL_EVENT_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8080/internal/v1/events".to_string())
+}
+
+fn external_api_url() -> String {
+    std::env::var("LLMPARTY_EXTERNAL_API_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8080/external/v1".to_string())
+}
+
+fn external_api_token() -> String {
+    std::env::var("LLMPARTY_EXTERNAL_API_TOKEN").unwrap_or_default()
 }
 
 fn run_startup_hooks(hooks: &[StartupHook], workspace: &Path) -> Result<()> {

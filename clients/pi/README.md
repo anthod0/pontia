@@ -28,6 +28,8 @@ The extension reads configuration from environment variables:
 | `LLMPARTY_RUNTIME_INSTANCE_ID` | required for startup ready | none |
 | `LLMPARTY_CURRENT_TURN_FILE` | recommended | `$LLMPARTY_RUNTIME_DIR/current-turn.json` |
 | `LLMPARTY_INTERNAL_EVENT_URL` | required for startup ready, required for turns unless present in context file | none |
+| `LLMPARTY_EXTERNAL_API_URL` | required for llmparty tools | none |
+| `LLMPARTY_EXTERNAL_API_TOKEN` | required for llmparty tools | none |
 | `LLMPARTY_PI_HOOK_LOG` | recommended | `$LLMPARTY_RUNTIME_DIR/pi-hook.log` |
 
 Expected `current-turn.json`:
@@ -53,6 +55,16 @@ Expected `current-turn.json`:
 - If pi exposes an explicit agent-end error, it posts `turn.failed`.
 
 The extension does not parse TUI screen contents and does not infer completion from tmux, process state, or runtime exit.
+
+## llmparty tools
+
+The extension registers the shared tools from `clients/tools/llmparty-tools.v1.json`:
+
+- `llmparty_create_session`
+- `llmparty_send_message`
+- `llmparty_exit_session`
+
+These tools call the llmparty External API using `LLMPARTY_EXTERNAL_API_URL` and `LLMPARTY_EXTERNAL_API_TOKEN`. `llmparty_exit_session` is self-session only and uses `LLMPARTY_SESSION_ID` from the current runtime environment.
 
 ## Manual validation
 

@@ -15,6 +15,7 @@ function fakePi() {
       on: vi.fn((event: string, handler: HandlerMap[string]) => {
         handlers[event] = handler;
       }),
+      registerTool: vi.fn(),
     },
   };
 }

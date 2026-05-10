@@ -550,6 +550,9 @@ async fn pi_runtime_exports_real_hook_environment() {
     assert!(runtime_script.contains("export LLMPARTY_RUNTIME_DIR="));
     assert!(runtime_script.contains("export LLMPARTY_INTERNAL_EVENT_URL="));
     assert!(runtime_script.contains("http://127.0.0.1:8080/internal/v1/events"));
+    assert!(runtime_script.contains("export LLMPARTY_EXTERNAL_API_URL="));
+    assert!(runtime_script.contains("http://127.0.0.1:8080/external/v1"));
+    assert!(runtime_script.contains("export LLMPARTY_EXTERNAL_API_TOKEN="));
     let runtime_instance_id = metadata["runtime_instance_id"]
         .as_str()
         .expect("runtime_instance_id");
