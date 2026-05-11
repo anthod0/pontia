@@ -66,6 +66,18 @@ pub fn router(state: AppState) -> Router {
             get(external::list_sessions).post(external::create_session),
         )
         .route(
+            "/external/v1/agent-profiles",
+            get(external::list_agent_profiles).post(external::create_agent_profile),
+        )
+        .route(
+            "/external/v1/agent-profiles/{profile_id}",
+            get(external::get_agent_profile),
+        )
+        .route(
+            "/external/v1/agent-profiles/{profile_id}/versions",
+            post(external::create_agent_profile_version),
+        )
+        .route(
             "/external/v1/workspaces",
             get(external::list_workspaces).post(external::register_workspace),
         )

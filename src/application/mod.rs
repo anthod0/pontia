@@ -26,6 +26,7 @@ use crate::{
     storage::sqlite::{connect_sqlite, run_migrations},
 };
 
+mod agent_profiles;
 mod artifacts;
 mod events;
 mod graph;
@@ -43,6 +44,10 @@ mod turns;
 mod views;
 mod workspaces;
 
+pub use agent_profiles::{
+    AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView,
+    UpsertExecutionProfileRequest,
+};
 pub use artifacts::{
     ArtifactContentService, ArtifactDiscoveryService, ArtifactRegistrationService,
 };

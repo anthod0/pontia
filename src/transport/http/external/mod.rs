@@ -1,3 +1,4 @@
+mod agent_profiles;
 mod artifacts;
 mod common;
 mod events;
@@ -7,6 +8,9 @@ mod tasks;
 mod turns;
 mod workspaces;
 
+pub use agent_profiles::{
+    create_agent_profile, create_agent_profile_version, get_agent_profile, list_agent_profiles,
+};
 pub use artifacts::{discover_artifacts, get_artifact, get_artifact_content, list_artifacts};
 pub use common::{ApiResponse, ExternalApiError};
 pub use events::{stream_session_events, stream_turn_events};
