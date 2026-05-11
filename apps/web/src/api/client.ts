@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
 import { token } from '../stores/auth';
 import { ApiError } from './errors';
 import type {
+  AgentProfileView,
   ApiEnvelope,
   ArtifactContent,
   ArtifactView,
@@ -61,6 +62,14 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw new ApiError('Response did not include data.', 'missing_data', response.status);
   }
   return envelope.data;
+}
+
+export async function listAgentProfiles(): Promise<AgentProfileView[]> {
+  return (await request<{ agent_profiles: AgentProfileView[] }>('/agent-profiles')).agent_profiles;
+}
+
+export async function getAgentProfile(profileId: string): Promise<AgentProfileView> {
+  return (await request<{ agent_profile: AgentProfileView }>(`/agent-profiles/${encodeURIComponent(profileId)}`)).agent_profile;
 }
 
 export async function listSessions(): Promise<SessionView[]> {

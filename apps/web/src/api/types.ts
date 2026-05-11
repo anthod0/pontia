@@ -15,6 +15,27 @@ export interface SessionCapabilities {
   [key: string]: unknown;
 }
 
+export interface AgentProfileView {
+  profile_id: string;
+  version: string;
+  name: string;
+  description: string | null;
+  supported_client_types: string[];
+  system_prompt_template: string | null;
+  turn_prompt_template: string | null;
+  default_session_role: string | null;
+  default_session_description: string | null;
+  handle_prefix: string | null;
+  session_reuse_policy: string;
+  expected_output_schema: string | null;
+  artifact_contract: JsonObject;
+  default_execution_policy: JsonObject;
+  default_review_policy: JsonObject;
+  metadata: JsonObject;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SessionView {
   session_id: string;
   client_type: string;
@@ -166,6 +187,8 @@ export interface CreateSessionInput {
   workspace?: string | null;
   workspace_id?: string | null;
   handle?: string | null;
+  role?: string | null;
+  description?: string | null;
   metadata?: JsonObject;
   initial_task?: { input: string; metadata?: JsonObject } | null;
 }
