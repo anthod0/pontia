@@ -213,7 +213,7 @@ impl AgentProfileService {
         })
     }
 
-    async fn get_version(
+    pub(crate) async fn get_version(
         &self,
         profile_id: &str,
         version: &str,
