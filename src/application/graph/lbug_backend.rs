@@ -1,218 +1,30 @@
-use super::*;
+use std::path::PathBuf;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct GraphRuntimeConfig {
-    pub enabled: bool,
-    pub db_dir: Option<String>,
-}
+#[cfg(feature = "lbug")]
+use serde_json::json;
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct ProvenanceNode {
-    pub id: String,
-    pub kind: String,
-    pub properties: Value,
-}
+#[cfg(feature = "lbug")]
+use crate::error::Error;
+use crate::error::Result;
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct ProvenanceEdge {
-    pub from: String,
-    pub to: String,
-    pub kind: String,
-    pub properties: Value,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct TaskProvenance {
-    pub nodes: Vec<ProvenanceNode>,
-    pub edges: Vec<ProvenanceEdge>,
-}
-
-#[derive(Clone)]
-pub struct GraphProjectionService {
-    pool: SqlitePool,
-    config: GraphRuntimeConfig,
-}
-
-impl GraphProjectionService {
-    pub fn new(pool: SqlitePool, config: GraphRuntimeConfig) -> Self {
-        Self { pool, config }
-    }
-
-    pub async fn project_task(&self, task_id: &str) -> Result<()> {
-        if !self.config.enabled {
-            return Ok(());
-        }
-        let Some(db_dir) = self.config.db_dir.clone() else {
-            return Err(Error::InvalidConfig {
-                key: "LLMPARTY_GRAPH_DB_DIR",
-                message: "graph projection is enabled but no database directory is configured"
-                    .to_string(),
-            });
-        };
-
-        let snapshot = self.load_task_snapshot(task_id).await?;
-        project_snapshot_to_lbug(PathBuf::from(db_dir), snapshot)
-    }
-
-    pub async fn task_provenance(&self, task_id: &str) -> Result<TaskProvenance> {
-        if !self.config.enabled {
-            return Ok(TaskProvenance {
-                nodes: vec![],
-                edges: vec![],
-            });
-        }
-
-        #[cfg(feature = "lbug")]
-        if let Some(db_dir) = self.config.db_dir.clone() {
-            return query_task_provenance(PathBuf::from(db_dir), task_id);
-        }
-
-        let snapshot = self.load_task_snapshot(task_id).await?;
-        Ok(snapshot_to_provenance(snapshot))
-    }
-
-    async fn load_task_snapshot(&self, task_id: &str) -> Result<TaskGraphSnapshot> {
-        let task_row = sqlx::query(
-            r#"SELECT task_id, input, created_at, updated_at
-               FROM tasks WHERE task_id = ?"#,
-        )
-        .bind(task_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
-
-        let event_rows = sqlx::query(
-            r#"SELECT event_type, payload, created_at
-               FROM task_events WHERE task_id = ? ORDER BY created_at, event_id"#,
-        )
-        .bind(task_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut decisions = Vec::new();
-        for row in event_rows {
-            let event_type: String = row.try_get("event_type")?;
-            if !matches!(
-                event_type.as_str(),
-                "task.planning_completed"
-                    | "task.planning_resolved"
-                    | "task.planning_needs_input"
-                    | "task.planning_failed"
-            ) {
-                continue;
-            }
-            let payload: String = row.try_get("payload")?;
-            let payload: Value = serde_json::from_str(&payload)?;
-            let Some(decision_value) = payload.get("decision").filter(|value| value.is_object())
-            else {
-                continue;
-            };
-            let decision_id = decision_value
-                .get("decision_id")
-                .and_then(Value::as_str)
-                .unwrap_or("dec_unknown")
-                .to_string();
-            if decisions
-                .iter()
-                .any(|decision: &GraphDecision| decision.decision_id == decision_id)
-            {
-                continue;
-            }
-            let workspace_confidence = decision_value
-                .get("workspace")
-                .and_then(|workspace| workspace.get("confidence"))
-                .and_then(Value::as_f64)
-                .unwrap_or(0.0)
-                .clamp(0.0, 1.0);
-            let mut evidence = Vec::new();
-            if let Some(items) = decision_value.get("evidence").and_then(Value::as_array) {
-                for (index, item) in items.iter().enumerate() {
-                    evidence.push(GraphEvidence {
-                        evidence_id: item
-                            .get("evidence_id")
-                            .and_then(Value::as_str)
-                            .map(ToString::to_string)
-                            .unwrap_or_else(|| format!("{decision_id}_ev_{index}")),
-                        kind: item
-                            .get("kind")
-                            .and_then(Value::as_str)
-                            .unwrap_or("other")
-                            .to_string(),
-                        reference: item
-                            .get("ref")
-                            .and_then(Value::as_str)
-                            .unwrap_or("")
-                            .to_string(),
-                        summary: item
-                            .get("summary")
-                            .and_then(Value::as_str)
-                            .unwrap_or("")
-                            .to_string(),
-                    });
-                }
-            }
-            decisions.push(GraphDecision {
-                decision_id,
-                status: decision_value
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .unwrap_or("unknown")
-                    .to_string(),
-                reason: decision_value
-                    .get("reason")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string(),
-                confidence: workspace_confidence,
-                created_at: row.try_get("created_at")?,
-                evidence,
-            });
-        }
-
-        Ok(TaskGraphSnapshot {
-            task_id: task_row.try_get("task_id")?,
-            task_input: task_row.try_get("input")?,
-            task_created_at: task_row.try_get("created_at")?,
-            task_updated_at: task_row.try_get("updated_at")?,
-            decisions,
-        })
-    }
-}
-
-#[derive(Debug)]
-struct TaskGraphSnapshot {
-    task_id: String,
-    task_input: String,
-    task_created_at: String,
-    task_updated_at: String,
-    decisions: Vec<GraphDecision>,
-}
-
-#[derive(Debug)]
-struct GraphDecision {
-    decision_id: String,
-    status: String,
-    reason: String,
-    confidence: f64,
-    created_at: String,
-    evidence: Vec<GraphEvidence>,
-}
-
-#[derive(Debug)]
-struct GraphEvidence {
-    evidence_id: String,
-    kind: String,
-    reference: String,
-    summary: String,
-}
+#[cfg(feature = "lbug")]
+use super::TaskProvenance;
+use super::snapshot::TaskGraphSnapshot;
+#[cfg(feature = "lbug")]
+use super::snapshot::{decision_execution_state, decision_signal_kind, task_title};
+#[cfg(feature = "lbug")]
+use super::{ProvenanceEdge, ProvenanceNode};
 
 #[cfg(not(feature = "lbug"))]
-fn project_snapshot_to_lbug(_db_dir: PathBuf, _snapshot: TaskGraphSnapshot) -> Result<()> {
+pub(super) fn project_snapshot_to_lbug(
+    _db_dir: PathBuf,
+    _snapshot: TaskGraphSnapshot,
+) -> Result<()> {
     Ok(())
 }
 
 #[cfg(feature = "lbug")]
-fn project_snapshot_to_lbug(db_dir: PathBuf, snapshot: TaskGraphSnapshot) -> Result<()> {
+pub(super) fn project_snapshot_to_lbug(db_dir: PathBuf, snapshot: TaskGraphSnapshot) -> Result<()> {
     let conn = open_graph_connection(db_dir)?;
     initialize_schema(&conn)?;
 
@@ -331,153 +143,11 @@ fn project_snapshot_to_lbug(db_dir: PathBuf, snapshot: TaskGraphSnapshot) -> Res
     Ok(())
 }
 
-fn snapshot_to_provenance(snapshot: TaskGraphSnapshot) -> TaskProvenance {
-    let mut nodes = vec![ProvenanceNode {
-        id: snapshot.task_id.clone(),
-        kind: "Task".to_string(),
-        properties: json!({
-            "title": task_title(&snapshot.task_input),
-            "description": snapshot.task_input,
-            "ref": format!("sqlite:task:{}", snapshot.task_id),
-            "created_at": snapshot.task_created_at,
-            "updated_at": snapshot.task_updated_at
-        }),
-    }];
-    let mut edges = Vec::new();
-
-    if !snapshot.decisions.is_empty() {
-        nodes.push(ProvenanceNode {
-            id: "agent_planner".to_string(),
-            kind: "Agent".to_string(),
-            properties: json!({
-                "name": "Task Planner",
-                "role": "planner",
-                "capabilities": "[\"workspace_routing\",\"task_planning\"]",
-                "availability": "available",
-                "ref": "internal:planner",
-                "created_at": "",
-                "updated_at": ""
-            }),
-        });
-    }
-
-    for decision in snapshot.decisions {
-        let work_item_id = format!("wi_{}", decision.decision_id);
-        let signal_id = format!("sig_{}", decision.decision_id);
-        nodes.push(ProvenanceNode {
-            id: work_item_id.clone(),
-            kind: "WorkItem".to_string(),
-            properties: json!({
-                "title": "Plan task",
-                "description": decision.reason,
-                "kind": "planning",
-                "planning_state": "active",
-                "execution_state": decision_execution_state(&decision.status),
-                "execution_ref": "",
-                "created_at": decision.created_at,
-                "updated_at": decision.created_at
-            }),
-        });
-        edges.push(ProvenanceEdge {
-            from: snapshot.task_id.clone(),
-            to: work_item_id.clone(),
-            kind: "HAS_WORK".to_string(),
-            properties: json!({}),
-        });
-        edges.push(ProvenanceEdge {
-            from: work_item_id.clone(),
-            to: "agent_planner".to_string(),
-            kind: "ASSIGNED_TO".to_string(),
-            properties: json!({}),
-        });
-
-        nodes.push(ProvenanceNode {
-            id: signal_id.clone(),
-            kind: "Signal".to_string(),
-            properties: json!({
-                "source_type": "agent",
-                "kind": decision_signal_kind(&decision.status),
-                "summary": decision.reason,
-                "detail": format!("planner status: {}; confidence: {}", decision.status, decision.confidence),
-                "origin_ref": format!("sqlite:task:{}", snapshot.task_id),
-                "created_at": decision.created_at
-            }),
-        });
-        edges.push(ProvenanceEdge {
-            from: snapshot.task_id.clone(),
-            to: signal_id.clone(),
-            kind: "HAS_SIGNAL".to_string(),
-            properties: json!({}),
-        });
-        edges.push(ProvenanceEdge {
-            from: "agent_planner".to_string(),
-            to: signal_id.clone(),
-            kind: "EMITS".to_string(),
-            properties: json!({}),
-        });
-
-        for evidence in decision.evidence {
-            let artifact_id = format!("art_{}", evidence.evidence_id);
-            nodes.push(ProvenanceNode {
-                id: artifact_id.clone(),
-                kind: "Artifact".to_string(),
-                properties: json!({
-                    "kind": evidence.kind,
-                    "name": evidence.evidence_id,
-                    "summary": evidence.summary,
-                    "availability": "available",
-                    "ref": evidence.reference,
-                    "created_at": "",
-                    "updated_at": ""
-                }),
-            });
-            edges.push(ProvenanceEdge {
-                from: work_item_id.clone(),
-                to: artifact_id.clone(),
-                kind: "REQUIRES".to_string(),
-                properties: json!({}),
-            });
-            edges.push(ProvenanceEdge {
-                from: signal_id.clone(),
-                to: artifact_id,
-                kind: "SUPPORTED_BY".to_string(),
-                properties: json!({}),
-            });
-        }
-    }
-
-    TaskProvenance { nodes, edges }
-}
-
-fn task_title(input: &str) -> String {
-    input
-        .lines()
-        .next()
-        .unwrap_or(input)
-        .chars()
-        .take(80)
-        .collect()
-}
-
-fn decision_execution_state(status: &str) -> &'static str {
-    match status {
-        "failed" => "failed",
-        _ => "completed",
-    }
-}
-
-fn decision_signal_kind(status: &str) -> &'static str {
-    match status {
-        "needs_input" => "constraint",
-        "failed" => "failure",
-        _ => "finding",
-    }
-}
-
 #[cfg(feature = "lbug")]
-fn query_task_provenance(db_dir: PathBuf, task_id: &str) -> Result<TaskProvenance> {
+pub(super) fn query_task_provenance(db_dir: PathBuf, task_id: &str) -> Result<TaskProvenance> {
     let conn = open_graph_connection(db_dir)?;
     initialize_schema(&conn)?;
+
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
 
