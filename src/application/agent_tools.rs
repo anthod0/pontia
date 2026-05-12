@@ -10,8 +10,11 @@ pub struct AgentToolRequest {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct AgentToolResponse {
-    pub context: AgentToolContext,
+#[serde(untagged)]
+pub enum AgentToolResponse {
+    Skeleton { context: AgentToolContext },
+    Planning(AgentPlanningContextView),
+    Execution(AgentExecutionContextView),
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -46,12 +49,16 @@ pub enum AgentPlanningRole {
 #[derive(Clone)]
 pub struct AgentToolService {
     resolver: AgentToolContextResolver,
+    queries: ExternalQueryService,
+    profiles: AgentProfileService,
 }
 
 impl AgentToolService {
     pub fn new(pool: SqlitePool) -> Self {
         Self {
-            resolver: AgentToolContextResolver::new(pool),
+            resolver: AgentToolContextResolver::new(pool.clone()),
+            queries: ExternalQueryService::new(pool.clone()),
+            profiles: AgentProfileService::new(pool),
         }
     }
 
@@ -64,7 +71,111 @@ impl AgentToolService {
             return Err(Error::NotFound(format!("agent tool {tool_name} not found")));
         }
         let context = self.resolver.resolve(&request).await?;
-        Ok(AgentToolResponse { context })
+        if tool_name == "getContext" {
+            self.get_context(context).await
+        } else {
+            Ok(AgentToolResponse::Skeleton { context })
+        }
+    }
+
+    async fn get_context(&self, context: AgentToolContext) -> Result<AgentToolResponse> {
+        let task = self
+            .queries
+            .get_task(&context.task_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("task {} not found", context.task_id)))?;
+
+        match context.mode.clone() {
+            AgentToolMode::Planning { role } => {
+                let dag = self.queries.get_task_dag(&context.task_id).await?;
+                let open_signals = dag
+                    .signals
+                    .iter()
+                    .filter(|signal| signal.state == "open")
+                    .cloned()
+                    .collect();
+                let relevant_proposals = self
+                    .queries
+                    .list_relevant_dag_proposals(&context.task_id)
+                    .await?;
+                let execution_profiles = self.profiles.list_latest().await?;
+
+                Ok(AgentToolResponse::Planning(AgentPlanningContextView {
+                    context,
+                    mode: "planning",
+                    role,
+                    task,
+                    dag,
+                    open_signals,
+                    relevant_proposals,
+                    execution_profiles,
+                }))
+            }
+            AgentToolMode::Execution {
+                run_id,
+                work_item_id,
+            } => {
+                let work_items = self.queries.list_work_items(&context.task_id).await?;
+                let work_item = work_items
+                    .iter()
+                    .find(|item| item.work_item.work_item_id == *work_item_id)
+                    .cloned()
+                    .ok_or_else(|| {
+                        Error::NotFound(format!("work item {work_item_id} not found"))
+                    })?;
+                let work_item_run = self
+                    .queries
+                    .list_work_item_runs(&context.task_id)
+                    .await?
+                    .into_iter()
+                    .find(|run| run.run_id == *run_id)
+                    .ok_or_else(|| Error::NotFound(format!("work item run {run_id} not found")))?;
+                let edges = self.queries.list_work_item_edges(&context.task_id).await?;
+                let dependencies: Vec<_> = edges
+                    .into_iter()
+                    .filter(|edge| edge.to_work_item_id == *work_item_id)
+                    .collect();
+                let upstream_completed_items = dependencies
+                    .iter()
+                    .filter_map(|edge| {
+                        work_items.iter().find(|item| {
+                            item.work_item.work_item_id == edge.from_work_item_id
+                                && item
+                                    .runtime
+                                    .as_ref()
+                                    .map(|runtime| runtime.current_state.as_str())
+                                    == Some("completed")
+                        })
+                    })
+                    .cloned()
+                    .collect();
+                let open_signals = self
+                    .queries
+                    .list_dag_signals(&context.task_id)
+                    .await?
+                    .into_iter()
+                    .filter(|signal| {
+                        signal.state == "open"
+                            && (signal.work_item_id.as_deref().is_none()
+                                || signal.work_item_id.as_deref() == Some(work_item_id.as_str())
+                                || signal.run_id.as_deref() == Some(run_id.as_str()))
+                    })
+                    .collect();
+                let acceptance_criteria = work_item.work_item.acceptance_criteria.clone();
+
+                Ok(AgentToolResponse::Execution(AgentExecutionContextView {
+                    context,
+                    mode: "execution",
+                    task,
+                    work_item,
+                    work_item_run,
+                    dependencies,
+                    upstream_completed_items,
+                    acceptance_criteria,
+                    open_signals,
+                }))
+            }
+        }
     }
 }
 

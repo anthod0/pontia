@@ -175,6 +175,23 @@ pub(crate) fn row_to_dag_signal_record(row: sqlx::sqlite::SqliteRow) -> Result<D
     })
 }
 
+pub(crate) fn row_to_dag_proposal(row: sqlx::sqlite::SqliteRow) -> Result<DagProposal> {
+    let proposal_json: String = row.try_get("proposal_json")?;
+    let validation_json: String = row.try_get("validation_json")?;
+    Ok(DagProposal {
+        proposal_id: row.try_get("proposal_id")?,
+        task_id: row.try_get("task_id")?,
+        mode: row.try_get("mode")?,
+        state: row.try_get("state")?,
+        summary: row.try_get("summary")?,
+        proposal_json: serde_json::from_str(&proposal_json)?,
+        validation_json: serde_json::from_str(&validation_json)?,
+        created_by_session_id: row.try_get("created_by_session_id")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
 pub(crate) fn row_to_turn_view(row: sqlx::sqlite::SqliteRow) -> Result<TurnView> {
     let metadata: String = row.try_get("metadata")?;
     let metadata_json: Value = serde_json::from_str(&metadata)?;

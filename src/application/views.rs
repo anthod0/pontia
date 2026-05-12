@@ -223,3 +223,28 @@ pub struct TaskDagView {
     pub runs: Vec<WorkItemRunRecord>,
     pub signals: Vec<DagSignalRecord>,
 }
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct AgentPlanningContextView {
+    pub context: AgentToolContext,
+    pub mode: &'static str,
+    pub role: AgentPlanningRole,
+    pub task: TaskView,
+    pub dag: TaskDagView,
+    pub open_signals: Vec<DagSignalRecord>,
+    pub relevant_proposals: Vec<DagProposal>,
+    pub execution_profiles: Vec<ExecutionProfileView>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct AgentExecutionContextView {
+    pub context: AgentToolContext,
+    pub mode: &'static str,
+    pub task: TaskView,
+    pub work_item: WorkItemWithRuntimeView,
+    pub work_item_run: WorkItemRunRecord,
+    pub dependencies: Vec<WorkItemEdgeView>,
+    pub upstream_completed_items: Vec<WorkItemWithRuntimeView>,
+    pub acceptance_criteria: Value,
+    pub open_signals: Vec<DagSignalRecord>,
+}

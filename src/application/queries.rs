@@ -236,6 +236,21 @@ impl ExternalQueryService {
         rows.into_iter().map(row_to_dag_signal_record).collect()
     }
 
+    pub async fn list_relevant_dag_proposals(&self, task_id: &str) -> Result<Vec<DagProposal>> {
+        let rows = sqlx::query(
+            r#"SELECT proposal_id, task_id, mode, state, summary, proposal_json,
+                      validation_json, created_by_session_id, created_at, updated_at
+               FROM dag_proposals
+               WHERE task_id = ? AND state IN ('proposed', 'validated', 'rejected')
+               ORDER BY created_at DESC, proposal_id"#,
+        )
+        .bind(task_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_dag_proposal).collect()
+    }
+
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnView>> {
         let rows = sqlx::query(
             r#"SELECT turn_id, session_id, state, input_summary, output_summary,
