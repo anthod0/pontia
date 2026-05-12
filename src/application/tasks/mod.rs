@@ -27,6 +27,15 @@ pub struct CreateDagTaskRequest {
     pub metadata: Value,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct HumanSignalRequest {
+    pub kind: String,
+    pub summary: String,
+    pub detail: Option<String>,
+    #[serde(default = "default_signal_severity")]
+    pub severity: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CreateTaskOutcome {
     pub data: Value,
@@ -83,4 +92,8 @@ pub(super) enum DispatchRoutingUpdate {
 
 pub(super) fn is_terminal_task_state(state: &str) -> bool {
     matches!(state, "completed" | "failed" | "cancelled")
+}
+
+fn default_signal_severity() -> String {
+    "medium".to_string()
 }

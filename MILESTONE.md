@@ -612,7 +612,7 @@ DAG task 模式：
 
 ---
 
-# [ ] WorkItem 8：WebUI Human Control 最小边界
+# [x] WorkItem 8：WebUI Human Control 最小边界
 
 ## 目标
 

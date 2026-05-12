@@ -225,7 +225,7 @@ impl ExternalQueryService {
 
     pub async fn list_dag_signals(&self, task_id: &str) -> Result<Vec<DagSignalRecord>> {
         let rows = sqlx::query(
-            r#"SELECT signal_id, task_id, work_item_id, run_id, source_session_id, kind,
+            r#"SELECT signal_id, task_id, work_item_id, run_id, source_session_id, source, kind,
                       summary, detail, severity, related_refs, state, created_at, updated_at
                FROM dag_signals WHERE task_id = ? ORDER BY created_at, signal_id"#,
         )

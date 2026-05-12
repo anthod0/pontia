@@ -130,7 +130,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/external/v1/tasks/{task_id}/signals",
-            get(external::list_task_signals),
+            get(external::list_task_signals).post(external::create_human_signal),
         )
         .route(
             "/external/v1/tasks/{task_id}/scheduler/tick",
@@ -139,6 +139,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/external/v1/tasks/{task_id}/provenance",
             get(external::get_task_provenance),
+        )
+        .route(
+            "/external/v1/tasks/{task_id}/pause",
+            post(external::pause_task),
+        )
+        .route(
+            "/external/v1/tasks/{task_id}/resume",
+            post(external::resume_task),
         )
         .route(
             "/external/v1/tasks/{task_id}/interrupt",

@@ -28,8 +28,9 @@ pub use sessions::{
     terminate_session,
 };
 pub use tasks::{
-    cancel_task, confirm_task_workspace, create_task, get_task, get_task_provenance,
-    interrupt_task, list_task_events, list_tasks, submit_planner_input,
+    cancel_task, confirm_task_workspace, create_human_signal, create_task, get_task,
+    get_task_provenance, interrupt_task, list_task_events, list_tasks, pause_task, resume_task,
+    submit_planner_input,
 };
 pub use turns::{get_turn, interrupt_turn, list_session_events, list_turn_events, list_turns};
 pub use workspaces::{

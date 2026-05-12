@@ -1,7 +1,7 @@
 export type JsonObject = Record<string, unknown>;
 
 export type SessionState = 'created' | 'starting' | 'idle' | 'busy' | 'interrupted' | 'exited' | 'error';
-export type TaskState = 'created' | 'routing' | 'needs_confirmation' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type TaskState = 'created' | 'routing' | 'needs_confirmation' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 export type TurnState = 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
 export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now';
 export type InboxMessageState = 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed';
@@ -189,6 +189,7 @@ export interface DagSignalView {
   work_item_id: string | null;
   run_id: string | null;
   source_session_id: string | null;
+  source: 'agent' | 'human' | 'system' | string;
   kind: string;
   summary: string;
   detail: string | null;
@@ -297,6 +298,13 @@ export interface ConfirmTaskWorkspaceInput {
 export interface SubmitPlannerInput {
   message: string;
   client_type: string;
+}
+
+export interface HumanSignalInput {
+  kind: string;
+  summary: string;
+  detail?: string | null;
+  severity?: 'low' | 'medium' | 'high';
 }
 
 export interface CreateSessionInput {

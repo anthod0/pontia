@@ -3,18 +3,22 @@ import {
   cancelTask as apiCancelTask,
   confirmTaskWorkspace as apiConfirmTaskWorkspace,
   createDagTask as apiCreateDagTask,
+  createHumanSignal as apiCreateHumanSignal,
   createTask as apiCreateTask,
   getTask,
   getTaskDag,
   interruptTask as apiInterruptTask,
   listTaskEvents,
+  pauseTask as apiPauseTask,
   listTasks,
+  resumeTask as apiResumeTask,
   submitPlannerInput as apiSubmitPlannerInput,
 } from '../api/client';
 import type {
   ConfirmTaskWorkspaceInput,
   CreateDagTaskResult,
   CreateTaskInput,
+  HumanSignalInput,
   SubmitPlannerInput,
   TaskDagView,
   TaskEventView,
@@ -97,6 +101,23 @@ export async function submitPlannerInput(taskId: string, input: SubmitPlannerInp
   const updated = await apiSubmitPlannerInput(taskId, input);
   await Promise.all([loadTasks(), refreshTask(taskId)]);
   return updated;
+}
+
+export async function pauseTask(taskId: string): Promise<TaskView> {
+  const updated = await apiPauseTask(taskId);
+  await Promise.all([loadTasks(), refreshTask(taskId)]);
+  return updated;
+}
+
+export async function resumeTask(taskId: string): Promise<TaskView> {
+  const result = await apiResumeTask(taskId);
+  await Promise.all([loadTasks(), refreshTask(taskId)]);
+  return result.task;
+}
+
+export async function createHumanSignal(taskId: string, input: HumanSignalInput): Promise<void> {
+  await apiCreateHumanSignal(taskId, input);
+  await refreshTask(taskId);
 }
 
 export async function cancelTask(taskId: string): Promise<TaskView> {

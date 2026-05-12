@@ -12,6 +12,7 @@ import type {
   CreateSessionResult,
   CreateTaskInput,
   EventView,
+  HumanSignalInput,
   InboxMessageView,
   RegisterWorkspaceInput,
   SessionView,
@@ -20,6 +21,7 @@ import type {
   TaskDagView,
   TaskEventView,
   TaskView,
+  DagSignalView,
   TurnView,
   WorkspaceDirectoryListingView,
   WorkspaceRootView,
@@ -129,6 +131,18 @@ export async function listTaskEvents(taskId: string): Promise<TaskEventView[]> {
 
 export async function getTaskDag(taskId: string): Promise<TaskDagView> {
   return (await request<{ dag: TaskDagView }>(`/tasks/${taskId}/dag`)).dag;
+}
+
+export async function pauseTask(taskId: string): Promise<TaskView> {
+  return (await request<{ task: TaskView }>(`/tasks/${taskId}/pause`, { method: 'POST', mutating: true })).task;
+}
+
+export async function resumeTask(taskId: string): Promise<{ task: TaskView; scheduler: unknown }> {
+  return request<{ task: TaskView; scheduler: unknown }>(`/tasks/${taskId}/resume`, { method: 'POST', mutating: true });
+}
+
+export async function createHumanSignal(taskId: string, input: HumanSignalInput): Promise<DagSignalView> {
+  return (await request<{ signal: DagSignalView }>(`/tasks/${taskId}/signals`, { method: 'POST', body: input, mutating: true })).signal;
 }
 
 export async function interruptTask(taskId: string): Promise<TaskView> {

@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::application::{
     AppState, ConfirmTaskWorkspaceRequest, CreateTaskRequest, ExternalQueryService,
-    GraphProjectionService, SubmitPlannerInputRequest, TaskCommandService,
+    GraphProjectionService, HumanSignalRequest, SubmitPlannerInputRequest, TaskCommandService,
 };
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key, ok};
@@ -58,6 +58,50 @@ pub async fn submit_planner_input(
         .submit_planner_input(&task_id, request, idempotency_key)
         .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
+
+pub async fn pause_task(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = idempotency_key(&headers);
+    let service = TaskCommandService::new(state.db);
+    let outcome = service.pause_task(&task_id, idempotency_key).await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
+
+pub async fn resume_task(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = idempotency_key(&headers);
+    let service = TaskCommandService::new(state.db);
+    let outcome = service.resume_task(&task_id, idempotency_key).await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
+
+pub async fn create_human_signal(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(request): Json<HumanSignalRequest>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = idempotency_key(&headers);
+    let service = TaskCommandService::new(state.db);
+    let outcome = service
+        .create_human_signal(&task_id, request, idempotency_key)
+        .await?;
+    let status = if outcome.duplicate {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    Ok((status, ok(outcome.data)).into_response())
 }
 
 pub async fn interrupt_task(

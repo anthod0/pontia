@@ -6,8 +6,11 @@
   import {
     cancelTask,
     confirmTaskWorkspace,
+    createHumanSignal,
     interruptTask,
+    pauseTask,
     refreshTask,
+    resumeTask,
     selectedTaskId,
     submitPlannerInput,
     task,
@@ -27,10 +30,16 @@
   let workspacePath = '';
   let plannerMessage = '';
   let clientType = 'claude_code';
+  let signalKind = 'user_objection';
+  let signalSummary = '';
+  let signalDetail = '';
+  let signalSeverity: 'low' | 'medium' | 'high' = 'medium';
   let busy = false;
 
   $: canConfirm = $task?.state === 'needs_confirmation';
   $: canCancel = $task && !['completed', 'failed', 'cancelled'].includes($task.state);
+  $: canPause = $task && !['paused', 'completed', 'failed', 'cancelled'].includes($task.state);
+  $: canResume = $task?.state === 'paused';
   $: canInterrupt = $task && ['queued', 'running'].includes($task.state);
 
   function handleWorkspaceSelected(event: CustomEvent<WorkspaceView | null>) {
@@ -61,6 +70,19 @@
     if (!run.session_id) return;
     await selectSession(run.session_id);
   }
+
+  async function submitHumanSignal() {
+    if (!$task || !signalSummary.trim()) return;
+    await createHumanSignal($task.task_id, {
+      kind: signalKind.trim() || 'user_objection',
+      summary: signalSummary.trim(),
+      detail: signalDetail.trim() || null,
+      severity: signalSeverity,
+    });
+    signalSummary = '';
+    signalDetail = '';
+    setStatus('Human signal submitted.');
+  }
 </script>
 
 <section class="panel">
@@ -90,9 +112,28 @@
 
     <div class="row task-actions">
       <button class="secondary" disabled={!$task.session_id} on:click={() => $task?.session_id && selectSession($task.session_id)}>Open session</button>
+      <button class="secondary" disabled={busy || !canPause} on:click={() => run(async () => { await pauseTask($task!.task_id); setStatus('Task paused.'); })}>Pause</button>
+      <button class="secondary" disabled={busy || !canResume} on:click={() => run(async () => { await resumeTask($task!.task_id); setStatus('Task resumed.'); })}>Resume</button>
       <button class="secondary" disabled={busy || !canInterrupt} on:click={() => run(async () => { await interruptTask($task!.task_id); setStatus('Task interrupt requested.'); })}>Interrupt task</button>
       <button class="danger" disabled={busy || !canCancel} on:click={() => run(async () => { await cancelTask($task!.task_id); setStatus('Task cancelled.'); })}>Cancel task</button>
     </div>
+
+    <form class="human-signal" on:submit|preventDefault={() => run(submitHumanSignal)}>
+      <h3>Human signal</h3>
+      <div class="row">
+        <label>Kind <input bind:value={signalKind} placeholder="user_objection" /></label>
+        <label>Severity
+          <select bind:value={signalSeverity}>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </label>
+      </div>
+      <label>Summary <input bind:value={signalSummary} placeholder="Plan is too broad" /></label>
+      <label>Detail <textarea bind:value={signalDetail} placeholder="Optional detail for the planner or operator"></textarea></label>
+      <button class="secondary" disabled={busy || !signalSummary.trim()}>Submit signal</button>
+    </form>
 
     <details>
       <summary>Task JSON</summary>
@@ -143,7 +184,7 @@
               <div class="row"><strong>{signal.kind}</strong><span class="badge">{signal.severity} · {signal.state}</span></div>
               <p>{signal.summary}</p>
               {#if signal.detail}<p class="muted">{signal.detail}</p>{/if}
-              <p class="muted">Run {signal.run_id ?? 'none'} · WorkItem {signal.work_item_id ?? 'none'}</p>
+              <p class="muted">Source {signal.source} · Run {signal.run_id ?? 'none'} · WorkItem {signal.work_item_id ?? 'none'}</p>
             </article>
           {/each}
         </div>

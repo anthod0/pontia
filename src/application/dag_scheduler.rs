@@ -19,6 +19,7 @@ pub(crate) struct SchedulerTaskContext {
     pub input: String,
     pub workspace_id: Option<String>,
     pub preferred_client_type: Option<String>,
+    pub paused: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +47,11 @@ impl DagSchedulerService {
 
     pub async fn schedule_task(&self, task_id: &str) -> Result<DagSchedulerOutcome> {
         let task = self.task_context(task_id).await?;
+        if task.paused {
+            return Ok(DagSchedulerOutcome {
+                dispatched_runs: Vec::new(),
+            });
+        }
         self.recompute_ready(task_id).await?;
 
         let mut dispatched_runs = Vec::new();
@@ -428,7 +434,7 @@ impl DagSchedulerService {
 
     async fn task_context(&self, task_id: &str) -> Result<SchedulerTaskContext> {
         let row = sqlx::query(
-            "SELECT task_id, input, workspace_id, metadata FROM tasks WHERE task_id = ?",
+            "SELECT task_id, state, input, workspace_id, metadata FROM tasks WHERE task_id = ?",
         )
         .bind(task_id)
         .fetch_optional(&self.pool)
@@ -449,6 +455,7 @@ impl DagSchedulerService {
             input: row.get("input"),
             workspace_id: row.get("workspace_id"),
             preferred_client_type,
+            paused: row.get::<String, _>("state") == "paused",
         })
     }
 }

@@ -164,6 +164,7 @@ pub(crate) fn row_to_dag_signal_record(row: sqlx::sqlite::SqliteRow) -> Result<D
         work_item_id: row.try_get("work_item_id")?,
         run_id: row.try_get("run_id")?,
         source_session_id: row.try_get("source_session_id")?,
+        source: row.try_get("source")?,
         kind: row.try_get("kind")?,
         summary: row.try_get("summary")?,
         detail: row.try_get("detail")?,

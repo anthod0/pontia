@@ -486,7 +486,7 @@ impl DagRunResultService {
         sqlx::query(
             r#"UPDATE tasks
                SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE task_id = ? AND state NOT IN ('completed', 'failed', 'cancelled', 'replanning')"#,
+               WHERE task_id = ? AND state NOT IN ('completed', 'failed', 'cancelled', 'replanning', 'paused')"#,
         )
         .bind(next_state)
         .bind(task_id)

@@ -89,7 +89,7 @@ pub use sessions::{
 pub use state::{AppState, initialize};
 pub use tasks::{
     ConfirmTaskWorkspaceRequest, CreateDagTaskRequest, CreateTaskOutcome, CreateTaskRequest,
-    TaskCommandService,
+    HumanSignalRequest, TaskCommandService,
 };
 pub use turns::TurnCommandService;
 pub use views::*;

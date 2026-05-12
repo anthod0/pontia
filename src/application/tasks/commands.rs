@@ -337,6 +337,189 @@ impl TaskCommandService {
         })
     }
 
+    pub async fn pause_task(
+        &self,
+        task_id: &str,
+        idempotency_key: Option<&str>,
+    ) -> Result<CreateTaskOutcome> {
+        if let Some(key) = idempotency_key
+            && let Some(response) = self
+                .idempotency_response(&format!("pause_task:{task_id}"), key)
+                .await?
+        {
+            return Ok(CreateTaskOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+
+        let task = ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
+        if is_terminal_task_state(&task.state) {
+            return Err(Error::StateConflict(format!(
+                "task {task_id} is already terminal"
+            )));
+        }
+
+        sqlx::query(
+            r#"UPDATE tasks
+               SET state = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(task_id)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(task_id, "task.paused", json!({}))
+            .await?;
+        let task = ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await?
+            .ok_or_else(|| Error::Domain("paused task missing".to_string()))?;
+        let data = json!({ "task": task });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&format!("pause_task:{task_id}"), key, &data)
+                .await?;
+        }
+        Ok(CreateTaskOutcome {
+            data,
+            duplicate: false,
+        })
+    }
+
+    pub async fn resume_task(
+        &self,
+        task_id: &str,
+        idempotency_key: Option<&str>,
+    ) -> Result<CreateTaskOutcome> {
+        if let Some(key) = idempotency_key
+            && let Some(response) = self
+                .idempotency_response(&format!("resume_task:{task_id}"), key)
+                .await?
+        {
+            return Ok(CreateTaskOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+
+        let task = ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
+        if is_terminal_task_state(&task.state) {
+            return Err(Error::StateConflict(format!(
+                "task {task_id} is already terminal"
+            )));
+        }
+        if task.state != "paused" {
+            return Err(Error::StateConflict(format!(
+                "task {task_id} is not paused"
+            )));
+        }
+
+        sqlx::query(
+            r#"UPDATE tasks
+               SET state = 'running', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(task_id)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(task_id, "task.resumed", json!({}))
+            .await?;
+        let scheduler = DagSchedulerService::new(self.pool.clone())
+            .schedule_task(task_id)
+            .await?;
+        let task = ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await?
+            .ok_or_else(|| Error::Domain("resumed task missing".to_string()))?;
+        let data = json!({ "task": task, "scheduler": scheduler });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&format!("resume_task:{task_id}"), key, &data)
+                .await?;
+        }
+        Ok(CreateTaskOutcome {
+            data,
+            duplicate: false,
+        })
+    }
+
+    pub async fn create_human_signal(
+        &self,
+        task_id: &str,
+        request: HumanSignalRequest,
+        idempotency_key: Option<&str>,
+    ) -> Result<CreateTaskOutcome> {
+        if let Some(key) = idempotency_key
+            && let Some(response) = self
+                .idempotency_response(&format!("human_signal:{task_id}"), key)
+                .await?
+        {
+            return Ok(CreateTaskOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+
+        ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
+        let kind = request.kind.trim();
+        let summary = request.summary.trim();
+        if kind.is_empty() {
+            return Err(Error::Domain("signal kind is required".to_string()));
+        }
+        if summary.is_empty() {
+            return Err(Error::Domain("signal summary is required".to_string()));
+        }
+        let severity = match request.severity.as_str() {
+            "low" | "medium" | "high" => request.severity.as_str(),
+            _ => "medium",
+        };
+        let signal_id = format!("dagsig_{}", uuid::Uuid::now_v7());
+        sqlx::query(
+            r#"INSERT INTO dag_signals (
+                    signal_id, task_id, source, kind, summary, detail, severity, related_refs
+               ) VALUES (?, ?, 'human', ?, ?, ?, ?, '[]')"#,
+        )
+        .bind(&signal_id)
+        .bind(task_id)
+        .bind(kind)
+        .bind(summary)
+        .bind(&request.detail)
+        .bind(severity)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(
+            task_id,
+            "dag.signal_created",
+            json!({"signal_id": signal_id, "source": "human", "kind": kind}),
+        )
+        .await?;
+        let row = sqlx::query(
+            r#"SELECT signal_id, task_id, work_item_id, run_id, source_session_id, source, kind,
+                      summary, detail, severity, related_refs, state, created_at, updated_at
+               FROM dag_signals WHERE signal_id = ?"#,
+        )
+        .bind(&signal_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let signal = row_to_dag_signal_record(row)?;
+        let data = json!({ "signal": signal });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&format!("human_signal:{task_id}"), key, &data)
+                .await?;
+        }
+        Ok(CreateTaskOutcome {
+            data,
+            duplicate: false,
+        })
+    }
+
     pub async fn interrupt_task(
         &self,
         task_id: &str,

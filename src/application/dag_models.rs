@@ -127,6 +127,7 @@ pub struct DagSignalRecord {
     pub work_item_id: Option<String>,
     pub run_id: Option<String>,
     pub source_session_id: Option<String>,
+    pub source: String,
     pub kind: String,
     pub summary: String,
     pub detail: Option<String>,
