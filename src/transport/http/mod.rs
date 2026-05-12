@@ -16,6 +16,7 @@ pub mod dashboard;
 pub mod external;
 pub mod health;
 pub mod internal;
+pub mod internal_agent_tools;
 
 pub async fn serve_with_shutdown_timeout<F>(
     listener: tokio::net::TcpListener,
@@ -61,6 +62,10 @@ pub fn router(state: AppState) -> Router {
         .route("/dashboard/", get(dashboard::dashboard))
         .route("/dashboard/assets/{*path}", get(dashboard::dashboard_asset))
         .route("/internal/v1/events", post(internal::post_event))
+        .route(
+            "/internal/v1/agent-tools/{tool_name}",
+            post(internal_agent_tools::post_agent_tool),
+        )
         .route(
             "/external/v1/sessions",
             get(external::list_sessions).post(external::create_session),

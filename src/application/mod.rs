@@ -27,6 +27,7 @@ use crate::{
 };
 
 mod agent_profiles;
+mod agent_tools;
 mod artifacts;
 mod dag;
 mod dag_models;
@@ -54,6 +55,10 @@ mod workspaces;
 pub use agent_profiles::{
     AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView,
     UpsertExecutionProfileRequest,
+};
+pub use agent_tools::{
+    AgentPlanningRole, AgentToolContext, AgentToolContextResolver, AgentToolMode, AgentToolRequest,
+    AgentToolResponse, AgentToolService,
 };
 pub use artifacts::{
     ArtifactContentService, ArtifactDiscoveryService, ArtifactRegistrationService,
