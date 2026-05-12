@@ -10,7 +10,7 @@ use llmparty::{
     transport::http,
 };
 use serde_json::{Value, json};
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 use std::process::{Command, Stdio};
 use tower::ServiceExt;
 
@@ -370,7 +370,7 @@ async fn authorizes_execution_context_from_current_work_item_run_not_request_inp
 
     let (status, body) = post_tool(
         state,
-        "submitResult",
+        "getContext",
         json!({
             "session_id": "sess_exec",
             "turn_id": "turn_exec",
@@ -582,12 +582,11 @@ async fn submit_plan_from_planner_saves_applies_and_schedules_initial_dag() {
 
     assert_eq!(status, StatusCode::OK, "{body:#}");
     let result = &body["result"];
-    assert_eq!(
+    assert!(
         result["proposal_id"]
             .as_str()
             .unwrap()
-            .starts_with("dagprop_"),
-        true
+            .starts_with("dagprop_")
     );
     assert_eq!(result["validation"]["ok"], true);
     assert_eq!(result["apply"]["applied"], true);
@@ -831,6 +830,305 @@ async fn submit_plan_rejects_invalid_patch_without_partial_apply() {
             .await
             .expect("edge count");
     assert_eq!(edge_count, 0);
+}
+
+#[tokio::test]
+async fn submit_result_from_worker_updates_current_run_and_schedules_downstream_once() {
+    let state = test_state().await;
+    insert_task(&state.db, "task_result").await;
+    insert_dag_session(
+        &state.db,
+        "sess_result",
+        "turn_result",
+        "rt_result",
+        json!({"dag_managed": true}),
+    )
+    .await;
+    insert_execution_run(
+        &state.db,
+        "task_result",
+        "wi_result_upstream",
+        "run_result_upstream",
+        "sess_result",
+        "turn_result",
+    )
+    .await;
+    insert_work_item(
+        &state.db,
+        "task_result",
+        "wi_result_downstream",
+        "Downstream",
+        "blocked",
+        json!(["downstream done"]),
+    )
+    .await;
+    insert_edge(
+        &state.db,
+        "task_result",
+        "wi_result_upstream",
+        "wi_result_downstream",
+    )
+    .await;
+
+    let body = json!({
+        "session_id": "sess_result",
+        "turn_id": "turn_result",
+        "runtime_instance_id": "rt_result",
+        "input": {
+            "status": "completed",
+            "summary": "upstream done",
+            "outputs": [{"kind":"document","name":"demo","ref":"file:/tmp/demo.txt"}],
+            "failure": null,
+            "run_id": "run_other"
+        }
+    });
+    let (status, response) = post_tool(state.clone(), "submitResult", body.clone()).await;
+
+    assert_eq!(status, StatusCode::OK, "{response:#}");
+    assert_eq!(response["result"]["run_id"], "run_result_upstream");
+    assert_eq!(response["result"]["state"], "completed");
+    assert_eq!(
+        response["result"]["scheduler"]["dispatched_runs"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let run = sqlx::query(
+        "SELECT state, output_summary FROM work_item_runs WHERE run_id = 'run_result_upstream'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("run");
+    assert_eq!(run.get::<String, _>("state"), "completed");
+    assert_eq!(run.get::<String, _>("output_summary"), "upstream done");
+    let downstream_runs: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM work_item_runs WHERE work_item_id = 'wi_result_downstream'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("downstream run count");
+    assert_eq!(downstream_runs, 1);
+    let event_payload: String = sqlx::query_scalar(
+        "SELECT payload FROM task_events WHERE task_id = 'task_result' AND event_type = 'dag.run_completed' ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("run completed event");
+    let event_payload: Value = serde_json::from_str(&event_payload).expect("event payload json");
+    assert_eq!(event_payload["outputs"][0]["ref"], "file:/tmp/demo.txt");
+
+    let (status, response) = post_tool(state.clone(), "submitResult", body).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{response:#}");
+    let downstream_runs_after_duplicate: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM work_item_runs WHERE work_item_id = 'wi_result_downstream'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("downstream run count after duplicate");
+    assert_eq!(downstream_runs_after_duplicate, 1);
+
+    cleanup_runtime_sessions(&state.db).await;
+}
+
+#[tokio::test]
+async fn submit_result_requires_execution_context_and_supported_status() {
+    let state = test_state().await;
+    insert_task(&state.db, "task_result_modes").await;
+    insert_dag_session(
+        &state.db,
+        "sess_result_planner",
+        "turn_result_planner",
+        "rt_result_planner",
+        json!({
+            "dag_managed": true,
+            "dag_planning_role": "planner",
+            "task_id": "task_result_modes"
+        }),
+    )
+    .await;
+    insert_dag_session(
+        &state.db,
+        "sess_result_worker",
+        "turn_result_worker",
+        "rt_result_worker",
+        json!({"dag_managed": true}),
+    )
+    .await;
+    insert_execution_run(
+        &state.db,
+        "task_result_modes",
+        "wi_result_worker",
+        "run_result_worker",
+        "sess_result_worker",
+        "turn_result_worker",
+    )
+    .await;
+
+    let (status, body) = post_tool(
+        state.clone(),
+        "submitResult",
+        json!({
+            "session_id": "sess_result_planner",
+            "turn_id": "turn_result_planner",
+            "runtime_instance_id": "rt_result_planner",
+            "input": {"status":"completed", "summary":"not allowed"}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("execution")
+    );
+
+    let (status, body) = post_tool(
+        state,
+        "submitResult",
+        json!({
+            "session_id": "sess_result_worker",
+            "turn_id": "turn_result_worker",
+            "runtime_instance_id": "rt_result_worker",
+            "input": {"status":"cancelled", "summary":"bad status"}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("status")
+    );
+}
+
+#[tokio::test]
+async fn raise_signal_records_agent_signal_and_replan_policy_starts_replanner() {
+    let state = test_state().await;
+    insert_task(&state.db, "task_signal").await;
+    insert_dag_session(
+        &state.db,
+        "sess_signal_worker",
+        "turn_signal_worker",
+        "rt_signal_worker",
+        json!({"dag_managed": true}),
+    )
+    .await;
+    insert_execution_run(
+        &state.db,
+        "task_signal",
+        "wi_signal_worker",
+        "run_signal_worker",
+        "sess_signal_worker",
+        "turn_signal_worker",
+    )
+    .await;
+
+    let (status, body) = post_tool(
+        state.clone(),
+        "raiseSignal",
+        json!({
+            "session_id": "sess_signal_worker",
+            "turn_id": "turn_signal_worker",
+            "runtime_instance_id": "rt_signal_worker",
+            "input": {
+                "kind": "replan_requested",
+                "summary": "Need one more step",
+                "detail": "Validation is missing",
+                "severity": "medium",
+                "related_refs": [{"type":"work_item","id":"wi_signal_worker"}]
+            }
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:#}");
+    assert_eq!(body["result"]["kind"], "replan_requested");
+    assert_eq!(body["result"]["work_item_id"], "wi_signal_worker");
+    assert_eq!(body["result"]["run_id"], "run_signal_worker");
+    assert_eq!(body["result"]["policy"]["replanner_started"], true);
+    let signal = sqlx::query(
+        "SELECT source_session_id, kind, summary, detail, severity, related_refs, state FROM dag_signals WHERE task_id = 'task_signal'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("signal");
+    assert_eq!(
+        signal.get::<String, _>("source_session_id"),
+        "sess_signal_worker"
+    );
+    assert_eq!(signal.get::<String, _>("kind"), "replan_requested");
+    assert_eq!(signal.get::<String, _>("summary"), "Need one more step");
+    assert_eq!(signal.get::<String, _>("detail"), "Validation is missing");
+    assert_eq!(signal.get::<String, _>("severity"), "medium");
+    assert_eq!(signal.get::<String, _>("state"), "open");
+    let related_refs: Value =
+        serde_json::from_str(&signal.get::<String, _>("related_refs")).expect("related refs json");
+    assert_eq!(related_refs[0]["id"], "wi_signal_worker");
+    let replanner_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sessions WHERE json_extract(metadata, '$.dag_planning_role') = 'replanner' AND json_extract(metadata, '$.task_id') = 'task_signal'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("replanner count");
+    assert_eq!(replanner_count, 1);
+
+    cleanup_runtime_sessions(&state.db).await;
+}
+
+#[tokio::test]
+async fn raise_signal_from_planning_turn_records_task_scoped_open_signal() {
+    let state = test_state().await;
+    insert_task(&state.db, "task_planning_signal").await;
+    insert_dag_session(
+        &state.db,
+        "sess_planning_signal",
+        "turn_planning_signal",
+        "rt_planning_signal",
+        json!({
+            "dag_managed": true,
+            "dag_planning_role": "planner",
+            "task_id": "task_planning_signal"
+        }),
+    )
+    .await;
+
+    let (status, body) = post_tool(
+        state.clone(),
+        "raiseSignal",
+        json!({
+            "session_id": "sess_planning_signal",
+            "turn_id": "turn_planning_signal",
+            "runtime_instance_id": "rt_planning_signal",
+            "input": {
+                "kind": "risk",
+                "summary": "Plan has uncertainty",
+                "severity": "low"
+            }
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:#}");
+    assert_eq!(body["result"]["task_id"], "task_planning_signal");
+    assert!(body["result"].get("work_item_id").unwrap().is_null());
+    assert_eq!(body["result"]["policy"]["replanner_started"], false);
+    let row = sqlx::query(
+        "SELECT work_item_id, run_id, source_session_id, kind, state FROM dag_signals WHERE task_id = 'task_planning_signal'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("planning signal");
+    assert!(row.get::<Option<String>, _>("work_item_id").is_none());
+    assert!(row.get::<Option<String>, _>("run_id").is_none());
+    assert_eq!(
+        row.get::<String, _>("source_session_id"),
+        "sess_planning_signal"
+    );
+    assert_eq!(row.get::<String, _>("kind"), "risk");
+    assert_eq!(row.get::<String, _>("state"), "open");
 }
 
 #[tokio::test]

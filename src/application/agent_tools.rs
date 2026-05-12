@@ -13,9 +13,11 @@ pub struct AgentToolRequest {
 #[serde(untagged)]
 pub enum AgentToolResponse {
     Skeleton { context: AgentToolContext },
-    Planning(AgentPlanningContextView),
-    Execution(AgentExecutionContextView),
+    Planning(Box<AgentPlanningContextView>),
+    Execution(Box<AgentExecutionContextView>),
     SubmitPlan(SubmitPlanToolResponse),
+    SubmitResult(SubmitResultToolResponse),
+    RaiseSignal(RaiseSignalToolResponse),
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -24,6 +26,26 @@ pub struct SubmitPlanToolResponse {
     pub validation: Value,
     pub apply: Value,
     pub scheduler: DagSchedulerOutcome,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SubmitResultToolResponse {
+    pub task_id: String,
+    pub work_item_id: String,
+    pub run_id: String,
+    pub state: String,
+    pub scheduler: DagSchedulerOutcome,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct RaiseSignalToolResponse {
+    pub signal_id: String,
+    pub task_id: String,
+    pub work_item_id: Option<String>,
+    pub run_id: Option<String>,
+    pub kind: String,
+    pub state: String,
+    pub policy: Value,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -85,8 +107,55 @@ impl AgentToolService {
         match tool_name {
             "getContext" => self.get_context(context).await,
             "submitPlan" => self.submit_plan(context, request.input).await,
+            "submitResult" => self.submit_result(context, request.input).await,
+            "raiseSignal" => self.raise_signal(context, request.input).await,
             _ => Ok(AgentToolResponse::Skeleton { context }),
         }
+    }
+
+    async fn submit_result(
+        &self,
+        context: AgentToolContext,
+        input: Value,
+    ) -> Result<AgentToolResponse> {
+        if !matches!(&context.mode, AgentToolMode::Execution { .. }) {
+            return Err(Error::StateConflict(
+                "submitResult requires a DAG execution turn".to_string(),
+            ));
+        }
+        let payload: SubmitResultPayload = serde_json::from_value(input)
+            .map_err(|err| Error::Domain(format!("invalid submitResult input: {err}")))?;
+        let outcome = DagRunResultService::new(self.pool.clone())
+            .submit_tool_result(&context, payload)
+            .await?;
+        Ok(AgentToolResponse::SubmitResult(SubmitResultToolResponse {
+            task_id: outcome.task_id,
+            work_item_id: outcome.work_item_id,
+            run_id: outcome.run_id,
+            state: outcome.state,
+            scheduler: outcome.scheduler,
+        }))
+    }
+
+    async fn raise_signal(
+        &self,
+        context: AgentToolContext,
+        input: Value,
+    ) -> Result<AgentToolResponse> {
+        let payload: RaiseSignalPayload = serde_json::from_value(input)
+            .map_err(|err| Error::Domain(format!("invalid raiseSignal input: {err}")))?;
+        let outcome = DagRunResultService::new(self.pool.clone())
+            .raise_tool_signal(&context, payload)
+            .await?;
+        Ok(AgentToolResponse::RaiseSignal(RaiseSignalToolResponse {
+            signal_id: outcome.signal_id,
+            task_id: outcome.task_id,
+            work_item_id: outcome.work_item_id,
+            run_id: outcome.run_id,
+            kind: outcome.kind,
+            state: outcome.state,
+            policy: json!({ "replanner_started": outcome.replanner_started }),
+        }))
     }
 
     async fn submit_plan(
@@ -171,16 +240,18 @@ impl AgentToolService {
                     .await?;
                 let execution_profiles = self.profiles.list_latest().await?;
 
-                Ok(AgentToolResponse::Planning(AgentPlanningContextView {
-                    context,
-                    mode: "planning",
-                    role,
-                    task,
-                    dag,
-                    open_signals,
-                    relevant_proposals,
-                    execution_profiles,
-                }))
+                Ok(AgentToolResponse::Planning(Box::new(
+                    AgentPlanningContextView {
+                        context,
+                        mode: "planning",
+                        role,
+                        task,
+                        dag,
+                        open_signals,
+                        relevant_proposals,
+                        execution_profiles,
+                    },
+                )))
             }
             AgentToolMode::Execution {
                 run_id,
@@ -234,17 +305,19 @@ impl AgentToolService {
                     .collect();
                 let acceptance_criteria = work_item.work_item.acceptance_criteria.clone();
 
-                Ok(AgentToolResponse::Execution(AgentExecutionContextView {
-                    context,
-                    mode: "execution",
-                    task,
-                    work_item,
-                    work_item_run,
-                    dependencies,
-                    upstream_completed_items,
-                    acceptance_criteria,
-                    open_signals,
-                }))
+                Ok(AgentToolResponse::Execution(Box::new(
+                    AgentExecutionContextView {
+                        context,
+                        mode: "execution",
+                        task,
+                        work_item,
+                        work_item_run,
+                        dependencies,
+                        upstream_completed_items,
+                        acceptance_criteria,
+                        open_signals,
+                    },
+                )))
             }
         }
     }

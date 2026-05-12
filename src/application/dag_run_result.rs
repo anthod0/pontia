@@ -13,8 +13,34 @@ struct RunForTurn {
 struct ParsedRunResult {
     state: String,
     summary: String,
+    outputs: Vec<Value>,
     failure: Option<Value>,
     signals: Vec<RaiseSignalPayload>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SubmitResultToolOutcome {
+    pub task_id: String,
+    pub work_item_id: String,
+    pub run_id: String,
+    pub state: String,
+    pub scheduler: DagSchedulerOutcome,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RaiseSignalToolOutcome {
+    pub signal_id: String,
+    pub task_id: String,
+    pub work_item_id: Option<String>,
+    pub run_id: Option<String>,
+    pub kind: String,
+    pub state: String,
+    pub replanner_started: bool,
+}
+
+struct TerminalEventRefs {
+    turn_id: Option<String>,
+    domain_event_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -25,6 +51,101 @@ pub struct DagRunResultService {
 impl DagRunResultService {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
+    }
+
+    pub async fn submit_tool_result(
+        &self,
+        context: &AgentToolContext,
+        payload: SubmitResultPayload,
+    ) -> Result<SubmitResultToolOutcome> {
+        validate_result_status(&payload.status)?;
+        let run = self.run_for_tool_context(context).await?;
+        let result = parsed_payload_to_result(payload);
+        let state = result.state.clone();
+        let scheduler = self
+            .handle_terminal_result(
+                &TerminalEventRefs {
+                    turn_id: Some(context.turn_id.clone()),
+                    domain_event_id: None,
+                },
+                &run,
+                result,
+            )
+            .await?;
+        Ok(SubmitResultToolOutcome {
+            task_id: run.task_id,
+            work_item_id: run.work_item_id,
+            run_id: run.run_id,
+            state,
+            scheduler,
+        })
+    }
+
+    pub async fn raise_tool_signal(
+        &self,
+        context: &AgentToolContext,
+        payload: RaiseSignalPayload,
+    ) -> Result<RaiseSignalToolOutcome> {
+        validate_signal_kind(&payload.kind)?;
+        let (work_item_id, run_id) = match &context.mode {
+            AgentToolMode::Execution {
+                run_id,
+                work_item_id,
+            } => (Some(work_item_id.clone()), Some(run_id.clone())),
+            AgentToolMode::Planning { .. } => (None, None),
+        };
+        let signal_id = new_dag_run_result_id("dagsig");
+        sqlx::query(
+            r#"INSERT INTO dag_signals (
+                    signal_id, task_id, work_item_id, run_id, source_session_id,
+                    kind, summary, detail, severity, related_refs
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&signal_id)
+        .bind(&context.task_id)
+        .bind(work_item_id.as_deref())
+        .bind(run_id.as_deref())
+        .bind(&context.session_id)
+        .bind(&payload.kind)
+        .bind(&payload.summary)
+        .bind(&payload.detail)
+        .bind(normalize_severity(&payload.severity))
+        .bind(serde_json::to_string(&payload.related_refs)?)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(
+            &context.task_id,
+            "dag.signal_raised",
+            json!({
+                "signal_id": signal_id,
+                "kind": payload.kind,
+                "summary": payload.summary,
+                "work_item_id": work_item_id,
+                "run_id": run_id,
+                "source_session_id": context.session_id,
+                "source": "agent",
+            }),
+        )
+        .await?;
+        let replanner_started = if payload.kind == "replan_requested" {
+            Box::pin(
+                DagPlanningService::new(self.pool.clone())
+                    .start_replanning_for_signal(&context.task_id, &signal_id),
+            )
+            .await?;
+            true
+        } else {
+            false
+        };
+        Ok(RaiseSignalToolOutcome {
+            signal_id,
+            task_id: context.task_id.clone(),
+            work_item_id,
+            run_id,
+            kind: payload.kind,
+            state: "open".to_string(),
+            replanner_started,
+        })
     }
 
     pub async fn sync_from_turn_event(&self, event: &DomainEvent) -> Result<()> {
@@ -52,6 +173,7 @@ impl DagRunResultService {
                     ParsedRunResult {
                         state: "failed".to_string(),
                         summary: summary.clone(),
+                        outputs: Vec::new(),
                         failure: Some(json!({ "message": summary })),
                         signals: Vec::new(),
                     },
@@ -66,6 +188,7 @@ impl DagRunResultService {
                         state: "cancelled".to_string(),
                         summary: terminal_summary(&event.payload)
                             .unwrap_or_else(|| event.event_type.to_string()),
+                        outputs: Vec::new(),
                         failure: None,
                         signals: Vec::new(),
                     },
@@ -74,6 +197,42 @@ impl DagRunResultService {
             }
             _ => Ok(()),
         }
+    }
+
+    async fn run_for_tool_context(&self, context: &AgentToolContext) -> Result<RunForTurn> {
+        let AgentToolMode::Execution {
+            run_id,
+            work_item_id,
+        } = &context.mode
+        else {
+            return Err(Error::StateConflict(
+                "submitResult requires a DAG execution turn".to_string(),
+            ));
+        };
+        let row = sqlx::query(
+            r#"SELECT run_id, work_item_id, task_id, session_id, state
+               FROM work_item_runs
+               WHERE run_id = ? AND work_item_id = ? AND task_id = ? AND session_id = ? AND turn_id = ?"#,
+        )
+        .bind(run_id)
+        .bind(work_item_id)
+        .bind(&context.task_id)
+        .bind(&context.session_id)
+        .bind(&context.turn_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| {
+            Error::StateConflict(format!(
+                "current execution context is not authorized for work item run {run_id}"
+            ))
+        })?;
+        Ok(RunForTurn {
+            run_id: row.try_get("run_id")?,
+            work_item_id: row.try_get("work_item_id")?,
+            task_id: row.try_get("task_id")?,
+            session_id: row.try_get("session_id")?,
+            state: row.try_get("state")?,
+        })
     }
 
     async fn run_for_turn(&self, turn_id: &str) -> Result<Option<RunForTurn>> {
@@ -127,6 +286,30 @@ impl DagRunResultService {
     ) -> Result<()> {
         if is_terminal_run_state(&run.state) {
             return Ok(());
+        }
+        self.handle_terminal_result(
+            &TerminalEventRefs {
+                turn_id: event.turn_id.clone(),
+                domain_event_id: Some(event.event_id.clone()),
+            },
+            run,
+            result,
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn handle_terminal_result(
+        &self,
+        refs: &TerminalEventRefs,
+        run: &RunForTurn,
+        result: ParsedRunResult,
+    ) -> Result<DagSchedulerOutcome> {
+        if is_terminal_run_state(&run.state) {
+            return Err(Error::StateConflict(format!(
+                "work item run {} is already terminal ({})",
+                run.run_id, run.state
+            )));
         }
 
         let failure_json = result
@@ -204,10 +387,11 @@ impl DagRunResultService {
             json!({
                 "run_id": run.run_id,
                 "work_item_id": run.work_item_id,
-                "turn_id": event.turn_id,
+                "turn_id": refs.turn_id,
                 "state": result.state,
+                "outputs": result.outputs,
                 "signals": signal_ids,
-                "domain_event_id": event.event_id,
+                "domain_event_id": refs.domain_event_id,
             }),
         )
         .await?;
@@ -220,15 +404,22 @@ impl DagRunResultService {
                 )
                 .await?;
             }
-            return Ok(());
+            return Ok(DagSchedulerOutcome {
+                dispatched_runs: Vec::new(),
+            });
         }
 
-        if result.state == "completed" {
+        let scheduler = if result.state == "completed" {
             Box::pin(DagSchedulerService::new(self.pool.clone()).schedule_task(&run.task_id))
-                .await?;
-        }
+                .await?
+        } else {
+            DagSchedulerOutcome {
+                dispatched_runs: Vec::new(),
+            }
+        };
 
-        self.aggregate_task_state(&run.task_id).await
+        self.aggregate_task_state(&run.task_id).await?;
+        Ok(scheduler)
     }
 
     fn completed_result(&self, event: &DomainEvent) -> Result<ParsedRunResult> {
@@ -247,6 +438,7 @@ impl DagRunResultService {
             Err(_) => Ok(ParsedRunResult {
                 state: "completed".to_string(),
                 summary: raw,
+                outputs: Vec::new(),
                 failure: None,
                 signals: Vec::new(),
             }),
@@ -357,8 +549,18 @@ fn parsed_payload_to_result(payload: SubmitResultPayload) -> ParsedRunResult {
     ParsedRunResult {
         state: normalize_result_status(&payload.status),
         summary: payload.summary,
+        outputs: payload.outputs,
         failure: payload.failure,
         signals: payload.signals,
+    }
+}
+
+fn validate_result_status(status: &str) -> Result<()> {
+    match status {
+        "completed" | "failed" | "blocked" | "needs_input" => Ok(()),
+        other => Err(Error::Domain(format!(
+            "submitResult status must be completed, failed, blocked, or needs_input, got {other}"
+        ))),
     }
 }
 
@@ -366,6 +568,16 @@ fn normalize_result_status(status: &str) -> String {
     match status {
         "completed" | "failed" | "blocked" | "needs_input" => status.to_string(),
         _ => "completed".to_string(),
+    }
+}
+
+fn validate_signal_kind(kind: &str) -> Result<()> {
+    match kind {
+        "needs_input" | "replan_requested" | "risk" | "missing_dependency" | "scope_change"
+        | "assistance_needed" | "review_requested" | "other" => Ok(()),
+        other => Err(Error::Domain(format!(
+            "raiseSignal kind is not supported: {other}"
+        ))),
     }
 }
 
