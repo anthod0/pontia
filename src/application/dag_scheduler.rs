@@ -18,6 +18,7 @@ pub(crate) struct SchedulerTaskContext {
     pub task_id: String,
     pub input: String,
     pub workspace_id: Option<String>,
+    pub preferred_client_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -60,7 +61,8 @@ impl DagSchedulerService {
                 &work_item,
                 &run_id,
             );
-            let client_type = preferred_client_type(&profile);
+            let client_type =
+                preferred_client_type(&profile, task.preferred_client_type.as_deref());
             let turn_id = self
                 .dispatch_run(&run_id, &work_item, &session_id, &client_type, prompt)
                 .await?;
@@ -286,7 +288,7 @@ impl DagSchedulerService {
             return Ok(session_id);
         }
 
-        let client_type = preferred_client_type(profile);
+        let client_type = preferred_client_type(profile, task.preferred_client_type.as_deref());
         let outcome = SessionCommandService::new(self.pool.clone())
             .create_session(
                 CreateSessionRequest {
@@ -425,15 +427,28 @@ impl DagSchedulerService {
     }
 
     async fn task_context(&self, task_id: &str) -> Result<SchedulerTaskContext> {
-        let row = sqlx::query("SELECT task_id, input, workspace_id FROM tasks WHERE task_id = ?")
-            .bind(task_id)
-            .fetch_optional(&self.pool)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("task {task_id}")))?;
+        let row = sqlx::query(
+            "SELECT task_id, input, workspace_id, metadata FROM tasks WHERE task_id = ?",
+        )
+        .bind(task_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("task {task_id}")))?;
+        let metadata: String = row.get("metadata");
+        let preferred_client_type =
+            serde_json::from_str::<Value>(&metadata)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("planner_client_type")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                });
         Ok(SchedulerTaskContext {
             task_id: row.get("task_id"),
             input: row.get("input"),
             workspace_id: row.get("workspace_id"),
+            preferred_client_type,
         })
     }
 }
@@ -452,7 +467,15 @@ async fn ensure_task_not_terminal(pool: &SqlitePool, task_id: &str) -> Result<()
     }
 }
 
-fn preferred_client_type(profile: &ExecutionProfileView) -> String {
+fn preferred_client_type(profile: &ExecutionProfileView, task_preferred: Option<&str>) -> String {
+    if let Some(client_type) = task_preferred
+        && profile
+            .supported_client_types
+            .iter()
+            .any(|value| value == client_type)
+    {
+        return client_type.to_string();
+    }
     if profile
         .supported_client_types
         .iter()

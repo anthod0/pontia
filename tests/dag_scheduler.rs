@@ -37,6 +37,20 @@ async fn insert_task(pool: &SqlitePool) -> String {
     task_id
 }
 
+async fn insert_dag_task_with_planner_client(pool: &SqlitePool, client_type: &str) -> String {
+    let task_id = new_task_id().to_string();
+    sqlx::query(
+        r#"INSERT INTO tasks (task_id, state, input, metadata)
+           VALUES (?, 'running', 'test task', ?)"#,
+    )
+    .bind(&task_id)
+    .bind(json!({"dag_managed": true, "planner_client_type": client_type}).to_string())
+    .execute(pool)
+    .await
+    .expect("insert dag task");
+    task_id
+}
+
 fn draft(temp_id: &str, profile: &str, priority: i64) -> WorkItemDraft {
     WorkItemDraft {
         temp_id: Some(temp_id.to_string()),
@@ -135,6 +149,48 @@ async fn scheduler_dispatches_one_ready_work_item_as_run_session_and_turn() {
     assert!(input.contains("impl description"));
 
     cleanup_scheduler_tmux_sessions(&pool).await;
+}
+
+#[tokio::test]
+async fn scheduler_uses_dag_task_planner_client_for_work_item_agents() {
+    let prior_pi_command = std::env::var("LLMPARTY_PI_TUI_COMMAND").ok();
+    unsafe { std::env::set_var("LLMPARTY_PI_TUI_COMMAND", "sleep 600") };
+
+    let pool = test_pool().await;
+    let task_id = insert_dag_task_with_planner_client(&pool, "pi").await;
+    DagService::new(pool.clone())
+        .apply_initial_dag(
+            &task_id,
+            &initial_plan(vec![draft("impl", "implementer", 0)], vec![]),
+        )
+        .await
+        .expect("apply dag");
+
+    let outcome = DagSchedulerService::new(pool.clone())
+        .schedule_task(&task_id)
+        .await
+        .expect("schedule task");
+
+    assert_eq!(outcome.dispatched_runs.len(), 1);
+    let row = sqlx::query(
+        r#"SELECT r.client_type AS run_client_type, s.client_type AS session_client_type
+           FROM work_item_runs r
+           JOIN sessions s ON s.session_id = r.session_id
+           WHERE r.run_id = ?"#,
+    )
+    .bind(&outcome.dispatched_runs[0].run_id)
+    .fetch_one(&pool)
+    .await
+    .expect("run client row");
+    assert_eq!(row.get::<String, _>("run_client_type"), "pi");
+    assert_eq!(row.get::<String, _>("session_client_type"), "pi");
+
+    cleanup_scheduler_tmux_sessions(&pool).await;
+    if let Some(value) = prior_pi_command {
+        unsafe { std::env::set_var("LLMPARTY_PI_TUI_COMMAND", value) };
+    } else {
+        unsafe { std::env::remove_var("LLMPARTY_PI_TUI_COMMAND") };
+    }
 }
 
 #[tokio::test]
