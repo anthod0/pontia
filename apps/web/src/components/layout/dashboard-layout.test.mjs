@@ -7,13 +7,25 @@ const appShell = readFileSync(new URL('./AppShell.svelte', import.meta.url), 'ut
 const statusBar = readFileSync(new URL('./StatusBar.svelte', import.meta.url), 'utf8');
 const globalCss = readFileSync(new URL('../../styles/global.css', import.meta.url), 'utf8');
 
-test('dashboard uses session-first layout without task/planner panels', () => {
-  assert.match(sidebar, /import CreateSessionForm from/);
-  assert.match(sidebar, /<CreateSessionForm \/>/);
-  assert.doesNotMatch(sidebar, /CreateTaskForm|TaskList|Compatibility: create session directly/);
-  assert.doesNotMatch(sidebar, /<details class="panel">/);
+test('dashboard exposes separate sessions and tasks DAG views', () => {
+  assert.match(appShell, /dashboardView/);
+  assert.match(appShell, /value="sessions"/);
+  assert.match(appShell, /value="tasks"/);
+  assert.match(appShell, /Tasks \/ DAG/);
 
-  assert.doesNotMatch(appShell, /TaskDetail|tasks\/TaskDetail/);
+  assert.match(sidebar, /import CreateTaskForm from/);
+  assert.match(sidebar, /import TaskList from/);
+  assert.match(sidebar, /{#if view === 'tasks'}/);
+  assert.match(sidebar, /<CreateTaskForm \/>/);
+  assert.match(sidebar, /<TaskList \/>/);
+  assert.match(sidebar, /{:else}/);
+  assert.match(sidebar, /<CreateSessionForm \/>/);
+
+  assert.match(appShell, /import TaskDetail from/);
+  assert.match(appShell, /{#if dashboardView === 'tasks'}/);
+  assert.match(appShell, /<TaskDetail \/>/);
+  assert.match(appShell, /{:else}/);
+  assert.match(appShell, /<SessionDetail \/>/);
 });
 
 test('status bar keeps the API token input interactive under long status text', () => {

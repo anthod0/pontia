@@ -8,18 +8,29 @@
   import TurnHistory from '../turns/TurnHistory.svelte';
   import EventTimeline from '../events/EventTimeline.svelte';
   import ArtifactBrowser from '../artifacts/ArtifactBrowser.svelte';
+  import TaskDetail from '../tasks/TaskDetail.svelte';
+
+  let dashboardView = 'sessions' as 'sessions' | 'tasks';
 </script>
 
 <StatusBar />
+<div class="view-switcher" aria-label="Dashboard view">
+  <label><input type="radio" bind:group={dashboardView} value="sessions" /> Sessions</label>
+  <label><input type="radio" bind:group={dashboardView} value="tasks" /> Tasks / DAG</label>
+</div>
 <main>
-  <Sidebar />
+  <Sidebar view={dashboardView} />
   <section class="content">
-    <SessionDetail />
-    <SessionActions />
-    <TurnComposer />
-    <LatestReply />
-    <TurnHistory />
-    <EventTimeline />
-    <ArtifactBrowser />
+    {#if dashboardView === 'tasks'}
+      <TaskDetail />
+    {:else}
+      <SessionDetail />
+      <SessionActions />
+      <TurnComposer />
+      <LatestReply />
+      <TurnHistory />
+      <EventTimeline />
+      <ArtifactBrowser />
+    {/if}
   </section>
 </main>
