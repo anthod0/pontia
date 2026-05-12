@@ -38,11 +38,12 @@ Expected `current-turn.json`:
   "turn_id": "turn_xxx",
   "input": "user task",
   "client_type": "pi",
+  "runtime_instance_id": "rtinst_xxx",
   "internal_event_url": "http://127.0.0.1:8080/internal/v1/events"
 }
 ```
 
-`session_id`, `turn_id`, and `client_type: "pi"` are required. `LLMPARTY_INTERNAL_EVENT_URL` overrides `internal_event_url` when both are present.
+`session_id`, `turn_id`, `runtime_instance_id`, and `client_type: "pi"` are required. `LLMPARTY_INTERNAL_EVENT_URL` and `LLMPARTY_RUNTIME_INSTANCE_ID` override file values when present.
 
 ## What the extension reports
 
@@ -56,7 +57,16 @@ The extension does not parse TUI screen contents and does not infer completion f
 
 ## llmparty tools
 
-The pi extension currently does not register agent-visible llmparty tools. In DAG-only mode, session lifecycle and turn dispatch are controlled by the Web UI, Scheduler, and Runtime rather than by agent tools.
+The pi extension registers four agent-visible DAG tools from `clients/tools/llmparty-tools.v1.json`:
+
+- `llmparty_getContext`
+- `llmparty_submitPlan`
+- `llmparty_submitResult`
+- `llmparty_raiseSignal`
+
+Each tool handler reads the current turn context from `LLMPARTY_CURRENT_TURN_FILE` / environment, builds `{ session_id, turn_id, runtime_instance_id, input }`, and forwards it to `/internal/v1/agent-tools/{tool}`. The extension does not interpret DAG business logic and never accepts task, WorkItem, or run IDs as authority; llmparty derives authorization server-side.
+
+Backend errors are returned to the agent as clear tool failures and written to `LLMPARTY_PI_HOOK_LOG` diagnostics. Environment values such as API tokens are not included in agent-visible tool results.
 
 ## Manual validation
 
@@ -74,6 +84,7 @@ When pi is launched by llmparty `client_type = "pi"` runtime, the Control Plane 
      "turn_id": "turn_xxx",
      "input": "hello",
      "client_type": "pi",
+     "runtime_instance_id": "rtinst_xxx",
      "internal_event_url": "http://127.0.0.1:8080/internal/v1/events"
    }
    JSON
@@ -96,9 +107,9 @@ When pi is launched by llmparty `client_type = "pi"` runtime, the Control Plane 
    pi -e ./clients/pi
    ```
 
-5. Submit a prompt and verify llmparty received `turn.output` and `turn.completed` through its event list/API or database inspection.
+5. Submit a prompt and verify llmparty received `turn.output` and `turn.completed` through its event list/API or database inspection. In DAG-managed turns, ask pi to call `llmparty_getContext`, `llmparty_submitPlan`, `llmparty_submitResult`, or `llmparty_raiseSignal` and verify the backend receives `/internal/v1/agent-tools/*` requests.
 
-6. If reporting fails, inspect diagnostics:
+6. If reporting or tool forwarding fails, inspect diagnostics:
 
    ```bash
    tail -f "$LLMPARTY_RUNTIME_DIR/pi-hook.log"

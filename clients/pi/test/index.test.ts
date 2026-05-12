@@ -23,6 +23,7 @@ function fakePi() {
 const context: TurnContext = {
   sessionId: "sess_1",
   turnId: "turn_1",
+  runtimeInstanceId: "rtinst_1",
   clientType: "pi",
   internalEventUrl: "http://localhost/internal/v1/events",
 };

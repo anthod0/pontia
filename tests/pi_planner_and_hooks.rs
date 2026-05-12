@@ -523,6 +523,10 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
     assert_eq!(context["input"], "write context for hook");
     assert_eq!(context["client_type"], "pi");
     assert_eq!(
+        context["runtime_instance_id"],
+        metadata["runtime_instance_id"]
+    );
+    assert_eq!(
         context["internal_event_url"],
         "http://127.0.0.1:8080/internal/v1/events"
     );

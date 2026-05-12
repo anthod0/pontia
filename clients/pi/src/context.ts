@@ -6,6 +6,7 @@ import { appendDiagnostic } from "./diagnostics.js";
 export interface TurnContext {
   sessionId: string;
   turnId: string;
+  runtimeInstanceId: string;
   input?: string;
   clientType: "pi";
   internalEventUrl: string;
@@ -90,12 +91,14 @@ export async function loadTurnContext(env: EnvLike = process.env): Promise<LoadT
   const turnId = optionalString(record?.turn_id);
   const clientType = optionalString(record?.client_type);
   const internalEventUrl = optionalString(env.LLMPARTY_INTERNAL_EVENT_URL) ?? optionalString(record?.internal_event_url);
+  const runtimeInstanceId = optionalString(env.LLMPARTY_RUNTIME_INSTANCE_ID) ?? optionalString(record?.runtime_instance_id);
   const input = optionalString(record?.input);
 
   if (!sessionId) errors.push("session_id is required");
   if (!turnId) errors.push("turn_id is required");
   if (clientType !== "pi") errors.push("client_type must be pi");
   if (!internalEventUrl) errors.push("internal_event_url or LLMPARTY_INTERNAL_EVENT_URL is required");
+  if (!runtimeInstanceId) errors.push("runtime_instance_id or LLMPARTY_RUNTIME_INSTANCE_ID is required");
 
   if (errors.length > 0) {
     const reason = errors.join("; ");
@@ -115,6 +118,7 @@ export async function loadTurnContext(env: EnvLike = process.env): Promise<LoadT
     context: {
       sessionId: sessionId!,
       turnId: turnId!,
+      runtimeInstanceId: runtimeInstanceId!,
       input,
       clientType: "pi",
       internalEventUrl: internalEventUrl!,

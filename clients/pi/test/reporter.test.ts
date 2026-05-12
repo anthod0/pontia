@@ -22,6 +22,7 @@ async function tempLogFile() {
 const context: TurnContext = {
   sessionId: "sess_1",
   turnId: "turn_1",
+  runtimeInstanceId: "rtinst_1",
   clientType: "pi",
   internalEventUrl: "http://127.0.0.1:8080/internal/v1/events",
 };

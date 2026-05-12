@@ -4,6 +4,7 @@ import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, type InternalEvent } from "./events.js";
 import { EventReporter } from "./reporter.js";
 import { loadSessionContext } from "./session.js";
+import { buildLlmpartyTools } from "./tools.js";
 
 interface ReporterLike {
   report(context: { internalEventUrl: string }, event: InternalEvent): Promise<boolean>;
@@ -14,6 +15,7 @@ export interface LlmpartyPiExtensionDependencies {
   loadContext?: (env: EnvLike) => Promise<LoadTurnContextResult>;
   makeReporter?: (logFile: string) => ReporterLike;
   logDiagnostic?: (logFile: string, entry: DiagnosticEntry) => Promise<void>;
+  fetch?: typeof fetch;
 }
 
 interface ActiveTurnState {
@@ -84,6 +86,15 @@ export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: Llmpar
   const contextLoader = dependencies.loadContext ?? loadTurnContext;
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
+  for (const tool of buildLlmpartyTools({
+    env,
+    loadContext: contextLoader,
+    logDiagnostic,
+    fetch: dependencies.fetch,
+  })) {
+    pi.registerTool(tool as any);
+  }
+
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
 

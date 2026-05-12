@@ -45,6 +45,7 @@ describe("loadTurnContext", () => {
         turn_id: "turn_1",
         input: "build it",
         client_type: "pi",
+        runtime_instance_id: "rtinst_file",
         internal_event_url: "http://from-file/internal/v1/events",
       }),
     );
@@ -53,6 +54,7 @@ describe("loadTurnContext", () => {
       LLMPARTY_WORKSPACE: workspace,
       LLMPARTY_CURRENT_TURN_FILE: contextFile,
       LLMPARTY_INTERNAL_EVENT_URL: "http://from-env/internal/v1/events",
+      LLMPARTY_RUNTIME_INSTANCE_ID: "rtinst_env",
     });
 
     expect(result.ok).toBe(true);
@@ -62,6 +64,7 @@ describe("loadTurnContext", () => {
       turnId: "turn_1",
       clientType: "pi",
       internalEventUrl: "http://from-env/internal/v1/events",
+      runtimeInstanceId: "rtinst_env",
       input: "build it",
     });
   });
@@ -75,6 +78,7 @@ describe("loadTurnContext", () => {
         session_id: "sess_2",
         turn_id: "turn_2",
         client_type: "pi",
+        runtime_instance_id: "rtinst_file_2",
         internal_event_url: "http://from-file/internal/v1/events",
       }),
     );
@@ -84,6 +88,7 @@ describe("loadTurnContext", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected context");
     expect(result.context.internalEventUrl).toBe("http://from-file/internal/v1/events");
+    expect(result.context.runtimeInstanceId).toBe("rtinst_file_2");
   });
 
   test("silently skips missing fallback current-turn file when llmparty env is absent", async () => {
@@ -108,6 +113,7 @@ describe("loadTurnContext", () => {
       LLMPARTY_CURRENT_TURN_FILE: missingFile,
       LLMPARTY_PI_HOOK_LOG: logFile,
       LLMPARTY_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+      LLMPARTY_RUNTIME_INSTANCE_ID: "rtinst_missing_file",
     });
 
     expect(result.ok).toBe(false);
@@ -135,5 +141,6 @@ describe("loadTurnContext", () => {
     expect(log).toContain("invalid_current_turn_context");
     expect(log).toContain("turn_id is required");
     expect(log).toContain("client_type must be pi");
+    expect(log).toContain("runtime_instance_id or LLMPARTY_RUNTIME_INSTANCE_ID is required");
   });
 });
