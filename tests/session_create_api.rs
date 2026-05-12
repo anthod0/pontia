@@ -6,7 +6,8 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use llmparty::{
-    application::AppState,
+    application::{AppState, EventIngestService},
+    domain::{DomainEvent, EventSource, EventType},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
 };
@@ -334,6 +335,62 @@ async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_fr
     assert_eq!(
         duplicate.1["error"]["message"],
         "Cannot create session because @reviewer is already used, please try a different handle."
+    );
+}
+
+#[tokio::test]
+async fn create_session_allows_reusing_handle_after_previous_session_exited() {
+    let state = test_state().await;
+
+    let first = post_json(
+        state.clone(),
+        "/external/v1/sessions",
+        Some(TOKEN),
+        None,
+        json!({
+            "client_type":"generic",
+            "workspace":"/tmp",
+            "handle":"@reviewer"
+        }),
+    )
+    .await;
+    assert_eq!(first.0, StatusCode::CREATED);
+    let first_session_id = first.1["data"]["session"]["session_id"].as_str().unwrap();
+    let _runtime_guard = TmuxSessionGuard::for_session(first_session_id);
+
+    EventIngestService::new(state.db.clone())
+        .ingest_event(DomainEvent::new(
+            "evt_session_exited_for_handle_reuse".to_string(),
+            first_session_id.to_string(),
+            None,
+            EventSource::RuntimeManager,
+            "generic".to_string(),
+            EventType::SessionExited,
+            json!({}),
+        ))
+        .await
+        .expect("ingest session exited");
+
+    let second = post_json(
+        state,
+        "/external/v1/sessions",
+        Some(TOKEN),
+        None,
+        json!({
+            "client_type":"generic",
+            "workspace":"/tmp",
+            "handle":"@reviewer"
+        }),
+    )
+    .await;
+
+    assert_eq!(second.0, StatusCode::CREATED);
+    let second_session_id = second.1["data"]["session"]["session_id"].as_str().unwrap();
+    let _second_runtime_guard = TmuxSessionGuard::for_session(second_session_id);
+    assert_eq!(second.1["data"]["session"]["handle"], "@reviewer");
+    assert_ne!(
+        second.1["data"]["session"]["session_id"],
+        first.1["data"]["session"]["session_id"]
     );
 }
 

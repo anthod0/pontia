@@ -379,7 +379,7 @@ impl SessionCommandService {
 
     async fn ensure_handle_available(&self, workspace_id: &str, handle: &str) -> Result<()> {
         let existing: Option<String> = sqlx::query_scalar(
-            "SELECT session_id FROM sessions WHERE workspace_id = ? AND handle = ? LIMIT 1",
+            "SELECT session_id FROM sessions WHERE workspace_id = ? AND handle = ? AND state NOT IN ('exited', 'error') LIMIT 1",
         )
         .bind(workspace_id)
         .bind(handle)
