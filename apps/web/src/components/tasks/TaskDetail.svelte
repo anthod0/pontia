@@ -24,7 +24,8 @@
   import { loadWorkspaces } from '../../stores/workspaces';
   import { setStatus } from '../../stores/ui';
   import WorkspaceSelector from '../workspaces/WorkspaceSelector.svelte';
-  import type { WorkItemRunView, WorkspaceView } from '../../api/types';
+  import DagPreview from './DagPreview.svelte';
+  import type { WorkspaceView } from '../../api/types';
 
   let workspaceId = '';
   let workspacePath = '';
@@ -60,15 +61,6 @@
   async function syncDispatchedSession() {
     await Promise.all([loadSessions(), loadWorkspaces()]);
     if ($task?.session_id) await selectSession($task.session_id);
-  }
-
-  function latestRunFor(workItemId: string): WorkItemRunView | undefined {
-    return $taskDag?.runs.filter((run) => run.work_item_id === workItemId).at(-1);
-  }
-
-  async function openRun(run: WorkItemRunView) {
-    if (!run.session_id) return;
-    await selectSession(run.session_id);
   }
 
   async function submitHumanSignal() {
@@ -144,35 +136,7 @@
     {#if !$taskDag || $taskDag.summary.total_work_items === 0}
       <EmptyState message="No DAG work items yet." />
     {:else}
-      <div class="metadata-grid compact-grid">
-        <span>WorkItems</span><strong>{$taskDag.summary.total_work_items}</strong>
-        <span>Ready</span><strong>{$taskDag.summary.ready_work_items}</strong>
-        <span>Running</span><strong>{$taskDag.summary.running_work_items}</strong>
-        <span>Completed</span><strong>{$taskDag.summary.completed_work_items}</strong>
-        <span>Blocked</span><strong>{$taskDag.summary.blocked_work_items}</strong>
-        <span>Failed</span><strong>{$taskDag.summary.failed_work_items}</strong>
-        <span>Runs</span><strong>{$taskDag.summary.total_runs}</strong>
-        <span>Open signals</span><strong>{$taskDag.summary.open_signals}</strong>
-      </div>
-
-      <div class="timeline compact">
-        {#each $taskDag.work_items as item (item.work_item_id)}
-          {@const run = latestRunFor(item.work_item_id)}
-          <article class="timeline-item">
-            <div class="row"><strong>{item.title}</strong><span class="badge">{item.runtime?.current_state ?? 'unknown'}</span></div>
-            <p class="muted">{item.kind} · {item.execution_profile_id}{#if item.execution_profile_version}@{item.execution_profile_version}{/if}</p>
-            {#if item.description}<p>{item.description}</p>{/if}
-            {#if run}
-              <div class="metadata-grid compact-grid">
-                <span>Run</span><strong>{run.run_id} ({run.state})</strong>
-                <span>Session</span><strong>{run.session_id ?? 'none'}</strong>
-                <span>Turn</span><strong>{run.turn_id ?? 'none'}</strong>
-              </div>
-              <button class="secondary" disabled={!run.session_id} on:click={() => openRun(run)}>Open run session</button>
-            {/if}
-          </article>
-        {/each}
-      </div>
+      <DagPreview dag={$taskDag} />
 
       <h4>Signals</h4>
       {#if !$taskDag.signals.length}
