@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::set_runtime_config;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -15,6 +16,8 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     if config.run_migrations {
         run_migrations(&db).await?;
     }
+
+    set_runtime_config(config.runtime.clone());
 
     Ok(AppState {
         db,

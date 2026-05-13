@@ -1,4 +1,8 @@
-use llmparty::{application, config::AppConfig, transport::http};
+use llmparty::{
+    application,
+    config::{AppConfig, config_path_from_args},
+    transport::http,
+};
 use std::time::Duration;
 
 use tracing::info;
@@ -8,7 +12,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 async fn main() -> llmparty::error::Result<()> {
     init_tracing();
 
-    let config = AppConfig::from_env()?;
+    let config_path = config_path_from_args(std::env::args())?;
+    let config = AppConfig::from_env_with_config_path(config_path.as_deref())?;
     let state = application::initialize(&config).await?;
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;

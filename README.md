@@ -37,13 +37,49 @@ Install the following:
 
 ## Quick Start
 
-### 1. Configure environment variables
+### 1. Configure llmparty
+
+llmparty can be configured with a TOML file. By default it looks for:
+
+```text
+~/.config/llmparty/config.toml
+```
+
+You can also pass an explicit path:
+
+```bash
+cargo run -- --config /path/to/config.toml
+# or
+LLMPARTY_CONFIG=/path/to/config.toml cargo run
+```
+
+Example:
+
+```toml
+bind_addr = "127.0.0.1:8080"
+database_url = "sqlite://~/.local/share/llmparty/llmparty.db"
+external_api_token = "dev-token"
+run_migrations = true
+
+[runtime.pi]
+tui_command = "pi -e /absolute/path/to/llmparty/clients/pi"
+
+[runtime.claude_code]
+tui_command = "claude"
+
+[workspace_browser]
+roots = [
+  { root_id = "projects", label = "Projects", path = "/home/me/projects" }
+]
+```
+
+Environment variables and `.env` still work and take precedence over TOML values:
 
 ```bash
 cp .env.example .env
 ```
 
-The default configuration listens on `127.0.0.1:8080` and uses `dev-token` as the token for Dashboard and External API access.
+The default configuration listens on `127.0.0.1:8080`.
 
 ### 2. Install dependencies and build the Dashboard
 

@@ -4,7 +4,10 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use llmparty::runtime::GenericRuntimeManager;
+use llmparty::{
+    config::{RuntimeClientConfig, RuntimeConfig},
+    runtime::{GenericRuntimeManager, RuntimeStartRequest, set_runtime_config},
+};
 
 fn path_env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -33,6 +36,90 @@ fn interrupt_session_sends_escape_key() {
         .filter(|line| *line == "send-keys -t runtime-ref Escape")
         .count();
     assert_eq!(escape_sends, 1, "{log}");
+}
+
+#[test]
+fn start_session_uses_configured_tui_command_when_env_is_absent() {
+    let _guard = path_env_lock().lock().expect("path env lock");
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let tmux_log = tempdir.path().join("tmux.log");
+    let fake_tmux = tempdir.path().join("tmux");
+    write_fake_tmux(&fake_tmux);
+    let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
+    unsafe {
+        std::env::set_var("LLMPARTY_DATA_DIR", tempdir.path().join("data"));
+        std::env::remove_var("LLMPARTY_PI_TUI_COMMAND");
+    }
+    set_runtime_config(RuntimeConfig {
+        pi: RuntimeClientConfig {
+            tui_command: Some("pi -e /configured/clients/pi".to_string()),
+        },
+        claude_code: RuntimeClientConfig::default(),
+    });
+
+    let result = GenericRuntimeManager
+        .start_session(RuntimeStartRequest {
+            session_id: "sess_configured".to_string(),
+            client_type: "pi".to_string(),
+            workspace: Some(tempdir.path().join("workspace").display().to_string()),
+        })
+        .expect("start session");
+
+    restore_fake_tmux(original_path);
+    unsafe {
+        std::env::remove_var("LLMPARTY_DATA_DIR");
+    }
+    set_runtime_config(RuntimeConfig::default());
+
+    let runtime_dir = result.metadata["runtime_dir"]
+        .as_str()
+        .expect("runtime dir");
+    let script =
+        std::fs::read_to_string(Path::new(runtime_dir).join("runtime.sh")).expect("runtime script");
+    assert!(script.contains("pi -e /configured/clients/pi"), "{script}");
+}
+
+#[test]
+fn start_session_prefers_env_tui_command_over_configured_command() {
+    let _guard = path_env_lock().lock().expect("path env lock");
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let tmux_log = tempdir.path().join("tmux.log");
+    let fake_tmux = tempdir.path().join("tmux");
+    write_fake_tmux(&fake_tmux);
+    let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
+    unsafe {
+        std::env::set_var("LLMPARTY_DATA_DIR", tempdir.path().join("data"));
+        std::env::set_var("LLMPARTY_PI_TUI_COMMAND", "pi from env");
+    }
+    set_runtime_config(RuntimeConfig {
+        pi: RuntimeClientConfig {
+            tui_command: Some("pi from config".to_string()),
+        },
+        claude_code: RuntimeClientConfig::default(),
+    });
+
+    let result = GenericRuntimeManager
+        .start_session(RuntimeStartRequest {
+            session_id: "sess_env_override".to_string(),
+            client_type: "pi".to_string(),
+            workspace: Some(tempdir.path().join("workspace-env").display().to_string()),
+        })
+        .expect("start session");
+
+    restore_fake_tmux(original_path);
+    unsafe {
+        std::env::remove_var("LLMPARTY_DATA_DIR");
+        std::env::remove_var("LLMPARTY_PI_TUI_COMMAND");
+    }
+    set_runtime_config(RuntimeConfig::default());
+
+    let runtime_dir = result.metadata["runtime_dir"]
+        .as_str()
+        .expect("runtime dir");
+    let script =
+        std::fs::read_to_string(Path::new(runtime_dir).join("runtime.sh")).expect("runtime script");
+    assert!(script.contains("pi from env"), "{script}");
+    assert!(!script.contains("pi from config"), "{script}");
 }
 
 #[test]

@@ -9,6 +9,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
+    sync::{OnceLock, RwLock},
     thread,
     time::Duration,
 };
@@ -21,6 +22,7 @@ use crate::{
     adapters::{AdapterCapabilities, AgentInputSink, GenericTestAdapter},
     agent_clients::{self, DispatchMode, StartupHook},
     application::SessionCapabilities,
+    config::RuntimeConfig,
     error::{Error, Result},
     ids::new_runtime_instance_id,
     time::utc_now,
@@ -50,6 +52,18 @@ pub struct AgentInput {
 
 #[derive(Debug, Clone, Default)]
 pub struct GenericRuntimeManager;
+
+fn runtime_config() -> &'static RwLock<RuntimeConfig> {
+    static CONFIG: OnceLock<RwLock<RuntimeConfig>> = OnceLock::new();
+    CONFIG.get_or_init(|| RwLock::new(RuntimeConfig::default()))
+}
+
+pub fn set_runtime_config(config: RuntimeConfig) {
+    let mut guard = runtime_config()
+        .write()
+        .expect("runtime config lock poisoned");
+    *guard = config;
+}
 
 impl From<AdapterCapabilities> for SessionCapabilities {
     fn from(capabilities: AdapterCapabilities) -> Self {
@@ -370,6 +384,7 @@ fn write_runtime_script(
             let command = client_spec
                 .command_env
                 .and_then(|env| std::env::var(env).ok())
+                .or_else(|| configured_tui_command(&request.client_type))
                 .unwrap_or_else(|| default_command.to_string());
             (
                 "echo \"llmparty runtime started\" >> \"$LLMPARTY_RUNTIME_LOG\"".to_string(),
@@ -417,6 +432,17 @@ export LLMPARTY_CLAUDE_HOOK_LOG={}
     );
     std::fs::write(path, content)?;
     Ok(())
+}
+
+fn configured_tui_command(client_type: &str) -> Option<String> {
+    let guard = runtime_config()
+        .read()
+        .expect("runtime config lock poisoned");
+    match client_type {
+        "pi" => guard.pi.tui_command.clone(),
+        "claude_code" => guard.claude_code.tui_command.clone(),
+        _ => None,
+    }
 }
 
 fn internal_event_url() -> String {

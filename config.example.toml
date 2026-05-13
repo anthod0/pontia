@@ -1,0 +1,15 @@
+bind_addr = "127.0.0.1:8080"
+database_url = "sqlite://~/.local/share/llmparty/llmparty.db"
+external_api_token = "dev-token"
+run_migrations = true
+
+[runtime.pi]
+tui_command = "pi -e /absolute/path/to/llmparty/clients/pi"
+
+[runtime.claude_code]
+tui_command = "claude"
+
+[workspace_browser]
+roots = [
+  { root_id = "projects", label = "Projects", path = "/home/me/projects" }
+]

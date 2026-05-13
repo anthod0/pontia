@@ -1,4 +1,11 @@
-use std::{collections::HashMap, env, net::SocketAddr};
+use std::{
+    collections::HashMap,
+    env,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
+
+use serde::Deserialize;
 
 use crate::{
     application::{
@@ -19,17 +26,83 @@ pub struct AppConfig {
     pub planner: PlannerRuntimeConfig,
     pub graph: GraphRuntimeConfig,
     pub workspace_browser: WorkspaceBrowserConfig,
+    pub runtime: RuntimeConfig,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct RuntimeConfig {
+    #[serde(default)]
+    pub pi: RuntimeClientConfig,
+    #[serde(default)]
+    pub claude_code: RuntimeClientConfig,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct RuntimeClientConfig {
+    pub tui_command: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct FileConfig {
+    bind_addr: Option<String>,
+    database_url: Option<String>,
+    external_api_token: Option<String>,
+    run_migrations: Option<bool>,
+    runtime: Option<RuntimeConfig>,
+    workspace_browser: Option<WorkspaceBrowserConfig>,
+}
+
+pub fn config_path_from_args<I>(args: I) -> Result<Option<PathBuf>>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut args = args.into_iter().skip(1);
+    let mut config_path = None;
+    while let Some(arg) = args.next() {
+        if arg == "--config" {
+            let path = args.next().ok_or_else(|| Error::InvalidConfig {
+                key: "--config",
+                message: "--config requires a path".to_string(),
+            })?;
+            config_path = Some(PathBuf::from(path));
+        }
+    }
+    Ok(config_path)
 }
 
 impl AppConfig {
     pub fn from_env() -> Result<Self> {
         let _ = dotenvy::dotenv();
         let vars: HashMap<String, String> = env::vars().collect();
-        Self::from_vars(&vars)
+        let config_path = explicit_config_path(&vars).or_else(default_config_path_if_exists);
+        Self::from_vars_and_file(&vars, config_path.as_deref())
+    }
+
+    pub fn from_env_with_config_path(config_path: Option<&Path>) -> Result<Self> {
+        let _ = dotenvy::dotenv();
+        let vars: HashMap<String, String> = env::vars().collect();
+        let config_path = config_path
+            .map(Path::to_path_buf)
+            .or_else(|| explicit_config_path(&vars).or_else(default_config_path_if_exists));
+        Self::from_vars_and_file(&vars, config_path.as_deref())
     }
 
     pub fn from_vars(vars: &HashMap<String, String>) -> Result<Self> {
+        Self::from_vars_and_file(vars, None)
+    }
+
+    pub fn from_vars_and_file(
+        vars: &HashMap<String, String>,
+        config_path: Option<&Path>,
+    ) -> Result<Self> {
+        let file = match config_path {
+            Some(path) => Some(read_file_config(path)?),
+            None => None,
+        };
+        let file = file.as_ref();
+
         let bind_addr = get(vars, "LLMPARTY_BIND_ADDR")
+            .or_else(|| file.and_then(|config| config.bind_addr.as_deref()))
             .unwrap_or(DEFAULT_BIND_ADDR)
             .parse::<SocketAddr>()
             .map_err(|err| Error::InvalidConfig {
@@ -38,16 +111,20 @@ impl AppConfig {
             })?;
 
         let database_url = get(vars, "LLMPARTY_DATABASE_URL")
+            .or_else(|| file.and_then(|config| config.database_url.as_deref()))
             .unwrap_or(DEFAULT_DATABASE_URL)
             .to_string();
 
         let external_api_token = get(vars, "LLMPARTY_EXTERNAL_API_TOKEN")
+            .or_else(|| file.and_then(|config| config.external_api_token.as_deref()))
             .filter(|value| !value.trim().is_empty())
             .map(ToString::to_string);
 
         let run_migrations = match get(vars, "LLMPARTY_RUN_MIGRATIONS") {
             Some(value) => parse_bool("LLMPARTY_RUN_MIGRATIONS", value)?,
-            None => true,
+            None => file
+                .and_then(|config| config.run_migrations)
+                .unwrap_or(true),
         };
 
         let planner = PlannerRuntimeConfig {
@@ -86,9 +163,24 @@ impl AppConfig {
                 .or_else(|| graph_enabled.then(|| default_graph_db_dir(&database_url))),
         };
 
-        let workspace_browser = WorkspaceBrowserConfig {
-            roots: parse_workspace_roots(get(vars, "LLMPARTY_WORKSPACE_ROOTS").unwrap_or(""))?,
+        let workspace_browser = match get(vars, "LLMPARTY_WORKSPACE_ROOTS") {
+            Some(value) => WorkspaceBrowserConfig {
+                roots: parse_workspace_roots(value)?,
+            },
+            None => file
+                .and_then(|config| config.workspace_browser.clone())
+                .unwrap_or_default(),
         };
+
+        let mut runtime = file
+            .and_then(|config| config.runtime.clone())
+            .unwrap_or_default();
+        if let Some(value) = get(vars, "LLMPARTY_PI_TUI_COMMAND") {
+            runtime.pi.tui_command = non_empty(value);
+        }
+        if let Some(value) = get(vars, "LLMPARTY_CLAUDE_TUI_COMMAND") {
+            runtime.claude_code.tui_command = non_empty(value);
+        }
 
         Ok(Self {
             bind_addr,
@@ -98,12 +190,40 @@ impl AppConfig {
             planner,
             graph,
             workspace_browser,
+            runtime,
         })
     }
 }
 
 fn get<'a>(vars: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
     vars.get(key).map(String::as_str)
+}
+
+fn non_empty(value: &str) -> Option<String> {
+    (!value.trim().is_empty()).then(|| value.to_string())
+}
+
+fn explicit_config_path(vars: &HashMap<String, String>) -> Option<PathBuf> {
+    get(vars, "LLMPARTY_CONFIG")
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+}
+
+fn default_config_path_if_exists() -> Option<PathBuf> {
+    let home = env::var_os("HOME")?;
+    let path = PathBuf::from(home).join(".config/llmparty/config.toml");
+    path.exists().then_some(path)
+}
+
+fn read_file_config(path: &Path) -> Result<FileConfig> {
+    let contents = std::fs::read_to_string(path).map_err(|err| Error::InvalidConfig {
+        key: "LLMPARTY_CONFIG",
+        message: format!("failed to read {}: {err}", path.display()),
+    })?;
+    toml::from_str(&contents).map_err(|err| Error::InvalidConfig {
+        key: "LLMPARTY_CONFIG",
+        message: format!("failed to parse {}: {err}", path.display()),
+    })
 }
 
 fn default_graph_db_dir(database_url: &str) -> String {
