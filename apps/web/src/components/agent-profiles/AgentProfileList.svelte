@@ -13,7 +13,6 @@
 <section class="panel">
   <div class="panel-heading">
     <h2>Agent profiles</h2>
-    <button class="secondary" on:click={loadAgentProfiles}>Refresh</button>
   </div>
   <ErrorBanner message={$agentProfilesError} />
   {#if $agentProfilesLoading}

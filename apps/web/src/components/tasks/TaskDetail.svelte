@@ -9,7 +9,6 @@
     createHumanSignal,
     interruptTask,
     pauseTask,
-    refreshTask,
     resumeTask,
     selectedTaskId,
     submitPlannerInput,
@@ -80,7 +79,6 @@
 <section class="panel">
   <div class="panel-heading">
     <h2>Selected task</h2>
-    {#if $selectedTaskId}<button class="secondary" on:click={() => refreshTask($selectedTaskId!)}>Refresh</button>{/if}
   </div>
   <ErrorBanner message={$taskError} />
   {#if $taskLoading}

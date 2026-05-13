@@ -13,7 +13,6 @@
 <section class="panel">
   <div class="panel-heading">
     <h2>Workspaces</h2>
-    <button class="secondary" on:click={loadWorkspaces}>Refresh</button>
   </div>
   <ErrorBanner message={$workspacesError} />
   {#if $workspacesLoading}

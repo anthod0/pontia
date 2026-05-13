@@ -13,7 +13,6 @@
 <section class="panel">
   <div class="panel-heading">
     <h2>Tasks</h2>
-    <button class="secondary" on:click={loadTasks}>Refresh</button>
   </div>
   <ErrorBanner message={$tasksError} />
   {#if $tasksLoading}

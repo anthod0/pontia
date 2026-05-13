@@ -17,7 +17,6 @@
 <section class="panel">
   <div class="panel-heading">
     <h2>Sessions</h2>
-    <button class="secondary" on:click={loadSessions}>Refresh</button>
   </div>
   <ErrorBanner message={$sessionsError} />
   {#if $sessionsLoading}
