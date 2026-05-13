@@ -17,10 +17,6 @@ use llmparty::{
     },
 };
 
-async fn test_state() -> AppState {
-    test_state_with_dashboard(ResolvedDashboard::local_default()).await
-}
-
 async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("dashboard.db");
@@ -40,16 +36,7 @@ async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> AppState {
 
 #[tokio::test]
 async fn dashboard_serves_configured_local_entrypoint() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let root = dir.path().join("custom-dashboard");
-    let assets = root.join("assets");
-    std::fs::create_dir_all(&assets).expect("assets dir");
-    std::fs::write(
-        root.join("index.html"),
-        r#"<html><head><script src="/dashboard/assets/custom.js"></script></head><body>custom dashboard</body></html>"#,
-    )
-    .expect("index");
-    std::fs::write(assets.join("custom.js"), "console.log('custom');").expect("asset");
+    let (_dir, root) = build_local_dashboard("custom dashboard", "custom.js");
 
     let response =
         http::router(test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await)
@@ -84,6 +71,39 @@ async fn dashboard_serves_configured_local_entrypoint() {
             .expect("asset response");
 
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn dashboard_spa_fallback_serves_entrypoint_for_nested_routes() {
+    let (_dir, root) = build_local_dashboard("custom dashboard", "custom.js");
+
+    for path in [
+        "/dashboard/",
+        "/dashboard/overview",
+        "/dashboard/tasks/example/dag",
+    ] {
+        let response = http::router(
+            test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await,
+        )
+        .oneshot(
+            Request::builder()
+                .uri(path)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body")
+            .to_bytes();
+        let html = std::str::from_utf8(&body).expect("utf8 html");
+        assert!(html.contains("custom dashboard"), "{path}");
+    }
 }
 
 #[tokio::test]
@@ -156,7 +176,8 @@ async fn remote_dashboard_refreshes_cache_and_falls_back_when_refresh_fails() {
 
 #[tokio::test]
 async fn dashboard_serves_built_svelte_entrypoint() {
-    let response = http::router(test_state().await)
+    let dashboard = dashboard_v2_dist().await;
+    let response = http::router(test_state_with_dashboard(dashboard).await)
         .oneshot(
             Request::builder()
                 .uri("/dashboard")
@@ -218,6 +239,33 @@ async fn request_dashboard(dashboard: ResolvedDashboard) -> (StatusCode, String)
     )
 }
 
+async fn dashboard_v2_dist() -> ResolvedDashboard {
+    resolve_dashboard(&DashboardConfig {
+        source: Some("apps/dashboard/dist".to_string()),
+        cache_dir: None,
+    })
+    .await
+}
+
+fn build_local_dashboard(
+    html_text: &str,
+    script_name: &str,
+) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dir.path().join("custom-dashboard");
+    let assets = root.join("assets");
+    std::fs::create_dir_all(&assets).expect("assets dir");
+    std::fs::write(
+        root.join("index.html"),
+        format!(
+            r#"<html><head><script src="/dashboard/assets/{script_name}"></script></head><body>{html_text}</body></html>"#
+        ),
+    )
+    .expect("index");
+    std::fs::write(assets.join(script_name), "console.log('custom');").expect("asset");
+    (dir, root)
+}
+
 fn build_dashboard_zip(html_text: &str, script_name: &str) -> Vec<u8> {
     let mut bytes = std::io::Cursor::new(Vec::new());
     {
@@ -243,7 +291,8 @@ fn build_dashboard_zip(html_text: &str, script_name: &str) -> Vec<u8> {
 
 #[tokio::test]
 async fn dashboard_serves_built_frontend_assets() {
-    let entry_response = http::router(test_state().await)
+    let dashboard = dashboard_v2_dist().await;
+    let entry_response = http::router(test_state_with_dashboard(dashboard).await)
         .oneshot(
             Request::builder()
                 .uri("/dashboard")
@@ -266,7 +315,8 @@ async fn dashboard_serves_built_frontend_assets() {
         .expect("asset end");
     let asset_path = &html[asset_start..asset_end];
 
-    let response = http::router(test_state().await)
+    let dashboard = dashboard_v2_dist().await;
+    let response = http::router(test_state_with_dashboard(dashboard).await)
         .oneshot(
             Request::builder()
                 .uri(asset_path)
