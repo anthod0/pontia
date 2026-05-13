@@ -1,5 +1,5 @@
 use super::*;
-use crate::runtime::set_runtime_config;
+use crate::{runtime::set_runtime_config, transport::http::dashboard::ResolvedDashboard};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -8,6 +8,7 @@ pub struct AppState {
     pub planner: PlannerRuntimeConfig,
     pub graph: GraphRuntimeConfig,
     pub workspace_browser: WorkspaceBrowserConfig,
+    pub dashboard: ResolvedDashboard,
 }
 
 pub async fn initialize(config: &AppConfig) -> Result<AppState> {
@@ -18,6 +19,7 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     }
 
     set_runtime_config(config.runtime.clone());
+    let dashboard = crate::transport::http::dashboard::resolve_dashboard(&config.dashboard).await;
 
     Ok(AppState {
         db,
@@ -25,5 +27,6 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
         planner: config.planner.clone(),
         graph: config.graph.clone(),
         workspace_browser: config.workspace_browser.clone(),
+        dashboard,
     })
 }

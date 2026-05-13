@@ -27,6 +27,13 @@ pub struct AppConfig {
     pub graph: GraphRuntimeConfig,
     pub workspace_browser: WorkspaceBrowserConfig,
     pub runtime: RuntimeConfig,
+    pub dashboard: DashboardConfig,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct DashboardConfig {
+    pub source: Option<String>,
+    pub cache_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -50,6 +57,7 @@ struct FileConfig {
     run_migrations: Option<bool>,
     runtime: Option<RuntimeConfig>,
     workspace_browser: Option<WorkspaceBrowserConfig>,
+    dashboard: Option<DashboardConfig>,
 }
 
 pub fn config_path_from_args<I>(args: I) -> Result<Option<PathBuf>>
@@ -172,6 +180,16 @@ impl AppConfig {
                 .unwrap_or_default(),
         };
 
+        let mut dashboard = file
+            .and_then(|config| config.dashboard.clone())
+            .unwrap_or_default();
+        if let Some(value) = get(vars, "LLMPARTY_DASHBOARD_SOURCE") {
+            dashboard.source = non_empty(value);
+        }
+        if let Some(value) = get(vars, "LLMPARTY_DASHBOARD_CACHE_DIR") {
+            dashboard.cache_dir = non_empty(value);
+        }
+
         let mut runtime = file
             .and_then(|config| config.runtime.clone())
             .unwrap_or_default();
@@ -191,6 +209,7 @@ impl AppConfig {
             graph,
             workspace_browser,
             runtime,
+            dashboard,
         })
     }
 }

@@ -14,6 +14,14 @@ fn loads_config_from_key_value_source() {
             "sqlite://./data/control-plane.db".to_string(),
         ),
         (
+            "LLMPARTY_DASHBOARD_SOURCE".to_string(),
+            "https://example.test/dashboard.tar.gz".to_string(),
+        ),
+        (
+            "LLMPARTY_DASHBOARD_CACHE_DIR".to_string(),
+            "/tmp/llmparty-dashboard-cache".to_string(),
+        ),
+        (
             "LLMPARTY_EXTERNAL_API_TOKEN".to_string(),
             "dev-token".to_string(),
         ),
@@ -47,6 +55,14 @@ fn loads_config_from_key_value_source() {
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4000");
     assert_eq!(config.database_url, "sqlite://./data/control-plane.db");
     assert_eq!(config.external_api_token.as_deref(), Some("dev-token"));
+    assert_eq!(
+        config.dashboard.source.as_deref(),
+        Some("https://example.test/dashboard.tar.gz")
+    );
+    assert_eq!(
+        config.dashboard.cache_dir.as_deref(),
+        Some("/tmp/llmparty-dashboard-cache")
+    );
     assert!(!config.run_migrations);
     assert!(config.planner.enabled);
     assert_eq!(config.planner.client_type, "generic");
@@ -91,6 +107,10 @@ database_url = "sqlite:///tmp/from-file.db"
 external_api_token = "file-token"
 run_migrations = false
 
+[dashboard]
+source = "/opt/llmparty/dashboard"
+cache_dir = "/var/cache/llmparty/dashboard"
+
 [runtime.pi]
 tui_command = "pi -e /tmp/llmparty/clients/pi"
 
@@ -111,6 +131,14 @@ roots = [
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4040");
     assert_eq!(config.database_url, "sqlite:///tmp/from-file.db");
     assert_eq!(config.external_api_token.as_deref(), Some("file-token"));
+    assert_eq!(
+        config.dashboard.source.as_deref(),
+        Some("/opt/llmparty/dashboard")
+    );
+    assert_eq!(
+        config.dashboard.cache_dir.as_deref(),
+        Some("/var/cache/llmparty/dashboard")
+    );
     assert!(!config.run_migrations);
     assert_eq!(
         config.runtime.pi.tui_command.as_deref(),
@@ -134,6 +162,10 @@ fn env_vars_override_config_file_values() {
 bind_addr = "127.0.0.1:4040"
 external_api_token = "file-token"
 
+[dashboard]
+source = "/from/file/dashboard"
+cache_dir = "/from/file/cache"
+
 [runtime.pi]
 tui_command = "pi from file"
 "#,
@@ -152,6 +184,14 @@ tui_command = "pi from file"
             "LLMPARTY_PI_TUI_COMMAND".to_string(),
             "pi from env".to_string(),
         ),
+        (
+            "LLMPARTY_DASHBOARD_SOURCE".to_string(),
+            "/from/env/dashboard".to_string(),
+        ),
+        (
+            "LLMPARTY_DASHBOARD_CACHE_DIR".to_string(),
+            "/from/env/cache".to_string(),
+        ),
     ]);
 
     let config =
@@ -162,6 +202,14 @@ tui_command = "pi from file"
     assert_eq!(
         config.runtime.pi.tui_command.as_deref(),
         Some("pi from env")
+    );
+    assert_eq!(
+        config.dashboard.source.as_deref(),
+        Some("/from/env/dashboard")
+    );
+    assert_eq!(
+        config.dashboard.cache_dir.as_deref(),
+        Some("/from/env/cache")
     );
 }
 
@@ -198,6 +246,8 @@ fn provides_development_defaults_for_optional_values() {
         "sqlite://~/.local/share/llmparty/llmparty.db"
     );
     assert_eq!(config.external_api_token, None);
+    assert_eq!(config.dashboard.source, None);
+    assert_eq!(config.dashboard.cache_dir, None);
     assert!(config.run_migrations);
     assert!(!config.planner.enabled);
     assert_eq!(config.planner.client_type, "pi");

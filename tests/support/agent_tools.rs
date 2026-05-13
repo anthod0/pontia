@@ -26,6 +26,7 @@ pub async fn test_state() -> AppState {
         planner: config.planner,
         graph: config.graph,
         workspace_browser: config.workspace_browser,
+        dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),
     }
 }
 

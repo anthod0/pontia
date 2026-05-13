@@ -61,6 +61,11 @@ database_url = "sqlite://~/.local/share/llmparty/llmparty.db"
 external_api_token = "dev-token"
 run_migrations = true
 
+[dashboard]
+# Local Vite dist directory, or a remote .zip/.tar.gz/.tgz archive containing exactly one index.html.
+source = "apps/web/dist"
+cache_dir = "~/.cache/llmparty/dashboard"
+
 [runtime.pi]
 tui_command = "pi -e /absolute/path/to/llmparty/clients/pi"
 
@@ -80,6 +85,8 @@ cp .env.example .env
 ```
 
 The default configuration listens on `127.0.0.1:8080`.
+
+Dashboard `source` may be a local built dashboard directory or a remote archive URL. If `source` is missing, or a local source does not contain `index.html`, `/dashboard` returns a plain unavailable message instead of falling back. Remote archives are refreshed on startup into `cache_dir`; if refresh fails, llmparty serves the previous cache when one exists. The archive must contain exactly one `index.html` entry, whose parent directory is treated as the dashboard root.
 
 ### 2. Install dependencies and build the Dashboard
 
@@ -286,8 +293,10 @@ curl -X DELETE http://127.0.0.1:8080/external/v1/sessions/sess_example \
 | `LLMPARTY_DATABASE_URL`       | `sqlite://~/.local/share/llmparty/llmparty.db` | SQLite database URL                              |
 | `LLMPARTY_EXTERNAL_API_TOKEN` | Not set                                        | Bearer token for the Dashboard and External API  |
 | `LLMPARTY_RUN_MIGRATIONS`     | `true`                                         | Automatically run database migrations on startup |
-| `LLMPARTY_INTERNAL_EVENT_URL` | Auto-derived or manually set                   | URL used by agents / hooks to report events      |
-| `LLMPARTY_PI_TUI_COMMAND`     | `pi`                                           | Startup command used for pi sessions             |
+| `LLMPARTY_INTERNAL_EVENT_URL`   | Auto-derived or manually set                   | URL used by agents / hooks to report events      |
+| `LLMPARTY_DASHBOARD_SOURCE`     | Not set                                        | Local dashboard dist directory or remote archive |
+| `LLMPARTY_DASHBOARD_CACHE_DIR`  | `~/.cache/llmparty/dashboard`                  | Cache directory for remote dashboard archives    |
+| `LLMPARTY_PI_TUI_COMMAND`       | `pi`                                           | Startup command used for pi sessions             |
 
 ## Development Commands
 

@@ -26,5 +26,6 @@ pub async fn graph_planner_test_state(graph_dir: String) -> AppState {
             db_dir: Some(graph_dir),
         },
         workspace_browser: Default::default(),
+        dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),
     }
 }
