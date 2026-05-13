@@ -5,6 +5,7 @@ import { refreshSession } from '../stores/sessionDetail';
 import { loadSessions } from '../stores/sessions';
 import { loadInboxMessages } from '../stores/inbox';
 import { loadTurns } from '../stores/turns';
+import { loadTasks, refreshTask, selectedTaskId } from '../stores/tasks';
 
 type RefreshTask = () => Promise<void>;
 
@@ -57,4 +58,11 @@ export const refreshSessionList = coalesce(250, loadSessions);
 export const refreshArtifacts = coalesce(250, async () => {
   const id = get(selectedSessionId);
   if (id) await loadArtifacts(id);
+});
+
+export const refreshTaskList = coalesce(250, loadTasks);
+
+export const refreshSelectedTask = coalesce(150, async () => {
+  const id = get(selectedTaskId);
+  if (id) await refreshTask(id);
 });

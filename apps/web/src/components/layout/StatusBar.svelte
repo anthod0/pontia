@@ -16,7 +16,7 @@
   <div class="status-stack">
     <span class:error={$statusError}>{$statusMessage}</span>
     <small class:error={$sseStatus === 'error'}>
-      SSE: {$sseStatus}{ $streamedSessionId ? ` · ${$streamedSessionId}` : ''}{ $reconnectCount ? ` · reconnects ${$reconnectCount}` : ''}
+      Dashboard stream: {$sseStatus}{ $streamedSessionId ? ` · ${$streamedSessionId}` : ''}{ $reconnectCount ? ` · reconnects ${$reconnectCount}` : ''}
       {#if $lastConnectionError} · {$lastConnectionError}{/if}
     </small>
   </div>

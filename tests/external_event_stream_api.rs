@@ -60,6 +60,23 @@ async fn ingest(state: &AppState, event: DomainEvent) {
         .expect("ingest event");
 }
 
+async fn seed_task_event(state: &AppState) {
+    sqlx::query(
+        r#"INSERT INTO tasks (task_id, state, input, routing_state, metadata)
+           VALUES ('task_stream_1', 'running', 'stream task', 'ready', '{}')"#,
+    )
+    .execute(&state.db)
+    .await
+    .expect("insert task");
+    sqlx::query(
+        r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
+           VALUES ('task_evt_stream_1', 'task_stream_1', 'dag.work_item_completed', '{"work_item_id":"wi_1"}')"#,
+    )
+    .execute(&state.db)
+    .await
+    .expect("insert task event");
+}
+
 async fn seed_session_events(state: &AppState) {
     ingest(
         state,
@@ -143,6 +160,88 @@ async fn event_stream_rejects_missing_or_wrong_bearer_token() {
     assert!(missing.2.contains("authentication_failed"));
     assert_eq!(wrong.0, StatusCode::UNAUTHORIZED);
     assert!(wrong.2.contains("authentication_failed"));
+}
+
+#[tokio::test]
+async fn dashboard_event_stream_rejects_missing_or_wrong_bearer_token() {
+    let state = test_state("dashboard_auth").await;
+
+    let missing = stream_get(state.clone(), "/external/v1/dashboard/events/stream", None).await;
+    let wrong = stream_get(
+        state,
+        "/external/v1/dashboard/events/stream",
+        Some("wrong-token"),
+    )
+    .await;
+
+    assert_eq!(missing.0, StatusCode::UNAUTHORIZED);
+    assert!(missing.2.contains("authentication_failed"));
+    assert_eq!(wrong.0, StatusCode::UNAUTHORIZED);
+    assert!(wrong.2.contains("authentication_failed"));
+}
+
+#[tokio::test]
+async fn dashboard_event_stream_emits_session_events() {
+    let state = test_state("dashboard_session").await;
+    seed_session_events(&state).await;
+
+    let (status, content_type, body) =
+        stream_get(state, "/external/v1/dashboard/events/stream", Some(TOKEN)).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(content_type.starts_with("text/event-stream"));
+    assert!(body.contains("event: dashboard_event"));
+    assert!(body.contains("id: session:"));
+    assert!(body.contains(r#""kind":"session_event""#));
+    assert!(body.contains(r#""event_id":"evt_stream_1""#));
+    assert!(body.contains(r#""type":"session.created""#));
+}
+
+#[tokio::test]
+async fn dashboard_event_stream_emits_task_events() {
+    let state = test_state("dashboard_task").await;
+    seed_task_event(&state).await;
+
+    let (status, _, body) =
+        stream_get(state, "/external/v1/dashboard/events/stream", Some(TOKEN)).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("event: dashboard_event"));
+    assert!(body.contains(r#""kind":"task_event""#));
+    assert!(body.contains(r#""event_id":"task_evt_stream_1""#));
+    assert!(body.contains(r#""event_type":"dag.work_item_completed""#));
+}
+
+#[tokio::test]
+async fn dashboard_event_stream_after_cursor_does_not_repeat_read_events() {
+    let state = test_state("dashboard_after").await;
+    seed_session_events(&state).await;
+    seed_task_event(&state).await;
+
+    let (status, _, first_body) = stream_get(
+        state.clone(),
+        "/external/v1/dashboard/events/stream",
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let cursor = first_body
+        .lines()
+        .filter_map(|line| line.strip_prefix("id: "))
+        .last()
+        .expect("stream cursor");
+
+    let (status, _, second_body) = stream_get(
+        state,
+        &format!("/external/v1/dashboard/events/stream?after={cursor}"),
+        Some(TOKEN),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(!second_body.contains("evt_stream_1"));
+    assert!(!second_body.contains("evt_stream_2"));
+    assert!(!second_body.contains("task_evt_stream_1"));
 }
 
 #[tokio::test]

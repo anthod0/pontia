@@ -1,19 +1,33 @@
 import { get } from 'svelte/store';
-import type { EventView } from '../api/types';
+import type { DashboardStreamEvent, EventView, TaskEventView } from '../api/types';
 import { token } from '../stores/auth';
-import { sseStatus, reconnectCount, lastConnectionError, streamedSessionId } from '../stores/connection';
-import { appendEvent, lastEventIdBySession } from '../stores/events';
+import {
+  dashboardStreamCursor,
+  lastConnectionError,
+  reconnectCount,
+  sseStatus,
+  streamedSessionId,
+} from '../stores/connection';
+import { appendEvent } from '../stores/events';
 import { selectedSessionId } from '../stores/selection';
-import { refreshArtifacts, refreshSelectedSession, refreshSessionList, refreshTurns } from './refreshCoordinator';
+import { selectedTaskId } from '../stores/tasks';
+import {
+  refreshArtifacts,
+  refreshSelectedSession,
+  refreshSelectedTask,
+  refreshSessionList,
+  refreshTaskList,
+  refreshTurns,
+} from './refreshCoordinator';
 
 const API_BASE = '/external/v1';
 const TERMINAL_TURN_EVENTS = new Set(['turn.completed', 'turn.failed', 'turn.interrupted', 'turn.cancelled']);
 const SESSION_STATE_EVENTS = new Set(['session.ready', 'session.started', 'session.exited', 'session.error']);
 
 let controller: AbortController | null = null;
-let currentSessionId: string | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let generation = 0;
+let started = false;
 
 function clearReconnectTimer(): void {
   if (reconnectTimer) {
@@ -24,29 +38,28 @@ function clearReconnectTimer(): void {
 
 export function stopEventStream(): void {
   generation += 1;
+  started = false;
   clearReconnectTimer();
   controller?.abort();
   controller = null;
-  currentSessionId = null;
   streamedSessionId.set(null);
   sseStatus.set('closed');
 }
 
-export function startEventStream(sessionId: string): void {
-  if (currentSessionId === sessionId) return;
-  stopEventStream();
+export function startEventStream(): void {
+  if (started) return;
+  started = true;
   reconnectCount.set(0);
   lastConnectionError.set(null);
-  currentSessionId = sessionId;
-  streamedSessionId.set(sessionId);
-  void connect(sessionId, generation);
+  streamedSessionId.set('dashboard');
+  void connect(generation);
 }
 
-async function connect(sessionId: string, streamGeneration: number): Promise<void> {
+async function connect(streamGeneration: number): Promise<void> {
   const bearer = get(token).trim();
   if (!bearer) {
     sseStatus.set('idle');
-    lastConnectionError.set('Set an API token to open the event stream.');
+    lastConnectionError.set('Set an API token to open the dashboard event stream.');
     return;
   }
 
@@ -55,36 +68,36 @@ async function connect(sessionId: string, streamGeneration: number): Promise<voi
   lastConnectionError.set(null);
 
   try {
-    const after = get(lastEventIdBySession)[sessionId];
+    const after = get(dashboardStreamCursor);
     const query = after ? `?after=${encodeURIComponent(after)}` : '';
-    const response = await fetch(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}/events/stream${query}`, {
+    const response = await fetch(`${API_BASE}/dashboard/events/stream${query}`, {
       headers: { Authorization: `Bearer ${bearer}` },
       signal: controller.signal,
     });
 
-    if (!response.ok || !response.body) throw new Error(`Event stream failed: ${response.status} ${response.statusText}`);
+    if (!response.ok || !response.body) throw new Error(`Dashboard event stream failed: ${response.status} ${response.statusText}`);
     sseStatus.set('open');
-    await readSse(response.body, (event) => handleEvent(event, sessionId));
+    await readSse(response.body, handleDashboardEvent);
 
-    if (streamGeneration === generation && get(selectedSessionId) === sessionId) scheduleReconnect(sessionId, streamGeneration);
+    if (streamGeneration === generation && started) scheduleReconnect(streamGeneration);
   } catch (error) {
     if (controller?.signal.aborted || streamGeneration !== generation) return;
     lastConnectionError.set(error instanceof Error ? error.message : String(error));
     sseStatus.set('error');
-    scheduleReconnect(sessionId, streamGeneration);
+    scheduleReconnect(streamGeneration);
   }
 }
 
-function scheduleReconnect(sessionId: string, streamGeneration: number): void {
-  if (get(selectedSessionId) !== sessionId || streamGeneration !== generation) return;
+function scheduleReconnect(streamGeneration: number): void {
+  if (!started || streamGeneration !== generation) return;
   reconnectCount.update((count) => count + 1);
   const delay = Math.min(1000 + get(reconnectCount) * 500, 5000);
   sseStatus.set('reconnecting');
   clearReconnectTimer();
-  reconnectTimer = setTimeout(() => connect(sessionId, streamGeneration), delay);
+  reconnectTimer = setTimeout(() => connect(streamGeneration), delay);
 }
 
-async function readSse(body: ReadableStream<Uint8Array>, onEvent: (event: EventView) => void): Promise<void> {
+async function readSse(body: ReadableStream<Uint8Array>, onEvent: (event: DashboardStreamEvent, id: string | null) => void): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -103,33 +116,50 @@ async function readSse(body: ReadableStream<Uint8Array>, onEvent: (event: EventV
   }
 }
 
-function parseFrame(frame: string, onEvent: (event: EventView) => void): void {
+function parseFrame(frame: string, onEvent: (event: DashboardStreamEvent, id: string | null) => void): void {
   const dataLines: string[] = [];
+  let id: string | null = null;
   for (const line of frame.split(/\r?\n/)) {
+    if (line.startsWith('id:')) id = line.slice(3).trimStart();
     if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
   }
   if (!dataLines.length) return;
   try {
-    onEvent(JSON.parse(dataLines.join('\n')) as EventView);
+    onEvent(JSON.parse(dataLines.join('\n')) as DashboardStreamEvent, id);
   } catch (error) {
     lastConnectionError.set(error instanceof Error ? error.message : String(error));
   }
 }
 
-function handleEvent(event: EventView, sessionId: string): void {
-  if (event.session_id !== sessionId) return;
-  const accepted = appendEvent(event);
-  if (!accepted) return;
+function handleDashboardEvent(streamEvent: DashboardStreamEvent, cursor: string | null): void {
+  if (cursor) dashboardStreamCursor.set(cursor);
+  if (streamEvent.kind === 'session_event') {
+    handleSessionEvent(streamEvent.event);
+  } else {
+    handleTaskEvent(streamEvent.event);
+  }
+}
+
+function handleSessionEvent(event: EventView): void {
+  const isSelectedSession = event.session_id === get(selectedSessionId);
+  if (isSelectedSession && !appendEvent(event)) return;
 
   if (event.type === 'turn.output') {
-    refreshTurns();
+    if (isSelectedSession) refreshTurns();
   } else if (TERMINAL_TURN_EVENTS.has(event.type)) {
-    refreshSelectedSession();
-    refreshTurns();
+    if (isSelectedSession) {
+      refreshSelectedSession();
+      refreshTurns();
+    }
   } else if (SESSION_STATE_EVENTS.has(event.type)) {
-    refreshSelectedSession();
+    if (isSelectedSession) refreshSelectedSession();
     refreshSessionList();
   } else if (event.type.startsWith('artifact.')) {
-    refreshArtifacts();
+    if (isSelectedSession) refreshArtifacts();
   }
+}
+
+function handleTaskEvent(event: TaskEventView): void {
+  refreshTaskList();
+  if (event.task_id === get(selectedTaskId)) refreshSelectedTask();
 }

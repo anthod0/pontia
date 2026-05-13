@@ -259,6 +259,10 @@ export interface EventView {
   payload: JsonObject;
 }
 
+export type DashboardStreamEvent =
+  | { kind: 'session_event'; id: string; occurred_at: string; event: EventView }
+  | { kind: 'task_event'; id: string; occurred_at: string; event: TaskEventView };
+
 export interface ArtifactView {
   artifact_id: string;
   session_id: string;
