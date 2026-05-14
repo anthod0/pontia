@@ -10,10 +10,12 @@
   import { Label } from '$lib/components/ui/label/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
+  import * as Tabs from '$lib/components/ui/tabs/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import { formatDateTime, jsonPreview, shortId } from '../components/tasks/format'
   import type { AgentProfileView, InboxDeliveryPolicy, SessionView, WorkspaceView } from '../api/types'
   import { selectCurrentTurnOutput } from './sessions/currentTurnOutput'
+  import { isTerminalSession, visibleSessionsForFilter, type SessionFilter } from './sessions/sessionList'
   import {
     clientTypeOptionsForProfile,
     defaultHandleForProfile,
@@ -39,9 +41,8 @@
     terminateSession,
   } from '../stores/sessions'
 
-  const terminalStates = new Set(['exited', 'error'])
-
   let selectedSessionId = ''
+  let sessionFilter: SessionFilter = 'active'
   let actionError: string | null = null
   let actionMessage: string | null = null
   let actionBusy = false
@@ -61,11 +62,14 @@
 
   onMount(async () => {
     await Promise.all([loadSessions(), loadWorkspaces(), loadAgentProfiles()])
-    if (!selectedSessionId && $sessions.length) selectedSessionId = $sessions[0].session_id
+    if (!selectedSessionId) selectedSessionId = visibleSessionsForFilter($sessions, 'active')[0]?.session_id ?? ''
     if (!createWorkspaceId && $workspaces.length) createWorkspaceId = $workspaces[0].workspace_id
     if (selectedSessionId) await loadSessionDetail(selectedSessionId)
   })
 
+  $: visibleSessions = visibleSessionsForFilter($sessions, sessionFilter)
+  $: activeSessionCount = $sessions.filter((session) => !isTerminalSession(session)).length
+  $: exitedSessionCount = $sessions.filter((session) => isTerminalSession(session)).length
   $: selectedSession = $sessions.find((session) => session.session_id === selectedSessionId) ?? $sessionDetail?.session ?? null
   $: currentTurnOutput = $sessionDetail ? selectCurrentTurnOutput($sessionDetail.session, $sessionDetail.turns) : null
   $: selectedProfile = $agentProfiles.find((profile) => profile.profile_id === createProfileId) ?? null
@@ -76,8 +80,8 @@
   $: canSubmitInbox = Boolean(selectedSessionId && inboxInput.trim() && !submittingInbox)
   $: normalTurnReason = 'Direct POST /sessions/:id/turns is not exposed by the External API in this build. Use the inbox controls below.'
   $: interruptReason = interruptUnsupportedReason(selectedSession)
-  $: restartReason = selectedSession && terminalStates.has(selectedSession.state) ? 'Terminal sessions cannot be restarted.' : null
-  $: terminateReason = selectedSession && terminalStates.has(selectedSession.state) ? 'Session is already terminal.' : null
+  $: restartReason = selectedSession && isTerminalSession(selectedSession) ? 'Terminal sessions cannot be restarted.' : null
+  $: terminateReason = selectedSession && isTerminalSession(selectedSession) ? 'Session is already terminal.' : null
 
   function sessionTitle(session: SessionView): string {
     return session.handle || session.role || shortId(session.session_id)
@@ -109,7 +113,7 @@
     actionError = null
     actionMessage = null
     const loaded = await loadSessions()
-    if (!selectedSessionId && loaded.length) selectedSessionId = loaded[0].session_id
+    if (!selectedSessionId) selectedSessionId = visibleSessionsForFilter(loaded, 'active')[0]?.session_id ?? ''
     await Promise.all([loadWorkspaces(), loadAgentProfiles()])
     if (selectedSessionId) await loadSessionDetail(selectedSessionId)
   }
@@ -263,14 +267,27 @@
       </Card.Root>
 
       <Card.Root>
-        <Card.Header><Card.Title>Sessions</Card.Title><Card.Description>{$sessions.length} known sessions.</Card.Description></Card.Header>
-        <Card.Content class="space-y-2">
+        <Card.Header>
+          <Card.Title>Sessions</Card.Title>
+          <Card.Description>{activeSessionCount} active · {exitedSessionCount} exited/error · {$sessions.length} total.</Card.Description>
+        </Card.Header>
+        <Card.Content class="space-y-3">
+          <Tabs.Root bind:value={sessionFilter} class="gap-3">
+            <Tabs.List class="grid w-full grid-cols-3">
+              <Tabs.Trigger value="active">Active ({activeSessionCount})</Tabs.Trigger>
+              <Tabs.Trigger value="exited">Exited ({exitedSessionCount})</Tabs.Trigger>
+              <Tabs.Trigger value="all">All ({$sessions.length})</Tabs.Trigger>
+            </Tabs.List>
+          </Tabs.Root>
+
           {#if $sessionsLoading}
             <div class="space-y-2"><Skeleton class="h-16 w-full" /><Skeleton class="h-16 w-full" /><Skeleton class="h-16 w-full" /></div>
           {:else if !$sessions.length}
             <Empty.Root><Empty.Header><Empty.Title>No sessions</Empty.Title><Empty.Description>Create a manual session or start a DAG task.</Empty.Description></Empty.Header></Empty.Root>
+          {:else if !visibleSessions.length}
+            <Empty.Root><Empty.Header><Empty.Title>No {sessionFilter} sessions</Empty.Title><Empty.Description>Switch tabs to inspect other session states.</Empty.Description></Empty.Header></Empty.Root>
           {:else}
-            {#each $sessions as session}
+            {#each visibleSessions as session}
               <button class="w-full rounded-lg border p-3 text-left text-sm transition hover:bg-muted {selectedSessionId === session.session_id ? 'border-primary bg-muted' : ''}" onclick={() => void selectSession(session.session_id)}>
                 <div class="flex items-center justify-between gap-2"><span class="font-medium">{sessionTitle(session)}</span><Badge variant="secondary">{session.state}</Badge></div>
                 <div class="mt-1 truncate text-xs text-muted-foreground">{session.client_type} · {session.role ?? 'no role'} · {session.workspace_id ?? 'no workspace'}</div>
