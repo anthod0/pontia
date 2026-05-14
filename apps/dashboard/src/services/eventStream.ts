@@ -11,8 +11,17 @@ import {
 import { loadAgentProfiles } from '../stores/agentProfiles';
 import { loadTasks, refreshTask, selectedTaskId } from '../stores/tasks';
 import { loadWorkspaces } from '../stores/workspaces';
+import { createDashboardRefreshScheduler } from './dashboardRefreshScheduler';
 
 const API_BASE = '/external/v1';
+
+const refreshScheduler = createDashboardRefreshScheduler({
+  getSelectedTaskId: () => get(selectedTaskId),
+  loadTasks,
+  loadWorkspaces,
+  loadAgentProfiles,
+  refreshTask,
+});
 
 let controller: AbortController | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -33,6 +42,7 @@ export function stopEventStream(): void {
   controller?.abort();
   controller = null;
   streamedSessionId.set(null);
+  refreshScheduler.reset();
   sseStatus.set('closed');
 }
 
@@ -128,17 +138,5 @@ function parseFrame(frame: string, onEvent: (event: DashboardStreamEvent, id: st
 
 function handleDashboardEvent(streamEvent: DashboardStreamEvent, cursor: string | null): void {
   if (cursor) dashboardStreamCursor.set(cursor);
-
-  if (streamEvent.kind === 'task_event') {
-    void loadTasks();
-    const selected = get(selectedTaskId);
-    if (selected && streamEvent.event.task_id === selected) void refreshTask(selected);
-    return;
-  }
-
-  // Session events are execution detail for dashboard v2. Refresh summaries that may
-  // include task routing/session references, but do not make sessions primary state.
-  void loadTasks();
-  void loadWorkspaces();
-  void loadAgentProfiles();
+  refreshScheduler.handleEvent(streamEvent);
 }
