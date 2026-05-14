@@ -60,17 +60,50 @@ async fn post_json(
     body: Value,
     idempotency_key: Option<&str>,
 ) -> (StatusCode, Value) {
+    mutating_json(state, "POST", uri, Some(body), idempotency_key).await
+}
+
+async fn put_json(
+    state: AppState,
+    uri: &str,
+    body: Value,
+    idempotency_key: Option<&str>,
+) -> (StatusCode, Value) {
+    mutating_json(state, "PUT", uri, Some(body), idempotency_key).await
+}
+
+async fn delete_json(
+    state: AppState,
+    uri: &str,
+    idempotency_key: Option<&str>,
+) -> (StatusCode, Value) {
+    mutating_json(state, "DELETE", uri, None, idempotency_key).await
+}
+
+async fn mutating_json(
+    state: AppState,
+    method: &str,
+    uri: &str,
+    body: Option<Value>,
+    idempotency_key: Option<&str>,
+) -> (StatusCode, Value) {
     let mut builder = Request::builder()
-        .method("POST")
+        .method(method)
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-        .header(header::CONTENT_TYPE, "application/json");
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+    if body.is_some() {
+        builder = builder.header(header::CONTENT_TYPE, "application/json");
+    }
     if let Some(key) = idempotency_key {
         builder = builder.header("Idempotency-Key", key);
     }
 
     let response = http::router(state)
-        .oneshot(builder.body(Body::from(body.to_string())).expect("request"))
+        .oneshot(
+            builder
+                .body(body.map_or_else(Body::empty, |body| Body::from(body.to_string())))
+                .expect("request"),
+        )
         .await
         .expect("response");
 
@@ -222,6 +255,190 @@ async fn add_agent_profile_version_updates_latest_without_modifying_previous_ver
         fetched["data"]["agent_profile"]["expected_output_schema"],
         "release_review_v2"
     );
+}
+
+#[tokio::test]
+async fn lists_and_gets_exact_agent_profile_versions() {
+    let state = test_state().await;
+    let body_v1 = custom_profile_body("versioned-reviewer", "1");
+    let (status, _) = post_json(state.clone(), "/external/v1/agent-profiles", body_v1, None).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let mut body_v2 = custom_profile_body("versioned-reviewer", "2");
+    body_v2["name"] = json!("Versioned Reviewer v2");
+    let (status, _) = post_json(
+        state.clone(),
+        "/external/v1/agent-profiles/versioned-reviewer/versions",
+        body_v2,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, listed) = get_json(
+        state.clone(),
+        "/external/v1/agent-profiles/versioned-reviewer/versions",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{listed}");
+    let versions = listed["data"]["agent_profile_versions"].as_array().unwrap();
+    assert_eq!(versions.len(), 2);
+    assert_eq!(versions[0]["version"], "1");
+    assert_eq!(versions[1]["version"], "2");
+
+    let (status, fetched) = get_json(
+        state,
+        "/external/v1/agent-profiles/versioned-reviewer/versions/1",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{fetched}");
+    assert_eq!(fetched["data"]["agent_profile"]["version"], "1");
+}
+
+#[tokio::test]
+async fn updates_agent_profile_version_with_put() {
+    let state = test_state().await;
+    let body = custom_profile_body("editable-reviewer", "1");
+    let (status, _) = post_json(state.clone(), "/external/v1/agent-profiles", body, None).await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let mut updated = custom_profile_body("editable-reviewer", "1");
+    updated["name"] = json!("Edited Reviewer");
+    updated["metadata"] = json!({"team":"platform", "edited": true});
+    let (status, body) = put_json(
+        state.clone(),
+        "/external/v1/agent-profiles/editable-reviewer/versions/1",
+        updated,
+        Some("edit-reviewer-v1"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["agent_profile"]["name"], "Edited Reviewer");
+    assert_eq!(body["data"]["agent_profile"]["metadata"]["edited"], true);
+
+    let (status, fetched) = get_json(state, "/external/v1/agent-profiles/editable-reviewer").await;
+    assert_eq!(status, StatusCode::OK, "{fetched}");
+    assert_eq!(fetched["data"]["agent_profile"]["name"], "Edited Reviewer");
+}
+
+#[tokio::test]
+async fn deleting_latest_version_archives_it_and_falls_back_to_previous_version() {
+    let state = test_state().await;
+    let body_v1 = custom_profile_body("archive-version-reviewer", "1");
+    let (status, _) = post_json(state.clone(), "/external/v1/agent-profiles", body_v1, None).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let mut body_v2 = custom_profile_body("archive-version-reviewer", "2");
+    body_v2["name"] = json!("Archive Version Reviewer v2");
+    let (status, _) = post_json(
+        state.clone(),
+        "/external/v1/agent-profiles/archive-version-reviewer/versions",
+        body_v2,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, deleted) = delete_json(
+        state.clone(),
+        "/external/v1/agent-profiles/archive-version-reviewer/versions/2",
+        Some("archive-v2"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{deleted}");
+    assert_eq!(deleted["data"]["agent_profile"]["active"], false);
+    assert!(deleted["data"]["agent_profile"]["archived_at"].is_string());
+
+    let (status, latest) = get_json(
+        state.clone(),
+        "/external/v1/agent-profiles/archive-version-reviewer",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{latest}");
+    assert_eq!(latest["data"]["agent_profile"]["version"], "1");
+
+    let (status, versions) = get_json(
+        state,
+        "/external/v1/agent-profiles/archive-version-reviewer/versions?include_archived=true",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{versions}");
+    assert_eq!(
+        versions["data"]["agent_profile_versions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn deleting_profile_archives_custom_versions_and_hides_latest() {
+    let state = test_state().await;
+    let body = custom_profile_body("archive-all-reviewer", "1");
+    let (status, _) = post_json(state.clone(), "/external/v1/agent-profiles", body, None).await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, deleted) = delete_json(
+        state.clone(),
+        "/external/v1/agent-profiles/archive-all-reviewer",
+        Some("archive-profile"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{deleted}");
+    assert_eq!(deleted["data"]["archived_versions"], 1);
+
+    let (status, missing) = get_json(
+        state.clone(),
+        "/external/v1/agent-profiles/archive-all-reviewer",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{missing}");
+
+    let (status, listed) = get_json(
+        state.clone(),
+        "/external/v1/agent-profiles?include_archived=true",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{listed}");
+    assert!(
+        listed["data"]["agent_profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|profile| {
+                profile["profile_id"] == "archive-all-reviewer" && profile["active"] == false
+            })
+    );
+
+    let (status, versions) = get_json(
+        state,
+        "/external/v1/agent-profiles/archive-all-reviewer/versions?include_archived=true",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{versions}");
+    assert_eq!(
+        versions["data"]["agent_profile_versions"][0]["active"],
+        false
+    );
+}
+
+#[tokio::test]
+async fn builtin_agent_profiles_cannot_be_updated_or_deleted() {
+    let state = test_state().await;
+    let mut body = custom_profile_body("planner", "1");
+    body["name"] = json!("Custom Planner");
+
+    let (status, updated) = put_json(
+        state.clone(),
+        "/external/v1/agent-profiles/planner/versions/1",
+        body,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{updated}");
+
+    let (status, deleted) = delete_json(state, "/external/v1/agent-profiles/planner", None).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{deleted}");
 }
 
 #[tokio::test]

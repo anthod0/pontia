@@ -26,14 +26,34 @@ export interface AgentProfileView {
   default_session_role: string | null;
   default_session_description: string | null;
   handle_prefix: string | null;
-  session_reuse_policy: string;
   expected_output_schema: string | null;
   artifact_contract: JsonObject;
   default_execution_policy: JsonObject;
   default_review_policy: JsonObject;
   metadata: JsonObject;
+  active: boolean;
+  archived_at: string | null;
+  archived_reason: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface UpsertAgentProfileInput {
+  profile_id: string;
+  version: string;
+  name: string;
+  description?: string | null;
+  supported_client_types?: string[];
+  system_prompt_template?: string | null;
+  turn_prompt_template?: string | null;
+  default_session_role?: string | null;
+  default_session_description?: string | null;
+  handle_prefix?: string | null;
+  expected_output_schema?: string | null;
+  artifact_contract?: JsonObject;
+  default_execution_policy?: JsonObject;
+  default_review_policy?: JsonObject;
+  metadata?: JsonObject;
 }
 
 export interface SessionView {

@@ -93,7 +93,7 @@
                   ['Version', selectedProfile.version],
                   ['Session role', selectedProfile.default_session_role ?? '—'],
                   ['Handle prefix', selectedProfile.handle_prefix ?? '—'],
-                  ['Reuse policy', selectedProfile.session_reuse_policy],
+                  ['State', selectedProfile.active ? 'Active' : 'Archived'],
                   ['Updated', formatDateTime(selectedProfile.updated_at)],
                 ] as [label, value]}
                   <div class="rounded-lg border p-3">

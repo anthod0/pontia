@@ -17,6 +17,9 @@ pub struct ExecutionProfileView {
     pub default_execution_policy: Value,
     pub default_review_policy: Value,
     pub metadata: Value,
+    pub active: bool,
+    pub archived_at: Option<String>,
+    pub archived_reason: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -71,7 +74,33 @@ impl AgentProfileService {
                       system_prompt_template, turn_prompt_template, default_session_role,
                       default_session_description, handle_prefix,
                       expected_output_schema, artifact_contract, default_execution_policy,
-                      default_review_policy, metadata, created_at, updated_at
+                      default_review_policy, metadata, active, archived_at, archived_reason,
+                      created_at, updated_at
+               FROM execution_profiles ep
+               WHERE active = 1 AND archived_at IS NULL AND rowid = (
+                   SELECT max(rowid) FROM execution_profiles latest
+                   WHERE latest.profile_id = ep.profile_id
+                     AND latest.active = 1
+                     AND latest.archived_at IS NULL
+               )
+               ORDER BY profile_id"#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(row_to_execution_profile_view)
+            .collect()
+    }
+
+    pub async fn list_latest_including_archived(&self) -> Result<Vec<ExecutionProfileView>> {
+        let rows = sqlx::query(
+            r#"SELECT profile_id, version, name, description, supported_client_types,
+                      system_prompt_template, turn_prompt_template, default_session_role,
+                      default_session_description, handle_prefix,
+                      expected_output_schema, artifact_contract, default_execution_policy,
+                      default_review_policy, metadata, active, archived_at, archived_reason,
+                      created_at, updated_at
                FROM execution_profiles ep
                WHERE rowid = (
                    SELECT max(rowid) FROM execution_profiles latest
@@ -93,9 +122,10 @@ impl AgentProfileService {
                       system_prompt_template, turn_prompt_template, default_session_role,
                       default_session_description, handle_prefix,
                       expected_output_schema, artifact_contract, default_execution_policy,
-                      default_review_policy, metadata, created_at, updated_at
+                      default_review_policy, metadata, active, archived_at, archived_reason,
+                      created_at, updated_at
                FROM execution_profiles
-               WHERE profile_id = ?
+               WHERE profile_id = ? AND active = 1 AND archived_at IS NULL
                ORDER BY rowid DESC
                LIMIT 1"#,
         )
@@ -106,11 +136,69 @@ impl AgentProfileService {
         row.map(row_to_execution_profile_view).transpose()
     }
 
+    pub async fn list_versions(
+        &self,
+        profile_id: &str,
+        include_archived: bool,
+    ) -> Result<Vec<ExecutionProfileView>> {
+        let rows = if include_archived {
+            sqlx::query(
+                r#"SELECT profile_id, version, name, description, supported_client_types,
+                          system_prompt_template, turn_prompt_template, default_session_role,
+                          default_session_description, handle_prefix,
+                          expected_output_schema, artifact_contract, default_execution_policy,
+                          default_review_policy, metadata, active, archived_at, archived_reason,
+                          created_at, updated_at
+                   FROM execution_profiles
+                   WHERE profile_id = ?
+                   ORDER BY rowid"#,
+            )
+            .bind(profile_id)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query(
+                r#"SELECT profile_id, version, name, description, supported_client_types,
+                          system_prompt_template, turn_prompt_template, default_session_role,
+                          default_session_description, handle_prefix,
+                          expected_output_schema, artifact_contract, default_execution_policy,
+                          default_review_policy, metadata, active, archived_at, archived_reason,
+                          created_at, updated_at
+                   FROM execution_profiles
+                   WHERE profile_id = ? AND active = 1 AND archived_at IS NULL
+                   ORDER BY rowid"#,
+            )
+            .bind(profile_id)
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        rows.into_iter()
+            .map(row_to_execution_profile_view)
+            .collect()
+    }
+
     pub async fn create_profile(
         &self,
         request: UpsertExecutionProfileRequest,
         idempotency_key: Option<&str>,
     ) -> Result<AgentProfileCommandOutcome> {
+        if let Some(key) = idempotency_key
+            && let Some(response) = self
+                .idempotency_response("create_agent_profile", key)
+                .await?
+        {
+            return Ok(AgentProfileCommandOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+        if self.profile_exists(&request.profile_id).await? {
+            return Err(Error::StateConflict(format!(
+                "execution profile {} already exists; create a new version instead",
+                request.profile_id
+            )));
+        }
         self.create_version("create_agent_profile", request, idempotency_key)
             .await
     }
@@ -220,7 +308,8 @@ impl AgentProfileService {
                       system_prompt_template, turn_prompt_template, default_session_role,
                       default_session_description, handle_prefix,
                       expected_output_schema, artifact_contract, default_execution_policy,
-                      default_review_policy, metadata, created_at, updated_at
+                      default_review_policy, metadata, active, archived_at, archived_reason,
+                      created_at, updated_at
                FROM execution_profiles
                WHERE profile_id = ? AND version = ?"#,
         )
@@ -230,6 +319,190 @@ impl AgentProfileService {
         .await?;
 
         row.map(row_to_execution_profile_view).transpose()
+    }
+
+    pub async fn update_version(
+        &self,
+        profile_id: &str,
+        version: &str,
+        request: UpsertExecutionProfileRequest,
+        idempotency_key: Option<&str>,
+    ) -> Result<AgentProfileCommandOutcome> {
+        if profile_id != request.profile_id || version != request.version {
+            return Err(Error::Domain(
+                "profile_id and version in path must match request body".to_string(),
+            ));
+        }
+        validate_request(&request)?;
+        let operation = format!("update_agent_profile_version:{profile_id}:{version}");
+        if let Some(key) = idempotency_key
+            && let Some(response) = self.idempotency_response(&operation, key).await?
+        {
+            return Ok(AgentProfileCommandOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+        let current = self
+            .get_version(profile_id, version)
+            .await?
+            .ok_or_else(|| {
+                Error::NotFound(format!("agent profile {profile_id}@{version} not found"))
+            })?;
+        ensure_not_builtin(&current)?;
+
+        let supported_client_types = serde_json::to_string(&request.supported_client_types)?;
+        let artifact_contract = serde_json::to_string(&request.artifact_contract)?;
+        let default_execution_policy = serde_json::to_string(&request.default_execution_policy)?;
+        let default_review_policy = serde_json::to_string(&request.default_review_policy)?;
+        let metadata = serde_json::to_string(&request.metadata)?;
+
+        sqlx::query(
+            r#"UPDATE execution_profiles
+               SET name = ?, description = ?, supported_client_types = ?,
+                   system_prompt_template = ?, turn_prompt_template = ?, default_session_role = ?,
+                   default_session_description = ?, handle_prefix = ?, expected_output_schema = ?,
+                   artifact_contract = ?, default_execution_policy = ?, default_review_policy = ?,
+                   metadata = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE profile_id = ? AND version = ?"#,
+        )
+        .bind(&request.name)
+        .bind(&request.description)
+        .bind(supported_client_types)
+        .bind(&request.system_prompt_template)
+        .bind(&request.turn_prompt_template)
+        .bind(&request.default_session_role)
+        .bind(&request.default_session_description)
+        .bind(&request.handle_prefix)
+        .bind(&request.expected_output_schema)
+        .bind(artifact_contract)
+        .bind(default_execution_policy)
+        .bind(default_review_policy)
+        .bind(metadata)
+        .bind(profile_id)
+        .bind(version)
+        .execute(&self.pool)
+        .await?;
+
+        let profile = self
+            .get_version(profile_id, version)
+            .await?
+            .ok_or_else(|| Error::Domain("updated execution profile missing".to_string()))?;
+        let data = json!({ "agent_profile": profile });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&operation, key, &data)
+                .await?;
+        }
+        Ok(AgentProfileCommandOutcome {
+            data,
+            duplicate: false,
+        })
+    }
+
+    pub async fn archive_version(
+        &self,
+        profile_id: &str,
+        version: &str,
+        idempotency_key: Option<&str>,
+    ) -> Result<AgentProfileCommandOutcome> {
+        let operation = format!("archive_agent_profile_version:{profile_id}:{version}");
+        if let Some(key) = idempotency_key
+            && let Some(response) = self.idempotency_response(&operation, key).await?
+        {
+            return Ok(AgentProfileCommandOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+        let current = self
+            .get_version(profile_id, version)
+            .await?
+            .ok_or_else(|| {
+                Error::NotFound(format!("agent profile {profile_id}@{version} not found"))
+            })?;
+        ensure_not_builtin(&current)?;
+        if current.active {
+            sqlx::query(
+                r#"UPDATE execution_profiles
+                   SET active = 0,
+                       archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                       archived_reason = COALESCE(archived_reason, 'deleted via External API'),
+                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                   WHERE profile_id = ? AND version = ?"#,
+            )
+            .bind(profile_id)
+            .bind(version)
+            .execute(&self.pool)
+            .await?;
+        }
+        let profile = self
+            .get_version(profile_id, version)
+            .await?
+            .ok_or_else(|| Error::Domain("archived execution profile missing".to_string()))?;
+        let data = json!({ "agent_profile": profile });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&operation, key, &data)
+                .await?;
+        }
+        Ok(AgentProfileCommandOutcome {
+            data,
+            duplicate: false,
+        })
+    }
+
+    pub async fn archive_profile(
+        &self,
+        profile_id: &str,
+        idempotency_key: Option<&str>,
+    ) -> Result<AgentProfileCommandOutcome> {
+        let operation = format!("archive_agent_profile:{profile_id}");
+        if let Some(key) = idempotency_key
+            && let Some(response) = self.idempotency_response(&operation, key).await?
+        {
+            return Ok(AgentProfileCommandOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+        let versions = self.list_versions(profile_id, true).await?;
+        if versions.is_empty() {
+            return Err(Error::NotFound(format!(
+                "agent profile {profile_id} not found"
+            )));
+        }
+        for version in &versions {
+            ensure_not_builtin(version)?;
+        }
+        let result = sqlx::query(
+            r#"UPDATE execution_profiles
+               SET active = 0,
+                   archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                   archived_reason = COALESCE(archived_reason, 'deleted via External API'),
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE profile_id = ? AND active = 1"#,
+        )
+        .bind(profile_id)
+        .execute(&self.pool)
+        .await?;
+        let data = json!({ "profile_id": profile_id, "archived_versions": result.rows_affected() });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&operation, key, &data)
+                .await?;
+        }
+        Ok(AgentProfileCommandOutcome {
+            data,
+            duplicate: false,
+        })
+    }
+
+    async fn profile_exists(&self, profile_id: &str) -> Result<bool> {
+        let exists: i64 = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM execution_profiles WHERE profile_id = ?)",
+        )
+        .bind(profile_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(exists != 0)
     }
 
     async fn idempotency_response(&self, operation: &str, key: &str) -> Result<Option<Value>> {
@@ -297,6 +570,21 @@ fn is_unique_constraint(error: &sqlx::Error) -> bool {
     )
 }
 
+fn ensure_not_builtin(profile: &ExecutionProfileView) -> Result<()> {
+    if profile
+        .metadata
+        .get("builtin")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Err(Error::StateConflict(format!(
+            "builtin execution profile {} cannot be modified or deleted",
+            profile.profile_id
+        )));
+    }
+    Ok(())
+}
+
 fn row_to_execution_profile_view(row: sqlx::sqlite::SqliteRow) -> Result<ExecutionProfileView> {
     Ok(ExecutionProfileView {
         profile_id: row.try_get("profile_id")?,
@@ -314,6 +602,9 @@ fn row_to_execution_profile_view(row: sqlx::sqlite::SqliteRow) -> Result<Executi
         default_execution_policy: json_field(&row, "default_execution_policy")?,
         default_review_policy: json_field(&row, "default_review_policy")?,
         metadata: json_field(&row, "metadata")?,
+        active: row.try_get::<i64, _>("active")? != 0,
+        archived_at: row.try_get("archived_at")?,
+        archived_reason: row.try_get("archived_reason")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })

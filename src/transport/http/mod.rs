@@ -77,11 +77,17 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/external/v1/agent-profiles/{profile_id}",
-            get(external::get_agent_profile),
+            get(external::get_agent_profile).delete(external::delete_agent_profile),
         )
         .route(
             "/external/v1/agent-profiles/{profile_id}/versions",
-            post(external::create_agent_profile_version),
+            get(external::list_agent_profile_versions).post(external::create_agent_profile_version),
+        )
+        .route(
+            "/external/v1/agent-profiles/{profile_id}/versions/{version}",
+            get(external::get_agent_profile_version)
+                .put(external::update_agent_profile_version)
+                .delete(external::delete_agent_profile_version),
         )
         .route(
             "/external/v1/workspaces",

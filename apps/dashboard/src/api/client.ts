@@ -18,6 +18,7 @@ import type {
   SessionView,
   SubmitInboxMessageInput,
   SubmitPlannerInput,
+  UpsertAgentProfileInput,
   TaskDagView,
   TaskEventView,
   TaskView,
@@ -74,6 +75,35 @@ export async function listAgentProfiles(): Promise<AgentProfileView[]> {
 
 export async function getAgentProfile(profileId: string): Promise<AgentProfileView> {
   return (await request<{ agent_profile: AgentProfileView }>(`/agent-profiles/${encodeURIComponent(profileId)}`)).agent_profile;
+}
+
+export async function createAgentProfile(input: UpsertAgentProfileInput): Promise<AgentProfileView> {
+  return (await request<{ agent_profile: AgentProfileView }>('/agent-profiles', { method: 'POST', body: input, mutating: true })).agent_profile;
+}
+
+export async function deleteAgentProfile(profileId: string): Promise<{ profile_id: string; archived_versions: number }> {
+  return request<{ profile_id: string; archived_versions: number }>(`/agent-profiles/${encodeURIComponent(profileId)}`, { method: 'DELETE', mutating: true });
+}
+
+export async function listAgentProfileVersions(profileId: string, includeArchived = false): Promise<AgentProfileView[]> {
+  const query = includeArchived ? '?include_archived=true' : '';
+  return (await request<{ agent_profile_versions: AgentProfileView[] }>(`/agent-profiles/${encodeURIComponent(profileId)}/versions${query}`)).agent_profile_versions;
+}
+
+export async function createAgentProfileVersion(profileId: string, input: UpsertAgentProfileInput): Promise<AgentProfileView> {
+  return (await request<{ agent_profile: AgentProfileView }>(`/agent-profiles/${encodeURIComponent(profileId)}/versions`, { method: 'POST', body: input, mutating: true })).agent_profile;
+}
+
+export async function getAgentProfileVersion(profileId: string, version: string): Promise<AgentProfileView> {
+  return (await request<{ agent_profile: AgentProfileView }>(`/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(version)}`)).agent_profile;
+}
+
+export async function updateAgentProfileVersion(profileId: string, version: string, input: UpsertAgentProfileInput): Promise<AgentProfileView> {
+  return (await request<{ agent_profile: AgentProfileView }>(`/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(version)}`, { method: 'PUT', body: input, mutating: true })).agent_profile;
+}
+
+export async function deleteAgentProfileVersion(profileId: string, version: string): Promise<AgentProfileView> {
+  return (await request<{ agent_profile: AgentProfileView }>(`/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(version)}`, { method: 'DELETE', mutating: true })).agent_profile;
 }
 
 export async function listSessions(): Promise<SessionView[]> {
