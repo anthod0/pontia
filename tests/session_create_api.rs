@@ -1,4 +1,5 @@
-use std::process::{Command, Stdio};
+#[path = "support/tmux.rs"]
+mod tmux;
 
 use axum::{
     body::Body,
@@ -12,6 +13,7 @@ use llmparty::{
     transport::http,
 };
 use serde_json::{Value, json};
+use tmux::TmuxSessionGuard;
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
@@ -89,31 +91,6 @@ async fn get(state: AppState, uri: &str) -> (StatusCode, Value) {
         .to_bytes();
     let json = serde_json::from_slice(&body).expect("json body");
     (status, json)
-}
-
-struct TmuxSessionGuard {
-    tmux_session: String,
-}
-
-impl TmuxSessionGuard {
-    fn for_session(session_id: &str) -> Self {
-        let sanitized: String = session_id
-            .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-            .collect();
-        Self {
-            tmux_session: format!("llmparty_{sanitized}"),
-        }
-    }
-}
-
-impl Drop for TmuxSessionGuard {
-    fn drop(&mut self) {
-        let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &self.tmux_session])
-            .stderr(Stdio::null())
-            .status();
-    }
 }
 
 #[tokio::test]

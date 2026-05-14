@@ -17,6 +17,20 @@ export function sortSessionsForConsole<T extends Pick<SessionView, 'state' | 'up
   });
 }
 
+export function sessionDisplayTitle(session: Pick<SessionView, 'session_id' | 'handle' | 'role'>): string {
+  const handle = session.handle?.trim();
+  const role = session.role?.trim();
+  const short = shortSessionId(session.session_id);
+  if (handle && role) return `${handle} · ${role}`;
+  if (handle) return handle;
+  if (role) return `${role} · ${short}`;
+  return short;
+}
+
+function shortSessionId(sessionId: string): string {
+  return sessionId.split('_').at(-1)?.slice(0, 10) || sessionId;
+}
+
 export function visibleSessionsForFilter<T extends Pick<SessionView, 'state' | 'updated_at'>>(
   sessions: T[],
   filter: SessionFilter,

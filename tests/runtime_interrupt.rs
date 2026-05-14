@@ -62,6 +62,8 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
             session_id: "sess_configured".to_string(),
             client_type: "pi".to_string(),
             workspace: Some(tempdir.path().join("workspace").display().to_string()),
+            handle: None,
+            role: None,
         })
         .expect("start session");
 
@@ -103,6 +105,8 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
             session_id: "sess_env_override".to_string(),
             client_type: "pi".to_string(),
             workspace: Some(tempdir.path().join("workspace-env").display().to_string()),
+            handle: None,
+            role: None,
         })
         .expect("start session");
 

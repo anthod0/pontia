@@ -261,6 +261,8 @@ impl RuntimeControlService {
                 session_id: session_id.to_string(),
                 client_type: session.client_type.clone(),
                 workspace: session.workspace.clone(),
+                handle: session.handle.clone(),
+                role: session.role.clone(),
             },
             prior_restart_count + 1,
         )?;

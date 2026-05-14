@@ -15,7 +15,7 @@
   import { formatDateTime, jsonPreview, shortId } from '../components/tasks/format'
   import type { AgentProfileView, InboxDeliveryPolicy, SessionView, WorkspaceView } from '../api/types'
   import { selectCurrentTurnOutput } from './sessions/currentTurnOutput'
-  import { isTerminalSession, visibleSessionsForFilter, type SessionFilter } from './sessions/sessionList'
+  import { isTerminalSession, sessionDisplayTitle, visibleSessionsForFilter, type SessionFilter } from './sessions/sessionList'
   import {
     clientTypeOptionsForProfile,
     defaultHandleForProfile,
@@ -84,7 +84,7 @@
   $: terminateReason = selectedSession && isTerminalSession(selectedSession) ? 'Session is already terminal.' : null
 
   function sessionTitle(session: SessionView): string {
-    return session.handle || session.role || shortId(session.session_id)
+    return sessionDisplayTitle(session)
   }
 
   function workspaceTitle(workspace: WorkspaceView): string {
@@ -290,7 +290,7 @@
             {#each visibleSessions as session}
               <button class="w-full rounded-lg border p-3 text-left text-sm transition hover:bg-muted {selectedSessionId === session.session_id ? 'border-primary bg-muted' : ''}" onclick={() => void selectSession(session.session_id)}>
                 <div class="flex items-center justify-between gap-2"><span class="font-medium">{sessionTitle(session)}</span><Badge variant="secondary">{session.state}</Badge></div>
-                <div class="mt-1 truncate text-xs text-muted-foreground">{session.client_type} · {session.role ?? 'no role'} · {session.workspace_id ?? 'no workspace'}</div>
+                <div class="mt-1 truncate text-xs text-muted-foreground">{session.client_type} · {session.workspace_id ?? 'no workspace'}</div>
                 <div class="mt-2 text-xs text-muted-foreground">Updated {formatDateTime(session.updated_at)}</div>
               </button>
             {/each}

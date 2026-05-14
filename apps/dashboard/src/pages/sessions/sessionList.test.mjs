@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { visibleSessionsForFilter } from './sessionList.ts';
+import { sessionDisplayTitle, visibleSessionsForFilter } from './sessionList.ts';
 
 const session = (overrides) => ({
   session_id: 'session-active-old',
@@ -18,6 +18,19 @@ const session = (overrides) => ({
   updated_at: '2026-01-01T00:00:00Z',
   metadata: {},
   ...overrides,
+});
+
+test('uses handle and role as the primary session display title', () => {
+  assert.equal(
+    sessionDisplayTitle(session({ handle: '@planner', role: 'execution reviewer', session_id: 'sess_abcdef123456' })),
+    '@planner · execution reviewer',
+  );
+});
+
+test('falls back to handle, role, then short session id in display title', () => {
+  assert.equal(sessionDisplayTitle(session({ handle: '@planner', role: null })), '@planner');
+  assert.equal(sessionDisplayTitle(session({ session_id: 'active-old', handle: null, role: 'reviewer' })), 'reviewer · active-old');
+  assert.equal(sessionDisplayTitle(session({ session_id: 'active-old', handle: null, role: null })), 'active-old');
 });
 
 test('shows active sessions by default and sorts newest first', () => {

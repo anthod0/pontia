@@ -228,7 +228,7 @@ async fn dashboard_event_stream_after_cursor_does_not_repeat_read_events() {
     let cursor = first_body
         .lines()
         .filter_map(|line| line.strip_prefix("id: "))
-        .last()
+        .next_back()
         .expect("stream cursor");
 
     let (status, _, second_body) = stream_get(

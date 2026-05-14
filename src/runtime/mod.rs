@@ -33,6 +33,8 @@ pub struct RuntimeStartRequest {
     pub session_id: String,
     pub client_type: String,
     pub workspace: Option<String>,
+    pub handle: Option<String>,
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -94,7 +96,7 @@ impl GenericRuntimeManager {
                 Error::Domain(format!("unsupported client_type: {}", request.client_type))
             })?;
         let capabilities = client_spec.capabilities.clone();
-        let tmux_session = tmux_session_name(&request.session_id);
+        let tmux_session = tmux_session_name(&request);
         let workspace = workspace_path(&request)?;
         run_startup_hooks(client_spec.startup_hooks, &workspace)?;
         let runtime_dir = runtime_dir(&request.session_id)?;
@@ -158,6 +160,8 @@ impl GenericRuntimeManager {
                 "internal_event_url": internal_event_url,
                 "pi_hook_log": pi_hook_log,
                 "claude_hook_log": claude_hook_log,
+                "handle": request.handle,
+                "role": request.role,
                 "started_at": started_at,
                 "restart_count": restart_count,
                 "runtime_instance_id": runtime_instance_id,
@@ -316,12 +320,38 @@ fn spawn_tmux_session(
     command()
 }
 
-fn tmux_session_name(session_id: &str) -> String {
-    let sanitized: String = session_id
-        .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-        .collect();
-    format!("llmparty_{sanitized}")
+fn tmux_session_name(request: &RuntimeStartRequest) -> String {
+    let short_id = short_session_id(&request.session_id);
+    let handle = request
+        .handle
+        .as_deref()
+        .map(|value| value.trim_start_matches('@'))
+        .filter(|value| !value.is_empty())
+        .map(sanitize_tmux_identifier);
+    let role = request
+        .role
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .map(sanitize_tmux_identifier);
+    let mut parts = vec!["llmparty".to_string()];
+    if let Some(handle) = handle {
+        parts.push(handle);
+    }
+    if let Some(role) = role {
+        parts.push(role);
+    }
+    if parts.len() == 1 {
+        return format!("llmparty_{}", sanitize_tmux_identifier(&request.session_id));
+    }
+    parts.push(short_id);
+    parts.join("_")
+}
+
+fn short_session_id(session_id: &str) -> String {
+    let id_body = session_id.rsplit('_').next().unwrap_or(session_id);
+    let mut chars: Vec<char> = id_body.chars().rev().take(8).collect();
+    chars.reverse();
+    chars.into_iter().collect()
 }
 
 fn workspace_path(request: &RuntimeStartRequest) -> Result<PathBuf> {

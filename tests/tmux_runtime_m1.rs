@@ -92,14 +92,11 @@ async fn request(
 }
 
 async fn create_session(state: AppState, client_type: &str) -> String {
-    let (status, body) = request(
-        state,
-        "POST",
-        "/external/v1/sessions",
-        None,
-        Some(json!({"client_type": client_type})),
-    )
-    .await;
+    create_session_with_body(state, json!({"client_type": client_type})).await
+}
+
+async fn create_session_with_body(state: AppState, body: Value) -> String {
+    let (status, body) = request(state, "POST", "/external/v1/sessions", None, Some(body)).await;
     assert_eq!(status, StatusCode::CREATED);
     body["data"]["session"]["session_id"]
         .as_str()
@@ -170,6 +167,36 @@ async fn create_generic_session_creates_real_tmux_runtime() {
         metadata["started_at"]
             .as_str()
             .is_some_and(|value| !value.is_empty())
+    );
+    assert!(tmux_has_session(tmux_session));
+
+    cleanup_tmux(tmux_session);
+}
+
+#[tokio::test]
+async fn tmux_runtime_name_includes_handle_role_and_short_session_id() {
+    let state = test_state("m1_named_tmux_runtime").await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let session_id = create_session_with_body(
+        state.clone(),
+        json!({
+            "client_type": "generic",
+            "workspace": workspace.path().display().to_string(),
+            "handle": "@planner",
+            "role": "execution reviewer"
+        }),
+    )
+    .await;
+    let metadata = binding_metadata(&state, &session_id).await;
+    let tmux_session = metadata["tmux_session"].as_str().expect("tmux session");
+    let id_body = session_id.rsplit('_').next().unwrap_or(&session_id);
+    let short_id = id_body[id_body.len() - 8..].to_string();
+
+    assert_eq!(metadata["handle"], "@planner");
+    assert_eq!(metadata["role"], "execution reviewer");
+    assert_eq!(
+        tmux_session,
+        format!("llmparty_planner_execution_reviewer_{short_id}")
     );
     assert!(tmux_has_session(tmux_session));
 

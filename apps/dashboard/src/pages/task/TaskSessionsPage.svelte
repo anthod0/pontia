@@ -9,6 +9,7 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
   import { formatDateTime, shortId } from '../../components/tasks/format'
+  import { sessionDisplayTitle } from '../sessions/sessionList'
   import { task, taskDag } from '../../stores/tasks'
   import { loadTaskSessions, taskSessions, taskSessionsError, taskSessionsLoading } from '../../stores/sessions'
   import TaskPageFrame from './TaskPageFrame.svelte'
@@ -53,8 +54,8 @@
           <Card.Content class="space-y-2">
             {#each $taskSessions as detail}
               <button class="w-full rounded-lg border p-3 text-left text-sm transition hover:bg-muted {selectedDetail?.session.session_id === detail.session.session_id ? 'border-primary bg-muted' : ''}" onclick={() => selectedSessionId = detail.session.session_id}>
-                <div class="flex items-center justify-between gap-2"><span class="font-medium">{detail.session.handle ?? shortId(detail.session.session_id)}</span><Badge variant="secondary">{detail.session.state}</Badge></div>
-                <div class="mt-1 truncate text-xs text-muted-foreground">{detail.session.client_type} · {detail.session.role ?? 'no role'}</div>
+                <div class="flex items-center justify-between gap-2"><span class="font-medium">{sessionDisplayTitle(detail.session)}</span><Badge variant="secondary">{detail.session.state}</Badge></div>
+                <div class="mt-1 truncate text-xs text-muted-foreground">{detail.session.client_type}</div>
                 <div class="mt-2 text-xs text-muted-foreground">Updated {formatDateTime(detail.session.updated_at)}</div>
               </button>
             {/each}
@@ -64,7 +65,7 @@
         {#if selectedDetail}
           <div class="space-y-4">
             <Card.Root>
-              <Card.Header><Card.Title>{selectedDetail.session.handle ?? selectedDetail.session.session_id}</Card.Title><Card.Description>{selectedDetail.session.description ?? 'No session description.'}</Card.Description></Card.Header>
+              <Card.Header><Card.Title>{sessionDisplayTitle(selectedDetail.session)}</Card.Title><Card.Description>{selectedDetail.session.description ?? 'No session description.'}</Card.Description></Card.Header>
               <Card.Content class="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
                 {#each [
                   ['Session ID', selectedDetail.session.session_id],

@@ -201,6 +201,8 @@ impl PiTaskPlanner {
             session_id: session_id.clone(),
             client_type: "pi".to_string(),
             workspace: Some(workspace.display().to_string()),
+            handle: None,
+            role: Some("planner".to_string()),
         })?;
         let runtime_ref = runtime.runtime_ref.clone();
         let result = async {

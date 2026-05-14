@@ -58,26 +58,6 @@ fn init_tracing() {
         .init();
 }
 
-#[cfg(test)]
-mod tests {
-    use super::dashboard_url;
-    use std::net::SocketAddr;
-
-    #[test]
-    fn dashboard_url_uses_loopback_for_unspecified_bind_address() {
-        let addr: SocketAddr = "0.0.0.0:8080".parse().expect("valid socket addr");
-
-        assert_eq!(dashboard_url(addr), "http://127.0.0.1:8080/dashboard");
-    }
-
-    #[test]
-    fn dashboard_url_uses_configured_bind_address() {
-        let addr: SocketAddr = "127.0.0.1:9090".parse().expect("valid socket addr");
-
-        assert_eq!(dashboard_url(addr), "http://127.0.0.1:9090/dashboard");
-    }
-}
-
 async fn shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
@@ -99,5 +79,25 @@ async fn shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {},
         _ = terminate => {},
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dashboard_url;
+    use std::net::SocketAddr;
+
+    #[test]
+    fn dashboard_url_uses_loopback_for_unspecified_bind_address() {
+        let addr: SocketAddr = "0.0.0.0:8080".parse().expect("valid socket addr");
+
+        assert_eq!(dashboard_url(addr), "http://127.0.0.1:8080/dashboard");
+    }
+
+    #[test]
+    fn dashboard_url_uses_configured_bind_address() {
+        let addr: SocketAddr = "127.0.0.1:9090".parse().expect("valid socket addr");
+
+        assert_eq!(dashboard_url(addr), "http://127.0.0.1:9090/dashboard");
     }
 }
