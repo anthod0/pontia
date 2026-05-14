@@ -221,26 +221,26 @@
                 {#each listing.entries as entry}
                   <Table.Row>
                     <Table.Cell class="font-medium">
-                      <span class="flex min-w-0 items-center gap-2">
+                      <button
+                        type="button"
+                        class="flex min-w-0 cursor-pointer items-center gap-2 text-left hover:underline"
+                        aria-label="Open directory {entry.name}"
+                        title="Open directory"
+                        onclick={() => void openPath(entry.path)}
+                      >
                         <FolderOpen class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                        <span class="truncate">{entry.name}</span>
-                      </span>
+                        <span class="truncate">{entry.name}/</span>
+                      </button>
                     </Table.Cell>
                     <Table.Cell class="text-right">
-                      <div class="flex justify-end gap-2">
-                        <Button size="sm" variant="outline" aria-label="Open directory {entry.name}" title="Open directory" onclick={() => void openPath(entry.path)}>
-                          Open
-                          <FolderOpen class="size-4" />
-                        </Button>
-                        <Button size="sm" variant={entry.is_workspace ? 'secondary' : 'outline'} aria-label={entry.is_workspace ? `Deactivate ${entry.name}` : `Activate ${entry.name}`} title={entry.is_workspace ? 'Delete workspace registration' : 'Register as workspace'} onclick={() => void activateEntry(entry)}>
-                          Active
-                          {#if entry.is_workspace}
-                            <CheckCircle2 class="size-4 text-primary" />
-                          {:else}
-                            <Circle class="size-4 text-muted-foreground" />
-                          {/if}
-                        </Button>
-                      </div>
+                      <Button size="sm" variant={entry.is_workspace ? 'secondary' : 'outline'} aria-label={entry.is_workspace ? `Deactivate ${entry.name}` : `Activate ${entry.name}`} title={entry.is_workspace ? 'Delete workspace registration' : 'Register as workspace'} onclick={() => void activateEntry(entry)}>
+                        Active
+                        {#if entry.is_workspace}
+                          <CheckCircle2 class="size-4 text-primary" />
+                        {:else}
+                          <Circle class="size-4 text-muted-foreground" />
+                        {/if}
+                      </Button>
                     </Table.Cell>
                   </Table.Row>
                 {/each}
