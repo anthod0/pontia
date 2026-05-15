@@ -1,6 +1,9 @@
 use super::turns::write_client_current_turn_context;
 use super::*;
-use crate::agent_clients::{DispatchMode, ReadinessMode, get_client_spec};
+use crate::{
+    adapters::GenericTestAdapter,
+    agent_clients::{DispatchMode, ReadinessMode, get_client_spec},
+};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct CreateSessionRequest {
@@ -244,15 +247,28 @@ impl SessionCommandService {
                     json!({}),
                 ))
                 .await?;
-            if client_dispatch_mode(&request.client_type)? == DispatchMode::TmuxPaste {
-                self.wait_and_dispatch_initial_tui_turn(
-                    &session_id,
-                    &turn_id,
-                    &request.client_type,
-                    &initial_task.input,
-                    &runtime,
-                )
-                .await?;
+            match client_dispatch_mode(&request.client_type)? {
+                DispatchMode::GenericTestAdapter => {
+                    self.dispatch_initial_generic_turn(
+                        &session_id,
+                        &turn_id,
+                        &request.client_type,
+                        &initial_task.input,
+                        &runtime,
+                    )
+                    .await?;
+                }
+                DispatchMode::TmuxPaste => {
+                    self.wait_and_dispatch_initial_tui_turn(
+                        &session_id,
+                        &turn_id,
+                        &request.client_type,
+                        &initial_task.input,
+                        &runtime,
+                    )
+                    .await?;
+                }
+                DispatchMode::None => {}
             }
             Some(turn_id)
         } else {
@@ -280,6 +296,40 @@ impl SessionCommandService {
             data,
             duplicate: false,
         })
+    }
+
+    async fn dispatch_initial_generic_turn(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        client_type: &str,
+        input: &str,
+        runtime: &RuntimeStartResult,
+    ) -> Result<()> {
+        let agent_input = AgentInput {
+            session_id: session_id.to_string(),
+            turn_id: turn_id.to_string(),
+            input: input.to_string(),
+        };
+        let behavior = GenericTestAdapter::behavior();
+        if behavior.write_current_turn_context {
+            write_client_current_turn_context(&runtime.metadata, &agent_input, client_type)?;
+        }
+        self.runtime.submit_input(agent_input)?;
+        if behavior.auto_start_turn {
+            EventIngestService::new(self.pool.clone())
+                .ingest_event(DomainEvent::new(
+                    new_event_id().to_string(),
+                    session_id.to_string(),
+                    Some(turn_id.to_string()),
+                    EventSource::AgentAdapter,
+                    client_type.to_string(),
+                    EventType::TurnStarted,
+                    json!({}),
+                ))
+                .await?;
+        }
+        Ok(())
     }
 
     async fn wait_and_dispatch_initial_tui_turn(

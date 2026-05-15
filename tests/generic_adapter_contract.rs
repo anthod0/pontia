@@ -2,6 +2,7 @@ use std::{
     fs,
     path::Path,
     process::{Command, Stdio},
+    sync::OnceLock,
 };
 
 use axum::{
@@ -10,7 +11,9 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use llmparty::{
-    adapters::{AdapterCapabilities, ArtifactRegistration, GenericTestAdapter},
+    adapters::{
+        AdapterCapabilities, ArtifactRegistration, GenericTestAdapter, GenericTestBehavior,
+    },
     application::{AppState, ArtifactRegistrationService},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
@@ -19,6 +22,27 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
+
+fn generic_adapter_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
+struct GenericAdapterScope {
+    _guard: tokio::sync::MutexGuard<'static, ()>,
+}
+
+impl Drop for GenericAdapterScope {
+    fn drop(&mut self) {
+        GenericTestAdapter::clear_recorded_inputs();
+    }
+}
+
+async fn generic_adapter_scope() -> GenericAdapterScope {
+    GenericAdapterScope {
+        _guard: generic_adapter_lock().lock().await,
+    }
+}
 
 async fn test_state(name: &str) -> AppState {
     GenericTestAdapter::clear_recorded_inputs();
@@ -124,6 +148,12 @@ async fn create_session(state: AppState) -> String {
         .to_string()
 }
 
+async fn create_session_with_body(state: AppState, body: Value) -> Value {
+    let (status, body) = post_json(state, "/external/v1/sessions", Some(TOKEN), body).await;
+    assert_eq!(status, StatusCode::CREATED, "{body:?}");
+    body
+}
+
 async fn submit_turn(state: AppState, session_id: &str, input: &str) -> (String, Value) {
     let (status, body) = post_json(
         state.clone(),
@@ -179,7 +209,39 @@ impl Drop for TmuxSessionGuard {
 }
 
 #[tokio::test]
+async fn generic_test_adapter_can_expose_pi_like_capabilities_without_pi_runtime() {
+    let _scope = generic_adapter_scope().await;
+    let state = test_state("m8_pi_like_capabilities").await;
+    GenericTestAdapter::set_capabilities(AdapterCapabilities::pi_m0_default());
+    let session_id = create_session(state.clone()).await;
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let session = &body["data"]["session"];
+    assert_eq!(session["client_type"], "generic");
+    assert_eq!(session["capabilities"]["interrupt"], true);
+    assert_eq!(session["capabilities"]["stream_output"], true);
+    assert_eq!(session["capabilities"]["artifact_sources"], true);
+
+    let metadata: String =
+        sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+            .bind(&session_id)
+            .fetch_one(&state.db)
+            .await
+            .expect("runtime metadata");
+    let metadata: Value = serde_json::from_str(&metadata).expect("metadata json");
+    assert_eq!(metadata["backend"], "in_process_test");
+    assert!(metadata.get("tmux_session").is_none());
+}
+
+#[tokio::test]
 async fn capability_model_declares_all_mvp_adapter_capabilities() {
+    let _scope = generic_adapter_scope().await;
     let state = test_state("m8_capabilities").await;
     let session_id = create_session(state.clone()).await;
     let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
@@ -200,7 +262,65 @@ async fn capability_model_declares_all_mvp_adapter_capabilities() {
 }
 
 #[tokio::test]
+async fn generic_initial_task_dispatches_in_process() {
+    let _scope = generic_adapter_scope().await;
+    let state = test_state("m8_in_process_initial_task").await;
+    GenericTestAdapter::set_behavior(GenericTestBehavior {
+        auto_start_turn: true,
+        write_current_turn_context: true,
+    });
+
+    let body = create_session_with_body(
+        state.clone(),
+        json!({"client_type":"generic","initial_task":{"input":"boot generic"}}),
+    )
+    .await;
+
+    let session_id = body["data"]["session"]["session_id"].as_str().unwrap();
+    let turn = &body["data"]["initial_turn"];
+    let turn_id = turn["turn_id"].as_str().unwrap();
+    assert_eq!(body["data"]["session"]["state"], "busy");
+    assert_eq!(turn["state"], "running");
+    assert!(GenericTestAdapter::recorded_inputs().iter().any(|input| {
+        input.session_id == session_id && input.turn_id == turn_id && input.input == "boot generic"
+    }));
+}
+
+#[tokio::test]
+async fn generic_dispatch_starts_turn_and_writes_current_turn_context_in_process() {
+    let _scope = generic_adapter_scope().await;
+    let state = test_state("m8_in_process_dispatch").await;
+    GenericTestAdapter::set_behavior(GenericTestBehavior {
+        auto_start_turn: true,
+        write_current_turn_context: true,
+    });
+    let session_id = create_session(state.clone()).await;
+
+    let (turn_id, body) = submit_turn(state.clone(), &session_id, "in process task").await;
+
+    assert_eq!(body["data"]["turn"]["state"], "running");
+    let metadata: String =
+        sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+            .bind(&session_id)
+            .fetch_one(&state.db)
+            .await
+            .expect("runtime metadata");
+    let metadata: Value = serde_json::from_str(&metadata).expect("metadata json");
+    let context_path = metadata["current_turn_file"]
+        .as_str()
+        .expect("context path");
+    let context: Value =
+        serde_json::from_str(&fs::read_to_string(context_path).expect("current turn context"))
+            .expect("context json");
+    assert_eq!(context["session_id"], session_id);
+    assert_eq!(context["turn_id"], turn_id);
+    assert_eq!(context["input"], "in process task");
+    assert_eq!(context["client_type"], "generic");
+}
+
+#[tokio::test]
 async fn turn_input_handoff_uses_control_plane_assigned_identity() {
+    let _scope = generic_adapter_scope().await;
     let state = test_state("m8_turn_input").await;
     let session_id = create_session(state.clone()).await;
     let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
@@ -221,6 +341,7 @@ async fn turn_input_handoff_uses_control_plane_assigned_identity() {
 
 #[tokio::test]
 async fn event_source_returns_turn_facts_through_internal_event_api() {
+    let _scope = generic_adapter_scope().await;
     let state = test_state("m8_event_source").await;
     let session_id = create_session(state.clone()).await;
     let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
@@ -286,6 +407,7 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
 
 #[tokio::test]
 async fn artifact_source_provider_registers_readable_artifacts_without_exposing_source_ref() {
+    let _scope = generic_adapter_scope().await;
     let state = test_state("m8_artifact_source").await;
     let session_id = create_session(state.clone()).await;
     let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
@@ -332,6 +454,7 @@ async fn artifact_source_provider_registers_readable_artifacts_without_exposing_
 
 #[tokio::test]
 async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
+    let _scope = generic_adapter_scope().await;
     let state = test_state("m8_degradation").await;
     let session_id = create_session(state.clone()).await;
     let _runtime_guard = TmuxSessionGuard::for_session(&session_id);

@@ -1,5 +1,8 @@
 use super::*;
-use crate::agent_clients::{DispatchMode, ReadinessMode, get_client_spec};
+use crate::{
+    adapters::GenericTestAdapter,
+    agent_clients::{DispatchMode, ReadinessMode, get_client_spec},
+};
 
 #[derive(Clone)]
 pub struct TurnCommandService {
@@ -59,9 +62,6 @@ impl TurnCommandService {
             turn_id: turn_id.clone(),
             input: input.clone(),
         };
-        if dispatch_mode == DispatchMode::GenericTestAdapter {
-            self.runtime.submit_input(agent_input.clone())?;
-        }
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
@@ -89,6 +89,34 @@ impl TurnCommandService {
                 json!({}),
             ))
             .await?;
+
+        if dispatch_mode == DispatchMode::GenericTestAdapter {
+            let behavior = GenericTestAdapter::behavior();
+            if behavior.write_current_turn_context
+                && let Some((_runtime_ref, binding_metadata)) =
+                    self.runtime_binding_metadata(session_id).await?
+            {
+                write_client_current_turn_context(
+                    &binding_metadata,
+                    &agent_input,
+                    &session.client_type,
+                )?;
+            }
+            self.runtime.submit_input(agent_input.clone())?;
+            if behavior.auto_start_turn {
+                ingest
+                    .ingest_event(DomainEvent::new(
+                        new_event_id().to_string(),
+                        session_id.to_string(),
+                        Some(turn_id.clone()),
+                        EventSource::AgentAdapter,
+                        session.client_type.clone(),
+                        EventType::TurnStarted,
+                        json!({}),
+                    ))
+                    .await?;
+            }
+        }
 
         if dispatch_mode == DispatchMode::TmuxPaste {
             match self.runtime_binding_metadata(session_id).await? {

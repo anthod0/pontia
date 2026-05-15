@@ -84,6 +84,21 @@ pub struct ArtifactRegistration {
     pub metadata: Value,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenericTestBehavior {
+    pub auto_start_turn: bool,
+    pub write_current_turn_context: bool,
+}
+
+impl Default for GenericTestBehavior {
+    fn default() -> Self {
+        Self {
+            auto_start_turn: false,
+            write_current_turn_context: false,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct GenericTestAdapter;
 
@@ -93,6 +108,21 @@ impl GenericTestAdapter {
             .lock()
             .expect("recorded inputs lock")
             .clear();
+        *test_capabilities().lock().expect("test capabilities lock") =
+            AdapterCapabilities::generic_default();
+        *test_behavior().lock().expect("test behavior lock") = GenericTestBehavior::default();
+    }
+
+    pub fn set_capabilities(capabilities: AdapterCapabilities) {
+        *test_capabilities().lock().expect("test capabilities lock") = capabilities;
+    }
+
+    pub fn set_behavior(behavior: GenericTestBehavior) {
+        *test_behavior().lock().expect("test behavior lock") = behavior;
+    }
+
+    pub fn behavior() -> GenericTestBehavior {
+        test_behavior().lock().expect("test behavior lock").clone()
     }
 
     pub fn recorded_inputs() -> Vec<AgentInput> {
@@ -115,7 +145,10 @@ impl AgentInputSink for GenericTestAdapter {
 
 impl AgentEventSource for GenericTestAdapter {
     fn capabilities(&self) -> AdapterCapabilities {
-        AdapterCapabilities::generic_default()
+        test_capabilities()
+            .lock()
+            .expect("test capabilities lock")
+            .clone()
     }
 }
 
@@ -128,4 +161,14 @@ impl ArtifactSourceProvider for GenericTestAdapter {
 fn recorded_inputs() -> &'static Mutex<Vec<AgentInput>> {
     static RECORDED_INPUTS: OnceLock<Mutex<Vec<AgentInput>>> = OnceLock::new();
     RECORDED_INPUTS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn test_capabilities() -> &'static Mutex<AdapterCapabilities> {
+    static TEST_CAPABILITIES: OnceLock<Mutex<AdapterCapabilities>> = OnceLock::new();
+    TEST_CAPABILITIES.get_or_init(|| Mutex::new(AdapterCapabilities::generic_default()))
+}
+
+fn test_behavior() -> &'static Mutex<GenericTestBehavior> {
+    static TEST_BEHAVIOR: OnceLock<Mutex<GenericTestBehavior>> = OnceLock::new();
+    TEST_BEHAVIOR.get_or_init(|| Mutex::new(GenericTestBehavior::default()))
 }

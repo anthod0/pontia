@@ -130,6 +130,29 @@ async fn binding_metadata(state: &AppState, session_id: &str) -> Value {
     serde_json::from_str(&metadata).expect("metadata json")
 }
 
+async fn report_ready(state: AppState, session_id: &str) {
+    let metadata = binding_metadata(&state, session_id).await;
+    let (status, body) = request(
+        state,
+        "POST",
+        "/internal/v1/events",
+        None,
+        Some(json!({
+            "event_id": format!("evt_ready_{session_id}"),
+            "session_id": session_id,
+            "turn_id": null,
+            "source": "agent_client",
+            "client_type": "pi",
+            "type": "session.ready",
+            "time": "2026-05-08T12:00:00Z",
+            "seq": 1,
+            "payload": {"runtime_instance_id": metadata["runtime_instance_id"]}
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+}
+
 fn tmux_has_session(tmux_session: &str) -> bool {
     Command::new("tmux")
         .args(["has-session", "-t", tmux_session])
@@ -147,9 +170,9 @@ fn cleanup_tmux(tmux_session: &str) {
 }
 
 #[tokio::test]
-async fn create_generic_session_creates_real_tmux_runtime() {
-    let state = test_state("m1_create_generic").await;
-    let session_id = create_session(state.clone(), "generic").await;
+async fn create_tmux_client_session_creates_real_tmux_runtime() {
+    let state = test_state("m1_create_tmux_client").await;
+    let session_id = create_session(state.clone(), "pi").await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"].as_str().expect("tmux session");
 
@@ -180,7 +203,7 @@ async fn tmux_runtime_name_includes_handle_role_and_short_session_id() {
     let session_id = create_session_with_body(
         state.clone(),
         json!({
-            "client_type": "generic",
+            "client_type": "pi",
             "workspace": workspace.path().display().to_string(),
             "handle": "@planner",
             "role": "execution reviewer"
@@ -206,7 +229,7 @@ async fn tmux_runtime_name_includes_handle_role_and_short_session_id() {
 #[tokio::test]
 async fn terminate_session_kills_real_tmux_runtime() {
     let state = test_state("m1_terminate").await;
-    let session_id = create_session(state.clone(), "generic").await;
+    let session_id = create_session(state.clone(), "pi").await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"]
         .as_str()
@@ -229,9 +252,9 @@ async fn terminate_session_kills_real_tmux_runtime() {
 }
 
 #[tokio::test]
-async fn restart_replaces_tmux_runtime_and_returns_idle() {
+async fn restart_replaces_tmux_runtime_and_returns_starting() {
     let state = test_state("m1_restart").await;
-    let session_id = create_session(state.clone(), "generic").await;
+    let session_id = create_session(state.clone(), "pi").await;
     let first = binding_metadata(&state, &session_id).await;
     let tmux_session = first["tmux_session"]
         .as_str()
@@ -251,7 +274,7 @@ async fn restart_replaces_tmux_runtime_and_returns_idle() {
     let second = binding_metadata(&state, &session_id).await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["data"]["session"]["state"], "idle");
+    assert_eq!(body["data"]["session"]["state"], "starting");
     assert_eq!(second["tmux_session"], tmux_session);
     assert_eq!(second["restart_count"], 1);
     assert_ne!(first["started_at"], second["started_at"]);
@@ -263,7 +286,7 @@ async fn restart_replaces_tmux_runtime_and_returns_idle() {
 #[tokio::test]
 async fn observe_missing_tmux_runtime_projects_session_error() {
     let state = test_state("m1_observe_session_error").await;
-    let session_id = create_session(state.clone(), "generic").await;
+    let session_id = create_session(state.clone(), "pi").await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"]
         .as_str()
@@ -307,7 +330,8 @@ async fn observe_missing_tmux_runtime_projects_session_error() {
 #[tokio::test]
 async fn observe_missing_tmux_runtime_fails_active_turn() {
     let state = test_state("m1_observe_active_turn").await;
-    let session_id = create_session(state.clone(), "generic").await;
+    let session_id = create_session(state.clone(), "pi").await;
+    report_ready(state.clone(), &session_id).await;
     let turn_id = submit_turn(state.clone(), &session_id).await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"]
