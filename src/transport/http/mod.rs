@@ -95,7 +95,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/external/v1/workspaces/{workspace_id}",
-            get(external::get_workspace).delete(external::delete_workspace),
+            get(external::get_workspace)
+                .patch(external::rename_workspace)
+                .delete(external::delete_workspace),
         )
         .route(
             "/external/v1/workspace-roots",

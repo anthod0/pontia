@@ -8,7 +8,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::application::{
-    AppState, ExternalQueryService, RegisterWorkspaceRequest, WorkspaceBrowserService,
+    AppState, ExternalQueryService, RegisterWorkspaceRequest, RenameWorkspaceRequest,
+    WorkspaceBrowserService,
 };
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
@@ -39,6 +40,18 @@ pub async fn get_workspace(
     let workspace = service.get_workspace(&workspace_id).await?.ok_or_else(|| {
         ExternalApiError::not_found(format!("workspace {workspace_id} not found"))
     })?;
+    Ok(ok(json!({ "workspace": workspace })))
+}
+
+pub async fn rename_workspace(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<String>,
+    Json(request): Json<RenameWorkspaceRequest>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = WorkspaceBrowserService::new(state.db, state.workspace_browser);
+    let workspace = service.rename_workspace(&workspace_id, request).await?;
     Ok(ok(json!({ "workspace": workspace })))
 }
 

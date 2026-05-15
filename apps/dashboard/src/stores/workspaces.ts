@@ -5,9 +5,11 @@ import {
   listWorkspaceRoots,
   listWorkspaces,
   registerWorkspace as apiRegisterWorkspace,
+  renameWorkspace as apiRenameWorkspace,
 } from '../api/client';
 import type {
   RegisterWorkspaceInput,
+  RenameWorkspaceInput,
   WorkspaceDirectoryListingView,
   WorkspaceRootView,
   WorkspaceView,
@@ -42,6 +44,12 @@ export async function browseWorkspaceRoot(rootId: string, path = ''): Promise<Wo
 
 export async function registerWorkspace(input: RegisterWorkspaceInput): Promise<WorkspaceView> {
   const workspace = await apiRegisterWorkspace(input);
+  await loadWorkspaces();
+  return workspace;
+}
+
+export async function renameWorkspace(workspaceId: string, input: RenameWorkspaceInput): Promise<WorkspaceView> {
+  const workspace = await apiRenameWorkspace(workspaceId, input);
   await loadWorkspaces();
   return workspace;
 }

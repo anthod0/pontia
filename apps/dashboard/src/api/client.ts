@@ -15,6 +15,7 @@ import type {
   HumanSignalInput,
   InboxMessageView,
   RegisterWorkspaceInput,
+  RenameWorkspaceInput,
   SessionView,
   SubmitInboxMessageInput,
   SubmitPlannerInput,
@@ -120,6 +121,10 @@ export async function getWorkspace(workspaceId: string): Promise<WorkspaceView> 
 
 export async function registerWorkspace(input: RegisterWorkspaceInput): Promise<WorkspaceView> {
   return (await request<{ workspace: WorkspaceView }>('/workspaces', { method: 'POST', body: input, mutating: true })).workspace;
+}
+
+export async function renameWorkspace(workspaceId: string, input: RenameWorkspaceInput): Promise<WorkspaceView> {
+  return (await request<{ workspace: WorkspaceView }>(`/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'PATCH', body: input, mutating: true })).workspace;
 }
 
 export async function deleteWorkspace(workspaceId: string): Promise<WorkspaceView> {

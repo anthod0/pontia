@@ -105,6 +105,22 @@ async fn delete_json(state: AppState, uri: &str) -> (StatusCode, Value) {
     json_response(response).await
 }
 
+async fn patch_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Value) {
+    let response = http::router(state)
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(uri)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    json_response(response).await
+}
+
 async fn json_response(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let body = response
@@ -214,6 +230,49 @@ async fn registers_existing_directory_under_allowed_root_without_storing_root_id
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["workspace"]["workspace_id"], workspace_id);
     assert!(body["data"]["workspace"].get("root_id").is_none());
+}
+
+#[tokio::test]
+async fn renames_workspace_without_changing_path() {
+    let root = tempfile::tempdir().expect("root");
+    let app = root.path().join("app");
+    std::fs::create_dir(&app).expect("app");
+    let canonical = std::fs::canonicalize(&app).expect("canonical");
+    let state = test_state(vec![WorkspaceRootConfig {
+        root_id: "projects".to_string(),
+        label: "Projects".to_string(),
+        path: root.path().display().to_string(),
+    }])
+    .await;
+    let (_, body) = post_json(
+        state.clone(),
+        "/external/v1/workspaces",
+        json!({"root_id":"projects", "path":"app", "name":"App"}),
+    )
+    .await;
+    let workspace_id = body["data"]["workspace"]["workspace_id"].as_str().unwrap();
+
+    let (status, body) = patch_json(
+        state.clone(),
+        &format!("/external/v1/workspaces/{workspace_id}"),
+        json!({"name":"Renamed App"}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let workspace = &body["data"]["workspace"];
+    assert_eq!(workspace["workspace_id"], workspace_id);
+    assert_eq!(workspace["name"], "Renamed App");
+    assert_eq!(workspace["canonical_path"], canonical.display().to_string());
+
+    let (status, body) = patch_json(
+        state,
+        &format!("/external/v1/workspaces/{workspace_id}"),
+        json!({"name":"   "}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body["data"]["workspace"]["name"].is_null());
 }
 
 #[tokio::test]

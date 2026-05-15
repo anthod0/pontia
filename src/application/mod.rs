@@ -94,9 +94,9 @@ pub use tasks::{
 pub use turns::TurnCommandService;
 pub use views::*;
 pub use workspaces::{
-    RegisterWorkspaceRequest, WorkspaceBrowserConfig, WorkspaceBrowserService,
-    WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceRootConfig,
-    WorkspaceRootView,
+    RegisterWorkspaceRequest, RenameWorkspaceRequest, WorkspaceBrowserConfig,
+    WorkspaceBrowserService, WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView,
+    WorkspaceRootConfig, WorkspaceRootView,
 };
 
 pub(crate) use mapping::*;

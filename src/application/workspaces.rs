@@ -46,6 +46,11 @@ pub struct RegisterWorkspaceRequest {
     pub name: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct RenameWorkspaceRequest {
+    pub name: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkspaceRecord {
     pub(crate) workspace_id: String,
@@ -294,6 +299,36 @@ impl WorkspaceBrowserService {
             .get_workspace(&record.workspace_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("workspace {} not found", record.workspace_id)))
+    }
+
+    pub async fn rename_workspace(
+        &self,
+        workspace_id: &str,
+        request: RenameWorkspaceRequest,
+    ) -> Result<WorkspaceView> {
+        let name = request
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty());
+        let result = sqlx::query(
+            r#"UPDATE workspaces
+               SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE workspace_id = ?"#,
+        )
+        .bind(name)
+        .bind(workspace_id)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(Error::NotFound(format!(
+                "workspace {workspace_id} not found"
+            )));
+        }
+        ExternalQueryService::new(self.pool.clone())
+            .get_workspace(workspace_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))
     }
 
     pub async fn delete_workspace(&self, workspace_id: &str) -> Result<WorkspaceView> {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CheckCircle2, Circle, CircleAlert, CornerUpLeft, FolderOpen, RefreshCw, Trash2 } from '@lucide/svelte'
+  import { CheckCircle2, Circle, CircleAlert, CornerUpLeft, FolderOpen, Pencil, RefreshCw, Trash2 } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -12,7 +12,7 @@
   import * as Table from '$lib/components/ui/table/index.js'
   import { formatDateTime } from '../components/tasks/format'
   import type { WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceView } from '../api/types'
-  import { browseWorkspaceRoot, deleteWorkspace, loadWorkspaceRoots, loadWorkspaces, registerWorkspace, workspaceRoots, workspaces, workspacesError, workspacesLoading } from '../stores/workspaces'
+  import { browseWorkspaceRoot, deleteWorkspace, loadWorkspaceRoots, loadWorkspaces, registerWorkspace, renameWorkspace, workspaceRoots, workspaces, workspacesError, workspacesLoading } from '../stores/workspaces'
 
   let rootId = ''
   let browsePath = ''
@@ -23,6 +23,10 @@
   let registerError: string | null = null
   let deletingWorkspaceId: string | null = null
   let deleteError: string | null = null
+  let renameError: string | null = null
+  let renamingWorkspace: WorkspaceView | null = null
+  let renamingWorkspaceName = ''
+  let savingRename = false
   let registerEntry: WorkspaceDirectoryEntryView | null = null
   let registerWorkspaceName = ''
 
@@ -98,6 +102,28 @@
     }
   }
 
+  function startRenamingWorkspace(workspace: WorkspaceView): void {
+    renameError = null
+    renamingWorkspace = workspace
+    renamingWorkspaceName = workspace.name ?? workspace.display_path
+  }
+
+  async function confirmRenameWorkspace(): Promise<void> {
+    if (!renamingWorkspace || savingRename) return
+    savingRename = true
+    renameError = null
+    try {
+      await renameWorkspace(renamingWorkspace.workspace_id, { name: renamingWorkspaceName.trim() || null })
+      renamingWorkspace = null
+      renamingWorkspaceName = ''
+      if (rootId) await openPath(browsePath)
+    } catch (error) {
+      renameError = error instanceof Error ? error.message : String(error)
+    } finally {
+      savingRename = false
+    }
+  }
+
   async function deleteRegisteredWorkspace(workspaceId: string, label: string): Promise<void> {
     if (deletingWorkspaceId || !confirm(`Delete workspace "${label}" from llmparty? Files on disk will not be deleted.`)) return
     deletingWorkspaceId = workspaceId
@@ -123,14 +149,16 @@
     <Button variant="outline" onclick={() => void refreshAll()}><RefreshCw class="size-4" /> Refresh</Button>
   </div>
 
-  {#if $workspacesError || browserError || registerError || deleteError}
+  {#if $workspacesError || browserError || registerError || renameError || deleteError}
     <Alert.Root variant="destructive">
       <CircleAlert class="size-4" />
       <Alert.Title>Workspace error</Alert.Title>
-      <Alert.Description>{deleteError ?? registerError ?? browserError ?? $workspacesError}</Alert.Description>
+      <Alert.Description>{deleteError ?? renameError ?? registerError ?? browserError ?? $workspacesError}</Alert.Description>
     </Alert.Root>
   {/if}
 
+  <div class="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] xl:items-start">
+  <div class="xl:order-2">
   <Card.Root>
     <Card.Header><Card.Title>Active workspaces</Card.Title><Card.Description>{$workspaces.length} available for DAG task creation.</Card.Description></Card.Header>
     <Card.Content>
@@ -139,7 +167,7 @@
       {:else if !$workspaces.length}
         <Empty.Root><Empty.Header><Empty.Title>No workspaces</Empty.Title><Empty.Description>Use Active in the browser below to register a directory.</Empty.Description></Empty.Header></Empty.Root>
       {:else}
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
           {#each $workspaces as workspace}
             {@const workspaceLabel = workspace.name ?? workspace.display_path}
             <div class="rounded-xl border bg-card p-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md">
@@ -155,16 +183,27 @@
                   <div class="truncate text-muted-foreground" title={workspace.canonical_path}>{workspace.canonical_path}</div>
                   <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="secondary">{workspace.state}</Badge><span>Updated {formatDateTime(workspace.updated_at)}</span></div>
                 </div>
-                <Button
-                  size="icon-sm"
-                  variant="outline"
-                  aria-label={deletingWorkspaceId === workspace.workspace_id ? `Deleting ${workspaceLabel}` : `Delete ${workspaceLabel}`}
-                  title={deletingWorkspaceId === workspace.workspace_id ? 'Deleting…' : 'Delete workspace'}
-                  onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id, workspaceLabel)}
-                  disabled={deletingWorkspaceId === workspace.workspace_id}
-                >
-                  <Trash2 class="size-4" />
-                </Button>
+                <div class="flex shrink-0 gap-2">
+                  <Button
+                    size="icon-sm"
+                    variant="outline"
+                    aria-label={`Rename ${workspaceLabel}`}
+                    title="Rename workspace"
+                    onclick={() => startRenamingWorkspace(workspace)}
+                  >
+                    <Pencil class="size-4" />
+                  </Button>
+                  <Button
+                    size="icon-sm"
+                    variant="outline"
+                    aria-label={deletingWorkspaceId === workspace.workspace_id ? `Deleting ${workspaceLabel}` : `Delete ${workspaceLabel}`}
+                    title={deletingWorkspaceId === workspace.workspace_id ? 'Deleting…' : 'Delete workspace'}
+                    onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id, workspaceLabel)}
+                    disabled={deletingWorkspaceId === workspace.workspace_id}
+                  >
+                    <Trash2 class="size-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           {/each}
@@ -172,7 +211,9 @@
       {/if}
     </Card.Content>
   </Card.Root>
+  </div>
 
+  <div class="xl:order-1">
   <Card.Root>
     <Card.Header>
       <Card.Title class="flex items-center gap-2"><FolderOpen class="size-5" /> Root browser</Card.Title>
@@ -253,7 +294,29 @@
       {/if}
     </Card.Content>
   </Card.Root>
+  </div>
+  </div>
 </section>
+
+{#if renamingWorkspace}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" role="presentation">
+    <form class="w-full max-w-md rounded-xl border bg-card p-5 shadow-xl" onsubmit={(event) => { event.preventDefault(); void confirmRenameWorkspace() }}>
+      <div class="space-y-2">
+        <h3 class="text-lg font-semibold">Confirm workspace rename</h3>
+        <p class="text-sm text-muted-foreground">Rename <span class="font-medium text-foreground">{renamingWorkspace.name ?? renamingWorkspace.display_path}</span>.</p>
+      </div>
+      <div class="mt-4 space-y-2">
+        <Label for="rename-workspace-name">Display name</Label>
+        <Input id="rename-workspace-name" bind:value={renamingWorkspaceName} placeholder={renamingWorkspace.display_path} />
+        <p class="text-xs text-muted-foreground">Clear the name to display the workspace path.</p>
+      </div>
+      <div class="mt-5 flex justify-end gap-2">
+        <Button type="button" variant="outline" onclick={() => { renamingWorkspace = null; renamingWorkspaceName = '' }} disabled={savingRename}>Cancel</Button>
+        <Button type="submit" disabled={savingRename}>{savingRename ? 'Saving…' : 'Rename workspace'}</Button>
+      </div>
+    </form>
+  </div>
+{/if}
 
 {#if registerEntry}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" role="presentation">

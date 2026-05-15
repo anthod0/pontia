@@ -115,6 +115,10 @@ export interface RegisterWorkspaceInput {
   name?: string | null;
 }
 
+export interface RenameWorkspaceInput {
+  name?: string | null;
+}
+
 export interface TaskView {
   task_id: string;
   state: TaskState | string;
