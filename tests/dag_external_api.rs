@@ -66,8 +66,9 @@ fn initial_plan() -> SubmitPlanPayload {
 
 #[tokio::test]
 async fn dag_external_api_exposes_summary_work_items_runs_and_signals_from_projections() {
-    let _scope = GenericClientTestScope::new().await;
+    let scope = GenericClientTestScope::new().await;
     let state = test_state().await;
+    scope.enable_builtin_profiles(&state).await;
     let task_id = insert_running_task(&state).await;
     DagService::new(state.db.clone())
         .apply_initial_dag(&task_id, &initial_plan())

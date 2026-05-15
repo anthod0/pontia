@@ -62,6 +62,17 @@ impl GenericClientTestScope {
     }
 
     #[allow(dead_code)]
+    pub async fn enable_builtin_profiles(&self, state: &AppState) {
+        sqlx::query(
+            r#"UPDATE execution_profiles
+               SET supported_client_types = '["generic"]'
+               WHERE profile_id IN ('default', 'planner', 'replanner', 'implementer', 'reviewer', 'tester', 'debugger')"#,
+        )
+        .execute(&state.db)
+        .await
+        .expect("enable generic builtin profiles");
+    }
+
     pub async fn runtime_metadata(&self, state: &AppState, session_id: &str) -> Value {
         let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)

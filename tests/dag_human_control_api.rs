@@ -89,8 +89,9 @@ async fn human_signal_api_records_human_objection_visible_in_signals() {
 
 #[tokio::test]
 async fn pause_prevents_scheduler_dispatch_until_resume() {
-    let _scope = GenericClientTestScope::new().await;
+    let scope = GenericClientTestScope::new().await;
     let state = test_state().await;
+    scope.enable_builtin_profiles(&state).await;
     let task_id = insert_running_task(&state).await;
     DagService::new(state.db.clone())
         .apply_initial_dag(&task_id, &initial_plan())
