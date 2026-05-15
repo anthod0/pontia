@@ -301,6 +301,7 @@ impl DagRunResultService {
             return Ok(());
         }
         let next_state = signal_blocking_state(&payload.kind);
+        let projection_state = signal_projection_state(&payload.kind);
         let mut tx = self.pool.begin().await?;
         sqlx::query(
             r#"UPDATE work_item_runs
@@ -318,7 +319,7 @@ impl DagRunResultService {
                SET current_state = ?, blocked_reason = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE work_item_id = ? AND current_run_id = ?"#,
         )
-        .bind(next_state)
+        .bind(projection_state)
         .bind(&payload.summary)
         .bind(&run.work_item_id)
         .bind(&run.run_id)
@@ -441,6 +442,19 @@ impl DagRunResultService {
             .execute(&mut *tx)
             .await?;
         }
+        if !replan_signal_ids.is_empty() {
+            sqlx::query(
+                r#"UPDATE work_item_runtime_projection
+                   SET current_state = 'replan_anchor', blocked_reason = ?,
+                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                   WHERE work_item_id = ? AND current_run_id = ?"#,
+            )
+            .bind(&result.summary)
+            .bind(&run.work_item_id)
+            .bind(&run.run_id)
+            .execute(&mut *tx)
+            .await?;
+        }
         tx.commit().await?;
 
         self.record_task_event(
@@ -544,7 +558,10 @@ impl DagRunResultService {
             return Ok(());
         }
 
-        let next_state = if required.iter().all(|state| state == "completed") {
+        let next_state = if required
+            .iter()
+            .all(|state| matches!(state.as_str(), "completed" | "replan_anchor"))
+        {
             "completed"
         } else if required.iter().any(|state| state == "failed") {
             "failed"
@@ -649,6 +666,13 @@ fn signal_blocking_state(kind: &str) -> &'static str {
     match kind {
         "needs_input" | "assistance_needed" => "needs_input",
         _ => "blocked",
+    }
+}
+
+fn signal_projection_state(kind: &str) -> &'static str {
+    match kind {
+        "replan_requested" => "replan_anchor",
+        _ => signal_blocking_state(kind),
     }
 }
 

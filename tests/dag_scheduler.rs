@@ -4,7 +4,8 @@ mod generic_client;
 use generic_client::GenericClientTestScope;
 use llmparty::{
     application::{
-        DagSchedulerService, DagService, SubmitPlanPayload, WorkItemDraft, WorkItemEdgeDraft,
+        DagPatch, DagSchedulerService, DagService, PatchOperation, SubmitPlanPayload,
+        WorkItemDraft, WorkItemEdgeDraft,
     },
     ids::new_task_id,
     storage::sqlite::{connect_sqlite, run_migrations},
@@ -226,6 +227,141 @@ async fn scheduler_tick_is_idempotent_for_active_runs() {
         .await
         .expect("run count");
     assert_eq!(run_count, 1);
+
+    cleanup_scheduler_tmux_sessions(&pool).await;
+}
+
+#[tokio::test]
+async fn scheduler_does_not_dispatch_while_blocking_signal_is_open() {
+    let pool = test_pool().await;
+    let task_id = insert_task(&pool).await;
+    DagService::new(pool.clone())
+        .apply_initial_dag(
+            &task_id,
+            &initial_plan(vec![draft("impl", "implementer", 0)], vec![]),
+        )
+        .await
+        .expect("apply dag");
+    sqlx::query(
+        r#"INSERT INTO dag_signals (signal_id, task_id, kind, summary, severity, state)
+           VALUES ('sig_blocking_open', ?, 'needs_input', 'Need input', 'medium', 'open')"#,
+    )
+    .bind(&task_id)
+    .execute(&pool)
+    .await
+    .expect("insert signal");
+
+    let outcome = DagSchedulerService::new(pool.clone())
+        .schedule_task(&task_id)
+        .await
+        .expect("schedule task");
+
+    assert_eq!(outcome.dispatched_runs.len(), 0);
+    let run_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM work_item_runs")
+        .fetch_one(&pool)
+        .await
+        .expect("run count");
+    assert_eq!(run_count, 0);
+
+    cleanup_scheduler_tmux_sessions(&pool).await;
+}
+
+#[tokio::test]
+async fn scheduler_does_not_dispatch_while_task_is_replanning() {
+    let pool = test_pool().await;
+    let task_id = insert_task(&pool).await;
+    DagService::new(pool.clone())
+        .apply_initial_dag(
+            &task_id,
+            &initial_plan(vec![draft("impl", "implementer", 0)], vec![]),
+        )
+        .await
+        .expect("apply dag");
+    sqlx::query("UPDATE tasks SET state = 'replanning' WHERE task_id = ?")
+        .bind(&task_id)
+        .execute(&pool)
+        .await
+        .expect("mark replanning");
+
+    let outcome = DagSchedulerService::new(pool.clone())
+        .schedule_task(&task_id)
+        .await
+        .expect("schedule task");
+
+    assert_eq!(outcome.dispatched_runs.len(), 0);
+
+    cleanup_scheduler_tmux_sessions(&pool).await;
+}
+
+#[tokio::test]
+async fn scheduler_allows_replan_anchor_to_start_new_path() {
+    let pool = test_pool().await;
+    let task_id = insert_task(&pool).await;
+    let dag = DagService::new(pool.clone());
+    dag.apply_initial_dag(
+        &task_id,
+        &initial_plan(
+            vec![
+                draft("current", "implementer", 0),
+                draft("old_next", "implementer", 0),
+            ],
+            vec![edge("current", "old_next")],
+        ),
+    )
+    .await
+    .expect("apply dag");
+    let current_id: String =
+        sqlx::query_scalar("SELECT work_item_id FROM work_items WHERE title = 'current title'")
+            .fetch_one(&pool)
+            .await
+            .expect("current id");
+    let old_next_id: String =
+        sqlx::query_scalar("SELECT work_item_id FROM work_items WHERE title = 'old_next title'")
+            .fetch_one(&pool)
+            .await
+            .expect("old next id");
+    sqlx::query(
+        "UPDATE work_item_runtime_projection SET current_state = 'replan_anchor' WHERE work_item_id = ?",
+    )
+    .bind(&current_id)
+    .execute(&pool)
+    .await
+    .expect("mark anchor");
+
+    dag.apply_patch(
+        &task_id,
+        &DagPatch {
+            summary: "replace old path".to_string(),
+            operations: vec![
+                PatchOperation::SupersedeWorkItem {
+                    work_item_id: old_next_id,
+                    reason: "replanned".to_string(),
+                },
+                PatchOperation::AddWorkItem {
+                    work_item: draft("new_next", "implementer", 0),
+                },
+                PatchOperation::AddEdge {
+                    edge: edge(&current_id, "new_next"),
+                },
+            ],
+        },
+    )
+    .await
+    .expect("apply patch");
+
+    let outcome = DagSchedulerService::new(pool.clone())
+        .schedule_task(&task_id)
+        .await
+        .expect("schedule task");
+
+    assert_eq!(outcome.dispatched_runs.len(), 1);
+    let dispatched_title: String =
+        sqlx::query_scalar("SELECT title FROM work_items WHERE work_item_id = ?")
+            .bind(&outcome.dispatched_runs[0].work_item_id)
+            .fetch_one(&pool)
+            .await
+            .expect("dispatched title");
+    assert_eq!(dispatched_title, "new_next title");
 
     cleanup_scheduler_tmux_sessions(&pool).await;
 }

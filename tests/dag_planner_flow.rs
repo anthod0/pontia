@@ -182,7 +182,7 @@ async fn replanner_output_applies_patch_and_resumes_scheduler() {
     .expect("insert signal");
     sqlx::query(
         r#"INSERT INTO dag_signals (signal_id, task_id, kind, summary, severity)
-           VALUES ('sig_unrelated', ?, 'needs_input', 'Keep this signal open', 'low')"#,
+           VALUES ('sig_unrelated', ?, 'risk', 'Keep this signal open', 'low')"#,
     )
     .bind(&task_id)
     .execute(&pool)

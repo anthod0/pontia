@@ -88,7 +88,7 @@ async fn raise_signal_records_agent_signal_and_replan_policy_starts_replanner() 
     .fetch_one(&state.db)
     .await
     .expect("runtime state");
-    assert_eq!(runtime_state, "blocked");
+    assert_eq!(runtime_state, "replan_anchor");
     let worker_session_state: String =
         sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = 'sess_signal_worker'")
             .fetch_one(&state.db)

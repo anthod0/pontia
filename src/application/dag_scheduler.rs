@@ -47,7 +47,7 @@ impl DagSchedulerService {
 
     pub async fn schedule_task(&self, task_id: &str) -> Result<DagSchedulerOutcome> {
         let task = self.task_context(task_id).await?;
-        if task.paused {
+        if task.paused || self.has_open_blocking_signal(task_id).await? {
             return Ok(DagSchedulerOutcome {
                 dispatched_runs: Vec::new(),
             });
@@ -96,7 +96,7 @@ impl DagSchedulerService {
                              AND e.to_work_item_id = work_item_runtime_projection.work_item_id
                              AND e.edge_type = 'depends_on'
                              AND upstream.active = 1
-                             AND COALESCE(up.current_state, 'pending') != 'completed'
+                             AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
                        ) THEN 'blocked'
                        ELSE 'ready'
                    END,
@@ -109,7 +109,7 @@ impl DagSchedulerService {
                              AND e.to_work_item_id = work_item_runtime_projection.work_item_id
                              AND e.edge_type = 'depends_on'
                              AND upstream.active = 1
-                             AND COALESCE(up.current_state, 'pending') != 'completed'
+                             AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
                        ) THEN NULL
                        ELSE COALESCE(ready_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                    END,
@@ -122,7 +122,7 @@ impl DagSchedulerService {
                              AND e.to_work_item_id = work_item_runtime_projection.work_item_id
                              AND e.edge_type = 'depends_on'
                              AND upstream.active = 1
-                             AND COALESCE(up.current_state, 'pending') != 'completed'
+                             AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
                        ) THEN 'waiting_for_dependencies'
                        ELSE NULL
                    END,
@@ -167,7 +167,7 @@ impl DagSchedulerService {
                        AND e.to_work_item_id = wi.work_item_id
                        AND e.edge_type = 'depends_on'
                        AND upstream.active = 1
-                       AND COALESCE(up.current_state, 'pending') != 'completed'
+                       AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
                  )
                  AND EXISTS (
                      SELECT 1 FROM execution_profiles ep
@@ -367,6 +367,19 @@ impl DagSchedulerService {
         Ok(turn.turn_id)
     }
 
+    async fn has_open_blocking_signal(&self, task_id: &str) -> Result<bool> {
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM dag_signals
+               WHERE task_id = ?
+                 AND state = 'open'
+                 AND kind IN ('replan_requested', 'needs_input', 'missing_dependency', 'scope_change')"#,
+        )
+        .bind(task_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count > 0)
+    }
+
     async fn task_context(&self, task_id: &str) -> Result<SchedulerTaskContext> {
         let row = sqlx::query(
             "SELECT task_id, state, input, workspace_id, metadata FROM tasks WHERE task_id = ?",
@@ -390,7 +403,10 @@ impl DagSchedulerService {
             input: row.get("input"),
             workspace_id: row.get("workspace_id"),
             preferred_client_type,
-            paused: row.get::<String, _>("state") == "paused",
+            paused: matches!(
+                row.get::<String, _>("state").as_str(),
+                "paused" | "replanning"
+            ),
         })
     }
 }

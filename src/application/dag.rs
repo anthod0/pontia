@@ -400,7 +400,7 @@ async fn initialize_projection(tx: &mut Transaction<'_, Sqlite>, task_id: &str) 
                         AND e.to_work_item_id = wi.work_item_id
                         AND e.edge_type = 'depends_on'
                         AND upstream.active = 1
-                        AND COALESCE(up.current_state, 'pending') != 'completed'
+                        AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
                   ) AS has_blocking_dependency
            FROM work_items wi
            LEFT JOIN work_item_runtime_projection existing
