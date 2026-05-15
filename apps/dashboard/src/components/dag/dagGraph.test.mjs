@@ -61,6 +61,36 @@ test('builds Svelte Flow nodes and edges from DAG work items', () => {
   assert.equal(flow.nodes[0].data.state, 'completed');
 });
 
+test('pins rendered node dimensions to match dagre layout assumptions', () => {
+  const flow = buildDagFlow({
+    task_id: 'task-1',
+    summary: {
+      total_work_items: 1,
+      ready_work_items: 1,
+      running_work_items: 0,
+      completed_work_items: 0,
+      blocked_work_items: 0,
+      failed_work_items: 0,
+      open_signals: 0,
+      total_runs: 0,
+    },
+    work_items: [
+      item({
+        work_item_id: 'very-long',
+        title: 'Very long work item title that should not change graph geometry',
+        description: 'Long descriptions should be clipped within the node instead of pushing nearby nodes around.',
+        kind: 'implementation-with-an-extraordinarily-long-kind-label',
+      }),
+    ],
+    edges: [],
+    runs: [],
+    signals: [],
+  });
+
+  assert.match(flow.nodes[0].style, /width: 260px/);
+  assert.match(flow.nodes[0].style, /height: 118px/);
+});
+
 test('lays out dependent work items from left to right', () => {
   const flow = buildDagFlow({
     task_id: 'task-1',

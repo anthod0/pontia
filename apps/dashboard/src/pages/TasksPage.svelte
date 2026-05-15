@@ -112,26 +112,28 @@
           </Empty.Header>
         </Empty.Root>
       {:else}
-        <div class="overflow-x-auto">
-          <Table.Root>
+        <div class="min-w-0 overflow-x-auto">
+          <Table.Root class="table-fixed">
             <Table.Header>
               <Table.Row>
-                <Table.Head>Task</Table.Head>
-                <Table.Head>State</Table.Head>
-                <Table.Head>Workspace</Table.Head>
-                <Table.Head>Updated</Table.Head>
-                <Table.Head class="text-right">Open</Table.Head>
+                <Table.Head class="w-[45%]">Task</Table.Head>
+                <Table.Head class="w-28">State</Table.Head>
+                <Table.Head class="w-[24%]">Workspace</Table.Head>
+                <Table.Head class="w-40">Updated</Table.Head>
+                <Table.Head class="w-20 text-right">Open</Table.Head>
               </Table.Row>
             </Table.Header>
             <Table.Body>
               {#each sortedTasks as item}
                 <Table.Row>
-                  <Table.Cell>
+                  <Table.Cell class="max-w-0">
                     <div class="font-medium">{shortId(item.task_id)}</div>
-                    <div class="max-w-xl truncate text-sm text-muted-foreground">{item.input}</div>
+                    <div class="truncate text-sm text-muted-foreground" title={item.input}>{item.input}</div>
                   </Table.Cell>
                   <Table.Cell><TaskStateBadge state={item.state} /></Table.Cell>
-                  <Table.Cell>{item.workspace_id ?? '—'}</Table.Cell>
+                  <Table.Cell class="max-w-0">
+                    <div class="truncate" title={item.workspace_id ?? '—'}>{item.workspace_id ?? '—'}</div>
+                  </Table.Cell>
                   <Table.Cell>{formatDateTime(item.updated_at)}</Table.Cell>
                   <Table.Cell class="text-right"><Button size="sm" variant="outline" onclick={() => navigate(`/tasks/${item.task_id}/overview`)}>Open</Button></Table.Cell>
                 </Table.Row>

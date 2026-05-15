@@ -58,6 +58,7 @@ export function buildDagFlow(dag: TaskDagView): DagFlowModel {
         priority: item.priority,
         workItem: item,
       },
+      style: `width: ${NODE_WIDTH}px; height: ${NODE_HEIGHT}px;`,
       sourcePosition: 'right' as WorkItemFlowNode['sourcePosition'],
       targetPosition: 'left' as WorkItemFlowNode['targetPosition'],
     };
