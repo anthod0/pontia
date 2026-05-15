@@ -1,18 +1,19 @@
+#[path = "support/generic_client.rs"]
+mod generic_client;
 #[path = "support/http.rs"]
 mod http;
 #[path = "support/task_state.rs"]
 mod task_state;
-#[path = "support/tmux.rs"]
-mod tmux;
 
 use axum::http::StatusCode;
+use generic_client::GenericClientTestScope;
 use http::{get_json, post_json};
 use serde_json::json;
 use task_state::test_state;
-use tmux::TmuxSessionGuard;
 
 #[tokio::test]
 async fn create_session_upserts_canonical_workspace_and_links_session() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let canonical = std::fs::canonicalize(workspace.path()).expect("canonical");
@@ -25,8 +26,7 @@ async fn create_session_upserts_canonical_workspace_and_links_session() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    let session_id = body["data"]["session"]["session_id"].as_str().unwrap();
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
+    assert!(body["data"]["session"]["session_id"].as_str().is_some());
     assert_eq!(
         body["data"]["session"]["workspace"],
         canonical.display().to_string()

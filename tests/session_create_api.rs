@@ -1,10 +1,11 @@
-#[path = "support/tmux.rs"]
-mod tmux;
+#[path = "support/generic_client.rs"]
+mod generic_client;
 
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
+use generic_client::GenericClientTestScope;
 use http_body_util::BodyExt;
 use llmparty::{
     application::{AppState, EventIngestService},
@@ -13,7 +14,6 @@ use llmparty::{
     transport::http,
 };
 use serde_json::{Value, json};
-use tmux::TmuxSessionGuard;
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
@@ -95,6 +95,7 @@ async fn get(state: AppState, uri: &str) -> (StatusCode, Value) {
 
 #[tokio::test]
 async fn create_session_rejects_unauthenticated_requests() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -113,6 +114,7 @@ async fn create_session_rejects_unauthenticated_requests() {
 
 #[tokio::test]
 async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_capabilities() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -134,7 +136,6 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
     assert_eq!(body["error"], Value::Null);
     let session = &body["data"]["session"];
     let session_id = session["session_id"].as_str().expect("session id");
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
     assert!(session_id.starts_with("sess_"));
     assert_eq!(session["client_type"], "generic");
     assert_eq!(session["handle"], Value::Null);
@@ -190,6 +191,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
 
 #[tokio::test]
 async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -208,7 +210,6 @@ async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
     assert_eq!(status, StatusCode::CREATED);
     let session = &body["data"]["session"];
     let session_id = session["session_id"].as_str().expect("session id");
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
     assert_eq!(session["handle"], "@reviewer");
 
     let (get_status, get_body) = get(
@@ -226,6 +227,7 @@ async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
 
 #[tokio::test]
 async fn create_session_accepts_role_and_description_and_exposes_them_on_session_views() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -246,7 +248,6 @@ async fn create_session_accepts_role_and_description_and_exposes_them_on_session
     assert_eq!(status, StatusCode::CREATED);
     let session = &body["data"]["session"];
     let session_id = session["session_id"].as_str().expect("session id");
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
     assert_eq!(session["role"], "reviewer");
     assert_eq!(
         session["description"],
@@ -276,6 +277,7 @@ async fn create_session_accepts_role_and_description_and_exposes_them_on_session
 
 #[tokio::test]
 async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_friendly_error() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let first = post_json(
@@ -291,8 +293,7 @@ async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_fr
     )
     .await;
     assert_eq!(first.0, StatusCode::CREATED);
-    let first_session_id = first.1["data"]["session"]["session_id"].as_str().unwrap();
-    let _runtime_guard = TmuxSessionGuard::for_session(first_session_id);
+    assert!(first.1["data"]["session"]["session_id"].as_str().is_some());
 
     let duplicate = post_json(
         state,
@@ -318,6 +319,7 @@ async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_fr
 
 #[tokio::test]
 async fn create_session_allows_reusing_handle_after_previous_session_exited() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let first = post_json(
@@ -334,7 +336,6 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
     .await;
     assert_eq!(first.0, StatusCode::CREATED);
     let first_session_id = first.1["data"]["session"]["session_id"].as_str().unwrap();
-    let _runtime_guard = TmuxSessionGuard::for_session(first_session_id);
 
     EventIngestService::new(state.db.clone())
         .ingest_event(DomainEvent::new(
@@ -363,8 +364,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
     .await;
 
     assert_eq!(second.0, StatusCode::CREATED);
-    let second_session_id = second.1["data"]["session"]["session_id"].as_str().unwrap();
-    let _second_runtime_guard = TmuxSessionGuard::for_session(second_session_id);
+    assert!(second.1["data"]["session"]["session_id"].as_str().is_some());
     assert_eq!(second.1["data"]["session"]["handle"], "@reviewer");
     assert_ne!(
         second.1["data"]["session"]["session_id"],
@@ -374,6 +374,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
 
 #[tokio::test]
 async fn create_session_rejects_handle_without_workspace() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -399,6 +400,7 @@ async fn create_session_rejects_handle_without_workspace() {
 
 #[tokio::test]
 async fn create_session_rejects_invalid_handle_format() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -425,6 +427,7 @@ async fn create_session_rejects_invalid_handle_format() {
 
 #[tokio::test]
 async fn create_session_with_initial_task_creates_queued_initial_turn() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -441,7 +444,6 @@ async fn create_session_with_initial_task_creates_queued_initial_turn() {
 
     assert_eq!(status, StatusCode::CREATED);
     let session_id = body["data"]["session"]["session_id"].as_str().unwrap();
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
     let initial_turn = &body["data"]["initial_turn"];
     let turn_id = initial_turn["turn_id"].as_str().expect("turn id");
     assert!(turn_id.starts_with("turn_"));
@@ -466,6 +468,7 @@ async fn create_session_with_initial_task_creates_queued_initial_turn() {
 
 #[tokio::test]
 async fn create_session_is_idempotent_when_idempotency_key_is_retried() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let body = json!({
         "client_type":"generic",
@@ -494,7 +497,6 @@ async fn create_session_is_idempotent_when_idempotency_key_is_retried() {
     assert_eq!(second.1["data"], first.1["data"]);
 
     let session_id = first.1["data"]["session"]["session_id"].as_str().unwrap();
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
     let (events_status, events_body) =
         get(state, &format!("/external/v1/sessions/{session_id}/events")).await;
     assert_eq!(events_status, StatusCode::OK);

@@ -1,5 +1,3 @@
-use std::process::{Command, Stdio};
-
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
@@ -12,6 +10,11 @@ use llmparty::{
 };
 use serde_json::{Value, json};
 use tower::ServiceExt;
+
+#[path = "support/generic_client.rs"]
+mod generic_client;
+
+use generic_client::GenericClientTestScope;
 
 const TOKEN: &str = "test-token";
 
@@ -140,36 +143,11 @@ fn event_body(event_id: &str, event_type: &str, session_id: &str, turn_id: &str)
     })
 }
 
-struct TmuxSessionGuard {
-    tmux_session: String,
-}
-
-impl TmuxSessionGuard {
-    fn for_session(session_id: &str) -> Self {
-        let sanitized: String = session_id
-            .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-            .collect();
-        Self {
-            tmux_session: format!("llmparty_{sanitized}"),
-        }
-    }
-}
-
-impl Drop for TmuxSessionGuard {
-    fn drop(&mut self) {
-        let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &self.tmux_session])
-            .stderr(Stdio::null())
-            .status();
-    }
-}
-
 #[tokio::test]
 async fn idle_after_idle_inbox_message_dispatches_immediately() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _guard = TmuxSessionGuard::for_session(&session_id);
 
     let (status, body) = post_json(
         state.clone(),
@@ -202,9 +180,9 @@ async fn idle_after_idle_inbox_message_dispatches_immediately() {
 
 #[tokio::test]
 async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _guard = TmuxSessionGuard::for_session(&session_id);
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     let (started_status, _) = post_internal_event(
         state.clone(),
@@ -275,9 +253,9 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
 
 #[tokio::test]
 async fn idempotent_inbox_retry_returns_current_message_state_without_duplicate_turn() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _guard = TmuxSessionGuard::for_session(&session_id);
     let uri = format!("/external/v1/sessions/{session_id}/inbox/messages");
 
     let first = post_json(
@@ -307,9 +285,9 @@ async fn idempotent_inbox_retry_returns_current_message_state_without_duplicate_
 
 #[tokio::test]
 async fn cancel_pending_message_prevents_later_dispatch() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _guard = TmuxSessionGuard::for_session(&session_id);
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
         state.clone(),
@@ -362,9 +340,9 @@ async fn cancel_pending_message_prevents_later_dispatch() {
 
 #[tokio::test]
 async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _guard = TmuxSessionGuard::for_session(&session_id);
     post_internal_event(
         state.clone(),
         json!({
@@ -429,9 +407,9 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
 
 #[tokio::test]
 async fn interrupt_now_without_interrupt_capability_marks_message_failed() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _guard = TmuxSessionGuard::for_session(&session_id);
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
         state.clone(),

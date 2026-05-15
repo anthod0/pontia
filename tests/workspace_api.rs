@@ -12,35 +12,14 @@ use llmparty::{
     transport::http,
 };
 use serde_json::{Value, json};
-use std::process::{Command, Stdio};
 use tower::ServiceExt;
 
+#[path = "support/generic_client.rs"]
+mod generic_client;
+
+use generic_client::GenericClientTestScope;
+
 const TOKEN: &str = "test-token";
-
-struct TmuxSessionGuard {
-    tmux_session: String,
-}
-
-impl TmuxSessionGuard {
-    fn for_session(session_id: &str) -> Self {
-        let sanitized: String = session_id
-            .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-            .collect();
-        Self {
-            tmux_session: format!("llmparty_{sanitized}"),
-        }
-    }
-}
-
-impl Drop for TmuxSessionGuard {
-    fn drop(&mut self) {
-        let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &self.tmux_session])
-            .stderr(Stdio::null())
-            .status();
-    }
-}
 
 async fn test_state(roots: Vec<WorkspaceRootConfig>) -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -345,6 +324,7 @@ async fn does_not_register_missing_directory() {
 
 #[tokio::test]
 async fn creates_session_from_known_workspace_id() {
+    let _scope = GenericClientTestScope::new().await;
     let root = tempfile::tempdir().expect("root");
     let app = root.path().join("app");
     std::fs::create_dir(&app).expect("app");
@@ -371,8 +351,7 @@ async fn creates_session_from_known_workspace_id() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    let session_id = body["data"]["session"]["session_id"].as_str().unwrap();
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
+    assert!(body["data"]["session"]["session_id"].as_str().is_some());
     assert_eq!(body["data"]["session"]["workspace_id"], workspace_id);
     assert_eq!(
         body["data"]["session"]["workspace"],

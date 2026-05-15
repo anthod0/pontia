@@ -1,18 +1,19 @@
+#[path = "support/generic_client.rs"]
+mod generic_client;
 #[path = "support/http.rs"]
 mod http;
 #[path = "support/task_state.rs"]
 mod task_state;
-#[path = "support/tmux.rs"]
-mod tmux;
 
 use axum::http::StatusCode;
+use generic_client::GenericClientTestScope;
 use http::{get_json, post_json, post_json_with_idempotency};
 use serde_json::{Value, json};
 use task_state::test_state;
-use tmux::TmuxSessionGuard;
 
 #[tokio::test]
 async fn confirm_workspace_dispatches_pending_task() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let canonical = std::fs::canonicalize(workspace.path()).expect("canonical");
@@ -37,7 +38,6 @@ async fn confirm_workspace_dispatches_pending_task() {
     assert_eq!(status, StatusCode::OK);
     let task = &body["data"]["task"];
     let session_id = task["session_id"].as_str().expect("session id");
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
     assert_eq!(task["state"], "queued");
     assert_eq!(task["routing_state"], "confirmed");
     assert!(task["workspace_id"].as_str().unwrap().starts_with("wks_"));
@@ -67,6 +67,7 @@ async fn confirm_workspace_dispatches_pending_task() {
 
 #[tokio::test]
 async fn confirm_workspace_rejects_already_dispatched_task() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
 
@@ -83,8 +84,7 @@ async fn confirm_workspace_rejects_already_dispatched_task() {
     assert_eq!(status, StatusCode::CREATED);
     let task = &body["data"]["task"];
     let task_id = task["task_id"].as_str().unwrap();
-    let session_id = task["session_id"].as_str().unwrap();
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
+    assert!(task["session_id"].as_str().is_some());
 
     let (status, body) = post_json(
         state,
@@ -99,6 +99,7 @@ async fn confirm_workspace_rejects_already_dispatched_task() {
 
 #[tokio::test]
 async fn cancelling_pending_confirmation_task_marks_it_cancelled() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(

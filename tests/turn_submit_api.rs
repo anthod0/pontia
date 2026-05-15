@@ -1,5 +1,3 @@
-use std::process::{Command, Stdio};
-
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
@@ -12,6 +10,11 @@ use llmparty::{
 };
 use serde_json::{Value, json};
 use tower::ServiceExt;
+
+#[path = "support/generic_client.rs"]
+mod generic_client;
+
+use generic_client::GenericClientTestScope;
 
 const TOKEN: &str = "test-token";
 
@@ -137,36 +140,11 @@ fn event_body(event_id: &str, event_type: &str, session_id: &str, turn_id: &str)
     })
 }
 
-struct TmuxSessionGuard {
-    tmux_session: String,
-}
-
-impl TmuxSessionGuard {
-    fn for_session(session_id: &str) -> Self {
-        let sanitized: String = session_id
-            .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-            .collect();
-        Self {
-            tmux_session: format!("llmparty_{sanitized}"),
-        }
-    }
-}
-
-impl Drop for TmuxSessionGuard {
-    fn drop(&mut self) {
-        let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &self.tmux_session])
-            .stderr(Stdio::null())
-            .status();
-    }
-}
-
 #[tokio::test]
 async fn post_turn_external_endpoint_is_removed() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
 
     let (status, _) = request(
         state,
@@ -181,9 +159,9 @@ async fn post_turn_external_endpoint_is_removed() {
 
 #[tokio::test]
 async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
 
     let turn_id = submit_inbox_message(state.clone(), &session_id, "continue work").await;
 
@@ -224,9 +202,9 @@ async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
 
 #[tokio::test]
 async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
     let turn_id = submit_inbox_message(state.clone(), &session_id, "run").await;
 
     let (started_status, _) = post_internal_event(

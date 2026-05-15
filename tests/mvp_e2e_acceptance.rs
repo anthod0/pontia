@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    path::Path,
-    process::{Command, Stdio},
-};
+use std::{fs, path::Path};
 
 use axum::{
     body::Body,
@@ -18,10 +14,14 @@ use llmparty::{
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+#[path = "support/generic_client.rs"]
+mod generic_client;
+
+use generic_client::GenericClientTestScope;
+
 const TOKEN: &str = "test-token";
 
 async fn test_state(name: &str) -> AppState {
-    GenericTestAdapter::clear_recorded_inputs();
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join(format!("{name}.db"));
     let _kept_dir = dir.keep();
@@ -183,33 +183,9 @@ fn file_url(path: &Path) -> String {
     format!("file://{}", path.display())
 }
 
-struct TmuxSessionGuard {
-    tmux_session: String,
-}
-
-impl TmuxSessionGuard {
-    fn for_session(session_id: &str) -> Self {
-        let sanitized: String = session_id
-            .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-            .collect();
-        Self {
-            tmux_session: format!("llmparty_{sanitized}"),
-        }
-    }
-}
-
-impl Drop for TmuxSessionGuard {
-    fn drop(&mut self) {
-        let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &self.tmux_session])
-            .stderr(Stdio::null())
-            .status();
-    }
-}
-
 #[tokio::test]
 async fn orchestrator_can_complete_backend_only_http_polling_flow() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state("mvp_e2e").await;
 
     let (create_status, create_body) = create_session_with_key(state.clone(), "mvp-session").await;
@@ -218,7 +194,6 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
         .as_str()
         .expect("session id")
         .to_string();
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
     assert_eq!(create_body["data"]["session"]["state"], "idle");
     assert_eq!(
         create_body["data"]["session"]["capabilities"]["accept_task"],
@@ -380,6 +355,7 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
 
 #[tokio::test]
 async fn external_api_has_stable_error_semantics_and_idempotency() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state("mvp_errors").await;
 
     let (unauth_status, unauth_body) = request_json(
@@ -428,7 +404,6 @@ async fn external_api_has_stable_error_semantics_and_idempotency() {
         .as_str()
         .expect("session id")
         .to_string();
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
     assert_eq!(
         second_create_body["data"]["session"]["session_id"],
         session_id

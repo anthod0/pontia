@@ -1,18 +1,19 @@
+#[path = "support/generic_client.rs"]
+mod generic_client;
 #[path = "support/http.rs"]
 mod http;
 #[path = "support/task_state.rs"]
 mod task_state;
-#[path = "support/tmux.rs"]
-mod tmux;
 
 use axum::http::StatusCode;
+use generic_client::GenericClientTestScope;
 use http::{get_json, post_json, post_json_with_idempotency};
 use serde_json::{Value, json};
 use task_state::test_state;
-use tmux::TmuxSessionGuard;
 
 #[tokio::test]
 async fn create_task_without_workspace_persists_global_task_for_confirmation() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -41,6 +42,7 @@ async fn create_task_without_workspace_persists_global_task_for_confirmation() {
 
 #[tokio::test]
 async fn task_creation_idempotency_returns_same_task_for_replayed_key() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let request = json!({"input":"retry-safe task", "client_type":"generic"});
 
@@ -73,6 +75,7 @@ async fn task_creation_idempotency_returns_same_task_for_replayed_key() {
 
 #[tokio::test]
 async fn invalid_task_client_type_returns_error_without_creating_task() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -92,6 +95,7 @@ async fn invalid_task_client_type_returns_error_without_creating_task() {
 
 #[tokio::test]
 async fn create_task_with_workspace_routes_to_session_and_links_created_turn() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let canonical = std::fs::canonicalize(workspace.path()).expect("canonical");
@@ -111,7 +115,6 @@ async fn create_task_with_workspace_routes_to_session_and_links_created_turn() {
     assert_eq!(status, StatusCode::CREATED);
     let task = &body["data"]["task"];
     let session_id = task["session_id"].as_str().expect("session id");
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
     let turn_id = task["turn_id"].as_str().expect("turn id");
     assert_eq!(task["state"], "queued");
     assert_eq!(task["routing_state"], "matched");

@@ -1,21 +1,22 @@
 #[path = "support/events.rs"]
 mod events;
+#[path = "support/generic_client.rs"]
+mod generic_client;
 #[path = "support/http.rs"]
 mod http;
 #[path = "support/task_state.rs"]
 mod task_state;
-#[path = "support/tmux.rs"]
-mod tmux;
 
 use axum::http::StatusCode;
 use events::{event_body, post_internal_event};
+use generic_client::GenericClientTestScope;
 use http::{get_json, post_json, post_json_with_idempotency};
 use serde_json::{Value, json};
 use task_state::test_state;
-use tmux::TmuxSessionGuard;
 
 #[tokio::test]
 async fn task_events_endpoint_returns_task_lifecycle_history() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = post_json(
@@ -50,6 +51,7 @@ async fn task_events_endpoint_returns_task_lifecycle_history() {
 
 #[tokio::test]
 async fn task_events_endpoint_returns_not_found_for_missing_task() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = get_json(state, "/external/v1/tasks/task_missing/events").await;
@@ -60,6 +62,7 @@ async fn task_events_endpoint_returns_not_found_for_missing_task() {
 
 #[tokio::test]
 async fn task_state_follows_turn_lifecycle() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
 
@@ -76,7 +79,6 @@ async fn task_state_follows_turn_lifecycle() {
     assert_eq!(status, StatusCode::CREATED);
     let task_id = body["data"]["task"]["task_id"].as_str().unwrap();
     let session_id = body["data"]["task"]["session_id"].as_str().unwrap();
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
     let turn_id = body["data"]["task"]["turn_id"].as_str().unwrap();
 
     let (status, _) = post_internal_event(
@@ -140,6 +142,7 @@ async fn task_state_follows_turn_lifecycle() {
 
 #[tokio::test]
 async fn task_interrupt_delegates_to_active_turn_and_updates_task_state() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
 
@@ -157,7 +160,6 @@ async fn task_interrupt_delegates_to_active_turn_and_updates_task_state() {
     let task = &body["data"]["task"];
     let task_id = task["task_id"].as_str().unwrap();
     let session_id = task["session_id"].as_str().unwrap();
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
     let turn_id = task["turn_id"].as_str().unwrap();
     let metadata: String =
         sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")

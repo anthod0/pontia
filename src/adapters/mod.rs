@@ -84,19 +84,10 @@ pub struct ArtifactRegistration {
     pub metadata: Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct GenericTestBehavior {
     pub auto_start_turn: bool,
     pub write_current_turn_context: bool,
-}
-
-impl Default for GenericTestBehavior {
-    fn default() -> Self {
-        Self {
-            auto_start_turn: false,
-            write_current_turn_context: false,
-        }
-    }
 }
 
 #[derive(Debug, Default, Clone)]

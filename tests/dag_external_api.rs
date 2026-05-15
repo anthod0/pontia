@@ -1,11 +1,12 @@
+#[path = "support/generic_client.rs"]
+mod generic_client;
 #[path = "support/http.rs"]
 mod http;
 #[path = "support/task_state.rs"]
 mod task_state;
-#[path = "support/tmux.rs"]
-mod tmux;
 
 use axum::http::StatusCode;
+use generic_client::GenericClientTestScope;
 use http::{get_json, post_json};
 use llmparty::{
     application::{DagService, SubmitPlanPayload, WorkItemDraft, WorkItemEdgeDraft},
@@ -13,7 +14,6 @@ use llmparty::{
 };
 use serde_json::json;
 use task_state::test_state;
-use tmux::TmuxSessionGuard;
 
 async fn insert_running_task(state: &llmparty::application::AppState) -> String {
     let task_id = new_task_id().to_string();
@@ -66,6 +66,7 @@ fn initial_plan() -> SubmitPlanPayload {
 
 #[tokio::test]
 async fn dag_external_api_exposes_summary_work_items_runs_and_signals_from_projections() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let task_id = insert_running_task(&state).await;
     DagService::new(state.db.clone())
@@ -90,7 +91,6 @@ async fn dag_external_api_exposes_summary_work_items_runs_and_signals_from_proje
         .expect("work item id");
     let session_id = dispatched[0]["session_id"].as_str().expect("session id");
     let turn_id = dispatched[0]["turn_id"].as_str().expect("turn id");
-    let _runtime_guard = TmuxSessionGuard::for_session(session_id);
 
     sqlx::query(
         r#"INSERT INTO dag_signals (
@@ -154,6 +154,7 @@ async fn dag_external_api_exposes_summary_work_items_runs_and_signals_from_proje
 
 #[tokio::test]
 async fn dag_external_api_returns_not_found_for_missing_task() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
 
     let (status, body) = get_json(state, "/external/v1/tasks/task_missing/dag").await;

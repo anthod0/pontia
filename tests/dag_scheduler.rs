@@ -1,3 +1,7 @@
+#[path = "support/generic_client.rs"]
+mod generic_client;
+
+use generic_client::GenericClientTestScope;
 use llmparty::{
     application::{
         DagSchedulerService, DagService, SubmitPlanPayload, WorkItemDraft, WorkItemEdgeDraft,
@@ -21,6 +25,9 @@ async fn cleanup_scheduler_tmux_sessions(pool: &SqlitePool) {
         .await
         .unwrap_or_default();
     for runtime_ref in refs {
+        if runtime_ref.starts_with("generic:") {
+            continue;
+        }
         let _ = Command::new("tmux")
             .args(["kill-session", "-t", &runtime_ref])
             .status();
@@ -153,11 +160,16 @@ async fn scheduler_dispatches_one_ready_work_item_as_run_session_and_turn() {
 
 #[tokio::test]
 async fn scheduler_uses_dag_task_planner_client_for_work_item_agents() {
-    let prior_pi_command = std::env::var("LLMPARTY_PI_TUI_COMMAND").ok();
-    unsafe { std::env::set_var("LLMPARTY_PI_TUI_COMMAND", "sleep 600") };
-
+    let _scope = GenericClientTestScope::new().await;
     let pool = test_pool().await;
-    let task_id = insert_dag_task_with_planner_client(&pool, "pi").await;
+    sqlx::query(
+        "UPDATE execution_profiles SET supported_client_types = ? WHERE profile_id = 'implementer'",
+    )
+    .bind(json!(["pi", "claude_code", "generic"]).to_string())
+    .execute(&pool)
+    .await
+    .expect("enable generic implementer profile");
+    let task_id = insert_dag_task_with_planner_client(&pool, "generic").await;
     DagService::new(pool.clone())
         .apply_initial_dag(
             &task_id,
@@ -182,15 +194,10 @@ async fn scheduler_uses_dag_task_planner_client_for_work_item_agents() {
     .fetch_one(&pool)
     .await
     .expect("run client row");
-    assert_eq!(row.get::<String, _>("run_client_type"), "pi");
-    assert_eq!(row.get::<String, _>("session_client_type"), "pi");
+    assert_eq!(row.get::<String, _>("run_client_type"), "generic");
+    assert_eq!(row.get::<String, _>("session_client_type"), "generic");
 
     cleanup_scheduler_tmux_sessions(&pool).await;
-    if let Some(value) = prior_pi_command {
-        unsafe { std::env::set_var("LLMPARTY_PI_TUI_COMMAND", value) };
-    } else {
-        unsafe { std::env::remove_var("LLMPARTY_PI_TUI_COMMAND") };
-    }
 }
 
 #[tokio::test]

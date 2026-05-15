@@ -1,9 +1,4 @@
-use std::{
-    fs,
-    path::Path,
-    process::{Command, Stdio},
-    sync::OnceLock,
-};
+use std::{fs, path::Path};
 
 use axum::{
     body::Body,
@@ -11,9 +6,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use llmparty::{
-    adapters::{
-        AdapterCapabilities, ArtifactRegistration, GenericTestAdapter, GenericTestBehavior,
-    },
+    adapters::{AdapterCapabilities, ArtifactRegistration, GenericTestAdapter},
     application::{AppState, ArtifactRegistrationService},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
@@ -21,31 +14,14 @@ use llmparty::{
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+#[path = "support/generic_client.rs"]
+mod generic_client;
+
+use generic_client::GenericClientTestScope;
+
 const TOKEN: &str = "test-token";
 
-fn generic_adapter_lock() -> &'static tokio::sync::Mutex<()> {
-    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
-}
-
-struct GenericAdapterScope {
-    _guard: tokio::sync::MutexGuard<'static, ()>,
-}
-
-impl Drop for GenericAdapterScope {
-    fn drop(&mut self) {
-        GenericTestAdapter::clear_recorded_inputs();
-    }
-}
-
-async fn generic_adapter_scope() -> GenericAdapterScope {
-    GenericAdapterScope {
-        _guard: generic_adapter_lock().lock().await,
-    }
-}
-
 async fn test_state(name: &str) -> AppState {
-    GenericTestAdapter::clear_recorded_inputs();
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join(format!("{name}.db"));
     let _kept_dir = dir.keep();
@@ -183,36 +159,12 @@ fn file_url(path: &Path) -> String {
     format!("file://{}", path.display())
 }
 
-struct TmuxSessionGuard {
-    tmux_session: String,
-}
-
-impl TmuxSessionGuard {
-    fn for_session(session_id: &str) -> Self {
-        let sanitized: String = session_id
-            .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-            .collect();
-        Self {
-            tmux_session: format!("llmparty_{sanitized}"),
-        }
-    }
-}
-
-impl Drop for TmuxSessionGuard {
-    fn drop(&mut self) {
-        let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &self.tmux_session])
-            .stderr(Stdio::null())
-            .status();
-    }
-}
-
 #[tokio::test]
 async fn generic_test_adapter_can_expose_pi_like_capabilities_without_pi_runtime() {
-    let _scope = generic_adapter_scope().await;
+    let _scope = GenericClientTestScope::new()
+        .await
+        .with_capabilities(AdapterCapabilities::pi_m0_default());
     let state = test_state("m8_pi_like_capabilities").await;
-    GenericTestAdapter::set_capabilities(AdapterCapabilities::pi_m0_default());
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = get_json(
@@ -241,10 +193,9 @@ async fn generic_test_adapter_can_expose_pi_like_capabilities_without_pi_runtime
 
 #[tokio::test]
 async fn capability_model_declares_all_mvp_adapter_capabilities() {
-    let _scope = generic_adapter_scope().await;
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state("m8_capabilities").await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
 
     let (status, body) = get_json(state, &format!("/external/v1/sessions/{session_id}")).await;
 
@@ -263,12 +214,9 @@ async fn capability_model_declares_all_mvp_adapter_capabilities() {
 
 #[tokio::test]
 async fn generic_initial_task_dispatches_in_process() {
-    let _scope = generic_adapter_scope().await;
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state("m8_in_process_initial_task").await;
-    GenericTestAdapter::set_behavior(GenericTestBehavior {
-        auto_start_turn: true,
-        write_current_turn_context: true,
-    });
+    let _scope = _scope.auto_start_turn().write_current_turn_context();
 
     let body = create_session_with_body(
         state.clone(),
@@ -288,12 +236,9 @@ async fn generic_initial_task_dispatches_in_process() {
 
 #[tokio::test]
 async fn generic_dispatch_starts_turn_and_writes_current_turn_context_in_process() {
-    let _scope = generic_adapter_scope().await;
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state("m8_in_process_dispatch").await;
-    GenericTestAdapter::set_behavior(GenericTestBehavior {
-        auto_start_turn: true,
-        write_current_turn_context: true,
-    });
+    let _scope = _scope.auto_start_turn().write_current_turn_context();
     let session_id = create_session(state.clone()).await;
 
     let (turn_id, body) = submit_turn(state.clone(), &session_id, "in process task").await;
@@ -320,10 +265,9 @@ async fn generic_dispatch_starts_turn_and_writes_current_turn_context_in_process
 
 #[tokio::test]
 async fn turn_input_handoff_uses_control_plane_assigned_identity() {
-    let _scope = generic_adapter_scope().await;
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state("m8_turn_input").await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
 
     let (turn_id, body) = submit_turn(state, &session_id, "adapter contract task").await;
 
@@ -341,10 +285,9 @@ async fn turn_input_handoff_uses_control_plane_assigned_identity() {
 
 #[tokio::test]
 async fn event_source_returns_turn_facts_through_internal_event_api() {
-    let _scope = generic_adapter_scope().await;
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state("m8_event_source").await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "run to completion").await;
 
     for (idx, event_type, payload) in [
@@ -407,10 +350,9 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
 
 #[tokio::test]
 async fn artifact_source_provider_registers_readable_artifacts_without_exposing_source_ref() {
-    let _scope = generic_adapter_scope().await;
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state("m8_artifact_source").await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "produce artifact").await;
     let dir = tempfile::tempdir().expect("artifact dir");
     let artifact_path = dir.path().join("result.txt");
@@ -454,10 +396,9 @@ async fn artifact_source_provider_registers_readable_artifacts_without_exposing_
 
 #[tokio::test]
 async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
-    let _scope = generic_adapter_scope().await;
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state("m8_degradation").await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "cannot interrupt").await;
 
     let (started_status, _) = post_json(

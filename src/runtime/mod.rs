@@ -9,6 +9,11 @@ mod paths;
 mod script;
 mod tmux;
 
+use std::{
+    collections::HashMap,
+    sync::{Mutex, OnceLock},
+};
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use time::format_description::well_known::Rfc3339;
@@ -50,6 +55,11 @@ pub struct AgentInput {
 
 #[derive(Debug, Clone, Default)]
 pub struct GenericRuntimeManager;
+
+#[derive(Debug, Clone)]
+struct InProcessRuntimeState {
+    alive: bool,
+}
 
 impl From<AdapterCapabilities> for SessionCapabilities {
     fn from(capabilities: AdapterCapabilities) -> Self {
@@ -183,9 +193,14 @@ impl GenericRuntimeManager {
         let log_path = log_path.display().to_string();
         let adapter_event_log = adapter_event_log.display().to_string();
         let current_turn_file = current_turn_file.display().to_string();
+        let runtime_ref = in_process_runtime_ref(&request);
+        in_process_registry()
+            .lock()
+            .expect("in-process runtime registry lock")
+            .insert(runtime_ref.clone(), InProcessRuntimeState { alive: true });
         Ok(RuntimeStartResult {
             runtime_kind: "in_process_test".to_string(),
-            runtime_ref: format!("generic:{}", request.session_id),
+            runtime_ref,
             capabilities: capabilities.into(),
             metadata: json!({
                 "backend": "in_process_test",
@@ -231,6 +246,13 @@ impl GenericRuntimeManager {
 
     pub fn terminate_session(&self, runtime_ref: &str) -> Result<()> {
         if runtime_ref.starts_with("generic:") {
+            if let Some(runtime) = in_process_registry()
+                .lock()
+                .expect("in-process runtime registry lock")
+                .get_mut(runtime_ref)
+            {
+                runtime.alive = false;
+            }
             return Ok(());
         }
         tmux::terminate_session(runtime_ref)
@@ -241,7 +263,21 @@ impl GenericRuntimeManager {
     }
 
     pub fn is_alive(&self, runtime_ref: &str) -> bool {
+        if runtime_ref.starts_with("generic:") {
+            return in_process_registry()
+                .lock()
+                .expect("in-process runtime registry lock")
+                .get(runtime_ref)
+                .is_some_and(|runtime| runtime.alive);
+        }
         tmux::is_alive(runtime_ref)
+    }
+
+    pub fn reset_in_process_test_registry() {
+        in_process_registry()
+            .lock()
+            .expect("in-process runtime registry lock")
+            .clear();
     }
 }
 
@@ -253,6 +289,55 @@ impl RuntimeStartResult {
         }
         metadata
     }
+}
+
+fn in_process_registry() -> &'static Mutex<HashMap<String, InProcessRuntimeState>> {
+    static REGISTRY: OnceLock<Mutex<HashMap<String, InProcessRuntimeState>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn in_process_runtime_ref(request: &RuntimeStartRequest) -> String {
+    let handle = request
+        .handle
+        .as_deref()
+        .map(|value| value.trim_start_matches('@'))
+        .filter(|value| !value.is_empty())
+        .map(sanitize_runtime_ref_part);
+    let role = request
+        .role
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .map(sanitize_runtime_ref_part);
+    let Some(handle) = handle else {
+        return format!("generic:{}", request.session_id);
+    };
+    let Some(role) = role else {
+        return format!(
+            "generic:{}:{}",
+            handle,
+            short_session_id(&request.session_id)
+        );
+    };
+    format!(
+        "generic:{}:{}:{}",
+        handle,
+        role,
+        short_session_id(&request.session_id)
+    )
+}
+
+fn short_session_id(session_id: &str) -> String {
+    let id_body = session_id.rsplit('_').next().unwrap_or(session_id);
+    let mut chars: Vec<char> = id_body.chars().rev().take(8).collect();
+    chars.reverse();
+    chars.into_iter().collect()
+}
+
+fn sanitize_runtime_ref_part(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
+        .collect()
 }
 
 fn shell_quote(value: &str) -> String {
@@ -289,5 +374,61 @@ mod tests {
                 .unwrap()
                 .contains_key("tmux_session")
         );
+    }
+
+    #[test]
+    fn generic_runtime_ref_uses_handle_role_and_short_session_id() {
+        GenericRuntimeManager::reset_in_process_test_registry();
+        let manager = GenericRuntimeManager;
+        let session_id = "sess_1234567890abcdef".to_string();
+
+        let runtime = manager
+            .start_session(RuntimeStartRequest {
+                session_id,
+                client_type: "generic".to_string(),
+                workspace: None,
+                handle: Some("@planner".to_string()),
+                role: Some("execution reviewer".to_string()),
+            })
+            .expect("generic runtime should start");
+
+        assert_eq!(
+            runtime.runtime_ref,
+            "generic:planner:execution_reviewer:90abcdef"
+        );
+    }
+
+    #[test]
+    fn generic_runtime_registry_tracks_lifecycle_and_restart_identity() {
+        GenericRuntimeManager::reset_in_process_test_registry();
+        let manager = GenericRuntimeManager;
+        let request = RuntimeStartRequest {
+            session_id: "sess_runtime_lifecycle_abcdef12".to_string(),
+            client_type: "generic".to_string(),
+            workspace: None,
+            handle: None,
+            role: None,
+        };
+
+        let first = manager
+            .start_session(request.clone())
+            .expect("generic runtime should start");
+        assert!(manager.is_alive(&first.runtime_ref));
+
+        manager
+            .terminate_session(&first.runtime_ref)
+            .expect("terminate generic runtime");
+        assert!(!manager.is_alive(&first.runtime_ref));
+
+        let second = manager
+            .start_session_with_restart_count(request, 1)
+            .expect("generic runtime should restart");
+        assert_eq!(second.runtime_ref, first.runtime_ref);
+        assert!(manager.is_alive(&second.runtime_ref));
+        assert_ne!(
+            first.metadata["runtime_instance_id"],
+            second.metadata["runtime_instance_id"]
+        );
+        assert_ne!(first.metadata["started_at"], second.metadata["started_at"]);
     }
 }

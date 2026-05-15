@@ -1,11 +1,12 @@
+#[path = "support/generic_client.rs"]
+mod generic_client;
 #[path = "support/http.rs"]
 mod http;
 #[path = "support/task_state.rs"]
 mod task_state;
-#[path = "support/tmux.rs"]
-mod tmux;
 
 use axum::http::StatusCode;
+use generic_client::GenericClientTestScope;
 use http::{get_json, post_json};
 use llmparty::{
     application::{DagSchedulerService, DagService, SubmitPlanPayload, WorkItemDraft},
@@ -13,7 +14,6 @@ use llmparty::{
 };
 use serde_json::json;
 use task_state::test_state;
-use tmux::TmuxSessionGuard;
 
 async fn insert_running_task(state: &llmparty::application::AppState) -> String {
     let task_id = new_task_id().to_string();
@@ -57,6 +57,7 @@ fn initial_plan() -> SubmitPlanPayload {
 
 #[tokio::test]
 async fn human_signal_api_records_human_objection_visible_in_signals() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let task_id = insert_running_task(&state).await;
 
@@ -88,6 +89,7 @@ async fn human_signal_api_records_human_objection_visible_in_signals() {
 
 #[tokio::test]
 async fn pause_prevents_scheduler_dispatch_until_resume() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let task_id = insert_running_task(&state).await;
     DagService::new(state.db.clone())
@@ -138,7 +140,6 @@ async fn pause_prevents_scheduler_dispatch_until_resume() {
         .as_array()
         .unwrap()
     {
-        let session_id = run["session_id"].as_str().unwrap();
-        let _guard = TmuxSessionGuard::for_session(session_id);
+        assert!(run["session_id"].as_str().is_some());
     }
 }

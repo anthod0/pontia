@@ -1,5 +1,3 @@
-use std::process::{Command, Stdio};
-
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
@@ -12,6 +10,11 @@ use llmparty::{
 };
 use serde_json::{Value, json};
 use tower::ServiceExt;
+
+#[path = "support/generic_client.rs"]
+mod generic_client;
+
+use generic_client::GenericClientTestScope;
 
 const TOKEN: &str = "test-token";
 
@@ -104,36 +107,11 @@ async fn submit_turn(state: AppState, session_id: &str) -> String {
         .to_string()
 }
 
-struct TmuxSessionGuard {
-    tmux_session: String,
-}
-
-impl TmuxSessionGuard {
-    fn for_session(session_id: &str) -> Self {
-        let sanitized: String = session_id
-            .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-            .collect();
-        Self {
-            tmux_session: format!("llmparty_{sanitized}"),
-        }
-    }
-}
-
-impl Drop for TmuxSessionGuard {
-    fn drop(&mut self) {
-        let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &self.tmux_session])
-            .stderr(Stdio::null())
-            .status();
-    }
-}
-
 #[tokio::test]
 async fn interrupt_current_turn_returns_capability_unavailable_for_generic_runtime() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
     let turn_id = submit_turn(state.clone(), &session_id).await;
 
     let (status, body) = request(
@@ -170,9 +148,9 @@ async fn interrupt_current_turn_returns_capability_unavailable_for_generic_runti
 
 #[tokio::test]
 async fn interrupt_specified_turn_returns_capability_unavailable_for_generic_runtime() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
     let turn_id = submit_turn(state.clone(), &session_id).await;
 
     let (status, body) = request(
@@ -191,9 +169,9 @@ async fn interrupt_specified_turn_returns_capability_unavailable_for_generic_run
 
 #[tokio::test]
 async fn terminate_session_emits_terminal_state_and_is_idempotent() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
 
     let first = request(
         state.clone(),
@@ -241,9 +219,9 @@ async fn terminate_session_emits_terminal_state_and_is_idempotent() {
 
 #[tokio::test]
 async fn restart_non_terminal_session_runs_new_start_cycle_and_is_idempotent() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
 
     let first = request(
         state.clone(),
@@ -305,9 +283,9 @@ async fn restart_non_terminal_session_runs_new_start_cycle_and_is_idempotent() {
 
 #[tokio::test]
 async fn restart_rejects_terminal_session() {
+    let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let _runtime_guard = TmuxSessionGuard::for_session(&session_id);
     let terminate = request(
         state.clone(),
         "DELETE",
