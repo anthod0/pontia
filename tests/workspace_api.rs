@@ -4,10 +4,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use llmparty::{
-    application::{
-        AppState, GraphRuntimeConfig, PlannerRuntimeConfig, WorkspaceBrowserConfig,
-        WorkspaceRootConfig,
-    },
+    application::{AppState, GraphRuntimeConfig, WorkspaceBrowserConfig, WorkspaceRootConfig},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
 };
@@ -31,7 +28,6 @@ async fn test_state(roots: Vec<WorkspaceRootConfig>) -> AppState {
     AppState {
         db,
         external_api_token: Some(TOKEN.to_string()),
-        planner: PlannerRuntimeConfig::default(),
         graph: GraphRuntimeConfig::default(),
         workspace_browser: WorkspaceBrowserConfig { roots },
         dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),

@@ -12,9 +12,7 @@ use axum::{
 use http_body_util::BodyExt;
 use llmparty::{
     adapters::GenericTestAdapter,
-    application::{
-        AppState, PiAdapterEventOutboxService, PiTaskPlanner, PlannerDecisionStatus, PlannerInput,
-    },
+    application::{AppState, PiAdapterEventOutboxService},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
 };
@@ -37,7 +35,6 @@ async fn test_state(name: &str) -> AppState {
     AppState {
         db,
         external_api_token: Some(TOKEN.to_string()),
-        planner: Default::default(),
         graph: Default::default(),
         workspace_browser: Default::default(),
         dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),
@@ -200,10 +197,6 @@ fn cleanup_tmux(tmux_session: &str) {
         .status();
 }
 
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
-
 async fn wait_for_file_contains(path: &Path, expected: &str) {
     for _ in 0..50 {
         if let Ok(content) = std::fs::read_to_string(path)
@@ -214,84 +207,6 @@ async fn wait_for_file_contains(path: &Path, expected: &str) {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     panic!("{} did not contain {expected:?}", path.display());
-}
-
-#[tokio::test]
-async fn pi_task_planner_reads_json_decision_from_one_shot_adapter_event() {
-    assert_tmux_available();
-    let workspace = tempfile::tempdir().expect("workspace");
-    let canonical = std::fs::canonicalize(workspace.path()).expect("canonical");
-    let decision = json!({
-        "status": "resolved",
-        "workspace": {
-            "canonical_path": canonical.display().to_string(),
-            "confidence": 0.77,
-            "reason": "pi planner chose test workspace"
-        },
-        "reason": "planner fixture resolved workspace"
-    });
-    let event = json!({
-        "type": "turn.completed",
-        "payload": { "output": { "summary": decision.to_string() } }
-    });
-    let _guard = pi_env_lock().lock().await;
-    unsafe {
-        std::env::set_var(
-            "LLMPARTY_PI_TUI_COMMAND",
-            format!(
-                "IFS= read -r _prompt; printf '%s\\n' {} >> \"$LLMPARTY_ADAPTER_EVENT_LOG\"; while :; do sleep 60; done",
-                shell_quote(&event.to_string())
-            ),
-        );
-    }
-
-    let planner = PiTaskPlanner::new(Duration::from_millis(2_000));
-    let decision = planner
-        .plan(PlannerInput {
-            task_id: "task_test".to_string(),
-            input: "resolve with real pi planner".to_string(),
-            metadata: json!({}),
-            candidate_workspaces: vec![],
-            prior_decisions: vec![],
-            user_messages: vec![],
-        })
-        .await
-        .expect("planner decision");
-
-    assert_eq!(decision.status, PlannerDecisionStatus::Resolved);
-    let workspace = decision.workspace.expect("workspace");
-    assert_eq!(
-        workspace.canonical_path.as_deref(),
-        Some(canonical.to_str().unwrap())
-    );
-    assert_eq!(workspace.confidence, Some(0.77));
-}
-
-#[tokio::test]
-async fn pi_task_planner_times_out_when_adapter_event_never_arrives() {
-    assert_tmux_available();
-    let _guard = pi_env_lock().lock().await;
-    unsafe {
-        std::env::set_var(
-            "LLMPARTY_PI_TUI_COMMAND",
-            "IFS= read -r _prompt; while :; do sleep 60; done",
-        );
-    }
-
-    let planner = PiTaskPlanner::new(Duration::from_millis(100));
-    let error = planner
-        .plan(PlannerInput {
-            task_id: "task_timeout".to_string(),
-            input: "this will timeout".to_string(),
-            metadata: json!({}),
-            candidate_workspaces: vec![],
-            prior_decisions: vec![],
-            user_messages: vec![],
-        })
-        .await
-        .expect_err("planner should time out");
-
-    assert!(error.to_string().contains("timed out"));
 }
 
 #[tokio::test]

@@ -7,8 +7,7 @@ use axum::{
 use serde_json::{Value, json};
 
 use crate::application::{
-    AppState, ConfirmTaskWorkspaceRequest, CreateTaskRequest, ExternalQueryService,
-    GraphProjectionService, HumanSignalRequest, SubmitPlannerInputRequest, TaskCommandService,
+    AppState, ExternalQueryService, GraphProjectionService, HumanSignalRequest, TaskCommandService,
 };
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key, ok};
@@ -16,48 +15,21 @@ use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key
 pub async fn create_task(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<CreateTaskRequest>,
+    Json(_request): Json<Value>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::with_runtime(state.db, state.planner, state.graph);
-    let outcome = service.create_task(request, idempotency_key).await?;
-    let status = if outcome.duplicate {
-        StatusCode::OK
-    } else {
-        StatusCode::CREATED
-    };
-    Ok((status, ok(outcome.data)).into_response())
-}
-
-pub async fn confirm_task_workspace(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(task_id): Path<String>,
-    Json(request): Json<ConfirmTaskWorkspaceRequest>,
-) -> Result<Response, ExternalApiError> {
-    authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::with_runtime(state.db, state.planner, state.graph);
-    let outcome = service
-        .confirm_workspace(&task_id, request, idempotency_key)
-        .await?;
-    Ok((StatusCode::OK, ok(outcome.data)).into_response())
-}
-
-pub async fn submit_planner_input(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(task_id): Path<String>,
-    Json(request): Json<SubmitPlannerInputRequest>,
-) -> Result<Response, ExternalApiError> {
-    authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::with_runtime(state.db, state.planner, state.graph);
-    let outcome = service
-        .submit_planner_input(&task_id, request, idempotency_key)
-        .await?;
-    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+    Ok((
+        StatusCode::GONE,
+        Json(json!({
+            "data": null,
+            "meta": {},
+            "error": {
+                "code": "removed",
+                "message": "common task direct dispatch has been removed; use /external/v1/dag-tasks"
+            }
+        })),
+    )
+        .into_response())
 }
 
 pub async fn pause_task(

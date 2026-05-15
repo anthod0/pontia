@@ -131,9 +131,6 @@ impl EventIngestService {
 
         tx.commit().await?;
 
-        TaskCommandService::new(self.pool.clone())
-            .sync_task_from_turn_event(&event)
-            .await?;
         DagRunResultService::new(self.pool.clone())
             .sync_from_turn_event(&event)
             .await?;

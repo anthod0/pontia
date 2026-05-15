@@ -27,7 +27,6 @@ async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> AppState {
     AppState {
         db,
         external_api_token: Some("test-token".to_owned()),
-        planner: Default::default(),
         graph: Default::default(),
         workspace_browser: Default::default(),
         dashboard,

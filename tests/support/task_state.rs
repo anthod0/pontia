@@ -15,12 +15,6 @@ pub async fn test_state() -> AppState {
     AppState {
         db,
         external_api_token: Some(TOKEN.to_string()),
-        planner: llmparty::application::PlannerRuntimeConfig {
-            enabled: false,
-            client_type: "generic".to_string(),
-            timeout_ms: 30_000,
-            compatibility_direct_dispatch: false,
-        },
         graph: Default::default(),
         workspace_browser: Default::default(),
         dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),

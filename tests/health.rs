@@ -21,7 +21,6 @@ async fn test_state() -> AppState {
     AppState {
         db,
         external_api_token: None,
-        planner: Default::default(),
         graph: Default::default(),
         workspace_browser: Default::default(),
         dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),

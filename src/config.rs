@@ -8,9 +8,7 @@ use std::{
 use serde::Deserialize;
 
 use crate::{
-    application::{
-        GraphRuntimeConfig, PlannerRuntimeConfig, WorkspaceBrowserConfig, WorkspaceRootConfig,
-    },
+    application::{GraphRuntimeConfig, WorkspaceBrowserConfig, WorkspaceRootConfig},
     error::{Error, Result},
 };
 
@@ -24,7 +22,6 @@ pub struct AppConfig {
     pub external_api_token: Option<String>,
     pub run_migrations: bool,
     pub default_client_type: String,
-    pub planner: PlannerRuntimeConfig,
     pub graph: GraphRuntimeConfig,
     pub workspace_browser: WorkspaceBrowserConfig,
     pub runtime: RuntimeConfig,
@@ -143,30 +140,6 @@ impl AppConfig {
             .to_string();
         validate_real_default_client_type("LLMPARTY_DEFAULT_CLIENT_TYPE", &default_client_type)?;
 
-        let planner = PlannerRuntimeConfig {
-            enabled: match get(vars, "LLMPARTY_PLANNER_ENABLED") {
-                Some(value) => parse_bool("LLMPARTY_PLANNER_ENABLED", value)?,
-                None => false,
-            },
-            client_type: get(vars, "LLMPARTY_PLANNER_CLIENT_TYPE")
-                .unwrap_or("pi")
-                .to_string(),
-            timeout_ms: match get(vars, "LLMPARTY_PLANNER_TIMEOUT_MS") {
-                Some(value) => value.parse::<u64>().map_err(|err| Error::InvalidConfig {
-                    key: "LLMPARTY_PLANNER_TIMEOUT_MS",
-                    message: err.to_string(),
-                })?,
-                None => 30_000,
-            },
-            compatibility_direct_dispatch: match get(
-                vars,
-                "LLMPARTY_PLANNER_COMPAT_DIRECT_DISPATCH",
-            ) {
-                Some(value) => parse_bool("LLMPARTY_PLANNER_COMPAT_DIRECT_DISPATCH", value)?,
-                None => false,
-            },
-        };
-
         let graph_enabled = match get(vars, "LLMPARTY_GRAPH_ENABLED") {
             Some(value) => parse_bool("LLMPARTY_GRAPH_ENABLED", value)?,
             None => false,
@@ -214,7 +187,6 @@ impl AppConfig {
             external_api_token,
             run_migrations,
             default_client_type,
-            planner,
             graph,
             workspace_browser,
             runtime,

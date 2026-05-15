@@ -39,7 +39,6 @@ mod events;
 mod graph;
 mod inbox;
 mod mapping;
-mod planner;
 mod prompt_rendering;
 mod queries;
 mod runtime_control;
@@ -75,10 +74,6 @@ pub use events::{EventIngestResult, EventIngestService};
 pub(crate) use events::{nested_array_strings, nested_string, remove_internal_metadata_fields};
 pub use graph::{GraphProjectionService, GraphRuntimeConfig, TaskProvenance};
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
-pub use planner::{
-    FakeTaskPlanner, PiTaskPlanner, PlannerDecision, PlannerDecisionStatus, PlannerInput,
-    PlannerRuntimeConfig, SubmitPlannerInputRequest, TaskPlannerService,
-};
 pub use queries::ExternalQueryService;
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};
 pub use runtime_observation::{PiAdapterEventOutboxService, RuntimeObservationService};
@@ -87,10 +82,7 @@ pub use sessions::{
     CreateSessionOutcome, CreateSessionRequest, InitialTaskRequest, SessionCommandService,
 };
 pub use state::{AppState, initialize};
-pub use tasks::{
-    ConfirmTaskWorkspaceRequest, CreateDagTaskRequest, CreateTaskOutcome, CreateTaskRequest,
-    HumanSignalRequest, TaskCommandService,
-};
+pub use tasks::{CreateDagTaskRequest, CreateTaskOutcome, HumanSignalRequest, TaskCommandService};
 pub use turns::TurnCommandService;
 pub use views::*;
 pub use workspaces::{
