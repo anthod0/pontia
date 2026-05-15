@@ -6,11 +6,10 @@ import type {
   ApiEnvelope,
   ArtifactContent,
   ArtifactView,
-  ConfirmTaskWorkspaceInput,
+  CreateDagTaskInput,
   CreateDagTaskResult,
   CreateSessionInput,
   CreateSessionResult,
-  CreateTaskInput,
   EventView,
   HumanSignalInput,
   InboxMessageView,
@@ -18,7 +17,6 @@ import type {
   RenameWorkspaceInput,
   SessionView,
   SubmitInboxMessageInput,
-  SubmitPlannerInput,
   UpsertAgentProfileInput,
   TaskDagView,
   TaskEventView,
@@ -145,24 +143,12 @@ export async function listTasks(): Promise<TaskView[]> {
   return (await request<{ tasks: TaskView[] }>('/tasks')).tasks;
 }
 
-export async function createTask(input: CreateTaskInput): Promise<TaskView> {
-  return (await request<{ task: TaskView }>('/tasks', { method: 'POST', body: input, mutating: true })).task;
-}
-
-export async function createDagTask(input: CreateTaskInput): Promise<CreateDagTaskResult> {
+export async function createDagTask(input: CreateDagTaskInput): Promise<CreateDagTaskResult> {
   return request<CreateDagTaskResult>('/dag-tasks', { method: 'POST', body: input, mutating: true });
 }
 
 export async function getTask(taskId: string): Promise<TaskView> {
   return (await request<{ task: TaskView }>(`/tasks/${taskId}`)).task;
-}
-
-export async function confirmTaskWorkspace(taskId: string, input: ConfirmTaskWorkspaceInput): Promise<TaskView> {
-  return (await request<{ task: TaskView }>(`/tasks/${taskId}/confirm-workspace`, { method: 'POST', body: input, mutating: true })).task;
-}
-
-export async function submitPlannerInput(taskId: string, input: SubmitPlannerInput): Promise<TaskView> {
-  return (await request<{ task: TaskView }>(`/tasks/${taskId}/planner-input`, { method: 'POST', body: input, mutating: true })).task;
 }
 
 export async function listTaskEvents(taskId: string): Promise<TaskEventView[]> {

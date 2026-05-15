@@ -1,10 +1,8 @@
 import { writable } from 'svelte/store';
 import {
   cancelTask as apiCancelTask,
-  confirmTaskWorkspace as apiConfirmTaskWorkspace,
   createDagTask as apiCreateDagTask,
   createHumanSignal as apiCreateHumanSignal,
-  createTask as apiCreateTask,
   getTask,
   getTaskDag,
   interruptTask as apiInterruptTask,
@@ -12,14 +10,11 @@ import {
   pauseTask as apiPauseTask,
   listTasks,
   resumeTask as apiResumeTask,
-  submitPlannerInput as apiSubmitPlannerInput,
 } from '../api/client';
 import type {
-  ConfirmTaskWorkspaceInput,
+  CreateDagTaskInput,
   CreateDagTaskResult,
-  CreateTaskInput,
   HumanSignalInput,
-  SubmitPlannerInput,
   TaskDagView,
   TaskEventView,
   TaskView,
@@ -69,18 +64,7 @@ export async function refreshTask(taskId: string): Promise<void> {
   }
 }
 
-export async function createTask(input: CreateTaskInput): Promise<TaskView> {
-  const created = await apiCreateTask(input);
-  await loadTasks();
-  selectedTaskId.set(created.task_id);
-  task.set(created);
-  const [events, dag] = await Promise.all([listTaskEvents(created.task_id), getTaskDag(created.task_id)]);
-  taskEvents.set(events);
-  taskDag.set(dag);
-  return created;
-}
-
-export async function createDagTask(input: CreateTaskInput): Promise<CreateDagTaskResult> {
+export async function createDagTask(input: CreateDagTaskInput): Promise<CreateDagTaskResult> {
   const result = await apiCreateDagTask(input);
   await loadTasks();
   selectedTaskId.set(result.task.task_id);
@@ -89,18 +73,6 @@ export async function createDagTask(input: CreateTaskInput): Promise<CreateDagTa
   taskEvents.set(events);
   taskDag.set(dag);
   return result;
-}
-
-export async function confirmTaskWorkspace(taskId: string, input: ConfirmTaskWorkspaceInput): Promise<TaskView> {
-  const updated = await apiConfirmTaskWorkspace(taskId, input);
-  await Promise.all([loadTasks(), refreshTask(taskId)]);
-  return updated;
-}
-
-export async function submitPlannerInput(taskId: string, input: SubmitPlannerInput): Promise<TaskView> {
-  const updated = await apiSubmitPlannerInput(taskId, input);
-  await Promise.all([loadTasks(), refreshTask(taskId)]);
-  return updated;
 }
 
 export async function pauseTask(taskId: string): Promise<TaskView> {

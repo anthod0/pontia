@@ -299,7 +299,7 @@ export interface ArtifactView {
   metadata: JsonObject;
 }
 
-export interface CreateTaskInput {
+export interface CreateDagTaskInput {
   input: string;
   workspace?: string | null;
   client_type: string;
@@ -316,16 +316,6 @@ export interface DagPlanningTurnView {
 export interface CreateDagTaskResult {
   task: TaskView;
   planning_turn: DagPlanningTurnView;
-}
-
-export interface ConfirmTaskWorkspaceInput {
-  workspace: string;
-  client_type: string;
-}
-
-export interface SubmitPlannerInput {
-  message: string;
-  client_type: string;
 }
 
 export interface HumanSignalInput {

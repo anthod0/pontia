@@ -6,11 +6,10 @@
   import { Label } from '$lib/components/ui/label/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import type { TaskView } from '../../api/types'
-  import { cancelTask, createHumanSignal, interruptTask, pauseTask, resumeTask, submitPlannerInput } from '../../stores/tasks'
+  import { cancelTask, createHumanSignal, interruptTask, pauseTask, resumeTask } from '../../stores/tasks'
 
   let { task }: { task: TaskView } = $props()
 
-  let plannerMessage = $state('')
   let signalKind = $state('needs_input')
   let signalSummary = $state('')
   let signalDetail = $state('')
@@ -28,15 +27,6 @@
     } finally {
       busy = false
     }
-  }
-
-  function submitPlanner() {
-    const message = plannerMessage.trim()
-    if (!message) return
-    void run(async () => {
-      await submitPlannerInput(task.task_id, { message, client_type: 'pi' })
-      plannerMessage = ''
-    })
   }
 
   function submitSignal() {
@@ -71,13 +61,7 @@
     <Button size="sm" variant="destructive" disabled={busy} onclick={() => void run(() => cancelTask(task.task_id))}>Cancel</Button>
   </div>
 
-  <div class="grid gap-4 lg:grid-cols-2">
-    <div class="space-y-2 rounded-lg border p-4">
-      <Label for="planner-message">Planner input</Label>
-      <Textarea id="planner-message" bind:value={plannerMessage} placeholder="Additional instruction for the DAG planner…" />
-      <Button size="sm" disabled={busy || !plannerMessage.trim()} onclick={submitPlanner}>Send planner input</Button>
-    </div>
-
+  <div class="grid gap-4">
     <div class="space-y-3 rounded-lg border p-4">
       <div class="grid gap-3 sm:grid-cols-2">
         <div class="space-y-2">
