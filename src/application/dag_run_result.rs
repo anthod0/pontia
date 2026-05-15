@@ -396,8 +396,6 @@ impl DagRunResultService {
         )
         .await?;
 
-        self.terminate_run_session(run).await?;
-
         if !replan_signal_ids.is_empty() {
             for signal_id in replan_signal_ids {
                 Box::pin(
@@ -406,6 +404,7 @@ impl DagRunResultService {
                 )
                 .await?;
             }
+            self.terminate_run_session(run).await?;
             return Ok(DagSchedulerOutcome {
                 dispatched_runs: Vec::new(),
             });
@@ -420,6 +419,7 @@ impl DagRunResultService {
             }
         };
 
+        self.terminate_run_session(run).await?;
         self.aggregate_task_state(&run.task_id).await?;
         Ok(scheduler)
     }

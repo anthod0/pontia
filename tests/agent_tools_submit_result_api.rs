@@ -106,6 +106,86 @@ async fn submit_result_from_worker_updates_current_run_and_schedules_downstream_
 }
 
 #[tokio::test]
+async fn submit_result_dispatches_downstream_before_terminating_calling_session() {
+    let state = test_state().await;
+    insert_task(&state.db, "task_result_order").await;
+    insert_dag_session(
+        &state.db,
+        "sess_result_order",
+        "turn_result_order",
+        "rt_result_order",
+        json!({"dag_managed": true}),
+    )
+    .await;
+    insert_execution_run(
+        &state.db,
+        "task_result_order",
+        "wi_result_order_upstream",
+        "run_result_order_upstream",
+        "sess_result_order",
+        "turn_result_order",
+    )
+    .await;
+    insert_work_item(
+        &state.db,
+        "task_result_order",
+        "wi_result_order_downstream",
+        "Downstream",
+        "blocked",
+        json!(["downstream done"]),
+    )
+    .await;
+    insert_edge(
+        &state.db,
+        "task_result_order",
+        "wi_result_order_upstream",
+        "wi_result_order_downstream",
+    )
+    .await;
+
+    let (status, response) = post_tool(
+        state.clone(),
+        "submitResult",
+        json!({
+            "session_id": "sess_result_order",
+            "turn_id": "turn_result_order",
+            "runtime_instance_id": "rt_result_order",
+            "input": {"status": "completed", "summary": "upstream done"}
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{response:#}");
+    let downstream_session_created_rowid: i64 = sqlx::query_scalar(
+        r#"SELECT rowid FROM events
+           WHERE event_type = 'session.created'
+             AND payload LIKE '%wi_result_order_downstream%'
+           ORDER BY rowid
+           LIMIT 1"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("downstream session.created event");
+    let calling_session_exited_rowid: i64 = sqlx::query_scalar(
+        r#"SELECT rowid FROM events
+           WHERE session_id = 'sess_result_order'
+             AND event_type = 'session.exited'
+           ORDER BY rowid
+           LIMIT 1"#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("calling session.exited event");
+
+    assert!(
+        downstream_session_created_rowid < calling_session_exited_rowid,
+        "downstream dispatch must be committed before terminating the session that submitted the result"
+    );
+
+    cleanup_runtime_sessions(&state.db).await;
+}
+
+#[tokio::test]
 async fn submit_result_requires_execution_context_and_supported_status() {
     let state = test_state().await;
     insert_task(&state.db, "task_result_modes").await;
