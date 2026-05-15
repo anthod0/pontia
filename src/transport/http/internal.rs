@@ -49,6 +49,7 @@ pub async fn post_event(
 ) -> Result<Json<InternalEventResponse>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let event = request.into_domain_event()?;
+    ensure_agent_client_ready_references_existing_session(&state, &event).await?;
     let service = EventIngestService::new(state.db);
     let warnings = service.sequence_warnings(&event).await?;
     let result = service.ingest_event(event.clone()).await?;
@@ -71,6 +72,30 @@ pub async fn post_event(
         state_version: result.state_version,
         warnings,
     }))
+}
+
+async fn ensure_agent_client_ready_references_existing_session(
+    state: &AppState,
+    event: &DomainEvent,
+) -> Result<(), ApiError> {
+    if event.event_type != EventType::SessionReady || event.source != EventSource::AgentClient {
+        return Ok(());
+    }
+
+    let exists: i64 =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?)")
+            .bind(&event.session_id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(Error::from)?;
+    if exists == 0 {
+        return Err(ApiError::invalid_request(format!(
+            "session.ready from agent_client references unknown session {}",
+            event.session_id
+        )));
+    }
+
+    Ok(())
 }
 
 impl InternalEventRequest {

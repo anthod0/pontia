@@ -102,7 +102,9 @@ async fn internal_event_api_accepts_session_event_and_updates_projection() {
 async fn internal_event_api_accepts_turn_events_and_updates_projection() {
     let state = test_state().await;
 
-    let mut ready = event_body("evt_m2_2", "session.ready", "sess_m2_2", None, 1);
+    let created = event_body("evt_m2_2_created", "session.created", "sess_m2_2", None, 1);
+    post_event(state.clone(), created).await;
+    let mut ready = event_body("evt_m2_2", "session.ready", "sess_m2_2", None, 2);
     ready["source"] = json!("agent_client");
     ready["payload"] = json!({"runtime_instance_id":"rtinst_m2_2"});
     post_event(state.clone(), ready).await;
@@ -113,14 +115,14 @@ async fn internal_event_api_accepts_turn_events_and_updates_projection() {
             "turn.started",
             "sess_m2_2",
             Some("turn_m2_1"),
-            2,
+            3,
         ),
     )
     .await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["turn_id"], "turn_m2_1");
-    assert_eq!(body["state_version"], 2);
+    assert_eq!(body["state_version"], 3);
 
     let service = EventIngestService::new(state.db);
     let session = service.get_session("sess_m2_2").await.unwrap().unwrap();
@@ -174,9 +176,21 @@ async fn internal_event_api_rejects_turn_event_without_turn_id() {
 }
 
 #[tokio::test]
-async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id() {
+async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id_for_existing_session()
+ {
     let state = test_state().await;
-    let mut event = event_body("evt_m2_ready", "session.ready", "sess_m2_ready", None, 1);
+    let mut created = event_body(
+        "evt_m2_ready_created",
+        "session.created",
+        "sess_m2_ready",
+        None,
+        1,
+    );
+    created["source"] = json!("external_api");
+    created["client_type"] = json!("pi");
+    post_event(state.clone(), created).await;
+
+    let mut event = event_body("evt_m2_ready", "session.ready", "sess_m2_ready", None, 2);
     event["source"] = json!("agent_client");
     event["client_type"] = json!("pi");
     event["payload"] = json!({"runtime_instance_id":"rtinst_test"});
@@ -185,6 +199,40 @@ async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id(
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["accepted"], true);
+}
+
+#[tokio::test]
+async fn internal_event_api_rejects_agent_client_ready_for_unknown_session() {
+    let state = test_state().await;
+    let mut event = event_body(
+        "evt_m2_unknown_ready",
+        "session.ready",
+        "sess_m2_unknown_ready",
+        None,
+        1,
+    );
+    event["source"] = json!("agent_client");
+    event["client_type"] = json!("pi");
+    event["payload"] = json!({"runtime_instance_id":"rtinst_test"});
+
+    let (status, body) = post_event(state.clone(), event).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("unknown session")
+    );
+    let service = EventIngestService::new(state.db);
+    assert!(
+        service
+            .get_session("sess_m2_unknown_ready")
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
