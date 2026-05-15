@@ -1,6 +1,7 @@
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::OnceLock,
 };
 
 use axum::{
@@ -19,8 +20,31 @@ use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
 
+fn configure_test_runtime_env() {
+    static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+    let data_dir = DATA_DIR.get_or_init(|| {
+        let dir = tempfile::tempdir().expect("runtime data tempdir");
+        let path = dir.path().join("data");
+        let _kept_dir = dir.keep();
+        path
+    });
+    unsafe {
+        std::env::set_var("LLMPARTY_DATA_DIR", data_dir);
+        std::env::set_var(
+            "LLMPARTY_INTERNAL_EVENT_URL",
+            "http://127.0.0.1:9/internal/v1/events",
+        );
+        std::env::set_var(
+            "LLMPARTY_EXTERNAL_API_URL",
+            "http://127.0.0.1:9/external/v1",
+        );
+        std::env::set_var("LLMPARTY_EXTERNAL_API_TOKEN", TOKEN);
+    }
+}
+
 async fn test_state(name: &str) -> AppState {
     assert_tmux_available();
+    configure_test_runtime_env();
     unsafe {
         std::env::set_var(
             "LLMPARTY_PI_TUI_COMMAND",

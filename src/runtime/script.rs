@@ -89,12 +89,32 @@ export LLMPARTY_CLAUDE_HOOK_LOG={}
 
 pub(super) fn internal_event_url() -> String {
     std::env::var("LLMPARTY_INTERNAL_EVENT_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8080/internal/v1/events".to_string())
+        .unwrap_or_else(|_| default_internal_event_url().to_string())
 }
 
 fn external_api_url() -> String {
     std::env::var("LLMPARTY_EXTERNAL_API_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8080/external/v1".to_string())
+        .unwrap_or_else(|_| default_external_api_url().to_string())
+}
+
+#[cfg(test)]
+fn default_internal_event_url() -> &'static str {
+    "http://127.0.0.1:9/internal/v1/events"
+}
+
+#[cfg(not(test))]
+fn default_internal_event_url() -> &'static str {
+    "http://127.0.0.1:8080/internal/v1/events"
+}
+
+#[cfg(test)]
+fn default_external_api_url() -> &'static str {
+    "http://127.0.0.1:9/external/v1"
+}
+
+#[cfg(not(test))]
+fn default_external_api_url() -> &'static str {
+    "http://127.0.0.1:8080/external/v1"
 }
 
 fn external_api_token() -> String {
@@ -110,4 +130,18 @@ pub(super) fn run_startup_hooks(hooks: &[StartupHook], workspace: &Path) -> Resu
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_defaults_use_non_listening_ports() {
+        assert_eq!(
+            default_internal_event_url(),
+            "http://127.0.0.1:9/internal/v1/events"
+        );
+        assert_eq!(default_external_api_url(), "http://127.0.0.1:9/external/v1");
+    }
 }

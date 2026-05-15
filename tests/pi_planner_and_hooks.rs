@@ -26,6 +26,7 @@ const TOKEN: &str = "test-token";
 
 async fn test_state(name: &str) -> AppState {
     assert_tmux_available();
+    configure_test_runtime_env();
     GenericTestAdapter::clear_recorded_inputs();
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join(format!("{name}.db"));
@@ -89,6 +90,28 @@ async fn request_json(
 fn pi_env_lock() -> &'static tokio::sync::Mutex<()> {
     static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
+fn configure_test_runtime_env() {
+    static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+    let data_dir = DATA_DIR.get_or_init(|| {
+        let dir = tempfile::tempdir().expect("runtime data tempdir");
+        let path = dir.path().join("data");
+        let _kept_dir = dir.keep();
+        path
+    });
+    unsafe {
+        std::env::set_var("LLMPARTY_DATA_DIR", data_dir);
+        std::env::set_var(
+            "LLMPARTY_INTERNAL_EVENT_URL",
+            "http://127.0.0.1:9/internal/v1/events",
+        );
+        std::env::set_var(
+            "LLMPARTY_EXTERNAL_API_URL",
+            "http://127.0.0.1:9/external/v1",
+        );
+        std::env::set_var("LLMPARTY_EXTERNAL_API_TOKEN", TOKEN);
+    }
 }
 
 async fn create_pi_session(state: AppState, workspace: &Path) -> String {
@@ -529,7 +552,7 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
     );
     assert_eq!(
         context["internal_event_url"],
-        "http://127.0.0.1:8080/internal/v1/events"
+        "http://127.0.0.1:9/internal/v1/events"
     );
 
     cleanup_tmux(&tmux_session);
@@ -548,16 +571,18 @@ async fn pi_runtime_exports_real_hook_environment() {
 
     assert!(!workspace.path().join(".llmparty").exists());
     let runtime_dir = metadata["runtime_dir"].as_str().expect("runtime_dir");
+    assert!(!runtime_dir.contains(".local/share/llmparty/runtimes"));
     let runtime_script = std::fs::read_to_string(PathBuf::from(runtime_dir).join("runtime.sh"))
         .expect("runtime script");
     assert!(runtime_script.contains("export LLMPARTY_CURRENT_TURN_FILE="));
     assert!(runtime_script.contains("/runtimes/"));
     assert!(runtime_script.contains("current-turn.json"));
     assert!(runtime_script.contains("export LLMPARTY_RUNTIME_DIR="));
+    assert!(!runtime_script.contains("127.0.0.1:8080"));
     assert!(runtime_script.contains("export LLMPARTY_INTERNAL_EVENT_URL="));
-    assert!(runtime_script.contains("http://127.0.0.1:8080/internal/v1/events"));
+    assert!(runtime_script.contains("http://127.0.0.1:9/internal/v1/events"));
     assert!(runtime_script.contains("export LLMPARTY_EXTERNAL_API_URL="));
-    assert!(runtime_script.contains("http://127.0.0.1:8080/external/v1"));
+    assert!(runtime_script.contains("http://127.0.0.1:9/external/v1"));
     assert!(runtime_script.contains("export LLMPARTY_EXTERNAL_API_TOKEN="));
     let runtime_instance_id = metadata["runtime_instance_id"]
         .as_str()
