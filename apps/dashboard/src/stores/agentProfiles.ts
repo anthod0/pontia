@@ -8,11 +8,11 @@ export const agentProfiles = writable<AgentProfileView[]>([]);
 export const agentProfilesLoading = writable(false);
 export const agentProfilesError = writable<string | null>(null);
 
-export async function loadAgentProfiles(): Promise<void> {
+export async function loadAgentProfiles(includeArchived = false): Promise<void> {
   agentProfilesLoading.set(true);
   agentProfilesError.set(null);
   try {
-    agentProfiles.set(await listAgentProfiles());
+    agentProfiles.set(await listAgentProfiles(includeArchived));
   } catch (error) {
     agentProfilesError.set(error instanceof Error ? error.message : String(error));
   } finally {

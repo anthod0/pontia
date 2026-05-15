@@ -70,8 +70,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return envelope.data;
 }
 
-export async function listAgentProfiles(): Promise<AgentProfileView[]> {
-  return (await request<{ agent_profiles: AgentProfileView[] }>('/agent-profiles')).agent_profiles;
+export async function listAgentProfiles(includeArchived = false): Promise<AgentProfileView[]> {
+  const query = includeArchived ? '?include_archived=true' : '';
+  return (await request<{ agent_profiles: AgentProfileView[] }>(`/agent-profiles${query}`)).agent_profiles;
 }
 
 export async function getAgentProfile(profileId: string): Promise<AgentProfileView> {
