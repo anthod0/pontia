@@ -113,18 +113,14 @@ impl DagRunResultService {
         .bind(serde_json::to_string(&payload.related_refs)?)
         .execute(&self.pool)
         .await?;
-        self.record_task_event(
+        self.emit_signal_event(
             &context.task_id,
-            "dag.signal_raised",
-            json!({
-                "signal_id": signal_id,
-                "kind": payload.kind,
-                "summary": payload.summary,
-                "work_item_id": work_item_id,
-                "run_id": run_id,
-                "source_session_id": context.session_id,
-                "source": "agent",
-            }),
+            &signal_id,
+            work_item_id.as_deref(),
+            run_id.as_deref(),
+            Some(&context.session_id),
+            "agent",
+            &payload,
         )
         .await?;
         let execution_run = if matches!(&context.mode, AgentToolMode::Execution { .. }) {
@@ -390,6 +386,7 @@ impl DagRunResultService {
         };
 
         let mut signal_ids = Vec::new();
+        let mut emitted_signals = Vec::new();
         let mut replan_signal_ids = Vec::new();
         let mut tx = self.pool.begin().await?;
         sqlx::query(
@@ -422,6 +419,7 @@ impl DagRunResultService {
             if signal.kind == "replan_requested" {
                 replan_signal_ids.push(signal_id.clone());
             }
+            emitted_signals.push((signal_id.clone(), signal.clone()));
             signal_ids.push(signal_id.clone());
             sqlx::query(
                 r#"INSERT INTO dag_signals (
@@ -456,6 +454,19 @@ impl DagRunResultService {
             .await?;
         }
         tx.commit().await?;
+
+        for (signal_id, signal) in &emitted_signals {
+            self.emit_signal_event(
+                &run.task_id,
+                signal_id,
+                Some(&run.work_item_id),
+                Some(&run.run_id),
+                run.session_id.as_deref(),
+                "agent",
+                signal,
+            )
+            .await?;
+        }
 
         self.record_task_event(
             &run.task_id,
@@ -607,6 +618,40 @@ impl DagRunResultService {
         )
         .await?;
         Ok(())
+    }
+
+    async fn emit_signal_event(
+        &self,
+        task_id: &str,
+        signal_id: &str,
+        work_item_id: Option<&str>,
+        run_id: Option<&str>,
+        source_session_id: Option<&str>,
+        source: &str,
+        payload: &RaiseSignalPayload,
+    ) -> Result<()> {
+        self.record_task_event(
+            task_id,
+            "signal.emitted",
+            json!({
+                "signal_id": signal_id,
+                "task_id": task_id,
+                "work_item_id": work_item_id,
+                "run_id": run_id,
+                "source_session_id": source_session_id,
+                "source": source,
+                "kind": payload.kind,
+                "summary": payload.summary,
+                "detail": payload.detail,
+                "severity": normalize_severity(&payload.severity),
+                "related_refs": payload.related_refs,
+                "state": "open",
+            }),
+        )
+        .await?;
+        GraphProjectionService::new(self.pool.clone(), GraphRuntimeConfig::default())
+            .project_task(task_id)
+            .await
     }
 
     async fn record_task_event(

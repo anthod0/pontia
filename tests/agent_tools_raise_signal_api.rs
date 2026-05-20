@@ -3,6 +3,7 @@ mod agent_tools;
 
 use agent_tools::*;
 use axum::http::StatusCode;
+use llmparty::application::SqliteDagGraphStore;
 use serde_json::{Value, json};
 use sqlx::Row;
 
@@ -69,6 +70,20 @@ async fn raise_signal_records_agent_signal_and_replan_policy_starts_replanner() 
     let related_refs: Value =
         serde_json::from_str(&signal.get::<String, _>("related_refs")).expect("related refs json");
     assert_eq!(related_refs[0]["id"], "wi_signal_worker");
+    let signal_event_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM task_events WHERE task_id = 'task_signal' AND event_type = 'signal.emitted'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .expect("signal event count");
+    assert_eq!(signal_event_count, 1);
+    let graph = SqliteDagGraphStore::new(state.db.clone())
+        .task_graph("task_signal")
+        .await
+        .expect("task graph");
+    assert_eq!(graph.signals.len(), 1);
+    assert_eq!(graph.signals[0].summary, "Need one more step");
+
     let replanner_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sessions WHERE json_extract(metadata, '$.dag_planning_role') = 'replanner' AND json_extract(metadata, '$.task_id') = 'task_signal'",
     )

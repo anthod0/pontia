@@ -243,10 +243,23 @@ impl TaskCommandService {
         .await?;
         self.record_task_event(
             task_id,
-            "dag.signal_created",
-            json!({"signal_id": signal_id, "source": "human", "kind": kind}),
+            "signal.emitted",
+            json!({
+                "signal_id": signal_id,
+                "task_id": task_id,
+                "source": "human",
+                "kind": kind,
+                "summary": summary,
+                "detail": request.detail,
+                "severity": severity,
+                "related_refs": [],
+                "state": "open",
+            }),
         )
         .await?;
+        GraphProjectionService::new(self.pool.clone(), GraphRuntimeConfig::default())
+            .project_task(task_id)
+            .await?;
         let row = sqlx::query(
             r#"SELECT signal_id, task_id, work_item_id, run_id, source_session_id, source, kind,
                       summary, detail, severity, related_refs, state, created_at, updated_at

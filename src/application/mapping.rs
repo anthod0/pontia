@@ -69,64 +69,36 @@ pub(crate) fn row_to_task_event_view(row: sqlx::sqlite::SqliteRow) -> Result<Tas
     })
 }
 
-pub(crate) fn row_to_work_item_with_runtime_view(
-    row: sqlx::sqlite::SqliteRow,
-) -> Result<WorkItemWithRuntimeView> {
-    let acceptance_criteria: String = row.try_get("acceptance_criteria")?;
-    let metadata: String = row.try_get("metadata")?;
-    let current_state: Option<String> = row.try_get("current_state")?;
-    let runtime = current_state
-        .map(|current_state| -> Result<WorkItemRuntimeView> {
-            Ok(WorkItemRuntimeView {
-                current_run_id: row.try_get("current_run_id")?,
-                current_state,
-                current_attempt: row.try_get("current_attempt")?,
-                ready_at: row.try_get("ready_at")?,
-                blocked_reason: row.try_get("blocked_reason")?,
-                retry_count: row.try_get("retry_count")?,
-                max_retries: row.try_get("max_retries")?,
-                priority: row.try_get("runtime_priority")?,
-                optional: row.try_get("runtime_optional")?,
-                parallelizable: row.try_get("runtime_parallelizable")?,
-                session_id: row.try_get("session_id")?,
-                turn_id: row.try_get("turn_id")?,
-                updated_at: row.try_get("runtime_updated_at")?,
-            })
-        })
-        .transpose()?;
-
-    Ok(WorkItemWithRuntimeView {
-        work_item: WorkItemRecord {
-            work_item_id: row.try_get("work_item_id")?,
-            task_id: row.try_get("task_id")?,
-            title: row.try_get("title")?,
-            description: row.try_get("description")?,
-            kind: row.try_get("kind")?,
-            action: row.try_get("action")?,
-            execution_profile_id: row.try_get("execution_profile_id")?,
-            execution_profile_version: row.try_get("execution_profile_version")?,
-            active: row.try_get("active")?,
-            priority: row.try_get("priority")?,
-            optional: row.try_get("optional")?,
-            parallelizable: row.try_get("parallelizable")?,
-            acceptance_criteria: serde_json::from_str(&acceptance_criteria)?,
-            metadata: serde_json::from_str(&metadata)?,
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
-        },
-        runtime,
-    })
+pub(crate) fn work_item_node_to_record(node: WorkItemNode) -> WorkItemRecord {
+    WorkItemRecord {
+        work_item_id: node.work_item_id,
+        task_id: node.task_id,
+        title: node.title,
+        description: node.description,
+        kind: node.kind,
+        action: node.action,
+        execution_profile_id: node.execution_profile_id,
+        execution_profile_version: node.execution_profile_version,
+        active: node.active,
+        priority: node.priority,
+        optional: node.optional,
+        parallelizable: node.parallelizable,
+        acceptance_criteria: node.acceptance_criteria,
+        metadata: node.metadata,
+        created_at: node.created_at,
+        updated_at: node.updated_at,
+    }
 }
 
-pub(crate) fn row_to_work_item_edge_view(row: sqlx::sqlite::SqliteRow) -> Result<WorkItemEdgeView> {
-    Ok(WorkItemEdgeView {
-        edge_id: row.try_get("edge_id")?,
-        task_id: row.try_get("task_id")?,
-        from_work_item_id: row.try_get("from_work_item_id")?,
-        to_work_item_id: row.try_get("to_work_item_id")?,
-        edge_type: row.try_get("edge_type")?,
-        created_at: row.try_get("created_at")?,
-    })
+pub(crate) fn graph_edge_record_to_view(edge: WorkItemEdgeRecord) -> WorkItemEdgeView {
+    WorkItemEdgeView {
+        edge_id: edge.edge_id,
+        task_id: edge.task_id,
+        from_work_item_id: edge.from_work_item_id,
+        to_work_item_id: edge.to_work_item_id,
+        edge_type: edge.edge_type.as_str().to_string(),
+        created_at: edge.created_at,
+    }
 }
 
 pub(crate) fn row_to_work_item_run_record(
