@@ -3,6 +3,7 @@ mod agent_tools;
 
 use agent_tools::*;
 use axum::http::StatusCode;
+use llmparty::application::SqliteDagGraphStore;
 use serde_json::json;
 
 #[tokio::test]
@@ -316,13 +317,11 @@ async fn submit_plan_rejects_invalid_dag_without_partial_apply() {
     .await
     .expect("rejected proposal");
     assert_eq!(proposal_state, "rejected");
-    let work_item_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM work_items WHERE task_id = ?")
-            .bind("task_invalid_plan")
-            .fetch_one(&state.db)
-            .await
-            .expect("work item count");
-    assert_eq!(work_item_count, 0);
+    let graph = SqliteDagGraphStore::new(state.db.clone())
+        .task_graph("task_invalid_plan")
+        .await
+        .expect("task graph");
+    assert_eq!(graph.work_items.len(), 0);
 }
 
 #[tokio::test]
@@ -375,11 +374,9 @@ async fn submit_plan_rejects_invalid_patch_without_partial_apply() {
     .await
     .expect("rejected patch proposal");
     assert_eq!(proposal_state, "rejected");
-    let edge_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM work_item_edges WHERE task_id = ?")
-            .bind("task_invalid_patch")
-            .fetch_one(&state.db)
-            .await
-            .expect("edge count");
-    assert_eq!(edge_count, 0);
+    let graph = SqliteDagGraphStore::new(state.db.clone())
+        .task_graph("task_invalid_patch")
+        .await
+        .expect("task graph");
+    assert_eq!(graph.edges.len(), 0);
 }

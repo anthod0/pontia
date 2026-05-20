@@ -120,7 +120,7 @@ pub async fn insert_work_item(
     acceptance_criteria: Value,
 ) {
     sqlx::query(
-        r#"INSERT INTO work_items (
+        r#"INSERT INTO graph_work_items (
                 work_item_id, task_id, title, description, kind, action,
                 execution_profile_id, acceptance_criteria
            ) VALUES (?, ?, ?, 'Do the current work', 'implementation', 'agent_turn', 'implementer', ?)"#,
@@ -192,7 +192,7 @@ pub async fn insert_execution_run(
 
 pub async fn insert_edge(pool: &SqlitePool, task_id: &str, from: &str, to: &str) {
     sqlx::query(
-        "INSERT INTO work_item_edges (edge_id, task_id, from_work_item_id, to_work_item_id) VALUES (?, ?, ?, ?)",
+        "INSERT INTO graph_work_item_edges (edge_id, task_id, from_work_item_id, to_work_item_id, edge_type) VALUES (?, ?, ?, ?, 'depends_on')",
     )
     .bind(format!("edge_{from}_{to}"))
     .bind(task_id)

@@ -4,8 +4,8 @@ mod generic_client;
 use generic_client::GenericClientTestScope;
 use llmparty::{
     application::{
-        DagPatch, DagSchedulerService, DagService, PatchOperation, SubmitPlanPayload,
-        WorkItemDraft, WorkItemEdgeDraft,
+        DagPatch, DagSchedulerService, DagService, PatchOperation, SqliteDagGraphStore,
+        SubmitPlanPayload, WorkItemDraft, WorkItemEdgeDraft,
     },
     ids::new_task_id,
     storage::sqlite::{connect_sqlite, run_migrations},
@@ -310,16 +310,22 @@ async fn scheduler_allows_replan_anchor_to_start_new_path() {
     )
     .await
     .expect("apply dag");
-    let current_id: String =
-        sqlx::query_scalar("SELECT work_item_id FROM work_items WHERE title = 'current title'")
-            .fetch_one(&pool)
-            .await
-            .expect("current id");
-    let old_next_id: String =
-        sqlx::query_scalar("SELECT work_item_id FROM work_items WHERE title = 'old_next title'")
-            .fetch_one(&pool)
-            .await
-            .expect("old next id");
+    let graph_store = SqliteDagGraphStore::new(pool.clone());
+    let graph = graph_store.task_graph(&task_id).await.expect("task graph");
+    let current_id = graph
+        .work_items
+        .iter()
+        .find(|work_item| work_item.title == "current title")
+        .expect("current id")
+        .work_item_id
+        .clone();
+    let old_next_id = graph
+        .work_items
+        .iter()
+        .find(|work_item| work_item.title == "old_next title")
+        .expect("old next id")
+        .work_item_id
+        .clone();
     sqlx::query(
         "UPDATE work_item_runtime_projection SET current_state = 'replan_anchor' WHERE work_item_id = ?",
     )
@@ -355,12 +361,12 @@ async fn scheduler_allows_replan_anchor_to_start_new_path() {
         .expect("schedule task");
 
     assert_eq!(outcome.dispatched_runs.len(), 1);
-    let dispatched_title: String =
-        sqlx::query_scalar("SELECT title FROM work_items WHERE work_item_id = ?")
-            .bind(&outcome.dispatched_runs[0].work_item_id)
-            .fetch_one(&pool)
-            .await
-            .expect("dispatched title");
+    let dispatched_title = graph_store
+        .get_work_item(&outcome.dispatched_runs[0].work_item_id)
+        .await
+        .expect("dispatched work item")
+        .expect("dispatched work item")
+        .title;
     assert_eq!(dispatched_title, "new_next title");
 
     cleanup_scheduler_tmux_sessions(&pool).await;
@@ -390,19 +396,28 @@ async fn scheduler_does_not_dispatch_blocked_downstream_work_items() {
         .expect("schedule task");
 
     assert_eq!(outcome.dispatched_runs.len(), 1);
-    let dispatched_title: String =
-        sqlx::query_scalar("SELECT title FROM work_items WHERE work_item_id = ?")
-            .bind(&outcome.dispatched_runs[0].work_item_id)
-            .fetch_one(&pool)
-            .await
-            .expect("dispatched title");
+    let graph_store = SqliteDagGraphStore::new(pool.clone());
+    let dispatched_title = graph_store
+        .get_work_item(&outcome.dispatched_runs[0].work_item_id)
+        .await
+        .expect("dispatched work item")
+        .expect("dispatched work item")
+        .title;
     assert_eq!(dispatched_title, "design title");
 
+    let impl_id = graph_store
+        .task_graph(&task_id)
+        .await
+        .expect("task graph")
+        .work_items
+        .into_iter()
+        .find(|work_item| work_item.title == "impl title")
+        .expect("impl work item")
+        .work_item_id;
     let impl_state: String = sqlx::query_scalar(
-        r#"SELECT p.current_state
-           FROM work_items wi JOIN work_item_runtime_projection p ON p.work_item_id = wi.work_item_id
-           WHERE wi.title = 'impl title'"#,
+        "SELECT current_state FROM work_item_runtime_projection WHERE work_item_id = ?",
     )
+    .bind(impl_id)
     .fetch_one(&pool)
     .await
     .expect("impl state");

@@ -1,6 +1,7 @@
 use llmparty::{
     application::{
-        DagPatch, DagService, PatchOperation, SubmitPlanPayload, WorkItemDraft, WorkItemEdgeDraft,
+        DagPatch, DagService, PatchOperation, SqliteDagGraphStore, SubmitPlanPayload,
+        WorkItemDraft, WorkItemEdgeDraft,
     },
     ids::new_task_id,
     storage::sqlite::{connect_sqlite, run_migrations},
@@ -79,11 +80,11 @@ async fn saves_dag_proposal_without_applying_it() {
     assert_eq!(proposal.mode, "initial_dag");
     assert_eq!(proposal.state, "proposed");
 
-    let work_item_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM work_items")
-        .fetch_one(&pool)
+    let graph = SqliteDagGraphStore::new(pool.clone())
+        .task_graph(&task_id)
         .await
-        .expect("count work items");
-    assert_eq!(work_item_count, 0);
+        .expect("task graph");
+    assert_eq!(graph.work_items.len(), 0);
 }
 
 #[tokio::test]
@@ -101,19 +102,33 @@ async fn applies_initial_dag_and_initializes_ready_projection() {
         .await
         .expect("apply initial dag");
 
+    let graph = SqliteDagGraphStore::new(pool.clone())
+        .task_graph(&task_id)
+        .await
+        .expect("task graph");
+    assert_eq!(graph.work_items.len(), 2);
+    assert_eq!(graph.edges.len(), 1);
+
     let states: Vec<(String, String)> = sqlx::query_as(
-        r#"SELECT wi.title, p.current_state
-           FROM work_items wi
-           JOIN work_item_runtime_projection p ON p.work_item_id = wi.work_item_id
-           ORDER BY wi.title"#,
+        r#"SELECT work_item_id, current_state
+           FROM work_item_runtime_projection
+           ORDER BY work_item_id"#,
     )
     .fetch_all(&pool)
     .await
     .expect("projection states");
+    let title_by_id = graph
+        .work_items
+        .iter()
+        .map(|work_item| (work_item.work_item_id.as_str(), work_item.title.as_str()))
+        .collect::<std::collections::HashMap<_, _>>();
+    let state_by_title = states
+        .iter()
+        .map(|(id, state)| (title_by_id[id.as_str()], state.as_str()))
+        .collect::<std::collections::HashMap<_, _>>();
 
-    assert_eq!(states.len(), 2);
-    assert_eq!(states[0].1, "ready");
-    assert_eq!(states[1].1, "blocked");
+    assert_eq!(state_by_title["design title"], "ready");
+    assert_eq!(state_by_title["impl title"], "blocked");
 }
 
 #[tokio::test]
@@ -144,10 +159,16 @@ async fn applies_patch_with_added_work_item_and_edge() {
         .apply_initial_dag(&task_id, &payload)
         .await
         .expect("apply initial dag");
-    let existing_id: String = sqlx::query_scalar("SELECT work_item_id FROM work_items LIMIT 1")
-        .fetch_one(&pool)
+    let graph_store = SqliteDagGraphStore::new(pool.clone());
+    let existing_id = graph_store
+        .task_graph(&task_id)
         .await
-        .expect("existing work item");
+        .expect("task graph")
+        .work_items
+        .first()
+        .expect("existing work item")
+        .work_item_id
+        .clone();
 
     let patch = DagPatch {
         summary: "add review".to_string(),
@@ -166,15 +187,20 @@ async fn applies_patch_with_added_work_item_and_edge() {
         .await
         .expect("apply patch");
 
-    let edge_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM work_item_edges")
-        .fetch_one(&pool)
-        .await
-        .expect("edge count");
-    assert_eq!(edge_count, 1);
+    let graph = graph_store.task_graph(&task_id).await.expect("task graph");
+    assert_eq!(graph.edges.len(), 1);
+    let review_id = graph
+        .work_items
+        .iter()
+        .find(|work_item| work_item.title == "review title")
+        .expect("review work item")
+        .work_item_id
+        .clone();
 
     let review_state: String = sqlx::query_scalar(
-        "SELECT p.current_state FROM work_items wi JOIN work_item_runtime_projection p ON p.work_item_id = wi.work_item_id WHERE wi.title = 'review title'",
+        "SELECT current_state FROM work_item_runtime_projection WHERE work_item_id = ?",
     )
+    .bind(review_id)
     .fetch_one(&pool)
     .await
     .expect("review state");
@@ -193,10 +219,15 @@ async fn rejects_superseding_running_work_item() {
         )
         .await
         .expect("apply initial dag");
-    let work_item_id: String = sqlx::query_scalar("SELECT work_item_id FROM work_items LIMIT 1")
-        .fetch_one(&pool)
+    let work_item_id = SqliteDagGraphStore::new(pool.clone())
+        .task_graph(&task_id)
         .await
-        .expect("work item");
+        .expect("task graph")
+        .work_items
+        .first()
+        .expect("work item")
+        .work_item_id
+        .clone();
     sqlx::query(
         "UPDATE work_item_runtime_projection SET current_state = 'running' WHERE work_item_id = ?",
     )

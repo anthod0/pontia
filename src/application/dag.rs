@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use sqlx::{Sqlite, Transaction};
+use sqlx::Transaction;
 use uuid::Uuid;
 
 use super::*;
@@ -124,18 +124,33 @@ impl DagService {
         dag_validator::validate_plan_shape(payload)?;
         self.ensure_profiles_exist(&payload.work_items).await?;
 
-        let existing_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM work_items WHERE task_id = ? AND active = 1")
-                .bind(task_id)
-                .fetch_one(&self.pool)
-                .await?;
-        if existing_count > 0 {
+        let graph_store = SqliteDagGraphStore::new(self.pool.clone());
+        if graph_store
+            .task_graph(task_id)
+            .await?
+            .work_items
+            .iter()
+            .any(|work_item| work_item.active)
+        {
             return Err(Error::StateConflict(format!(
                 "task {task_id} already has an active DAG"
             )));
         }
 
         let mut tx = self.pool.begin().await?;
+        append_task_event(
+            &mut tx,
+            task_id,
+            "dag.applied",
+            json!({
+                "task_id": task_id,
+                "summary": payload.summary,
+                "assumptions": payload.assumptions,
+                "risks": payload.risks,
+            }),
+        )
+        .await?;
+
         let mut id_map = HashMap::new();
         for draft in &payload.work_items {
             let work_item_id = new_prefixed_id("wi");
@@ -143,7 +158,13 @@ impl DagService {
                 draft.temp_id.clone().unwrap_or_default(),
                 work_item_id.clone(),
             );
-            insert_work_item(&mut tx, task_id, &work_item_id, draft).await?;
+            append_task_event(
+                &mut tx,
+                task_id,
+                "work_item.created",
+                json!({ "work_item": work_item_event_payload(task_id, &work_item_id, draft) }),
+            )
+            .await?;
         }
         for edge in &payload.edges {
             let from = id_map.get(&edge.from_work_item_id).ok_or_else(|| {
@@ -158,10 +179,25 @@ impl DagService {
                     edge.to_work_item_id
                 ))
             })?;
-            insert_edge(&mut tx, task_id, from, to, &edge.edge_type).await?;
+            append_task_event(
+                &mut tx,
+                task_id,
+                "work_item.edge_added",
+                json!({
+                    "task_id": task_id,
+                    "from_work_item_id": from,
+                    "to_work_item_id": to,
+                    "edge_type": edge.edge_type,
+                }),
+            )
+            .await?;
         }
-        initialize_projection(&mut tx, task_id).await?;
         tx.commit().await?;
+
+        GraphProjectionService::new(self.pool.clone(), GraphRuntimeConfig::default())
+            .project_task(task_id)
+            .await?;
+        initialize_projection(&self.pool, task_id).await?;
         Ok(())
     }
 
@@ -170,6 +206,18 @@ impl DagService {
         self.validate_patch(task_id, patch).await?;
 
         let mut tx = self.pool.begin().await?;
+        append_task_event(
+            &mut tx,
+            task_id,
+            "dag.patch_applied",
+            json!({
+                "task_id": task_id,
+                "summary": patch.summary,
+                "operations": patch.operations,
+            }),
+        )
+        .await?;
+
         let mut temp_id_map = HashMap::new();
         for operation in &patch.operations {
             match operation {
@@ -178,7 +226,13 @@ impl DagService {
                     if let Some(temp_id) = &work_item.temp_id {
                         temp_id_map.insert(temp_id.clone(), work_item_id.clone());
                     }
-                    insert_work_item(&mut tx, task_id, &work_item_id, work_item).await?;
+                    append_task_event(
+                        &mut tx,
+                        task_id,
+                        "work_item.created",
+                        json!({ "work_item": work_item_event_payload(task_id, &work_item_id, work_item) }),
+                    )
+                    .await?;
                 }
                 PatchOperation::AddEdge { edge } => {
                     let from = temp_id_map
@@ -189,22 +243,33 @@ impl DagService {
                         .get(&edge.to_work_item_id)
                         .map(String::as_str)
                         .unwrap_or(&edge.to_work_item_id);
-                    insert_edge(&mut tx, task_id, from, to, &edge.edge_type).await?;
+                    append_task_event(
+                        &mut tx,
+                        task_id,
+                        "work_item.edge_added",
+                        json!({
+                            "task_id": task_id,
+                            "from_work_item_id": from,
+                            "to_work_item_id": to,
+                            "edge_type": edge.edge_type,
+                        }),
+                    )
+                    .await?;
                 }
                 PatchOperation::SupersedeWorkItem {
                     work_item_id,
                     reason,
                 } => {
-                    sqlx::query(
-                        r#"UPDATE work_items
-                           SET active = 0, metadata = json_set(metadata, '$.superseded_reason', ?),
-                               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           WHERE task_id = ? AND work_item_id = ?"#,
+                    append_task_event(
+                        &mut tx,
+                        task_id,
+                        "work_item.superseded",
+                        json!({
+                            "task_id": task_id,
+                            "work_item_id": work_item_id,
+                            "reason": reason,
+                        }),
                     )
-                    .bind(reason)
-                    .bind(task_id)
-                    .bind(work_item_id)
-                    .execute(&mut *tx)
                     .await?;
                     sqlx::query(
                         r#"UPDATE work_item_runtime_projection
@@ -220,8 +285,12 @@ impl DagService {
                 }
             }
         }
-        initialize_projection(&mut tx, task_id).await?;
         tx.commit().await?;
+
+        GraphProjectionService::new(self.pool.clone(), GraphRuntimeConfig::default())
+            .project_task(task_id)
+            .await?;
+        initialize_projection(&self.pool, task_id).await?;
         Ok(())
     }
 
@@ -306,7 +375,25 @@ impl DagService {
         }
         self.ensure_profiles_exist(&added_work_items).await?;
 
-        let mut nodes = existing_work_item_ids(&self.pool, task_id).await?;
+        let snapshot = SqliteDagGraphStore::new(self.pool.clone())
+            .task_graph(task_id)
+            .await?;
+        let superseded: HashSet<String> = patch
+            .operations
+            .iter()
+            .filter_map(|operation| match operation {
+                PatchOperation::SupersedeWorkItem { work_item_id, .. } => {
+                    Some(work_item_id.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        let mut nodes: Vec<String> = snapshot
+            .work_items
+            .iter()
+            .filter(|work_item| work_item.active && !superseded.contains(&work_item.work_item_id))
+            .map(|work_item| work_item.work_item_id.clone())
+            .collect();
         let mut temp_to_generated = HashMap::new();
         for work_item in &added_work_items {
             let generated = format!("__new_{}", temp_to_generated.len());
@@ -316,7 +403,20 @@ impl DagService {
             nodes.push(generated);
         }
 
-        let mut edges = existing_edges(&self.pool, task_id).await?;
+        let mut edges: Vec<WorkItemEdgeDraft> = snapshot
+            .edges
+            .iter()
+            .filter(|edge| {
+                edge.edge_type == GraphEdgeKind::DependsOn
+                    && !superseded.contains(&edge.from_work_item_id)
+                    && !superseded.contains(&edge.to_work_item_id)
+            })
+            .map(|edge| WorkItemEdgeDraft {
+                from_work_item_id: edge.from_work_item_id.clone(),
+                to_work_item_id: edge.to_work_item_id.clone(),
+                edge_type: edge.edge_type.as_str().to_string(),
+            })
+            .collect();
         for operation in &patch.operations {
             if let PatchOperation::AddEdge { edge } = operation {
                 let from =
@@ -334,89 +434,79 @@ impl DagService {
     }
 }
 
-async fn insert_work_item(
-    tx: &mut Transaction<'_, Sqlite>,
+async fn append_task_event(
+    tx: &mut Transaction<'_, sqlx::Sqlite>,
     task_id: &str,
-    work_item_id: &str,
-    draft: &WorkItemDraft,
+    event_type: &str,
+    payload: Value,
 ) -> Result<()> {
-    let acceptance_criteria = serde_json::to_string(&draft.acceptance_criteria)?;
-    let metadata = serde_json::to_string(&draft.metadata)?;
     sqlx::query(
-        r#"INSERT INTO work_items (
-                work_item_id, task_id, title, description, kind, action,
-                execution_profile_id, execution_profile_version, active, priority,
-                optional, parallelizable, acceptance_criteria, metadata
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)"#,
+        r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
+           VALUES (?, ?, ?, ?)"#,
     )
-    .bind(work_item_id)
+    .bind(new_event_id().to_string())
     .bind(task_id)
-    .bind(&draft.title)
-    .bind(&draft.description)
-    .bind(&draft.kind)
-    .bind(&draft.action)
-    .bind(&draft.execution_profile_id)
-    .bind(&draft.execution_profile_version)
-    .bind(draft.priority)
-    .bind(draft.optional)
-    .bind(draft.parallelizable)
-    .bind(acceptance_criteria)
-    .bind(metadata)
+    .bind(event_type)
+    .bind(serde_json::to_string(&payload)?)
     .execute(&mut **tx)
     .await?;
     Ok(())
 }
 
-async fn insert_edge(
-    tx: &mut Transaction<'_, Sqlite>,
-    task_id: &str,
-    from: &str,
-    to: &str,
-    edge_type: &str,
-) -> Result<()> {
-    sqlx::query(
-        r#"INSERT INTO work_item_edges (edge_id, task_id, from_work_item_id, to_work_item_id, edge_type)
-           VALUES (?, ?, ?, ?, ?)"#,
-    )
-    .bind(new_prefixed_id("wie"))
-    .bind(task_id)
-    .bind(from)
-    .bind(to)
-    .bind(edge_type)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
+fn work_item_event_payload(task_id: &str, work_item_id: &str, draft: &WorkItemDraft) -> Value {
+    json!({
+        "work_item_id": work_item_id,
+        "task_id": task_id,
+        "title": draft.title,
+        "description": draft.description,
+        "kind": draft.kind,
+        "action": draft.action,
+        "execution_profile_id": draft.execution_profile_id,
+        "execution_profile_version": draft.execution_profile_version,
+        "priority": draft.priority,
+        "optional": draft.optional,
+        "parallelizable": draft.parallelizable,
+        "acceptance_criteria": draft.acceptance_criteria,
+        "active": true,
+        "metadata": draft.metadata,
+    })
 }
 
-async fn initialize_projection(tx: &mut Transaction<'_, Sqlite>, task_id: &str) -> Result<()> {
-    let rows = sqlx::query(
-        r#"SELECT wi.work_item_id, wi.priority, wi.optional, wi.parallelizable,
-                  EXISTS(
-                      SELECT 1 FROM work_item_edges e
-                      JOIN work_items upstream ON upstream.work_item_id = e.from_work_item_id
-                      LEFT JOIN work_item_runtime_projection up
-                        ON up.work_item_id = upstream.work_item_id
-                      WHERE e.task_id = wi.task_id
-                        AND e.to_work_item_id = wi.work_item_id
-                        AND e.edge_type = 'depends_on'
-                        AND upstream.active = 1
-                        AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
-                  ) AS has_blocking_dependency
-           FROM work_items wi
-           LEFT JOIN work_item_runtime_projection existing
-             ON existing.work_item_id = wi.work_item_id
-           WHERE wi.task_id = ? AND wi.active = 1 AND existing.work_item_id IS NULL"#,
+async fn initialize_projection(pool: &SqlitePool, task_id: &str) -> Result<()> {
+    let snapshot = SqliteDagGraphStore::new(pool.clone())
+        .task_graph(task_id)
+        .await?;
+    let runtime_rows = sqlx::query(
+        "SELECT work_item_id, current_state FROM work_item_runtime_projection WHERE task_id = ?",
     )
     .bind(task_id)
-    .fetch_all(&mut **tx)
+    .fetch_all(pool)
     .await?;
+    let runtime_states: HashMap<String, String> = runtime_rows
+        .into_iter()
+        .map(|row| (row.get("work_item_id"), row.get("current_state")))
+        .collect();
+    let active_ids: HashSet<String> = snapshot
+        .work_items
+        .iter()
+        .filter(|work_item| work_item.active)
+        .map(|work_item| work_item.work_item_id.clone())
+        .collect();
 
-    for row in rows {
-        let work_item_id: String = row.get("work_item_id");
-        let priority: i64 = row.get("priority");
-        let optional: bool = row.get("optional");
-        let parallelizable: bool = row.get("parallelizable");
-        let has_blocking_dependency: bool = row.get("has_blocking_dependency");
+    for work_item in snapshot.work_items.iter().filter(|work_item| {
+        work_item.active && !runtime_states.contains_key(&work_item.work_item_id)
+    }) {
+        let has_blocking_dependency = snapshot.edges.iter().any(|edge| {
+            edge.edge_type == GraphEdgeKind::DependsOn
+                && edge.to_work_item_id == work_item.work_item_id
+                && active_ids.contains(&edge.from_work_item_id)
+                && !matches!(
+                    runtime_states
+                        .get(&edge.from_work_item_id)
+                        .map(String::as_str),
+                    Some("completed") | Some("replan_anchor")
+                )
+        });
         let state = if has_blocking_dependency {
             "blocked"
         } else {
@@ -431,7 +521,7 @@ async fn initialize_projection(tx: &mut Transaction<'_, Sqlite>, task_id: &str) 
                     CASE WHEN ? IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END,
                     ?, 0, 0, ?, ?, ?)"#,
         )
-        .bind(&work_item_id)
+        .bind(&work_item.work_item_id)
         .bind(task_id)
         .bind(state)
         .bind(ready_at)
@@ -440,10 +530,10 @@ async fn initialize_projection(tx: &mut Transaction<'_, Sqlite>, task_id: &str) 
         } else {
             None
         })
-        .bind(priority)
-        .bind(optional)
-        .bind(parallelizable)
-        .execute(&mut **tx)
+        .bind(work_item.priority)
+        .bind(work_item.optional)
+        .bind(work_item.parallelizable)
+        .execute(pool)
         .await?;
     }
     Ok(())
@@ -466,14 +556,13 @@ async fn ensure_work_item_exists(
     task_id: &str,
     work_item_id: &str,
 ) -> Result<()> {
-    let exists: Option<i64> = sqlx::query_scalar(
-        "SELECT 1 FROM work_items WHERE task_id = ? AND work_item_id = ? AND active = 1",
-    )
-    .bind(task_id)
-    .bind(work_item_id)
-    .fetch_optional(pool)
-    .await?;
-    if exists.is_some() {
+    let work_item = SqliteDagGraphStore::new(pool.clone())
+        .get_work_item(work_item_id)
+        .await?;
+    if work_item
+        .as_ref()
+        .is_some_and(|work_item| work_item.task_id == task_id && work_item.active)
+    {
         Ok(())
     } else {
         Err(Error::NotFound(format!("work item {work_item_id}")))
@@ -498,33 +587,6 @@ async fn ensure_work_item_not_running(
         )));
     }
     Ok(())
-}
-
-async fn existing_work_item_ids(pool: &SqlitePool, task_id: &str) -> Result<Vec<String>> {
-    Ok(
-        sqlx::query_scalar("SELECT work_item_id FROM work_items WHERE task_id = ? AND active = 1")
-            .bind(task_id)
-            .fetch_all(pool)
-            .await?,
-    )
-}
-
-async fn existing_edges(pool: &SqlitePool, task_id: &str) -> Result<Vec<WorkItemEdgeDraft>> {
-    let rows = sqlx::query(
-        "SELECT from_work_item_id, to_work_item_id, edge_type FROM work_item_edges WHERE task_id = ?",
-    )
-    .bind(task_id)
-    .fetch_all(pool)
-    .await?;
-    rows.into_iter()
-        .map(|row| {
-            Ok(WorkItemEdgeDraft {
-                from_work_item_id: row.get("from_work_item_id"),
-                to_work_item_id: row.get("to_work_item_id"),
-                edge_type: row.get("edge_type"),
-            })
-        })
-        .collect()
 }
 
 fn resolve_patch_ref(

@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use super::*;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -85,48 +87,28 @@ impl DagSchedulerService {
 
     pub async fn recompute_ready(&self, task_id: &str) -> Result<()> {
         ensure_task_not_terminal(&self.pool, task_id).await?;
-        sqlx::query(
-            r#"UPDATE work_item_runtime_projection
-               SET current_state = CASE
-                       WHEN EXISTS (
-                           SELECT 1 FROM work_item_edges e
-                           JOIN work_items upstream ON upstream.work_item_id = e.from_work_item_id
-                           LEFT JOIN work_item_runtime_projection up ON up.work_item_id = upstream.work_item_id
-                           WHERE e.task_id = work_item_runtime_projection.task_id
-                             AND e.to_work_item_id = work_item_runtime_projection.work_item_id
-                             AND e.edge_type = 'depends_on'
-                             AND upstream.active = 1
-                             AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
-                       ) THEN 'blocked'
-                       ELSE 'ready'
-                   END,
-                   ready_at = CASE
-                       WHEN EXISTS (
-                           SELECT 1 FROM work_item_edges e
-                           JOIN work_items upstream ON upstream.work_item_id = e.from_work_item_id
-                           LEFT JOIN work_item_runtime_projection up ON up.work_item_id = upstream.work_item_id
-                           WHERE e.task_id = work_item_runtime_projection.task_id
-                             AND e.to_work_item_id = work_item_runtime_projection.work_item_id
-                             AND e.edge_type = 'depends_on'
-                             AND upstream.active = 1
-                             AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
-                       ) THEN NULL
-                       ELSE COALESCE(ready_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                   END,
-                   blocked_reason = CASE
-                       WHEN EXISTS (
-                           SELECT 1 FROM work_item_edges e
-                           JOIN work_items upstream ON upstream.work_item_id = e.from_work_item_id
-                           LEFT JOIN work_item_runtime_projection up ON up.work_item_id = upstream.work_item_id
-                           WHERE e.task_id = work_item_runtime_projection.task_id
-                             AND e.to_work_item_id = work_item_runtime_projection.work_item_id
-                             AND e.edge_type = 'depends_on'
-                             AND upstream.active = 1
-                             AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
-                       ) THEN 'waiting_for_dependencies'
-                       ELSE NULL
-                   END,
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        let snapshot = SqliteDagGraphStore::new(self.pool.clone())
+            .task_graph(task_id)
+            .await?;
+        let active_ids: HashSet<String> = snapshot
+            .work_items
+            .iter()
+            .filter(|work_item| work_item.active)
+            .map(|work_item| work_item.work_item_id.clone())
+            .collect();
+        let state_rows = sqlx::query(
+            "SELECT work_item_id, current_state FROM work_item_runtime_projection WHERE task_id = ?",
+        )
+        .bind(task_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let states: HashMap<String, String> = state_rows
+            .into_iter()
+            .map(|row| (row.get("work_item_id"), row.get("current_state")))
+            .collect();
+        let rows = sqlx::query(
+            r#"SELECT work_item_id, current_state
+               FROM work_item_runtime_projection
                WHERE task_id = ?
                  AND current_state IN ('pending', 'ready', 'blocked')
                  AND NOT EXISTS (
@@ -136,8 +118,43 @@ impl DagSchedulerService {
                  )"#,
         )
         .bind(task_id)
-        .execute(&self.pool)
+        .fetch_all(&self.pool)
         .await?;
+        for row in rows {
+            let work_item_id: String = row.get("work_item_id");
+            if !active_ids.contains(&work_item_id) {
+                continue;
+            }
+            let has_blocking_dependency = snapshot.edges.iter().any(|edge| {
+                edge.edge_type == GraphEdgeKind::DependsOn
+                    && edge.to_work_item_id == work_item_id
+                    && active_ids.contains(&edge.from_work_item_id)
+                    && !matches!(
+                        states.get(&edge.from_work_item_id).map(String::as_str),
+                        Some("completed") | Some("replan_anchor")
+                    )
+            });
+            let state = if has_blocking_dependency {
+                "blocked"
+            } else {
+                "ready"
+            };
+            sqlx::query(
+                r#"UPDATE work_item_runtime_projection
+                   SET current_state = ?,
+                       ready_at = CASE WHEN ? = 'ready' THEN COALESCE(ready_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ELSE NULL END,
+                       blocked_reason = CASE WHEN ? = 'blocked' THEN 'waiting_for_dependencies' ELSE NULL END,
+                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                   WHERE task_id = ? AND work_item_id = ?"#,
+            )
+            .bind(state)
+            .bind(state)
+            .bind(state)
+            .bind(task_id)
+            .bind(&work_item_id)
+            .execute(&self.pool)
+            .await?;
+        }
         Ok(())
     }
 
@@ -146,73 +163,99 @@ impl DagSchedulerService {
         task_id: &str,
     ) -> Result<Option<SchedulerWorkItem>> {
         ensure_task_not_terminal(&self.pool, task_id).await?;
-        let mut tx = self.pool.begin().await?;
-        let row = sqlx::query(
-            r#"SELECT wi.work_item_id, wi.task_id, wi.title, wi.description, wi.kind, wi.action,
-                      wi.execution_profile_id, wi.execution_profile_version, p.current_attempt
-               FROM work_items wi
-               JOIN work_item_runtime_projection p ON p.work_item_id = wi.work_item_id
-               WHERE wi.task_id = ?
-                 AND wi.active = 1
-                 AND p.current_state = 'ready'
+        let snapshot = SqliteDagGraphStore::new(self.pool.clone())
+            .task_graph(task_id)
+            .await?;
+        let active_items: HashMap<String, WorkItemNode> = snapshot
+            .work_items
+            .iter()
+            .filter(|work_item| work_item.active)
+            .map(|work_item| (work_item.work_item_id.clone(), work_item.clone()))
+            .collect();
+        let active_ids: HashSet<String> = active_items.keys().cloned().collect();
+        let state_rows = sqlx::query(
+            "SELECT work_item_id, current_state FROM work_item_runtime_projection WHERE task_id = ?",
+        )
+        .bind(task_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let states: HashMap<String, String> = state_rows
+            .into_iter()
+            .map(|row| (row.get("work_item_id"), row.get("current_state")))
+            .collect();
+        let rows = sqlx::query(
+            r#"SELECT work_item_id, current_attempt
+               FROM work_item_runtime_projection
+               WHERE task_id = ? AND current_state = 'ready'
                  AND NOT EXISTS (
                      SELECT 1 FROM work_item_runs r
-                     WHERE r.work_item_id = wi.work_item_id AND r.state IN ('queued', 'running')
+                     WHERE r.work_item_id = work_item_runtime_projection.work_item_id
+                       AND r.state IN ('queued', 'running')
                  )
-                 AND NOT EXISTS (
-                     SELECT 1 FROM work_item_edges e
-                     JOIN work_items upstream ON upstream.work_item_id = e.from_work_item_id
-                     LEFT JOIN work_item_runtime_projection up ON up.work_item_id = upstream.work_item_id
-                     WHERE e.task_id = wi.task_id
-                       AND e.to_work_item_id = wi.work_item_id
-                       AND e.edge_type = 'depends_on'
-                       AND upstream.active = 1
-                       AND COALESCE(up.current_state, 'pending') NOT IN ('completed', 'replan_anchor')
-                 )
-                 AND EXISTS (
-                     SELECT 1 FROM execution_profiles ep
-                     WHERE ep.profile_id = wi.execution_profile_id
-                       AND (wi.execution_profile_version IS NULL OR ep.version = wi.execution_profile_version)
-                 )
-               ORDER BY p.priority DESC, p.ready_at, wi.work_item_id
-               LIMIT 1"#,
+               ORDER BY priority DESC, ready_at, work_item_id"#,
         )
         .bind(task_id)
-        .fetch_optional(&mut *tx)
+        .fetch_all(&self.pool)
         .await?;
 
-        let Some(row) = row else {
-            tx.commit().await?;
-            return Ok(None);
-        };
-        let work_item_id: String = row.get("work_item_id");
-        let updated = sqlx::query(
-            r#"UPDATE work_item_runtime_projection
-               SET current_state = 'running', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE task_id = ? AND work_item_id = ? AND current_state = 'ready'"#,
-        )
-        .bind(task_id)
-        .bind(&work_item_id)
-        .execute(&mut *tx)
-        .await?
-        .rows_affected();
-        if updated == 0 {
-            tx.commit().await?;
-            return Ok(None);
-        }
-        tx.commit().await?;
+        for row in rows {
+            let work_item_id: String = row.get("work_item_id");
+            let Some(work_item) = active_items.get(&work_item_id) else {
+                sqlx::query(
+                    r#"UPDATE work_item_runtime_projection
+                       SET current_state = 'blocked', blocked_reason = 'missing_or_inactive_graph_work_item',
+                           ready_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                       WHERE task_id = ? AND work_item_id = ?"#,
+                )
+                .bind(task_id)
+                .bind(&work_item_id)
+                .execute(&self.pool)
+                .await?;
+                continue;
+            };
+            let dependencies_blocking = snapshot.edges.iter().any(|edge| {
+                edge.edge_type == GraphEdgeKind::DependsOn
+                    && edge.to_work_item_id == work_item_id
+                    && active_ids.contains(&edge.from_work_item_id)
+                    && !matches!(
+                        states.get(&edge.from_work_item_id).map(String::as_str),
+                        Some("completed") | Some("replan_anchor")
+                    )
+            });
+            if dependencies_blocking || !profile_exists(&self.pool, work_item).await? {
+                continue;
+            }
 
-        Ok(Some(SchedulerWorkItem {
-            work_item_id,
-            task_id: row.get("task_id"),
-            title: row.get("title"),
-            description: row.get("description"),
-            kind: row.get("kind"),
-            action: row.get("action"),
-            execution_profile_id: row.get("execution_profile_id"),
-            execution_profile_version: row.get("execution_profile_version"),
-            current_attempt: row.get("current_attempt"),
-        }))
+            let mut tx = self.pool.begin().await?;
+            let updated = sqlx::query(
+                r#"UPDATE work_item_runtime_projection
+                   SET current_state = 'running', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                   WHERE task_id = ? AND work_item_id = ? AND current_state = 'ready'"#,
+            )
+            .bind(task_id)
+            .bind(&work_item_id)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+            tx.commit().await?;
+            if updated == 0 {
+                return Ok(None);
+            }
+
+            return Ok(Some(SchedulerWorkItem {
+                work_item_id,
+                task_id: work_item.task_id.clone(),
+                title: work_item.title.clone(),
+                description: work_item.description.clone(),
+                kind: work_item.kind.clone(),
+                action: work_item.action.clone(),
+                execution_profile_id: work_item.execution_profile_id.clone(),
+                execution_profile_version: work_item.execution_profile_version.clone(),
+                current_attempt: row.get("current_attempt"),
+            }));
+        }
+
+        Ok(None)
     }
 
     async fn create_work_item_run(
@@ -423,6 +466,22 @@ async fn ensure_task_not_terminal(pool: &SqlitePool, task_id: &str) -> Result<()
         }
         Some(_) => Ok(()),
     }
+}
+
+async fn profile_exists(pool: &SqlitePool, work_item: &WorkItemNode) -> Result<bool> {
+    let exists: Option<i64> = if let Some(version) = &work_item.execution_profile_version {
+        sqlx::query_scalar("SELECT 1 FROM execution_profiles WHERE profile_id = ? AND version = ?")
+            .bind(&work_item.execution_profile_id)
+            .bind(version)
+            .fetch_optional(pool)
+            .await?
+    } else {
+        sqlx::query_scalar("SELECT 1 FROM execution_profiles WHERE profile_id = ? LIMIT 1")
+            .bind(&work_item.execution_profile_id)
+            .fetch_optional(pool)
+            .await?
+    };
+    Ok(exists.is_some())
 }
 
 fn preferred_client_type(profile: &ExecutionProfileView, task_preferred: Option<&str>) -> String {

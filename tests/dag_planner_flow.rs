@@ -1,5 +1,7 @@
 use llmparty::{
-    application::{DagPlanningService, DagService, SubmitPlanPayload, WorkItemDraft},
+    application::{
+        DagPlanningService, DagService, SqliteDagGraphStore, SubmitPlanPayload, WorkItemDraft,
+    },
     ids::new_task_id,
     storage::sqlite::{connect_sqlite, run_migrations},
 };
@@ -224,9 +226,21 @@ async fn replanner_output_applies_patch_and_resumes_scheduler() {
     assert_eq!(outcome.proposal.state, "applied");
     assert_eq!(outcome.scheduler.dispatched_runs.len(), 1);
 
+    let graph = SqliteDagGraphStore::new(pool.clone())
+        .task_graph(&task_id)
+        .await
+        .expect("task graph");
+    let followup_id = graph
+        .work_items
+        .iter()
+        .find(|work_item| work_item.title == "Implement follow-up")
+        .expect("followup work item")
+        .work_item_id
+        .clone();
     let followup_state: String = sqlx::query_scalar(
-        "SELECT p.current_state FROM work_items wi JOIN work_item_runtime_projection p ON p.work_item_id = wi.work_item_id WHERE wi.title = 'Implement follow-up'",
+        "SELECT current_state FROM work_item_runtime_projection WHERE work_item_id = ?",
     )
+    .bind(followup_id)
     .fetch_one(&pool)
     .await
     .expect("followup state");
