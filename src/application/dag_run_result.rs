@@ -534,22 +534,34 @@ impl DagRunResultService {
     }
 
     async fn aggregate_task_state(&self, task_id: &str) -> Result<()> {
+        let graph = SqliteDagGraphStore::new(self.pool.clone())
+            .task_graph(task_id)
+            .await?;
+        let active_items: std::collections::HashMap<String, bool> = graph
+            .work_items
+            .into_iter()
+            .filter(|work_item| work_item.active)
+            .map(|work_item| (work_item.work_item_id, work_item.optional))
+            .collect();
+        if active_items.is_empty() {
+            return Ok(());
+        }
+
         let rows = sqlx::query(
-            r#"SELECT p.current_state, wi.optional
-               FROM work_items wi
-               JOIN work_item_runtime_projection p ON p.work_item_id = wi.work_item_id
-               WHERE wi.task_id = ? AND wi.active = 1"#,
+            r#"SELECT work_item_id, current_state
+               FROM work_item_runtime_projection
+               WHERE task_id = ?"#,
         )
         .bind(task_id)
         .fetch_all(&self.pool)
         .await?;
-        if rows.is_empty() {
-            return Ok(());
-        }
 
         let mut required = Vec::new();
         for row in rows {
-            let optional: bool = row.try_get("optional")?;
+            let work_item_id: String = row.try_get("work_item_id")?;
+            let Some(optional) = active_items.get(&work_item_id) else {
+                continue;
+            };
             if !optional {
                 required.push(row.try_get::<String, _>("current_state")?);
             }

@@ -1,7 +1,7 @@
 use llmparty::{
     application::{
-        DagSchedulerService, DagService, EventIngestService, SubmitPlanPayload, WorkItemDraft,
-        WorkItemEdgeDraft,
+        DagSchedulerService, DagService, EventIngestService, SqliteDagGraphStore,
+        SubmitPlanPayload, WorkItemDraft, WorkItemEdgeDraft,
     },
     domain::{DomainEvent, EventSource, EventType},
     ids::{new_event_id, new_task_id},
@@ -160,11 +160,21 @@ async fn worker_completed_json_updates_run_projection_and_dispatches_downstream(
     assert_eq!(run.get::<String, _>("state"), "completed");
     assert_eq!(run.get::<String, _>("output_summary"), "design done");
 
+    let impl_id = SqliteDagGraphStore::new(pool.clone())
+        .task_graph(&task_id)
+        .await
+        .expect("task graph")
+        .work_items
+        .into_iter()
+        .find(|work_item| work_item.title == "impl title")
+        .expect("impl work item")
+        .work_item_id;
     let downstream = sqlx::query(
-        r#"SELECT p.current_state, p.current_run_id, p.turn_id
-           FROM work_items wi JOIN work_item_runtime_projection p ON p.work_item_id = wi.work_item_id
-           WHERE wi.title = 'impl title'"#,
+        r#"SELECT current_state, current_run_id, turn_id
+           FROM work_item_runtime_projection
+           WHERE work_item_id = ?"#,
     )
+    .bind(impl_id)
     .fetch_one(&pool)
     .await
     .expect("downstream");

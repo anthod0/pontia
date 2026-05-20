@@ -425,3 +425,46 @@ async fn scheduler_does_not_dispatch_blocked_downstream_work_items() {
 
     cleanup_scheduler_tmux_sessions(&pool).await;
 }
+
+#[tokio::test]
+async fn scheduler_dispatches_ready_work_items_by_priority() {
+    let pool = test_pool().await;
+    let task_id = insert_task(&pool).await;
+    DagService::new(pool.clone())
+        .apply_initial_dag(
+            &task_id,
+            &initial_plan(
+                vec![
+                    draft("low", "implementer", 1),
+                    draft("high", "implementer", 50),
+                ],
+                vec![],
+            ),
+        )
+        .await
+        .expect("apply dag");
+
+    let outcome = DagSchedulerService::new(pool.clone())
+        .schedule_task(&task_id)
+        .await
+        .expect("schedule task");
+
+    assert_eq!(outcome.dispatched_runs.len(), 2);
+    let graph_store = SqliteDagGraphStore::new(pool.clone());
+    let first_title = graph_store
+        .get_work_item(&outcome.dispatched_runs[0].work_item_id)
+        .await
+        .expect("first work item")
+        .expect("first work item")
+        .title;
+    let second_title = graph_store
+        .get_work_item(&outcome.dispatched_runs[1].work_item_id)
+        .await
+        .expect("second work item")
+        .expect("second work item")
+        .title;
+    assert_eq!(first_title, "high title");
+    assert_eq!(second_title, "low title");
+
+    cleanup_scheduler_tmux_sessions(&pool).await;
+}

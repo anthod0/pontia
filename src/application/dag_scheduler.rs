@@ -222,7 +222,30 @@ impl DagSchedulerService {
                         Some("completed") | Some("replan_anchor")
                     )
             });
-            if dependencies_blocking || !profile_exists(&self.pool, work_item).await? {
+            if dependencies_blocking {
+                sqlx::query(
+                    r#"UPDATE work_item_runtime_projection
+                       SET current_state = 'blocked', blocked_reason = 'waiting_for_dependencies',
+                           ready_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                       WHERE task_id = ? AND work_item_id = ? AND current_state = 'ready'"#,
+                )
+                .bind(task_id)
+                .bind(&work_item_id)
+                .execute(&self.pool)
+                .await?;
+                continue;
+            }
+            if !profile_exists(&self.pool, work_item).await? {
+                sqlx::query(
+                    r#"UPDATE work_item_runtime_projection
+                       SET current_state = 'blocked', blocked_reason = 'missing_execution_profile',
+                           ready_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                       WHERE task_id = ? AND work_item_id = ? AND current_state = 'ready'"#,
+                )
+                .bind(task_id)
+                .bind(&work_item_id)
+                .execute(&self.pool)
+                .await?;
                 continue;
             }
 
