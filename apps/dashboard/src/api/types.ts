@@ -148,6 +148,9 @@ export interface WorkItemRuntimeView {
   current_attempt: number;
   ready_at: string | null;
   blocked_reason: string | null;
+  outcome_state: string | null;
+  outcome_reason: string | null;
+  replanned_from_state: string | null;
   retry_count: number;
   max_retries: number;
   priority: number;

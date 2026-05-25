@@ -171,6 +171,7 @@ async fn applies_patch_with_added_work_item_and_edge() {
         .clone();
 
     let patch = DagPatch {
+        base_revision: None,
         summary: "add review".to_string(),
         anchor_work_item_id: None,
         supersede_policy: "explicit_only".to_string(),
@@ -249,6 +250,7 @@ async fn patch_with_anchor_replaces_reachable_unstarted_downstream() {
         .apply_patch(
             &task_id,
             &DagPatch {
+                base_revision: None,
                 summary: "replace downstream".to_string(),
                 anchor_work_item_id: Some(anchor_id.clone()),
                 supersede_policy: "reachable_downstream".to_string(),
@@ -330,6 +332,7 @@ async fn rejects_anchor_cutover_when_reachable_downstream_is_running() {
         .apply_patch(
             &task_id,
             &DagPatch {
+                base_revision: None,
                 summary: "replace running downstream".to_string(),
                 anchor_work_item_id: Some(anchor_id),
                 supersede_policy: "reachable_downstream".to_string(),
@@ -340,6 +343,254 @@ async fn rejects_anchor_cutover_when_reachable_downstream_is_running() {
         .expect_err("running downstream cutover should fail");
 
     assert!(error.to_string().contains("running"));
+}
+
+#[tokio::test]
+async fn patch_remove_edge_inserts_work_between_existing_nodes() {
+    let pool = test_pool().await;
+    let task_id = insert_task(&pool).await;
+    let service = DagService::new(pool.clone());
+    service
+        .apply_initial_dag(
+            &task_id,
+            &initial_plan(
+                vec![draft("a", "implementer"), draft("b", "implementer")],
+                vec![edge("a", "b")],
+            ),
+        )
+        .await
+        .expect("apply initial dag");
+    let graph_store = SqliteDagGraphStore::new(pool.clone());
+    let graph = graph_store.task_graph(&task_id).await.expect("task graph");
+    let id_by_title = graph
+        .work_items
+        .iter()
+        .map(|work_item| (work_item.title.as_str(), work_item.work_item_id.clone()))
+        .collect::<std::collections::HashMap<_, _>>();
+    let a_id = id_by_title["a title"].clone();
+    let b_id = id_by_title["b title"].clone();
+
+    service
+        .apply_patch(
+            &task_id,
+            &DagPatch {
+                base_revision: None,
+                summary: "insert x".to_string(),
+                anchor_work_item_id: None,
+                supersede_policy: "none".to_string(),
+                operations: vec![
+                    PatchOperation::AddWorkItem {
+                        work_item: draft("x", "implementer"),
+                    },
+                    PatchOperation::RemoveEdge {
+                        edge: edge(&a_id, &b_id),
+                    },
+                    PatchOperation::AddEdge {
+                        edge: edge(&a_id, "x"),
+                    },
+                    PatchOperation::AddEdge {
+                        edge: edge("x", &b_id),
+                    },
+                ],
+            },
+        )
+        .await
+        .expect("apply patch");
+
+    let graph = graph_store.task_graph(&task_id).await.expect("task graph");
+    let x_id = graph
+        .work_items
+        .iter()
+        .find(|work_item| work_item.title == "x title")
+        .expect("x work item")
+        .work_item_id
+        .clone();
+    let active_edges = graph
+        .edges
+        .iter()
+        .map(|edge| {
+            (
+                edge.from_work_item_id.as_str(),
+                edge.to_work_item_id.as_str(),
+            )
+        })
+        .collect::<std::collections::HashSet<_>>();
+    assert!(!active_edges.contains(&(a_id.as_str(), b_id.as_str())));
+    assert!(active_edges.contains(&(a_id.as_str(), x_id.as_str())));
+    assert!(active_edges.contains(&(x_id.as_str(), b_id.as_str())));
+}
+
+#[tokio::test]
+async fn patch_remove_edge_recomputes_existing_blocked_node_as_ready() {
+    let pool = test_pool().await;
+    let task_id = insert_task(&pool).await;
+    let service = DagService::new(pool.clone());
+    service
+        .apply_initial_dag(
+            &task_id,
+            &initial_plan(
+                vec![draft("a", "implementer"), draft("b", "implementer")],
+                vec![edge("a", "b")],
+            ),
+        )
+        .await
+        .expect("apply initial dag");
+    let graph = SqliteDagGraphStore::new(pool.clone())
+        .task_graph(&task_id)
+        .await
+        .expect("task graph");
+    let id_by_title = graph
+        .work_items
+        .iter()
+        .map(|work_item| (work_item.title.as_str(), work_item.work_item_id.clone()))
+        .collect::<std::collections::HashMap<_, _>>();
+    let a_id = id_by_title["a title"].clone();
+    let b_id = id_by_title["b title"].clone();
+
+    service
+        .apply_patch(
+            &task_id,
+            &DagPatch {
+                base_revision: None,
+                summary: "unblock b".to_string(),
+                anchor_work_item_id: None,
+                supersede_policy: "none".to_string(),
+                operations: vec![PatchOperation::RemoveEdge {
+                    edge: edge(&a_id, &b_id),
+                }],
+            },
+        )
+        .await
+        .expect("apply patch");
+
+    let b_state: String = sqlx::query_scalar(
+        "SELECT current_state FROM work_item_runtime_projection WHERE work_item_id = ?",
+    )
+    .bind(&b_id)
+    .fetch_one(&pool)
+    .await
+    .expect("b state");
+    assert_eq!(b_state, "ready");
+}
+
+#[tokio::test]
+async fn patch_replace_edge_rejects_cycles_atomically() {
+    let pool = test_pool().await;
+    let task_id = insert_task(&pool).await;
+    let service = DagService::new(pool.clone());
+    service
+        .apply_initial_dag(
+            &task_id,
+            &initial_plan(
+                vec![
+                    draft("a", "implementer"),
+                    draft("b", "implementer"),
+                    draft("c", "implementer"),
+                ],
+                vec![edge("a", "b"), edge("b", "c"), edge("a", "c")],
+            ),
+        )
+        .await
+        .expect("apply initial dag");
+    let graph_store = SqliteDagGraphStore::new(pool.clone());
+    let graph = graph_store.task_graph(&task_id).await.expect("task graph");
+    let id_by_title = graph
+        .work_items
+        .iter()
+        .map(|work_item| (work_item.title.as_str(), work_item.work_item_id.clone()))
+        .collect::<std::collections::HashMap<_, _>>();
+    let a_id = id_by_title["a title"].clone();
+    let b_id = id_by_title["b title"].clone();
+    let c_id = id_by_title["c title"].clone();
+
+    let error = service
+        .apply_patch(
+            &task_id,
+            &DagPatch {
+                base_revision: None,
+                summary: "cycle".to_string(),
+                anchor_work_item_id: None,
+                supersede_policy: "none".to_string(),
+                operations: vec![PatchOperation::ReplaceEdge {
+                    from: edge(&a_id, &c_id),
+                    to: edge(&c_id, &a_id),
+                }],
+            },
+        )
+        .await
+        .expect_err("cycle should fail");
+
+    assert!(error.to_string().contains("cycle"));
+    let graph = graph_store.task_graph(&task_id).await.expect("task graph");
+    let active_edges = graph
+        .edges
+        .iter()
+        .map(|edge| {
+            (
+                edge.from_work_item_id.as_str(),
+                edge.to_work_item_id.as_str(),
+            )
+        })
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(active_edges.len(), 3);
+    assert!(active_edges.contains(&(a_id.as_str(), b_id.as_str())));
+    assert!(active_edges.contains(&(b_id.as_str(), c_id.as_str())));
+    assert!(active_edges.contains(&(a_id.as_str(), c_id.as_str())));
+}
+
+#[tokio::test]
+async fn patch_set_work_item_outcome_preserves_replan_anchor_result() {
+    let pool = test_pool().await;
+    let task_id = insert_task(&pool).await;
+    let service = DagService::new(pool.clone());
+    service
+        .apply_initial_dag(
+            &task_id,
+            &initial_plan(vec![draft("a", "implementer")], vec![]),
+        )
+        .await
+        .expect("apply initial dag");
+    let work_item_id = SqliteDagGraphStore::new(pool.clone())
+        .task_graph(&task_id)
+        .await
+        .expect("task graph")
+        .work_items
+        .first()
+        .expect("work item")
+        .work_item_id
+        .clone();
+
+    service
+        .apply_patch(
+            &task_id,
+            &DagPatch {
+                base_revision: None,
+                summary: "record anchor failure".to_string(),
+                anchor_work_item_id: Some(work_item_id.clone()),
+                supersede_policy: "none".to_string(),
+                operations: vec![PatchOperation::SetWorkItemOutcome {
+                    work_item_id: work_item_id.clone(),
+                    outcome_state: "failed".to_string(),
+                    reason: "tests failed; replanning from this point".to_string(),
+                }],
+            },
+        )
+        .await
+        .expect("apply patch");
+
+    let row: (String, Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT current_state, outcome_state, outcome_reason FROM work_item_runtime_projection WHERE work_item_id = ?",
+    )
+    .bind(&work_item_id)
+    .fetch_one(&pool)
+    .await
+    .expect("runtime row");
+    assert_eq!(row.0, "replan_anchor");
+    assert_eq!(row.1.as_deref(), Some("failed"));
+    assert_eq!(
+        row.2.as_deref(),
+        Some("tests failed; replanning from this point")
+    );
 }
 
 #[tokio::test]
@@ -372,6 +623,7 @@ async fn rejects_superseding_running_work_item() {
     .expect("mark running");
 
     let patch = DagPatch {
+        base_revision: None,
         summary: "supersede running".to_string(),
         anchor_work_item_id: None,
         supersede_policy: "explicit_only".to_string(),

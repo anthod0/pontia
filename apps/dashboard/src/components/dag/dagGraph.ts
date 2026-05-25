@@ -23,7 +23,11 @@ const NODE_WIDTH = 260;
 const NODE_HEIGHT = 118;
 
 function workItemState(item: WorkItemView): string {
-  return item.runtime?.current_state ?? (item.active ? 'active' : 'inactive');
+  const schedulerState = item.runtime?.current_state ?? (item.active ? 'active' : 'inactive');
+  if (schedulerState === 'replan_anchor' && item.runtime?.outcome_state) {
+    return `replan_anchor · ${item.runtime.outcome_state}`;
+  }
+  return schedulerState;
 }
 
 export function buildDagFlow(dag: TaskDagView): DagFlowModel {

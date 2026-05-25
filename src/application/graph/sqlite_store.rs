@@ -117,7 +117,9 @@ impl SqliteDagGraphStore {
             r#"INSERT INTO graph_work_item_edges (
                     edge_id, task_id, from_work_item_id, to_work_item_id, edge_type, ref, metadata
                ) VALUES (?, ?, ?, ?, ?, ?, '{}')
-               ON CONFLICT(task_id, from_work_item_id, to_work_item_id, edge_type) DO NOTHING"#,
+               ON CONFLICT(task_id, from_work_item_id, to_work_item_id, edge_type) DO UPDATE SET
+                   active = 1,
+                   ref = excluded.ref"#,
         )
         .bind(edge_id)
         .bind(request.task_id)
@@ -125,6 +127,27 @@ impl SqliteDagGraphStore {
         .bind(request.to_work_item_id)
         .bind(request.edge_type.as_str())
         .bind(request.ref_)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn remove_edge(
+        &self,
+        task_id: &str,
+        from_work_item_id: &str,
+        to_work_item_id: &str,
+        edge_type: GraphEdgeKind,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE graph_work_item_edges
+               SET active = 0
+               WHERE task_id = ? AND from_work_item_id = ? AND to_work_item_id = ? AND edge_type = ?"#,
+        )
+        .bind(task_id)
+        .bind(from_work_item_id)
+        .bind(to_work_item_id)
+        .bind(edge_type.as_str())
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -206,7 +229,7 @@ impl SqliteDagGraphStore {
             r#"SELECT edge_id, task_id, from_work_item_id, to_work_item_id, edge_type,
                       ref, metadata, created_at
                FROM graph_work_item_edges
-               WHERE task_id = ?
+               WHERE task_id = ? AND active = 1
                ORDER BY created_at, edge_id"#,
         )
         .bind(task_id)
@@ -267,7 +290,7 @@ impl SqliteDagGraphStore {
                       wi.created_at, wi.updated_at
                FROM graph_work_item_edges edge
                JOIN graph_work_items wi ON wi.work_item_id = edge.from_work_item_id
-               WHERE edge.to_work_item_id = ? AND edge.edge_type = 'depends_on'
+               WHERE edge.to_work_item_id = ? AND edge.edge_type = 'depends_on' AND edge.active = 1
                ORDER BY wi.priority DESC, wi.created_at, wi.work_item_id"#,
         )
         .bind(work_item_id)

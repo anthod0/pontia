@@ -502,7 +502,8 @@ impl ExternalQueryService {
     ) -> Result<std::collections::HashMap<String, WorkItemRuntimeView>> {
         let rows = sqlx::query(
             r#"SELECT work_item_id, current_run_id, current_state, current_attempt, ready_at,
-                      blocked_reason, retry_count, max_retries, priority, optional,
+                      blocked_reason, outcome_state, outcome_reason, replanned_from_state,
+                      retry_count, max_retries, priority, optional,
                       parallelizable, session_id, turn_id, updated_at
                FROM work_item_runtime_projection
                WHERE task_id = ?"#,
@@ -521,6 +522,9 @@ impl ExternalQueryService {
                     current_attempt: row.try_get("current_attempt")?,
                     ready_at: row.try_get("ready_at")?,
                     blocked_reason: row.try_get("blocked_reason")?,
+                    outcome_state: row.try_get("outcome_state")?,
+                    outcome_reason: row.try_get("outcome_reason")?,
+                    replanned_from_state: row.try_get("replanned_from_state")?,
                     retry_count: row.try_get("retry_count")?,
                     max_retries: row.try_get("max_retries")?,
                     priority: row.try_get("priority")?,

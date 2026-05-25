@@ -143,6 +143,24 @@ impl GraphProjectionService {
                     })
                     .await?;
             }
+            "work_item.edge_removed" => {
+                self.store
+                    .remove_edge(
+                        &string(payload, "task_id").unwrap_or_else(|| task_id.to_string()),
+                        &string(payload, "from_work_item_id").unwrap_or_default(),
+                        &string(payload, "to_work_item_id").unwrap_or_default(),
+                        string(payload, "edge_type")
+                            .as_deref()
+                            .and_then(GraphEdgeKind::parse)
+                            .unwrap_or(GraphEdgeKind::DependsOn),
+                    )
+                    .await?;
+            }
+            "work_item.reactivated" => {
+                if let Some(work_item_id) = string(payload, "work_item_id") {
+                    self.store.set_work_item_active(&work_item_id, true).await?;
+                }
+            }
             "work_item.superseded" => {
                 if let Some(work_item_id) = string(payload, "work_item_id") {
                     self.store

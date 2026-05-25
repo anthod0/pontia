@@ -454,9 +454,13 @@ impl DagRunResultService {
             sqlx::query(
                 r#"UPDATE work_item_runtime_projection
                    SET current_state = 'replan_anchor', blocked_reason = ?,
+                       outcome_state = ?, outcome_reason = ?,
+                       replanned_from_state = COALESCE(replanned_from_state, current_state),
                        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                    WHERE work_item_id = ? AND current_run_id = ?"#,
             )
+            .bind(&result.summary)
+            .bind(outcome_state_for_status(&result.state))
             .bind(&result.summary)
             .bind(&run.work_item_id)
             .bind(&run.run_id)
@@ -717,6 +721,15 @@ fn normalize_result_status(status: &str) -> String {
     match status {
         "completed" | "failed" | "blocked" | "needs_input" => status.to_string(),
         _ => "completed".to_string(),
+    }
+}
+
+fn outcome_state_for_status(status: &str) -> &'static str {
+    match status {
+        "completed" => "succeeded",
+        "failed" => "failed",
+        "blocked" | "needs_input" => "blocked",
+        _ => "unknown",
     }
 }
 

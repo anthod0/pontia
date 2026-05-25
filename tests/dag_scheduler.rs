@@ -337,6 +337,7 @@ async fn scheduler_allows_replan_anchor_to_start_new_path() {
     dag.apply_patch(
         &task_id,
         &DagPatch {
+            base_revision: None,
             summary: "replace old path".to_string(),
             anchor_work_item_id: None,
             supersede_policy: "explicit_only".to_string(),

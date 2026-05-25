@@ -47,6 +47,8 @@ pub struct SubmitPlanPayload {
 pub struct DagPatch {
     pub summary: String,
     #[serde(default)]
+    pub base_revision: Option<i64>,
+    #[serde(default)]
     pub anchor_work_item_id: Option<String>,
     #[serde(default = "default_supersede_policy")]
     pub supersede_policy: String,
@@ -63,9 +65,37 @@ pub enum PatchOperation {
     AddEdge {
         edge: WorkItemEdgeDraft,
     },
+    RemoveEdge {
+        edge: WorkItemEdgeDraft,
+    },
+    ReplaceEdge {
+        from: WorkItemEdgeDraft,
+        to: WorkItemEdgeDraft,
+    },
     SupersedeWorkItem {
         work_item_id: String,
         reason: String,
+    },
+    ReactivateWorkItem {
+        work_item_id: String,
+        reason: String,
+    },
+    SetWorkItemOutcome {
+        work_item_id: String,
+        outcome_state: String,
+        reason: String,
+    },
+    InsertWorkItemBetween {
+        from_work_item_id: String,
+        to_work_item_id: String,
+        work_item: WorkItemDraft,
+    },
+    ReplaceDownstream {
+        anchor_work_item_id: String,
+        old_work_item_ids: Vec<String>,
+        replacement: WorkItemDraft,
+        #[serde(default = "default_true")]
+        supersede_old: bool,
     },
 }
 
@@ -174,6 +204,10 @@ pub struct RaiseSignalPayload {
 }
 
 fn default_parallelizable() -> bool {
+    true
+}
+
+fn default_true() -> bool {
     true
 }
 

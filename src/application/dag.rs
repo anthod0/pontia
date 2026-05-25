@@ -224,6 +224,7 @@ impl DagService {
         ensure_task_exists(&self.pool, task_id).await?;
         self.validate_patch(task_id, patch).await?;
 
+        let expanded_operations = expand_patch_operations(&patch.operations);
         let auto_superseded = self.auto_supersede_work_items(task_id, patch).await?;
         let auto_superseded_for_event = auto_superseded.clone();
 
@@ -235,10 +236,12 @@ impl DagService {
             json!({
                 "task_id": task_id,
                 "summary": patch.summary,
+                "base_revision": patch.base_revision,
                 "anchor_work_item_id": patch.anchor_work_item_id,
                 "supersede_policy": patch.supersede_policy,
                 "auto_superseded_work_item_ids": auto_superseded_for_event,
                 "operations": patch.operations,
+                "expanded_operations": expanded_operations,
             }),
         )
         .await?;
@@ -278,7 +281,7 @@ impl DagService {
         }
 
         let mut temp_id_map = HashMap::new();
-        for operation in &patch.operations {
+        for operation in &expanded_operations {
             match operation {
                 PatchOperation::AddWorkItem { work_item } => {
                     let work_item_id = new_prefixed_id("wi");
@@ -295,18 +298,28 @@ impl DagService {
                     .await?;
                 }
                 PatchOperation::AddEdge { edge } => {
-                    let from = temp_id_map
-                        .get(&edge.from_work_item_id)
-                        .map(String::as_str)
-                        .unwrap_or(&edge.from_work_item_id);
-                    let to = temp_id_map
-                        .get(&edge.to_work_item_id)
-                        .map(String::as_str)
-                        .unwrap_or(&edge.to_work_item_id);
+                    let from = resolve_runtime_ref(&edge.from_work_item_id, &temp_id_map);
+                    let to = resolve_runtime_ref(&edge.to_work_item_id, &temp_id_map);
                     append_task_event(
                         &mut tx,
                         task_id,
                         "work_item.edge_added",
+                        json!({
+                            "task_id": task_id,
+                            "from_work_item_id": from,
+                            "to_work_item_id": to,
+                            "edge_type": edge.edge_type,
+                        }),
+                    )
+                    .await?;
+                }
+                PatchOperation::RemoveEdge { edge } => {
+                    let from = resolve_runtime_ref(&edge.from_work_item_id, &temp_id_map);
+                    let to = resolve_runtime_ref(&edge.to_work_item_id, &temp_id_map);
+                    append_task_event(
+                        &mut tx,
+                        task_id,
+                        "work_item.edge_removed",
                         json!({
                             "task_id": task_id,
                             "from_work_item_id": from,
@@ -347,6 +360,73 @@ impl DagService {
                     .execute(&mut *tx)
                     .await?;
                 }
+                PatchOperation::ReactivateWorkItem {
+                    work_item_id,
+                    reason,
+                } => {
+                    append_task_event(
+                        &mut tx,
+                        task_id,
+                        "work_item.reactivated",
+                        json!({
+                            "task_id": task_id,
+                            "work_item_id": work_item_id,
+                            "reason": reason,
+                        }),
+                    )
+                    .await?;
+                    sqlx::query(
+                        r#"UPDATE work_item_runtime_projection
+                           SET current_state = 'blocked', blocked_reason = 'waiting_for_dependencies',
+                               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           WHERE task_id = ? AND work_item_id = ? AND current_state = 'superseded'"#,
+                    )
+                    .bind(task_id)
+                    .bind(work_item_id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+                PatchOperation::SetWorkItemOutcome {
+                    work_item_id,
+                    outcome_state,
+                    reason,
+                } => {
+                    append_task_event(
+                        &mut tx,
+                        task_id,
+                        "work_item.outcome_set",
+                        json!({
+                            "task_id": task_id,
+                            "work_item_id": work_item_id,
+                            "outcome_state": outcome_state,
+                            "reason": reason,
+                        }),
+                    )
+                    .await?;
+                    let replan_anchor_state = patch
+                        .anchor_work_item_id
+                        .as_deref()
+                        .filter(|anchor| *anchor == work_item_id)
+                        .map(|_| "replan_anchor");
+                    sqlx::query(
+                        r#"UPDATE work_item_runtime_projection
+                           SET outcome_state = ?, outcome_reason = ?,
+                               replanned_from_state = COALESCE(replanned_from_state, current_state),
+                               current_state = COALESCE(?, current_state),
+                               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           WHERE task_id = ? AND work_item_id = ?"#,
+                    )
+                    .bind(outcome_state)
+                    .bind(reason)
+                    .bind(replan_anchor_state)
+                    .bind(task_id)
+                    .bind(work_item_id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+                PatchOperation::ReplaceEdge { .. }
+                | PatchOperation::InsertWorkItemBetween { .. }
+                | PatchOperation::ReplaceDownstream { .. } => {}
             }
         }
         tx.commit().await?;
@@ -508,9 +588,31 @@ impl DagService {
             ensure_work_item_exists(&self.pool, task_id, anchor).await?;
         }
 
+        let expanded_operations = expand_patch_operations(&patch.operations);
+        let snapshot = SqliteDagGraphStore::new(self.pool.clone())
+            .task_graph(task_id)
+            .await?;
+        let active_ids: HashSet<String> = snapshot
+            .work_items
+            .iter()
+            .filter(|work_item| work_item.active)
+            .map(|work_item| work_item.work_item_id.clone())
+            .collect();
+        let active_edge_keys: HashSet<(String, String, String)> = snapshot
+            .edges
+            .iter()
+            .map(|edge| {
+                (
+                    edge.from_work_item_id.clone(),
+                    edge.to_work_item_id.clone(),
+                    edge.edge_type.as_str().to_string(),
+                )
+            })
+            .collect();
+
         let mut added_work_items = Vec::new();
         let mut temp_ids = HashSet::new();
-        for operation in &patch.operations {
+        for operation in &expanded_operations {
             match operation {
                 PatchOperation::AddWorkItem { work_item } => {
                     dag_validator::validate_work_item_drafts(std::slice::from_ref(work_item))?;
@@ -526,25 +628,48 @@ impl DagService {
                 PatchOperation::AddEdge { edge } => {
                     dag_validator::validate_edge_type(&edge.edge_type)?;
                 }
+                PatchOperation::RemoveEdge { edge } => {
+                    dag_validator::validate_edge_type(&edge.edge_type)?;
+                    if !active_edge_keys.contains(&(
+                        edge.from_work_item_id.clone(),
+                        edge.to_work_item_id.clone(),
+                        edge.edge_type.clone(),
+                    )) {
+                        return Err(Error::NotFound(format!(
+                            "active edge {} -> {}",
+                            edge.from_work_item_id, edge.to_work_item_id
+                        )));
+                    }
+                }
                 PatchOperation::SupersedeWorkItem { work_item_id, .. } => {
                     ensure_work_item_exists(&self.pool, task_id, work_item_id).await?;
                     ensure_work_item_not_running(&self.pool, task_id, work_item_id).await?;
                 }
+                PatchOperation::ReactivateWorkItem { work_item_id, .. }
+                | PatchOperation::SetWorkItemOutcome { work_item_id, .. } => {
+                    let exists = SqliteDagGraphStore::new(self.pool.clone())
+                        .get_work_item(work_item_id)
+                        .await?
+                        .is_some_and(|work_item| work_item.task_id == task_id);
+                    if !exists {
+                        return Err(Error::NotFound(format!("work item {work_item_id}")));
+                    }
+                    ensure_work_item_not_running(&self.pool, task_id, work_item_id).await?;
+                }
+                PatchOperation::ReplaceEdge { .. }
+                | PatchOperation::InsertWorkItemBetween { .. }
+                | PatchOperation::ReplaceDownstream { .. } => {}
             }
         }
         self.ensure_profiles_exist(&added_work_items).await?;
 
-        let snapshot = SqliteDagGraphStore::new(self.pool.clone())
-            .task_graph(task_id)
-            .await?;
         let mut superseded: HashSet<String> = self
             .auto_supersede_work_items(task_id, patch)
             .await?
             .into_iter()
             .collect();
         superseded.extend(
-            patch
-                .operations
+            expanded_operations
                 .iter()
                 .filter_map(|operation| match operation {
                     PatchOperation::SupersedeWorkItem { work_item_id, .. } => {
@@ -582,17 +707,37 @@ impl DagService {
                 edge_type: edge.edge_type.as_str().to_string(),
             })
             .collect();
-        for operation in &patch.operations {
-            if let PatchOperation::AddEdge { edge } = operation {
-                let from =
-                    resolve_patch_ref(&edge.from_work_item_id, &temp_to_generated, &nodes, "from")?;
-                let to =
-                    resolve_patch_ref(&edge.to_work_item_id, &temp_to_generated, &nodes, "to")?;
-                edges.push(WorkItemEdgeDraft {
-                    from_work_item_id: from,
-                    to_work_item_id: to,
-                    edge_type: edge.edge_type.clone(),
-                });
+        for operation in &expanded_operations {
+            match operation {
+                PatchOperation::RemoveEdge { edge } => {
+                    edges.retain(|existing| {
+                        !(existing.from_work_item_id == edge.from_work_item_id
+                            && existing.to_work_item_id == edge.to_work_item_id
+                            && existing.edge_type == edge.edge_type)
+                    });
+                }
+                PatchOperation::AddEdge { edge } => {
+                    let from = resolve_patch_ref(
+                        &edge.from_work_item_id,
+                        &temp_to_generated,
+                        &nodes,
+                        "from",
+                    )?;
+                    let to =
+                        resolve_patch_ref(&edge.to_work_item_id, &temp_to_generated, &nodes, "to")?;
+                    if active_ids.contains(&from) {
+                        ensure_work_item_not_running(&self.pool, task_id, &from).await?;
+                    }
+                    if active_ids.contains(&to) {
+                        ensure_work_item_not_running(&self.pool, task_id, &to).await?;
+                    }
+                    edges.push(WorkItemEdgeDraft {
+                        from_work_item_id: from,
+                        to_work_item_id: to,
+                        edge_type: edge.edge_type.clone(),
+                    });
+                }
+                _ => {}
             }
         }
         dag_validator::validate_acyclic(nodes, &edges)
@@ -616,6 +761,99 @@ async fn append_task_event(
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+fn expand_patch_operations(operations: &[PatchOperation]) -> Vec<PatchOperation> {
+    let mut expanded = Vec::new();
+    for operation in operations {
+        match operation {
+            PatchOperation::ReplaceEdge { from, to } => {
+                expanded.push(PatchOperation::RemoveEdge { edge: from.clone() });
+                expanded.push(PatchOperation::AddEdge { edge: to.clone() });
+            }
+            PatchOperation::InsertWorkItemBetween {
+                from_work_item_id,
+                to_work_item_id,
+                work_item,
+            } => {
+                let temp_id = work_item
+                    .temp_id
+                    .clone()
+                    .unwrap_or_else(|| work_item.title.clone());
+                expanded.push(PatchOperation::AddWorkItem {
+                    work_item: work_item.clone(),
+                });
+                expanded.push(PatchOperation::RemoveEdge {
+                    edge: WorkItemEdgeDraft {
+                        from_work_item_id: from_work_item_id.clone(),
+                        to_work_item_id: to_work_item_id.clone(),
+                        edge_type: "depends_on".to_string(),
+                    },
+                });
+                expanded.push(PatchOperation::AddEdge {
+                    edge: WorkItemEdgeDraft {
+                        from_work_item_id: from_work_item_id.clone(),
+                        to_work_item_id: temp_id.clone(),
+                        edge_type: "depends_on".to_string(),
+                    },
+                });
+                expanded.push(PatchOperation::AddEdge {
+                    edge: WorkItemEdgeDraft {
+                        from_work_item_id: temp_id,
+                        to_work_item_id: to_work_item_id.clone(),
+                        edge_type: "depends_on".to_string(),
+                    },
+                });
+            }
+            PatchOperation::ReplaceDownstream {
+                anchor_work_item_id,
+                old_work_item_ids,
+                replacement,
+                supersede_old,
+            } => {
+                let temp_id = replacement
+                    .temp_id
+                    .clone()
+                    .unwrap_or_else(|| replacement.title.clone());
+                expanded.push(PatchOperation::AddWorkItem {
+                    work_item: replacement.clone(),
+                });
+                for old_id in old_work_item_ids {
+                    expanded.push(PatchOperation::RemoveEdge {
+                        edge: WorkItemEdgeDraft {
+                            from_work_item_id: anchor_work_item_id.clone(),
+                            to_work_item_id: old_id.clone(),
+                            edge_type: "depends_on".to_string(),
+                        },
+                    });
+                }
+                expanded.push(PatchOperation::AddEdge {
+                    edge: WorkItemEdgeDraft {
+                        from_work_item_id: anchor_work_item_id.clone(),
+                        to_work_item_id: temp_id,
+                        edge_type: "depends_on".to_string(),
+                    },
+                });
+                if *supersede_old {
+                    for old_id in old_work_item_ids {
+                        expanded.push(PatchOperation::SupersedeWorkItem {
+                            work_item_id: old_id.clone(),
+                            reason: "replaced by downstream patch".to_string(),
+                        });
+                    }
+                }
+            }
+            other => expanded.push(other.clone()),
+        }
+    }
+    expanded
+}
+
+fn resolve_runtime_ref(value: &str, temp_id_map: &HashMap<String, String>) -> String {
+    temp_id_map
+        .get(value)
+        .cloned()
+        .unwrap_or_else(|| value.to_string())
 }
 
 fn work_item_event_payload(task_id: &str, work_item_id: &str, draft: &WorkItemDraft) -> Value {
@@ -647,7 +885,7 @@ async fn initialize_projection(pool: &SqlitePool, task_id: &str) -> Result<()> {
     .bind(task_id)
     .fetch_all(pool)
     .await?;
-    let runtime_states: HashMap<String, String> = runtime_rows
+    let mut runtime_states: HashMap<String, String> = runtime_rows
         .into_iter()
         .map(|row| (row.get("work_item_id"), row.get("current_state")))
         .collect();
@@ -658,9 +896,15 @@ async fn initialize_projection(pool: &SqlitePool, task_id: &str) -> Result<()> {
         .map(|work_item| work_item.work_item_id.clone())
         .collect();
 
-    for work_item in snapshot.work_items.iter().filter(|work_item| {
-        work_item.active && !runtime_states.contains_key(&work_item.work_item_id)
-    }) {
+    let missing_runtime_items = snapshot
+        .work_items
+        .iter()
+        .filter(|work_item| {
+            work_item.active && !runtime_states.contains_key(&work_item.work_item_id)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    for work_item in &missing_runtime_items {
         let has_blocking_dependency = snapshot.edges.iter().any(|edge| {
             edge.edge_type == GraphEdgeKind::DependsOn
                 && edge.to_work_item_id == work_item.work_item_id
@@ -700,6 +944,57 @@ async fn initialize_projection(pool: &SqlitePool, task_id: &str) -> Result<()> {
         .bind(work_item.parallelizable)
         .execute(pool)
         .await?;
+        runtime_states.insert(work_item.work_item_id.clone(), state.to_string());
+    }
+
+    for work_item in snapshot
+        .work_items
+        .iter()
+        .filter(|work_item| work_item.active)
+    {
+        let Some(current_state) = runtime_states
+            .get(&work_item.work_item_id)
+            .map(String::as_str)
+        else {
+            continue;
+        };
+        if !matches!(current_state, "pending" | "ready" | "blocked") {
+            continue;
+        }
+        let has_blocking_dependency = snapshot.edges.iter().any(|edge| {
+            edge.edge_type == GraphEdgeKind::DependsOn
+                && edge.to_work_item_id == work_item.work_item_id
+                && active_ids.contains(&edge.from_work_item_id)
+                && !matches!(
+                    runtime_states
+                        .get(&edge.from_work_item_id)
+                        .map(String::as_str),
+                    Some("completed") | Some("replan_anchor")
+                )
+        });
+        let next_state = if has_blocking_dependency {
+            "blocked"
+        } else {
+            "ready"
+        };
+        if next_state != current_state {
+            sqlx::query(
+                r#"UPDATE work_item_runtime_projection
+                   SET current_state = ?,
+                       ready_at = CASE WHEN ? = 'ready' THEN COALESCE(ready_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ELSE NULL END,
+                       blocked_reason = CASE WHEN ? = 'blocked' THEN 'waiting_for_dependencies' ELSE NULL END,
+                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                   WHERE task_id = ? AND work_item_id = ?"#,
+            )
+            .bind(next_state)
+            .bind(next_state)
+            .bind(next_state)
+            .bind(task_id)
+            .bind(&work_item.work_item_id)
+            .execute(pool)
+            .await?;
+            runtime_states.insert(work_item.work_item_id.clone(), next_state.to_string());
+        }
     }
     Ok(())
 }
