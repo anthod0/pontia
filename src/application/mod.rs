@@ -73,6 +73,8 @@ pub use dag_run_result::DagRunResultService;
 pub use dag_scheduler::{DagSchedulerDispatch, DagSchedulerOutcome, DagSchedulerService};
 pub use events::{EventIngestResult, EventIngestService};
 pub(crate) use events::{nested_array_strings, nested_string, remove_internal_metadata_fields};
+#[cfg(feature = "lbug")]
+pub use graph::LbugDagGraphStore;
 pub use graph::{
     AddWorkItemEdgeRequest, GraphEdgeKind, GraphProjectionService, GraphRuntimeConfig, SignalNode,
     SqliteDagGraphStore, TaskGraphSnapshot, TaskNode, TaskProvenance, UpsertSignalRequest,

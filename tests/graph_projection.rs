@@ -1,3 +1,5 @@
+#[cfg(feature = "lbug")]
+use llmparty::application::LbugDagGraphStore;
 use llmparty::{
     application::{
         AddWorkItemEdgeRequest, GraphEdgeKind, GraphProjectionService, GraphRuntimeConfig,
@@ -7,6 +9,44 @@ use llmparty::{
 };
 use serde_json::json;
 use sqlx::SqlitePool;
+
+fn task_request(task_id: &str) -> UpsertTaskRequest {
+    UpsertTaskRequest {
+        task_id: task_id.to_string(),
+        title: "Graph task".to_string(),
+        description: "Persist graph data".to_string(),
+        ref_: Some("event:task.created:evt_1".to_string()),
+        metadata: json!({"source":"test"}),
+    }
+}
+
+fn work_item_request(
+    task_id: &str,
+    work_item_id: &str,
+    title: &str,
+    priority: i64,
+) -> UpsertWorkItemRequest {
+    UpsertWorkItemRequest {
+        work_item_id: work_item_id.to_string(),
+        task_id: task_id.to_string(),
+        title: title.to_string(),
+        description: format!("Work item {title}"),
+        kind: "implementation".to_string(),
+        action: "agent_turn".to_string(),
+        execution_profile_id: "default".to_string(),
+        execution_profile_version: None,
+        review_policy: None,
+        execution_policy: None,
+        escalation_policy: None,
+        priority,
+        optional: false,
+        parallelizable: true,
+        acceptance_criteria: json!(["done"]),
+        active: true,
+        ref_: None,
+        metadata: json!({}),
+    }
+}
 
 async fn test_pool() -> SqlitePool {
     let db = connect_sqlite("sqlite::memory:")
@@ -34,37 +74,17 @@ async fn sqlite_graph_store_persists_work_items_and_edges() {
     let store = SqliteDagGraphStore::new(pool);
 
     store
-        .upsert_task(UpsertTaskRequest {
-            task_id: "task_graph_store".to_string(),
-            title: "Graph task".to_string(),
-            description: "Persist graph data".to_string(),
-            ref_: Some("event:task.created:evt_1".to_string()),
-            metadata: json!({"source":"test"}),
-        })
+        .upsert_task(task_request("task_graph_store"))
         .await
         .expect("upsert task");
     for (work_item_id, title, priority) in [("wi_a", "A", 10), ("wi_b", "B", 0)] {
         store
-            .upsert_work_item(UpsertWorkItemRequest {
-                work_item_id: work_item_id.to_string(),
-                task_id: "task_graph_store".to_string(),
-                title: title.to_string(),
-                description: format!("Work item {title}"),
-                kind: "implementation".to_string(),
-                action: "agent_turn".to_string(),
-                execution_profile_id: "default".to_string(),
-                execution_profile_version: None,
-                review_policy: None,
-                execution_policy: None,
-                escalation_policy: None,
+            .upsert_work_item(work_item_request(
+                "task_graph_store",
+                work_item_id,
+                title,
                 priority,
-                optional: false,
-                parallelizable: true,
-                acceptance_criteria: json!(["done"]),
-                active: true,
-                ref_: None,
-                metadata: json!({}),
-            })
+            ))
             .await
             .expect("upsert work item");
     }
@@ -90,6 +110,118 @@ async fn sqlite_graph_store_persists_work_items_and_edges() {
     let dependencies = store.list_dependencies("wi_b").await.expect("dependencies");
     assert_eq!(dependencies.len(), 1);
     assert_eq!(dependencies[0].work_item_id, "wi_a");
+}
+
+#[cfg(feature = "lbug")]
+#[tokio::test]
+async fn lbug_graph_store_persists_work_items_edges_and_active_state() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let store = LbugDagGraphStore::open(temp_dir.path().join("graphdb"))
+        .await
+        .expect("open lbug graph store");
+
+    store
+        .upsert_task(task_request("task_lbug_graph_store"))
+        .await
+        .expect("upsert task");
+    for (work_item_id, title, priority) in [("wi_a", "A", 10), ("wi_b", "B", 0)] {
+        store
+            .upsert_work_item(work_item_request(
+                "task_lbug_graph_store",
+                work_item_id,
+                title,
+                priority,
+            ))
+            .await
+            .expect("upsert work item");
+    }
+    let edge = AddWorkItemEdgeRequest {
+        task_id: "task_lbug_graph_store".to_string(),
+        from_work_item_id: "wi_a".to_string(),
+        to_work_item_id: "wi_b".to_string(),
+        edge_type: GraphEdgeKind::DependsOn,
+        ref_: None,
+    };
+    store.add_edge(edge.clone()).await.expect("add edge");
+    store.add_edge(edge).await.expect("idempotent edge");
+    store
+        .set_work_item_active("wi_a", false)
+        .await
+        .expect("deactivate work item");
+
+    let snapshot = store
+        .task_graph("task_lbug_graph_store")
+        .await
+        .expect("snapshot");
+    assert_eq!(snapshot.task.as_ref().unwrap().title, "Graph task");
+    assert_eq!(snapshot.work_items.len(), 2);
+    assert_eq!(snapshot.edges.len(), 1);
+    assert_eq!(snapshot.edges[0].edge_type, GraphEdgeKind::DependsOn);
+    assert!(
+        !snapshot
+            .work_items
+            .iter()
+            .find(|work_item| work_item.work_item_id == "wi_a")
+            .unwrap()
+            .active
+    );
+
+    let dependencies = store.list_dependencies("wi_b").await.expect("dependencies");
+    assert_eq!(dependencies.len(), 1);
+    assert_eq!(dependencies[0].work_item_id, "wi_a");
+}
+
+#[cfg(feature = "lbug")]
+#[tokio::test]
+async fn graph_projection_projects_events_to_lbug_when_enabled() {
+    let pool = test_pool().await;
+    insert_task(&pool, "task_lbug_projection").await;
+    sqlx::query(
+        r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
+           VALUES
+             ('evt_task_created_lbug', 'task_lbug_projection', 'task.created', ?),
+             ('evt_wi_lbug', 'task_lbug_projection', 'work_item.created', ?)"#,
+    )
+    .bind(json!({"input":"Build a lbug-backed DAG"}).to_string())
+    .bind(
+        json!({
+            "work_item_id":"wi_lbug_design",
+            "task_id":"task_lbug_projection",
+            "title":"Design",
+            "description":"Design graph model",
+            "kind":"design",
+            "action":"agent_turn",
+            "execution_profile_id":"planner",
+            "priority": 5
+        })
+        .to_string(),
+    )
+    .execute(&pool)
+    .await
+    .expect("insert task events");
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let graph = GraphRuntimeConfig {
+        enabled: true,
+        db_dir: Some(temp_dir.path().join("graphdb").display().to_string()),
+    };
+
+    GraphProjectionService::new(pool, graph.clone())
+        .project_task("task_lbug_projection")
+        .await
+        .expect("project task");
+
+    let snapshot = LbugDagGraphStore::open(graph.db_dir.unwrap())
+        .await
+        .expect("open lbug store")
+        .task_graph("task_lbug_projection")
+        .await
+        .expect("snapshot");
+    assert_eq!(
+        snapshot.task.as_ref().unwrap().title,
+        "Build a lbug-backed DAG"
+    );
+    assert_eq!(snapshot.work_items.len(), 1);
+    assert_eq!(snapshot.work_items[0].work_item_id, "wi_lbug_design");
 }
 
 #[tokio::test]

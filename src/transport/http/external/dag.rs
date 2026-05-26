@@ -16,7 +16,7 @@ pub async fn get_task_dag(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::with_graph(state.db, state.graph);
     ensure_task_exists(&service, &task_id).await?;
     let dag = service.get_task_dag(&task_id).await?;
     Ok(ok(json!({ "dag": dag })))
@@ -28,7 +28,7 @@ pub async fn list_task_work_items(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::with_graph(state.db, state.graph);
     ensure_task_exists(&service, &task_id).await?;
     let work_items = service.list_work_items(&task_id).await?;
     Ok(ok(json!({ "work_items": work_items })))
@@ -40,7 +40,7 @@ pub async fn list_task_work_item_runs(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::with_graph(state.db, state.graph);
     ensure_task_exists(&service, &task_id).await?;
     let runs = service.list_work_item_runs(&task_id).await?;
     Ok(ok(json!({ "runs": runs })))
@@ -52,7 +52,7 @@ pub async fn list_task_signals(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::with_graph(state.db, state.graph);
     ensure_task_exists(&service, &task_id).await?;
     let signals = service.list_dag_signals(&task_id).await?;
     Ok(ok(json!({ "signals": signals })))
@@ -64,7 +64,7 @@ pub async fn scheduler_tick(
     Path(task_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let query = ExternalQueryService::new(state.db.clone());
+    let query = ExternalQueryService::with_graph(state.db.clone(), state.graph.clone());
     ensure_task_exists(&query, &task_id).await?;
     let scheduler = DagSchedulerService::new(state.db)
         .schedule_task(&task_id)

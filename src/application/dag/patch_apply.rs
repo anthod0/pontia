@@ -216,7 +216,7 @@ impl DagService {
         }
         tx.commit().await?;
 
-        GraphProjectionService::new(self.pool.clone(), GraphRuntimeConfig::default())
+        GraphProjectionService::new(self.pool.clone(), self.graph.clone())
             .project_task(task_id)
             .await?;
         initialize_projection(&self.pool, task_id).await?;

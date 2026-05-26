@@ -19,6 +19,7 @@ pub use types::{
 
 pub struct AgentToolService {
     pool: SqlitePool,
+    graph: GraphRuntimeConfig,
     resolver: AgentToolContextResolver,
     queries: ExternalQueryService,
     profiles: AgentProfileService,
@@ -26,10 +27,15 @@ pub struct AgentToolService {
 
 impl AgentToolService {
     pub fn new(pool: SqlitePool) -> Self {
+        Self::with_graph(pool, GraphRuntimeConfig::default())
+    }
+
+    pub fn with_graph(pool: SqlitePool, graph: GraphRuntimeConfig) -> Self {
         Self {
             pool: pool.clone(),
+            graph: graph.clone(),
             resolver: AgentToolContextResolver::new(pool.clone()),
-            queries: ExternalQueryService::new(pool.clone()),
+            queries: ExternalQueryService::with_graph(pool.clone(), graph),
             profiles: AgentProfileService::new(pool),
         }
     }
@@ -64,7 +70,7 @@ impl AgentToolService {
         }
         let payload: SubmitResultPayload = serde_json::from_value(input)
             .map_err(|err| Error::Domain(format!("invalid submitResult input: {err}")))?;
-        let outcome = DagRunResultService::new(self.pool.clone())
+        let outcome = DagRunResultService::with_graph(self.pool.clone(), self.graph.clone())
             .submit_tool_result(&context, payload)
             .await?;
         Ok(AgentToolResponse::SubmitResult(SubmitResultToolResponse {
@@ -83,7 +89,7 @@ impl AgentToolService {
     ) -> Result<AgentToolResponse> {
         let payload: RaiseSignalPayload = serde_json::from_value(input)
             .map_err(|err| Error::Domain(format!("invalid raiseSignal input: {err}")))?;
-        let outcome = DagRunResultService::new(self.pool.clone())
+        let outcome = DagRunResultService::with_graph(self.pool.clone(), self.graph.clone())
             .raise_tool_signal(&context, payload)
             .await?;
         Ok(AgentToolResponse::RaiseSignal(RaiseSignalToolResponse {

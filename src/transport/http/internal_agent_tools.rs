@@ -25,7 +25,7 @@ pub async fn post_agent_tool(
     request: Result<Json<AgentToolRequest>, JsonRejection>,
 ) -> Result<Json<InternalAgentToolResponse>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let result = AgentToolService::new(state.db)
+    let result = AgentToolService::with_graph(state.db, state.graph)
         .call(&tool_name, request)
         .await?;
     Ok(Json(InternalAgentToolResponse {

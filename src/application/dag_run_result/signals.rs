@@ -147,7 +147,7 @@ impl DagRunResultService {
             }),
         )
         .await?;
-        GraphProjectionService::new(self.pool.clone(), GraphRuntimeConfig::default())
+        GraphProjectionService::new(self.pool.clone(), self.graph.clone())
             .project_task(event.task_id)
             .await
     }

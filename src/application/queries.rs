@@ -3,12 +3,18 @@ use super::*;
 #[derive(Clone)]
 pub struct ExternalQueryService {
     pool: SqlitePool,
+    graph: GraphRuntimeConfig,
     graph_store: SqliteDagGraphStore,
 }
 
 impl ExternalQueryService {
     pub fn new(pool: SqlitePool) -> Self {
+        Self::with_graph(pool, GraphRuntimeConfig::default())
+    }
+
+    pub fn with_graph(pool: SqlitePool, graph: GraphRuntimeConfig) -> Self {
         Self {
+            graph,
             graph_store: SqliteDagGraphStore::new(pool.clone()),
             pool,
         }
@@ -144,7 +150,7 @@ impl ExternalQueryService {
     }
 
     pub async fn get_task_dag_summary(&self, task_id: &str) -> Result<DagSummaryView> {
-        let graph = self.graph_store.task_graph(task_id).await?;
+        let graph = self.task_graph_snapshot(task_id).await?;
         let runtime = self.runtime_map(task_id).await?;
         let active_ids: std::collections::HashSet<_> = graph
             .work_items
@@ -184,7 +190,7 @@ impl ExternalQueryService {
     }
 
     pub async fn list_work_items(&self, task_id: &str) -> Result<Vec<WorkItemWithRuntimeView>> {
-        let graph = self.graph_store.task_graph(task_id).await?;
+        let graph = self.task_graph_snapshot(task_id).await?;
         let runtime = self.runtime_map(task_id).await?;
         Ok(graph
             .work_items
@@ -201,8 +207,7 @@ impl ExternalQueryService {
 
     pub async fn list_work_item_edges(&self, task_id: &str) -> Result<Vec<WorkItemEdgeView>> {
         Ok(self
-            .graph_store
-            .task_graph(task_id)
+            .task_graph_snapshot(task_id)
             .await?
             .edges
             .into_iter()
@@ -667,5 +672,30 @@ impl ExternalQueryService {
         .await?;
 
         row.map(row_to_artifact_view).transpose()
+    }
+
+    async fn task_graph_snapshot(&self, task_id: &str) -> Result<TaskGraphSnapshot> {
+        #[cfg(feature = "lbug")]
+        if self.graph.enabled {
+            let db_dir = self
+                .graph
+                .db_dir
+                .as_ref()
+                .ok_or_else(|| Error::InvalidConfig {
+                    key: "LLMPARTY_GRAPH_DB_DIR",
+                    message: "graph.enabled requires a Ladybug database path".to_string(),
+                })?;
+            return LbugDagGraphStore::open(db_dir)
+                .await?
+                .task_graph(task_id)
+                .await;
+        }
+        #[cfg(not(feature = "lbug"))]
+        if self.graph.enabled {
+            return Err(Error::CapabilityUnavailable(
+                "lbug graph store requires building llmparty with the `lbug` feature".to_string(),
+            ));
+        }
+        self.graph_store.task_graph(task_id).await
     }
 }

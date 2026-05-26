@@ -69,7 +69,7 @@ impl TaskCommandService {
         let planning_turn = DagPlanningService::new(self.pool.clone())
             .start_initial_planning_with_client_type(&task_id, &request.client_type)
             .await?;
-        let task = ExternalQueryService::new(self.pool.clone())
+        let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(&task_id)
             .await?
             .ok_or_else(|| Error::Domain("created DAG task missing".to_string()))?;
@@ -100,7 +100,7 @@ impl TaskCommandService {
             });
         }
 
-        let task = ExternalQueryService::new(self.pool.clone())
+        let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
@@ -120,7 +120,7 @@ impl TaskCommandService {
         .await?;
         self.record_task_event(task_id, "task.paused", json!({}))
             .await?;
-        let task = ExternalQueryService::new(self.pool.clone())
+        let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::Domain("paused task missing".to_string()))?;
@@ -151,7 +151,7 @@ impl TaskCommandService {
             });
         }
 
-        let task = ExternalQueryService::new(self.pool.clone())
+        let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
@@ -179,7 +179,7 @@ impl TaskCommandService {
         let scheduler = DagSchedulerService::new(self.pool.clone())
             .schedule_task(task_id)
             .await?;
-        let task = ExternalQueryService::new(self.pool.clone())
+        let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::Domain("resumed task missing".to_string()))?;
@@ -211,7 +211,7 @@ impl TaskCommandService {
             });
         }
 
-        ExternalQueryService::new(self.pool.clone())
+        ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
@@ -257,7 +257,7 @@ impl TaskCommandService {
             }),
         )
         .await?;
-        GraphProjectionService::new(self.pool.clone(), GraphRuntimeConfig::default())
+        GraphProjectionService::new(self.pool.clone(), self.graph.clone())
             .project_task(task_id)
             .await?;
         let row = sqlx::query(
@@ -296,7 +296,7 @@ impl TaskCommandService {
             });
         }
 
-        let task = ExternalQueryService::new(self.pool.clone())
+        let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
@@ -315,7 +315,7 @@ impl TaskCommandService {
         RuntimeControlService::new(self.pool.clone())
             .interrupt_turn(&session_id, &turn_id, idempotency_key)
             .await?;
-        let task = ExternalQueryService::new(self.pool.clone())
+        let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::Domain("interrupted task missing".to_string()))?;
@@ -346,7 +346,7 @@ impl TaskCommandService {
             });
         }
 
-        let task = ExternalQueryService::new(self.pool.clone())
+        let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("task {task_id} not found")))?;
@@ -374,7 +374,7 @@ impl TaskCommandService {
             json!({"reason":"cancelled by user"}),
         )
         .await?;
-        let task = ExternalQueryService::new(self.pool.clone())
+        let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::Domain("cancelled task missing".to_string()))?;

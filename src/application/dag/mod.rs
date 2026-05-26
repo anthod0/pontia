@@ -22,10 +22,15 @@ use projection::initialize_projection;
 #[derive(Clone)]
 pub struct DagService {
     pool: SqlitePool,
+    graph: GraphRuntimeConfig,
 }
 
 impl DagService {
     pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+        Self::with_graph(pool, GraphRuntimeConfig::default())
+    }
+
+    pub fn with_graph(pool: SqlitePool, graph: GraphRuntimeConfig) -> Self {
+        Self { pool, graph }
     }
 }
