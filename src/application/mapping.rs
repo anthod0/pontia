@@ -160,6 +160,8 @@ pub(crate) fn row_to_dag_proposal(row: sqlx::sqlite::SqliteRow) -> Result<DagPro
         proposal_json: serde_json::from_str(&proposal_json)?,
         validation_json: serde_json::from_str(&validation_json)?,
         created_by_session_id: row.try_get("created_by_session_id")?,
+        revision: row.try_get("revision")?,
+        supersedes_proposal_id: row.try_get("supersedes_proposal_id")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })

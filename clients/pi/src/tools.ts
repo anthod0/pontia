@@ -36,7 +36,7 @@ export interface PiToolDefinitionLike {
   ): Promise<AgentToolResult>;
 }
 
-const TOOL_NAMES = ["getContext", "submitPlan", "submitResult", "raiseSignal"] as const;
+const TOOL_NAMES = ["getContext", "submitPlan", "applyPlan", "submitResult", "raiseSignal"] as const;
 type LlmpartyToolName = (typeof TOOL_NAMES)[number];
 
 function isLlmpartyToolName(name: string): name is LlmpartyToolName {
@@ -57,7 +57,15 @@ function responseText(toolName: string, payload: unknown): string {
   const lines = [`${toolName} succeeded.`];
 
   if (toolName === "submitPlan") {
-    lines.push(`Accepted: ${booleanText(result?.accepted) ?? "unknown"}`);
+    const validation = result?.validation;
+    const accepted = booleanText(result?.accepted) ?? booleanText(validation && typeof validation === "object" ? (validation as Record<string, unknown>).ok : undefined);
+    lines.push(`Accepted: ${accepted ?? "unknown"}`);
+    const proposalId = stringField(result, "proposal_id");
+    if (proposalId) lines.push(`Proposal ID: ${proposalId}`);
+    return lines.join("\n");
+  }
+
+  if (toolName === "applyPlan") {
     const proposalId = stringField(result, "proposal_id");
     if (proposalId) lines.push(`Proposal ID: ${proposalId}`);
     return lines.join("\n");

@@ -13,7 +13,7 @@ use rendering::{render_execution_context, render_planning_context};
 pub use resolver::AgentToolContextResolver;
 pub use types::{
     AgentPlanningRole, AgentToolContext, AgentToolMode, AgentToolRequest, AgentToolResponse,
-    GetContextToolResponse, RaiseSignalToolResponse, SubmitPlanToolResponse,
+    ApplyPlanToolResponse, GetContextToolResponse, RaiseSignalToolResponse, SubmitPlanToolResponse,
     SubmitResultToolResponse,
 };
 
@@ -52,6 +52,7 @@ impl AgentToolService {
         match tool_name {
             "getContext" => self.get_context(context).await,
             "submitPlan" => self.submit_plan(context, request.input).await,
+            "applyPlan" => self.apply_plan(context, request.input).await,
             "submitResult" => self.submit_result(context, request.input).await,
             "raiseSignal" => self.raise_signal(context, request.input).await,
             _ => Ok(AgentToolResponse::Skeleton { context }),
@@ -155,9 +156,58 @@ impl AgentToolService {
             proposal_id: outcome.proposal.proposal_id.clone(),
             validation: json!({"ok": true}),
             apply: json!({
+                "applied": false,
+                "proposal_state": outcome.proposal.state,
+                "mode": outcome.proposal.mode,
+                "revision": outcome.proposal.revision,
+            }),
+            scheduler: outcome.scheduler,
+        }))
+    }
+
+    async fn apply_plan(
+        &self,
+        context: AgentToolContext,
+        input: Value,
+    ) -> Result<AgentToolResponse> {
+        let AgentToolMode::Planning { .. } = &context.mode else {
+            return Err(Error::StateConflict(
+                "applyPlan requires a DAG planning turn".to_string(),
+            ));
+        };
+        let proposal_id = input
+            .get("proposal_id")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| Error::Domain("applyPlan input missing proposal_id".to_string()))?;
+        let approval_quote = input
+            .get("approval_quote")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let approval_message_ref = input
+            .get("approval_message_ref")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+
+        let planning = DagPlanningService::with_graph(self.pool.clone(), self.graph.clone());
+        let outcome = planning
+            .apply_proposal(
+                &context.task_id,
+                &context.session_id,
+                proposal_id,
+                approval_quote,
+                approval_message_ref,
+            )
+            .await?;
+
+        Ok(AgentToolResponse::ApplyPlan(ApplyPlanToolResponse {
+            proposal_id: outcome.proposal.proposal_id.clone(),
+            validation: outcome.proposal.validation_json.clone(),
+            apply: json!({
                 "applied": true,
                 "proposal_state": outcome.proposal.state,
                 "mode": outcome.proposal.mode,
+                "revision": outcome.proposal.revision,
             }),
             scheduler: outcome.scheduler,
         }))

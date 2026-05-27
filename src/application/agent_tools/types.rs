@@ -15,6 +15,7 @@ pub enum AgentToolResponse {
     Skeleton { context: AgentToolContext },
     GetContext(GetContextToolResponse),
     SubmitPlan(SubmitPlanToolResponse),
+    ApplyPlan(ApplyPlanToolResponse),
     SubmitResult(SubmitResultToolResponse),
     RaiseSignal(RaiseSignalToolResponse),
 }
@@ -26,6 +27,14 @@ pub struct GetContextToolResponse {
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct SubmitPlanToolResponse {
+    pub proposal_id: String,
+    pub validation: Value,
+    pub apply: Value,
+    pub scheduler: DagSchedulerOutcome,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ApplyPlanToolResponse {
     pub proposal_id: String,
     pub validation: Value,
     pub apply: Value,

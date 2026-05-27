@@ -14,6 +14,12 @@ pub struct DagPlanningOutcome {
     pub scheduler: DagSchedulerOutcome,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct DagApplyOutcome {
+    pub proposal: DagProposal,
+    pub scheduler: DagSchedulerOutcome,
+}
+
 #[derive(Clone)]
 pub struct DagPlanningService {
     pool: SqlitePool,
@@ -94,20 +100,14 @@ impl DagPlanningService {
         session_id: &str,
         payload: SubmitPlanPayload,
     ) -> Result<DagPlanningOutcome> {
+        dag_validator::validate_plan_shape(&payload)?;
         let dag = DagService::with_graph(self.pool.clone(), self.graph.clone());
         let proposal = dag
             .save_proposal(task_id, &payload, Some(session_id))
             .await?;
-        if let Err(error) = dag.apply_initial_dag(task_id, &payload).await {
-            let _ = dag
-                .mark_proposal_rejected(&proposal.proposal_id, &error.to_string())
-                .await;
-            return Err(error);
-        }
-        let proposal = dag.mark_proposal_applied(&proposal.proposal_id).await?;
         sqlx::query(
             r#"UPDATE tasks
-               SET state = 'running', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               SET state = 'awaiting_approval', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE task_id = ?"#,
         )
         .bind(task_id)
@@ -115,18 +115,15 @@ impl DagPlanningService {
         .await?;
         self.record_task_event(
             task_id,
-            "dag.applied",
-            json!({"proposal_id": proposal.proposal_id, "mode": proposal.mode}),
+            "dag.proposed",
+            json!({"proposal_id": proposal.proposal_id, "mode": proposal.mode, "revision": proposal.revision}),
         )
         .await?;
-        let scheduler = DagSchedulerService::with_graph(self.pool.clone(), self.graph.clone())
-            .schedule_task(task_id)
-            .await?;
-        Box::pin(RuntimeControlService::new(self.pool.clone()).terminate_session(session_id, None))
-            .await?;
         Ok(DagPlanningOutcome {
             proposal,
-            scheduler,
+            scheduler: DagSchedulerOutcome {
+                dispatched_runs: Vec::new(),
+            },
         })
     }
 
@@ -203,32 +200,98 @@ impl DagPlanningService {
         let proposal = dag
             .save_patch_proposal(task_id, &summary, &patch, Some(session_id))
             .await?;
-        let apply_summary = match dag.apply_patch(task_id, &patch).await {
-            Ok(summary) => summary,
-            Err(error) => {
-                let _ = dag
-                    .mark_proposal_rejected(&proposal.proposal_id, &error.to_string())
-                    .await;
-                return Err(error);
-            }
-        };
-        let proposal = dag
-            .mark_proposal_applied_with_result(
-                &proposal.proposal_id,
-                serde_json::to_value(&apply_summary)?,
-            )
-            .await?;
-        if let Some(signal_id) = self.planning_signal_id(session_id).await? {
-            sqlx::query(
-                r#"UPDATE dag_signals
-                   SET state = 'acknowledged', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                   WHERE task_id = ? AND signal_id = ? AND state = 'open'"#,
-            )
-            .bind(task_id)
-            .bind(signal_id)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            r#"UPDATE tasks
+               SET state = 'awaiting_approval', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(task_id)
+        .execute(&self.pool)
+        .await?;
+        self.record_task_event(
+            task_id,
+            "dag.patch_proposed",
+            json!({"proposal_id": proposal.proposal_id, "revision": proposal.revision}),
+        )
+        .await?;
+        Ok(DagPlanningOutcome {
+            proposal,
+            scheduler: DagSchedulerOutcome {
+                dispatched_runs: Vec::new(),
+            },
+        })
+    }
+
+    pub async fn apply_proposal(
+        &self,
+        task_id: &str,
+        session_id: &str,
+        proposal_id: &str,
+        approval_quote: Option<String>,
+        approval_message_ref: Option<String>,
+    ) -> Result<DagApplyOutcome> {
+        let dag = DagService::with_graph(self.pool.clone(), self.graph.clone());
+        let proposal = dag.get_proposal(proposal_id).await?;
+        if proposal.task_id != task_id {
+            return Err(Error::StateConflict(format!(
+                "proposal {proposal_id} belongs to task {}, not {task_id}",
+                proposal.task_id
+            )));
         }
+        if proposal.state != "proposed" {
+            return Err(Error::StateConflict(format!(
+                "proposal {proposal_id} is not proposed (state {})",
+                proposal.state
+            )));
+        }
+
+        self.record_task_event(
+            task_id,
+            "human.approved",
+            json!({
+                "proposal_id": proposal.proposal_id,
+                "approval_quote": approval_quote,
+                "approval_message_ref": approval_message_ref,
+                "approved_by_session_id": session_id,
+            }),
+        )
+        .await?;
+
+        let apply_result = if proposal.mode == "initial_dag" {
+            let payload: SubmitPlanPayload =
+                serde_json::from_value(proposal.proposal_json.clone())?;
+            dag.apply_initial_dag(task_id, &payload).await?;
+            json!({ "ok": true, "mode": "initial_dag" })
+        } else if proposal.mode == "patch" {
+            let patch_value = proposal
+                .proposal_json
+                .get("patch")
+                .cloned()
+                .ok_or_else(|| Error::Domain(format!("proposal {proposal_id} missing patch")))?;
+            let patch: DagPatch = serde_json::from_value(patch_value)?;
+            let summary = dag.apply_patch(task_id, &patch).await?;
+            if let Some(signal_id) = self.planning_signal_id(session_id).await? {
+                sqlx::query(
+                    r#"UPDATE dag_signals
+                       SET state = 'acknowledged', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                       WHERE task_id = ? AND signal_id = ? AND state = 'open'"#,
+                )
+                .bind(task_id)
+                .bind(signal_id)
+                .execute(&self.pool)
+                .await?;
+            }
+            serde_json::to_value(&summary)?
+        } else {
+            return Err(Error::Domain(format!(
+                "proposal {proposal_id} has unsupported mode {}",
+                proposal.mode
+            )));
+        };
+
+        let proposal = dag
+            .mark_proposal_applied_with_result(&proposal.proposal_id, apply_result)
+            .await?;
         sqlx::query(
             r#"UPDATE tasks
                SET state = 'running', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -239,8 +302,8 @@ impl DagPlanningService {
         .await?;
         self.record_task_event(
             task_id,
-            "dag.patch_applied",
-            json!({"proposal_id": proposal.proposal_id}),
+            "dag.approved",
+            json!({"proposal_id": proposal.proposal_id, "mode": proposal.mode, "revision": proposal.revision}),
         )
         .await?;
         let scheduler = DagSchedulerService::with_graph(self.pool.clone(), self.graph.clone())
@@ -248,7 +311,7 @@ impl DagPlanningService {
             .await?;
         Box::pin(RuntimeControlService::new(self.pool.clone()).terminate_session(session_id, None))
             .await?;
-        Ok(DagPlanningOutcome {
+        Ok(DagApplyOutcome {
             proposal,
             scheduler,
         })

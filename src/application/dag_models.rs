@@ -117,6 +117,8 @@ pub struct DagProposal {
     pub proposal_json: Value,
     pub validation_json: Value,
     pub created_by_session_id: Option<String>,
+    pub revision: i64,
+    pub supersedes_proposal_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

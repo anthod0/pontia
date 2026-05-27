@@ -7,7 +7,7 @@ pub(super) fn default_agent_tool_input() -> Value {
 pub(super) fn is_known_tool(tool_name: &str) -> bool {
     matches!(
         tool_name,
-        "getContext" | "submitPlan" | "submitResult" | "raiseSignal"
+        "getContext" | "submitPlan" | "applyPlan" | "submitResult" | "raiseSignal"
     )
 }
 

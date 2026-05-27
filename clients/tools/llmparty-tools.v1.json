@@ -851,6 +851,61 @@
       }
     },
     {
+      "name": "applyPlan",
+      "title": "Apply approved DAG plan",
+      "description": "Apply a previously submitted DAG proposal after the user has approved it in the planning chat. This promotes the single stored draft proposal into the executable DAG and starts scheduling.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Identifier returned by submitPlan for the proposal the user approved."
+          },
+          "approval_quote": {
+            "type": "string",
+            "description": "Short quote of the user chat message that explicitly approved applying this proposal."
+          },
+          "approval_message_ref": {
+            "type": "string",
+            "description": "Optional stable reference to the user message that approved this proposal."
+          }
+        },
+        "required": [
+          "proposal_id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "description": "Identifier of the stored DAG proposal or patch proposal."
+          },
+          "validation": {
+            "type": "object",
+            "description": "Validation result or diagnostics."
+          },
+          "apply": {
+            "type": "object",
+            "description": "Apply outcome for the proposal."
+          },
+          "scheduler": {
+            "type": "object",
+            "description": "Scheduler outcome after applying the proposal."
+          }
+        },
+        "required": [
+          "proposal_id",
+          "validation",
+          "apply",
+          "scheduler"
+        ]
+      }
+    },
+    {
       "name": "submitResult",
       "title": "Submit WorkItem result",
       "description": "Submit the execution agent's main output for the current WorkItemRun. Implementation, validation, review, documentation, debugging, and similar WorkItems all use this same tool. This tool reports the current node result only; llmparty decides scheduling, retry, session reuse, and downstream DAG state server-side.",

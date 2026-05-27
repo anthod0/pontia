@@ -35,7 +35,7 @@ function install(env: Record<string, string | undefined> = {}, overrides: Partia
 }
 
 describe("llmparty pi agent tools", () => {
-  test("builds four DAG agent tools from the shared contract without a pi-only prefix", () => {
+  test("builds DAG agent tools from the shared contract without a pi-only prefix", () => {
     const tools = buildLlmpartyTools({
       env: {},
       loadContext: vi.fn(),
@@ -45,6 +45,7 @@ describe("llmparty pi agent tools", () => {
     expect(tools.map((tool) => tool.name)).toEqual([
       "getContext",
       "submitPlan",
+      "applyPlan",
       "submitResult",
       "raiseSignal",
     ]);
@@ -68,8 +69,8 @@ describe("llmparty pi agent tools", () => {
   test("planner agent kind registers planning tools only", () => {
     const { pi, tools } = install({ LLMPARTY_AGENT_KIND: "planner" });
 
-    expect(tools.map((tool) => tool.name)).toEqual(["getContext", "submitPlan", "raiseSignal"]);
-    expect(pi.registerTool).toHaveBeenCalledTimes(3);
+    expect(tools.map((tool) => tool.name)).toEqual(["getContext", "submitPlan", "applyPlan", "raiseSignal"]);
+    expect(pi.registerTool).toHaveBeenCalledTimes(4);
   });
 
   test("executor agent kind registers execution tools only", () => {
@@ -154,6 +155,7 @@ describe("llmparty pi agent tools", () => {
     const responses: Record<string, unknown> = {
       getContext: { ok: true, tool: "getContext", result: { text: "llmparty context: execution\n\nCurrent WorkItem:\n- Title: Do it" } },
       submitPlan: { ok: true, tool: "submitPlan", result: { accepted: true, proposal_id: "prop_1" } },
+      applyPlan: { ok: true, tool: "applyPlan", result: { proposal_id: "prop_1" } },
       submitResult: { ok: true, tool: "submitResult", result: { recorded: true, run_id: "run_1", status: "completed" } },
       raiseSignal: { ok: true, tool: "raiseSignal", result: { signal_id: "sig_1", recorded: true } },
     };

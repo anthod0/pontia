@@ -29,7 +29,7 @@ interface ActiveTurnState {
 type LlmpartyAgentKind = "planner" | "executor";
 
 const TOOL_NAMES_BY_AGENT_KIND: Record<LlmpartyAgentKind, Set<string>> = {
-  planner: new Set(["getContext", "submitPlan", "raiseSignal"]),
+  planner: new Set(["getContext", "submitPlan", "applyPlan", "raiseSignal"]),
   executor: new Set(["getContext", "submitResult", "raiseSignal"]),
 };
 
