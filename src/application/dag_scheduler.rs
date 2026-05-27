@@ -253,6 +253,19 @@ impl DagSchedulerService {
                 .await?;
                 continue;
             }
+            if !profile_has_agent_kind(&self.pool, work_item, "executor").await? {
+                sqlx::query(
+                    r#"UPDATE work_item_runtime_projection
+                       SET current_state = 'blocked', blocked_reason = 'incompatible_execution_profile_kind',
+                           ready_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                       WHERE task_id = ? AND work_item_id = ? AND current_state = 'ready'"#,
+                )
+                .bind(task_id)
+                .bind(&work_item_id)
+                .execute(&self.pool)
+                .await?;
+                continue;
+            }
 
             let mut tx = self.pool.begin().await?;
             let updated = sqlx::query(
@@ -512,6 +525,32 @@ async fn profile_exists(pool: &SqlitePool, work_item: &WorkItemNode) -> Result<b
     Ok(exists.is_some())
 }
 
+async fn profile_has_agent_kind(
+    pool: &SqlitePool,
+    work_item: &WorkItemNode,
+    expected_kind: &str,
+) -> Result<bool> {
+    let agent_kind: Option<String> = if let Some(version) = &work_item.execution_profile_version {
+        sqlx::query_scalar(
+            "SELECT agent_kind FROM execution_profiles WHERE profile_id = ? AND version = ?",
+        )
+        .bind(&work_item.execution_profile_id)
+        .bind(version)
+        .fetch_optional(pool)
+        .await?
+    } else {
+        sqlx::query_scalar(
+            r#"SELECT agent_kind FROM execution_profiles
+               WHERE profile_id = ? AND active = 1 AND archived_at IS NULL
+               ORDER BY rowid DESC LIMIT 1"#,
+        )
+        .bind(&work_item.execution_profile_id)
+        .fetch_optional(pool)
+        .await?
+    };
+    Ok(agent_kind.as_deref() == Some(expected_kind))
+}
+
 fn preferred_client_type(profile: &ExecutionProfileView, task_preferred: Option<&str>) -> String {
     if let Some(client_type) = task_preferred
         && profile
@@ -530,4 +569,62 @@ fn preferred_client_type(profile: &ExecutionProfileView, task_preferred: Option<
 
 fn new_scheduler_id(prefix: &str) -> String {
     format!("{prefix}_{}", uuid::Uuid::now_v7())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::sqlite::{connect_sqlite, run_migrations};
+
+    async fn test_pool() -> SqlitePool {
+        let db = connect_sqlite("sqlite://:memory:").await.expect("connect");
+        run_migrations(&db).await.expect("migrate");
+        db
+    }
+
+    fn work_item(profile_id: &str, version: Option<&str>) -> WorkItemNode {
+        WorkItemNode {
+            work_item_id: "wi_test".to_string(),
+            task_id: "task_test".to_string(),
+            title: "Test".to_string(),
+            description: "Test".to_string(),
+            kind: "implementation".to_string(),
+            action: "agent_turn".to_string(),
+            execution_profile_id: profile_id.to_string(),
+            execution_profile_version: version.map(str::to_string),
+            review_policy: None,
+            execution_policy: None,
+            escalation_policy: None,
+            priority: 0,
+            optional: false,
+            parallelizable: true,
+            acceptance_criteria: json!([]),
+            active: true,
+            ref_: None,
+            metadata: json!({}),
+            created_at: "2026-01-01T00:00:00.000Z".to_string(),
+            updated_at: "2026-01-01T00:00:00.000Z".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn profile_has_agent_kind_distinguishes_planner_and_executor_profiles() {
+        let pool = test_pool().await;
+
+        assert!(
+            profile_has_agent_kind(&pool, &work_item("implementer", None), "executor")
+                .await
+                .expect("implementer kind")
+        );
+        assert!(
+            profile_has_agent_kind(&pool, &work_item("planner", None), "planner")
+                .await
+                .expect("planner kind")
+        );
+        assert!(
+            !profile_has_agent_kind(&pool, &work_item("planner", None), "executor")
+                .await
+                .expect("planner is not executor")
+        );
+    }
 }

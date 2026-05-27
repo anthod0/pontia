@@ -15,12 +15,15 @@ export interface SessionCapabilities {
   [key: string]: unknown;
 }
 
+export type AgentKind = 'planner' | 'executor';
+
 export interface AgentProfileView {
   profile_id: string;
   version: string;
   name: string;
   description: string | null;
   supported_client_types: string[];
+  agent_kind: AgentKind;
   system_prompt_template: string | null;
   turn_prompt_template: string | null;
   default_session_role: string | null;
@@ -44,6 +47,7 @@ export interface UpsertAgentProfileInput {
   name: string;
   description?: string | null;
   supported_client_types?: string[];
+  agent_kind: AgentKind;
   system_prompt_template?: string | null;
   turn_prompt_template?: string | null;
   default_session_role?: string | null;

@@ -124,6 +124,7 @@ fn custom_profile_body(profile_id: &str, version: &str) -> Value {
         "name": "API Reviewer",
         "description": "Reviews backend API changes.",
         "supported_client_types": ["pi", "claude_code"],
+        "agent_kind": "executor",
         "system_prompt_template": "You review API changes.",
         "turn_prompt_template": "Review {{work_item_id}}: {{title}}",
         "default_session_role": "API reviewer",
@@ -165,7 +166,23 @@ async fn list_agent_profiles_includes_builtin_latest_profiles() {
         .iter()
         .find(|profile| profile["profile_id"] == "default")
         .unwrap();
+    let planner = profiles
+        .iter()
+        .find(|profile| profile["profile_id"] == "planner")
+        .unwrap();
+    let replanner = profiles
+        .iter()
+        .find(|profile| profile["profile_id"] == "replanner")
+        .unwrap();
+    let implementer = profiles
+        .iter()
+        .find(|profile| profile["profile_id"] == "implementer")
+        .unwrap();
     assert_eq!(default["version"], "1");
+    assert_eq!(default["agent_kind"], "executor");
+    assert_eq!(planner["agent_kind"], "planner");
+    assert_eq!(replanner["agent_kind"], "planner");
+    assert_eq!(implementer["agent_kind"], "executor");
     assert!(
         default.get("session_reuse_policy").is_none(),
         "session reuse policy must not be exposed: {default:?}"
@@ -181,6 +198,7 @@ async fn get_agent_profile_returns_latest_version() {
     assert_eq!(status, StatusCode::OK, "{body}");
     let profile = &body["data"]["agent_profile"];
     assert_eq!(profile["profile_id"], "replanner");
+    assert_eq!(profile["agent_kind"], "planner");
     assert_eq!(profile["expected_output_schema"], "dag_patch_v1");
     assert!(
         profile.get("session_reuse_policy").is_none(),
@@ -203,6 +221,7 @@ async fn create_agent_profile_persists_and_is_idempotent() {
     assert_eq!(status, StatusCode::CREATED, "{created}");
     let profile = &created["data"]["agent_profile"];
     assert_eq!(profile["profile_id"], "api-reviewer");
+    assert_eq!(profile["agent_kind"], "executor");
     assert_eq!(
         profile["supported_client_types"],
         json!(["pi", "claude_code"])
@@ -222,6 +241,18 @@ async fn create_agent_profile_persists_and_is_idempotent() {
     let (status, fetched) = get_json(state, "/external/v1/agent-profiles/api-reviewer").await;
     assert_eq!(status, StatusCode::OK, "{fetched}");
     assert_eq!(fetched["data"]["agent_profile"]["version"], "1");
+}
+
+#[tokio::test]
+async fn create_agent_profile_rejects_unknown_agent_kind() {
+    let state = test_state().await;
+    let mut body = custom_profile_body("invalid-kind", "1");
+    body["agent_kind"] = json!("plannerish");
+
+    let (status, response) = post_json(state, "/external/v1/agent-profiles", body, None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
+    assert_eq!(response["error"]["code"], "invalid_request");
 }
 
 #[tokio::test]

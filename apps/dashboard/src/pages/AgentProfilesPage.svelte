@@ -282,6 +282,13 @@
             {#if draftErrors.supported_client_types_text}<p class="text-xs text-destructive">{draftErrors.supported_client_types_text}</p>{/if}
           </div>
           <div class="space-y-2">
+            <Label for="profile-agent-kind">Agent kind</Label>
+            <select id="profile-agent-kind" bind:value={draft.agent_kind} class="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs">
+              <option value="executor">executor</option>
+              <option value="planner">planner</option>
+            </select>
+          </div>
+          <div class="space-y-2">
             <Label for="profile-role">Default session role</Label>
             <Input id="profile-role" bind:value={draft.default_session_role} />
           </div>
@@ -367,6 +374,7 @@
                 {#if !profile.active}<Badge variant="outline">Archived</Badge>{/if}
               </div>
               <div class="mt-2 flex flex-wrap gap-1">
+                <Badge>{profile.agent_kind}</Badge>
                 {#each profile.supported_client_types as client}
                   <Badge variant="secondary">{client}</Badge>
                 {/each}
@@ -398,6 +406,7 @@
                 {#each [
                   ['Profile ID', selectedVersionProfile.profile_id],
                   ['Version', selectedVersionProfile.version],
+                  ['Agent kind', selectedVersionProfile.agent_kind],
                   ['Session role', selectedVersionProfile.default_session_role ?? '—'],
                   ['Handle prefix', selectedVersionProfile.handle_prefix ?? '—'],
                   ['State', selectedVersionProfile.active ? 'Active' : 'Archived'],

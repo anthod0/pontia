@@ -1,4 +1,4 @@
-import type { AgentProfileView, JsonObject, UpsertAgentProfileInput } from '../../api/types';
+import type { AgentKind, AgentProfileView, JsonObject, UpsertAgentProfileInput } from '../../api/types';
 
 export interface AgentProfileDraft {
   profile_id: string;
@@ -6,6 +6,7 @@ export interface AgentProfileDraft {
   name: string;
   description: string;
   supported_client_types_text: string;
+  agent_kind: AgentKind;
   system_prompt_template: string;
   turn_prompt_template: string;
   default_session_role: string;
@@ -33,6 +34,7 @@ export function createAgentProfileDraft(): AgentProfileDraft {
     name: '',
     description: '',
     supported_client_types_text: 'pi, claude_code',
+    agent_kind: 'executor',
     system_prompt_template: '',
     turn_prompt_template: '',
     default_session_role: '',
@@ -56,6 +58,7 @@ export function createAgentProfileDraftFromProfile(
     name: profile.name,
     description: profile.description ?? '',
     supported_client_types_text: profile.supported_client_types.join(', '),
+    agent_kind: profile.agent_kind,
     system_prompt_template: profile.system_prompt_template ?? '',
     turn_prompt_template: profile.turn_prompt_template ?? '',
     default_session_role: profile.default_session_role ?? '',
@@ -91,6 +94,7 @@ export function buildAgentProfileInput(draft: AgentProfileDraft): BuildAgentProf
       name: draft.name.trim(),
       description: nullableTrimmed(draft.description),
       supported_client_types: splitClientTypes(draft.supported_client_types_text),
+      agent_kind: draft.agent_kind,
       system_prompt_template: nullableTrimmed(draft.system_prompt_template),
       turn_prompt_template: nullableTrimmed(draft.turn_prompt_template),
       default_session_role: nullableTrimmed(draft.default_session_role),

@@ -7,6 +7,7 @@ pub struct ExecutionProfileView {
     pub name: String,
     pub description: Option<String>,
     pub supported_client_types: Vec<String>,
+    pub agent_kind: String,
     pub system_prompt_template: Option<String>,
     pub turn_prompt_template: Option<String>,
     pub default_session_role: Option<String>,
@@ -32,6 +33,7 @@ pub struct UpsertExecutionProfileRequest {
     pub description: Option<String>,
     #[serde(default)]
     pub supported_client_types: Vec<String>,
+    pub agent_kind: String,
     pub system_prompt_template: Option<String>,
     pub turn_prompt_template: Option<String>,
     pub default_session_role: Option<String>,
@@ -70,7 +72,7 @@ impl AgentProfileService {
 
     pub async fn list_latest(&self) -> Result<Vec<ExecutionProfileView>> {
         let rows = sqlx::query(
-            r#"SELECT profile_id, version, name, description, supported_client_types,
+            r#"SELECT profile_id, version, name, description, supported_client_types, agent_kind,
                       system_prompt_template, turn_prompt_template, default_session_role,
                       default_session_description, handle_prefix,
                       expected_output_schema, artifact_contract, default_execution_policy,
@@ -95,7 +97,7 @@ impl AgentProfileService {
 
     pub async fn list_latest_including_archived(&self) -> Result<Vec<ExecutionProfileView>> {
         let rows = sqlx::query(
-            r#"SELECT profile_id, version, name, description, supported_client_types,
+            r#"SELECT profile_id, version, name, description, supported_client_types, agent_kind,
                       system_prompt_template, turn_prompt_template, default_session_role,
                       default_session_description, handle_prefix,
                       expected_output_schema, artifact_contract, default_execution_policy,
@@ -118,7 +120,7 @@ impl AgentProfileService {
 
     pub async fn get_latest(&self, profile_id: &str) -> Result<Option<ExecutionProfileView>> {
         let row = sqlx::query(
-            r#"SELECT profile_id, version, name, description, supported_client_types,
+            r#"SELECT profile_id, version, name, description, supported_client_types, agent_kind,
                       system_prompt_template, turn_prompt_template, default_session_role,
                       default_session_description, handle_prefix,
                       expected_output_schema, artifact_contract, default_execution_policy,
@@ -143,7 +145,7 @@ impl AgentProfileService {
     ) -> Result<Vec<ExecutionProfileView>> {
         let rows = if include_archived {
             sqlx::query(
-                r#"SELECT profile_id, version, name, description, supported_client_types,
+                r#"SELECT profile_id, version, name, description, supported_client_types, agent_kind,
                           system_prompt_template, turn_prompt_template, default_session_role,
                           default_session_description, handle_prefix,
                           expected_output_schema, artifact_contract, default_execution_policy,
@@ -158,7 +160,7 @@ impl AgentProfileService {
             .await?
         } else {
             sqlx::query(
-                r#"SELECT profile_id, version, name, description, supported_client_types,
+                r#"SELECT profile_id, version, name, description, supported_client_types, agent_kind,
                           system_prompt_template, turn_prompt_template, default_session_role,
                           default_session_description, handle_prefix,
                           expected_output_schema, artifact_contract, default_execution_policy,
@@ -248,18 +250,19 @@ impl AgentProfileService {
 
         let result = sqlx::query(
             r#"INSERT INTO execution_profiles (
-                    profile_id, version, name, description, supported_client_types,
+                    profile_id, version, name, description, supported_client_types, agent_kind,
                     system_prompt_template, turn_prompt_template, default_session_role,
                     default_session_description, handle_prefix,
                     expected_output_schema, artifact_contract, default_execution_policy,
                     default_review_policy, metadata
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(&request.profile_id)
         .bind(&request.version)
         .bind(&request.name)
         .bind(&request.description)
         .bind(supported_client_types)
+        .bind(&request.agent_kind)
         .bind(&request.system_prompt_template)
         .bind(&request.turn_prompt_template)
         .bind(&request.default_session_role)
@@ -304,7 +307,7 @@ impl AgentProfileService {
         version: &str,
     ) -> Result<Option<ExecutionProfileView>> {
         let row = sqlx::query(
-            r#"SELECT profile_id, version, name, description, supported_client_types,
+            r#"SELECT profile_id, version, name, description, supported_client_types, agent_kind,
                       system_prompt_template, turn_prompt_template, default_session_role,
                       default_session_description, handle_prefix,
                       expected_output_schema, artifact_contract, default_execution_policy,
@@ -359,7 +362,7 @@ impl AgentProfileService {
 
         sqlx::query(
             r#"UPDATE execution_profiles
-               SET name = ?, description = ?, supported_client_types = ?,
+               SET name = ?, description = ?, supported_client_types = ?, agent_kind = ?,
                    system_prompt_template = ?, turn_prompt_template = ?, default_session_role = ?,
                    default_session_description = ?, handle_prefix = ?, expected_output_schema = ?,
                    artifact_contract = ?, default_execution_policy = ?, default_review_policy = ?,
@@ -369,6 +372,7 @@ impl AgentProfileService {
         .bind(&request.name)
         .bind(&request.description)
         .bind(supported_client_types)
+        .bind(&request.agent_kind)
         .bind(&request.system_prompt_template)
         .bind(&request.turn_prompt_template)
         .bind(&request.default_session_role)
@@ -551,6 +555,12 @@ fn validate_request(request: &UpsertExecutionProfileRequest) -> Result<()> {
             )));
         }
     }
+    if !matches!(request.agent_kind.as_str(), "planner" | "executor") {
+        return Err(Error::Domain(format!(
+            "unsupported agent_kind: {}",
+            request.agent_kind
+        )));
+    }
     Ok(())
 }
 
@@ -592,6 +602,7 @@ fn row_to_execution_profile_view(row: sqlx::sqlite::SqliteRow) -> Result<Executi
         name: row.try_get("name")?,
         description: row.try_get("description")?,
         supported_client_types: json_field(&row, "supported_client_types")?,
+        agent_kind: row.try_get("agent_kind")?,
         system_prompt_template: row.try_get("system_prompt_template")?,
         turn_prompt_template: row.try_get("turn_prompt_template")?,
         default_session_role: row.try_get("default_session_role")?,

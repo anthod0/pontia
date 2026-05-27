@@ -22,6 +22,50 @@ async fn enable_generic_planner_profile(state: &llmparty::application::AppState)
 }
 
 #[tokio::test]
+async fn dag_task_api_rejects_planner_profile_with_executor_agent_kind() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    sqlx::query(
+        r#"INSERT INTO execution_profiles (
+                profile_id, version, name, description, supported_client_types, agent_kind,
+                system_prompt_template, turn_prompt_template, default_session_role,
+                default_session_description, handle_prefix, expected_output_schema,
+                artifact_contract, default_execution_policy, default_review_policy, metadata
+           ) VALUES (
+                'planner', '2', 'Misconfigured Planner', 'Should not be allowed for planning', ?, 'executor',
+                'bad system prompt', 'bad turn prompt', 'Planner', 'Plans task DAGs.', 'planner', 'dag_v1',
+                '{}', '{}', '{}', '{}'
+           )"#,
+    )
+    .bind(json!(["generic"]).to_string())
+    .execute(&state.db)
+    .await
+    .expect("insert misconfigured planner profile");
+
+    let (status, body) = post_json(
+        state,
+        "/external/v1/dag-tasks",
+        json!({
+            "input": "Create demo file",
+            "workspace": workspace.path().display().to_string(),
+            "client_type": "generic",
+            "metadata": {}
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:#}");
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .expect("error message")
+            .contains("requires agent_kind planner")
+    );
+}
+
+#[tokio::test]
 async fn dag_task_api_creates_task_links_workspace_and_starts_generic_planner_turn() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;

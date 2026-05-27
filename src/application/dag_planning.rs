@@ -269,6 +269,12 @@ impl DagPlanningService {
             .ok_or_else(|| {
                 Error::Domain(format!("execution profile {profile_id} does not exist"))
             })?;
+        if profile.agent_kind != "planner" {
+            return Err(Error::Domain(format!(
+                "planning profile {profile_id}@{} requires agent_kind planner, got {}",
+                profile.version, profile.agent_kind
+            )));
+        }
         let client_type = if let Some(client_type) = preferred_client_type {
             if !profile
                 .supported_client_types
