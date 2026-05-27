@@ -87,6 +87,22 @@ async fn migrations_do_not_create_sqlite_graph_store_tables() {
 
 #[cfg(feature = "lbug")]
 #[tokio::test]
+async fn lbug_graph_store_creates_missing_parent_directory() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let db_path = temp_dir.path().join("missing-parent").join("graphdb");
+
+    LbugDagGraphStore::open(&db_path)
+        .await
+        .expect("open lbug graph store with missing parent");
+
+    assert!(
+        db_path.parent().expect("db path parent").exists(),
+        "graph store should create the database parent directory"
+    );
+}
+
+#[cfg(feature = "lbug")]
+#[tokio::test]
 async fn lbug_graph_store_persists_work_items_edges_and_active_state() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let store = LbugDagGraphStore::open(temp_dir.path().join("graphdb"))

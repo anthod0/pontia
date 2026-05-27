@@ -1,6 +1,9 @@
 #![cfg(feature = "lbug")]
 
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use lbug::{Connection, Database, LogicalType, SystemConfig, Value as LbugValue};
 use serde_json::Value;
@@ -24,12 +27,13 @@ pub struct LbugDagGraphStore {
 
 impl LbugDagGraphStore {
     pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
-        if let Some(parent) = path.as_ref().parent()
+        let path = expand_home_prefix(path.as_ref());
+        if let Some(parent) = path.parent()
             && !parent.as_os_str().is_empty()
         {
             std::fs::create_dir_all(parent)?;
         }
-        let db = Database::new(path.as_ref(), SystemConfig::default())?;
+        let db = Database::new(&path, SystemConfig::default())?;
         let store = Self { db: Arc::new(db) };
         store.initialize_schema()?;
         Ok(store)
@@ -695,4 +699,40 @@ fn now_string() -> String {
     utc_now()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+fn expand_home_prefix(path: &Path) -> PathBuf {
+    match std::env::var_os("HOME") {
+        Some(home) => expand_home_prefix_with_home(path, Path::new(&home)),
+        None => path.to_path_buf(),
+    }
+}
+
+fn expand_home_prefix_with_home(path: &Path, home: &Path) -> PathBuf {
+    if path == Path::new("~") {
+        return home.to_path_buf();
+    }
+
+    match path.strip_prefix("~") {
+        Ok(rest) => home.join(rest),
+        Err(_) => path.to_path_buf(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    #[test]
+    fn expands_leading_tilde_before_opening_lbug_database() {
+        let expanded = super::expand_home_prefix_with_home(
+            Path::new("~/.local/share/llmparty/graph/lbug"),
+            Path::new("/home/example"),
+        );
+
+        assert_eq!(
+            expanded,
+            Path::new("/home/example/.local/share/llmparty/graph/lbug")
+        );
+    }
 }
