@@ -1127,13 +1127,34 @@ CREATE INDEX idx_work_item_runtime_ready ON work_item_runtime_projection(current
 
 ## 当前实现状态
 
-当前项目中的 task/planner 能力应视为临时 scaffolding：
+当前项目已经实现了 WorkItem DAG 编排的一版可运行骨架，不再只是早期 task/planner scaffolding。整体状态是：**核心执行链路基本符合本文目标模型，语义图、审批、策略和治理能力仍未完整落地**。
 
-- `Task` 目前主要承载全局用户输入和 workspace/session/turn 路由结果。
-- `Planner` 目前主要做 workspace resolution，不是完整 DAG planner。
-- `GraphProjectionService` 当前从 planner decision 生成简化 WorkItem provenance。
-- 当前 `WorkItem` graph schema 不代表最终 WorkItem / WorkItemRun 分层。
-- 后续实现 DAG orchestrator 时，可以重写 task/planner 边界，而不需要兼容当前临时 planner 语义。
+已实现或基本实现：
+
+- `Task` 仍承载顶层用户意图、workspace/session/turn 路由和聚合状态，但 DAG task 已通过 `metadata.mode = "dag"` 与普通任务区分。
+- `Planner` / `RePlanner` 已能通过 DAG-managed planning turn 产出结构化初始 DAG 或 DAG Patch，并通过 `submitPlan` 进入系统。
+- 系统当前维护的是同一张 WorkItem DAG：planner 产出的 DAG 被投影到 graph store，并作为 scheduler 的执行拓扑；没有独立的 Plan DAG / Execution DAG。
+- `WorkItem` 与 DAG 边已经从 SQLite graph tables 迁移到 lbug graph store；历史 SQLite graph store 已被移除。
+- `GraphProjectionService` 现在从 `task_events` 重放并投影 `Task`、`WorkItem`、`Signal` 和 WorkItem 边到 lbug，而不只是生成简化 provenance。
+- `WorkItemRun` 和 `work_item_runtime_projection` 保存在 SQLite，用于运行状态、ready/blocked/running/completed、attempt、session/turn 关联等调度视图。
+- `DagSchedulerService` 已实现 deterministic 调度：读取 lbug DAG + SQLite runtime projection，计算 ready WorkItem，创建 WorkItemRun，创建/复用执行 profile 对应的 Session，并 dispatch Turn。
+- Worker agent 可通过 `submitResult` 完成当前 WorkItemRun，也可通过 `raiseSignal` 发出 `needs_input`、`replan_requested`、`missing_dependency`、`scope_change` 等信号；`replan_requested` 可触发 RePlanner。
+- DAG Patch 已支持新增 WorkItem、增删边、替换边、supersede/reactivate、设置 WorkItem outcome、插入中间 WorkItem、替换下游路径，以及 `supersede_policy` 控制的自动 supersede。
+- `execution_profile_id` / `execution_profile_version` 已接入 WorkItem、WorkItemRun、Session 和 prompt rendering；profile registry 已支持版本和归档。
+
+仍未完整符合本文目标模型：
+
+- 初始 DAG 和 DAG Patch 目前主要是提交后校验并立即 apply/schedule；尚未实现稳定的 `dag.proposed -> awaiting_approval -> approved -> applied` 人类/策略审批流。
+- Human gate 还不是完整的 WorkItem action 语义。当前 validator 支持 `agent_turn`、`human_input`、`noop`，但没有实现本文建议的 `wait_human` 调度行为。
+- WorkProduct 语义节点与 `REQUIRES`、`PRODUCES`、`SUPPORTED_BY`、`DERIVED_FROM` 等关系尚未实现；`submitResult.outputs` 目前主要作为 run 输出摘要/事件 payload，而不是 graph 中的 WorkProduct。
+- Agent 语义节点与 `ASSIGNED_TO`、`EMITS` 等关系尚未实现；当前 agent/runtime 身份主要体现在 Session、profile 和 turn metadata 中。
+- Review 仍主要体现为 execution profile 或普通 WorkItem；尚未实现 `ReviewPolicy` 的 risk trigger 评估和自动 materialize review WorkItem。
+- `review_policy`、`execution_policy`、`escalation_policy` 字段已出现在 graph schema 中，但 WorkItemDraft/API 和 scheduler 对这些 policy 的执行还不完整。
+- Scheduler 目前没有完整实现 lease、timeout、max retry/failure strategy、budget、review gate、WorkProduct availability 等机制。
+- lbug schema 与本文草案仍有少量差异，例如 `CAUSED_BY` 当前建模为 WorkItem 到 WorkItem 的边，而本文目标是 WorkItem 到 Signal。
+- kind/action 枚举仍偏当前实现：`design`、`implementation`、`review`、`test`、`debug`、`documentation`、`planning`、`other` 和 `agent_turn`、`human_input`、`noop`；尚未完全采用本文建议的 `investigation`、`validation`、`run_command`、`wait_human` 等命名。
+
+因此，后续实现 DAG orchestrator 时不再需要从零重写 task/planner 边界；更合理的方向是在现有 DAG-managed task、lbug projection、SQLite runtime projection、Scheduler、RePlanner Patch Protocol 之上补齐审批流、WorkProduct/Agent 语义图、policy enforcement、retry/lease 和 human/review gate。
 
 ## 设计原则
 
