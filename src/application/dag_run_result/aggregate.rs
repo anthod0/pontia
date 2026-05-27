@@ -2,50 +2,38 @@ use super::*;
 
 impl DagRunResultService {
     pub(super) async fn aggregate_task_state(&self, task_id: &str) -> Result<()> {
-        let graph = GraphProjectionService::new(self.pool.clone(), self.graph.clone())
-            .task_graph(task_id)
-            .await?;
-        let active_items: std::collections::HashMap<String, bool> = graph
-            .work_items
-            .into_iter()
-            .filter(|work_item| work_item.active)
-            .map(|work_item| (work_item.work_item_id, work_item.optional))
-            .collect();
-        if active_items.is_empty() {
-            return Ok(());
-        }
-
         let rows = sqlx::query(
-            r#"SELECT work_item_id, current_state
+            r#"SELECT current_state, optional
                FROM work_item_runtime_projection
-               WHERE task_id = ?"#,
+               WHERE task_id = ? AND current_state != 'superseded'"#,
         )
         .bind(task_id)
         .fetch_all(&self.pool)
         .await?;
-
-        let mut required = Vec::new();
-        for row in rows {
-            let work_item_id: String = row.try_get("work_item_id")?;
-            let Some(optional) = active_items.get(&work_item_id) else {
-                continue;
-            };
-            if !optional {
-                required.push(row.try_get::<String, _>("current_state")?);
-            }
-        }
-        if required.is_empty() {
+        if rows.is_empty() {
             return Ok(());
         }
 
-        let next_state = if required
+        let mut required = Vec::new();
+        let mut all = Vec::new();
+        for row in rows {
+            let state: String = row.try_get("current_state")?;
+            let optional: bool = row.try_get("optional")?;
+            if !optional {
+                required.push(state.clone());
+            }
+            all.push(state);
+        }
+        let considered = if required.is_empty() { &all } else { &required };
+
+        let next_state = if considered
             .iter()
             .all(|state| matches!(state.as_str(), "completed" | "replan_anchor"))
         {
             "completed"
-        } else if required.iter().any(|state| state == "failed") {
+        } else if considered.iter().any(|state| state == "failed") {
             "failed"
-        } else if required
+        } else if considered
             .iter()
             .any(|state| matches!(state.as_str(), "blocked" | "needs_input" | "cancelled"))
         {
