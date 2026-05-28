@@ -76,7 +76,10 @@ test('sidebar shows workflow items and omits settings from navigation', () => {
   const workflowQueries = within(workflow as HTMLElement);
   expect(workflowQueries.getByText('Overview')).toBeInTheDocument();
   expect(workflowQueries.getByText('Tasks')).toBeInTheDocument();
-  expect(workflowQueries.getByText('Chat')).toBeInTheDocument();
+  const newChat = workflowQueries.getByText('New Chat').closest('button');
+  expect(newChat).not.toBeNull();
+  expect(newChat?.querySelector('svg')).toHaveClass('lucide-square-pen');
+  expect(workflowQueries.queryByText('Chat')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('DAG Tasks')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Session Console')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Workspaces')).not.toBeInTheDocument();
@@ -140,7 +143,7 @@ test('sidebar only marks the current route as active', () => {
 
   const overview = screen.getByText('Overview').closest('button');
   const tasks = screen.getByText('Tasks').closest('button');
-  const chat = screen.getByText('Chat').closest('button');
+  const chat = screen.getByText('New Chat').closest('button');
 
   expect(overview).not.toBeNull();
   expect(tasks).not.toBeNull();

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GitBranch, Home, MessageCircle } from '@lucide/svelte'
+  import { GitBranch, Home, MessageCircle, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import { sessions, sessionsLoading } from '../../stores/sessions'
@@ -14,7 +14,7 @@
   const primaryItems: Item[] = [
     { label: 'Overview', path: '/overview', icon: Home },
     { label: 'Tasks', path: '/tasks', icon: GitBranch },
-    { label: 'Chat', path: '/chat', icon: MessageCircle },
+    { label: 'New Chat', path: '/chat', icon: SquarePen },
   ]
 
   const recentSessionLimit = 8
