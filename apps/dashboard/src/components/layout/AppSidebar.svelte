@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Bot, Boxes, GitBranch, Home, Settings, TerminalSquare } from '@lucide/svelte'
+  import { Bot, Boxes, GitBranch, Home, MessageCircle, Settings, TerminalSquare } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
 
@@ -13,6 +13,7 @@
     { label: 'Overview', path: '/overview', icon: Home },
     { label: 'DAG Tasks', path: '/tasks', icon: GitBranch },
     { label: 'Workspaces', path: '/workspaces', icon: Boxes },
+    { label: 'Chat', path: '/chat', icon: MessageCircle },
     { label: 'Session Console', path: '/sessions', icon: TerminalSquare },
     { label: 'Agent Profiles', path: '/agent-profiles', icon: Bot },
     { label: 'Settings', path: '/settings', icon: Settings },

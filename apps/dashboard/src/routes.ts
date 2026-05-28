@@ -13,6 +13,7 @@ export const routerConf: RouterConf = {
     { path: '/tasks/{taskId}/artifacts', render: () => import('./pages/task/TaskArtifactsPage.svelte') },
     { path: '/tasks/{taskId}/activity', render: () => import('./pages/task/TaskActivityPage.svelte') },
     { path: '/workspaces', render: () => import('./pages/WorkspacesPage.svelte') },
+    { path: '/chat', render: () => import('./pages/ChatPage.svelte') },
     { path: '/sessions', render: () => import('./pages/SessionsPage.svelte') },
     { path: '/agent-profiles', render: () => import('./pages/AgentProfilesPage.svelte') },
     { path: '/settings', render: () => import('./pages/SettingsPage.svelte') },
