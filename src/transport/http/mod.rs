@@ -122,6 +122,10 @@ pub fn router(state: AppState) -> Router {
             get(external::list_task_events),
         )
         .route(
+            "/external/v1/tasks/{task_id}/proposals",
+            get(external::list_task_proposals),
+        )
+        .route(
             "/external/v1/tasks/{task_id}/dag",
             get(external::get_task_dag),
         )

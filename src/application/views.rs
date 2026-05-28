@@ -69,6 +69,22 @@ pub struct TaskEventView {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct DagProposalView {
+    pub proposal_id: String,
+    pub task_id: String,
+    pub mode: String,
+    pub state: String,
+    pub summary: String,
+    pub proposal_json: Value,
+    pub validation_json: Value,
+    pub created_by_session_id: Option<String>,
+    pub revision: i64,
+    pub supersedes_proposal_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct TurnInputView {
     pub summary: Option<String>,
     pub artifact_id: Option<String>,

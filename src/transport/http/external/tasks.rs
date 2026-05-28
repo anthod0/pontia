@@ -139,6 +139,21 @@ pub async fn list_task_events(
     Ok(ok(json!({ "events": events })))
 }
 
+pub async fn list_task_proposals(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = ExternalQueryService::new(state.db);
+    service
+        .get_task(&task_id)
+        .await?
+        .ok_or_else(|| ExternalApiError::not_found(format!("task {task_id} not found")))?;
+    let proposals = service.list_task_dag_proposals(&task_id).await?;
+    Ok(ok(json!({ "proposals": proposals })))
+}
+
 pub async fn get_task_provenance(
     State(state): State<AppState>,
     headers: HeaderMap,

@@ -111,6 +111,7 @@ async fn dag_task_api_creates_task_links_workspace_and_starts_generic_planner_tu
     assert_eq!(session["workspace_id"], task["workspace_id"]);
     assert_eq!(session["metadata"]["dag_managed"], true);
     assert_eq!(session["metadata"]["dag_planning_role"], "planner");
+    assert_eq!(session["metadata"]["task_id"], task["task_id"]);
 
     let (_turn_status, turn_body) = get_json(
         state.clone(),
@@ -120,6 +121,7 @@ async fn dag_task_api_creates_task_links_workspace_and_starts_generic_planner_tu
     let turn = &turn_body["data"]["turn"];
     assert_eq!(turn["metadata"]["dag_managed"], true);
     assert_eq!(turn["metadata"]["dag_planning_role"], "planner");
+    assert_eq!(turn["metadata"]["task_id"], task["task_id"]);
     assert!(
         turn["input"]["summary"]
             .as_str()

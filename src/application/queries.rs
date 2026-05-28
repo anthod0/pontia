@@ -128,6 +128,22 @@ impl ExternalQueryService {
         rows.into_iter().map(row_to_task_event_view).collect()
     }
 
+    pub async fn list_task_dag_proposals(&self, task_id: &str) -> Result<Vec<DagProposalView>> {
+        let rows = sqlx::query(
+            r#"SELECT proposal_id, task_id, mode, state, summary, proposal_json,
+                      validation_json, created_by_session_id, revision,
+                      supersedes_proposal_id, created_at, updated_at
+               FROM dag_proposals
+               WHERE task_id = ?
+               ORDER BY revision DESC, created_at DESC, proposal_id DESC"#,
+        )
+        .bind(task_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_dag_proposal_view).collect()
+    }
+
     pub async fn get_task_dag(&self, task_id: &str) -> Result<TaskDagView> {
         let summary = self.get_task_dag_summary(task_id).await?;
         let work_items = self.list_work_items(task_id).await?;
