@@ -7,20 +7,49 @@ import SettingsShellHost from './components/settings/SettingsShellHost.svelte';
 import SettingsCommonPage from '../src/pages/SettingsCommonPage.svelte';
 import { routerConf } from '../src/routes';
 
-const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(),
-  startEventStream: vi.fn(),
-  stopEventStream: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  function writableStore<T>(initial: T) {
+    let value = initial;
+    const subscribers = new Set<(value: T) => void>();
+    return {
+      subscribe(run: (value: T) => void) {
+        subscribers.add(run);
+        run(value);
+        return () => subscribers.delete(run);
+      },
+      set(next: T) {
+        value = next;
+        for (const run of subscribers) run(value);
+      },
+    };
+  }
+
+  return {
+    navigate: vi.fn(),
+    startEventStream: vi.fn(),
+    stopEventStream: vi.fn(),
+    sessions: writableStore([]),
+    sessionsLoading: writableStore(false),
+    loadSessions: vi.fn(async () => []),
+  };
+});
 
 vi.mock('svelte-mini-router', () => ({ navigate: mocks.navigate }));
 vi.mock('../src/services/eventStream', () => ({
   startEventStream: mocks.startEventStream,
   stopEventStream: mocks.stopEventStream,
 }));
+vi.mock('../src/stores/sessions', () => ({
+  sessions: mocks.sessions,
+  sessionsLoading: mocks.sessionsLoading,
+  loadSessions: mocks.loadSessions,
+}));
 
 beforeEach(() => {
   window.history.pushState({}, '', '/dashboard/overview');
+  mocks.sessions.set([]);
+  mocks.sessionsLoading.set(false);
+  vi.clearAllMocks();
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -53,6 +82,55 @@ test('sidebar shows workflow items and omits settings from navigation', () => {
   expect(workflowQueries.queryByText('Workspaces')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Agent Profiles')).not.toBeInTheDocument();
   expect(screen.queryByText('Settings')).not.toBeInTheDocument();
+});
+
+test('sidebar shows recent active sessions and opens chat for the selected session', async () => {
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-1',
+      workspace: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+    {
+      session_id: 'session-closed',
+      client_type: 'pi',
+      handle: 'closed',
+      role: null,
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'exited',
+      current_turn_id: null,
+      workspace_id: 'workspace-2',
+      workspace: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T02:00:00Z',
+      metadata: {},
+    },
+  ]);
+
+  render(AppSidebarHost);
+
+  expect(screen.getByText('Recent Sessions')).toBeInTheDocument();
+  expect(screen.getByText('main · coder')).toBeInTheDocument();
+  expect(screen.queryByText('closed')).not.toBeInTheDocument();
+
+  await fireEvent.click(screen.getByText('main · coder'));
+
+  expect(mocks.navigate).toHaveBeenCalledWith('/chat', { session: 'session-active' });
 });
 
 test('sidebar only marks the current route as active', () => {

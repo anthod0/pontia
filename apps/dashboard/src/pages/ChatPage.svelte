@@ -8,14 +8,12 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
-  import SessionList from '$lib/components/session-chat/SessionList.svelte'
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
   import {
     canSendSessionMessage,
     sessionChatTitle,
     turnsToChatMessages,
     visibleChatSessions,
-    type ChatSessionFilter,
   } from '$lib/session-chat/sessionChat'
   import {
     loadSessionDetail,
@@ -30,7 +28,6 @@
   } from '../stores/sessions'
 
   let selectedSessionId = ''
-  let filter: ChatSessionFilter = 'active'
   let input = ''
   let submitting = false
   let actionError: string | null = null
@@ -38,23 +35,25 @@
 
   onMount(async () => {
     const loaded = await loadSessions()
-    selectedSessionId = visibleChatSessions(loaded, 'active')[0]?.session_id ?? visibleChatSessions(loaded, 'all')[0]?.session_id ?? ''
-    if (selectedSessionId) await loadSessionDetail(selectedSessionId)
+    await selectSessionFromLocation(loaded)
   })
 
-  $: visibleSessions = visibleChatSessions($sessions, filter)
   $: selectedSession = $sessions.find((session) => session.session_id === selectedSessionId) ?? $sessionDetail?.session ?? null
   $: messages = $sessionDetail && $sessionDetail.session.session_id === selectedSessionId ? turnsToChatMessages($sessionDetail.turns) : []
   $: canSend = canSendSessionMessage(selectedSession, input) && !submitting
   $: errorMessage = actionError ?? $sessionDetailError ?? $sessionsError
 
+  async function selectSessionFromLocation(availableSessions = $sessions): Promise<void> {
+    const requestedSessionId = new URLSearchParams(window.location.search).get('session') ?? ''
+    const requestedSession = availableSessions.find((session) => session.session_id === requestedSessionId)
+    const nextSessionId = requestedSession?.session_id ?? visibleChatSessions(availableSessions, 'active')[0]?.session_id ?? visibleChatSessions(availableSessions, 'all')[0]?.session_id ?? ''
+    if (!nextSessionId || nextSessionId === selectedSessionId) return
 
-  async function selectSession(sessionId: string): Promise<void> {
-    selectedSessionId = sessionId
+    selectedSessionId = nextSessionId
     input = ''
     actionError = null
     actionMessage = null
-    await loadSessionDetail(sessionId)
+    await loadSessionDetail(nextSessionId)
   }
 
   async function sendMessage(): Promise<void> {
@@ -78,6 +77,8 @@
     }
   }
 </script>
+
+<svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
 <section class="flex h-[calc(100vh-5rem)] min-h-[42rem] flex-col gap-4">
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -104,17 +105,8 @@
     </Alert.Root>
   {/if}
 
-  <div class="grid min-h-0 flex-1 gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
-    <SessionList
-      sessions={visibleSessions}
-      {selectedSessionId}
-      {filter}
-      loading={$sessionsLoading}
-      onFilterChange={(nextFilter) => (filter = nextFilter)}
-      onSelect={(sessionId) => void selectSession(sessionId)}
-    />
-
-    <div class="flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
+  <div class="min-h-0 flex-1">
+    <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
       {#if $sessionsLoading && !selectedSessionId}
         <div class="space-y-4 p-6"><Skeleton class="h-10 w-1/3" /><Skeleton class="h-80 w-full" /></div>
       {:else if !$sessions.length}
@@ -130,7 +122,7 @@
         <Empty.Root class="h-full">
           <Empty.Header>
             <Empty.Title>Select a session</Empty.Title>
-            <Empty.Description>Choose a session from the list to view the conversation.</Empty.Description>
+            <Empty.Description>Choose a recent active session from the global sidebar to view the conversation.</Empty.Description>
           </Empty.Header>
         </Empty.Root>
       {:else}

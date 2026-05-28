@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
 import ChatPage from '../../src/pages/ChatPage.svelte';
 import type { SessionConsoleDetail } from '../../src/stores/sessions';
@@ -77,6 +77,7 @@ const session = (overrides: Partial<SessionView> = {}): SessionView => ({
 });
 
 beforeEach(() => {
+  window.history.pushState({}, '', '/dashboard/chat');
   const activeSession = session();
   mocks.loadedSessions = [activeSession];
   mocks.sessions.set([activeSession]);
@@ -93,4 +94,41 @@ test('does not render a manual refresh button in the chat header', () => {
 
   expect(screen.getByRole('button', { name: /session console/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument();
+});
+
+test('does not render the sessions list inside chat content', () => {
+  render(ChatPage);
+
+  expect(screen.queryByText('Pick an existing session to continue.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /active/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^all$/i })).not.toBeInTheDocument();
+});
+
+test('loads the session selected by the chat query parameter', async () => {
+  const first = session({ session_id: 'session-1', handle: 'first' });
+  const second = session({ session_id: 'session-2', handle: 'second' });
+  window.history.pushState({}, '', '/dashboard/chat?session=session-2');
+  mocks.loadedSessions = [first, second];
+  mocks.sessions.set([first, second]);
+  mocks.sessionDetail.set({ session: second, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2'));
+});
+
+test('updates the selected chat session when the query parameter changes on the mounted page', async () => {
+  const first = session({ session_id: 'session-1', handle: 'first' });
+  const second = session({ session_id: 'session-2', handle: 'second' });
+  mocks.loadedSessions = [first, second];
+  mocks.sessions.set([first, second]);
+  mocks.sessionDetail.set({ session: first, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-1'));
+
+  window.history.pushState({}, '', '/dashboard/chat?session=session-2');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+
+  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2'));
 });

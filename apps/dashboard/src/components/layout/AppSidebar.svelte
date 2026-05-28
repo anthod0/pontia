@@ -2,6 +2,8 @@
   import { GitBranch, Home, MessageCircle } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
+  import { sessions, sessionsLoading } from '../../stores/sessions'
+  import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
 
   type Item = {
     label: string
@@ -15,7 +17,10 @@
     { label: 'Chat', path: '/chat', icon: MessageCircle },
   ]
 
+  const recentSessionLimit = 8
+
   let currentPath = $state(normalizePath(window.location.pathname))
+  let recentSessions = $derived(visibleChatSessions($sessions, 'active').slice(0, recentSessionLimit))
 
   function normalizePath(pathname: string) {
     return pathname.replace(/^\/dashboard/, '') || '/'
@@ -28,7 +33,13 @@
 
   function go(path: string) {
     navigate(path)
-    currentPath = path
+    currentPath = normalizePath(path)
+  }
+
+  function openSession(sessionId: string) {
+    navigate('/chat', { session: sessionId })
+    currentPath = '/chat'
+    window.dispatchEvent(new PopStateEvent('popstate'))
   }
 </script>
 
@@ -58,6 +69,31 @@
               </Sidebar.MenuButton>
             </Sidebar.MenuItem>
           {/each}
+        </Sidebar.Menu>
+      </Sidebar.GroupContent>
+    </Sidebar.Group>
+
+    <Sidebar.Group>
+      <Sidebar.GroupLabel>Recent Sessions</Sidebar.GroupLabel>
+      <Sidebar.GroupContent>
+        <Sidebar.Menu>
+          {#if $sessionsLoading && !recentSessions.length}
+            <Sidebar.MenuSkeleton />
+            <Sidebar.MenuSkeleton />
+          {:else if recentSessions.length}
+            {#each recentSessions as session}
+              <Sidebar.MenuItem>
+                <Sidebar.MenuButton tooltipContent={sessionChatTitle(session)} onclick={() => openSession(session.session_id)}>
+                  <MessageCircle />
+                  <span>{sessionChatTitle(session)}</span>
+                </Sidebar.MenuButton>
+              </Sidebar.MenuItem>
+            {/each}
+          {:else}
+            <Sidebar.MenuItem>
+              <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No active sessions</div>
+            </Sidebar.MenuItem>
+          {/if}
         </Sidebar.Menu>
       </Sidebar.GroupContent>
     </Sidebar.Group>
