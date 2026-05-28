@@ -3,17 +3,22 @@ import type { DashboardStreamEvent } from '../api/types';
 type RefreshOptions = {
   delayMs?: number;
   getSelectedTaskId: () => string | null;
-  loadTasks: () => Promise<void>;
-  loadWorkspaces: () => Promise<void>;
-  loadAgentProfiles: () => Promise<void>;
-  refreshTask: (taskId: string) => Promise<void>;
+  getSelectedSessionId: () => string | null;
+  loadTasks: () => Promise<unknown>;
+  loadWorkspaces: () => Promise<unknown>;
+  loadAgentProfiles: () => Promise<unknown>;
+  loadSessions: () => Promise<unknown>;
+  refreshTask: (taskId: string) => Promise<unknown>;
+  refreshSession: (sessionId: string) => Promise<unknown>;
 };
 
 type PendingRefresh = {
   tasks: boolean;
   workspaces: boolean;
   agentProfiles: boolean;
+  sessions: boolean;
   taskIds: Set<string>;
+  sessionIds: Set<string>;
 };
 
 function emptyPending(): PendingRefresh {
@@ -21,12 +26,14 @@ function emptyPending(): PendingRefresh {
     tasks: false,
     workspaces: false,
     agentProfiles: false,
+    sessions: false,
     taskIds: new Set(),
+    sessionIds: new Set(),
   };
 }
 
 function hasPending(pending: PendingRefresh): boolean {
-  return pending.tasks || pending.workspaces || pending.agentProfiles || pending.taskIds.size > 0;
+  return pending.tasks || pending.workspaces || pending.agentProfiles || pending.sessions || pending.taskIds.size > 0 || pending.sessionIds.size > 0;
 }
 
 export function createDashboardRefreshScheduler(options: RefreshOptions) {
@@ -60,11 +67,13 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
     pending = emptyPending();
 
     try {
-      const refreshes: Promise<void>[] = [];
+      const refreshes: Promise<unknown>[] = [];
       if (batch.tasks) refreshes.push(options.loadTasks());
       if (batch.workspaces) refreshes.push(options.loadWorkspaces());
       if (batch.agentProfiles) refreshes.push(options.loadAgentProfiles());
+      if (batch.sessions) refreshes.push(options.loadSessions());
       for (const taskId of batch.taskIds) refreshes.push(options.refreshTask(taskId));
+      for (const sessionId of batch.sessionIds) refreshes.push(options.refreshSession(sessionId));
       await Promise.all(refreshes);
     } finally {
       flushing = false;
@@ -73,14 +82,14 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
   }
 
   function handleEvent(streamEvent: DashboardStreamEvent): void {
-    pending.tasks = true;
-
     if (streamEvent.kind === 'task_event') {
+      pending.tasks = true;
       const selected = options.getSelectedTaskId();
       if (selected && streamEvent.event.task_id === selected) pending.taskIds.add(selected);
-    } else {
-      pending.workspaces = true;
-      pending.agentProfiles = true;
+    } else if (streamEvent.kind === 'session_event') {
+      pending.sessions = true;
+      const selected = options.getSelectedSessionId();
+      if (selected && streamEvent.event.session_id === selected) pending.sessionIds.add(selected);
     }
 
     schedule();

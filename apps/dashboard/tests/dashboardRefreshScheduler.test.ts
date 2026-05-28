@@ -40,10 +40,13 @@ test('coalesces bursts of dashboard stream events into one refresh per affected 
   const scheduler = createDashboardRefreshScheduler({
     delayMs: 0,
     getSelectedTaskId: () => 'task-1',
+    getSelectedSessionId: () => 'session-1',
     loadTasks: async () => { calls.push('tasks'); },
     loadWorkspaces: async () => { calls.push('workspaces'); },
     loadAgentProfiles: async () => { calls.push('profiles'); },
+    loadSessions: async () => { calls.push('sessions'); },
     refreshTask: async (taskId) => { calls.push(`task:${taskId}`); },
+    refreshSession: async (sessionId) => { calls.push(`session:${sessionId}`); },
   });
 
   scheduler.handleEvent(taskEvent('task-1'));
@@ -51,5 +54,25 @@ test('coalesces bursts of dashboard stream events into one refresh per affected 
   scheduler.handleEvent(sessionEvent());
   await scheduler.flushNow();
 
-  assert.deepEqual(calls.sort(), ['profiles', 'task:task-1', 'tasks', 'workspaces'].sort());
+  assert.deepEqual(calls.sort(), ['session:session-1', 'sessions', 'task:task-1', 'tasks'].sort());
+});
+
+test('refreshes selected session detail when a session stream event arrives', async () => {
+  const calls: string[] = [];
+  const scheduler = createDashboardRefreshScheduler({
+    delayMs: 0,
+    getSelectedTaskId: () => null,
+    getSelectedSessionId: () => 'session-1',
+    loadTasks: async () => { calls.push('tasks'); },
+    loadWorkspaces: async () => { calls.push('workspaces'); },
+    loadAgentProfiles: async () => { calls.push('profiles'); },
+    loadSessions: async () => { calls.push('sessions'); },
+    refreshTask: async (taskId) => { calls.push(`task:${taskId}`); },
+    refreshSession: async (sessionId) => { calls.push(`session:${sessionId}`); },
+  });
+
+  scheduler.handleEvent(sessionEvent());
+  await scheduler.flushNow();
+
+  assert.deepEqual(calls.sort(), ['session:session-1', 'sessions'].sort());
 });

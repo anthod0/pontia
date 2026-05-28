@@ -10,6 +10,7 @@ import {
 } from '../stores/connection';
 import { loadAgentProfiles } from '../stores/agentProfiles';
 import { loadTasks, refreshTask, selectedTaskId } from '../stores/tasks';
+import { loadSessions, loadSessionDetail, sessionDetail } from '../stores/sessions';
 import { loadWorkspaces } from '../stores/workspaces';
 import { createDashboardRefreshScheduler } from './dashboardRefreshScheduler';
 
@@ -17,10 +18,13 @@ const API_BASE = '/external/v1';
 
 const refreshScheduler = createDashboardRefreshScheduler({
   getSelectedTaskId: () => get(selectedTaskId),
+  getSelectedSessionId: () => get(sessionDetail)?.session.session_id ?? null,
   loadTasks,
   loadWorkspaces,
   loadAgentProfiles,
+  loadSessions,
   refreshTask,
+  refreshSession: loadSessionDetail,
 });
 
 let controller: AbortController | null = null;
