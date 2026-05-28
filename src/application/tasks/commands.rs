@@ -7,9 +7,15 @@ impl TaskCommandService {
         idempotency_key: Option<&str>,
     ) -> Result<CreateTaskOutcome> {
         let workspace = request.workspace.as_deref().unwrap_or_default().trim();
-        if workspace.is_empty() {
+        let workspace_id = request.workspace_id.as_deref().unwrap_or_default().trim();
+        if workspace.is_empty() && workspace_id.is_empty() {
             return Err(Error::Domain(
-                "workspace is required for DAG tasks".to_string(),
+                "workspace or workspace_id is required for DAG tasks".to_string(),
+            ));
+        }
+        if !workspace.is_empty() && !workspace_id.is_empty() {
+            return Err(Error::Domain(
+                "workspace and workspace_id cannot both be provided".to_string(),
             ));
         }
         if !is_supported_client_type(&request.client_type) {
@@ -28,7 +34,13 @@ impl TaskCommandService {
             });
         }
 
-        let workspace_record = upsert_workspace(&self.pool, workspace).await?;
+        let workspace_record = if !workspace_id.is_empty() {
+            get_workspace_record(&self.pool, workspace_id)
+                .await?
+                .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))?
+        } else {
+            upsert_workspace(&self.pool, workspace).await?
+        };
         let task_id = new_task_id().to_string();
         let mut metadata = request.metadata;
         if let Some(object) = metadata.as_object_mut() {

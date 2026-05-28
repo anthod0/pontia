@@ -4,6 +4,7 @@ use super::*;
 pub struct CreateDagTaskRequest {
     pub input: String,
     pub workspace: Option<String>,
+    pub workspace_id: Option<String>,
     #[serde(default = "default_client_type")]
     pub client_type: String,
     #[serde(default)]

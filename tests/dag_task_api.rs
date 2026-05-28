@@ -147,6 +147,58 @@ async fn dag_task_api_creates_task_links_workspace_and_starts_generic_planner_tu
 }
 
 #[tokio::test]
+async fn dag_task_api_accepts_existing_workspace_id() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    enable_generic_planner_profile(&state).await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace_path = workspace.path().display().to_string();
+
+    let (first_status, first_body) = post_json(
+        state.clone(),
+        "/external/v1/dag-tasks",
+        json!({
+            "input": "Create first demo file",
+            "workspace": workspace_path,
+            "client_type": "generic",
+            "metadata": {}
+        }),
+    )
+    .await;
+    assert_eq!(first_status, StatusCode::CREATED, "{first_body:#}");
+    let workspace_id = first_body["data"]["task"]["workspace_id"]
+        .as_str()
+        .expect("workspace id");
+
+    let (status, body) = post_json(
+        state.clone(),
+        "/external/v1/dag-tasks",
+        json!({
+            "input": "Create second demo file",
+            "workspace_id": workspace_id,
+            "client_type": "generic",
+            "metadata": {}
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED, "{body:#}");
+    let task = &body["data"]["task"];
+    assert_eq!(task["state"], "planning");
+    assert_eq!(task["workspace_id"], workspace_id);
+
+    let session_id = body["data"]["planning_turn"]["session_id"]
+        .as_str()
+        .expect("session id");
+    let (_session_status, session_body) =
+        get_json(state, &format!("/external/v1/sessions/{session_id}")).await;
+    assert_eq!(
+        session_body["data"]["session"]["workspace_id"],
+        workspace_id
+    );
+}
+
+#[tokio::test]
 async fn dag_task_api_requires_workspace_and_is_idempotent() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
