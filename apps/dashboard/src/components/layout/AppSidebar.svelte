@@ -32,6 +32,15 @@
     return currentPath === path
   }
 
+  function activeSessionIdFromPath(): string | null {
+    const match = currentPath.match(/^\/(?:chat|sessions)\/([^/?#]+)/)
+    return match ? decodeURIComponent(match[1]) : null
+  }
+
+  function isSessionActive(sessionId: string) {
+    return activeSessionIdFromPath() === sessionId
+  }
+
   function go(path: string) {
     navigate(path)
     currentPath = normalizePath(path)
@@ -84,7 +93,7 @@
           {:else if recentSessions.length}
             {#each recentSessions as session}
               <Sidebar.MenuItem>
-                <Sidebar.MenuButton tooltipContent={sessionChatTitle(session)} onclick={() => openSession(session.session_id)}>
+                <Sidebar.MenuButton isActive={isSessionActive(session.session_id)} tooltipContent={sessionChatTitle(session)} onclick={() => openSession(session.session_id)}>
                   <MessageCircle />
                   <span>{sessionChatTitle(session)}</span>
                 </Sidebar.MenuButton>

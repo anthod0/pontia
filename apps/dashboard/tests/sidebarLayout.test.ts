@@ -151,6 +151,58 @@ test('sidebar only marks the current route as active', () => {
   expect(tasks).not.toHaveAttribute('data-active');
 });
 
+test('sidebar highlights the matching recent session on chat and session console routes', () => {
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-1',
+      workspace: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+    {
+      session_id: 'session-other',
+      client_type: 'pi',
+      handle: 'other',
+      role: null,
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-2',
+      workspace: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T00:30:00Z',
+      metadata: {},
+    },
+  ]);
+
+  window.history.pushState({}, '', '/dashboard/chat/session-active');
+  const { unmount } = render(AppSidebarHost);
+
+  expect(screen.getByText('main · coder').closest('button')).toHaveAttribute('data-active', 'true');
+  expect(screen.getByText('other').closest('button')).not.toHaveAttribute('data-active');
+
+  unmount();
+  window.history.pushState({}, '', '/dashboard/sessions/session-active');
+  render(AppSidebarHost);
+
+  expect(screen.getByText('main · coder').closest('button')).toHaveAttribute('data-active', 'true');
+  expect(screen.getByText('other').closest('button')).not.toHaveAttribute('data-active');
+});
+
 test('top bar omits static dashboard title and description copy and links settings button to common settings', () => {
   render(TopBarHost);
 
