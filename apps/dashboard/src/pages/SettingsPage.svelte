@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, KeyRound, RadioTower } from '@lucide/svelte'
+  import { Bot, Boxes, CircleAlert, KeyRound, RadioTower } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -54,6 +54,28 @@
       <Alert.Description>API requests and SSE updates need an External API token. Paste it below; it is stored only in this browser's localStorage.</Alert.Description>
     </Alert.Root>
   {/if}
+
+  <div class="grid gap-4 md:grid-cols-2">
+    <Card.Root>
+      <Card.Header>
+        <Card.Title class="flex items-center gap-2"><Boxes class="size-5" /> Workspaces</Card.Title>
+        <Card.Description>Register and manage execution workspaces used by dashboard tasks and sessions.</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <Button variant="outline" href="/dashboard/workspaces">Open Workspaces</Button>
+      </Card.Content>
+    </Card.Root>
+
+    <Card.Root>
+      <Card.Header>
+        <Card.Title class="flex items-center gap-2"><Bot class="size-5" /> Agent Profiles</Card.Title>
+        <Card.Description>Configure agent client profiles and defaults for new sessions.</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <Button variant="outline" href="/dashboard/agent-profiles">Open Agent Profiles</Button>
+      </Card.Content>
+    </Card.Root>
+  </div>
 
   <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.75fr)]">
     <Card.Root>

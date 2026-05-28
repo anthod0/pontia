@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Bot, Boxes, GitBranch, Home, MessageCircle, Settings, TerminalSquare } from '@lucide/svelte'
+  import { GitBranch, Home, MessageCircle, Settings } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
 
@@ -11,12 +11,8 @@
 
   const primaryItems: Item[] = [
     { label: 'Overview', path: '/overview', icon: Home },
-    { label: 'DAG Tasks', path: '/tasks', icon: GitBranch },
-    { label: 'Workspaces', path: '/workspaces', icon: Boxes },
+    { label: 'Tasks', path: '/tasks', icon: GitBranch },
     { label: 'Chat', path: '/chat', icon: MessageCircle },
-    { label: 'Session Console', path: '/sessions', icon: TerminalSquare },
-    { label: 'Agent Profiles', path: '/agent-profiles', icon: Bot },
-    { label: 'Settings', path: '/settings', icon: Settings },
   ]
 
   let currentPath = $state(normalizePath(window.location.pathname))
@@ -52,7 +48,6 @@
   </Sidebar.Header>
   <Sidebar.Content>
     <Sidebar.Group>
-      <Sidebar.GroupLabel>Workflow</Sidebar.GroupLabel>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
           {#each primaryItems as item}
@@ -68,7 +63,14 @@
     </Sidebar.Group>
   </Sidebar.Content>
   <Sidebar.Footer>
-    <div class="px-2 py-1 text-xs text-muted-foreground">External API only</div>
+    <Sidebar.Menu>
+      <Sidebar.MenuItem>
+        <Sidebar.MenuButton isActive={isActive('/settings')} tooltipContent="Settings" onclick={() => go('/settings')}>
+          <Settings />
+          <span>Settings</span>
+        </Sidebar.MenuButton>
+      </Sidebar.MenuItem>
+    </Sidebar.Menu>
   </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>
