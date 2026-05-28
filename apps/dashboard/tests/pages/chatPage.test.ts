@@ -192,7 +192,8 @@ test('renders a clean centered prompt input on the bare chat route instead of se
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
   expect(promptInput).toHaveValue('');
-  expect(screen.queryByRole('heading', { name: /start a new chat/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /new chat/i })).toBeInTheDocument();
+  expect(screen.getByText('Start a new agent session from a prompt, workspace, client, and profile.')).toBeInTheDocument();
   expect(screen.queryByText(/Enter the first prompt/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/^Prompt$/i)).not.toBeInTheDocument();
   expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('llmparty');
@@ -222,8 +223,19 @@ test('creates a session with initial prompt, workspace, and client then opens it
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new');
 });
 
-test('loads and renders an existing chat session when the route has a session id', async () => {
-  const selected = session({ session_id: 'session-2', handle: 'second' });
+test('loads and renders an existing chat session with session metadata in the page header', async () => {
+  const selected = session({
+    session_id: 'session-2',
+    client_type: 'claude-code',
+    handle: 'second',
+    role: 'reviewer',
+    description: 'Review dashboard changes',
+    execution_profile_id: 'coder',
+    execution_profile_version: '1',
+    state: 'running',
+    workspace_id: 'workspace-1',
+    workspace: '~/repo/llmparty',
+  });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
@@ -234,5 +246,13 @@ test('loads and renders an existing chat session when the route has a session id
 
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2'));
   expect(await screen.findByText('hi there')).toBeInTheDocument();
-  expect(screen.queryByRole('heading', { name: /start a new chat/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /second · reviewer/i })).toBeInTheDocument();
+  expect(screen.getByText('Client: claude-code')).toBeInTheDocument();
+  expect(screen.getByText('Profile: coder@1')).toBeInTheDocument();
+  expect(screen.getByText('Handle: second')).toBeInTheDocument();
+  expect(screen.getByText('Description: Review dashboard changes')).toBeInTheDocument();
+  expect(screen.getByText('State: running')).toBeInTheDocument();
+  expect(screen.getByText('Workspace: workspace-1')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /new chat/i }).querySelector('svg')).toHaveClass('lucide-square-pen');
+  expect(screen.queryByRole('heading', { name: /new chat/i })).not.toBeInTheDocument();
 });

@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, MessageCircle, PlusCircle, TerminalSquare } from '@lucide/svelte'
+  import { CircleAlert, MessageCircle, SquarePen, TerminalSquare } from '@lucide/svelte'
   import { getPathParams, navigate } from 'svelte-mini-router'
   import * as Alert from '$lib/components/ui/alert/index.js'
-  import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
@@ -11,7 +10,7 @@
   import * as Select from '$lib/components/ui/select/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
-  import type { AgentProfileView, WorkspaceView } from '../api/types'
+  import type { AgentProfileView, SessionView, WorkspaceView } from '../api/types'
   import {
     canSendSessionMessage,
     sessionChatTitle,
@@ -88,6 +87,15 @@
 
   function clientTitle(clientType: string): string {
     return clientType || 'Client'
+  }
+
+  function sessionProfileTitle(session: SessionView): string {
+    if (!session.execution_profile_id) return '—'
+    return session.execution_profile_version ? `${session.execution_profile_id}@${session.execution_profile_version}` : session.execution_profile_id
+  }
+
+  function sessionWorkspaceTitle(session: SessionView): string {
+    return session.workspace_id ?? session.workspace ?? 'No workspace'
   }
 
   function openSessionConsole(): void {
@@ -170,12 +178,25 @@
 <section class="flex h-[calc(100vh-5rem)] min-h-[42rem] flex-col gap-4">
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
     <div class="space-y-2">
-      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><MessageCircle class="size-7" /> Chat</h2>
-      <p class="max-w-3xl text-muted-foreground">Start a new agent session from a prompt, workspace, client, and profile.</p>
+      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+        <MessageCircle class="size-7" /> {selectedSession ? sessionChatTitle(selectedSession) : 'New Chat'}
+      </h2>
+      {#if selectedSession}
+        <div class="flex max-w-5xl flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span>Client: {selectedSession.client_type}</span>
+          <span>Profile: {sessionProfileTitle(selectedSession)}</span>
+          <span>Handle: {selectedSession.handle ?? '—'}</span>
+          <span>Description: {selectedSession.description ?? '—'}</span>
+          <span>State: {selectedSession.state}</span>
+          <span>Workspace: {sessionWorkspaceTitle(selectedSession)}</span>
+        </div>
+      {:else}
+        <p class="max-w-3xl text-muted-foreground">Start a new agent session from a prompt, workspace, client, and profile.</p>
+      {/if}
     </div>
     <div class="flex gap-2">
       {#if selectedSessionId}
-        <Button variant="outline" onclick={openNewChat}><PlusCircle class="size-4" /> New chat</Button>
+        <Button variant="outline" onclick={openNewChat}><SquarePen class="size-4" /> New chat</Button>
       {/if}
       <Button variant="outline" onclick={openSessionConsole}><TerminalSquare class="size-4" /> Session Console</Button>
     </div>
@@ -265,16 +286,6 @@
             <Empty.Content><Button onclick={openNewChat}>Start a new chat</Button></Empty.Content>
           </Empty.Root>
         {:else}
-          <div class="p-4">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 class="text-lg font-semibold">{sessionChatTitle(selectedSession)}</h3>
-                <p class="text-sm text-muted-foreground">{selectedSession.workspace_id ?? selectedSession.workspace ?? 'No workspace'} · {selectedSession.client_type}</p>
-              </div>
-              <Badge variant="secondary">{selectedSession.state}</Badge>
-            </div>
-          </div>
-
           <SessionConversation {messages} loading={$sessionDetailLoading} />
 
           <div class="p-4">
