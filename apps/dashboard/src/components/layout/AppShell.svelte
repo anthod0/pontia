@@ -27,8 +27,8 @@
   <AppSidebar />
   <Sidebar.Inset>
     <TopBar />
-    <main class="flex-1 bg-muted/20 p-4 md:p-6">
-      <div class="mx-auto w-full max-w-7xl">
+    <main class={isSettingsPath(currentPath) ? 'flex-1 bg-muted/20' : 'flex-1 bg-muted/20 p-4 md:p-6'}>
+      <div class={isSettingsPath(currentPath) ? 'w-full' : 'mx-auto w-full max-w-7xl'}>
         {#if isSettingsPath(currentPath)}
           <SettingsShell>
             {@render children()}

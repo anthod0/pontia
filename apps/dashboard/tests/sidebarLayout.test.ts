@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
 import AppSidebarHost from './components/layout/AppSidebarHost.svelte';
+import AppShellHost from './components/layout/AppShellHost.svelte';
 import TopBarHost from './components/layout/TopBarHost.svelte';
 import SettingsShellHost from './components/settings/SettingsShellHost.svelte';
 import SettingsCommonPage from '../src/pages/SettingsCommonPage.svelte';
@@ -92,6 +93,19 @@ test('settings common page contains controls without owning the section switcher
   expect(screen.queryByRole('navigation', { name: /settings sections/i })).not.toBeInTheDocument();
 });
 
+test('settings app shell removes centered main chrome so the settings nav can align left', () => {
+  window.history.pushState({}, '', '/dashboard/settings/common');
+
+  render(AppShellHost);
+
+  const main = screen.getByText('App shell page content').closest('main');
+  expect(main).not.toBeNull();
+  expect(main).not.toHaveClass('p-4');
+  expect(main).not.toHaveClass('md:p-6');
+  expect(main?.firstElementChild).not.toHaveClass('mx-auto');
+  expect(main?.firstElementChild).not.toHaveClass('max-w-7xl');
+});
+
 test('settings shell renders a persistent vertical side switcher around page content', () => {
   window.history.pushState({}, '', '/dashboard/settings/workspaces');
 
@@ -100,10 +114,23 @@ test('settings shell renders a persistent vertical side switcher around page con
   const nav = screen.getByRole('navigation', { name: /settings sections/i });
   expect(nav).toHaveAttribute('data-settings-shell-nav', 'persistent');
   expect(nav).toHaveClass('md:w-56');
+  expect(nav.parentElement).toHaveClass('md:items-start');
+
+  const navList = nav.firstElementChild;
+  expect(navList).toHaveClass('bg-transparent');
+  expect(navList).not.toHaveClass('border');
+  expect(navList).not.toHaveClass('bg-card');
+
   expect(within(nav).getByRole('link', { name: /^common$/i })).toHaveAttribute('href', '/dashboard/settings/common');
-  expect(within(nav).getByRole('link', { name: /^workspaces$/i })).toHaveAttribute('aria-current', 'page');
+  const activeLink = within(nav).getByRole('link', { name: /^workspaces$/i });
+  expect(activeLink).toHaveAttribute('aria-current', 'page');
+  expect(activeLink).toHaveClass('aria-[current=page]:bg-muted');
+  expect(activeLink).not.toHaveClass('aria-[current=page]:bg-primary');
   expect(within(nav).getByRole('link', { name: /^agent profiles$/i })).toHaveAttribute('href', '/dashboard/settings/agent-profiles');
-  expect(screen.getByText('Current settings page content')).toBeInTheDocument();
+
+  const content = screen.getByText('Current settings page content');
+  expect(content).toBeInTheDocument();
+  expect(content.parentElement).toHaveClass('mx-auto');
 });
 
 test('settings shell section switcher uses router navigation instead of a document reload', async () => {
