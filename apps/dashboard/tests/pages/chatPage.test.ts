@@ -202,6 +202,19 @@ test('renders a clean centered prompt input on the bare chat route instead of se
   expect(mocks.loadSessionDetail).not.toHaveBeenCalled();
 });
 
+test('places new chat selectors above the prompt input', async () => {
+  render(ChatPage);
+
+  const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  const workspaceSelector = screen.getByLabelText(/workspace/i);
+  const profileSelector = screen.getByLabelText(/profile/i);
+  const clientSelector = screen.getByLabelText(/client/i);
+
+  expect(workspaceSelector.compareDocumentPosition(promptInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(profileSelector.compareDocumentPosition(promptInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(clientSelector.compareDocumentPosition(promptInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 test('creates a session with initial prompt, workspace, and client then opens its chat', async () => {
   const user = userEvent.setup();
   const created = session({ session_id: 'session-new' });

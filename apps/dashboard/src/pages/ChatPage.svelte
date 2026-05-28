@@ -219,55 +219,55 @@
   {#if !selectedSessionId}
     <div class="flex min-h-0 flex-1 items-center justify-center">
       <PromptInput.Root class="w-full max-w-4xl space-y-3" onSubmit={() => void startChat()}>
+        <div class="flex min-w-0 flex-wrap items-center gap-2 px-1">
+          <Select.Root type="single" bind:value={createWorkspaceId} disabled={$workspacesLoading}>
+            <Select.Trigger class="max-w-56" aria-label="Workspace" title={selectedWorkspace?.canonical_path ?? undefined}>
+              {#if selectedWorkspace}{workspaceTitle(selectedWorkspace)}{:else}Workspace{/if}
+            </Select.Trigger>
+            <Select.Content align="start">
+              {#each $workspaces as workspace (workspace.workspace_id)}
+                <Select.Item value={workspace.workspace_id} label={workspaceTitle(workspace)}>
+                  <div class="flex min-w-0 flex-col">
+                    <span class="truncate">{workspaceTitle(workspace)}</span>
+                    <span class="truncate text-xs text-muted-foreground">{workspace.display_path}</span>
+                  </div>
+                </Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+
+          <Select.Root type="single" bind:value={createProfileId} disabled={$agentProfilesLoading} onValueChange={applyProfileDefaults}>
+            <Select.Trigger class="max-w-56" aria-label="Profile">
+              {#if selectedProfile}{profileTitle(selectedProfile)}{:else}Profile{/if}
+            </Select.Trigger>
+            <Select.Content align="start">
+              <Select.Item value="" label="No profile">No profile</Select.Item>
+              {#each $agentProfiles as profile (profile.profile_id)}
+                <Select.Item value={profile.profile_id} label={profileTitle(profile)}>{profileTitle(profile)}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+
+          <Select.Root type="single" bind:value={createClientType}>
+            <Select.Trigger class="max-w-44" aria-label="Client">{clientTitle(createClientType)}</Select.Trigger>
+            <Select.Content align="start">
+              {#each clientTypeOptions as clientType (clientType)}
+                <Select.Item value={clientType} label={clientType}>{clientType}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+
         <PromptInput.Body>
           <PromptInput.Textarea
             id="chat-prompt"
             bind:value={prompt}
             placeholder="Ask the agent to implement, inspect, or explain something…"
-            class="min-h-40 text-base"
+            class="min-h-28 text-base"
           />
         </PromptInput.Body>
 
-        <PromptInput.Toolbar class="gap-2 pt-1">
-          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <Select.Root type="single" bind:value={createWorkspaceId} disabled={$workspacesLoading}>
-              <Select.Trigger class="max-w-56 border-none" aria-label="Workspace" title={selectedWorkspace?.canonical_path ?? undefined}>
-                {#if selectedWorkspace}{workspaceTitle(selectedWorkspace)}{:else}Workspace{/if}
-              </Select.Trigger>
-              <Select.Content align="start">
-                {#each $workspaces as workspace (workspace.workspace_id)}
-                  <Select.Item value={workspace.workspace_id} label={workspaceTitle(workspace)}>
-                    <div class="flex min-w-0 flex-col">
-                      <span class="truncate">{workspaceTitle(workspace)}</span>
-                      <span class="truncate text-xs text-muted-foreground">{workspace.display_path}</span>
-                    </div>
-                  </Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-
-            <Select.Root type="single" bind:value={createProfileId} disabled={$agentProfilesLoading} onValueChange={applyProfileDefaults}>
-              <Select.Trigger class="max-w-56 border-none" aria-label="Profile">
-                {#if selectedProfile}{profileTitle(selectedProfile)}{:else}Profile{/if}
-              </Select.Trigger>
-              <Select.Content align="start">
-                <Select.Item value="" label="No profile">No profile</Select.Item>
-                {#each $agentProfiles as profile (profile.profile_id)}
-                  <Select.Item value={profile.profile_id} label={profileTitle(profile)}>{profileTitle(profile)}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-
-            <Select.Root type="single" bind:value={createClientType}>
-              <Select.Trigger class="max-w-44 border-none" aria-label="Client">{clientTitle(createClientType)}</Select.Trigger>
-              <Select.Content align="start">
-                {#each clientTypeOptions as clientType (clientType)}
-                  <Select.Item value={clientType} label={clientType}>{clientType}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          </div>
-
+        <PromptInput.Toolbar class="justify-end pt-1">
           <PromptInput.Submit disabled={!canCreate || creating} aria-label={creating ? 'Starting chat' : 'Start chat'} />
         </PromptInput.Toolbar>
       </PromptInput.Root>
