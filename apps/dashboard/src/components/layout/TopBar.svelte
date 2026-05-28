@@ -24,7 +24,7 @@
   <div class="min-w-0 flex-1"></div>
 
   {#if !$token.trim()}
-    <Button variant="destructive" size="sm" class="hidden gap-2 sm:inline-flex" href="/dashboard/settings">
+    <Button variant="destructive" size="sm" class="hidden gap-2 sm:inline-flex" href="/dashboard/settings/common">
       <TriangleAlert class="size-4" />
       Set API token
     </Button>
@@ -39,7 +39,7 @@
     <Search class="size-4" />
     Browse tasks
   </Button>
-  <Button variant="ghost" size="sm" class="gap-2" href="/dashboard/settings">
+  <Button variant="ghost" size="sm" class="gap-2" href="/dashboard/settings/common">
     <Settings class="size-4" />
     <span class="sr-only sm:not-sr-only">Settings</span>
   </Button>
