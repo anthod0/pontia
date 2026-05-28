@@ -1,11 +1,10 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { expect, test } from 'vitest';
 import {
   canSendSessionMessage,
   sessionChatTitle,
   turnsToChatMessages,
   visibleChatSessions,
-} from './sessionChat.ts';
+} from '../../../src/lib/session-chat/sessionChat';
 
 const session = (overrides) => ({
   session_id: 'session_alpha123456789',
@@ -41,8 +40,8 @@ const turn = (overrides) => ({
 });
 
 test('uses friendly chat title without exposing raw ids when metadata exists', () => {
-  assert.equal(sessionChatTitle(session({ handle: '@assistant', role: 'executor' })), '@assistant · executor');
-  assert.equal(sessionChatTitle(session({ handle: null, role: null, description: 'Website polish' })), 'Website polish');
+  expect(sessionChatTitle(session({ handle: '@assistant', role: 'executor' }))).toBe('@assistant · executor');
+  expect(sessionChatTitle(session({ handle: null, role: null, description: 'Website polish' }))).toBe('Website polish');
 });
 
 test('filters chat sessions to active sessions by default and sorts newest first', () => {
@@ -52,7 +51,7 @@ test('filters chat sessions to active sessions by default and sorts newest first
     session({ session_id: 'new-active', state: 'busy', updated_at: '2026-01-01T00:20:00Z' }),
   ], 'active');
 
-  assert.deepEqual(visible.map((item) => item.session_id), ['new-active', 'old-active']);
+  expect(visible.map((item) => item.session_id)).toEqual(['new-active', 'old-active']);
 });
 
 test('maps each turn into user and assistant chat messages in chronological order', () => {
@@ -61,7 +60,7 @@ test('maps each turn into user and assistant chat messages in chronological orde
     turn({ turn_id: 'turn-1', input: { summary: 'first input' }, output: { summary: 'first output' }, created_at: '2026-01-01T00:00:00Z' }),
   ]);
 
-  assert.deepEqual(messages.map((message) => [message.role, message.content]), [
+  expect(messages.map((message) => [message.role, message.content])).toEqual([
     ['user', 'first input'],
     ['assistant', 'first output'],
     ['user', 'second input'],
@@ -75,15 +74,15 @@ test('renders failed and pending turns as assistant status messages', () => {
     turn({ turn_id: 'running', state: 'running', input: { summary: 'still working' }, output: null, failure: null, created_at: '2026-01-01T00:01:00Z' }),
   ]);
 
-  assert.equal(messages[1].status, 'failed');
-  assert.match(messages[1].content, /tool failed/);
-  assert.equal(messages[3].status, 'pending');
-  assert.match(messages[3].content, /Waiting/);
+  expect(messages[1].status).toBe('failed');
+  expect(messages[1].content).toMatch(/tool failed/);
+  expect(messages[3].status).toBe('pending');
+  expect(messages[3].content).toMatch(/Waiting/);
 });
 
 test('only allows sending non-empty messages to non-terminal sessions', () => {
-  assert.equal(canSendSessionMessage(session({ state: 'idle' }), 'hello'), true);
-  assert.equal(canSendSessionMessage(session({ state: 'exited' }), 'hello'), false);
-  assert.equal(canSendSessionMessage(session({ state: 'idle' }), '   '), false);
-  assert.equal(canSendSessionMessage(null, 'hello'), false);
+  expect(canSendSessionMessage(session({ state: 'idle' }), 'hello')).toBe(true);
+  expect(canSendSessionMessage(session({ state: 'exited' }), 'hello')).toBe(false);
+  expect(canSendSessionMessage(session({ state: 'idle' }), '   ')).toBe(false);
+  expect(canSendSessionMessage(null, 'hello')).toBe(false);
 });

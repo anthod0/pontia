@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import { expect, test } from 'vitest';
 import { buildAgentProfileInput, createAgentProfileDraft, createAgentProfileDraftFromProfile } from '../src/pages/agentProfiles/form.ts';
 import type { AgentProfileView } from '../src/api/types.ts';
 
@@ -30,12 +29,12 @@ const profile: AgentProfileView = {
 test('creates a version draft by copying the current profile and clearing only the version', () => {
   const draft = createAgentProfileDraftFromProfile(profile, { clearVersion: true });
 
-  assert.equal(draft.profile_id, 'planner');
-  assert.equal(draft.version, '');
-  assert.equal(draft.name, 'Planner');
-  assert.equal(draft.supported_client_types_text, 'pi, claude_code');
-  assert.equal(draft.agent_kind, 'planner');
-  assert.match(draft.artifact_contract_text, /"kind": "patch"/);
+  expect(draft.profile_id).toBe('planner');
+  expect(draft.version).toBe('');
+  expect(draft.name).toBe('Planner');
+  expect(draft.supported_client_types_text).toBe('pi, claude_code');
+  expect(draft.agent_kind).toBe('planner');
+  expect(draft.artifact_contract_text).toMatch(/"kind": "patch"/);
 });
 
 test('builds an upsert input with parsed JSON fields and split client types', () => {
@@ -49,12 +48,12 @@ test('builds an upsert input with parsed JSON fields and split client types', ()
 
   const result = buildAgentProfileInput(draft);
 
-  assert.equal(result.ok, true);
+  expect(result.ok).toBe(true);
   if (!result.ok) return;
-  assert.deepEqual(result.input.supported_client_types, ['pi', 'claude_code']);
-  assert.equal(result.input.agent_kind, 'executor');
-  assert.equal(result.input.description, null);
-  assert.deepEqual(result.input.artifact_contract, { outputs: ['patch'] });
+  expect(result.input.supported_client_types).toEqual(['pi', 'claude_code']);
+  expect(result.input.agent_kind).toBe('executor');
+  expect(result.input.description).toBe(null);
+  expect(result.input.artifact_contract).toEqual({ outputs: ['patch'] });
 });
 
 test('returns field errors without building input when required or JSON fields are invalid', () => {
@@ -65,8 +64,8 @@ test('returns field errors without building input when required or JSON fields a
 
   const result = buildAgentProfileInput(draft);
 
-  assert.equal(result.ok, false);
+  expect(result.ok).toBe(false);
   if (result.ok) return;
-  assert.equal(result.errors.profile_id, 'Profile ID is required.');
-  assert.match(result.errors.metadata_text ?? '', /Invalid JSON/);
+  expect(result.errors.profile_id).toBe('Profile ID is required.');
+  expect(result.errors.metadata_text ?? '').toMatch(/Invalid JSON/);
 });

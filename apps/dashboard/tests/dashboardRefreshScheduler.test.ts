@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import { expect, test } from 'vitest';
 import { createDashboardRefreshScheduler } from '../src/services/dashboardRefreshScheduler.ts';
 import type { DashboardStreamEvent } from '../src/api/types.ts';
 
@@ -54,7 +53,7 @@ test('coalesces bursts of dashboard stream events into one refresh per affected 
   scheduler.handleEvent(sessionEvent());
   await scheduler.flushNow();
 
-  assert.deepEqual(calls.sort(), ['session:session-1', 'task:task-1', 'tasks'].sort());
+  expect(calls.sort()).toEqual(['session:session-1', 'task:task-1', 'tasks'].sort());
 });
 
 test('refreshes selected session detail without reloading the whole session list when a session stream event arrives', async () => {
@@ -74,5 +73,5 @@ test('refreshes selected session detail without reloading the whole session list
   scheduler.handleEvent(sessionEvent());
   await scheduler.flushNow();
 
-  assert.deepEqual(calls, ['session:session-1']);
+  expect(calls).toEqual(['session:session-1']);
 });

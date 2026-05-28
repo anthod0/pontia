@@ -1,6 +1,5 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { sessionDisplayTitle, visibleSessionsForFilter } from './sessionList.ts';
+import { expect, test } from 'vitest';
+import { sessionDisplayTitle, visibleSessionsForFilter } from '../../../src/pages/sessions/sessionList';
 
 const session = (overrides) => ({
   session_id: 'session-active-old',
@@ -21,16 +20,13 @@ const session = (overrides) => ({
 });
 
 test('uses handle and role as the primary session display title', () => {
-  assert.equal(
-    sessionDisplayTitle(session({ handle: '@planner', role: 'execution reviewer', session_id: 'sess_abcdef123456' })),
-    '@planner · execution reviewer',
-  );
+  expect(sessionDisplayTitle(session({ handle: '@planner', role: 'execution reviewer', session_id: 'sess_abcdef123456' }))).toBe('@planner · execution reviewer');
 });
 
 test('falls back to handle, role, then short session id in display title', () => {
-  assert.equal(sessionDisplayTitle(session({ handle: '@planner', role: null })), '@planner');
-  assert.equal(sessionDisplayTitle(session({ session_id: 'active-old', handle: null, role: 'reviewer' })), 'reviewer · active-old');
-  assert.equal(sessionDisplayTitle(session({ session_id: 'active-old', handle: null, role: null })), 'active-old');
+  expect(sessionDisplayTitle(session({ handle: '@planner', role: null }))).toBe('@planner');
+  expect(sessionDisplayTitle(session({ session_id: 'active-old', handle: null, role: 'reviewer' }))).toBe('reviewer · active-old');
+  expect(sessionDisplayTitle(session({ session_id: 'active-old', handle: null, role: null }))).toBe('active-old');
 });
 
 test('shows active sessions by default and sorts newest first', () => {
@@ -40,7 +36,7 @@ test('shows active sessions by default and sorts newest first', () => {
     session({ session_id: 'active-new', state: 'running', updated_at: '2026-01-01T00:20:00Z' }),
   ], 'active');
 
-  assert.deepEqual(visible.map((item) => item.session_id), ['active-new', 'active-old']);
+  expect(visible.map((item) => item.session_id)).toEqual(['active-new', 'active-old']);
 });
 
 test('keeps exited and error sessions after active sessions in all view', () => {
@@ -51,7 +47,7 @@ test('keeps exited and error sessions after active sessions in all view', () => 
     session({ session_id: 'active-new', state: 'running', updated_at: '2026-01-01T00:10:00Z' }),
   ], 'all');
 
-  assert.deepEqual(visible.map((item) => item.session_id), ['active-new', 'active-old', 'error-newest', 'exited-middle']);
+  expect(visible.map((item) => item.session_id)).toEqual(['active-new', 'active-old', 'error-newest', 'exited-middle']);
 });
 
 test('shows only terminal sessions in exited view sorted newest first', () => {
@@ -61,5 +57,5 @@ test('shows only terminal sessions in exited view sorted newest first', () => {
     session({ session_id: 'error-new', state: 'error', updated_at: '2026-01-01T00:20:00Z' }),
   ], 'exited');
 
-  assert.deepEqual(visible.map((item) => item.session_id), ['error-new', 'exited-old']);
+  expect(visible.map((item) => item.session_id)).toEqual(['error-new', 'exited-old']);
 });

@@ -1,6 +1,5 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { selectCurrentTurnOutput } from './currentTurnOutput.ts';
+import { expect, test } from 'vitest';
+import { selectCurrentTurnOutput } from '../../../src/pages/sessions/currentTurnOutput';
 
 const turn = (overrides) => ({
   turn_id: 'turn-old',
@@ -25,9 +24,9 @@ test('selects the session current turn even when it is not the newest turn', () 
     ],
   );
 
-  assert.equal(selected?.turn.turn_id, 'turn-current');
-  assert.equal(selected?.title, 'Current turn output');
-  assert.equal(selected?.outputSummary, 'current output');
+  expect(selected?.turn.turn_id).toBe('turn-current');
+  expect(selected?.title).toBe('Current turn output');
+  expect(selected?.outputSummary).toBe('current output');
 });
 
 test('falls back to the newest turn when the session has no current turn', () => {
@@ -39,7 +38,7 @@ test('falls back to the newest turn when the session has no current turn', () =>
     ],
   );
 
-  assert.equal(selected?.turn.turn_id, 'turn-b');
-  assert.equal(selected?.title, 'Latest turn output');
-  assert.equal(selected?.outputSummary, 'latest output');
+  expect(selected?.turn.turn_id).toBe('turn-b');
+  expect(selected?.title).toBe('Latest turn output');
+  expect(selected?.outputSummary).toBe('latest output');
 });

@@ -1,6 +1,5 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { buildDagFlow } from './dagGraph.ts';
+import { expect, test } from 'vitest';
+import { buildDagFlow } from '../../../src/components/dag/dagGraph';
 
 const item = (overrides) => ({
   work_item_id: 'item-1',
@@ -54,11 +53,11 @@ test('builds Svelte Flow nodes and edges from DAG work items', () => {
     signals: [],
   });
 
-  assert.deepEqual(flow.nodes.map((node) => node.id), ['plan', 'code']);
-  assert.deepEqual(flow.edges.map((edge) => [edge.source, edge.target]), [['plan', 'code']]);
-  assert.equal(flow.nodes[0].type, 'workItem');
-  assert.equal(flow.nodes[0].data.label, 'Plan');
-  assert.equal(flow.nodes[0].data.state, 'completed');
+  expect(flow.nodes.map((node) => node.id)).toEqual(['plan', 'code']);
+  expect(flow.edges.map((edge) => [edge.source, edge.target])).toEqual([['plan', 'code']]);
+  expect(flow.nodes[0].type).toBe('workItem');
+  expect(flow.nodes[0].data.label).toBe('Plan');
+  expect(flow.nodes[0].data.state).toBe('completed');
 });
 
 test('pins rendered node dimensions to match dagre layout assumptions', () => {
@@ -87,8 +86,8 @@ test('pins rendered node dimensions to match dagre layout assumptions', () => {
     signals: [],
   });
 
-  assert.match(flow.nodes[0].style, /width: 260px/);
-  assert.match(flow.nodes[0].style, /height: 118px/);
+  expect(flow.nodes[0].style).toMatch(/width: 260px/);
+  expect(flow.nodes[0].style).toMatch(/height: 118px/);
 });
 
 test('lays out dependent work items from left to right', () => {
@@ -115,6 +114,6 @@ test('lays out dependent work items from left to right', () => {
   });
 
   const byId = new Map(flow.nodes.map((node) => [node.id, node]));
-  assert.ok(byId.get('plan').position.x < byId.get('code').position.x);
-  assert.ok(byId.get('code').position.x < byId.get('test').position.x);
+  expect(byId.get('plan').position.x < byId.get('code').position.x).toBeTruthy();
+  expect(byId.get('code').position.x < byId.get('test').position.x).toBeTruthy();
 });
