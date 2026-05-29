@@ -83,7 +83,7 @@ pub use graph::{
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
 pub use queries::ExternalQueryService;
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};
-pub use runtime_observation::{PiAdapterEventOutboxService, RuntimeObservationService};
+pub use runtime_observation::{AdapterEventOutboxService, RuntimeObservationService};
 pub use runtime_readiness::RuntimeReadinessService;
 pub use sessions::{
     CreateSessionOutcome, CreateSessionRequest, InitialTaskRequest, SessionCommandService,

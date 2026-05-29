@@ -1,16 +1,60 @@
 use crate::adapters::AdapterCapabilities;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DispatchMode {
+pub enum DispatchBehavior {
     GenericTestAdapter,
     TmuxPaste,
     None,
 }
 
+pub type DispatchMode = DispatchBehavior;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReadinessMode {
+pub enum ReadinessBehavior {
     RuntimeManagerImmediate,
     AgentClientEvent,
+}
+
+pub type ReadinessMode = ReadinessBehavior;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeBehavior {
+    InProcessTest,
+    Tmux(TmuxRuntimeBehavior),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TmuxRuntimeBehavior {
+    pub command_env: Option<&'static str>,
+    pub default_command: &'static str,
+    pub session_identity_arg: Option<&'static str>,
+    pub hook_log: Option<HookLogBehavior>,
+    pub runtime_config_key: Option<&'static str>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HookLogBehavior {
+    pub env: &'static str,
+    pub file_name: &'static str,
+    pub metadata_key: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptBehavior {
+    Unsupported,
+    TmuxInterrupt,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TurnContextBehavior {
+    Disabled,
+    CurrentTurnFile,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdapterEventBehavior {
+    Disabled,
+    JsonlOutbox { file_name: &'static str },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,15 +66,22 @@ pub enum StartupHook {
 pub struct AgentClientSpec {
     pub client_type: &'static str,
     pub capabilities: AdapterCapabilities,
-    pub command_env: Option<&'static str>,
-    pub default_command: Option<&'static str>,
-    pub session_identity_arg: Option<&'static str>,
-    pub hook_log_env: Option<&'static str>,
-    pub runtime_config_key: Option<&'static str>,
-    pub dispatch_mode: DispatchMode,
-    pub readiness_mode: ReadinessMode,
+    pub runtime: RuntimeBehavior,
+    pub dispatch: DispatchBehavior,
+    pub readiness: ReadinessBehavior,
+    pub interrupt: InterruptBehavior,
+    pub turn_context: TurnContextBehavior,
+    pub adapter_events: AdapterEventBehavior,
     pub startup_hooks: &'static [StartupHook],
-    pub adapter_event_outbox: bool,
+}
+
+impl AgentClientSpec {
+    pub fn tmux_runtime(&self) -> Option<TmuxRuntimeBehavior> {
+        match self.runtime {
+            RuntimeBehavior::Tmux(runtime) => Some(runtime),
+            RuntimeBehavior::InProcessTest => None,
+        }
+    }
 }
 
 const GENERIC_CAPABILITIES: AdapterCapabilities = AdapterCapabilities {
@@ -67,41 +118,57 @@ pub const AGENT_CLIENTS: &[AgentClientSpec] = &[
     AgentClientSpec {
         client_type: "generic",
         capabilities: GENERIC_CAPABILITIES,
-        command_env: None,
-        default_command: None,
-        session_identity_arg: None,
-        hook_log_env: None,
-        runtime_config_key: None,
-        dispatch_mode: DispatchMode::GenericTestAdapter,
-        readiness_mode: ReadinessMode::RuntimeManagerImmediate,
+        runtime: RuntimeBehavior::InProcessTest,
+        dispatch: DispatchBehavior::GenericTestAdapter,
+        readiness: ReadinessBehavior::RuntimeManagerImmediate,
+        interrupt: InterruptBehavior::Unsupported,
+        turn_context: TurnContextBehavior::Disabled,
+        adapter_events: AdapterEventBehavior::Disabled,
         startup_hooks: &[],
-        adapter_event_outbox: false,
     },
     AgentClientSpec {
         client_type: "pi",
         capabilities: PI_CAPABILITIES,
-        command_env: Some("LLMPARTY_PI_TUI_COMMAND"),
-        default_command: Some("pi"),
-        session_identity_arg: Some("--session-id"),
-        hook_log_env: Some("LLMPARTY_PI_HOOK_LOG"),
-        runtime_config_key: Some("pi"),
-        dispatch_mode: DispatchMode::TmuxPaste,
-        readiness_mode: ReadinessMode::AgentClientEvent,
+        runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
+            command_env: Some("LLMPARTY_PI_TUI_COMMAND"),
+            default_command: "pi",
+            session_identity_arg: Some("--session-id"),
+            hook_log: Some(HookLogBehavior {
+                env: "LLMPARTY_PI_HOOK_LOG",
+                file_name: "pi-hook.log",
+                metadata_key: "pi_hook_log",
+            }),
+            runtime_config_key: Some("pi"),
+        }),
+        dispatch: DispatchBehavior::TmuxPaste,
+        readiness: ReadinessBehavior::AgentClientEvent,
+        interrupt: InterruptBehavior::TmuxInterrupt,
+        turn_context: TurnContextBehavior::CurrentTurnFile,
+        adapter_events: AdapterEventBehavior::JsonlOutbox {
+            file_name: "adapter-events.jsonl",
+        },
         startup_hooks: &[],
-        adapter_event_outbox: true,
     },
     AgentClientSpec {
         client_type: "claude_code",
         capabilities: CLAUDE_CODE_CAPABILITIES,
-        command_env: Some("LLMPARTY_CLAUDE_TUI_COMMAND"),
-        default_command: Some("claude --dangerously-skip-permissions"),
-        session_identity_arg: None,
-        hook_log_env: Some("LLMPARTY_CLAUDE_HOOK_LOG"),
-        runtime_config_key: Some("claude_code"),
-        dispatch_mode: DispatchMode::TmuxPaste,
-        readiness_mode: ReadinessMode::AgentClientEvent,
+        runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
+            command_env: Some("LLMPARTY_CLAUDE_TUI_COMMAND"),
+            default_command: "claude --dangerously-skip-permissions",
+            session_identity_arg: None,
+            hook_log: Some(HookLogBehavior {
+                env: "LLMPARTY_CLAUDE_HOOK_LOG",
+                file_name: "claude-hook.log",
+                metadata_key: "claude_hook_log",
+            }),
+            runtime_config_key: Some("claude_code"),
+        }),
+        dispatch: DispatchBehavior::TmuxPaste,
+        readiness: ReadinessBehavior::AgentClientEvent,
+        interrupt: InterruptBehavior::Unsupported,
+        turn_context: TurnContextBehavior::CurrentTurnFile,
+        adapter_events: AdapterEventBehavior::Disabled,
         startup_hooks: &[StartupHook::ClaudeCodeTrustWorkspace],
-        adapter_event_outbox: false,
     },
 ];
 
@@ -142,48 +209,66 @@ mod tests {
     }
 
     #[test]
-    fn pi_and_claude_are_tmux_clients_that_wait_for_agent_ready() {
-        let pi = get_client_spec("pi").expect("pi spec");
-        assert_eq!(pi.dispatch_mode, DispatchMode::TmuxPaste);
-        assert_eq!(pi.readiness_mode, ReadinessMode::AgentClientEvent);
-        assert_eq!(pi.command_env, Some("LLMPARTY_PI_TUI_COMMAND"));
-        assert_eq!(pi.default_command, Some("pi"));
-        assert_eq!(pi.session_identity_arg, Some("--session-id"));
-        assert_eq!(pi.hook_log_env, Some("LLMPARTY_PI_HOOK_LOG"));
-        assert_eq!(pi.runtime_config_key, Some("pi"));
-        assert!(pi.adapter_event_outbox);
-
-        let claude = get_client_spec("claude_code").expect("claude spec");
-        assert_eq!(claude.dispatch_mode, DispatchMode::TmuxPaste);
-        assert_eq!(claude.readiness_mode, ReadinessMode::AgentClientEvent);
-        assert_eq!(claude.command_env, Some("LLMPARTY_CLAUDE_TUI_COMMAND"));
+    fn generic_client_uses_test_adapter_and_runtime_ready() {
+        let generic = get_client_spec("generic").expect("generic spec");
+        assert_eq!(generic.runtime, RuntimeBehavior::InProcessTest);
+        assert_eq!(generic.dispatch, DispatchBehavior::GenericTestAdapter);
         assert_eq!(
-            claude.default_command,
-            Some("claude --dangerously-skip-permissions")
+            generic.readiness,
+            ReadinessBehavior::RuntimeManagerImmediate
         );
-        assert_eq!(claude.session_identity_arg, None);
-        assert_eq!(claude.hook_log_env, Some("LLMPARTY_CLAUDE_HOOK_LOG"));
-        assert_eq!(claude.runtime_config_key, Some("claude_code"));
-        assert!(!claude.adapter_event_outbox);
-        assert_eq!(
-            claude.startup_hooks,
-            &[StartupHook::ClaudeCodeTrustWorkspace]
-        );
+        assert_eq!(generic.interrupt, InterruptBehavior::Unsupported);
+        assert_eq!(generic.turn_context, TurnContextBehavior::Disabled);
+        assert_eq!(generic.adapter_events, AdapterEventBehavior::Disabled);
     }
 
     #[test]
-    fn generic_client_uses_test_adapter_and_runtime_ready() {
-        let generic = get_client_spec("generic").expect("generic spec");
-        assert_eq!(generic.dispatch_mode, DispatchMode::GenericTestAdapter);
+    fn tmux_clients_declare_runtime_behavior_in_registry() {
+        let pi = get_client_spec("pi").expect("pi spec");
         assert_eq!(
-            generic.readiness_mode,
-            ReadinessMode::RuntimeManagerImmediate
+            pi.runtime,
+            RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
+                command_env: Some("LLMPARTY_PI_TUI_COMMAND"),
+                default_command: "pi",
+                session_identity_arg: Some("--session-id"),
+                runtime_config_key: Some("pi"),
+                hook_log: Some(HookLogBehavior {
+                    env: "LLMPARTY_PI_HOOK_LOG",
+                    file_name: "pi-hook.log",
+                    metadata_key: "pi_hook_log",
+                }),
+            })
         );
-        assert_eq!(generic.command_env, None);
-        assert_eq!(generic.default_command, None);
-        assert_eq!(generic.session_identity_arg, None);
-        assert_eq!(generic.hook_log_env, None);
-        assert_eq!(generic.runtime_config_key, None);
-        assert!(!generic.adapter_event_outbox);
+        assert_eq!(pi.dispatch, DispatchBehavior::TmuxPaste);
+        assert_eq!(pi.readiness, ReadinessBehavior::AgentClientEvent);
+        assert_eq!(pi.interrupt, InterruptBehavior::TmuxInterrupt);
+        assert_eq!(pi.turn_context, TurnContextBehavior::CurrentTurnFile);
+        assert_eq!(
+            pi.adapter_events,
+            AdapterEventBehavior::JsonlOutbox {
+                file_name: "adapter-events.jsonl"
+            }
+        );
+
+        let claude = get_client_spec("claude_code").expect("claude spec");
+        assert_eq!(
+            claude.runtime,
+            RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
+                command_env: Some("LLMPARTY_CLAUDE_TUI_COMMAND"),
+                default_command: "claude --dangerously-skip-permissions",
+                session_identity_arg: None,
+                runtime_config_key: Some("claude_code"),
+                hook_log: Some(HookLogBehavior {
+                    env: "LLMPARTY_CLAUDE_HOOK_LOG",
+                    file_name: "claude-hook.log",
+                    metadata_key: "claude_hook_log",
+                }),
+            })
+        );
+        assert_eq!(claude.dispatch, DispatchBehavior::TmuxPaste);
+        assert_eq!(claude.readiness, ReadinessBehavior::AgentClientEvent);
+        assert_eq!(claude.interrupt, InterruptBehavior::Unsupported);
+        assert_eq!(claude.turn_context, TurnContextBehavior::CurrentTurnFile);
+        assert_eq!(claude.adapter_events, AdapterEventBehavior::Disabled);
     }
 }

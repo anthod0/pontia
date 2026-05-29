@@ -3,7 +3,7 @@ use crate::agent_clients::{ReadinessMode, get_client_spec};
 
 fn client_readiness_mode(client_type: &str) -> Result<ReadinessMode> {
     get_client_spec(client_type)
-        .map(|spec| spec.readiness_mode)
+        .map(|spec| spec.readiness)
         .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))
 }
 
@@ -113,7 +113,13 @@ impl RuntimeControlService {
         let runtime_ref = self.runtime_ref(session_id).await?.ok_or_else(|| {
             Error::StateConflict(format!("session {session_id} has no runtime binding"))
         })?;
-        self.runtime.interrupt_session(&runtime_ref)?;
+        let interrupt_behavior = get_client_spec(&session.client_type)
+            .map(|spec| spec.interrupt)
+            .ok_or_else(|| {
+                Error::Domain(format!("unsupported client_type: {}", session.client_type))
+            })?;
+        self.runtime
+            .interrupt_session(&runtime_ref, interrupt_behavior)?;
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest

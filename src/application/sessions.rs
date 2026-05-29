@@ -2,7 +2,7 @@ use super::turns::write_client_current_turn_context;
 use super::*;
 use crate::{
     adapters::GenericTestAdapter,
-    agent_clients::{DispatchMode, ReadinessMode, get_client_spec},
+    agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec},
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -36,13 +36,13 @@ pub struct CreateSessionOutcome {
 
 fn client_dispatch_mode(client_type: &str) -> Result<DispatchMode> {
     get_client_spec(client_type)
-        .map(|spec| spec.dispatch_mode)
+        .map(|spec| spec.dispatch)
         .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))
 }
 
 fn client_readiness_mode(client_type: &str) -> Result<ReadinessMode> {
     get_client_spec(client_type)
-        .map(|spec| spec.readiness_mode)
+        .map(|spec| spec.readiness)
         .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))
 }
 
@@ -374,12 +374,22 @@ impl SessionCommandService {
             turn_id: turn_id.to_string(),
             input: input.to_string(),
         };
+        let turn_context = get_client_spec(client_type)
+            .map(|spec| spec.turn_context)
+            .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))?;
         let ingest = EventIngestService::new(self.pool.clone());
         let dispatch_result = RuntimeReadinessService::new(self.pool.clone())
             .wait_until_ready(session_id, client_type, runtime_instance_id)
             .await
             .and_then(|()| {
-                write_client_current_turn_context(&runtime.metadata, &agent_input, client_type)
+                if turn_context == TurnContextBehavior::CurrentTurnFile {
+                    write_client_current_turn_context(
+                        &runtime.metadata,
+                        &agent_input,
+                        client_type,
+                    )?;
+                }
+                Ok(())
             })
             .and_then(|()| {
                 self.runtime

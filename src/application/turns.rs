@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     adapters::GenericTestAdapter,
-    agent_clients::{DispatchMode, ReadinessMode, get_client_spec},
+    agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec},
 };
 
 #[derive(Clone)]
@@ -33,8 +33,8 @@ impl TurnCommandService {
         let client_spec = get_client_spec(&session.client_type).ok_or_else(|| {
             Error::Domain(format!("unsupported client_type: {}", session.client_type))
         })?;
-        let dispatch_mode = client_spec.dispatch_mode;
-        let readiness_mode = client_spec.readiness_mode;
+        let dispatch_mode = client_spec.dispatch;
+        let readiness_mode = client_spec.readiness;
         let can_accept_turn = matches!(session.state.as_str(), "idle" | "interrupted")
             || (session.state == "starting" && dispatch_mode == DispatchMode::TmuxPaste);
         if !can_accept_turn {
@@ -130,11 +130,14 @@ impl TurnCommandService {
                         )
                         .await
                         .and_then(|()| {
-                            write_client_current_turn_context(
-                                &binding_metadata,
-                                &agent_input,
-                                &session.client_type,
-                            )
+                            if client_spec.turn_context == TurnContextBehavior::CurrentTurnFile {
+                                write_client_current_turn_context(
+                                    &binding_metadata,
+                                    &agent_input,
+                                    &session.client_type,
+                                )?;
+                            }
+                            Ok(())
                         })
                         .and_then(|()| {
                             self.runtime.dispatch_tui_turn(

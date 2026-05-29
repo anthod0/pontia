@@ -20,7 +20,9 @@ use time::format_description::well_known::Rfc3339;
 
 use crate::{
     adapters::{AdapterCapabilities, AgentEventSource, AgentInputSink, GenericTestAdapter},
-    agent_clients::{self, DispatchMode},
+    agent_clients::{
+        self, AdapterEventBehavior, DispatchBehavior, InterruptBehavior, RuntimeBehavior,
+    },
     application::SessionCapabilities,
     error::{Error, Result},
     ids::new_runtime_instance_id,
@@ -90,12 +92,12 @@ impl GenericRuntimeManager {
             agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", request.client_type))
             })?;
-        let capabilities = if client_spec.dispatch_mode == DispatchMode::GenericTestAdapter {
+        let capabilities = if client_spec.dispatch == DispatchBehavior::GenericTestAdapter {
             GenericTestAdapter.capabilities()
         } else {
             client_spec.capabilities.clone()
         };
-        if client_spec.dispatch_mode == DispatchMode::GenericTestAdapter {
+        if client_spec.runtime == RuntimeBehavior::InProcessTest {
             return self.start_in_process_test_session(request, capabilities, restart_count);
         }
 
@@ -105,10 +107,11 @@ impl GenericRuntimeManager {
         let runtime_dir = paths::runtime_dir(&request.session_id)?;
         std::fs::create_dir_all(&runtime_dir)?;
         let log_path = runtime_dir.join("runtime.log");
-        let adapter_event_log = runtime_dir.join("adapter-events.jsonl");
+        let adapter_event_log = match client_spec.adapter_events {
+            AdapterEventBehavior::JsonlOutbox { file_name } => runtime_dir.join(file_name),
+            AdapterEventBehavior::Disabled => runtime_dir.join("adapter-events.jsonl"),
+        };
         let current_turn_file = runtime_dir.join("current-turn.json");
-        let pi_hook_log = runtime_dir.join("pi-hook.log");
-        let claude_hook_log = runtime_dir.join("claude-hook.log");
         let internal_event_url = script::internal_event_url();
         let runtime_instance_id = new_runtime_instance_id().to_string();
         std::fs::File::create(&log_path)?;
@@ -118,8 +121,6 @@ impl GenericRuntimeManager {
             log_path: &log_path,
             adapter_event_log: &adapter_event_log,
             current_turn_file: &current_turn_file,
-            pi_hook_log: &pi_hook_log,
-            claude_hook_log: &claude_hook_log,
         };
         script::write_runtime_script(
             &script_path,
@@ -140,35 +141,46 @@ impl GenericRuntimeManager {
         let started_at = utc_now()
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
+        let hook_log_metadata = client_spec
+            .tmux_runtime()
+            .and_then(|runtime| runtime.hook_log)
+            .map(|hook_log| {
+                (
+                    hook_log.metadata_key,
+                    runtime_dir.join(hook_log.file_name).display().to_string(),
+                )
+            });
         let workspace = workspace.display().to_string();
         let runtime_dir = runtime_dir.display().to_string();
         let log_path = log_path.display().to_string();
         let adapter_event_log = adapter_event_log.display().to_string();
         let current_turn_file = current_turn_file.display().to_string();
-        let pi_hook_log = pi_hook_log.display().to_string();
-        let claude_hook_log = claude_hook_log.display().to_string();
+        let mut metadata = json!({
+            "backend": "tmux",
+            "tmux_session": tmux_session,
+            "workspace": workspace,
+            "runtime_dir": runtime_dir,
+            "runtime_log": log_path,
+            "log_path": log_path,
+            "adapter_event_log": adapter_event_log,
+            "current_turn_file": current_turn_file,
+            "internal_event_url": internal_event_url,
+            "handle": request.handle,
+            "role": request.role,
+            "started_at": started_at,
+            "restart_count": restart_count,
+            "runtime_instance_id": runtime_instance_id,
+        });
+        if let Some((metadata_key, path)) = hook_log_metadata
+            && let Some(object) = metadata.as_object_mut()
+        {
+            object.insert(metadata_key.to_string(), json!(path));
+        }
         Ok(RuntimeStartResult {
             runtime_kind: "tmux".to_string(),
             runtime_ref: tmux_session.clone(),
             capabilities: capabilities.into(),
-            metadata: json!({
-                "backend": "tmux",
-                "tmux_session": tmux_session,
-                "workspace": workspace,
-                "runtime_dir": runtime_dir,
-                "runtime_log": log_path,
-                "log_path": log_path,
-                "adapter_event_log": adapter_event_log,
-                "current_turn_file": current_turn_file,
-                "internal_event_url": internal_event_url,
-                "pi_hook_log": pi_hook_log,
-                "claude_hook_log": claude_hook_log,
-                "handle": request.handle,
-                "role": request.role,
-                "started_at": started_at,
-                "restart_count": restart_count,
-                "runtime_instance_id": runtime_instance_id,
-            }),
+            metadata,
         })
     }
 
@@ -225,10 +237,6 @@ impl GenericRuntimeManager {
         GenericTestAdapter.accept_input(input)
     }
 
-    pub fn dispatch_pi_turn(&self, runtime_ref: &str, input: &AgentInput) -> Result<()> {
-        self.dispatch_tui_turn(runtime_ref, "pi", input)
-    }
-
     pub fn dispatch_tui_turn(
         &self,
         runtime_ref: &str,
@@ -238,22 +246,20 @@ impl GenericRuntimeManager {
         tmux::dispatch_tui_turn(runtime_ref, client_type, input)
     }
 
-    pub fn interrupt_session(&self, runtime_ref: &str) -> Result<()> {
-        if runtime_ref.starts_with("generic:") {
-            return Ok(());
+    pub fn interrupt_session(&self, runtime_ref: &str, behavior: InterruptBehavior) -> Result<()> {
+        match behavior {
+            InterruptBehavior::Unsupported => Ok(()),
+            InterruptBehavior::TmuxInterrupt => tmux::interrupt_session(runtime_ref),
         }
-        tmux::interrupt_session(runtime_ref)
     }
 
     pub fn terminate_session(&self, runtime_ref: &str) -> Result<()> {
-        if runtime_ref.starts_with("generic:") {
-            if let Some(runtime) = in_process_registry()
-                .lock()
-                .expect("in-process runtime registry lock")
-                .get_mut(runtime_ref)
-            {
-                runtime.alive = false;
-            }
+        if let Some(runtime) = in_process_registry()
+            .lock()
+            .expect("in-process runtime registry lock")
+            .get_mut(runtime_ref)
+        {
+            runtime.alive = false;
             return Ok(());
         }
         tmux::terminate_session(runtime_ref)
@@ -264,12 +270,12 @@ impl GenericRuntimeManager {
     }
 
     pub fn is_alive(&self, runtime_ref: &str) -> bool {
-        if runtime_ref.starts_with("generic:") {
-            return in_process_registry()
-                .lock()
-                .expect("in-process runtime registry lock")
-                .get(runtime_ref)
-                .is_some_and(|runtime| runtime.alive);
+        if let Some(runtime) = in_process_registry()
+            .lock()
+            .expect("in-process runtime registry lock")
+            .get(runtime_ref)
+        {
+            return runtime.alive;
         }
         tmux::is_alive(runtime_ref)
     }
@@ -444,8 +450,6 @@ mod tests {
             log_path: &runtime_dir.join("runtime.log"),
             adapter_event_log: &runtime_dir.join("adapter-events.jsonl"),
             current_turn_file: &runtime_dir.join("current-turn.json"),
-            pi_hook_log: &runtime_dir.join("pi-hook.log"),
-            claude_hook_log: &runtime_dir.join("claude-hook.log"),
         };
 
         script::write_runtime_script(

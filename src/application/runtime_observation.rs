@@ -1,5 +1,5 @@
 use super::*;
-use crate::agent_clients;
+use crate::agent_clients::{self, AdapterEventBehavior};
 
 #[derive(Clone)]
 pub struct RuntimeObservationService {
@@ -67,11 +67,11 @@ impl RuntimeObservationService {
 }
 
 #[derive(Clone)]
-pub struct PiAdapterEventOutboxService {
+pub struct AdapterEventOutboxService {
     pool: SqlitePool,
 }
 
-impl PiAdapterEventOutboxService {
+impl AdapterEventOutboxService {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
@@ -85,7 +85,10 @@ impl PiAdapterEventOutboxService {
         let Some(client_spec) = agent_clients::get_client_spec(&session.client_type) else {
             return Ok(());
         };
-        if !client_spec.adapter_event_outbox {
+        if !matches!(
+            client_spec.adapter_events,
+            AdapterEventBehavior::JsonlOutbox { .. }
+        ) {
             return Ok(());
         }
 

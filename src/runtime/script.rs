@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::{
-    agent_clients::{self, DispatchMode, StartupHook},
+    agent_clients::{self, DispatchBehavior, HookLogBehavior, RuntimeBehavior, StartupHook},
     error::{Error, Result},
 };
 
@@ -12,8 +12,6 @@ pub(super) struct RuntimePaths<'a> {
     pub(super) log_path: &'a Path,
     pub(super) adapter_event_log: &'a Path,
     pub(super) current_turn_file: &'a Path,
-    pub(super) pi_hook_log: &'a Path,
-    pub(super) claude_hook_log: &'a Path,
 }
 
 pub(super) fn write_runtime_script(
@@ -26,21 +24,15 @@ pub(super) fn write_runtime_script(
     let client_spec = agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
         Error::Domain(format!("unsupported client_type: {}", request.client_type))
     })?;
-    let (log_setup, runtime_body) = match client_spec.dispatch_mode {
-        DispatchMode::TmuxPaste => {
-            let default_command = client_spec.default_command.ok_or_else(|| {
-                Error::Domain(format!(
-                    "{} tmux runtime missing default command",
-                    request.client_type
-                ))
-            })?;
-            let mut command = client_spec
+    let (log_setup, runtime_body) = match client_spec.runtime {
+        RuntimeBehavior::Tmux(tmux_runtime) => {
+            let mut command = tmux_runtime
                 .command_env
                 .and_then(|env| std::env::var(env).ok())
                 .or_else(|| configured_tui_command(&request.client_type))
-                .unwrap_or_else(|| default_command.to_string());
-            if let Some(session_identity_arg) = client_spec.session_identity_arg
-                && Some(command.trim()) == client_spec.default_command
+                .unwrap_or_else(|| tmux_runtime.default_command.to_string());
+            if let Some(session_identity_arg) = tmux_runtime.session_identity_arg
+                && command.trim() == tmux_runtime.default_command
             {
                 command.push(' ');
                 command.push_str(session_identity_arg);
@@ -52,10 +44,19 @@ pub(super) fn write_runtime_script(
                 format!("exec sh -lc {}\n", shell_quote(&command)),
             )
         }
-        DispatchMode::GenericTestAdapter | DispatchMode::None => (
-            "exec >> \"$LLMPARTY_RUNTIME_LOG\" 2>&1\necho \"llmparty runtime started\"".to_string(),
-            "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
-        ),
+        RuntimeBehavior::InProcessTest => match client_spec.dispatch {
+            DispatchBehavior::GenericTestAdapter | DispatchBehavior::None => (
+                "exec >> \"$LLMPARTY_RUNTIME_LOG\" 2>&1\necho \"llmparty runtime started\""
+                    .to_string(),
+                "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
+            ),
+            DispatchBehavior::TmuxPaste => {
+                return Err(Error::Domain(format!(
+                    "{} cannot use tmux paste dispatch without tmux runtime",
+                    request.client_type
+                )));
+            }
+        },
     };
     let agent_kind_export = request
         .agent_kind
@@ -63,12 +64,13 @@ pub(super) fn write_runtime_script(
         .map(|agent_kind| format!("export LLMPARTY_AGENT_KIND={}\n", shell_quote(agent_kind)))
         .unwrap_or_default();
     let hook_log_export = client_spec
-        .hook_log_env
-        .and_then(|env| hook_log_path(runtime_paths, env).map(|path| (env, path)))
-        .map(|(env, path)| {
+        .tmux_runtime()
+        .and_then(|runtime| runtime.hook_log)
+        .map(|hook_log| {
+            let path = hook_log_path(runtime_paths, hook_log);
             format!(
                 "export {}={}\n",
-                env,
+                hook_log.env,
                 shell_quote(&path.display().to_string())
             )
         })
@@ -109,12 +111,11 @@ export LLMPARTY_RUNTIME_INSTANCE_ID={}
     Ok(())
 }
 
-fn hook_log_path<'a>(runtime_paths: &'a RuntimePaths<'_>, env: &str) -> Option<&'a Path> {
-    match env {
-        "LLMPARTY_PI_HOOK_LOG" => Some(runtime_paths.pi_hook_log),
-        "LLMPARTY_CLAUDE_HOOK_LOG" => Some(runtime_paths.claude_hook_log),
-        _ => None,
-    }
+fn hook_log_path(
+    runtime_paths: &RuntimePaths<'_>,
+    hook_log: HookLogBehavior,
+) -> std::path::PathBuf {
+    runtime_paths.runtime_dir.join(hook_log.file_name)
 }
 
 pub(super) fn internal_event_url() -> String {
@@ -176,8 +177,6 @@ mod tests {
             log_path: &log_path,
             adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
             current_turn_file: &tempdir.path().join("current-turn.json"),
-            pi_hook_log: &tempdir.path().join("pi-hook.log"),
-            claude_hook_log: &tempdir.path().join("claude-hook.log"),
         };
         let request = RuntimeStartRequest {
             session_id: "sess_resume_1".to_string(),
@@ -212,8 +211,6 @@ mod tests {
             log_path: &log_path,
             adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
             current_turn_file: &tempdir.path().join("current-turn.json"),
-            pi_hook_log: &tempdir.path().join("pi-hook.log"),
-            claude_hook_log: &tempdir.path().join("claude-hook.log"),
         };
         let request = RuntimeStartRequest {
             session_id: "sess_claude_1".to_string(),

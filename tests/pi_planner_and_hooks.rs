@@ -12,7 +12,7 @@ use axum::{
 use http_body_util::BodyExt;
 use llmparty::{
     adapters::GenericTestAdapter,
-    application::{AppState, PiAdapterEventOutboxService},
+    application::{AdapterEventOutboxService, AppState},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
 };
@@ -324,7 +324,7 @@ async fn pi_adapter_event_outbox_projects_output_and_completed() {
     )
     .expect("write adapter event log");
 
-    PiAdapterEventOutboxService::new(state.db.clone())
+    AdapterEventOutboxService::new(state.db.clone())
         .observe_session(&session_id)
         .await
         .expect("observe adapter outbox");
@@ -389,7 +389,7 @@ async fn pi_adapter_event_outbox_reports_malformed_records_without_forging_turn_
         .expect("adapter event log");
     std::fs::write(adapter_event_log, "{not-json}\n").expect("write malformed adapter event");
 
-    PiAdapterEventOutboxService::new(state.db.clone())
+    AdapterEventOutboxService::new(state.db.clone())
         .observe_session(&session_id)
         .await
         .expect("observe adapter outbox");

@@ -5,6 +5,7 @@ use std::{
 };
 
 use llmparty::{
+    agent_clients::InterruptBehavior,
     config::{RuntimeClientConfig, RuntimeConfig},
     runtime::{GenericRuntimeManager, RuntimeStartRequest, set_runtime_config},
 };
@@ -25,7 +26,7 @@ fn interrupt_session_sends_escape_key() {
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
 
     GenericRuntimeManager
-        .interrupt_session("runtime-ref")
+        .interrupt_session("runtime-ref", InterruptBehavior::TmuxInterrupt)
         .expect("interrupt session");
 
     restore_fake_tmux(original_path);
@@ -140,7 +141,7 @@ fn interrupt_session_succeeds_when_runtime_exits_after_escape() {
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, Some(&tmux_state));
 
     GenericRuntimeManager
-        .interrupt_session("runtime-ref")
+        .interrupt_session("runtime-ref", InterruptBehavior::TmuxInterrupt)
         .expect("interrupt session should send escape successfully");
 
     restore_fake_tmux(original_path);
