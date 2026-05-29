@@ -322,6 +322,24 @@ test('creates a session with initial prompt, workspace, and client then opens it
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new');
 });
 
+test('keeps an existing chat route constrained to viewport height so only the conversation scrolls', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+
+  const { container } = render(ChatPage);
+
+  await screen.findByPlaceholderText('Send a follow-up message…');
+  const pageSection = container.querySelector('section');
+  expect(pageSection).toHaveClass('h-full');
+  expect(pageSection).toHaveClass('min-h-0');
+  expect(pageSection).not.toHaveClass('h-[calc(100vh-5rem)]');
+  expect(pageSection).not.toHaveClass('min-h-[42rem]');
+});
+
 test('loads and renders an existing chat session with metadata, state, and workspace path above the prompt input without a page header', async () => {
   const selected = session({
     session_id: 'session-2',

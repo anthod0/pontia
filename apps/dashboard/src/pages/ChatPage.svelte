@@ -277,7 +277,7 @@
 
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
-<section class="flex h-[calc(100vh-5rem)] min-h-[42rem] flex-col gap-4">
+<section class="flex h-full min-h-0 flex-col gap-4">
   {#if !selectedSessionId}
     <div class="space-y-2">
       <h2 class="text-3xl font-semibold tracking-tight">New Chat</h2>
