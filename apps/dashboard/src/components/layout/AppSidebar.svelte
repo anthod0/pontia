@@ -20,7 +20,7 @@
   const recentSessionLimit = 8
 
   let currentPath = $state(normalizePath(window.location.pathname))
-  let recentSessions = $derived(visibleChatSessions($sessions, 'active').slice(0, recentSessionLimit))
+  let recentSessions = $derived(visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit))
 
   function normalizePath(pathname: string) {
     return pathname.replace(/^\/dashboard/, '') || '/'
@@ -39,6 +39,10 @@
 
   function isSessionActive(sessionId: string) {
     return activeSessionIdFromPath() === sessionId
+  }
+
+  function isSessionActiveState(state: string) {
+    return state !== 'exited' && state !== 'error'
   }
 
   function go(path: string) {
@@ -93,9 +97,12 @@
           {:else if recentSessions.length}
             {#each recentSessions as session}
               <Sidebar.MenuItem>
-                <Sidebar.MenuButton isActive={isSessionActive(session.session_id)} tooltipContent={sessionChatTitle(session)} onclick={() => openSession(session.session_id)}>
+                <Sidebar.MenuButton isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
                   <MessageCircle />
-                  <span>{sessionChatTitle(session)}</span>
+                  <span class="line-clamp-1">{sessionChatTitle(session)}</span>
+                  {#if isSessionActiveState(session.state)}
+                    <span class="ml-auto size-2 shrink-0 rounded-full bg-green-500 group-data-[collapsible=icon]:hidden" aria-label="Active session"></span>
+                  {/if}
                 </Sidebar.MenuButton>
               </Sidebar.MenuItem>
             {/each}

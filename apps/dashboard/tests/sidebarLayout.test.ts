@@ -87,7 +87,7 @@ test('sidebar shows workflow items and omits settings from navigation', () => {
   expect(screen.queryByText('Settings')).not.toBeInTheDocument();
 });
 
-test('sidebar shows recent active sessions and opens chat for the selected session', async () => {
+test('sidebar shows recent sessions with active dot, including exited sessions, and opens chat for the selected session', async () => {
   mocks.sessions.set([
     {
       session_id: 'session-active',
@@ -129,7 +129,10 @@ test('sidebar shows recent active sessions and opens chat for the selected sessi
 
   expect(screen.getByText('Recent Sessions')).toBeInTheDocument();
   expect(screen.getByText('main · coder')).toBeInTheDocument();
-  expect(screen.queryByText('closed')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Active session')).toBeInTheDocument();
+  expect(screen.getByText('closed')).toBeInTheDocument();
+  expect(screen.queryByText('idle')).not.toBeInTheDocument();
+  expect(screen.queryByText('exited')).not.toBeInTheDocument();
 
   await fireEvent.click(screen.getByText('main · coder'));
 
