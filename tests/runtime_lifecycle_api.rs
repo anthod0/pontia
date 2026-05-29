@@ -282,6 +282,129 @@ async fn restart_non_terminal_session_runs_new_start_cycle_and_is_idempotent() {
 }
 
 #[tokio::test]
+async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session_id = create_session(state.clone()).await;
+    let terminate = request(
+        state.clone(),
+        "DELETE",
+        &format!("/external/v1/sessions/{session_id}"),
+        Some(TOKEN),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(terminate.0, StatusCode::OK);
+
+    let first = request(
+        state.clone(),
+        "POST",
+        &format!("/external/v1/sessions/{session_id}/resume"),
+        Some(TOKEN),
+        Some("resume-once"),
+        None,
+    )
+    .await;
+    let second = request(
+        state.clone(),
+        "POST",
+        &format!("/external/v1/sessions/{session_id}/resume"),
+        Some(TOKEN),
+        Some("resume-once"),
+        None,
+    )
+    .await;
+
+    assert_eq!(first.0, StatusCode::OK);
+    assert_eq!(second.0, StatusCode::OK);
+    assert_eq!(second.1["data"], first.1["data"]);
+    assert_eq!(first.1["data"]["session"]["state"], "idle");
+
+    let (events_status, events_body) = request(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/events"),
+        Some(TOKEN),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(events_status, StatusCode::OK);
+    let types: Vec<&str> = events_body["data"]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| event["type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec![
+            "session.created",
+            "session.starting",
+            "session.started",
+            "session.ready",
+            "session.exited",
+            "session.resuming",
+            "session.started",
+            "session.ready",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn resume_rejects_non_exited_session() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session_id = create_session(state.clone()).await;
+
+    let (status, body) = request(
+        state,
+        "POST",
+        &format!("/external/v1/sessions/{session_id}/resume"),
+        Some(TOKEN),
+        None,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "state_conflict");
+}
+
+#[tokio::test]
+async fn resume_rejects_error_session() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session_id = create_session(state.clone()).await;
+    llmparty::application::EventIngestService::new(state.db.clone())
+        .ingest_event(llmparty::domain::DomainEvent::new(
+            llmparty::ids::new_event_id().to_string(),
+            session_id.clone(),
+            None,
+            llmparty::domain::EventSource::RuntimeManager,
+            "generic".to_string(),
+            llmparty::domain::EventType::SessionError,
+            json!({ "error": { "message": "boom" } }),
+        ))
+        .await
+        .expect("ingest session error");
+
+    let (status, body) = request(
+        state,
+        "POST",
+        &format!("/external/v1/sessions/{session_id}/resume"),
+        Some(TOKEN),
+        None,
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "state_conflict");
+}
+
+#[tokio::test]
 async fn restart_rejects_terminal_session() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;

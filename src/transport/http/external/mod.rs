@@ -26,7 +26,7 @@ pub use inbox::{
     cancel_inbox_message, get_inbox_message, list_inbox_messages, submit_inbox_message,
 };
 pub use sessions::{
-    create_session, get_session, interrupt_session, list_sessions, restart_session,
+    create_session, get_session, interrupt_session, list_sessions, restart_session, resume_session,
     terminate_session,
 };
 pub use tasks::{

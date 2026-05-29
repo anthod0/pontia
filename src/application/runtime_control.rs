@@ -212,6 +212,99 @@ impl RuntimeControlService {
         })
     }
 
+    pub async fn resume_session(
+        &self,
+        session_id: &str,
+        idempotency_key: Option<&str>,
+    ) -> Result<ControlCommandOutcome> {
+        if let Some(key) = idempotency_key
+            && let Some(response) = self
+                .idempotency_response(&format!("resume_session:{session_id}"), key)
+                .await?
+        {
+            return Ok(ControlCommandOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+
+        let query = ExternalQueryService::new(self.pool.clone());
+        let session = query
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        if session.state != "exited" {
+            return Err(Error::StateConflict(format!(
+                "session {session_id} in state {} cannot be resumed",
+                session.state
+            )));
+        }
+
+        let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
+        let ingest = EventIngestService::new(self.pool.clone());
+        ingest
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.to_string(),
+                None,
+                EventSource::ExternalApi,
+                session.client_type.clone(),
+                EventType::SessionResuming,
+                json!({}),
+            ))
+            .await?;
+        let runtime = self.runtime.start_session_with_restart_count(
+            RuntimeStartRequest {
+                session_id: session_id.to_string(),
+                client_type: session.client_type.clone(),
+                workspace: session.workspace.clone(),
+                handle: session.handle.clone(),
+                role: session.role.clone(),
+                agent_kind: llmparty_agent_kind(&session.metadata),
+            },
+            prior_restart_count + 1,
+        )?;
+        self.upsert_runtime_binding(session_id, &runtime).await?;
+        ingest
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.to_string(),
+                None,
+                EventSource::RuntimeManager,
+                session.client_type.clone(),
+                EventType::SessionStarted,
+                json!({}),
+            ))
+            .await?;
+        if client_readiness_mode(&session.client_type)? == ReadinessMode::RuntimeManagerImmediate {
+            ingest
+                .ingest_event(DomainEvent::new(
+                    new_event_id().to_string(),
+                    session_id.to_string(),
+                    None,
+                    EventSource::RuntimeManager,
+                    session.client_type,
+                    EventType::SessionReady,
+                    json!({}),
+                ))
+                .await?;
+        }
+
+        let session = query
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| Error::Domain("resumed session missing".to_string()))?;
+        let data = json!({ "session": session });
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response(&format!("resume_session:{session_id}"), key, &data)
+                .await?;
+        }
+        Ok(ControlCommandOutcome {
+            data,
+            duplicate: false,
+        })
+    }
+
     pub async fn restart_session(
         &self,
         session_id: &str,

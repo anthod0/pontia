@@ -47,6 +47,8 @@ pub enum EventType {
     SessionCreated,
     #[serde(rename = "session.starting")]
     SessionStarting,
+    #[serde(rename = "session.resuming")]
+    SessionResuming,
     #[serde(rename = "session.started")]
     SessionStarted,
     #[serde(rename = "session.ready")]
@@ -107,6 +109,7 @@ impl std::fmt::Display for EventType {
         f.write_str(match self {
             Self::SessionCreated => "session.created",
             Self::SessionStarting => "session.starting",
+            Self::SessionResuming => "session.resuming",
             Self::SessionStarted => "session.started",
             Self::SessionReady => "session.ready",
             Self::SessionExited => "session.exited",
@@ -136,6 +139,7 @@ impl std::str::FromStr for EventType {
         match value {
             "session.created" => Ok(Self::SessionCreated),
             "session.starting" => Ok(Self::SessionStarting),
+            "session.resuming" => Ok(Self::SessionResuming),
             "session.started" => Ok(Self::SessionStarted),
             "session.ready" => Ok(Self::SessionReady),
             "session.exited" => Ok(Self::SessionExited),

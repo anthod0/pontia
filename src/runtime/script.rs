@@ -34,11 +34,15 @@ pub(super) fn write_runtime_script(
                     request.client_type
                 ))
             })?;
-            let command = client_spec
+            let mut command = client_spec
                 .command_env
                 .and_then(|env| std::env::var(env).ok())
                 .or_else(|| configured_tui_command(&request.client_type))
                 .unwrap_or_else(|| default_command.to_string());
+            if request.client_type == "pi" && command.trim() == "pi" {
+                command.push_str(" --session-id ");
+                command.push_str(&shell_quote(&request.session_id));
+            }
             (
                 "echo \"llmparty runtime started\" >> \"$LLMPARTY_RUNTIME_LOG\"".to_string(),
                 format!("exec sh -lc {}\n", shell_quote(&command)),
@@ -141,6 +145,42 @@ pub(super) fn run_startup_hooks(hooks: &[StartupHook], workspace: &Path) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pi_runtime_script_uses_exact_project_session_id() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let script_path = tempdir.path().join("runtime.sh");
+        let log_path = tempdir.path().join("runtime.log");
+        let paths = RuntimePaths {
+            runtime_dir: tempdir.path(),
+            log_path: &log_path,
+            adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
+            current_turn_file: &tempdir.path().join("current-turn.json"),
+            pi_hook_log: &tempdir.path().join("pi-hook.log"),
+            claude_hook_log: &tempdir.path().join("claude-hook.log"),
+        };
+        let request = RuntimeStartRequest {
+            session_id: "sess_resume_1".to_string(),
+            client_type: "pi".to_string(),
+            workspace: Some(tempdir.path().display().to_string()),
+            handle: None,
+            role: None,
+            agent_kind: None,
+        };
+
+        write_runtime_script(
+            &script_path,
+            tempdir.path(),
+            &paths,
+            &request,
+            "runtime_instance_1",
+        )
+        .expect("write script");
+
+        let script = std::fs::read_to_string(script_path).expect("script");
+        assert!(script.contains("pi --session-id"), "script was:\n{script}");
+        assert!(script.contains("sess_resume_1"), "script was:\n{script}");
+    }
 
     #[test]
     fn test_defaults_use_non_listening_ports() {

@@ -178,6 +178,10 @@ pub fn router(state: AppState) -> Router {
             post(external::restart_session),
         )
         .route(
+            "/external/v1/sessions/{session_id}/resume",
+            post(external::resume_session),
+        )
+        .route(
             "/external/v1/sessions/{session_id}/turns",
             get(external::list_turns),
         )

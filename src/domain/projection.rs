@@ -95,17 +95,19 @@ impl ProjectionState {
             )));
         }
 
-        if self
-            .sessions
-            .get(&event.session_id)
-            .is_some_and(|session| session.state.is_terminal())
+        if let Some(session) = self.sessions.get(&event.session_id)
+            && session.state.is_terminal()
+            && !(session.state == SessionState::Exited
+                && event.event_type == EventType::SessionResuming)
         {
             return Ok(());
         }
 
         match event.event_type {
             EventType::SessionCreated => self.apply_session(event, SessionState::Created),
-            EventType::SessionStarting => self.apply_session(event, SessionState::Starting),
+            EventType::SessionStarting | EventType::SessionResuming => {
+                self.apply_session(event, SessionState::Starting)
+            }
             EventType::SessionStarted => self.apply_session(event, SessionState::Starting),
             EventType::SessionReady => self.apply_session(event, SessionState::Idle),
             EventType::SessionExited => self.apply_session(event, SessionState::Exited),

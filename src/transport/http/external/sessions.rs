@@ -95,3 +95,15 @@ pub async fn restart_session(
         .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
+
+pub async fn resume_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let idempotency_key = idempotency_key(&headers);
+    let service = RuntimeControlService::new(state.db);
+    let outcome = service.resume_session(&session_id, idempotency_key).await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}
