@@ -147,20 +147,18 @@ async fn list_agent_profiles_includes_builtin_latest_profiles() {
 
     assert_eq!(status, StatusCode::OK, "{body}");
     let profiles = body["data"]["agent_profiles"].as_array().unwrap();
-    for expected in [
-        "default",
-        "planner",
-        "replanner",
-        "implementer",
-        "reviewer",
-        "tester",
-        "debugger",
-    ] {
+    for expected in ["default", "planner", "replanner", "implementer", "reviewer"] {
         assert!(
             profiles
                 .iter()
                 .any(|profile| profile["profile_id"] == expected),
             "missing {expected}: {profiles:?}"
+        );
+    }
+    for removed in ["tester", "debugger"] {
+        assert!(
+            profiles.iter().all(|profile| profile["profile_id"] != removed),
+            "removed builtin profile {removed} should not be present: {profiles:?}"
         );
     }
     let default = profiles
