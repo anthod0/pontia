@@ -12,7 +12,7 @@
   import * as Select from '$lib/components/ui/select/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
-  import type { AgentProfileView, DagProposalView, DashboardStreamEvent, JsonObject, SessionView, WorkspaceView } from '../api/types'
+  import type { AgentProfileView, DashboardStreamEvent, SessionView, WorkspaceView } from '../api/types'
   import {
     canSendSessionMessage,
     isTerminalChatSession,
@@ -151,25 +151,6 @@
     const taskId = typeof metadata.task_id === 'string' ? metadata.task_id : null
     const role = typeof metadata.dag_planning_role === 'string' ? metadata.dag_planning_role : null
     return metadata.dag_managed === true && role === 'planner' && taskId ? taskId : null
-  }
-
-  function proposalWorkItems(proposal: DagProposalView | null): JsonObject[] {
-    const workItems = proposal?.proposal_json.work_items
-    return Array.isArray(workItems) ? workItems.filter(isJsonObject) : []
-  }
-
-  function proposalEdges(proposal: DagProposalView | null): JsonObject[] {
-    const edges = proposal?.proposal_json.edges
-    return Array.isArray(edges) ? edges.filter(isJsonObject) : []
-  }
-
-  function isJsonObject(value: unknown): value is JsonObject {
-    return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-  }
-
-  function stringField(value: JsonObject, key: string, fallback = '—'): string {
-    const field = value[key]
-    return typeof field === 'string' && field.trim() ? field : fallback
   }
 
   function navigateToTaskDag(taskId: string): void {
@@ -419,53 +400,13 @@
             <Empty.Content><Button onclick={openNewChat}>Start a new chat</Button></Empty.Content>
           </Empty.Root>
         {:else}
-          {#if plannerTaskId}
-            <div class="border-b p-4">
-              <div class="rounded-xl border bg-card p-4 shadow-sm">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 class="text-lg font-semibold">Planner draft DAG</h3>
-                    <p class="text-sm text-muted-foreground">Task {plannerTaskId}</p>
-                  </div>
-                  {#if $taskProposalsLoading}
-                    <span class="text-sm text-muted-foreground">Loading proposal…</span>
-                  {:else if draftPlannerProposal}
-                    <span class="rounded-full border px-2.5 py-1 text-xs text-muted-foreground">revision {draftPlannerProposal.revision} · {draftPlannerProposal.state}</span>
-                  {/if}
-                </div>
-
-                {#if draftPlannerProposal}
-                  {@const draftWorkItems = proposalWorkItems(draftPlannerProposal)}
-                  {@const draftEdges = proposalEdges(draftPlannerProposal)}
-                  <p class="mt-3 text-sm">{draftPlannerProposal.summary}</p>
-                  <div class="mt-4 grid gap-3 md:grid-cols-2">
-                    {#each draftWorkItems as item}
-                      <div class="rounded-lg border bg-background p-3">
-                        <div class="font-medium">{stringField(item, 'title')}</div>
-                        <div class="mt-1 text-sm text-muted-foreground">{stringField(item, 'description')}</div>
-                        <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          <span>{stringField(item, 'temp_id', stringField(item, 'work_item_id', 'draft'))}</span>
-                          <span>{stringField(item, 'kind')}</span>
-                          <span>profile {stringField(item, 'execution_profile_id')}</span>
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                  {#if draftEdges.length}
-                    <div class="mt-4 space-y-1 text-sm text-muted-foreground">
-                      {#each draftEdges as edge}
-                        <div>{stringField(edge, 'from_work_item_id')} → {stringField(edge, 'to_work_item_id')} <span class="text-xs">{stringField(edge, 'edge_type', 'depends_on')}</span></div>
-                      {/each}
-                    </div>
-                  {/if}
-                {:else if !$taskProposalsLoading}
-                  <p class="mt-3 text-sm text-muted-foreground">Waiting for the planner to submit a draft DAG proposal.</p>
-                {/if}
-              </div>
-            </div>
-          {/if}
-
-          <SessionConversation {messages} loading={$sessionDetailLoading} />
+          <SessionConversation
+            {messages}
+            loading={$sessionDetailLoading}
+            {plannerTaskId}
+            {draftPlannerProposal}
+            draftPlannerProposalLoading={$taskProposalsLoading}
+          />
 
           <div class="shrink-0 border-t bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <div role="group" aria-label="Session status and controls" class="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2 px-2">

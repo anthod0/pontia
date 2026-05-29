@@ -539,7 +539,7 @@ test('hides exit on exited sessions and waits for idle after automatic resume be
   expect(mocks.resumeSession.mock.invocationCallOrder[0]).toBeLessThan(mocks.submitInboxMessage.mock.invocationCallOrder[0]);
 });
 
-test('loads planner task proposals from session metadata and renders the draft DAG', async () => {
+test('loads planner task proposals from session metadata and renders the draft DAG below the agent output', async () => {
   const planner = session({
     session_id: 'session-planner',
     execution_profile_id: 'planner',
@@ -549,7 +549,13 @@ test('loads planner task proposals from session metadata and renders the draft D
   mocks.pathParams = { sessionId: 'session-planner' };
   mocks.loadedSessions = [planner];
   mocks.sessions.set([planner]);
-  mocks.sessionDetail.set({ session: planner, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({
+    session: planner,
+    turns: [turn({ session_id: 'session-planner', input: { summary: 'Please plan this' }, output: { summary: 'I drafted a DAG below.' } })],
+    inboxMessages: [],
+    events: [],
+    artifacts: [],
+  });
   mocks.taskProposals.set([
     {
       proposal_id: 'proposal-1',
@@ -578,7 +584,9 @@ test('loads planner task proposals from session metadata and renders the draft D
   render(ChatPage);
 
   await waitFor(() => expect(mocks.loadTaskProposals).toHaveBeenCalledWith('task-new'));
-  expect(await screen.findByRole('heading', { name: /planner draft dag/i })).toBeInTheDocument();
+  const assistantOutput = await screen.findByText('I drafted a DAG below.');
+  const draftHeading = await screen.findByRole('heading', { name: /planner draft dag/i });
+  expect(assistantOutput.compareDocumentPosition(draftHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByText('Implement in two steps')).toBeInTheDocument();
   expect(screen.getByText('Design UI')).toBeInTheDocument();
   expect(screen.getByText('Wire events')).toBeInTheDocument();
