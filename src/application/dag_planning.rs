@@ -72,10 +72,7 @@ impl DagPlanningService {
         self.create_planning_turn(
             task_id,
             "planner",
-            format!(
-                "Plan task {task_id} into a WorkItem DAG.\n\nTask input:\n{}",
-                task.input
-            ),
+            task.input,
             json!({"mode":"initial_dag"}),
             client_type,
             task.workspace_id.as_deref(),

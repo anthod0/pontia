@@ -2,8 +2,8 @@ use crate::{
     adapters::AdapterCapabilities,
     agent_clients::types::{
         AdapterEventBehavior, AgentClientSpec, DispatchBehavior, HookLogBehavior,
-        InterruptBehavior, ReadinessBehavior, RuntimeBehavior, TmuxRuntimeBehavior,
-        TurnContextBehavior,
+        InterruptBehavior, ReadinessBehavior, RuntimeBehavior, SystemPromptInjectionBehavior,
+        TmuxRuntimeBehavior, TurnContextBehavior,
     },
 };
 
@@ -38,5 +38,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     adapter_events: AdapterEventBehavior::JsonlOutbox {
         file_name: "adapter-events.jsonl",
     },
+    system_prompt_injection: SystemPromptInjectionBehavior::AppendFromExternalApi,
     startup_hooks: &[],
 };

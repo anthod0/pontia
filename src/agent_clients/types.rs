@@ -58,6 +58,12 @@ pub enum AdapterEventBehavior {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemPromptInjectionBehavior {
+    Disabled,
+    AppendFromExternalApi,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StartupHook {
     ClaudeCodeTrustWorkspace,
 }
@@ -72,6 +78,7 @@ pub struct AgentClientSpec {
     pub interrupt: InterruptBehavior,
     pub turn_context: TurnContextBehavior,
     pub adapter_events: AdapterEventBehavior,
+    pub system_prompt_injection: SystemPromptInjectionBehavior,
     pub startup_hooks: &'static [StartupHook],
 }
 

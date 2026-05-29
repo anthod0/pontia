@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
+import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, type InternalEvent } from "./events.js";
 import { EventReporter } from "./reporter.js";
@@ -93,17 +93,73 @@ function lastAssistantTextFromMessages(messages: unknown): string | undefined {
   return undefined;
 }
 
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function externalApiUrl(env: EnvLike): string | undefined {
+  return optionalString(env.LLMPARTY_EXTERNAL_API_URL)?.replace(/\/+$/, "");
+}
+
+async function parseJsonResponse(response: Response): Promise<unknown> {
+  const text = await response.text().catch(() => "");
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function responseDataRecord(body: unknown): Record<string, unknown> | undefined {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
+  const data = (body as Record<string, unknown>).data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
+  return data as Record<string, unknown>;
+}
+
+async function fetchJson(fetchImpl: typeof fetch, url: string, token: string): Promise<unknown> {
+  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` } });
+  const body = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return body;
+}
+
+async function loadProfileSystemPrompt(env: EnvLike, fetchImpl: typeof fetch): Promise<string | undefined> {
+  const baseUrl = externalApiUrl(env);
+  const token = optionalString(env.LLMPARTY_EXTERNAL_API_TOKEN);
+  const sessionId = optionalString(env.LLMPARTY_SESSION_ID);
+  if (!baseUrl || !token || !sessionId) return undefined;
+
+  const sessionBody = await fetchJson(fetchImpl, `${baseUrl}/sessions/${encodeURIComponent(sessionId)}`, token);
+  const session = responseDataRecord(sessionBody)?.session;
+  if (!session || typeof session !== "object" || Array.isArray(session)) return undefined;
+  const sessionRecord = session as Record<string, unknown>;
+  const profileId = optionalString(sessionRecord.execution_profile_id);
+  const profileVersion = optionalString(sessionRecord.execution_profile_version);
+  if (!profileId) return undefined;
+
+  const profileUrl = profileVersion
+    ? `${baseUrl}/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(profileVersion)}`
+    : `${baseUrl}/agent-profiles/${encodeURIComponent(profileId)}`;
+  const profileBody = await fetchJson(fetchImpl, profileUrl, token);
+  const profile = responseDataRecord(profileBody)?.agent_profile;
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) return undefined;
+  return optionalString((profile as Record<string, unknown>).system_prompt_template);
+}
+
 export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: LlmpartyPiExtensionDependencies = {}): void {
   const env = dependencies.env ?? process.env;
   const contextLoader = dependencies.loadContext ?? loadTurnContext;
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
+  const fetchImpl = dependencies.fetch ?? fetch;
   const allowedToolNames = allowedToolNamesForAgentKind(env.LLMPARTY_AGENT_KIND);
   for (const tool of buildLlmpartyTools({
     env,
     loadContext: contextLoader,
     logDiagnostic,
-    fetch: dependencies.fetch,
+    fetch: fetchImpl,
   })) {
     if (!allowedToolNames.has(tool.name)) continue;
     pi.registerTool(tool as any);
@@ -111,6 +167,24 @@ export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: Llmpar
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
+
+  pi.on("before_agent_start", async (event) => {
+    const eventRecord = event as unknown as Record<string, unknown>;
+    const currentSystemPrompt = typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
+    try {
+      const profilePrompt = await loadProfileSystemPrompt(env, fetchImpl);
+      if (!profilePrompt) return { systemPrompt: currentSystemPrompt };
+      return { systemPrompt: `${currentSystemPrompt}\n\n${profilePrompt}` };
+    } catch (error) {
+      await logDiagnostic(env.LLMPARTY_PI_HOOK_LOG ?? defaultHookLogFile(env), {
+        level: "warn",
+        code: "system_prompt_append_failed",
+        message: "failed to append llmparty execution profile system prompt",
+        details: error instanceof Error ? error.message : String(error),
+      });
+      return { systemPrompt: currentSystemPrompt };
+    }
+  });
 
   pi.on("session_start", async (event) => {
     if (readyReported) return;

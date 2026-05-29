@@ -2,8 +2,8 @@ use crate::{
     adapters::AdapterCapabilities,
     agent_clients::types::{
         AdapterEventBehavior, AgentClientSpec, DispatchBehavior, HookLogBehavior,
-        InterruptBehavior, ReadinessBehavior, RuntimeBehavior, StartupHook, TmuxRuntimeBehavior,
-        TurnContextBehavior,
+        InterruptBehavior, ReadinessBehavior, RuntimeBehavior, StartupHook,
+        SystemPromptInjectionBehavior, TmuxRuntimeBehavior, TurnContextBehavior,
     },
 };
 
@@ -36,5 +36,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     interrupt: InterruptBehavior::Unsupported,
     turn_context: TurnContextBehavior::CurrentTurnFile,
     adapter_events: AdapterEventBehavior::Disabled,
+    system_prompt_injection: SystemPromptInjectionBehavior::Disabled,
     startup_hooks: &[StartupHook::ClaudeCodeTrustWorkspace],
 };

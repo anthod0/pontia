@@ -2,7 +2,7 @@ use crate::{
     adapters::AdapterCapabilities,
     agent_clients::types::{
         AdapterEventBehavior, AgentClientSpec, DispatchBehavior, InterruptBehavior,
-        ReadinessBehavior, RuntimeBehavior, TurnContextBehavior,
+        ReadinessBehavior, RuntimeBehavior, SystemPromptInjectionBehavior, TurnContextBehavior,
     },
 };
 
@@ -25,5 +25,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     interrupt: InterruptBehavior::Unsupported,
     turn_context: TurnContextBehavior::Disabled,
     adapter_events: AdapterEventBehavior::Disabled,
+    system_prompt_injection: SystemPromptInjectionBehavior::Disabled,
     startup_hooks: &[],
 };

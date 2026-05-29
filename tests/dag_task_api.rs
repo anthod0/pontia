@@ -122,11 +122,9 @@ async fn dag_task_api_creates_task_links_workspace_and_starts_generic_planner_tu
     assert_eq!(turn["metadata"]["dag_managed"], true);
     assert_eq!(turn["metadata"]["dag_planning_role"], "planner");
     assert_eq!(turn["metadata"]["task_id"], task["task_id"]);
-    assert!(
-        turn["input"]["summary"]
-            .as_str()
-            .expect("prompt")
-            .contains("Plan task")
+    assert_eq!(
+        turn["input"]["summary"].as_str().expect("prompt"),
+        "Create demo file"
     );
 
     let (_events_status, events_body) = get_json(

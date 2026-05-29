@@ -4,7 +4,7 @@ import type { TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
 
 interface HandlerMap {
-  [event: string]: (event: any, ctx: any) => Promise<void> | void;
+  [event: string]: (event: any, ctx: any) => Promise<any> | any;
 }
 
 function fakePi() {
@@ -90,10 +90,57 @@ describe("llmparty pi extension lifecycle", () => {
     });
 
     expect(pi.on).toHaveBeenCalledWith("session_start", expect.any(Function));
+    expect(pi.on).toHaveBeenCalledWith("before_agent_start", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("agent_start", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_update", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_end", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("agent_end", expect.any(Function));
+  });
+
+  test("appends profile system prompt from external API before agent starts", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/external/v1/sessions/sess_1")) {
+        return new Response(JSON.stringify({ data: { session: { execution_profile_id: "planner", execution_profile_version: "1" } } }), { status: 200 });
+      }
+      if (url.endsWith("/external/v1/agent-profiles/planner/versions/1")) {
+        return new Response(JSON.stringify({ data: { agent_profile: { system_prompt_template: "Planner instructions" } } }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const { handlers } = install({
+      env: {
+        LLMPARTY_SESSION_ID: "sess_1",
+        LLMPARTY_EXTERNAL_API_URL: "http://localhost/external/v1",
+        LLMPARTY_EXTERNAL_API_TOKEN: "token",
+      },
+      fetch: fetchImpl as any,
+    });
+
+    const result = await handlers.before_agent_start({ systemPrompt: "Base prompt" }, {});
+
+    expect(result).toEqual({ systemPrompt: "Base prompt\n\nPlanner instructions" });
+    expect(fetchImpl).toHaveBeenCalledWith("http://localhost/external/v1/sessions/sess_1", expect.objectContaining({ headers: { Authorization: "Bearer token" } }));
+  });
+
+  test("keeps original system prompt when profile has no system prompt", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/external/v1/sessions/sess_1")) {
+        return new Response(JSON.stringify({ data: { session: { execution_profile_id: "default", execution_profile_version: "1" } } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: { agent_profile: { system_prompt_template: null } } }), { status: 200 });
+    });
+    const { handlers } = install({
+      env: {
+        LLMPARTY_SESSION_ID: "sess_1",
+        LLMPARTY_EXTERNAL_API_URL: "http://localhost/external/v1",
+        LLMPARTY_EXTERNAL_API_TOKEN: "token",
+      },
+      fetch: fetchImpl as any,
+    });
+
+    const result = await handlers.before_agent_start({ systemPrompt: "Base prompt" }, {});
+
+    expect(result).toEqual({ systemPrompt: "Base prompt" });
   });
 
   test("reads context on agent_start and reports output then completed on agent_end", async () => {

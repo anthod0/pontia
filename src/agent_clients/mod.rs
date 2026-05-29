@@ -79,6 +79,10 @@ mod tests {
         assert_eq!(pi.interrupt, InterruptBehavior::TmuxInterrupt);
         assert_eq!(pi.turn_context, TurnContextBehavior::CurrentTurnFile);
         assert_eq!(
+            pi.system_prompt_injection,
+            SystemPromptInjectionBehavior::AppendFromExternalApi
+        );
+        assert_eq!(
             pi.adapter_events,
             AdapterEventBehavior::JsonlOutbox {
                 file_name: "adapter-events.jsonl"
@@ -104,6 +108,10 @@ mod tests {
         assert_eq!(claude.readiness, ReadinessBehavior::AgentClientEvent);
         assert_eq!(claude.interrupt, InterruptBehavior::Unsupported);
         assert_eq!(claude.turn_context, TurnContextBehavior::CurrentTurnFile);
+        assert_eq!(
+            claude.system_prompt_injection,
+            SystemPromptInjectionBehavior::Disabled
+        );
         assert_eq!(claude.adapter_events, AdapterEventBehavior::Disabled);
     }
 }
