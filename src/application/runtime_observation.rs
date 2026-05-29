@@ -1,4 +1,5 @@
 use super::*;
+use crate::agent_clients;
 
 #[derive(Clone)]
 pub struct RuntimeObservationService {
@@ -81,7 +82,10 @@ impl PiAdapterEventOutboxService {
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        if session.client_type != "pi" {
+        let Some(client_spec) = agent_clients::get_client_spec(&session.client_type) else {
+            return Ok(());
+        };
+        if !client_spec.adapter_event_outbox {
             return Ok(());
         }
 
@@ -167,7 +171,7 @@ fn adapter_record_to_event(line: &str, session_id: &str, client_type: &str) -> R
         EventType::TurnOutput | EventType::TurnCompleted | EventType::TurnFailed
     ) {
         return Err(Error::Domain(format!(
-            "adapter event type {event_type} is not accepted from pi outbox"
+            "adapter event type {event_type} is not accepted from adapter outbox"
         )));
     }
     let payload = value.get("payload").cloned().unwrap_or_else(|| json!({}));

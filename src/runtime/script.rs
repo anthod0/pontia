@@ -39,8 +39,12 @@ pub(super) fn write_runtime_script(
                 .and_then(|env| std::env::var(env).ok())
                 .or_else(|| configured_tui_command(&request.client_type))
                 .unwrap_or_else(|| default_command.to_string());
-            if request.client_type == "pi" && command.trim() == "pi" {
-                command.push_str(" --session-id ");
+            if let Some(session_identity_arg) = client_spec.session_identity_arg
+                && Some(command.trim()) == client_spec.default_command
+            {
+                command.push(' ');
+                command.push_str(session_identity_arg);
+                command.push(' ');
                 command.push_str(&shell_quote(&request.session_id));
             }
             (
@@ -58,6 +62,17 @@ pub(super) fn write_runtime_script(
         .as_ref()
         .map(|agent_kind| format!("export LLMPARTY_AGENT_KIND={}\n", shell_quote(agent_kind)))
         .unwrap_or_default();
+    let hook_log_export = client_spec
+        .hook_log_env
+        .and_then(|env| hook_log_path(runtime_paths, env).map(|path| (env, path)))
+        .map(|(env, path)| {
+            format!(
+                "export {}={}\n",
+                env,
+                shell_quote(&path.display().to_string())
+            )
+        })
+        .unwrap_or_default();
     let content = format!(
         r#"#!/usr/bin/env sh
 export LLMPARTY_SESSION_ID={}
@@ -71,9 +86,7 @@ export LLMPARTY_INTERNAL_EVENT_URL={}
 export LLMPARTY_EXTERNAL_API_URL={}
 export LLMPARTY_EXTERNAL_API_TOKEN={}
 export LLMPARTY_RUNTIME_INSTANCE_ID={}
-export LLMPARTY_PI_HOOK_LOG={}
-export LLMPARTY_CLAUDE_HOOK_LOG={}
-{}{}
+{}{}{}
 {}
 "#,
         shell_quote(&request.session_id),
@@ -87,14 +100,21 @@ export LLMPARTY_CLAUDE_HOOK_LOG={}
         shell_quote(&external_api_url()),
         shell_quote(&external_api_token()),
         shell_quote(runtime_instance_id),
-        shell_quote(&runtime_paths.pi_hook_log.display().to_string()),
-        shell_quote(&runtime_paths.claude_hook_log.display().to_string()),
+        hook_log_export,
         agent_kind_export,
         log_setup,
         runtime_body,
     );
     std::fs::write(path, content)?;
     Ok(())
+}
+
+fn hook_log_path<'a>(runtime_paths: &'a RuntimePaths<'_>, env: &str) -> Option<&'a Path> {
+    match env {
+        "LLMPARTY_PI_HOOK_LOG" => Some(runtime_paths.pi_hook_log),
+        "LLMPARTY_CLAUDE_HOOK_LOG" => Some(runtime_paths.claude_hook_log),
+        _ => None,
+    }
 }
 
 pub(super) fn internal_event_url() -> String {
@@ -180,6 +200,48 @@ mod tests {
         let script = std::fs::read_to_string(script_path).expect("script");
         assert!(script.contains("pi --session-id"), "script was:\n{script}");
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
+    }
+
+    #[test]
+    fn runtime_script_exports_only_current_client_hook_log_env() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let script_path = tempdir.path().join("runtime.sh");
+        let log_path = tempdir.path().join("runtime.log");
+        let paths = RuntimePaths {
+            runtime_dir: tempdir.path(),
+            log_path: &log_path,
+            adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
+            current_turn_file: &tempdir.path().join("current-turn.json"),
+            pi_hook_log: &tempdir.path().join("pi-hook.log"),
+            claude_hook_log: &tempdir.path().join("claude-hook.log"),
+        };
+        let request = RuntimeStartRequest {
+            session_id: "sess_claude_1".to_string(),
+            client_type: "claude_code".to_string(),
+            workspace: Some(tempdir.path().display().to_string()),
+            handle: None,
+            role: None,
+            agent_kind: None,
+        };
+
+        write_runtime_script(
+            &script_path,
+            tempdir.path(),
+            &paths,
+            &request,
+            "runtime_instance_1",
+        )
+        .expect("write script");
+
+        let script = std::fs::read_to_string(script_path).expect("script");
+        assert!(
+            script.contains("export LLMPARTY_CLAUDE_HOOK_LOG="),
+            "script was:\n{script}"
+        );
+        assert!(
+            !script.contains("export LLMPARTY_PI_HOOK_LOG="),
+            "script was:\n{script}"
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use std::sync::{OnceLock, RwLock};
 
-use crate::config::RuntimeConfig;
+use crate::{agent_clients, config::RuntimeConfig};
 
 fn runtime_config() -> &'static RwLock<RuntimeConfig> {
     static CONFIG: OnceLock<RwLock<RuntimeConfig>> = OnceLock::new();
@@ -18,7 +18,8 @@ pub(super) fn configured_tui_command(client_type: &str) -> Option<String> {
     let guard = runtime_config()
         .read()
         .expect("runtime config lock poisoned");
-    match client_type {
+    let runtime_config_key = agent_clients::get_client_spec(client_type)?.runtime_config_key?;
+    match runtime_config_key {
         "pi" => guard.pi.tui_command.clone(),
         "claude_code" => guard.claude_code.tui_command.clone(),
         _ => None,

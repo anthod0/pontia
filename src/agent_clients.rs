@@ -24,9 +24,13 @@ pub struct AgentClientSpec {
     pub capabilities: AdapterCapabilities,
     pub command_env: Option<&'static str>,
     pub default_command: Option<&'static str>,
+    pub session_identity_arg: Option<&'static str>,
+    pub hook_log_env: Option<&'static str>,
+    pub runtime_config_key: Option<&'static str>,
     pub dispatch_mode: DispatchMode,
     pub readiness_mode: ReadinessMode,
     pub startup_hooks: &'static [StartupHook],
+    pub adapter_event_outbox: bool,
 }
 
 const GENERIC_CAPABILITIES: AdapterCapabilities = AdapterCapabilities {
@@ -65,27 +69,39 @@ pub const AGENT_CLIENTS: &[AgentClientSpec] = &[
         capabilities: GENERIC_CAPABILITIES,
         command_env: None,
         default_command: None,
+        session_identity_arg: None,
+        hook_log_env: None,
+        runtime_config_key: None,
         dispatch_mode: DispatchMode::GenericTestAdapter,
         readiness_mode: ReadinessMode::RuntimeManagerImmediate,
         startup_hooks: &[],
+        adapter_event_outbox: false,
     },
     AgentClientSpec {
         client_type: "pi",
         capabilities: PI_CAPABILITIES,
         command_env: Some("LLMPARTY_PI_TUI_COMMAND"),
         default_command: Some("pi"),
+        session_identity_arg: Some("--session-id"),
+        hook_log_env: Some("LLMPARTY_PI_HOOK_LOG"),
+        runtime_config_key: Some("pi"),
         dispatch_mode: DispatchMode::TmuxPaste,
         readiness_mode: ReadinessMode::AgentClientEvent,
         startup_hooks: &[],
+        adapter_event_outbox: true,
     },
     AgentClientSpec {
         client_type: "claude_code",
         capabilities: CLAUDE_CODE_CAPABILITIES,
         command_env: Some("LLMPARTY_CLAUDE_TUI_COMMAND"),
         default_command: Some("claude --dangerously-skip-permissions"),
+        session_identity_arg: None,
+        hook_log_env: Some("LLMPARTY_CLAUDE_HOOK_LOG"),
+        runtime_config_key: Some("claude_code"),
         dispatch_mode: DispatchMode::TmuxPaste,
         readiness_mode: ReadinessMode::AgentClientEvent,
         startup_hooks: &[StartupHook::ClaudeCodeTrustWorkspace],
+        adapter_event_outbox: false,
     },
 ];
 
@@ -132,6 +148,10 @@ mod tests {
         assert_eq!(pi.readiness_mode, ReadinessMode::AgentClientEvent);
         assert_eq!(pi.command_env, Some("LLMPARTY_PI_TUI_COMMAND"));
         assert_eq!(pi.default_command, Some("pi"));
+        assert_eq!(pi.session_identity_arg, Some("--session-id"));
+        assert_eq!(pi.hook_log_env, Some("LLMPARTY_PI_HOOK_LOG"));
+        assert_eq!(pi.runtime_config_key, Some("pi"));
+        assert!(pi.adapter_event_outbox);
 
         let claude = get_client_spec("claude_code").expect("claude spec");
         assert_eq!(claude.dispatch_mode, DispatchMode::TmuxPaste);
@@ -141,6 +161,10 @@ mod tests {
             claude.default_command,
             Some("claude --dangerously-skip-permissions")
         );
+        assert_eq!(claude.session_identity_arg, None);
+        assert_eq!(claude.hook_log_env, Some("LLMPARTY_CLAUDE_HOOK_LOG"));
+        assert_eq!(claude.runtime_config_key, Some("claude_code"));
+        assert!(!claude.adapter_event_outbox);
         assert_eq!(
             claude.startup_hooks,
             &[StartupHook::ClaudeCodeTrustWorkspace]
@@ -157,5 +181,9 @@ mod tests {
         );
         assert_eq!(generic.command_env, None);
         assert_eq!(generic.default_command, None);
+        assert_eq!(generic.session_identity_arg, None);
+        assert_eq!(generic.hook_log_env, None);
+        assert_eq!(generic.runtime_config_key, None);
+        assert!(!generic.adapter_event_outbox);
     }
 }

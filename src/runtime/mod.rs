@@ -380,7 +380,6 @@ mod tests {
 
     #[test]
     fn generic_runtime_ref_uses_handle_role_and_short_session_id() {
-        GenericRuntimeManager::reset_in_process_test_registry();
         let manager = GenericRuntimeManager;
         let session_id = "sess_1234567890abcdef".to_string();
 
@@ -403,7 +402,6 @@ mod tests {
 
     #[test]
     fn generic_runtime_registry_tracks_lifecycle_and_restart_identity() {
-        GenericRuntimeManager::reset_in_process_test_registry();
         let manager = GenericRuntimeManager;
         let request = RuntimeStartRequest {
             session_id: "sess_runtime_lifecycle_abcdef12".to_string(),
