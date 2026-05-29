@@ -378,6 +378,7 @@ async fn list_task_proposals_returns_all_revisions_with_full_body() {
     assert_eq!(proposals[0]["revision"], 2);
     assert_eq!(proposals[0]["supersedes_proposal_id"], first_id);
     assert_eq!(proposals[0]["created_by_session_id"], "sess_list_proposals");
+    assert_eq!(proposals[0]["created_by_turn_id"], "turn_list_proposals");
     assert_eq!(
         proposals[0]["proposal_json"]["summary"],
         "Revised proposal visible to dashboard"

@@ -87,7 +87,8 @@ impl DagPlanningService {
         raw_output: String,
     ) -> Result<DagPlanningOutcome> {
         let payload = parse_initial_plan_output(&raw_output)?;
-        self.submit_initial_plan_payload(task_id, session_id, payload)
+        let turn_id = self.latest_planning_turn_id(task_id, session_id).await?;
+        self.submit_initial_plan_payload(task_id, session_id, &turn_id, payload)
             .await
     }
 
@@ -95,12 +96,13 @@ impl DagPlanningService {
         &self,
         task_id: &str,
         session_id: &str,
+        turn_id: &str,
         payload: SubmitPlanPayload,
     ) -> Result<DagPlanningOutcome> {
         dag_validator::validate_plan_shape(&payload)?;
         let dag = DagService::with_graph(self.pool.clone(), self.graph.clone());
         let proposal = dag
-            .save_proposal(task_id, &payload, Some(session_id))
+            .save_proposal(task_id, &payload, Some(session_id), turn_id)
             .await?;
         sqlx::query(
             r#"UPDATE tasks
@@ -182,7 +184,8 @@ impl DagPlanningService {
         raw_output: String,
     ) -> Result<DagPlanningOutcome> {
         let (summary, patch) = parse_patch_output(&raw_output)?;
-        self.submit_patch_payload(task_id, session_id, summary, patch)
+        let turn_id = self.latest_planning_turn_id(task_id, session_id).await?;
+        self.submit_patch_payload(task_id, session_id, &turn_id, summary, patch)
             .await
     }
 
@@ -190,12 +193,13 @@ impl DagPlanningService {
         &self,
         task_id: &str,
         session_id: &str,
+        turn_id: &str,
         summary: String,
         patch: DagPatch,
     ) -> Result<DagPlanningOutcome> {
         let dag = DagService::with_graph(self.pool.clone(), self.graph.clone());
         let proposal = dag
-            .save_patch_proposal(task_id, &summary, &patch, Some(session_id))
+            .save_patch_proposal(task_id, &summary, &patch, Some(session_id), turn_id)
             .await?;
         sqlx::query(
             r#"UPDATE tasks
@@ -400,6 +404,28 @@ impl DagPlanningService {
             session_id,
             turn_id: turn.turn_id,
             profile_id: profile_id.to_string(),
+        })
+    }
+
+    async fn latest_planning_turn_id(&self, task_id: &str, session_id: &str) -> Result<String> {
+        sqlx::query_scalar(
+            r#"SELECT turn_id
+               FROM turns
+               WHERE session_id = ?
+                 AND json_extract(metadata, '$.dag_managed') = 1
+                 AND json_extract(metadata, '$.dag_planning_role') IS NOT NULL
+                 AND json_extract(metadata, '$.task_id') = ?
+               ORDER BY created_at DESC, turn_id DESC
+               LIMIT 1"#,
+        )
+        .bind(session_id)
+        .bind(task_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| {
+            Error::StateConflict(format!(
+                "planning session {session_id} has no DAG planning turn for task {task_id}"
+            ))
         })
     }
 

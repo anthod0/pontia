@@ -78,6 +78,7 @@ pub struct DagProposalView {
     pub proposal_json: Value,
     pub validation_json: Value,
     pub created_by_session_id: Option<String>,
+    pub created_by_turn_id: String,
     pub revision: i64,
     pub supersedes_proposal_id: Option<String>,
     pub created_at: String,

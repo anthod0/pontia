@@ -6,6 +6,7 @@ impl DagService {
         task_id: &str,
         payload: &SubmitPlanPayload,
         created_by_session_id: Option<&str>,
+        created_by_turn_id: &str,
     ) -> Result<DagProposal> {
         ensure_task_exists(&self.pool, task_id).await?;
         let proposal_id = new_prefixed_id("dagprop");
@@ -15,8 +16,8 @@ impl DagService {
         sqlx::query(
             r#"INSERT INTO dag_proposals (
                     proposal_id, task_id, mode, state, summary, proposal_json,
-                    validation_json, created_by_session_id, revision, supersedes_proposal_id
-               ) VALUES (?, ?, ?, 'proposed', ?, ?, '{}', ?, ?, ?)"#,
+                    validation_json, created_by_session_id, created_by_turn_id, revision, supersedes_proposal_id
+               ) VALUES (?, ?, ?, 'proposed', ?, ?, '{}', ?, ?, ?, ?)"#,
         )
         .bind(&proposal_id)
         .bind(task_id)
@@ -24,6 +25,7 @@ impl DagService {
         .bind(&payload.summary)
         .bind(proposal_json)
         .bind(created_by_session_id)
+        .bind(created_by_turn_id)
         .bind(revision)
         .bind(supersedes_proposal_id)
         .execute(&self.pool)
@@ -38,6 +40,7 @@ impl DagService {
         summary: &str,
         patch: &DagPatch,
         created_by_session_id: Option<&str>,
+        created_by_turn_id: &str,
     ) -> Result<DagProposal> {
         ensure_task_exists(&self.pool, task_id).await?;
         let proposal_id = new_prefixed_id("dagprop");
@@ -51,14 +54,15 @@ impl DagService {
         sqlx::query(
             r#"INSERT INTO dag_proposals (
                     proposal_id, task_id, mode, state, summary, proposal_json,
-                    validation_json, created_by_session_id, revision, supersedes_proposal_id
-               ) VALUES (?, ?, 'patch', 'proposed', ?, ?, '{}', ?, ?, ?)"#,
+                    validation_json, created_by_session_id, created_by_turn_id, revision, supersedes_proposal_id
+               ) VALUES (?, ?, 'patch', 'proposed', ?, ?, '{}', ?, ?, ?, ?)"#,
         )
         .bind(&proposal_id)
         .bind(task_id)
         .bind(summary)
         .bind(proposal_json)
         .bind(created_by_session_id)
+        .bind(created_by_turn_id)
         .bind(revision)
         .bind(supersedes_proposal_id)
         .execute(&self.pool)
@@ -70,7 +74,7 @@ impl DagService {
     pub async fn get_proposal(&self, proposal_id: &str) -> Result<DagProposal> {
         let row = sqlx::query(
             r#"SELECT proposal_id, task_id, mode, state, summary, proposal_json,
-                      validation_json, created_by_session_id, revision,
+                      validation_json, created_by_session_id, created_by_turn_id, revision,
                       supersedes_proposal_id, created_at, updated_at
                FROM dag_proposals WHERE proposal_id = ?"#,
         )
@@ -86,6 +90,7 @@ impl DagService {
             proposal_json: parse_json_string(row.get("proposal_json"))?,
             validation_json: parse_json_string(row.get("validation_json"))?,
             created_by_session_id: row.get("created_by_session_id"),
+            created_by_turn_id: row.get("created_by_turn_id"),
             revision: row.get("revision"),
             supersedes_proposal_id: row.get("supersedes_proposal_id"),
             created_at: row.get("created_at"),

@@ -228,14 +228,43 @@ pub async fn insert_signal(
 }
 
 pub async fn insert_proposal(pool: &SqlitePool, proposal_id: &str, task_id: &str, state: &str) {
+    let session_id = format!("sess_{proposal_id}");
+    let turn_id = format!("turn_{proposal_id}");
+    let metadata = json!({
+        "dag_managed": true,
+        "dag_planning_role": "planner",
+        "task_id": task_id
+    });
+    sqlx::query(
+        r#"INSERT OR IGNORE INTO sessions (session_id, client_type, state, metadata)
+           VALUES (?, 'pi', 'busy', ?)"#,
+    )
+    .bind(&session_id)
+    .bind(metadata.to_string())
+    .execute(pool)
+    .await
+    .expect("insert proposal session");
+    sqlx::query(
+        r#"INSERT OR IGNORE INTO turns (turn_id, session_id, state, metadata)
+           VALUES (?, ?, 'completed', ?)"#,
+    )
+    .bind(&turn_id)
+    .bind(&session_id)
+    .bind(metadata.to_string())
+    .execute(pool)
+    .await
+    .expect("insert proposal turn");
     sqlx::query(
         r#"INSERT INTO dag_proposals (
-                proposal_id, task_id, mode, state, summary, proposal_json, validation_json
-           ) VALUES (?, ?, 'initial_dag', ?, 'Initial plan', '{"work_items":[]}', '{}')"#,
+                proposal_id, task_id, mode, state, summary, proposal_json, validation_json,
+                created_by_session_id, created_by_turn_id
+           ) VALUES (?, ?, 'initial_dag', ?, 'Initial plan', '{"work_items":[]}', '{}', ?, ?)"#,
     )
     .bind(proposal_id)
     .bind(task_id)
     .bind(state)
+    .bind(session_id)
+    .bind(turn_id)
     .execute(pool)
     .await
     .expect("insert proposal");

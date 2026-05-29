@@ -126,7 +126,12 @@ impl AgentToolService {
             (AgentPlanningRole::Planner, "initial_dag") => {
                 let payload = parse_submit_plan_initial_input(input)?;
                 planning
-                    .submit_initial_plan_payload(&context.task_id, &context.session_id, payload)
+                    .submit_initial_plan_payload(
+                        &context.task_id,
+                        &context.session_id,
+                        &context.turn_id,
+                        payload,
+                    )
                     .await?
             }
             (AgentPlanningRole::Planner, "patch") => {
@@ -137,7 +142,13 @@ impl AgentToolService {
             (AgentPlanningRole::Replanner, "patch") => {
                 let (summary, patch) = parse_submit_plan_patch_input(input)?;
                 planning
-                    .submit_patch_payload(&context.task_id, &context.session_id, summary, patch)
+                    .submit_patch_payload(
+                        &context.task_id,
+                        &context.session_id,
+                        &context.turn_id,
+                        summary,
+                        patch,
+                    )
                     .await?
             }
             (AgentPlanningRole::Replanner, "initial_dag") => {

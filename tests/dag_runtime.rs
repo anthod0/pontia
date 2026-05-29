@@ -74,7 +74,7 @@ async fn saves_dag_proposal_without_applying_it() {
     let payload = initial_plan(vec![draft("a", "implementer")], vec![]);
 
     let proposal = service
-        .save_proposal(&task_id, &payload, Some("sess_planner"))
+        .save_proposal(&task_id, &payload, Some("sess_planner"), "turn_planner")
         .await
         .expect("save proposal");
 
