@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
+  import { get } from 'svelte/store'
   import { Activity, AtSign, Bot, Folder, GitBranch, LogOut, MoreHorizontal, RotateCw, Terminal, TerminalSquare } from '@lucide/svelte'
   import { toast } from 'svelte-sonner'
   import { getPathParams, navigate } from 'svelte-mini-router'
@@ -72,6 +73,8 @@
   let loadedProposalTaskId = ''
   let appliedRedirectTaskId = ''
   let unsubscribeDashboardEvents: (() => void) | null = null
+
+  const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
 
   onMount(async () => {
     selectedSessionId = requestedSessionIdFromLocation()
@@ -259,13 +262,54 @@
     }
   }
 
+  function sessionStateFromStores(sessionId: string): string | null {
+    const detail = get(sessionDetail)
+    if (detail?.session.session_id === sessionId) return detail.session.state
+    return get(sessions).find((session) => session.session_id === sessionId)?.state ?? null
+  }
+
+  function waitForSessionIdle(sessionId: string, timeoutMs = AUTO_RESUME_IDLE_TIMEOUT_MS): Promise<void> {
+    if (sessionStateFromStores(sessionId) === 'idle') return Promise.resolve()
+
+    return new Promise((resolve, reject) => {
+      let done = false
+      let unsubscribeSessions: (() => void) | null = null
+      let unsubscribeDetail: (() => void) | null = null
+
+      const cleanup = () => {
+        unsubscribeSessions?.()
+        unsubscribeDetail?.()
+        clearTimeout(timeout)
+      }
+      const finish = (callback: () => void) => {
+        if (done) return
+        done = true
+        cleanup()
+        callback()
+      }
+      const check = () => {
+        if (sessionStateFromStores(sessionId) === 'idle') finish(resolve)
+      }
+      const timeout = setTimeout(() => {
+        finish(() => reject(new Error('Session resume timed out before becoming idle.')))
+      }, timeoutMs)
+
+      unsubscribeSessions = sessions.subscribe(check)
+      unsubscribeDetail = sessionDetail.subscribe(check)
+      check()
+    })
+  }
+
   async function sendMessage(): Promise<void> {
     if (!canSend || !selectedSessionId) return
     submitting = true
     actionError = null
     const message = input.trim()
     try {
-      if (selectedSession?.state === 'exited') await resumeSession(selectedSessionId)
+      if (selectedSession?.state === 'exited') {
+        await resumeSession(selectedSessionId)
+        await waitForSessionIdle(selectedSessionId)
+      }
       await submitInboxMessage(selectedSessionId, {
         input: message,
         delivery_policy: 'after_idle',

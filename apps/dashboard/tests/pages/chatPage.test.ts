@@ -460,15 +460,20 @@ test('does not render inline chat error alerts', async () => {
   expect(screen.queryByText('Could not load session detail')).not.toBeInTheDocument();
 });
 
-test('hides exit on exited sessions and automatically resumes before sending a message', async () => {
+test('hides exit on exited sessions and waits for idle after automatic resume before sending a message', async () => {
   const user = userEvent.setup();
   const selected = session({ session_id: 'session-2', state: 'exited' });
+  const starting = session({ session_id: 'session-2', state: 'starting' });
+  const idle = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
-  mocks.resumeSession.mockResolvedValue(undefined);
+  mocks.resumeSession.mockImplementation(async () => {
+    mocks.sessions.set([starting]);
+    mocks.sessionDetail.set({ session: starting, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
   render(ChatPage);
@@ -481,11 +486,20 @@ test('hides exit on exited sessions and automatically resumes before sending a m
   await user.click(screen.getByRole('button', { name: /send/i }));
 
   await waitFor(() => expect(mocks.resumeSession).toHaveBeenCalledWith('session-2'));
-  expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
+  expect(followUpInput).toHaveValue('continue this session');
+  expect(followUpInput).toBeDisabled();
+  expect(screen.getByRole('button', { name: /send/i })).toBeDisabled();
+  await Promise.resolve();
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+
+  mocks.sessions.set([idle]);
+  mocks.sessionDetail.set({ session: idle, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
     input: 'continue this session',
     delivery_policy: 'after_idle',
     metadata: { source: 'dashboard_chat' },
-  });
+  }));
   expect(mocks.resumeSession.mock.invocationCallOrder[0]).toBeLessThan(mocks.submitInboxMessage.mock.invocationCallOrder[0]);
 });
 
