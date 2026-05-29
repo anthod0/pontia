@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
-  import { CircleAlert, GitBranch, LogOut, MessageCircle, Play, RotateCw, SquarePen, TerminalSquare } from '@lucide/svelte'
+  import { Activity, CircleAlert, GitBranch, LogOut, MessageCircle, Play, RotateCw, TerminalSquare } from '@lucide/svelte'
   import { getPathParams, navigate } from 'svelte-mini-router'
   import * as Alert from '$lib/components/ui/alert/index.js'
+  import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
@@ -288,7 +289,6 @@
           <span>Profile: {sessionProfileTitle(selectedSession)}</span>
           <span>Handle: {selectedSession.handle ?? '—'}</span>
           <span>Description: {selectedSession.description ?? '—'}</span>
-          <span>State: {selectedSession.state}</span>
           <span>Workspace: {sessionWorkspaceTitle(selectedSession)}</span>
         </div>
       {:else}
@@ -296,9 +296,6 @@
       {/if}
     </div>
     <div class="flex gap-2">
-      {#if selectedSessionId}
-        <Button variant="outline" onclick={openNewChat}><SquarePen class="size-4" /> New chat</Button>
-      {/if}
       {#if selectedSession}
         <Button variant="outline" disabled={actionBusy} aria-label="Resume session" onclick={() => void runSessionLifecycle('resume')}><Play class="size-4" /> Resume</Button>
         <Button variant="outline" disabled={actionBusy} aria-label="Restart session" onclick={() => void runSessionLifecycle('restart')}><RotateCw class="size-4" /> Restart</Button>
@@ -452,6 +449,11 @@
           <SessionConversation {messages} loading={$sessionDetailLoading} />
 
           <div class="p-4">
+            <div class="mb-2 px-2">
+              <Badge variant="secondary" class="h-7 gap-1.5 px-3 text-sm">
+                <Activity class="size-4" /> {selectedSession.state}
+              </Badge>
+            </div>
             <SessionMessageComposer
               bind:value={input}
               busy={submitting}

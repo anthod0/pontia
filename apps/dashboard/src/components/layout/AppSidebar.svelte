@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GitBranch, Home, MessageCircle, SquarePen } from '@lucide/svelte'
+  import { GitBranch, Home, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import { sessions, sessionsLoading } from '../../stores/sessions'
@@ -98,7 +98,6 @@
             {#each recentSessions as session}
               <Sidebar.MenuItem>
                 <Sidebar.MenuButton isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
-                  <MessageCircle />
                   <span class="line-clamp-1">{sessionChatTitle(session)}</span>
                   {#if isSessionActiveState(session.state)}
                     <span class="ml-auto size-2 shrink-0 rounded-full bg-green-500 group-data-[collapsible=icon]:hidden" aria-label="Active session"></span>

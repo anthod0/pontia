@@ -128,9 +128,13 @@ test('sidebar shows recent sessions with active dot, including exited sessions, 
   render(AppSidebarHost);
 
   expect(screen.getByText('Recent Sessions')).toBeInTheDocument();
-  expect(screen.getByText('main · coder')).toBeInTheDocument();
+  const activeSessionButton = screen.getByText('main · coder').closest('button');
+  const closedSessionButton = screen.getByText('closed').closest('button');
+  expect(activeSessionButton).not.toBeNull();
+  expect(closedSessionButton).not.toBeNull();
+  expect(activeSessionButton?.querySelector('.lucide-message-circle')).not.toBeInTheDocument();
+  expect(closedSessionButton?.querySelector('.lucide-message-circle')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Active session')).toBeInTheDocument();
-  expect(screen.getByText('closed')).toBeInTheDocument();
   expect(screen.queryByText('idle')).not.toBeInTheDocument();
   expect(screen.queryByText('exited')).not.toBeInTheDocument();
 
