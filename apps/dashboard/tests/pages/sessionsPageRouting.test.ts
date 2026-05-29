@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
+import SessionDetailPage from '../../src/pages/SessionDetailPage.svelte';
 import SessionsPage from '../../src/pages/SessionsPage.svelte';
 import type { SessionConsoleDetail } from '../../src/stores/sessions';
 import type { SessionView } from '../../src/api/types';
@@ -113,26 +114,30 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test('loads the session selected by the sessions path parameter', async () => {
-  window.history.pushState({}, '', '/dashboard/sessions/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
-
+test('sessions index is a pure list page and does not load session details', async () => {
   render(SessionsPage);
 
-  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2'));
-  expect(await screen.findByRole('button', { name: /back to chat/i })).toBeInTheDocument();
+  await waitFor(() => expect(mocks.loadSessions).toHaveBeenCalled());
+  expect(mocks.loadSessionDetail).not.toHaveBeenCalled();
+  expect(screen.getByRole('heading', { name: /sessions/i })).toBeInTheDocument();
+  expect(screen.queryByText(/create manual session/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/current turn output/i)).not.toBeInTheDocument();
 });
 
-test('navigates between session console and chat canonical paths', async () => {
+test('sessions index rows navigate to the session detail page', async () => {
+  render(SessionsPage);
+
+  await fireEvent.click(await screen.findByRole('button', { name: /first/i }));
+  expect(mocks.navigate).toHaveBeenCalledWith('/sessions/session-1');
+});
+
+test('session detail page loads the selected session and has no embedded sessions list', async () => {
   window.history.pushState({}, '', '/dashboard/sessions/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
 
-  render(SessionsPage);
+  render(SessionDetailPage);
+
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2'));
-
-  await fireEvent.click(screen.getByRole('button', { name: /back to chat/i }));
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-2');
-
-  await fireEvent.click(screen.getByRole('button', { name: /first/i }));
-  expect(mocks.navigate).toHaveBeenCalledWith('/sessions/session-1');
+  expect(await screen.findByRole('button', { name: /back to sessions/i })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /first/i })).not.toBeInTheDocument();
 });
