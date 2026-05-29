@@ -7,11 +7,30 @@ fn runtime_config() -> &'static RwLock<RuntimeConfig> {
     CONFIG.get_or_init(|| RwLock::new(RuntimeConfig::default()))
 }
 
+fn external_api_token_config() -> &'static RwLock<Option<String>> {
+    static CONFIG: OnceLock<RwLock<Option<String>>> = OnceLock::new();
+    CONFIG.get_or_init(|| RwLock::new(None))
+}
+
 pub fn set_runtime_config(config: RuntimeConfig) {
     let mut guard = runtime_config()
         .write()
         .expect("runtime config lock poisoned");
     *guard = config;
+}
+
+pub fn set_runtime_external_api_token(token: Option<String>) {
+    let mut guard = external_api_token_config()
+        .write()
+        .expect("runtime external api token lock poisoned");
+    *guard = token;
+}
+
+pub(super) fn configured_external_api_token() -> Option<String> {
+    external_api_token_config()
+        .read()
+        .expect("runtime external api token lock poisoned")
+        .clone()
 }
 
 pub(super) fn configured_tui_command(client_type: &str) -> Option<String> {

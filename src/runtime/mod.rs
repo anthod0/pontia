@@ -29,7 +29,7 @@ use crate::{
     time::utc_now,
 };
 
-pub use config::set_runtime_config;
+pub use config::{set_runtime_config, set_runtime_external_api_token};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeStartRequest {

@@ -5,7 +5,11 @@ use crate::{
     error::{Error, Result},
 };
 
-use super::{RuntimeStartRequest, claude_code, config::configured_tui_command, shell_quote};
+use super::{
+    RuntimeStartRequest, claude_code,
+    config::{configured_external_api_token, configured_tui_command},
+    shell_quote,
+};
 
 pub(super) struct RuntimePaths<'a> {
     pub(super) runtime_dir: &'a Path,
@@ -149,7 +153,9 @@ fn default_external_api_url() -> &'static str {
 }
 
 fn external_api_token() -> String {
-    std::env::var("LLMPARTY_EXTERNAL_API_TOKEN").unwrap_or_default()
+    configured_external_api_token()
+        .or_else(|| std::env::var("LLMPARTY_EXTERNAL_API_TOKEN").ok())
+        .unwrap_or_default()
 }
 
 pub(super) fn run_startup_hooks(hooks: &[StartupHook], workspace: &Path) -> Result<()> {
@@ -199,6 +205,62 @@ mod tests {
         let script = std::fs::read_to_string(script_path).expect("script");
         assert!(script.contains("pi --session-id"), "script was:\n{script}");
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
+    }
+
+    #[tokio::test]
+    async fn runtime_script_uses_configured_external_api_token_when_env_is_unset() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let script_path = tempdir.path().join("runtime.sh");
+        let log_path = tempdir.path().join("runtime.log");
+        let paths = RuntimePaths {
+            runtime_dir: tempdir.path(),
+            log_path: &log_path,
+            adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
+            current_turn_file: &tempdir.path().join("current-turn.json"),
+        };
+        let request = RuntimeStartRequest {
+            session_id: "sess_token_from_config".to_string(),
+            client_type: "pi".to_string(),
+            workspace: Some(tempdir.path().display().to_string()),
+            handle: None,
+            role: None,
+            agent_kind: Some("planner".to_string()),
+        };
+
+        unsafe {
+            std::env::remove_var("LLMPARTY_EXTERNAL_API_TOKEN");
+        }
+        crate::runtime::set_runtime_external_api_token(None);
+        let config = crate::config::AppConfig {
+            bind_addr: "127.0.0.1:0".parse().expect("bind addr"),
+            database_url: format!("sqlite://{}", tempdir.path().join("llmparty.db").display()),
+            external_api_token: Some("config-token".to_string()),
+            run_migrations: false,
+            default_client_type: "pi".to_string(),
+            graph: Default::default(),
+            workspace_browser: Default::default(),
+            runtime: Default::default(),
+            dashboard: crate::config::DashboardConfig::default(),
+        };
+        let _state = crate::application::initialize(&config)
+            .await
+            .expect("initialize app state");
+        write_runtime_script(
+            &script_path,
+            tempdir.path(),
+            &paths,
+            &request,
+            "runtime_instance_1",
+        )
+        .expect("write script");
+        crate::runtime::set_runtime_external_api_token(None);
+
+        let script = std::fs::read_to_string(script_path).expect("script");
+        assert!(
+            script.contains("export LLMPARTY_EXTERNAL_API_TOKEN='config-token'"),
+            "script was:\n{script}"
+        );
+        assert!(script.contains("export LLMPARTY_AGENT_KIND='planner'"));
     }
 
     #[test]
