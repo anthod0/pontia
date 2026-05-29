@@ -75,6 +75,7 @@
   let unsubscribeDashboardEvents: (() => void) | null = null
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
+  const newChatSelectorTriggerClass = 'h-7 rounded-full px-3 text-sm font-normal text-muted-foreground'
 
   onMount(async () => {
     selectedSessionId = requestedSessionIdFromLocation()
@@ -336,11 +337,12 @@
 
   {#if !selectedSessionId}
     <div class="flex min-h-0 flex-1 items-center justify-center">
-      <PromptInput.Root class="w-full max-w-4xl space-y-3" onSubmit={() => void startChat()}>
+      <div class="w-full max-w-4xl space-y-3">
         <div class="flex min-w-0 flex-wrap items-center gap-2 px-1">
           <Select.Root type="single" bind:value={createWorkspaceId} disabled={$workspacesLoading}>
-            <Select.Trigger class="max-w-56" aria-label="Workspace" title={selectedWorkspace?.canonical_path ?? undefined}>
-              {#if selectedWorkspace}{workspaceTitle(selectedWorkspace)}{:else}Workspace{/if}
+            <Select.Trigger class={`${newChatSelectorTriggerClass} max-w-56`} aria-label="Workspace" title={selectedWorkspace?.canonical_path ?? undefined}>
+              <Folder class="size-4" aria-hidden="true" />
+              <span class="min-w-0 truncate">{#if selectedWorkspace}{workspaceTitle(selectedWorkspace)}{:else}Workspace{/if}</span>
             </Select.Trigger>
             <Select.Content align="start">
               {#each $workspaces as workspace (workspace.workspace_id)}
@@ -354,20 +356,11 @@
             </Select.Content>
           </Select.Root>
 
-          <Select.Root type="single" bind:value={createProfileId} disabled={$agentProfilesLoading} onValueChange={applyProfileDefaults}>
-            <Select.Trigger class="max-w-56" aria-label="Profile">
-              {#if selectedProfile}{profileTitle(selectedProfile)}{:else}Profile{/if}
-            </Select.Trigger>
-            <Select.Content align="start">
-              <Select.Item value="" label="No profile">No profile</Select.Item>
-              {#each $agentProfiles as profile (profile.profile_id)}
-                <Select.Item value={profile.profile_id} label={profileTitle(profile)}>{profileTitle(profile)}</Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-
           <Select.Root type="single" bind:value={createClientType}>
-            <Select.Trigger class="max-w-44" aria-label="Client">{clientTitle(createClientType)}</Select.Trigger>
+            <Select.Trigger class={`${newChatSelectorTriggerClass} max-w-44`} aria-label="Client">
+              <Terminal class="size-4" aria-hidden="true" />
+              <span class="min-w-0 truncate">{clientTitle(createClientType)}</span>
+            </Select.Trigger>
             <Select.Content align="start">
               {#each clientTypeOptions as clientType (clientType)}
                 <Select.Item value={clientType} label={clientType}>{clientType}</Select.Item>
@@ -376,30 +369,31 @@
           </Select.Root>
         </div>
 
-        <PromptInput.Body>
+        <PromptInput.Root class="w-full" onSubmit={() => void startChat()}>
+          <PromptInput.Body>
           <PromptInput.Textarea
             id="chat-prompt"
             bind:value={prompt}
             placeholder="Ask the agent to implement, inspect, or explain something…"
-            class="min-h-28 text-base"
           />
         </PromptInput.Body>
 
-        <PromptInput.Toolbar class="justify-between gap-2 pt-1">
-          <Button
-            type="button"
-            size="sm"
-            variant={taskMode ? 'default' : 'outline'}
-            class="rounded-full font-normal"
-            aria-pressed={taskMode}
-            aria-label={taskMode ? 'Task mode on' : 'Task mode off'}
-            onclick={() => (taskMode = !taskMode)}
-          >
-            <GitBranch class="size-4" /> Task
-          </Button>
-          <PromptInput.Submit disabled={!canCreate || creating} aria-label={creating ? (taskMode ? 'Creating task' : 'Starting chat') : (taskMode ? 'Create task' : 'Start chat')} />
-        </PromptInput.Toolbar>
-      </PromptInput.Root>
+          <PromptInput.Toolbar class="justify-between gap-2 pt-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={taskMode ? 'default' : 'outline'}
+              class="rounded-full font-normal"
+              aria-pressed={taskMode}
+              aria-label={taskMode ? 'Task mode on' : 'Task mode off'}
+              onclick={() => (taskMode = !taskMode)}
+            >
+              <GitBranch class="size-4" /> Task
+            </Button>
+            <PromptInput.Submit disabled={!canCreate || creating} aria-label={creating ? (taskMode ? 'Creating task' : 'Starting chat') : (taskMode ? 'Create task' : 'Start chat')} />
+          </PromptInput.Toolbar>
+        </PromptInput.Root>
+      </div>
     </div>
   {:else}
     <div class="min-h-0 flex-1">

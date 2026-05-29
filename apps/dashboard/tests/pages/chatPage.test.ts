@@ -252,21 +252,32 @@ test('renders a clean centered prompt input on the bare chat route instead of se
   expect(screen.queryByText(/^Prompt$/i)).not.toBeInTheDocument();
   expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('llmparty');
   expect(screen.getByLabelText(/client/i)).toHaveTextContent('pi');
-  expect(screen.getByLabelText(/profile/i)).toHaveTextContent('Profile');
+  expect(screen.queryByLabelText(/profile/i)).not.toBeInTheDocument();
   expect(mocks.loadSessionDetail).not.toHaveBeenCalled();
 });
 
-test('places new chat selectors above the prompt input', async () => {
+test('renders new chat selectors as compact metadata pills above the prompt input', async () => {
   render(ChatPage);
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  expect(promptInput).toHaveClass('min-h-20');
+  expect(promptInput).not.toHaveClass('min-h-28');
+  expect(promptInput).not.toHaveClass('text-base');
   const workspaceSelector = screen.getByLabelText(/workspace/i);
-  const profileSelector = screen.getByLabelText(/profile/i);
   const clientSelector = screen.getByLabelText(/client/i);
 
+  expect(screen.queryByLabelText(/profile/i)).not.toBeInTheDocument();
+  expect(workspaceSelector.compareDocumentPosition(clientSelector) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(workspaceSelector.compareDocumentPosition(promptInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(profileSelector.compareDocumentPosition(promptInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(clientSelector.compareDocumentPosition(promptInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  for (const selector of [workspaceSelector, clientSelector]) {
+    expect(selector).toHaveClass('h-7');
+    expect(selector).toHaveClass('rounded-full');
+    expect(selector).toHaveClass('text-muted-foreground');
+    expect(selector.closest('form')).toBeNull();
+  }
+  expect(workspaceSelector.querySelector('svg')).toHaveClass('lucide-folder');
+  expect(clientSelector.querySelector('svg')).toHaveClass('lucide-terminal');
 });
 
 test('places task mode toggle at the left edge of the prompt toolbar', async () => {
