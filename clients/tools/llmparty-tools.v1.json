@@ -2,12 +2,12 @@
   "$schema": "./agent-tools.v1.schema.json",
   "version": 1,
   "namespace": "llmparty",
-  "description": "Stable llmparty DAG-mode agent tool definitions. This file is the cross-language source of truth for tool names, descriptions, input schemas, and output schemas. All DAG agents may register the same tools; llmparty authorizes each call server-side from the current session, execution profile, task, WorkItem, and WorkItemRun context.",
+  "description": "Stable llmparty DAG-mode tool definitions. Cross-language source of truth for tool names, input schemas, and output schemas.",
   "tools": [
     {
       "name": "getContext",
       "title": "Get DAG work context",
-      "description": "Fetch the current DAG-managed context for this agent session. Planning agents receive task, DAG, signals, workspace summary, and available execution profile context. Execution agents receive the current WorkItemRun, inputs, dependencies, expected outputs, and acceptance criteria. The caller must not provide task, WorkItem, run, or profile identity; llmparty derives it from the current session.",
+      "description": "Fetch the current DAG-managed context for the current session.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -23,7 +23,7 @@
               "planning",
               "execution"
             ],
-            "description": "Authorized DAG agent mode for the current session."
+            "description": "DAG context mode for the current session."
           },
           "task": {
             "type": "object",
@@ -34,32 +34,32 @@
               "object",
               "null"
             ],
-            "description": "Current approved or draft DAG context when relevant."
+            "description": "DAG context data."
           },
           "work_item": {
             "type": [
               "object",
               "null"
             ],
-            "description": "Current WorkItem context for execution agents."
+            "description": "WorkItem context data."
           },
           "work_item_run": {
             "type": [
               "object",
               "null"
             ],
-            "description": "Current WorkItemRun context for execution agents."
+            "description": "WorkItemRun context data."
           },
           "signals": {
             "type": "array",
-            "description": "Relevant signals for planning or execution.",
+            "description": "Signal records.",
             "items": {
               "type": "object"
             }
           },
           "execution_profiles": {
             "type": "array",
-            "description": "Relevant available execution profiles for planning agents.",
+            "description": "Execution profile records.",
             "items": {
               "type": "object"
             }
@@ -73,8 +73,8 @@
     },
     {
       "name": "submitPlan",
-      "title": "Submit DAG plan",
-      "description": "Submit the planning agent's main output: an initial WorkItem DAG proposal or a DAG patch proposal. This tool proposes structured plan changes only; it does not approve, apply, or schedule the DAG. llmparty validates and authorizes the proposal server-side based on the current planning session and execution profile.",
+      "title": "Submit DAG proposal",
+      "description": "Store a WorkItem DAG proposal or DAG patch proposal.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -85,7 +85,7 @@
               "initial_dag",
               "patch"
             ],
-            "description": "Whether this submission proposes the initial DAG or a patch to an existing DAG."
+            "description": "Proposal kind."
           },
           "summary": {
             "type": "string",
@@ -94,7 +94,7 @@
           },
           "dag": {
             "type": "object",
-            "description": "Initial DAG proposal when mode is initial_dag. Temporary WorkItem IDs are allowed; llmparty assigns authoritative IDs when applying an approved DAG.",
+            "description": "Initial DAG proposal payload.",
             "additionalProperties": false,
             "properties": {
               "work_items": {
@@ -215,13 +215,13 @@
           },
           "patch": {
             "type": "object",
-            "description": "DAG patch proposal when mode is patch. Supported operations are validated by llmparty before approval or application.",
+            "description": "DAG patch proposal payload.",
             "additionalProperties": false,
             "properties": {
               "anchor_work_item_id": {
                 "type": "string",
                 "minLength": 1,
-                "description": "Existing WorkItem that anchors an automatic cutover. Required for direct_downstream or reachable_downstream supersede policies."
+                "description": "WorkItem ID used as the patch anchor."
               },
               "supersede_policy": {
                 "type": "string",
@@ -232,7 +232,7 @@
                   "reachable_downstream"
                 ],
                 "default": "explicit_only",
-                "description": "Controls which existing active WorkItems are automatically superseded before adding patch operations. reachable_downstream replaces the old active path after anchor_work_item_id."
+                "description": "Patch supersede policy value."
               },
               "operations": {
                 "type": "array",
@@ -835,11 +835,11 @@
           },
           "apply": {
             "type": "object",
-            "description": "Apply outcome for the proposal."
+            "description": "Apply result data."
           },
           "scheduler": {
             "type": "object",
-            "description": "Scheduler outcome after applying the proposal."
+            "description": "Additional result data."
           }
         },
         "required": [
@@ -852,8 +852,8 @@
     },
     {
       "name": "applyPlan",
-      "title": "Apply approved DAG plan",
-      "description": "Apply a previously submitted DAG proposal after the user has approved it in the planning chat. This promotes the single stored draft proposal into the executable DAG and starts scheduling.",
+      "title": "Apply DAG proposal",
+      "description": "Apply a stored DAG proposal by proposal ID.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -861,15 +861,15 @@
           "proposal_id": {
             "type": "string",
             "minLength": 1,
-            "description": "Identifier returned by submitPlan for the proposal the user approved."
+            "description": "Stored proposal identifier."
           },
           "approval_quote": {
             "type": "string",
-            "description": "Short quote of the user chat message that explicitly approved applying this proposal."
+            "description": "Approval message text."
           },
           "approval_message_ref": {
             "type": "string",
-            "description": "Optional stable reference to the user message that approved this proposal."
+            "description": "Approval reference identifier."
           }
         },
         "required": [
@@ -890,11 +890,11 @@
           },
           "apply": {
             "type": "object",
-            "description": "Apply outcome for the proposal."
+            "description": "Apply result data."
           },
           "scheduler": {
             "type": "object",
-            "description": "Scheduler outcome after applying the proposal."
+            "description": "Additional result data."
           }
         },
         "required": [
@@ -908,7 +908,7 @@
     {
       "name": "submitResult",
       "title": "Submit WorkItem result",
-      "description": "Submit the execution agent's main output for the current WorkItemRun. Implementation, validation, review, documentation, debugging, and similar WorkItems all use this same tool. This tool reports the current node result only; llmparty decides scheduling, retry, session reuse, and downstream DAG state server-side.",
+      "description": "Store a WorkItemRun result.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -930,7 +930,7 @@
           },
           "outputs": {
             "type": "array",
-            "description": "Logical work products produced or identified by this run. These may reference runtime artifacts or workspace files, but do not directly mutate the DAG.",
+            "description": "Logical work products produced or identified by this run.",
             "items": {
               "type": "object",
               "additionalProperties": false,
@@ -967,7 +967,7 @@
           },
           "failure": {
             "type": "object",
-            "description": "Failure or blocking detail when status is failed, blocked, or needs_input.",
+            "description": "Failure or blocking detail.",
             "additionalProperties": false,
             "properties": {
               "reason": {
@@ -1009,7 +1009,7 @@
     {
       "name": "raiseSignal",
       "title": "Raise DAG signal",
-      "description": "Report a signal from the current agent session: missing input, replan request, risk, missing dependency, scope change, assistance need, or review request. Signals do not directly modify the DAG; llmparty records them and the Scheduler/RePlanner/Human approval flow decides what happens next.",
+      "description": "Store a DAG signal record.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

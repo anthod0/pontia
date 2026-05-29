@@ -52,6 +52,23 @@ describe("llmparty pi agent tools", () => {
     expect(tools[0].description).toContain("Fetch the current DAG-managed context");
   });
 
+  test("tool descriptions and prompt guidelines do not contain workflow orchestration guidance", () => {
+    const tools = buildLlmpartyTools({
+      env: {},
+      loadContext: vi.fn(),
+      logDiagnostic: vi.fn(),
+    });
+    const disallowed = /\b(should|must|do not|schedule|scheduler|planner|replanner|next|supersede|missing input|task_id|work_item_id|run_id)\b/i;
+
+    for (const tool of tools) {
+      expect(tool.description, `${tool.name} description`).not.toMatch(disallowed);
+      expect(tool.promptSnippet, `${tool.name} promptSnippet`).toBe(tool.label);
+      for (const guideline of tool.promptGuidelines) {
+        expect(guideline, `${tool.name} prompt guideline`).not.toMatch(disallowed);
+      }
+    }
+  });
+
   test("does not register llmparty tools when agent kind is missing", () => {
     const { pi, tools } = install();
 

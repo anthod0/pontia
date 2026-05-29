@@ -1,5 +1,66 @@
 use super::*;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn planning_context_is_factual_and_has_no_workflow_guidance() {
+        let task = TaskView {
+            task_id: "task_1".to_string(),
+            state: "planning".to_string(),
+            input: "你好".to_string(),
+            workspace_id: Some("workspace_1".to_string()),
+            session_id: None,
+            turn_id: None,
+            routing_state: "none".to_string(),
+            routing_reason: None,
+            routing_confidence: None,
+            metadata: json!({}),
+            created_at: "now".to_string(),
+            updated_at: "now".to_string(),
+        };
+        let dag = TaskDagView {
+            task_id: "task_1".to_string(),
+            summary: DagSummaryView {
+                total_work_items: 0,
+                ready_work_items: 0,
+                running_work_items: 0,
+                completed_work_items: 0,
+                blocked_work_items: 0,
+                failed_work_items: 0,
+                open_signals: 0,
+                total_runs: 0,
+            },
+            work_items: Vec::new(),
+            edges: Vec::new(),
+            runs: Vec::new(),
+            signals: Vec::new(),
+        };
+
+        let text = render_planning_context(AgentPlanningRole::Planner, &task, &dag, &[], &[], &[]);
+
+        assert!(text.contains("llmparty context: planning"));
+        assert!(text.contains("Goal: 你好"));
+        for disallowed in [
+            "Next:",
+            "Submit an initial DAG",
+            "Submit a DAG patch",
+            "submitPlan",
+            "raiseSignal",
+            "Do not include",
+            "supersede_policy",
+            "scheduler",
+        ] {
+            assert!(
+                !text.contains(disallowed),
+                "planning context should not contain workflow guidance: {disallowed}\n{text}"
+            );
+        }
+    }
+}
+
 pub(super) fn render_planning_context(
     role: AgentPlanningRole,
     task: &TaskView,
@@ -118,21 +179,6 @@ pub(super) fn render_planning_context(
             );
         }
     }
-
-    lines.push(String::new());
-    lines.push("Next:".to_string());
-    match role {
-        AgentPlanningRole::Planner => {
-            lines.push("- Submit an initial DAG with submitPlan.".to_string())
-        }
-        AgentPlanningRole::Replanner => {
-            lines.push("- Submit a DAG patch with submitPlan.".to_string());
-            lines.push("- To replace an old path, set patch.anchor_work_item_id and supersede_policy='reachable_downstream' so llmparty supersedes the old active downstream path before scheduling the replacement.".to_string())
-        }
-    }
-    lines.push(
-        "- Do not include task_id, work_item_id, run_id, session_id, or turn_id.".to_string(),
-    );
 
     lines.join("\n")
 }

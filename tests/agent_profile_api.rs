@@ -157,7 +157,9 @@ async fn list_agent_profiles_includes_builtin_latest_profiles() {
     }
     for removed in ["tester", "debugger"] {
         assert!(
-            profiles.iter().all(|profile| profile["profile_id"] != removed),
+            profiles
+                .iter()
+                .all(|profile| profile["profile_id"] != removed),
             "removed builtin profile {removed} should not be present: {profiles:?}"
         );
     }

@@ -167,9 +167,7 @@ function buildTool(spec: ToolSpec, dependencies: Required<LlmpartyAgentToolDepen
     label: spec.title,
     description: spec.description,
     promptSnippet: spec.title,
-    promptGuidelines: [
-      `Use ${piName} for llmparty DAG-managed ${spec.name} operations. Do not include task_id, work_item_id, or run_id; llmparty authorizes the call from the current turn context.`,
-    ],
+    promptGuidelines: [],
     parameters: spec.inputSchema,
     async execute(_toolCallId, params, signal) {
       const loaded = await dependencies.loadContext(dependencies.env);
