@@ -6,6 +6,7 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { chatAutoScrollKey, scrollToBottom } from '../../session-chat/autoScroll'
+  import { buildDraftDagOutline } from '../../session-chat/draftDagOutline'
   import type { DagProposalView, JsonObject } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
 
@@ -80,49 +81,113 @@
         </Message.Root>
 
         {#if plannerTaskId && chatMessage.id === plannerDraftAnchorId}
-          <div class="mx-auto w-full max-w-4xl px-4 pb-4">
-            <div class="rounded-xl border bg-card p-4 shadow-sm">
-              <div class="flex flex-wrap items-start justify-between gap-3">
+          <section class="mx-auto w-full max-w-4xl px-4 pb-5" aria-label="Planner draft DAG">
+            <div class="border-y bg-muted/20 py-4">
+              <div class="flex flex-wrap items-start justify-between gap-3 px-1">
                 <div>
-                  <h3 class="text-lg font-semibold">Planner draft DAG</h3>
-                  <p class="text-sm text-muted-foreground">Task {plannerTaskId}</p>
+                  <h3 class="text-base font-semibold tracking-tight">Planner draft DAG</h3>
+                  <p class="text-xs text-muted-foreground">Task {plannerTaskId}</p>
                 </div>
                 {#if draftPlannerProposalLoading}
                   <span class="text-sm text-muted-foreground">Loading proposal…</span>
                 {:else if draftPlannerProposal}
-                  <span class="rounded-full border px-2.5 py-1 text-xs text-muted-foreground">revision {draftPlannerProposal.revision} · {draftPlannerProposal.state}</span>
+                  <span class="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground">revision {draftPlannerProposal.revision} · {draftPlannerProposal.state}</span>
                 {/if}
               </div>
 
               {#if draftPlannerProposal}
                 {@const draftWorkItems = proposalWorkItems(draftPlannerProposal)}
                 {@const draftEdges = proposalEdges(draftPlannerProposal)}
-                <p class="mt-3 text-sm">{draftPlannerProposal.summary}</p>
-                <div class="mt-4 grid gap-3 md:grid-cols-2">
-                  {#each draftWorkItems as item}
-                    <div class="rounded-lg border bg-background p-3">
-                      <div class="font-medium">{stringField(item, 'title')}</div>
-                      <div class="mt-1 text-sm text-muted-foreground">{stringField(item, 'description')}</div>
-                      <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <span>{stringField(item, 'temp_id', stringField(item, 'work_item_id', 'draft'))}</span>
-                        <span>{stringField(item, 'kind')}</span>
-                        <span>profile {stringField(item, 'execution_profile_id')}</span>
+                {@const outline = buildDraftDagOutline({ workItems: draftWorkItems, edges: draftEdges })}
+                <div class="mt-3 px-1">
+                  <p class="text-sm leading-6">{draftPlannerProposal.summary}</p>
+                  <div class="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span class="rounded-full bg-background px-2.5 py-1">{outline.totalWorkItems} work items</span>
+                    <span class="rounded-full bg-background px-2.5 py-1">{outline.totalEdges} dependencies</span>
+                    <span class="rounded-full bg-background px-2.5 py-1">{outline.components.length} flows</span>
+                    <span class="rounded-full bg-background px-2.5 py-1">roots {outline.rootIds.join(', ') || '—'}</span>
+                    <span class="rounded-full bg-background px-2.5 py-1">leaves {outline.leafIds.join(', ') || '—'}</span>
+                  </div>
+                </div>
+
+                {#if outline.warnings.length}
+                  <div class="mt-3 space-y-1 px-1 text-xs text-amber-600 dark:text-amber-400">
+                    {#each outline.warnings as warning}
+                      <p>{warning}</p>
+                    {/each}
+                  </div>
+                {/if}
+
+                <div class="mt-4 space-y-4 px-1">
+                  {#each outline.components as component, componentIndex}
+                    <div class="space-y-2">
+                      <div class="flex flex-wrap items-baseline gap-2">
+                        <h4 class="text-sm font-medium">Flow {componentIndex + 1}</h4>
+                        <code class="text-xs text-muted-foreground">{component.compactText}</code>
+                      </div>
+                      <div class="space-y-2 border-l pl-3">
+                        {#each component.layers as layer, layerIndex}
+                          <div class="grid gap-2 sm:grid-cols-[4.5rem_1fr]">
+                            <div class="pt-1 text-xs uppercase tracking-wide text-muted-foreground">Layer {layerIndex + 1}</div>
+                            <div class="flex flex-wrap gap-2">
+                              {#each layer as item}
+                                <span class="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm">
+                                  <span class="font-mono text-xs text-muted-foreground">{item.id}</span>
+                                  <span class="truncate font-medium">{item.title}</span>
+                                </span>
+                              {/each}
+                            </div>
+                          </div>
+                        {/each}
                       </div>
                     </div>
                   {/each}
                 </div>
-                {#if draftEdges.length}
-                  <div class="mt-4 space-y-1 text-sm text-muted-foreground">
-                    {#each draftEdges as edge}
-                      <div>{stringField(edge, 'from_work_item_id')} → {stringField(edge, 'to_work_item_id')} <span class="text-xs">{stringField(edge, 'edge_type', 'depends_on')}</span></div>
-                    {/each}
-                  </div>
-                {/if}
+
+                <div class="mt-4 divide-y border-y text-sm">
+                  <details class="group py-2" open>
+                    <summary class="cursor-pointer list-none px-1 font-medium marker:hidden">Work item details</summary>
+                    <div class="mt-2 divide-y">
+                      {#each outline.components as component}
+                        {#each component.layers as layer}
+                          {#each layer as item}
+                            <div class="grid gap-1 px-1 py-2 sm:grid-cols-[10rem_1fr]">
+                              <div class="font-mono text-xs text-muted-foreground">{item.id}</div>
+                              <div>
+                                <div class="font-medium">{item.title}</div>
+                                {#if item.description}<div class="mt-0.5 text-xs text-muted-foreground">{item.description}</div>{/if}
+                                <div class="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                  <span>{item.kind}</span>
+                                  <span>profile {item.executionProfileId}</span>
+                                  <span>priority {item.priority}</span>
+                                  {#if item.optional}<span>optional</span>{/if}
+                                  {#if item.parallelizable}<span>parallelizable</span>{/if}
+                                </div>
+                              </div>
+                            </div>
+                          {/each}
+                        {/each}
+                      {/each}
+                    </div>
+                  </details>
+                  <details class="group py-2">
+                    <summary class="cursor-pointer list-none px-1 font-medium marker:hidden">Dependency details</summary>
+                    {#if outline.dependencies.length}
+                      <div class="mt-2 space-y-1 px-1 text-sm text-muted-foreground">
+                        {#each outline.dependencies as dependency}
+                          <div class={dependency.resolved ? '' : 'text-amber-600 dark:text-amber-400'}>{dependency.label} <span class="text-xs">{dependency.edgeType}</span></div>
+                        {/each}
+                      </div>
+                    {:else}
+                      <p class="mt-2 px-1 text-sm text-muted-foreground">No dependencies in this draft.</p>
+                    {/if}
+                  </details>
+                </div>
               {:else if !draftPlannerProposalLoading}
-                <p class="mt-3 text-sm text-muted-foreground">Waiting for the planner to submit a draft DAG proposal.</p>
+                <p class="mt-3 px-1 text-sm text-muted-foreground">Waiting for the planner to submit a draft DAG proposal.</p>
               {/if}
             </div>
-          </div>
+          </section>
         {/if}
       {/each}
     </Conversation.Content>
