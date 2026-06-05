@@ -173,12 +173,34 @@ async fn apply_plan_applies_proposed_plan_and_starts_scheduler() {
     assert_eq!(result["proposal_id"], proposal_id);
     assert_eq!(result["apply"]["applied"], true);
     assert_eq!(result["apply"]["proposal_state"], "applied");
-    assert_eq!(
-        result["scheduler"]["dispatched_runs"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
+    let dispatched_runs = result["scheduler"]["dispatched_runs"]
+        .as_array()
+        .expect("dispatched runs");
+    assert_eq!(dispatched_runs.len(), 1);
+    let executor_session_id = dispatched_runs[0]["session_id"]
+        .as_str()
+        .expect("executor session id");
+    let runtime_metadata: String =
+        sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+            .bind(executor_session_id)
+            .fetch_one(&state.db)
+            .await
+            .expect("executor runtime metadata");
+    let runtime_metadata: Value =
+        serde_json::from_str(&runtime_metadata).expect("runtime metadata json");
+    let runtime_dir = runtime_metadata["runtime_dir"]
+        .as_str()
+        .expect("runtime dir");
+    let runtime_script =
+        std::fs::read_to_string(std::path::Path::new(runtime_dir).join("runtime.sh"))
+            .expect("runtime script");
+    assert!(
+        runtime_script.contains("cat >>"),
+        "agent-tools tests must use a harmless pi runtime stub, got:\n{runtime_script}"
+    );
+    assert!(
+        !runtime_script.contains("pi --session-id"),
+        "agent-tools tests must not launch the real pi runtime:\n{runtime_script}"
     );
 
     let proposal_state: String =

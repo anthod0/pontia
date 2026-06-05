@@ -13,10 +13,15 @@ use pilotfy::{
 };
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
-use std::process::{Command, Stdio};
+use std::{
+    path::PathBuf,
+    process::{Command, Stdio},
+    sync::OnceLock,
+};
 use tower::ServiceExt;
 
 pub async fn test_state() -> AppState {
+    configure_test_runtime_env();
     let db = connect_sqlite("sqlite://:memory:").await.expect("connect");
     run_migrations(&db).await.expect("migrate");
     let config = AppConfig::from_vars(&std::collections::HashMap::new()).expect("default config");
@@ -27,6 +32,23 @@ pub async fn test_state() -> AppState {
         workspace_browser: config.workspace_browser,
         dashboard: pilotfy::transport::http::dashboard::ResolvedDashboard::local_default(),
         shutdown: Default::default(),
+    }
+}
+
+fn configure_test_runtime_env() {
+    static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+    let data_dir = DATA_DIR.get_or_init(|| {
+        let dir = tempfile::tempdir().expect("agent-tools runtime data tempdir");
+        let path = dir.path().join("data");
+        let _kept_dir = dir.keep();
+        path
+    });
+    unsafe {
+        std::env::set_var("PILOTFY_DATA_DIR", data_dir);
+        std::env::set_var(
+            "PILOTFY_PI_TUI_COMMAND",
+            "cat >> \"$PILOTFY_WORKSPACE/pi-tui-input.log\"",
+        );
     }
 }
 
