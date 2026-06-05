@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { buildDagFlow } from '../../../src/components/dag/dagGraph';
+import { buildDagFlow, buildDraftDagFlow } from '../../../src/components/dag/dagGraph';
 
 const item = (overrides) => ({
   work_item_id: 'item-1',
@@ -116,4 +116,36 @@ test('lays out dependent work items from left to right', () => {
   const byId = new Map(flow.nodes.map((node) => [node.id, node]));
   expect(byId.get('plan').position.x < byId.get('code').position.x).toBeTruthy();
   expect(byId.get('code').position.x < byId.get('test').position.x).toBeTruthy();
+});
+
+test('builds the shared flow view from draft proposal work items', () => {
+  const flow = buildDraftDagFlow({
+    workItems: [
+      {
+        temp_id: 'draft-plan',
+        title: 'Draft plan',
+        description: 'Break down the task',
+        kind: 'planning',
+        execution_profile_id: 'planner',
+        priority: 3,
+        optional: false,
+        parallelizable: true,
+      },
+      {
+        temp_id: 'draft-code',
+        title: 'Draft code',
+        description: 'Implement the task',
+        kind: 'implementation',
+        execution_profile_id: 'executor',
+        priority: 5,
+      },
+    ],
+    edges: [{ from_work_item_id: 'draft-plan', to_work_item_id: 'draft-code', edge_type: 'blocks' }],
+  });
+
+  expect(flow.nodes.map((node) => node.id)).toEqual(['draft-plan', 'draft-code']);
+  expect(flow.edges.map((edge) => [edge.source, edge.target, edge.data.edgeType])).toEqual([['draft-plan', 'draft-code', 'blocks']]);
+  expect(flow.nodes[0].data.label).toBe('Draft plan');
+  expect(flow.nodes[0].data.state).toBe('proposed');
+  expect(flow.nodes[0].data.priority).toBe(3);
 });

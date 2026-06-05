@@ -593,12 +593,11 @@ test('loads planner task proposals from session metadata and renders the draft D
   const draftHeading = await screen.findByRole('heading', { name: /planner draft dag/i });
   expect(assistantOutput.compareDocumentPosition(draftHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByText('Implement in two steps')).toBeInTheDocument();
-  expect(screen.getByText('draft-a -> draft-b')).toBeInTheDocument();
-  expect(screen.getByText('Layer 1')).toBeInTheDocument();
-  expect(screen.getByText('Layer 2')).toBeInTheDocument();
+  expect(screen.getByText('2 work items')).toBeInTheDocument();
+  expect(screen.getByText('1 dependencies')).toBeInTheDocument();
   expect(screen.getAllByText('Design UI').length).toBeGreaterThan(0);
   expect(screen.getAllByText('Wire events').length).toBeGreaterThan(0);
-  expect(screen.getByText(/draft-a → draft-b/)).toBeInTheDocument();
+  expect(screen.getAllByText('proposed').length).toBeGreaterThan(0);
 });
 
 test('navigates from planner chat to the task DAG when SSE reports approval', async () => {
