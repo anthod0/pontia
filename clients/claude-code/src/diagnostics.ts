@@ -15,6 +15,6 @@ export async function appendDiagnostic(logFile: string, entry: DiagnosticEntry):
     await mkdir(dirname(logFile), { recursive: true });
     await appendFile(logFile, `${JSON.stringify({ time: new Date().toISOString(), ...entry })}\n`, "utf8");
   } catch (error) {
-    console.error("llmparty Claude Code plugin diagnostic write failed", error);
+    console.error("pilotfy Claude Code plugin diagnostic write failed", error);
   }
 }

@@ -1,12 +1,12 @@
-# llmparty
+# pilotfy
 
-`llmparty` is an external control system for coding agents. It keeps agent sessions, turns, events, and artifacts outside the agent process, so long-running work can be observed, controlled, interrupted, and resumed.
+`pilotfy` is an external control system for coding agents. It keeps agent sessions, turns, events, and artifacts outside the agent process, so long-running work can be observed, controlled, interrupted, and resumed.
 
 It is built for multi-client agent control, Web Dashboard operation, automation via HTTP APIs, and future DAG-based long-term task orchestration.
 
 ## Milestones
 
-`llmparty` is being built in public. The current work focuses on the control plane foundation, then gradually moves toward long-running autonomous task execution.
+`pilotfy` is being built in public. The current work focuses on the control plane foundation, then gradually moves toward long-running autonomous task execution.
 
 - **Control Plane Foundation**: maintain authoritative session / turn / event / artifact state outside the agent process, with HTTP APIs for external control.
 - **Multi-client Agent Control**: support different coding agent clients such as pi, Claude Code, and future runtimes through one shared model.
@@ -37,12 +37,12 @@ Install the following:
 
 ## Quick Start
 
-### 1. Configure llmparty
+### 1. Configure pilotfy
 
-llmparty can be configured with a TOML file. By default it looks for:
+pilotfy can be configured with a TOML file. By default it looks for:
 
 ```text
-~/.config/llmparty/config.toml
+~/.config/pilotfy/config.toml
 ```
 
 You can also pass an explicit path:
@@ -50,24 +50,24 @@ You can also pass an explicit path:
 ```bash
 cargo run -- --config /path/to/config.toml
 # or
-LLMPARTY_CONFIG=/path/to/config.toml cargo run
+PILOTFY_CONFIG=/path/to/config.toml cargo run
 ```
 
 Example:
 
 ```toml
 bind_addr = "127.0.0.1:8080"
-database_url = "sqlite://~/.local/share/llmparty/llmparty.db"
+database_url = "sqlite://~/.local/share/pilotfy/pilotfy.db"
 external_api_token = "dev-token"
 run_migrations = true
 
 [dashboard]
 # Local Vite dist directory, or a remote .zip/.tar.gz/.tgz archive containing exactly one index.html.
 source = "apps/dashboard/dist"
-cache_dir = "~/.cache/llmparty/dashboard"
+cache_dir = "~/.cache/pilotfy/dashboard"
 
 [runtime.pi]
-tui_command = "pi -e /absolute/path/to/llmparty/clients/pi"
+tui_command = "pi -e /absolute/path/to/pilotfy/clients/pi"
 
 [runtime.claude_code]
 tui_command = "claude"
@@ -86,7 +86,7 @@ cp .env.example .env
 
 The default configuration listens on `127.0.0.1:8080`.
 
-Dashboard `source` may be a local built dashboard directory or a remote archive URL. If `source` is missing, or a local source does not contain `index.html`, `/dashboard` returns a plain unavailable message instead of falling back. Remote archives are refreshed on startup into `cache_dir`; if refresh fails, llmparty serves the previous cache when one exists. The archive must contain exactly one `index.html` entry, whose parent directory is treated as the dashboard root.
+Dashboard `source` may be a local built dashboard directory or a remote archive URL. If `source` is missing, or a local source does not contain `index.html`, `/dashboard` returns a plain unavailable message instead of falling back. Remote archives are refreshed on startup into `cache_dir`; if refresh fails, pilotfy serves the previous cache when one exists. The archive must contain exactly one `index.html` entry, whose parent directory is treated as the dashboard root.
 
 ### 2. Install dependencies and build the Dashboard
 
@@ -95,7 +95,7 @@ pnpm --dir=apps/dashboard install
 pnpm --dir=apps/dashboard run build
 ```
 
-### 3. Start llmparty
+### 3. Start pilotfy
 
 ```bash
 cargo run
@@ -131,7 +131,7 @@ You can then create sessions, submit tasks, and view events and results.
 
 ## Using the Dashboard
 
-The Dashboard is the recommended way to use llmparty locally.
+The Dashboard is the recommended way to use pilotfy locally.
 
 Common workflow:
 
@@ -139,7 +139,7 @@ Common workflow:
 2. Enter the External API token
 3. Create a session
 4. Choose a client type:
-   - `claude_code`: for using Claude Code with the llmparty Claude Code plugin
+   - `claude_code`: for using Claude Code with the pilotfy Claude Code plugin
    - `pi`: for using the real pi client
 5. Enter the workspace path
 6. Submit a task
@@ -156,30 +156,30 @@ Before using pi, make sure it can run directly on your machine:
 pi
 ```
 
-When starting llmparty, it is recommended to explicitly configure the internal event reporting URL:
+When starting pilotfy, it is recommended to explicitly configure the internal event reporting URL:
 
 ```bash
-LLMPARTY_EXTERNAL_API_TOKEN=dev-token \
-LLMPARTY_INTERNAL_EVENT_URL=http://127.0.0.1:8080/internal/v1/events \
+PILOTFY_EXTERNAL_API_TOKEN=dev-token \
+PILOTFY_INTERNAL_EVENT_URL=http://127.0.0.1:8080/internal/v1/events \
 cargo run
 ```
 
 Then create a session with `client_type = "pi"` in the Dashboard.
 
-If you need llmparty to use a specific pi command or local extension, set:
+If you need pilotfy to use a specific pi command or local extension, set:
 
 ```bash
-LLMPARTY_PI_TUI_COMMAND='pi -e /absolute/path/to/llmparty/clients/pi'
+PILOTFY_PI_TUI_COMMAND='pi -e /absolute/path/to/pilotfy/clients/pi'
 ```
 
-During a pi session, llmparty stores its runtime state files under the global runtime directory:
+During a pi session, pilotfy stores its runtime state files under the global runtime directory:
 
 ```text
-~/.local/share/llmparty/runtimes/<session_id>/current-turn.json
-~/.local/share/llmparty/runtimes/<session_id>/pi-hook.log
+~/.local/share/pilotfy/runtimes/<session_id>/current-turn.json
+~/.local/share/pilotfy/runtimes/<session_id>/pi-hook.log
 ```
 
-The workspace is used only as the runtime current working directory; llmparty no longer creates an in-project `.llmparty/` directory. If the Dashboard does not receive pi output or completion events, first check the corresponding `pi-hook.log` file in the runtime directory.
+The workspace is used only as the runtime current working directory; pilotfy no longer creates an in-project `.pilotfy/` directory. If the Dashboard does not receive pi output or completion events, first check the corresponding `pi-hook.log` file in the runtime directory.
 
 ## Using the HTTP API
 
@@ -189,10 +189,10 @@ The examples below assume the service is running at `127.0.0.1:8080` with token 
 
 ### Workspace browser roots
 
-Restricted workspace browsing is configured with `LLMPARTY_WORKSPACE_ROOTS`:
+Restricted workspace browsing is configured with `PILOTFY_WORKSPACE_ROOTS`:
 
 ```bash
-export LLMPARTY_WORKSPACE_ROOTS='projects|Projects|/home/me/projects;tmp|Temporary|/tmp'
+export PILOTFY_WORKSPACE_ROOTS='projects|Projects|/home/me/projects;tmp|Temporary|/tmp'
 ```
 
 Each entry is `root_id|label|path`. `root_id` is only a configuration/API handle; it is not stored in the workspace database.
@@ -201,13 +201,13 @@ Each entry is `root_id|label|path`. `root_id` is only a configuration/API handle
 curl http://127.0.0.1:8080/external/v1/workspace-roots \
   -H 'Authorization: Bearer dev-token'
 
-curl 'http://127.0.0.1:8080/external/v1/workspace-roots/projects/entries?path=llmparty' \
+curl 'http://127.0.0.1:8080/external/v1/workspace-roots/projects/entries?path=pilotfy' \
   -H 'Authorization: Bearer dev-token'
 
 curl -X POST http://127.0.0.1:8080/external/v1/workspaces \
   -H 'Authorization: Bearer dev-token' \
   -H 'Content-Type: application/json' \
-  -d '{"root_id":"projects","path":"llmparty","name":"llmparty"}'
+  -d '{"root_id":"projects","path":"pilotfy","name":"pilotfy"}'
 ```
 
 ### Create a session
@@ -219,7 +219,7 @@ curl -X POST http://127.0.0.1:8080/external/v1/sessions \
   -H 'Idempotency-Key: demo-session-1' \
   -d '{
     "client_type":"claude_code",
-    "workspace":"/tmp/llmparty-demo",
+    "workspace":"/tmp/pilotfy-demo",
     "initial_task":{"input":"Please introduce the current project"}
   }'
 ```
@@ -289,16 +289,16 @@ curl -X DELETE http://127.0.0.1:8080/external/v1/sessions/sess_example \
 
 | Variable                      | Default                                        | Description                                      |
 | ----------------------------- | ---------------------------------------------- | ------------------------------------------------ |
-| `LLMPARTY_BIND_ADDR`          | `127.0.0.1:8080`                               | Service bind address                             |
-| `LLMPARTY_DATABASE_URL`       | `sqlite://~/.local/share/llmparty/llmparty.db` | SQLite database URL                              |
-| `LLMPARTY_EXTERNAL_API_TOKEN` | Not set                                        | Bearer token for the Dashboard and External API  |
-| `LLMPARTY_RUN_MIGRATIONS`     | `true`                                         | Automatically run database migrations on startup |
-| `LLMPARTY_INTERNAL_EVENT_URL`   | Auto-derived or manually set                   | URL used by agents / hooks to report events      |
-| `LLMPARTY_DASHBOARD_SOURCE`     | Not set                                        | Local dashboard dist directory or remote archive |
-| `LLMPARTY_DASHBOARD_CACHE_DIR`  | `~/.cache/llmparty/dashboard`                  | Cache directory for remote dashboard archives    |
-| `LLMPARTY_GRAPH_ENABLED`        | `true`                                         | Enable WorkItem DAG graph storage; default builds include the required `lbug` feature |
-| `LLMPARTY_GRAPH_DB_DIR`         | Next to SQLite database under `graph/lbug`     | Ladybug graph database directory when graph storage is enabled |
-| `LLMPARTY_PI_TUI_COMMAND`       | `pi`                                           | Startup command used for pi sessions             |
+| `PILOTFY_BIND_ADDR`          | `127.0.0.1:8080`                               | Service bind address                             |
+| `PILOTFY_DATABASE_URL`       | `sqlite://~/.local/share/pilotfy/pilotfy.db` | SQLite database URL                              |
+| `PILOTFY_EXTERNAL_API_TOKEN` | Not set                                        | Bearer token for the Dashboard and External API  |
+| `PILOTFY_RUN_MIGRATIONS`     | `true`                                         | Automatically run database migrations on startup |
+| `PILOTFY_INTERNAL_EVENT_URL`   | Auto-derived or manually set                   | URL used by agents / hooks to report events      |
+| `PILOTFY_DASHBOARD_SOURCE`     | Not set                                        | Local dashboard dist directory or remote archive |
+| `PILOTFY_DASHBOARD_CACHE_DIR`  | `~/.cache/pilotfy/dashboard`                  | Cache directory for remote dashboard archives    |
+| `PILOTFY_GRAPH_ENABLED`        | `true`                                         | Enable WorkItem DAG graph storage; default builds include the required `lbug` feature |
+| `PILOTFY_GRAPH_DB_DIR`         | Next to SQLite database under `graph/lbug`     | Ladybug graph database directory when graph storage is enabled |
+| `PILOTFY_PI_TUI_COMMAND`       | `pi`                                           | Startup command used for pi sessions             |
 
 ## Development Commands
 

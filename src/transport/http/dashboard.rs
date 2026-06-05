@@ -66,7 +66,7 @@ pub async fn resolve_dashboard(config: &DashboardConfig) -> ResolvedDashboard {
         .filter(|value| !value.trim().is_empty())
     else {
         return ResolvedDashboard::unavailable(
-            "Dashboard source is not configured. Set [dashboard].source or LLMPARTY_DASHBOARD_SOURCE."
+            "Dashboard source is not configured. Set [dashboard].source or PILOTFY_DASHBOARD_SOURCE."
                 .to_string(),
         );
     };
@@ -284,8 +284,8 @@ fn collect_index_files(root: &Path, matches: &mut Vec<PathBuf>) -> std::result::
 
 fn default_cache_dir() -> PathBuf {
     match env::var_os("HOME") {
-        Some(home) => PathBuf::from(home).join(".cache/llmparty/dashboard"),
-        None => PathBuf::from(".cache/llmparty/dashboard"),
+        Some(home) => PathBuf::from(home).join(".cache/pilotfy/dashboard"),
+        None => PathBuf::from(".cache/pilotfy/dashboard"),
     }
 }
 

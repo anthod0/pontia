@@ -108,7 +108,7 @@
     </Card.Header>
     <Card.Content class="space-y-2 text-sm text-muted-foreground">
       <p>Build this app with <code class="rounded bg-muted px-1 py-0.5">pnpm --dir=apps/dashboard run build</code>.</p>
-      <p>Serve it with <code class="rounded bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> or <code class="rounded bg-muted px-1 py-0.5">LLMPARTY_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
+      <p>Serve it with <code class="rounded bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> or <code class="rounded bg-muted px-1 py-0.5">PILOTFY_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
     </Card.Content>
   </Card.Root>
 </section>

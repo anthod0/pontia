@@ -16,7 +16,7 @@ fn claude_config_path() -> Result<PathBuf> {
     // Test-only escape hatch: production must use Claude Code's real
     // ~/.claude.json, but tests need to isolate writes from the developer's
     // personal Claude config. Do not document this as a supported runtime knob.
-    if let Some(path) = std::env::var_os("LLMPARTY_CLAUDE_CONFIG_PATH") {
+    if let Some(path) = std::env::var_os("PILOTFY_CLAUDE_CONFIG_PATH") {
         return Ok(PathBuf::from(path));
     }
     let home = home_dir().ok_or_else(|| {
@@ -137,20 +137,20 @@ mod tests {
     }
 
     #[test]
-    fn config_path_uses_llmparty_override_when_set() {
-        // LLMPARTY_CLAUDE_CONFIG_PATH is intentionally test-only; this verifies
+    fn config_path_uses_pilotfy_override_when_set() {
+        // PILOTFY_CLAUDE_CONFIG_PATH is intentionally test-only; this verifies
         // tests can redirect config writes without touching ~/.claude.json.
         let _lock = env_lock();
         let dir = tempdir().expect("tempdir");
         let config_path = dir.path().join("custom-claude.json");
         unsafe {
-            std::env::set_var("LLMPARTY_CLAUDE_CONFIG_PATH", &config_path);
+            std::env::set_var("PILOTFY_CLAUDE_CONFIG_PATH", &config_path);
         }
 
         assert_eq!(claude_config_path().expect("config path"), config_path);
 
         unsafe {
-            std::env::remove_var("LLMPARTY_CLAUDE_CONFIG_PATH");
+            std::env::remove_var("PILOTFY_CLAUDE_CONFIG_PATH");
         }
     }
 

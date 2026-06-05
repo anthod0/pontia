@@ -1,4 +1,4 @@
-use llmparty::{
+use pilotfy::{
     application::EventIngestService,
     domain::{DomainEvent, EventSource, EventType, SessionState, TurnState},
     storage::sqlite::{connect_sqlite, run_migrations},

@@ -1,8 +1,8 @@
 {
   "$schema": "./agent-tools.v1.schema.json",
   "version": 1,
-  "namespace": "llmparty",
-  "description": "Stable llmparty DAG-mode tool definitions. Cross-language source of truth for tool names, input schemas, and output schemas.",
+  "namespace": "pilotfy",
+  "description": "Stable pilotfy DAG-mode tool definitions. Cross-language source of truth for tool names, input schemas, and output schemas.",
   "tools": [
     {
       "name": "getContext",
@@ -994,7 +994,7 @@
         "properties": {
           "accepted": {
             "type": "boolean",
-            "description": "Whether llmparty accepted the result for the current WorkItemRun."
+            "description": "Whether pilotfy accepted the result for the current WorkItemRun."
           },
           "work_item_run": {
             "type": "object",
@@ -1066,7 +1066,7 @@
         "properties": {
           "accepted": {
             "type": "boolean",
-            "description": "Whether llmparty accepted and recorded the signal."
+            "description": "Whether pilotfy accepted and recorded the signal."
           },
           "signal_id": {
             "type": "string",

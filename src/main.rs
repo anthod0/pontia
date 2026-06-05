@@ -1,4 +1,4 @@
-use llmparty::{
+use pilotfy::{
     application,
     config::{AppConfig, config_path_from_args},
     transport::http,
@@ -12,7 +12,7 @@ use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
-async fn main() -> llmparty::error::Result<()> {
+async fn main() -> pilotfy::error::Result<()> {
     init_tracing();
 
     let config_path = config_path_from_args(std::env::args())?;
@@ -21,7 +21,7 @@ async fn main() -> llmparty::error::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
-    info!(addr = %bound_addr, "starting llmparty control plane");
+    info!(addr = %bound_addr, "starting pilotfy control plane");
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
     let shutdown = state.shutdown.clone();
@@ -56,7 +56,7 @@ fn init_tracing() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "llmparty=info,tower_http=info".into()),
+                .unwrap_or_else(|_| "pilotfy=info,tower_http=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();

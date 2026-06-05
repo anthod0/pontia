@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-const storageKey = 'llmparty.externalApiToken';
+const storageKey = 'pilotfy.externalApiToken';
 const initialToken = typeof localStorage === 'undefined' ? '' : localStorage.getItem(storageKey) ?? '';
 
 export const token = writable(initialToken);

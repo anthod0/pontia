@@ -2,7 +2,7 @@
 
 日期：2026-05-06
 
-本文记录 llmparty 的 Agent WorkItem DAG / graph orchestration 设计。目标是把当前偏 provenance 的 graph projection 演进为面向 agent 自动执行的任务编排模型。
+本文记录 pilotfy 的 Agent WorkItem DAG / graph orchestration 设计。目标是把当前偏 provenance 的 graph projection 演进为面向 agent 自动执行的任务编排模型。
 
 > 说明：当前 `task` / `planner` 系统仍是临时实现，主要服务 workspace routing 和早期 graph projection 验证；其 API、状态机、planner 事件、Task 与 WorkItem 的关系都尚未定型。本文描述的是目标方向，不应视为对当前 `task` / `planner` 代码结构的最终确认。
 
@@ -21,7 +21,7 @@
 
 当前 WorkItem 图模型参考了 superpowers skills 的 planner / executor / reviewer 编排方式。但 superpowers 更偏向人类参与的软件工程流程，中间会保留大量人类交互、spec 审批、review loop 和手动确认。
 
-llmparty 的 DAG 编排目标不同：
+pilotfy 的 DAG 编排目标不同：
 
 1. 面向 agent 自动执行，而不是模拟人类团队协作。
 2. 减少人类交互，只在计划审批、高风险变更、无法决策、最终发布等关键点打断用户。

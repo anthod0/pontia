@@ -25,13 +25,13 @@ mod tests {
     #[test]
     fn expands_leading_tilde_before_opening_lbug_database() {
         let expanded = super::expand_home_prefix_with_home(
-            Path::new("~/.local/share/llmparty/graph/lbug"),
+            Path::new("~/.local/share/pilotfy/graph/lbug"),
             Path::new("/home/example"),
         );
 
         assert_eq!(
             expanded,
-            Path::new("/home/example/.local/share/llmparty/graph/lbug")
+            Path::new("/home/example/.local/share/pilotfy/graph/lbug")
         );
     }
 }

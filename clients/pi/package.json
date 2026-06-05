@@ -1,9 +1,9 @@
 {
-  "name": "@llmparty/pi-client-plugin",
+  "name": "@pilotfy/pi-client-plugin",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "keywords": ["pi-package", "llmparty-client-plugin"],
+  "keywords": ["pi-package", "pilotfy-client-plugin"],
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

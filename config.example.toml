@@ -1,17 +1,17 @@
 bind_addr = "127.0.0.1:8080"
-database_url = "sqlite://~/.local/share/llmparty/llmparty.db"
+database_url = "sqlite://~/.local/share/pilotfy/pilotfy.db"
 external_api_token = "dev-token"
 run_migrations = true
 
 [dashboard]
 # Local Vite dist directory or a remote .tar.gz/.tgz/.zip archive containing exactly one index.html.
 source = "apps/dashboard/dist"
-# Used only for remote sources. On startup llmparty tries to refresh this cache;
+# Used only for remote sources. On startup pilotfy tries to refresh this cache;
 # if refresh fails, an existing cached dashboard is served.
-cache_dir = "~/.cache/llmparty/dashboard"
+cache_dir = "~/.cache/pilotfy/dashboard"
 
 [runtime.pi]
-tui_command = "pi -e /absolute/path/to/llmparty/clients/pi"
+tui_command = "pi -e /absolute/path/to/pilotfy/clients/pi"
 
 [runtime.claude_code]
 tui_command = "claude"

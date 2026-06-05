@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { createLlmpartyPiExtension } from "../src/index.js";
+import { createPilotfyPiExtension } from "../src/index.js";
 import type { TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
 
@@ -28,10 +28,10 @@ const context: TurnContext = {
   internalEventUrl: "http://localhost/internal/v1/events",
 };
 
-function install(overrides: Partial<Parameters<typeof createLlmpartyPiExtension>[1]> = {}) {
+function install(overrides: Partial<Parameters<typeof createPilotfyPiExtension>[1]> = {}) {
   const { pi, handlers } = fakePi();
   const reported: InternalEvent[] = [];
-  createLlmpartyPiExtension(pi as any, {
+  createPilotfyPiExtension(pi as any, {
     env: {},
     loadContext: vi.fn(async () => ({ ok: true as const, context, contextFile: "turn.json", logFile: "hook.log" })),
     makeReporter: vi.fn(() => ({ report: vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
@@ -44,13 +44,13 @@ function install(overrides: Partial<Parameters<typeof createLlmpartyPiExtension>
   return { handlers, reported };
 }
 
-describe("llmparty pi extension lifecycle", () => {
+describe("pilotfy pi extension lifecycle", () => {
   test("session_start startup reports one-time agent client ready from runtime env", async () => {
     const { handlers, reported } = install({
       env: {
-        LLMPARTY_SESSION_ID: "sess_ready",
-        LLMPARTY_RUNTIME_INSTANCE_ID: "rtinst_1",
-        LLMPARTY_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+        PILOTFY_SESSION_ID: "sess_ready",
+        PILOTFY_RUNTIME_INSTANCE_ID: "rtinst_1",
+        PILOTFY_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
       },
     });
 
@@ -69,9 +69,9 @@ describe("llmparty pi extension lifecycle", () => {
   test("session_start non-startup does not report ready", async () => {
     const { handlers, reported } = install({
       env: {
-        LLMPARTY_SESSION_ID: "sess_ready",
-        LLMPARTY_RUNTIME_INSTANCE_ID: "rtinst_1",
-        LLMPARTY_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+        PILOTFY_SESSION_ID: "sess_ready",
+        PILOTFY_RUNTIME_INSTANCE_ID: "rtinst_1",
+        PILOTFY_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
       },
     });
 
@@ -82,7 +82,7 @@ describe("llmparty pi extension lifecycle", () => {
 
   test("registers pi lifecycle handlers", () => {
     const { pi } = fakePi();
-    createLlmpartyPiExtension(pi as any, {
+    createPilotfyPiExtension(pi as any, {
       env: {},
       loadContext: vi.fn(),
       makeReporter: vi.fn(),
@@ -109,9 +109,9 @@ describe("llmparty pi extension lifecycle", () => {
     });
     const { handlers } = install({
       env: {
-        LLMPARTY_SESSION_ID: "sess_1",
-        LLMPARTY_EXTERNAL_API_URL: "http://localhost/external/v1",
-        LLMPARTY_EXTERNAL_API_TOKEN: "token",
+        PILOTFY_SESSION_ID: "sess_1",
+        PILOTFY_EXTERNAL_API_URL: "http://localhost/external/v1",
+        PILOTFY_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });
@@ -131,9 +131,9 @@ describe("llmparty pi extension lifecycle", () => {
     });
     const { handlers } = install({
       env: {
-        LLMPARTY_SESSION_ID: "sess_1",
-        LLMPARTY_EXTERNAL_API_URL: "http://localhost/external/v1",
-        LLMPARTY_EXTERNAL_API_TOKEN: "token",
+        PILOTFY_SESSION_ID: "sess_1",
+        PILOTFY_EXTERNAL_API_URL: "http://localhost/external/v1",
+        PILOTFY_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });

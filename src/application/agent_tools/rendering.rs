@@ -9,7 +9,7 @@ pub(super) fn render_planning_context(
     execution_profiles: &[ExecutionProfileView],
 ) -> String {
     let mut lines = vec![
-        "llmparty context: planning".to_string(),
+        "pilotfy context: planning".to_string(),
         format!("Role: {}", planning_role_text(&role)),
         String::new(),
         "Task:".to_string(),
@@ -131,7 +131,7 @@ pub(super) fn render_execution_context(
     open_signals: &[DagSignalRecord],
 ) -> String {
     let mut lines = vec![
-        "llmparty context: execution".to_string(),
+        "pilotfy context: execution".to_string(),
         String::new(),
         "Task:".to_string(),
         format!("- Goal: {}", task.input),
@@ -297,7 +297,7 @@ mod tests {
 
         let text = render_planning_context(AgentPlanningRole::Planner, &task, &dag, &[], &[], &[]);
 
-        assert!(text.contains("llmparty context: planning"));
+        assert!(text.contains("pilotfy context: planning"));
         assert!(text.contains("Goal: 你好"));
         for disallowed in [
             "Next:",

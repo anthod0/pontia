@@ -1,14 +1,14 @@
 {
-  "name": "llmparty",
+  "name": "pilotfy",
   "owner": {
-    "name": "llmparty"
+    "name": "pilotfy"
   },
-  "description": "llmparty first-party Claude Code plugins",
+  "description": "pilotfy first-party Claude Code plugins",
   "plugins": [
     {
-      "name": "llmparty-claude-code",
+      "name": "pilotfy-claude-code",
       "source": "./clients/claude-code",
-      "description": "Reports Claude Code turn output and completion facts back to llmparty"
+      "description": "Reports Claude Code turn output and completion facts back to pilotfy"
     }
   ]
 }

@@ -17,7 +17,7 @@ impl TmuxSessionGuard {
         chars.reverse();
         Self {
             session_id: session_id.to_string(),
-            legacy_tmux_session: format!("llmparty_{sanitized}"),
+            legacy_tmux_session: format!("pilotfy_{sanitized}"),
             short_session_id: chars.into_iter().collect(),
         }
     }
@@ -39,7 +39,7 @@ impl Drop for TmuxSessionGuard {
         };
         let sessions = String::from_utf8_lossy(&output.stdout);
         for tmux_session in sessions.lines().filter(|name| {
-            name.starts_with("llmparty_")
+            name.starts_with("pilotfy_")
                 && (name.ends_with(&format!("_{}", self.short_session_id))
                     || name.contains(&self.session_id))
         }) {

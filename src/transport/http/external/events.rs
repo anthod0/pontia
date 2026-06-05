@@ -265,7 +265,7 @@ fn event_sse_stream(
 
 fn is_test_stream_once(headers: &HeaderMap) -> bool {
     headers
-        .get("x-llmparty-test-stream-once")
+        .get("x-pilotfy-test-stream-once")
         .and_then(|value| value.to_str().ok())
         .is_some_and(|value| value.eq_ignore_ascii_case("true"))
 }

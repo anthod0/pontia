@@ -5,7 +5,7 @@ dev:
     ./scripts/dev-dashboard.sh
 
 backend:
-    LLMPARTY_EXTERNAL_API_TOKEN=${LLMPARTY_EXTERNAL_API_TOKEN:-dev-token} cargo run
+    PILOTFY_EXTERNAL_API_TOKEN=${PILOTFY_EXTERNAL_API_TOKEN:-dev-token} cargo run
 
 dashboard:
     pnpm --dir=apps/dashboard run dev

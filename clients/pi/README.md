@@ -1,10 +1,10 @@
-# @llmparty/pi-client-plugin
+# @pilotfy/pi-client-plugin
 
-First-party pi extension for reporting pi startup readiness and confirmed turn facts back to llmparty.
+First-party pi extension for reporting pi startup readiness and confirmed turn facts back to pilotfy.
 
 ## Install locally
 
-From the llmparty repository root, run pi with this package as a temporary extension:
+From the pilotfy repository root, run pi with this package as a temporary extension:
 
 ```bash
 pi -e ./clients/pi
@@ -22,13 +22,13 @@ The extension reads configuration from environment variables:
 
 | Variable | Required | Default |
 | --- | --- | --- |
-| `LLMPARTY_WORKSPACE` | recommended | pi process cwd |
-| `LLMPARTY_RUNTIME_DIR` | recommended | pi process cwd |
-| `LLMPARTY_SESSION_ID` | required for startup ready | none |
-| `LLMPARTY_RUNTIME_INSTANCE_ID` | required for startup ready | none |
-| `LLMPARTY_CURRENT_TURN_FILE` | recommended | `$LLMPARTY_RUNTIME_DIR/current-turn.json` |
-| `LLMPARTY_INTERNAL_EVENT_URL` | required for startup ready, required for turns unless present in context file | none |
-| `LLMPARTY_PI_HOOK_LOG` | recommended | `$LLMPARTY_RUNTIME_DIR/pi-hook.log` |
+| `PILOTFY_WORKSPACE` | recommended | pi process cwd |
+| `PILOTFY_RUNTIME_DIR` | recommended | pi process cwd |
+| `PILOTFY_SESSION_ID` | required for startup ready | none |
+| `PILOTFY_RUNTIME_INSTANCE_ID` | required for startup ready | none |
+| `PILOTFY_CURRENT_TURN_FILE` | recommended | `$PILOTFY_RUNTIME_DIR/current-turn.json` |
+| `PILOTFY_INTERNAL_EVENT_URL` | required for startup ready, required for turns unless present in context file | none |
+| `PILOTFY_PI_HOOK_LOG` | recommended | `$PILOTFY_RUNTIME_DIR/pi-hook.log` |
 
 Expected `current-turn.json`:
 
@@ -43,7 +43,7 @@ Expected `current-turn.json`:
 }
 ```
 
-`session_id`, `turn_id`, `runtime_instance_id`, and `client_type: "pi"` are required. `LLMPARTY_INTERNAL_EVENT_URL` and `LLMPARTY_RUNTIME_INSTANCE_ID` override file values when present.
+`session_id`, `turn_id`, `runtime_instance_id`, and `client_type: "pi"` are required. `PILOTFY_INTERNAL_EVENT_URL` and `PILOTFY_RUNTIME_INSTANCE_ID` override file values when present.
 
 ## What the extension reports
 
@@ -55,30 +55,30 @@ Expected `current-turn.json`:
 
 The extension does not parse TUI screen contents and does not infer completion from tmux, process state, or runtime exit.
 
-## llmparty tools
+## pilotfy tools
 
-The pi extension registers four agent-visible DAG tools from `clients/tools/llmparty-tools.v1.json`:
+The pi extension registers four agent-visible DAG tools from `clients/tools/pilotfy-tools.v1.json`:
 
 - `getContext`
 - `submitPlan`
 - `submitResult`
 - `raiseSignal`
 
-Each tool handler reads the current turn context from `LLMPARTY_CURRENT_TURN_FILE` / environment, builds `{ session_id, turn_id, runtime_instance_id, input }`, and forwards it to `/internal/v1/agent-tools/{tool}`. The extension does not interpret DAG business logic and never accepts task, WorkItem, or run IDs as authority; llmparty derives authorization server-side.
+Each tool handler reads the current turn context from `PILOTFY_CURRENT_TURN_FILE` / environment, builds `{ session_id, turn_id, runtime_instance_id, input }`, and forwards it to `/internal/v1/agent-tools/{tool}`. The extension does not interpret DAG business logic and never accepts task, WorkItem, or run IDs as authority; pilotfy derives authorization server-side.
 
-Backend errors are returned to the agent as clear tool failures and written to `LLMPARTY_PI_HOOK_LOG` diagnostics. Environment values such as API tokens are not included in agent-visible tool results.
+Backend errors are returned to the agent as clear tool failures and written to `PILOTFY_PI_HOOK_LOG` diagnostics. Environment values such as API tokens are not included in agent-visible tool results.
 
 ## Manual validation
 
-When pi is launched by llmparty `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `LLMPARTY_SESSION_ID`, `LLMPARTY_RUNTIME_INSTANCE_ID`, `LLMPARTY_RUNTIME_DIR`, `LLMPARTY_CURRENT_TURN_FILE`, `LLMPARTY_INTERNAL_EVENT_URL`, and `LLMPARTY_PI_HOOK_LOG` for the hook. The steps below are useful for standalone plugin validation.
+When pi is launched by pilotfy `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `PILOTFY_SESSION_ID`, `PILOTFY_RUNTIME_INSTANCE_ID`, `PILOTFY_RUNTIME_DIR`, `PILOTFY_CURRENT_TURN_FILE`, `PILOTFY_INTERNAL_EVENT_URL`, and `PILOTFY_PI_HOOK_LOG` for the hook. The steps below are useful for standalone plugin validation.
 
-1. Start llmparty so `/internal/v1/events` is reachable.
+1. Start pilotfy so `/internal/v1/events` is reachable.
 2. Create the current turn file in a runtime directory:
 
    ```bash
-   export LLMPARTY_RUNTIME_DIR="$HOME/.local/share/llmparty/runtimes/manual-pi"
-   mkdir -p "$LLMPARTY_RUNTIME_DIR"
-   cat > "$LLMPARTY_RUNTIME_DIR/current-turn.json" <<'JSON'
+   export PILOTFY_RUNTIME_DIR="$HOME/.local/share/pilotfy/runtimes/manual-pi"
+   mkdir -p "$PILOTFY_RUNTIME_DIR"
+   cat > "$PILOTFY_RUNTIME_DIR/current-turn.json" <<'JSON'
    {
      "session_id": "sess_xxx",
      "turn_id": "turn_xxx",
@@ -93,12 +93,12 @@ When pi is launched by llmparty `client_type = "pi"` runtime, the Control Plane 
 3. Export environment for the pi process:
 
    ```bash
-   export LLMPARTY_WORKSPACE="$PWD"
-   export LLMPARTY_SESSION_ID="sess_xxx"
-   export LLMPARTY_RUNTIME_INSTANCE_ID="rtinst_xxx"
-   export LLMPARTY_CURRENT_TURN_FILE="$LLMPARTY_RUNTIME_DIR/current-turn.json"
-   export LLMPARTY_INTERNAL_EVENT_URL="http://127.0.0.1:8080/internal/v1/events"
-   export LLMPARTY_PI_HOOK_LOG="$LLMPARTY_RUNTIME_DIR/pi-hook.log"
+   export PILOTFY_WORKSPACE="$PWD"
+   export PILOTFY_SESSION_ID="sess_xxx"
+   export PILOTFY_RUNTIME_INSTANCE_ID="rtinst_xxx"
+   export PILOTFY_CURRENT_TURN_FILE="$PILOTFY_RUNTIME_DIR/current-turn.json"
+   export PILOTFY_INTERNAL_EVENT_URL="http://127.0.0.1:8080/internal/v1/events"
+   export PILOTFY_PI_HOOK_LOG="$PILOTFY_RUNTIME_DIR/pi-hook.log"
    ```
 
 4. Run a real pi session:
@@ -107,10 +107,10 @@ When pi is launched by llmparty `client_type = "pi"` runtime, the Control Plane 
    pi -e ./clients/pi
    ```
 
-5. Submit a prompt and verify llmparty received `turn.output` and `turn.completed` through its event list/API or database inspection. In DAG-managed turns, ask pi to call `getContext`, `submitPlan`, `submitResult`, or `raiseSignal` and verify the backend receives `/internal/v1/agent-tools/*` requests.
+5. Submit a prompt and verify pilotfy received `turn.output` and `turn.completed` through its event list/API or database inspection. In DAG-managed turns, ask pi to call `getContext`, `submitPlan`, `submitResult`, or `raiseSignal` and verify the backend receives `/internal/v1/agent-tools/*` requests.
 
 6. If reporting or tool forwarding fails, inspect diagnostics:
 
    ```bash
-   tail -f "$LLMPARTY_RUNTIME_DIR/pi-hook.log"
+   tail -f "$PILOTFY_RUNTIME_DIR/pi-hook.log"
    ```

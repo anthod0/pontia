@@ -27,7 +27,7 @@ Useful commands:
 ```bash
 pnpm --dir=apps/dashboard run check
 pnpm --dir=apps/dashboard run build
-LLMPARTY_DASHBOARD_SOURCE=apps/dashboard/dist cargo run
+PILOTFY_DASHBOARD_SOURCE=apps/dashboard/dist cargo run
 ```
 
 ---
@@ -83,7 +83,7 @@ LLMPARTY_DASHBOARD_SOURCE=apps/dashboard/dist cargo run
 - `pnpm --dir=apps/dashboard run check` passes.
 - `pnpm --dir=apps/dashboard run build` passes.
 - `cargo test dashboard` or the relevant dashboard tests pass.
-- With `LLMPARTY_DASHBOARD_SOURCE=apps/dashboard/dist`, refreshing a nested route such as `/dashboard/tasks/test/dag` serves the SPA.
+- With `PILOTFY_DASHBOARD_SOURCE=apps/dashboard/dist`, refreshing a nested route such as `/dashboard/tasks/test/dag` serves the SPA.
 
 ---
 
@@ -269,7 +269,7 @@ pnpm --dir=apps/dashboard run build
 Manual smoke test:
 
 1. Build `apps/dashboard`.
-2. Start backend with `LLMPARTY_DASHBOARD_SOURCE=apps/dashboard/dist`.
+2. Start backend with `PILOTFY_DASHBOARD_SOURCE=apps/dashboard/dist`.
 3. Open `/dashboard`.
 4. Set External API token.
 5. Navigate Overview, Tasks, Sessions, Workspaces, Agent Profiles, Settings.

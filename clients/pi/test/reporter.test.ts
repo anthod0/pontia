@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 
 async function tempLogFile() {
-  const dir = await mkdtemp(join(tmpdir(), "llmparty-pi-reporter-"));
+  const dir = await mkdtemp(join(tmpdir(), "pilotfy-pi-reporter-"));
   tmpDirs.push(dir);
   return join(dir, "pi-hook.log");
 }

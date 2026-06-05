@@ -66,7 +66,7 @@ export async function handleClaudeHook(
     await reporter.report(loaded.context, buildTurnFailedEvent(loaded.context, failureMessage(payload)));
     return 0;
   } catch (error) {
-    const logFile = env.LLMPARTY_CLAUDE_HOOK_LOG ?? "claude-hook.log";
+    const logFile = env.PILOTFY_CLAUDE_HOOK_LOG ?? "claude-hook.log";
     await logDiagnostic(logFile, {
       level: "error",
       code: "unexpected_hook_exception",

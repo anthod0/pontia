@@ -1,6 +1,6 @@
 ## Project snapshot
 
-- `llmparty` is a Rust console/control plane for coding agents with a web dashboard and client integrations.
+- `pilotfy` is a Rust console/control plane for coding agents with a web dashboard and client integrations.
 - Backend: Rust 2024, Axum, Tokio, SQLx/SQLite.
 - Frontend/dashboard and client plugins use pnpm.
 - Key paths: `src/`, `tests/`, `apps/dashboard/`, `clients/pi/`, `clients/claude-code/`, `spec/`, `MILESTONE.md`, `README.md`.
@@ -30,7 +30,7 @@
 ## Domain model and data ownership
 
 - `Task`: user's global intent and primary Web UI object; may exist before workspace/session routing.
-- `Workspace`: execution context/cwd and artifact discovery scope, not llmparty's state storage location.
+- `Workspace`: execution context/cwd and artifact discovery scope, not pilotfy's state storage location.
 - `Session`: long-running agent runtime bound to a workspace; one workspace may have multiple sessions.
 - `Turn`: one concrete execution submitted to a session; do not conflate with task.
 - Ownership: workspace `1 -> N` sessions, session `1 -> N` turns, task `1 -> 0/1` workspace/session/turn.

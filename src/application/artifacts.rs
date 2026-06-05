@@ -210,7 +210,7 @@ fn collect_workspace_files(root: &Path, current: &Path, files: &mut Vec<PathBuf>
         let entry = entry?;
         let path = entry.path();
         let file_name = entry.file_name();
-        if file_name.to_string_lossy() == ".llmparty" {
+        if file_name.to_string_lossy() == ".pilotfy" {
             continue;
         }
         let file_type = entry.file_type()?;

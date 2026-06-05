@@ -195,7 +195,7 @@ impl GenericRuntimeManager {
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
         let runtime_dir = std::env::temp_dir()
-            .join("llmparty-test-runtimes")
+            .join("pilotfy-test-runtimes")
             .join(&request.session_id);
         std::fs::create_dir_all(&runtime_dir)?;
         let log_path = runtime_dir.join("runtime.log");
@@ -441,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_script_exports_llmparty_agent_kind_when_present() {
+    fn runtime_script_exports_pilotfy_agent_kind_when_present() {
         let dir = tempfile::tempdir().expect("tempdir");
         let runtime_dir = dir.path();
         let script_path = runtime_dir.join("runtime.sh");
@@ -469,6 +469,6 @@ mod tests {
         .expect("write runtime script");
 
         let content = std::fs::read_to_string(script_path).expect("runtime script");
-        assert!(content.contains("export LLMPARTY_AGENT_KIND='planner'"));
+        assert!(content.contains("export PILOTFY_AGENT_KIND='planner'"));
     }
 }

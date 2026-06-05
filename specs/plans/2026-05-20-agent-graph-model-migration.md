@@ -2,7 +2,7 @@
 
 > **给 agentic workers：** 必须使用子技能：建议使用 `superpowers:subagent-driven-development`，或使用 `superpowers:executing-plans`，按任务逐项执行本计划。步骤使用 checkbox（`- [ ]`）语法用于跟踪。
 
-**目标：** 破坏性地把 llmparty 当前 SQLite-authoritative DAG 模型迁移到目标 Agent WorkItem graph 模型，同时只保留当前已经实现的 DAG 执行能力。
+**目标：** 破坏性地把 pilotfy 当前 SQLite-authoritative DAG 模型迁移到目标 Agent WorkItem graph 模型，同时只保留当前已经实现的 DAG 执行能力。
 
 **架构：** WorkItem DAG 结构迁移到 graph-store 边界后面，并由 task events 投影生成；SQLite 只继续作为 operational runtime state 的权威来源，例如 WorkItemRun、ready/running/blocked projection、session、turn、idempotency。Scheduler 和 External API 聚合 graph 结构与 SQLite runtime projection，但 scheduler claim/retry/run mutation 仍然只在 SQLite 中完成。
 

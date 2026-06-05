@@ -1,4 +1,4 @@
-use llmparty::domain::{
+use pilotfy::domain::{
     DomainEvent, EventSource, EventType, ProjectionState, SessionState, TurnState,
 };
 use serde_json::json;

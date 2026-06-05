@@ -9,7 +9,7 @@ apps/web/dist/
 *.db
 *.db-shm
 *.db-wal
-.llmparty
+.pilotfy
 .pi
 TODO.md
 MILESTONE.md

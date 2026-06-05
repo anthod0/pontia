@@ -1,4 +1,4 @@
-import toolContract from "../../tools/llmparty-tools.v1.json" with { type: "json" };
+import toolContract from "../../tools/pilotfy-tools.v1.json" with { type: "json" };
 import type { EnvLike, LoadTurnContextResult } from "./context.js";
 import { loadTurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
@@ -13,7 +13,7 @@ type AgentToolResult = {
   details: unknown;
 };
 
-export interface LlmpartyAgentToolDependencies {
+export interface PilotfyAgentToolDependencies {
   env?: EnvLike;
   loadContext?: (env: EnvLike) => Promise<LoadTurnContextResult>;
   logDiagnostic?: (logFile: string, entry: DiagnosticEntry) => Promise<void>;
@@ -37,13 +37,13 @@ export interface PiToolDefinitionLike {
 }
 
 const TOOL_NAMES = ["getContext", "submitPlan", "applyPlan", "submitResult", "raiseSignal"] as const;
-type LlmpartyToolName = (typeof TOOL_NAMES)[number];
+type PilotfyToolName = (typeof TOOL_NAMES)[number];
 
-function isLlmpartyToolName(name: string): name is LlmpartyToolName {
+function isPilotfyToolName(name: string): name is PilotfyToolName {
   return (TOOL_NAMES as readonly string[]).includes(name);
 }
 
-function piToolName(toolName: LlmpartyToolName): string {
+function piToolName(toolName: PilotfyToolName): string {
   return toolName;
 }
 
@@ -158,8 +158,8 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   }
 }
 
-function buildTool(spec: ToolSpec, dependencies: Required<LlmpartyAgentToolDependencies>): PiToolDefinitionLike | undefined {
-  if (!isLlmpartyToolName(spec.name)) return undefined;
+function buildTool(spec: ToolSpec, dependencies: Required<PilotfyAgentToolDependencies>): PiToolDefinitionLike | undefined {
+  if (!isPilotfyToolName(spec.name)) return undefined;
 
   const piName = piToolName(spec.name);
   return {
@@ -232,8 +232,8 @@ function buildTool(spec: ToolSpec, dependencies: Required<LlmpartyAgentToolDepen
   };
 }
 
-export function buildLlmpartyTools(dependencies: LlmpartyAgentToolDependencies = {}): PiToolDefinitionLike[] {
-  const resolved: Required<LlmpartyAgentToolDependencies> = {
+export function buildPilotfyTools(dependencies: PilotfyAgentToolDependencies = {}): PiToolDefinitionLike[] {
+  const resolved: Required<PilotfyAgentToolDependencies> = {
     env: dependencies.env ?? process.env,
     loadContext: dependencies.loadContext ?? loadTurnContext,
     logDiagnostic: dependencies.logDiagnostic ?? appendDiagnostic,

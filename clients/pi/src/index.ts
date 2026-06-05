@@ -4,13 +4,13 @@ import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, type InternalEvent } from "./events.js";
 import { EventReporter } from "./reporter.js";
 import { loadSessionContext } from "./session.js";
-import { buildLlmpartyTools } from "./tools.js";
+import { buildPilotfyTools } from "./tools.js";
 
 interface ReporterLike {
   report(context: { internalEventUrl: string }, event: InternalEvent): Promise<boolean>;
 }
 
-export interface LlmpartyPiExtensionDependencies {
+export interface PilotfyPiExtensionDependencies {
   env?: EnvLike;
   loadContext?: (env: EnvLike) => Promise<LoadTurnContextResult>;
   makeReporter?: (logFile: string) => ReporterLike;
@@ -26,9 +26,9 @@ interface ActiveTurnState {
   ended: boolean;
 }
 
-type LlmpartyAgentKind = "planner" | "executor";
+type PilotfyAgentKind = "planner" | "executor";
 
-const TOOL_NAMES_BY_AGENT_KIND: Record<LlmpartyAgentKind, Set<string>> = {
+const TOOL_NAMES_BY_AGENT_KIND: Record<PilotfyAgentKind, Set<string>> = {
   planner: new Set(["getContext", "submitPlan", "applyPlan", "raiseSignal"]),
   executor: new Set(["getContext", "submitResult", "raiseSignal"]),
 };
@@ -98,7 +98,7 @@ function optionalString(value: unknown): string | undefined {
 }
 
 function externalApiUrl(env: EnvLike): string | undefined {
-  return optionalString(env.LLMPARTY_EXTERNAL_API_URL)?.replace(/\/+$/, "");
+  return optionalString(env.PILOTFY_EXTERNAL_API_URL)?.replace(/\/+$/, "");
 }
 
 async function parseJsonResponse(response: Response): Promise<unknown> {
@@ -127,8 +127,8 @@ async function fetchJson(fetchImpl: typeof fetch, url: string, token: string): P
 
 async function loadProfileSystemPrompt(env: EnvLike, fetchImpl: typeof fetch): Promise<string | undefined> {
   const baseUrl = externalApiUrl(env);
-  const token = optionalString(env.LLMPARTY_EXTERNAL_API_TOKEN);
-  const sessionId = optionalString(env.LLMPARTY_SESSION_ID);
+  const token = optionalString(env.PILOTFY_EXTERNAL_API_TOKEN);
+  const sessionId = optionalString(env.PILOTFY_SESSION_ID);
   if (!baseUrl || !token || !sessionId) return undefined;
 
   const sessionBody = await fetchJson(fetchImpl, `${baseUrl}/sessions/${encodeURIComponent(sessionId)}`, token);
@@ -148,14 +148,14 @@ async function loadProfileSystemPrompt(env: EnvLike, fetchImpl: typeof fetch): P
   return optionalString((profile as Record<string, unknown>).system_prompt_template);
 }
 
-export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: LlmpartyPiExtensionDependencies = {}): void {
+export function createPilotfyPiExtension(pi: ExtensionAPI, dependencies: PilotfyPiExtensionDependencies = {}): void {
   const env = dependencies.env ?? process.env;
   const contextLoader = dependencies.loadContext ?? loadTurnContext;
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   const fetchImpl = dependencies.fetch ?? fetch;
-  const allowedToolNames = allowedToolNamesForAgentKind(env.LLMPARTY_AGENT_KIND);
-  for (const tool of buildLlmpartyTools({
+  const allowedToolNames = allowedToolNamesForAgentKind(env.PILOTFY_AGENT_KIND);
+  for (const tool of buildPilotfyTools({
     env,
     loadContext: contextLoader,
     logDiagnostic,
@@ -176,10 +176,10 @@ export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: Llmpar
       if (!profilePrompt) return { systemPrompt: currentSystemPrompt };
       return { systemPrompt: `${currentSystemPrompt}\n\n${profilePrompt}` };
     } catch (error) {
-      await logDiagnostic(env.LLMPARTY_PI_HOOK_LOG ?? defaultHookLogFile(env), {
+      await logDiagnostic(env.PILOTFY_PI_HOOK_LOG ?? defaultHookLogFile(env), {
         level: "warn",
         code: "system_prompt_append_failed",
-        message: "failed to append llmparty execution profile system prompt",
+        message: "failed to append pilotfy execution profile system prompt",
         details: error instanceof Error ? error.message : String(error),
       });
       return { systemPrompt: currentSystemPrompt };
@@ -196,11 +196,11 @@ export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: Llmpar
       if (!loaded.ok) return;
       readyReported = await makeReporter(loaded.logFile).report(loaded.context, buildSessionReadyEvent(loaded.context));
     } catch (error) {
-      const logFile = env.LLMPARTY_PI_HOOK_LOG ?? "pi-hook.log";
+      const logFile = env.PILOTFY_PI_HOOK_LOG ?? "pi-hook.log";
       await logDiagnostic(logFile, {
         level: "error",
         code: "unexpected_extension_exception",
-        message: "failed to report llmparty ready signal",
+        message: "failed to report pilotfy ready signal",
         details: error instanceof Error ? error.message : String(error),
       });
     }
@@ -211,7 +211,7 @@ export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: Llmpar
       const loaded = await contextLoader(env);
       if (!loaded.ok) {
         activeTurn = undefined;
-        if (!loaded.silent && ctx?.hasUI) ctx.ui.notify(`llmparty: ${loaded.reason}`, "warning");
+        if (!loaded.silent && ctx?.hasUI) ctx.ui.notify(`pilotfy: ${loaded.reason}`, "warning");
         return;
       }
 
@@ -226,11 +226,11 @@ export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: Llmpar
       await reporter.report(loaded.context, buildTurnStartedEvent(loaded.context));
     } catch (error) {
       activeTurn = undefined;
-      const logFile = env.LLMPARTY_PI_HOOK_LOG ?? "pi-hook.log";
+      const logFile = env.PILOTFY_PI_HOOK_LOG ?? "pi-hook.log";
       await logDiagnostic(logFile, {
         level: "error",
         code: "unexpected_extension_exception",
-        message: "failed to initialize llmparty active turn",
+        message: "failed to initialize pilotfy active turn",
         details: error instanceof Error ? error.message : String(error),
       });
     }
@@ -281,6 +281,6 @@ export function createLlmpartyPiExtension(pi: ExtensionAPI, dependencies: Llmpar
   });
 }
 
-export default function llmpartyPiExtension(pi: ExtensionAPI): void {
-  createLlmpartyPiExtension(pi);
+export default function pilotfyPiExtension(pi: ExtensionAPI): void {
+  createPilotfyPiExtension(pi);
 }

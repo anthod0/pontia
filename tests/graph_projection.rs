@@ -1,11 +1,11 @@
 #[cfg(feature = "lbug")]
-use llmparty::application::LbugDagGraphStore;
+use pilotfy::application::LbugDagGraphStore;
 #[cfg(feature = "lbug")]
-use llmparty::application::{
+use pilotfy::application::{
     AddWorkItemEdgeRequest, GraphEdgeKind, GraphProjectionService, GraphRuntimeConfig,
     UpsertTaskRequest, UpsertWorkItemRequest,
 };
-use llmparty::storage::sqlite::{connect_sqlite, run_migrations};
+use pilotfy::storage::sqlite::{connect_sqlite, run_migrations};
 #[cfg(feature = "lbug")]
 use serde_json::json;
 use sqlx::SqlitePool;

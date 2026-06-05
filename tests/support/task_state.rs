@@ -1,4 +1,4 @@
-use llmparty::{
+use pilotfy::{
     application::AppState,
     storage::sqlite::{connect_sqlite, run_migrations},
 };
@@ -17,7 +17,7 @@ pub async fn test_state() -> AppState {
         external_api_token: Some(TOKEN.to_string()),
         graph: Default::default(),
         workspace_browser: Default::default(),
-        dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),
+        dashboard: pilotfy::transport::http::dashboard::ResolvedDashboard::local_default(),
         shutdown: Default::default(),
     }
 }

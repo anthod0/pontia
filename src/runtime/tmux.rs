@@ -49,7 +49,7 @@ pub(super) fn dispatch_tui_turn(
         )));
     }
 
-    let buffer_name = format!("llmparty_{}", sanitize_tmux_identifier(&input.turn_id));
+    let buffer_name = format!("pilotfy_{}", sanitize_tmux_identifier(&input.turn_id));
     let mut child = Command::new("tmux")
         .args(["load-buffer", "-b", &buffer_name, "-"])
         .stdin(Stdio::piped())
@@ -151,7 +151,7 @@ pub(super) fn tmux_session_name(request: &RuntimeStartRequest) -> String {
         .as_deref()
         .filter(|value| !value.is_empty())
         .map(sanitize_tmux_identifier);
-    let mut parts = vec!["llmparty".to_string()];
+    let mut parts = vec!["pilotfy".to_string()];
     if let Some(handle) = handle {
         parts.push(handle);
     }
@@ -159,7 +159,7 @@ pub(super) fn tmux_session_name(request: &RuntimeStartRequest) -> String {
         parts.push(role);
     }
     if parts.len() == 1 {
-        return format!("llmparty_{}", sanitize_tmux_identifier(&request.session_id));
+        return format!("pilotfy_{}", sanitize_tmux_identifier(&request.session_id));
     }
     parts.push(short_id);
     parts.join("_")

@@ -18,16 +18,16 @@ export type LoadTurnContextResult =
 export type EnvLike = Record<string, string | undefined>;
 
 function fallbackRuntimeDir(): string {
-  return join(tmpdir(), "llmparty", "claude-runtime-fallback");
+  return join(tmpdir(), "pilotfy", "claude-runtime-fallback");
 }
 
 export function defaultCurrentTurnFile(env: EnvLike = process.env): string {
-  const runtimeDir = env.LLMPARTY_RUNTIME_DIR ?? fallbackRuntimeDir();
+  const runtimeDir = env.PILOTFY_RUNTIME_DIR ?? fallbackRuntimeDir();
   return join(runtimeDir, "current-turn.json");
 }
 
 export function defaultHookLogFile(env: EnvLike = process.env): string {
-  const runtimeDir = env.LLMPARTY_RUNTIME_DIR ?? fallbackRuntimeDir();
+  const runtimeDir = env.PILOTFY_RUNTIME_DIR ?? fallbackRuntimeDir();
   return join(runtimeDir, "claude-hook.log");
 }
 
@@ -39,26 +39,26 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function hasLlmpartyRuntimeIntent(env: EnvLike): boolean {
+function hasPilotfyRuntimeIntent(env: EnvLike): boolean {
   return Boolean(
-    optionalString(env.LLMPARTY_RUNTIME_DIR) ||
-      optionalString(env.LLMPARTY_CURRENT_TURN_FILE) ||
-      optionalString(env.LLMPARTY_SESSION_ID) ||
-      optionalString(env.LLMPARTY_RUNTIME_INSTANCE_ID) ||
-      optionalString(env.LLMPARTY_INTERNAL_EVENT_URL),
+    optionalString(env.PILOTFY_RUNTIME_DIR) ||
+      optionalString(env.PILOTFY_CURRENT_TURN_FILE) ||
+      optionalString(env.PILOTFY_SESSION_ID) ||
+      optionalString(env.PILOTFY_RUNTIME_INSTANCE_ID) ||
+      optionalString(env.PILOTFY_INTERNAL_EVENT_URL),
   );
 }
 
 export async function loadTurnContext(env: EnvLike = process.env): Promise<LoadTurnContextResult> {
-  const contextFile = env.LLMPARTY_CURRENT_TURN_FILE ?? defaultCurrentTurnFile(env);
-  const logFile = env.LLMPARTY_CLAUDE_HOOK_LOG ?? defaultHookLogFile(env);
+  const contextFile = env.PILOTFY_CURRENT_TURN_FILE ?? defaultCurrentTurnFile(env);
+  const logFile = env.PILOTFY_CLAUDE_HOOK_LOG ?? defaultHookLogFile(env);
 
   let raw: string;
   try {
     raw = await readFile(contextFile, "utf8");
   } catch (error) {
     const reason = `current-turn file is missing or unreadable: ${contextFile}`;
-    if (!hasLlmpartyRuntimeIntent(env)) return { ok: false, reason, contextFile, logFile, silent: true };
+    if (!hasPilotfyRuntimeIntent(env)) return { ok: false, reason, contextFile, logFile, silent: true };
     await appendDiagnostic(logFile, {
       level: "warn",
       code: "missing_current_turn_file",
@@ -89,13 +89,13 @@ export async function loadTurnContext(env: EnvLike = process.env): Promise<LoadT
   const sessionId = optionalString(record?.session_id);
   const turnId = optionalString(record?.turn_id);
   const clientType = optionalString(record?.client_type);
-  const internalEventUrl = optionalString(env.LLMPARTY_INTERNAL_EVENT_URL) ?? optionalString(record?.internal_event_url);
+  const internalEventUrl = optionalString(env.PILOTFY_INTERNAL_EVENT_URL) ?? optionalString(record?.internal_event_url);
   const input = optionalString(record?.input);
 
   if (!sessionId) errors.push("session_id is required");
   if (!turnId) errors.push("turn_id is required");
   if (clientType !== "claude_code") errors.push("client_type must be claude_code");
-  if (!internalEventUrl) errors.push("internal_event_url or LLMPARTY_INTERNAL_EVENT_URL is required");
+  if (!internalEventUrl) errors.push("internal_event_url or PILOTFY_INTERNAL_EVENT_URL is required");
 
   if (errors.length > 0) {
     const reason = errors.join("; ");

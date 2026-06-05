@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { createLlmpartyPiExtension } from "../src/index.js";
-import { buildLlmpartyTools, internalAgentToolUrl } from "../src/tools.js";
+import { createPilotfyPiExtension } from "../src/index.js";
+import { buildPilotfyTools, internalAgentToolUrl } from "../src/tools.js";
 import type { TurnContext } from "../src/context.js";
 
 interface RegisteredTool {
@@ -16,14 +16,14 @@ const context: TurnContext = {
   internalEventUrl: "http://localhost/internal/v1/events",
 };
 
-function install(env: Record<string, string | undefined> = {}, overrides: Partial<Parameters<typeof createLlmpartyPiExtension>[1]> = {}) {
+function install(env: Record<string, string | undefined> = {}, overrides: Partial<Parameters<typeof createPilotfyPiExtension>[1]> = {}) {
   const tools: RegisteredTool[] = [];
   const pi = {
     on: vi.fn(),
     registerTool: vi.fn((tool: RegisteredTool) => tools.push(tool)),
   };
 
-  createLlmpartyPiExtension(pi as any, {
+  createPilotfyPiExtension(pi as any, {
     env,
     loadContext: vi.fn(async () => ({ ok: true as const, context, contextFile: "turn.json", logFile: "hook.log" })),
     makeReporter: vi.fn(),
@@ -34,9 +34,9 @@ function install(env: Record<string, string | undefined> = {}, overrides: Partia
   return { pi, tools };
 }
 
-describe("llmparty pi agent tools", () => {
+describe("pilotfy pi agent tools", () => {
   test("builds DAG agent tools from the shared contract without a pi-only prefix", () => {
-    const tools = buildLlmpartyTools({
+    const tools = buildPilotfyTools({
       env: {},
       loadContext: vi.fn(),
       logDiagnostic: vi.fn(),
@@ -53,7 +53,7 @@ describe("llmparty pi agent tools", () => {
   });
 
   test("tool descriptions and prompt guidelines do not contain workflow orchestration guidance", () => {
-    const tools = buildLlmpartyTools({
+    const tools = buildPilotfyTools({
       env: {},
       loadContext: vi.fn(),
       logDiagnostic: vi.fn(),
@@ -69,29 +69,29 @@ describe("llmparty pi agent tools", () => {
     }
   });
 
-  test("does not register llmparty tools when agent kind is missing", () => {
+  test("does not register pilotfy tools when agent kind is missing", () => {
     const { pi, tools } = install();
 
     expect(tools.map((tool) => tool.name)).toEqual([]);
     expect(pi.registerTool).not.toHaveBeenCalled();
   });
 
-  test("does not register llmparty tools when agent kind is unsupported", () => {
-    const { pi, tools } = install({ LLMPARTY_AGENT_KIND: "unknown" });
+  test("does not register pilotfy tools when agent kind is unsupported", () => {
+    const { pi, tools } = install({ PILOTFY_AGENT_KIND: "unknown" });
 
     expect(tools.map((tool) => tool.name)).toEqual([]);
     expect(pi.registerTool).not.toHaveBeenCalled();
   });
 
   test("planner agent kind registers planning tools only", () => {
-    const { pi, tools } = install({ LLMPARTY_AGENT_KIND: "planner" });
+    const { pi, tools } = install({ PILOTFY_AGENT_KIND: "planner" });
 
     expect(tools.map((tool) => tool.name)).toEqual(["getContext", "submitPlan", "applyPlan", "raiseSignal"]);
     expect(pi.registerTool).toHaveBeenCalledTimes(4);
   });
 
   test("executor agent kind registers execution tools only", () => {
-    const { pi, tools } = install({ LLMPARTY_AGENT_KIND: "executor" });
+    const { pi, tools } = install({ PILOTFY_AGENT_KIND: "executor" });
 
     expect(tools.map((tool) => tool.name)).toEqual(["getContext", "submitResult", "raiseSignal"]);
     expect(pi.registerTool).toHaveBeenCalledTimes(3);
@@ -107,7 +107,7 @@ describe("llmparty pi agent tools", () => {
   });
 
   test("submitPlan schema matches backend WorkItem draft contract", () => {
-    const tools = buildLlmpartyTools({
+    const tools = buildPilotfyTools({
       env: {},
       loadContext: vi.fn(),
       logDiagnostic: vi.fn(),
@@ -144,7 +144,7 @@ describe("llmparty pi agent tools", () => {
         headers: { "Content-Type": "application/json" },
       }),
     );
-    const { tools } = install({ LLMPARTY_AGENT_KIND: "planner" }, { fetch: fetchImpl as any });
+    const { tools } = install({ PILOTFY_AGENT_KIND: "planner" }, { fetch: fetchImpl as any });
 
     const result = await tools.find((tool) => tool.name === "submitPlan")!.execute("call_1", {
       mode: "initial_dag",
@@ -170,7 +170,7 @@ describe("llmparty pi agent tools", () => {
 
   test("all tool handlers return agent-visible plain text instead of JSON", async () => {
     const responses: Record<string, unknown> = {
-      getContext: { ok: true, tool: "getContext", result: { text: "llmparty context: execution\n\nCurrent WorkItem:\n- Title: Do it" } },
+      getContext: { ok: true, tool: "getContext", result: { text: "pilotfy context: execution\n\nCurrent WorkItem:\n- Title: Do it" } },
       submitPlan: { ok: true, tool: "submitPlan", result: { accepted: true, proposal_id: "prop_1" } },
       applyPlan: { ok: true, tool: "applyPlan", result: { proposal_id: "prop_1" } },
       submitResult: { ok: true, tool: "submitResult", result: { recorded: true, run_id: "run_1", status: "completed" } },
@@ -183,7 +183,7 @@ describe("llmparty pi agent tools", () => {
         headers: { "Content-Type": "application/json" },
       });
     });
-    const { tools } = install({ LLMPARTY_AGENT_KIND: "planner" }, { fetch: fetchImpl as any });
+    const { tools } = install({ PILOTFY_AGENT_KIND: "planner" }, { fetch: fetchImpl as any });
 
     for (const tool of tools) {
       const result = await tool.execute("call_plain", { status: "completed", summary: "done" });
@@ -196,25 +196,25 @@ describe("llmparty pi agent tools", () => {
 
   test("getContext returns agent-visible plain text instead of JSON", async () => {
     const fetchImpl = vi.fn(async () =>
-      new Response(JSON.stringify({ ok: true, tool: "getContext", result: { text: "llmparty context: execution\n\nCurrent WorkItem:\n- Title: Do it" } }), {
+      new Response(JSON.stringify({ ok: true, tool: "getContext", result: { text: "pilotfy context: execution\n\nCurrent WorkItem:\n- Title: Do it" } }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
     );
-    const { tools } = install({ LLMPARTY_AGENT_KIND: "executor" }, { fetch: fetchImpl as any });
+    const { tools } = install({ PILOTFY_AGENT_KIND: "executor" }, { fetch: fetchImpl as any });
 
     const result = await tools.find((tool) => tool.name === "getContext")!.execute("call_context", {});
 
-    expect(result.content[0].text).toBe("llmparty context: execution\n\nCurrent WorkItem:\n- Title: Do it");
+    expect(result.content[0].text).toBe("pilotfy context: execution\n\nCurrent WorkItem:\n- Title: Do it");
     expect(result.content[0].text).not.toContain("{\n");
-    expect(result.details).toEqual({ ok: true, tool: "getContext", result: { text: "llmparty context: execution\n\nCurrent WorkItem:\n- Title: Do it" } });
+    expect(result.details).toEqual({ ok: true, tool: "getContext", result: { text: "pilotfy context: execution\n\nCurrent WorkItem:\n- Title: Do it" } });
   });
 
   test("backend error is returned as a tool error without leaking environment", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: "not authorized" }), { status: 403, statusText: "Forbidden" }));
     const logDiagnostic = vi.fn(async () => undefined);
     const { tools } = install(
-      { LLMPARTY_AGENT_KIND: "executor", LLMPARTY_EXTERNAL_API_TOKEN: "secret-token" },
+      { PILOTFY_AGENT_KIND: "executor", PILOTFY_EXTERNAL_API_TOKEN: "secret-token" },
       { fetch: fetchImpl as any, logDiagnostic },
     );
 
@@ -231,7 +231,7 @@ describe("llmparty pi agent tools", () => {
     const fetchImpl = vi.fn();
     const logDiagnostic = vi.fn(async () => undefined);
     const { tools } = install(
-      { LLMPARTY_AGENT_KIND: "executor" },
+      { PILOTFY_AGENT_KIND: "executor" },
       {
         fetch: fetchImpl as any,
         logDiagnostic,

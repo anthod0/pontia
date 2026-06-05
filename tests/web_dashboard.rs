@@ -7,7 +7,7 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use llmparty::{
+use pilotfy::{
     application::AppState,
     config::DashboardConfig,
     storage::sqlite::{connect_sqlite, run_migrations},
@@ -204,7 +204,7 @@ async fn dashboard_serves_built_svelte_entrypoint() {
         .to_bytes();
     let html = std::str::from_utf8(&body).expect("utf8 html");
 
-    assert!(html.contains("llmparty Dashboard"));
+    assert!(html.contains("pilotfy Dashboard"));
     assert!(html.contains("id=\"app\""));
     assert!(html.contains("/dashboard/assets/"));
     assert!(!html.contains("openEventStream"));

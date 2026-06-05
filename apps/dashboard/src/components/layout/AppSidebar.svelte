@@ -68,7 +68,7 @@
       aria-label="Open dashboard overview"
     >
       <span class="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">ll</span>
-      <span class="truncate">llmparty Dashboard</span>
+      <span class="truncate">pilotfy Dashboard</span>
     </button>
   </Sidebar.Header>
   <Sidebar.Content>

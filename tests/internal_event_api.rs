@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use llmparty::{
+use pilotfy::{
     application::{AppState, EventIngestService},
     domain::{SessionState, TurnState},
     storage::sqlite::{connect_sqlite, run_migrations},
@@ -24,7 +24,7 @@ async fn test_state() -> AppState {
         external_api_token: None,
         graph: Default::default(),
         workspace_browser: Default::default(),
-        dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),
+        dashboard: pilotfy::transport::http::dashboard::ResolvedDashboard::local_default(),
         shutdown: Default::default(),
     }
 }

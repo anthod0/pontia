@@ -15,11 +15,11 @@ export type LoadSessionContextResult =
   | { ok: false; reason: string; logFile: string };
 
 function fallbackRuntimeDir(): string {
-  return join(tmpdir(), "llmparty", "claude-runtime-fallback");
+  return join(tmpdir(), "pilotfy", "claude-runtime-fallback");
 }
 
 function defaultHookLogFile(env: EnvLike = process.env): string {
-  const runtimeDir = env.LLMPARTY_RUNTIME_DIR ?? fallbackRuntimeDir();
+  const runtimeDir = env.PILOTFY_RUNTIME_DIR ?? fallbackRuntimeDir();
   return join(runtimeDir, "claude-hook.log");
 }
 
@@ -27,30 +27,30 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function hasLlmpartyRuntimeIntent(env: EnvLike): boolean {
+function hasPilotfyRuntimeIntent(env: EnvLike): boolean {
   return Boolean(
-    optionalString(env.LLMPARTY_RUNTIME_DIR) ||
-      optionalString(env.LLMPARTY_CURRENT_TURN_FILE) ||
-      optionalString(env.LLMPARTY_SESSION_ID) ||
-      optionalString(env.LLMPARTY_RUNTIME_INSTANCE_ID) ||
-      optionalString(env.LLMPARTY_INTERNAL_EVENT_URL),
+    optionalString(env.PILOTFY_RUNTIME_DIR) ||
+      optionalString(env.PILOTFY_CURRENT_TURN_FILE) ||
+      optionalString(env.PILOTFY_SESSION_ID) ||
+      optionalString(env.PILOTFY_RUNTIME_INSTANCE_ID) ||
+      optionalString(env.PILOTFY_INTERNAL_EVENT_URL),
   );
 }
 
 export async function loadSessionContext(env: EnvLike = process.env): Promise<LoadSessionContextResult> {
-  const logFile = env.LLMPARTY_CLAUDE_HOOK_LOG ?? defaultHookLogFile(env);
-  const sessionId = optionalString(env.LLMPARTY_SESSION_ID);
-  const internalEventUrl = optionalString(env.LLMPARTY_INTERNAL_EVENT_URL);
-  const runtimeInstanceId = optionalString(env.LLMPARTY_RUNTIME_INSTANCE_ID);
+  const logFile = env.PILOTFY_CLAUDE_HOOK_LOG ?? defaultHookLogFile(env);
+  const sessionId = optionalString(env.PILOTFY_SESSION_ID);
+  const internalEventUrl = optionalString(env.PILOTFY_INTERNAL_EVENT_URL);
+  const runtimeInstanceId = optionalString(env.PILOTFY_RUNTIME_INSTANCE_ID);
   const errors: string[] = [];
 
-  if (!sessionId) errors.push("LLMPARTY_SESSION_ID is required");
-  if (!internalEventUrl) errors.push("LLMPARTY_INTERNAL_EVENT_URL is required");
-  if (!runtimeInstanceId) errors.push("LLMPARTY_RUNTIME_INSTANCE_ID is required");
+  if (!sessionId) errors.push("PILOTFY_SESSION_ID is required");
+  if (!internalEventUrl) errors.push("PILOTFY_INTERNAL_EVENT_URL is required");
+  if (!runtimeInstanceId) errors.push("PILOTFY_RUNTIME_INSTANCE_ID is required");
 
   if (errors.length > 0) {
     const reason = errors.join("; ");
-    if (!hasLlmpartyRuntimeIntent(env)) return { ok: false, reason, logFile };
+    if (!hasPilotfyRuntimeIntent(env)) return { ok: false, reason, logFile };
     await appendDiagnostic(logFile, {
       level: "error",
       code: "invalid_session_context",

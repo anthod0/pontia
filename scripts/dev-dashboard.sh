@@ -4,7 +4,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-export LLMPARTY_EXTERNAL_API_TOKEN="${LLMPARTY_EXTERNAL_API_TOKEN:-dev-token}"
+export PILOTFY_EXTERNAL_API_TOKEN="${PILOTFY_EXTERNAL_API_TOKEN:-dev-token}"
 
 backend_pid=""
 frontend_pid=""
@@ -25,7 +25,7 @@ cleanup() {
   trap - EXIT INT TERM
 
   echo
-  echo "Stopping llmparty dev processes..."
+  echo "Stopping pilotfy dev processes..."
 
   if [[ -n "$frontend_pid" ]] && kill -0 "$frontend_pid" 2>/dev/null; then
     terminate_tree "$frontend_pid"
@@ -46,8 +46,8 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-echo "Starting llmparty backend with cargo run..."
-echo "Using LLMPARTY_EXTERNAL_API_TOKEN=$LLMPARTY_EXTERNAL_API_TOKEN"
+echo "Starting pilotfy backend with cargo run..."
+echo "Using PILOTFY_EXTERNAL_API_TOKEN=$PILOTFY_EXTERNAL_API_TOKEN"
 cargo run &
 backend_pid=$!
 

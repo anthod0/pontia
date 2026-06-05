@@ -164,9 +164,9 @@ const turn = (overrides: Partial<TurnView> = {}): TurnView => ({
 
 const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
   workspace_id: 'workspace-1',
-  canonical_path: '/repo/llmparty',
-  display_path: '~/repo/llmparty',
-  name: 'llmparty',
+  canonical_path: '/repo/pilotfy',
+  display_path: '~/repo/pilotfy',
+  name: 'pilotfy',
   state: 'active',
   metadata: {},
   created_at: '2026-05-14T00:00:00Z',
@@ -250,7 +250,7 @@ test('renders a clean centered prompt input on the bare chat route instead of se
   expect(screen.getByText('Start a new agent session from a prompt, workspace, client, and profile.')).toBeInTheDocument();
   expect(screen.queryByText(/Enter the first prompt/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/^Prompt$/i)).not.toBeInTheDocument();
-  expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('llmparty');
+  expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('pilotfy');
   expect(screen.getByLabelText(/client/i)).toHaveTextContent('pi');
   expect(screen.queryByLabelText(/profile/i)).not.toBeInTheDocument();
   expect(mocks.loadSessionDetail).not.toHaveBeenCalled();
@@ -328,7 +328,7 @@ test('creates a manual DAG task from task mode and opens the planner session cha
 
   await waitFor(() => expect(mocks.createDagTask).toHaveBeenCalledWith({
     input: 'Plan this as a DAG task',
-    workspace: '/repo/llmparty',
+    workspace: '/repo/pilotfy',
     client_type: 'pi',
     metadata: { source: 'dashboard_chat', action: 'manual_task' },
   }));
@@ -392,7 +392,7 @@ test('loads and renders an existing chat session with metadata, state, and works
     execution_profile_version: '1',
     state: 'busy',
     workspace_id: 'workspace-1',
-    workspace: '~/repo/llmparty',
+    workspace: '~/repo/pilotfy',
   });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -418,7 +418,7 @@ test('loads and renders an existing chat session with metadata, state, and works
   expect(screen.queryByText('Handle: second')).not.toBeInTheDocument();
   expect(screen.queryByText('Workspace: workspace-1')).not.toBeInTheDocument();
   const stateBadge = screen.getByText('busy').closest('[data-slot="badge"]');
-  const workspacePath = screen.getByText('~/repo/llmparty');
+  const workspacePath = screen.getByText('~/repo/pilotfy');
   const clientDetail = screen.getByLabelText('Client: claude-code');
   const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
   expect(screen.queryByText('State: busy')).not.toBeInTheDocument();

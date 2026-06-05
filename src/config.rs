@@ -13,7 +13,7 @@ use crate::{
 };
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
-const DEFAULT_DATABASE_URL: &str = "sqlite://~/.local/share/llmparty/llmparty.db";
+const DEFAULT_DATABASE_URL: &str = "sqlite://~/.local/share/pilotfy/pilotfy.db";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
@@ -108,51 +108,51 @@ impl AppConfig {
         };
         let file = file.as_ref();
 
-        let bind_addr = get(vars, "LLMPARTY_BIND_ADDR")
+        let bind_addr = get(vars, "PILOTFY_BIND_ADDR")
             .or_else(|| file.and_then(|config| config.bind_addr.as_deref()))
             .unwrap_or(DEFAULT_BIND_ADDR)
             .parse::<SocketAddr>()
             .map_err(|err| Error::InvalidConfig {
-                key: "LLMPARTY_BIND_ADDR",
+                key: "PILOTFY_BIND_ADDR",
                 message: err.to_string(),
             })?;
 
-        let database_url = get(vars, "LLMPARTY_DATABASE_URL")
+        let database_url = get(vars, "PILOTFY_DATABASE_URL")
             .or_else(|| file.and_then(|config| config.database_url.as_deref()))
             .unwrap_or(DEFAULT_DATABASE_URL)
             .to_string();
 
-        let external_api_token = get(vars, "LLMPARTY_EXTERNAL_API_TOKEN")
+        let external_api_token = get(vars, "PILOTFY_EXTERNAL_API_TOKEN")
             .or_else(|| file.and_then(|config| config.external_api_token.as_deref()))
             .filter(|value| !value.trim().is_empty())
             .map(ToString::to_string);
 
-        let run_migrations = match get(vars, "LLMPARTY_RUN_MIGRATIONS") {
-            Some(value) => parse_bool("LLMPARTY_RUN_MIGRATIONS", value)?,
+        let run_migrations = match get(vars, "PILOTFY_RUN_MIGRATIONS") {
+            Some(value) => parse_bool("PILOTFY_RUN_MIGRATIONS", value)?,
             None => file
                 .and_then(|config| config.run_migrations)
                 .unwrap_or(true),
         };
 
-        let default_client_type = get(vars, "LLMPARTY_DEFAULT_CLIENT_TYPE")
+        let default_client_type = get(vars, "PILOTFY_DEFAULT_CLIENT_TYPE")
             .or_else(|| file.and_then(|config| config.default_client_type.as_deref()))
             .unwrap_or("pi")
             .to_string();
-        validate_real_default_client_type("LLMPARTY_DEFAULT_CLIENT_TYPE", &default_client_type)?;
+        validate_real_default_client_type("PILOTFY_DEFAULT_CLIENT_TYPE", &default_client_type)?;
 
-        let graph_enabled = match get(vars, "LLMPARTY_GRAPH_ENABLED") {
-            Some(value) => parse_bool("LLMPARTY_GRAPH_ENABLED", value)?,
+        let graph_enabled = match get(vars, "PILOTFY_GRAPH_ENABLED") {
+            Some(value) => parse_bool("PILOTFY_GRAPH_ENABLED", value)?,
             None => true,
         };
         let graph = GraphRuntimeConfig {
             enabled: graph_enabled,
-            db_dir: get(vars, "LLMPARTY_GRAPH_DB_DIR")
+            db_dir: get(vars, "PILOTFY_GRAPH_DB_DIR")
                 .filter(|value| !value.trim().is_empty())
                 .map(ToString::to_string)
                 .or_else(|| graph_enabled.then(|| default_graph_db_dir(&database_url))),
         };
 
-        let workspace_browser = match get(vars, "LLMPARTY_WORKSPACE_ROOTS") {
+        let workspace_browser = match get(vars, "PILOTFY_WORKSPACE_ROOTS") {
             Some(value) => WorkspaceBrowserConfig {
                 roots: parse_workspace_roots(value)?,
             },
@@ -164,20 +164,20 @@ impl AppConfig {
         let mut dashboard = file
             .and_then(|config| config.dashboard.clone())
             .unwrap_or_default();
-        if let Some(value) = get(vars, "LLMPARTY_DASHBOARD_SOURCE") {
+        if let Some(value) = get(vars, "PILOTFY_DASHBOARD_SOURCE") {
             dashboard.source = non_empty(value);
         }
-        if let Some(value) = get(vars, "LLMPARTY_DASHBOARD_CACHE_DIR") {
+        if let Some(value) = get(vars, "PILOTFY_DASHBOARD_CACHE_DIR") {
             dashboard.cache_dir = non_empty(value);
         }
 
         let mut runtime = file
             .and_then(|config| config.runtime.clone())
             .unwrap_or_default();
-        if let Some(value) = get(vars, "LLMPARTY_PI_TUI_COMMAND") {
+        if let Some(value) = get(vars, "PILOTFY_PI_TUI_COMMAND") {
             runtime.pi.tui_command = non_empty(value);
         }
-        if let Some(value) = get(vars, "LLMPARTY_CLAUDE_TUI_COMMAND") {
+        if let Some(value) = get(vars, "PILOTFY_CLAUDE_TUI_COMMAND") {
             runtime.claude_code.tui_command = non_empty(value);
         }
 
@@ -215,24 +215,24 @@ fn non_empty(value: &str) -> Option<String> {
 }
 
 fn explicit_config_path(vars: &HashMap<String, String>) -> Option<PathBuf> {
-    get(vars, "LLMPARTY_CONFIG")
+    get(vars, "PILOTFY_CONFIG")
         .filter(|value| !value.trim().is_empty())
         .map(PathBuf::from)
 }
 
 fn default_config_path_if_exists() -> Option<PathBuf> {
     let home = env::var_os("HOME")?;
-    let path = PathBuf::from(home).join(".config/llmparty/config.toml");
+    let path = PathBuf::from(home).join(".config/pilotfy/config.toml");
     path.exists().then_some(path)
 }
 
 fn read_file_config(path: &Path) -> Result<FileConfig> {
     let contents = std::fs::read_to_string(path).map_err(|err| Error::InvalidConfig {
-        key: "LLMPARTY_CONFIG",
+        key: "PILOTFY_CONFIG",
         message: format!("failed to read {}: {err}", path.display()),
     })?;
     toml::from_str(&contents).map_err(|err| Error::InvalidConfig {
-        key: "LLMPARTY_CONFIG",
+        key: "PILOTFY_CONFIG",
         message: format!("failed to parse {}: {err}", path.display()),
     })
 }
@@ -261,7 +261,7 @@ fn parse_workspace_roots(value: &str) -> Result<Vec<WorkspaceRootConfig>> {
             let parts = entry.split('|').collect::<Vec<_>>();
             if parts.len() != 3 {
                 return Err(Error::InvalidConfig {
-                    key: "LLMPARTY_WORKSPACE_ROOTS",
+                    key: "PILOTFY_WORKSPACE_ROOTS",
                     message:
                         "expected entries formatted as root_id|label|path separated by semicolons"
                             .to_string(),
@@ -272,7 +272,7 @@ fn parse_workspace_roots(value: &str) -> Result<Vec<WorkspaceRootConfig>> {
             let path = parts[2].trim();
             if root_id.is_empty() || label.is_empty() || path.is_empty() {
                 return Err(Error::InvalidConfig {
-                    key: "LLMPARTY_WORKSPACE_ROOTS",
+                    key: "PILOTFY_WORKSPACE_ROOTS",
                     message: "root_id, label, and path must be non-empty".to_string(),
                 });
             }

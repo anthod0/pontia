@@ -21,11 +21,11 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "claude_code",
     capabilities: CAPABILITIES,
     runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
-        command_env: Some("LLMPARTY_CLAUDE_TUI_COMMAND"),
+        command_env: Some("PILOTFY_CLAUDE_TUI_COMMAND"),
         default_command: "claude --dangerously-skip-permissions",
         session_identity_arg: None,
         hook_log: Some(HookLogBehavior {
-            env: "LLMPARTY_CLAUDE_HOOK_LOG",
+            env: "PILOTFY_CLAUDE_HOOK_LOG",
             file_name: "claude-hook.log",
             metadata_key: "claude_hook_log",
         }),

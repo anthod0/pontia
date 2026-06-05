@@ -11,7 +11,7 @@ use http::{get_json, post_json, post_json_with_idempotency};
 use serde_json::json;
 use task_state::test_state;
 
-async fn enable_generic_planner_profile(state: &llmparty::application::AppState) {
+async fn enable_generic_planner_profile(state: &pilotfy::application::AppState) {
     sqlx::query(
         "UPDATE execution_profiles SET supported_client_types = ? WHERE profile_id = 'planner'",
     )

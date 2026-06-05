@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "llmparty agent tools contract v1",
+  "title": "pilotfy agent tools contract v1",
   "type": "object",
   "additionalProperties": false,
   "properties": {

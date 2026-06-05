@@ -4,7 +4,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use llmparty::{
+use pilotfy::{
     agent_clients::InterruptBehavior,
     config::{RuntimeClientConfig, RuntimeConfig},
     runtime::{GenericRuntimeManager, RuntimeStartRequest, set_runtime_config},
@@ -48,8 +48,8 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     write_fake_tmux(&fake_tmux);
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
     unsafe {
-        std::env::set_var("LLMPARTY_DATA_DIR", tempdir.path().join("data"));
-        std::env::remove_var("LLMPARTY_PI_TUI_COMMAND");
+        std::env::set_var("PILOTFY_DATA_DIR", tempdir.path().join("data"));
+        std::env::remove_var("PILOTFY_PI_TUI_COMMAND");
     }
     set_runtime_config(RuntimeConfig {
         pi: RuntimeClientConfig {
@@ -71,7 +71,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
 
     restore_fake_tmux(original_path);
     unsafe {
-        std::env::remove_var("LLMPARTY_DATA_DIR");
+        std::env::remove_var("PILOTFY_DATA_DIR");
     }
     set_runtime_config(RuntimeConfig::default());
 
@@ -92,8 +92,8 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
     write_fake_tmux(&fake_tmux);
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
     unsafe {
-        std::env::set_var("LLMPARTY_DATA_DIR", tempdir.path().join("data"));
-        std::env::set_var("LLMPARTY_PI_TUI_COMMAND", "pi from env");
+        std::env::set_var("PILOTFY_DATA_DIR", tempdir.path().join("data"));
+        std::env::set_var("PILOTFY_PI_TUI_COMMAND", "pi from env");
     }
     set_runtime_config(RuntimeConfig {
         pi: RuntimeClientConfig {
@@ -115,8 +115,8 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
 
     restore_fake_tmux(original_path);
     unsafe {
-        std::env::remove_var("LLMPARTY_DATA_DIR");
-        std::env::remove_var("LLMPARTY_PI_TUI_COMMAND");
+        std::env::remove_var("PILOTFY_DATA_DIR");
+        std::env::remove_var("PILOTFY_PI_TUI_COMMAND");
     }
     set_runtime_config(RuntimeConfig::default());
 

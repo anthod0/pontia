@@ -8,15 +8,15 @@ const command = process.argv[2];
 const env = process.env;
 
 function runtimeDir() {
-  return env.LLMPARTY_RUNTIME_DIR ?? join(tmpdir(), "llmparty", "claude-runtime-fallback");
+  return env.PILOTFY_RUNTIME_DIR ?? join(tmpdir(), "pilotfy", "claude-runtime-fallback");
 }
 
 function currentTurnFile() {
-  return env.LLMPARTY_CURRENT_TURN_FILE ?? join(runtimeDir(), "current-turn.json");
+  return env.PILOTFY_CURRENT_TURN_FILE ?? join(runtimeDir(), "current-turn.json");
 }
 
 function logFile() {
-  return env.LLMPARTY_CLAUDE_HOOK_LOG ?? join(runtimeDir(), "claude-hook.log");
+  return env.PILOTFY_CLAUDE_HOOK_LOG ?? join(runtimeDir(), "claude-hook.log");
 }
 
 async function appendDiagnostic(entry) {
@@ -25,7 +25,7 @@ async function appendDiagnostic(entry) {
     await mkdir(dirname(file), { recursive: true });
     await appendFile(file, `${JSON.stringify({ time: new Date().toISOString(), ...entry })}\n`, "utf8");
   } catch (error) {
-    console.error("llmparty Claude Code plugin diagnostic write failed", error);
+    console.error("pilotfy Claude Code plugin diagnostic write failed", error);
   }
 }
 
@@ -45,26 +45,26 @@ function stringValue(value) {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function hasLlmpartyRuntimeIntent() {
+function hasPilotfyRuntimeIntent() {
   return Boolean(
-    stringValue(env.LLMPARTY_RUNTIME_DIR) ||
-      stringValue(env.LLMPARTY_CURRENT_TURN_FILE) ||
-      stringValue(env.LLMPARTY_SESSION_ID) ||
-      stringValue(env.LLMPARTY_RUNTIME_INSTANCE_ID) ||
-      stringValue(env.LLMPARTY_INTERNAL_EVENT_URL),
+    stringValue(env.PILOTFY_RUNTIME_DIR) ||
+      stringValue(env.PILOTFY_CURRENT_TURN_FILE) ||
+      stringValue(env.PILOTFY_SESSION_ID) ||
+      stringValue(env.PILOTFY_RUNTIME_INSTANCE_ID) ||
+      stringValue(env.PILOTFY_INTERNAL_EVENT_URL),
   );
 }
 
 async function loadSessionContext() {
-  const sessionId = stringValue(env.LLMPARTY_SESSION_ID);
-  const runtimeInstanceId = stringValue(env.LLMPARTY_RUNTIME_INSTANCE_ID);
-  const internalEventUrl = stringValue(env.LLMPARTY_INTERNAL_EVENT_URL);
+  const sessionId = stringValue(env.PILOTFY_SESSION_ID);
+  const runtimeInstanceId = stringValue(env.PILOTFY_RUNTIME_INSTANCE_ID);
+  const internalEventUrl = stringValue(env.PILOTFY_INTERNAL_EVENT_URL);
   const errors = [];
-  if (!sessionId) errors.push("LLMPARTY_SESSION_ID is required");
-  if (!runtimeInstanceId) errors.push("LLMPARTY_RUNTIME_INSTANCE_ID is required");
-  if (!internalEventUrl) errors.push("LLMPARTY_INTERNAL_EVENT_URL is required");
+  if (!sessionId) errors.push("PILOTFY_SESSION_ID is required");
+  if (!runtimeInstanceId) errors.push("PILOTFY_RUNTIME_INSTANCE_ID is required");
+  if (!internalEventUrl) errors.push("PILOTFY_INTERNAL_EVENT_URL is required");
   if (errors.length) {
-    if (!hasLlmpartyRuntimeIntent()) return undefined;
+    if (!hasPilotfyRuntimeIntent()) return undefined;
     await appendDiagnostic({ level: "error", code: "invalid_session_context", message: errors.join("; ") });
     return undefined;
   }
@@ -77,19 +77,19 @@ async function loadContext() {
   try {
     parsed = JSON.parse(await readFile(file, "utf8"));
   } catch (error) {
-    if (!hasLlmpartyRuntimeIntent()) return undefined;
+    if (!hasPilotfyRuntimeIntent()) return undefined;
     await appendDiagnostic({ level: "warn", code: "missing_current_turn_file", message: `current-turn file is missing, unreadable, or invalid: ${file}`, details: error instanceof Error ? error.message : String(error) });
     return undefined;
   }
   const sessionId = stringValue(parsed?.session_id);
   const turnId = stringValue(parsed?.turn_id);
   const clientType = stringValue(parsed?.client_type);
-  const internalEventUrl = stringValue(env.LLMPARTY_INTERNAL_EVENT_URL) ?? stringValue(parsed?.internal_event_url);
+  const internalEventUrl = stringValue(env.PILOTFY_INTERNAL_EVENT_URL) ?? stringValue(parsed?.internal_event_url);
   const errors = [];
   if (!sessionId) errors.push("session_id is required");
   if (!turnId) errors.push("turn_id is required");
   if (clientType !== "claude_code") errors.push("client_type must be claude_code");
-  if (!internalEventUrl) errors.push("internal_event_url or LLMPARTY_INTERNAL_EVENT_URL is required");
+  if (!internalEventUrl) errors.push("internal_event_url or PILOTFY_INTERNAL_EVENT_URL is required");
   if (errors.length) {
     await appendDiagnostic({ level: "error", code: "invalid_current_turn_context", message: errors.join("; "), details: { contextFile: file } });
     return undefined;

@@ -1,16 +1,14 @@
-use llmparty::storage::sqlite::{connect_sqlite, normalize_sqlite_database_url, run_migrations};
+use pilotfy::storage::sqlite::{connect_sqlite, normalize_sqlite_database_url, run_migrations};
 
 #[test]
 fn expands_tilde_sqlite_database_urls_before_connecting() {
-    let normalized = normalize_sqlite_database_url(
-        "sqlite://~/.local/share/llmparty/llmparty.db",
-        "/home/alice",
-    )
-    .expect("normalize");
+    let normalized =
+        normalize_sqlite_database_url("sqlite://~/.local/share/pilotfy/pilotfy.db", "/home/alice")
+            .expect("normalize");
 
     assert_eq!(
         normalized,
-        "sqlite:///home/alice/.local/share/llmparty/llmparty.db"
+        "sqlite:///home/alice/.local/share/pilotfy/pilotfy.db"
     );
 }
 

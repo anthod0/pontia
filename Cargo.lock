@@ -1059,33 +1059,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
-name = "llmparty"
-version = "0.1.0"
-dependencies = [
- "axum",
- "dotenvy",
- "flate2",
- "http-body-util",
- "lbug",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "tar",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "tokio-stream",
- "toml",
- "tower",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "zip",
-]
-
-[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1274,6 +1247,33 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "pilotfy"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "dotenvy",
+ "flate2",
+ "http-body-util",
+ "lbug",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tokio-stream",
+ "toml",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zip",
+]
 
 [[package]]
 name = "pin-project-lite"

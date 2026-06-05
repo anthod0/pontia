@@ -1,6 +1,6 @@
 # 统一 Coding Agent Control Plane：产品愿景
 
-**当前设计基线**：`llmparty` 是可通过 Web Dashboard 和 HTTP External API 使用的 Coding Agent Control Plane。它以统一的 task / workspace / session / turn / event / artifact 模型管理不同 agent client，通过 tmux 承载长运行 runtime，并通过事件投影和查询模型提供稳定的对外状态。
+**当前设计基线**：`pilotfy` 是可通过 Web Dashboard 和 HTTP External API 使用的 Coding Agent Control Plane。它以统一的 task / workspace / session / turn / event / artifact 模型管理不同 agent client，通过 tmux 承载长运行 runtime，并通过事件投影和查询模型提供稳定的对外状态。
 
 ---
 
@@ -16,7 +16,7 @@
 - 通过统一事件模型聚合 runtime 和 agent client 回传的事实
 - 让浏览器用户、脚本和上层 Orchestrator 都不需要直接理解具体 client 的运行细节
 
-`llmparty` 的对外使用入口包括：
+`pilotfy` 的对外使用入口包括：
 
 - Web Dashboard：面向人类用户的本地控制台
 - HTTP External API：面向脚本、自动化系统和上层 Orchestrator 的稳定接口
@@ -64,7 +64,7 @@
 
 ### 2.4 Task / workspace / graph 能力
 
-- workspace 作为执行上下文和 artifact discovery 范围，不作为 llmparty 状态目录
+- workspace 作为执行上下文和 artifact discovery 范围，不作为 pilotfy 状态目录
 - task 是用户意图的一等对象，可以先于 workspace / session / turn 存在
 - task routing 可自动匹配 workspace，也可进入 `needs_confirmation` 等待用户确认
 - task dispatch 会选择或创建 session，并把 task 关联到实际 turn

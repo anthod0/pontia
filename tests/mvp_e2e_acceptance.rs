@@ -5,7 +5,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use llmparty::{
+use pilotfy::{
     adapters::{ArtifactRegistration, GenericTestAdapter},
     application::{AppState, ArtifactRegistrationService},
     storage::sqlite::{connect_sqlite, run_migrations},
@@ -33,7 +33,7 @@ async fn test_state(name: &str) -> AppState {
         external_api_token: Some(TOKEN.to_string()),
         graph: Default::default(),
         workspace_browser: Default::default(),
-        dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),
+        dashboard: pilotfy::transport::http::dashboard::ResolvedDashboard::local_default(),
         shutdown: Default::default(),
     }
 }
@@ -110,7 +110,7 @@ async fn create_session_with_key(state: AppState, key: &str) -> (StatusCode, Val
         "/external/v1/sessions",
         Some(TOKEN),
         Some(key),
-        Some(json!({"client_type":"generic","workspace":"/tmp/llmparty-mvp"})),
+        Some(json!({"client_type":"generic","workspace":"/tmp/pilotfy-mvp"})),
     )
     .await
 }

@@ -10,14 +10,14 @@ mod task_state;
 use axum::http::StatusCode;
 use generic_client::GenericClientTestScope;
 use http::{get_json, post_json};
-use llmparty::{
+use pilotfy::{
     application::{DagSchedulerService, DagService, SubmitPlanPayload, WorkItemDraft},
     ids::new_task_id,
 };
 use serde_json::json;
 use task_state::test_state;
 
-async fn insert_running_task(state: &llmparty::application::AppState) -> String {
+async fn insert_running_task(state: &pilotfy::application::AppState) -> String {
     let task_id = new_task_id().to_string();
     sqlx::query(
         "INSERT INTO tasks (task_id, state, input) VALUES (?, 'running', 'human control task')",

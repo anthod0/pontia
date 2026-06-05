@@ -4,7 +4,7 @@
 mod generic_client;
 
 use generic_client::GenericClientTestScope;
-use llmparty::{
+use pilotfy::{
     application::{
         DagPatch, DagSchedulerService, DagService, PatchOperation, SqliteDagGraphStore,
         SubmitPlanPayload, WorkItemDraft, WorkItemEdgeDraft,

@@ -21,11 +21,11 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "pi",
     capabilities: CAPABILITIES,
     runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
-        command_env: Some("LLMPARTY_PI_TUI_COMMAND"),
+        command_env: Some("PILOTFY_PI_TUI_COMMAND"),
         default_command: "pi",
         session_identity_arg: Some("--session-id"),
         hook_log: Some(HookLogBehavior {
-            env: "LLMPARTY_PI_HOOK_LOG",
+            env: "PILOTFY_PI_HOOK_LOG",
             file_name: "pi-hook.log",
             metadata_key: "pi_hook_log",
         }),

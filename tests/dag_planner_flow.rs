@@ -1,6 +1,6 @@
 #![cfg(any())]
 
-use llmparty::{
+use pilotfy::{
     application::{
         DagPlanningService, DagService, SqliteDagGraphStore, SubmitPlanPayload, WorkItemDraft,
     },

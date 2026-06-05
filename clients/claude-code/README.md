@@ -1,14 +1,14 @@
-# llmparty Claude Code plugin
+# pilotfy Claude Code plugin
 
-Reports Claude Code startup readiness and confirmed turn facts to llmparty through `/internal/v1/events`.
+Reports Claude Code startup readiness and confirmed turn facts to pilotfy through `/internal/v1/events`.
 
 ## Installation
 
-Install the llmparty marketplace from GitHub, then install the Claude Code plugin:
+Install the pilotfy marketplace from GitHub, then install the Claude Code plugin:
 
 ```bash
-claude plugin marketplace add anthod0/llmparty --sparse .claude-plugin clients/claude-code
-claude plugin install llmparty-claude-code@llmparty
+claude plugin marketplace add anthod0/pilotfy --sparse .claude-plugin clients/claude-code
+claude plugin install pilotfy-claude-code@pilotfy
 ```
 
 After installing or updating the plugin, reload plugins inside Claude Code if needed:
@@ -17,13 +17,13 @@ After installing or updating the plugin, reload plugins inside Claude Code if ne
 /reload-plugins
 ```
 
-When the plugin is installed from the marketplace, llmparty launches Claude Code with its default command:
+When the plugin is installed from the marketplace, pilotfy launches Claude Code with its default command:
 
 ```bash
 claude --dangerously-skip-permissions
 ```
 
-To override the launch command, set `LLMPARTY_CLAUDE_TUI_COMMAND`.
+To override the launch command, set `PILOTFY_CLAUDE_TUI_COMMAND`.
 
 ## Local development
 
@@ -33,6 +33,6 @@ pnpm test
 pnpm typecheck
 ```
 
-On `SessionStart` startup, the hook reads `LLMPARTY_SESSION_ID`, `LLMPARTY_RUNTIME_INSTANCE_ID`, and `LLMPARTY_INTERNAL_EVENT_URL` to post a one-time `session.ready` signal from `agent_client`.
+On `SessionStart` startup, the hook reads `PILOTFY_SESSION_ID`, `PILOTFY_RUNTIME_INSTANCE_ID`, and `PILOTFY_INTERNAL_EVENT_URL` to post a one-time `session.ready` signal from `agent_client`.
 
-For turn completion hooks, it reads `LLMPARTY_CURRENT_TURN_FILE`, posts to `LLMPARTY_INTERNAL_EVENT_URL` or the context file URL, and writes JSONL diagnostics to `LLMPARTY_CLAUDE_HOOK_LOG`.
+For turn completion hooks, it reads `PILOTFY_CURRENT_TURN_FILE`, posts to `PILOTFY_INTERNAL_EVENT_URL` or the context file URL, and writes JSONL diagnostics to `PILOTFY_CLAUDE_HOOK_LOG`.

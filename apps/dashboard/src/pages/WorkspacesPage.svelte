@@ -132,7 +132,7 @@
   }
 
   async function deleteRegisteredWorkspace(workspaceId: string, label: string): Promise<void> {
-    if (deletingWorkspaceId || !confirm(`Delete workspace "${label}" from llmparty? Files on disk will not be deleted.`)) return
+    if (deletingWorkspaceId || !confirm(`Delete workspace "${label}" from pilotfy? Files on disk will not be deleted.`)) return
     deletingWorkspaceId = workspaceId
     deleteError = null
     try {

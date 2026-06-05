@@ -63,7 +63,7 @@ async fn authorizes_planning_context_from_session_turn_and_runtime_binding() {
     assert_eq!(body["ok"], true);
     assert_eq!(body["tool"], "getContext");
     let text = body["result"]["text"].as_str().expect("plain text context");
-    assert!(text.contains("llmparty context: planning"));
+    assert!(text.contains("pilotfy context: planning"));
     assert!(text.contains("Role: planner"));
     assert!(text.contains("Goal:"));
     assert!(!text.contains("sess_plan"));
@@ -108,7 +108,7 @@ async fn authorizes_execution_context_from_current_work_item_run_not_request_inp
 
     assert_eq!(status, StatusCode::OK);
     let text = body["result"]["text"].as_str().expect("plain text context");
-    assert!(text.contains("llmparty context: execution"));
+    assert!(text.contains("pilotfy context: execution"));
     assert!(text.contains("ID: wi_exec"));
     assert!(!text.contains("task_other"));
     assert!(!text.contains("run_other"));
@@ -167,7 +167,7 @@ async fn get_context_returns_planning_view_from_authoritative_task_state() {
     assert_eq!(status, StatusCode::OK);
     let result = &body["result"];
     let text = result["text"].as_str().expect("plain text context");
-    assert!(text.contains("llmparty context: planning"));
+    assert!(text.contains("pilotfy context: planning"));
     assert!(text.contains("Role: planner"));
     assert!(text.contains("Goal:"));
     assert!(text.contains("Current DAG:"));
@@ -251,7 +251,7 @@ async fn get_context_returns_execution_view_scoped_to_current_run() {
     assert_eq!(status, StatusCode::OK);
     let result = &body["result"];
     let text = result["text"].as_str().expect("plain text context");
-    assert!(text.contains("llmparty context: execution"));
+    assert!(text.contains("pilotfy context: execution"));
     assert!(text.contains("Current WorkItem:"));
     assert!(text.contains("ID: wi_exec"));
     assert!(text.contains("Acceptance criteria:"));

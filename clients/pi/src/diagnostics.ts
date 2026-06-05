@@ -20,6 +20,6 @@ export async function appendDiagnostic(logFile: string, entry: DiagnosticEntry):
     );
   } catch (error) {
     // Diagnostics must never break pi execution.
-    console.error("llmparty pi plugin diagnostic write failed", error);
+    console.error("pilotfy pi plugin diagnostic write failed", error);
   }
 }

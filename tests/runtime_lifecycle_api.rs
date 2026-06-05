@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use llmparty::{
+use pilotfy::{
     application::AppState,
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
@@ -30,7 +30,7 @@ async fn test_state() -> AppState {
         external_api_token: Some(TOKEN.to_string()),
         graph: Default::default(),
         workspace_browser: Default::default(),
-        dashboard: llmparty::transport::http::dashboard::ResolvedDashboard::local_default(),
+        dashboard: pilotfy::transport::http::dashboard::ResolvedDashboard::local_default(),
         shutdown: Default::default(),
     }
 }
@@ -377,14 +377,14 @@ async fn resume_rejects_error_session() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    llmparty::application::EventIngestService::new(state.db.clone())
-        .ingest_event(llmparty::domain::DomainEvent::new(
-            llmparty::ids::new_event_id().to_string(),
+    pilotfy::application::EventIngestService::new(state.db.clone())
+        .ingest_event(pilotfy::domain::DomainEvent::new(
+            pilotfy::ids::new_event_id().to_string(),
             session_id.clone(),
             None,
-            llmparty::domain::EventSource::RuntimeManager,
+            pilotfy::domain::EventSource::RuntimeManager,
             "generic".to_string(),
-            llmparty::domain::EventType::SessionError,
+            pilotfy::domain::EventType::SessionError,
             json!({ "error": { "message": "boom" } }),
         ))
         .await

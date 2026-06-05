@@ -44,13 +44,13 @@ pub(super) fn write_runtime_script(
                 command.push_str(&shell_quote(&request.session_id));
             }
             (
-                "echo \"llmparty runtime started\" >> \"$LLMPARTY_RUNTIME_LOG\"".to_string(),
+                "echo \"pilotfy runtime started\" >> \"$PILOTFY_RUNTIME_LOG\"".to_string(),
                 format!("exec sh -lc {}\n", shell_quote(&command)),
             )
         }
         RuntimeBehavior::InProcessTest => match client_spec.dispatch {
             DispatchBehavior::GenericTestAdapter | DispatchBehavior::None => (
-                "exec >> \"$LLMPARTY_RUNTIME_LOG\" 2>&1\necho \"llmparty runtime started\""
+                "exec >> \"$PILOTFY_RUNTIME_LOG\" 2>&1\necho \"pilotfy runtime started\""
                     .to_string(),
                 "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
             ),
@@ -65,7 +65,7 @@ pub(super) fn write_runtime_script(
     let agent_kind_export = request
         .agent_kind
         .as_ref()
-        .map(|agent_kind| format!("export LLMPARTY_AGENT_KIND={}\n", shell_quote(agent_kind)))
+        .map(|agent_kind| format!("export PILOTFY_AGENT_KIND={}\n", shell_quote(agent_kind)))
         .unwrap_or_default();
     let hook_log_export = client_spec
         .tmux_runtime()
@@ -81,17 +81,17 @@ pub(super) fn write_runtime_script(
         .unwrap_or_default();
     let content = format!(
         r#"#!/usr/bin/env sh
-export LLMPARTY_SESSION_ID={}
-export LLMPARTY_CLIENT_TYPE={}
-export LLMPARTY_WORKSPACE={}
-export LLMPARTY_RUNTIME_DIR={}
-export LLMPARTY_RUNTIME_LOG={}
-export LLMPARTY_ADAPTER_EVENT_LOG={}
-export LLMPARTY_CURRENT_TURN_FILE={}
-export LLMPARTY_INTERNAL_EVENT_URL={}
-export LLMPARTY_EXTERNAL_API_URL={}
-export LLMPARTY_EXTERNAL_API_TOKEN={}
-export LLMPARTY_RUNTIME_INSTANCE_ID={}
+export PILOTFY_SESSION_ID={}
+export PILOTFY_CLIENT_TYPE={}
+export PILOTFY_WORKSPACE={}
+export PILOTFY_RUNTIME_DIR={}
+export PILOTFY_RUNTIME_LOG={}
+export PILOTFY_ADAPTER_EVENT_LOG={}
+export PILOTFY_CURRENT_TURN_FILE={}
+export PILOTFY_INTERNAL_EVENT_URL={}
+export PILOTFY_EXTERNAL_API_URL={}
+export PILOTFY_EXTERNAL_API_TOKEN={}
+export PILOTFY_RUNTIME_INSTANCE_ID={}
 {}{}{}
 {}
 "#,
@@ -123,12 +123,12 @@ fn hook_log_path(
 }
 
 pub(super) fn internal_event_url() -> String {
-    std::env::var("LLMPARTY_INTERNAL_EVENT_URL")
+    std::env::var("PILOTFY_INTERNAL_EVENT_URL")
         .unwrap_or_else(|_| default_internal_event_url().to_string())
 }
 
 fn external_api_url() -> String {
-    std::env::var("LLMPARTY_EXTERNAL_API_URL")
+    std::env::var("PILOTFY_EXTERNAL_API_URL")
         .unwrap_or_else(|_| default_external_api_url().to_string())
 }
 
@@ -154,7 +154,7 @@ fn default_external_api_url() -> &'static str {
 
 fn external_api_token() -> String {
     configured_external_api_token()
-        .or_else(|| std::env::var("LLMPARTY_EXTERNAL_API_TOKEN").ok())
+        .or_else(|| std::env::var("PILOTFY_EXTERNAL_API_TOKEN").ok())
         .unwrap_or_default()
 }
 
@@ -228,12 +228,12 @@ mod tests {
         };
 
         unsafe {
-            std::env::remove_var("LLMPARTY_EXTERNAL_API_TOKEN");
+            std::env::remove_var("PILOTFY_EXTERNAL_API_TOKEN");
         }
         crate::runtime::set_runtime_external_api_token(None);
         let config = crate::config::AppConfig {
             bind_addr: "127.0.0.1:0".parse().expect("bind addr"),
-            database_url: format!("sqlite://{}", tempdir.path().join("llmparty.db").display()),
+            database_url: format!("sqlite://{}", tempdir.path().join("pilotfy.db").display()),
             external_api_token: Some("config-token".to_string()),
             run_migrations: false,
             default_client_type: "pi".to_string(),
@@ -257,10 +257,10 @@ mod tests {
 
         let script = std::fs::read_to_string(script_path).expect("script");
         assert!(
-            script.contains("export LLMPARTY_EXTERNAL_API_TOKEN='config-token'"),
+            script.contains("export PILOTFY_EXTERNAL_API_TOKEN='config-token'"),
             "script was:\n{script}"
         );
-        assert!(script.contains("export LLMPARTY_AGENT_KIND='planner'"));
+        assert!(script.contains("export PILOTFY_AGENT_KIND='planner'"));
     }
 
     #[test]
@@ -294,11 +294,11 @@ mod tests {
 
         let script = std::fs::read_to_string(script_path).expect("script");
         assert!(
-            script.contains("export LLMPARTY_CLAUDE_HOOK_LOG="),
+            script.contains("export PILOTFY_CLAUDE_HOOK_LOG="),
             "script was:\n{script}"
         );
         assert!(
-            !script.contains("export LLMPARTY_PI_HOOK_LOG="),
+            !script.contains("export PILOTFY_PI_HOOK_LOG="),
             "script was:\n{script}"
         );
     }

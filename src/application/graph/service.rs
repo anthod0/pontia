@@ -280,7 +280,7 @@ impl GraphProjectionService {
             .db_dir
             .as_ref()
             .ok_or_else(|| Error::InvalidConfig {
-                key: "LLMPARTY_GRAPH_DB_DIR",
+                key: "PILOTFY_GRAPH_DB_DIR",
                 message: "graph.enabled requires a Ladybug database path".to_string(),
             })?;
         LbugDagGraphStore::open(db_dir).await
@@ -339,7 +339,7 @@ impl LbugDagGraphStoreUnavailable {
 
 fn lbug_required_error() -> Error {
     Error::CapabilityUnavailable(
-        "WorkItem DAG graph storage requires enabling graph.enabled with an llmparty build that includes the `lbug` feature".to_string(),
+        "WorkItem DAG graph storage requires enabling graph.enabled with an pilotfy build that includes the `lbug` feature".to_string(),
     )
 }
 

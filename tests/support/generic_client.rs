@@ -1,6 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use llmparty::{
+use pilotfy::{
     adapters::{AdapterCapabilities, GenericTestAdapter},
     application::AppState,
     runtime::{AgentInput, GenericRuntimeManager},
