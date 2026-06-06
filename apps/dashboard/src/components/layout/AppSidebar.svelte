@@ -63,12 +63,14 @@
   <Sidebar.Header>
     <button
       type="button"
-      class="flex items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-semibold hover:bg-sidebar-accent"
+      class="flex items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-semibold hover:bg-sidebar-accent group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0"
       onclick={() => go('/overview')}
       aria-label="Open dashboard overview"
     >
-      <span class="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">ll</span>
-      <span class="truncate">pilotfy Dashboard</span>
+      <span class="flex size-8 shrink-0 items-center justify-center rounded-lg">
+        <img src="/dashboard/logo-32.png" alt="" class="size-6 shrink-0 object-contain" />
+      </span>
+      <span class="truncate group-data-[collapsible=icon]:hidden">pilotfy Dashboard</span>
     </button>
   </Sidebar.Header>
   <Sidebar.Content>
