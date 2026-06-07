@@ -68,7 +68,7 @@
       aria-label="Open dashboard overview"
     >
       <span class="flex size-8 shrink-0 items-center justify-center rounded-lg">
-        <img src="/dashboard/logo-32.png" alt="" class="size-6 shrink-0 object-contain" />
+        <img src="/dashboard/logo.svg" alt="" class="size-6 shrink-0 object-contain" />
       </span>
       <span class="truncate group-data-[collapsible=icon]:hidden">pilotfy Dashboard</span>
     </button>
