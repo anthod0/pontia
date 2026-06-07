@@ -1,11 +1,10 @@
-<h1 align="center">
-  <img src="https://raw.githubusercontent.com/anthod0/pilotfy/assets/assets/logo/dark/logo-transparent.png" alt="" width="36" height="36" align="absmiddle">
-  Pilotfy
-</h1>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/anthod0/pilotfy/assets/assets/logo/dark/logo-transparent.png" width="120" alt="Pilotfy Logo" />
+</p>
 
-`pilotfy` is an experimental control plane for coding agents.
+<p align="center">An experimental control plane for coding agents.</p>
 
-The project is in development, changes quickly, and is not stable yet. Breaking changes should be expected.
+> The project is in development, changes quickly, and is not stable yet. Breaking changes should be expected.
 
 ## What pilotfy is
 
