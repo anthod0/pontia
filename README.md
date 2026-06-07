@@ -1,8 +1,7 @@
-# pilotfy
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/anthod0/pilotfy/assets/assets/logo/dark/logo-transparent.png" alt="pilotfy" width="420">
-</p>
+<h1 align="center">
+  <img src="https://raw.githubusercontent.com/anthod0/pilotfy/assets/assets/logo/dark/logo-transparent.png" alt="" width="36">
+  pilotfy
+</h1>
 
 `pilotfy` is an experimental control plane for coding agents.
 
