@@ -1,6 +1,6 @@
 <h1 align="center">
-  <img src="https://raw.githubusercontent.com/anthod0/pilotfy/assets/assets/logo/dark/logo-transparent.png" alt="" width="36">
-  pilotfy
+  <img src="https://raw.githubusercontent.com/anthod0/pilotfy/assets/assets/logo/dark/logo-transparent.png" alt="" width="36" height="36" align="absmiddle">
+  Pilotfy
 </h1>
 
 `pilotfy` is an experimental control plane for coding agents.
