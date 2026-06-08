@@ -53,7 +53,7 @@ test('blocks dashboard routes behind a token prompt when no token is saved', asy
 
   expect(screen.getByRole('heading', { name: /enter external api token/i })).toBeInTheDocument();
   expect(screen.getByLabelText(/bearer token/i)).toBeInTheDocument();
-  expect(screen.queryByText('pilotfy Dashboard')).not.toBeInTheDocument();
+  expect(screen.queryByText('PILOTFY')).not.toBeInTheDocument();
   expect(mocks.loadTasks).not.toHaveBeenCalled();
   expect(mocks.loadWorkspaces).not.toHaveBeenCalled();
   expect(mocks.loadAgentProfiles).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ test('saves the entered token and opens the requested dashboard route', async ()
 
   await waitFor(() => expect(localStorage.getItem('pilotfy.externalApiToken')).toBe('dev-token'));
   await waitFor(() => expect(screen.queryByRole('heading', { name: /enter external api token/i })).not.toBeInTheDocument());
-  expect(screen.getByText('pilotfy Dashboard')).toBeInTheDocument();
+  expect(screen.getByText('PILOTFY')).toBeInTheDocument();
   expect(mocks.loadTasks).toHaveBeenCalled();
   expect(mocks.loadWorkspaces).toHaveBeenCalled();
   expect(mocks.loadAgentProfiles).toHaveBeenCalled();
