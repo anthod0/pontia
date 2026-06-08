@@ -1,7 +1,10 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, type InternalEvent } from "./events.js";
+import { buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnCreatedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, type InternalEvent } from "./events.js";
 import { EventReporter } from "./reporter.js";
 import { loadSessionContext } from "./session.js";
 import { buildPilotfyTools } from "./tools.js";
@@ -15,6 +18,7 @@ export interface PilotfyPiExtensionDependencies {
   loadContext?: (env: EnvLike) => Promise<LoadTurnContextResult>;
   makeReporter?: (logFile: string) => ReporterLike;
   logDiagnostic?: (logFile: string, entry: DiagnosticEntry) => Promise<void>;
+  writeContext?: (contextFile: string, context: TurnContext) => Promise<void>;
   fetch?: typeof fetch;
 }
 
@@ -101,6 +105,26 @@ function externalApiUrl(env: EnvLike): string | undefined {
   return optionalString(env.PILOTFY_EXTERNAL_API_URL)?.replace(/\/+$/, "");
 }
 
+function freshTurnId(): string {
+  return `turn_${randomUUID()}`;
+}
+
+async function writeCurrentTurnContext(contextFile: string, context: TurnContext): Promise<void> {
+  await mkdir(dirname(contextFile), { recursive: true });
+  await writeFile(
+    contextFile,
+    `${JSON.stringify({
+      client_type: context.clientType,
+      input: context.input,
+      internal_event_url: context.internalEventUrl,
+      runtime_instance_id: context.runtimeInstanceId,
+      session_id: context.sessionId,
+      turn_id: context.turnId,
+    }, null, 2)}\n`,
+    "utf8",
+  );
+}
+
 async function parseJsonResponse(response: Response): Promise<unknown> {
   const text = await response.text().catch(() => "");
   if (!text) return null;
@@ -153,6 +177,7 @@ export function createPilotfyPiExtension(pi: ExtensionAPI, dependencies: Pilotfy
   const contextLoader = dependencies.loadContext ?? loadTurnContext;
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
+  const writeContext = dependencies.writeContext ?? writeCurrentTurnContext;
   const fetchImpl = dependencies.fetch ?? fetch;
   const allowedToolNames = allowedToolNamesForAgentKind(env.PILOTFY_AGENT_KIND);
   for (const tool of buildPilotfyTools({
@@ -167,9 +192,12 @@ export function createPilotfyPiExtension(pi: ExtensionAPI, dependencies: Pilotfy
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
+  let pendingPrompt: string | undefined;
+  const endedTurnIds = new Set<string>();
 
   pi.on("before_agent_start", async (event) => {
     const eventRecord = event as unknown as Record<string, unknown>;
+    pendingPrompt = optionalString(eventRecord.prompt);
     const currentSystemPrompt = typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
     try {
       const profilePrompt = await loadProfileSystemPrompt(env, fetchImpl);
@@ -215,15 +243,34 @@ export function createPilotfyPiExtension(pi: ExtensionAPI, dependencies: Pilotfy
         return;
       }
 
+      let context = loaded.context;
+      let createdFromTuiPrompt = false;
+      if (endedTurnIds.has(context.turnId)) {
+        context = {
+          ...context,
+          turnId: freshTurnId(),
+          input: pendingPrompt ?? context.input,
+        };
+        createdFromTuiPrompt = true;
+        await writeContext(loaded.contextFile, context);
+      }
+
       const reporter = makeReporter(loaded.logFile);
       activeTurn = {
-        context: loaded.context,
+        context,
         logFile: loaded.logFile,
         reporter,
         output: "",
         ended: false,
       };
-      await reporter.report(loaded.context, buildTurnStartedEvent(loaded.context));
+      if (createdFromTuiPrompt) {
+        const createdOk = await reporter.report(context, buildTurnCreatedEvent(context));
+        if (!createdOk) {
+          activeTurn = undefined;
+          return;
+        }
+      }
+      await reporter.report(context, buildTurnStartedEvent(context));
     } catch (error) {
       activeTurn = undefined;
       const logFile = env.PILOTFY_PI_HOOK_LOG ?? "pi-hook.log";
@@ -260,6 +307,7 @@ export function createPilotfyPiExtension(pi: ExtensionAPI, dependencies: Pilotfy
     activeTurn.ended = true;
 
     const state = activeTurn;
+    endedTurnIds.add(state.context.turnId);
     const failureMessage = errorMessageFromAgentEnd(event);
     if (failureMessage) {
       await state.reporter.report(state.context, buildTurnFailedEvent(state.context, failureMessage));

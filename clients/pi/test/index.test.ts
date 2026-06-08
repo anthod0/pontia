@@ -39,6 +39,7 @@ function install(overrides: Partial<Parameters<typeof createPilotfyPiExtension>[
       return true;
     }) })),
     logDiagnostic: vi.fn(async () => undefined),
+    writeContext: vi.fn(async () => undefined),
     ...overrides,
   });
   return { handlers, reported };
@@ -165,6 +166,31 @@ describe("pilotfy pi extension lifecycle", () => {
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.output", "turn.completed"]);
     expect(reported[1].payload).toEqual({ output: { summary: "final answer" } });
+  });
+
+  test("creates a fresh pilotfy turn for a TUI prompt after the dispatched turn completed", async () => {
+    const { handlers, reported } = install();
+
+    await handlers.before_agent_start({ prompt: "first from dashboard", systemPrompt: "Base prompt" }, {});
+    await handlers.agent_start({}, {});
+    await handlers.agent_end({ messages: [{ role: "assistant", content: "first answer" }] }, {});
+
+    await handlers.before_agent_start({ prompt: "second from tui", systemPrompt: "Base prompt" }, {});
+    await handlers.agent_start({}, {});
+    await handlers.agent_end({ messages: [{ role: "assistant", content: "second answer" }] }, {});
+
+    expect(reported.map((event) => event.type)).toEqual([
+      "turn.started",
+      "turn.output",
+      "turn.completed",
+      "turn.created",
+      "turn.started",
+      "turn.output",
+      "turn.completed",
+    ]);
+    expect(reported[3].turn_id).not.toBe("turn_1");
+    expect(reported[3]).toMatchObject({ source: "agent_client", payload: { input: { summary: "second from tui" } } });
+    expect(reported[4]).toMatchObject({ turn_id: reported[3].turn_id, payload: { runtime_instance_id: "rtinst_1", input: { summary: "second from tui" } } });
   });
 
   test("does not report completion when context is missing", async () => {

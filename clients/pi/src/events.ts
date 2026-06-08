@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
 import type { SessionContext } from "./session.js";
 
-export type InternalEventType = "session.ready" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
+export type InternalEventType = "session.ready" | "turn.created" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
 
 interface BaseInternalEvent {
   event_id: string;
@@ -22,13 +22,18 @@ export type InternalEvent =
     })
   | (BaseInternalEvent & {
       turn_id: string;
+      source: "agent_client";
+      type: "turn.created";
+    })
+  | (BaseInternalEvent & {
+      turn_id: string;
       source: "agent_adapter";
       type: "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
     });
 
-type TurnInternalEvent = Extract<InternalEvent, { source: "agent_adapter" }>;
+type AdapterTurnInternalEvent = Extract<InternalEvent, { source: "agent_adapter" }>;
 
-function baseTurnEvent(context: TurnContext, type: TurnInternalEvent["type"]): Omit<TurnInternalEvent, "payload"> {
+function baseAdapterTurnEvent(context: TurnContext, type: AdapterTurnInternalEvent["type"]): Omit<AdapterTurnInternalEvent, "payload"> {
   return {
     event_id: `evt_${randomUUID()}`,
     session_id: context.sessionId,
@@ -41,9 +46,27 @@ function baseTurnEvent(context: TurnContext, type: TurnInternalEvent["type"]): O
   };
 }
 
+export function buildTurnCreatedEvent(context: TurnContext): InternalEvent {
+  return {
+    event_id: `evt_${randomUUID()}`,
+    session_id: context.sessionId,
+    turn_id: context.turnId,
+    source: "agent_client",
+    client_type: "pi",
+    type: "turn.created",
+    time: new Date().toISOString(),
+    seq: null,
+    payload: {
+      runtime_instance_id: context.runtimeInstanceId,
+      input: context.input ? { summary: context.input } : {},
+      metadata: { source: "pi_tui" },
+    },
+  };
+}
+
 export function buildTurnStartedEvent(context: TurnContext): InternalEvent {
   return {
-    ...baseTurnEvent(context, "turn.started"),
+    ...baseAdapterTurnEvent(context, "turn.started"),
     payload: {
       runtime_instance_id: context.runtimeInstanceId,
       input: context.input ? { summary: context.input } : {},
@@ -53,21 +76,21 @@ export function buildTurnStartedEvent(context: TurnContext): InternalEvent {
 
 export function buildTurnOutputEvent(context: TurnContext, output: string): InternalEvent {
   return {
-    ...baseTurnEvent(context, "turn.output"),
+    ...baseAdapterTurnEvent(context, "turn.output"),
     payload: { output: { summary: output } },
   };
 }
 
 export function buildTurnCompletedEvent(context: TurnContext): InternalEvent {
   return {
-    ...baseTurnEvent(context, "turn.completed"),
+    ...baseAdapterTurnEvent(context, "turn.completed"),
     payload: {},
   };
 }
 
 export function buildTurnFailedEvent(context: TurnContext, message: string): InternalEvent {
   return {
-    ...baseTurnEvent(context, "turn.failed"),
+    ...baseAdapterTurnEvent(context, "turn.failed"),
     payload: { failure: { message } },
   };
 }
