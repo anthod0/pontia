@@ -4,18 +4,30 @@
   import * as Card from '$lib/components/ui/card/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
+  import { validateExternalApiToken } from '../../api/client'
   import { token } from '../../stores/auth'
 
   let draftToken = ''
   let error = ''
+  let validating = false
 
-  function continueToDashboard(): void {
+  async function continueToDashboard(): Promise<void> {
     const trimmed = draftToken.trim()
     if (!trimmed) {
       error = 'Enter a token to continue.'
       return
     }
-    token.set(trimmed)
+
+    validating = true
+    error = ''
+    try {
+      await validateExternalApiToken(trimmed)
+      token.set(trimmed)
+    } catch {
+      error = 'Invalid token.'
+    } finally {
+      validating = false
+    }
   }
 </script>
 
@@ -44,7 +56,7 @@
           <p class="text-xs text-muted-foreground">The token is stored only in this browser's localStorage.</p>
         </div>
         {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
-        <Button type="submit" class="w-full">Continue</Button>
+        <Button type="submit" class="w-full" disabled={validating}>{validating ? 'Validating…' : 'Continue'}</Button>
       </form>
     </Card.Content>
   </Card.Root>

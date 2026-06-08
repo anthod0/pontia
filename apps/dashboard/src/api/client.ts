@@ -38,6 +38,26 @@ function idempotencyKey(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+export async function validateExternalApiToken(candidateToken: string): Promise<void> {
+  const headers = new Headers();
+  headers.set('Authorization', `Bearer ${candidateToken}`);
+  const response = await fetch(`${API_BASE}/auth/validate`, { headers });
+  const text = await response.text();
+  let envelope: ApiEnvelope<unknown> | null = null;
+  try {
+    envelope = text ? JSON.parse(text) as ApiEnvelope<unknown> : null;
+  } catch {
+    throw new ApiError(text || response.statusText, 'invalid_json', response.status);
+  }
+  if (!response.ok || envelope?.error) {
+    throw new ApiError(
+      envelope?.error?.message ?? response.statusText,
+      envelope?.error?.code ?? 'request_failed',
+      response.status,
+    );
+  }
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   const bearer = get(token).trim();

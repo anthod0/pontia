@@ -67,6 +67,7 @@ pub fn router(state: AppState) -> Router {
             "/internal/v1/agent-tools/{tool_name}",
             post(internal_agent_tools::post_agent_tool),
         )
+        .route("/external/v1/auth/validate", get(external::validate_auth))
         .route(
             "/external/v1/sessions",
             get(external::list_sessions).post(external::create_session),

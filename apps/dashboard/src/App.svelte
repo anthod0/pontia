@@ -4,6 +4,7 @@
   import AuthGate from './components/auth/AuthGate.svelte'
   import AppShell from './components/layout/AppShell.svelte'
   import { Toaster } from './lib/components/ui/sonner/index.js'
+  import { validateExternalApiToken } from './api/client'
   import { startEventStream, stopEventStream } from './services/eventStream'
   import { loadAgentProfiles } from './stores/agentProfiles'
   import { token } from './stores/auth'
@@ -14,6 +15,8 @@
 
   let unsubscribeToken: (() => void) | null = null
   let dashboardStarted = false
+  let authenticatedToken = ''
+  let validationRun = 0
 
   function startDashboard(): void {
     void Promise.all([loadTasks(), loadWorkspaces(), loadAgentProfiles(), loadSessions()])
@@ -23,7 +26,10 @@
 
   onMount(() => {
     unsubscribeToken = token.subscribe((value) => {
-      if (!value.trim()) {
+      const trimmed = value.trim()
+      const run = ++validationRun
+      if (!trimmed) {
+        authenticatedToken = ''
         if (dashboardStarted) {
           stopEventStream()
           dashboardStarted = false
@@ -31,13 +37,21 @@
         return
       }
 
-      if (!dashboardStarted) {
-        startDashboard()
-        return
-      }
+      validateExternalApiToken(trimmed).then(() => {
+        if (run !== validationRun) return
+        authenticatedToken = trimmed
+        if (!dashboardStarted) {
+          startDashboard()
+          return
+        }
 
-      stopEventStream()
-      startEventStream()
+        stopEventStream()
+        startEventStream()
+      }).catch(() => {
+        if (run !== validationRun) return
+        authenticatedToken = ''
+        token.set('')
+      })
     })
   })
 
@@ -49,7 +63,7 @@
 
 <Toaster richColors />
 
-{#if $token.trim()}
+{#if authenticatedToken}
   <AppShell>
     <Router {routerConf} />
   </AppShell>

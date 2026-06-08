@@ -154,8 +154,30 @@ async fn get(state: AppState, uri: &str, token: Option<&str>) -> (StatusCode, Va
         .await
         .expect("body")
         .to_bytes();
-    let json = serde_json::from_slice(&body).expect("json body");
+    let json = if body.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&body).expect("json body")
+    };
     (status, json)
+}
+
+#[tokio::test]
+async fn external_api_validates_bearer_token_explicitly() {
+    let state = test_state().await;
+
+    let valid = get(state.clone(), "/external/v1/auth/validate", Some(TOKEN)).await;
+    let missing = get(state.clone(), "/external/v1/auth/validate", None).await;
+    let wrong = get(state, "/external/v1/auth/validate", Some("wrong-token")).await;
+
+    assert_eq!(valid.0, StatusCode::OK);
+    assert_eq!(valid.1["error"], Value::Null);
+    assert_eq!(valid.1["data"]["authenticated"], true);
+    assert_eq!(missing.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(missing.1["data"], Value::Null);
+    assert_eq!(missing.1["error"]["code"], "authentication_failed");
+    assert_eq!(wrong.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(wrong.1["error"]["code"], "authentication_failed");
 }
 
 #[tokio::test]

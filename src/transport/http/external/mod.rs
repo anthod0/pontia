@@ -1,5 +1,6 @@
 mod agent_profiles;
 mod artifacts;
+mod auth;
 mod common;
 mod dag;
 mod dag_tasks;
@@ -16,6 +17,7 @@ pub use agent_profiles::{
     list_agent_profile_versions, list_agent_profiles, update_agent_profile_version,
 };
 pub use artifacts::{discover_artifacts, get_artifact, get_artifact_content, list_artifacts};
+pub use auth::validate_auth;
 pub use common::{ApiResponse, ExternalApiError};
 pub use dag::{
     get_task_dag, list_task_signals, list_task_work_item_runs, list_task_work_items, scheduler_tick,
