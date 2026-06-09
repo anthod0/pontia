@@ -22,7 +22,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     capabilities: CAPABILITIES,
     runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
         command_env: Some("PILOTFY_PI_TUI_COMMAND"),
-        default_command: "pi",
+        default_command: "pi --approve",
         session_identity_arg: Some("--session-id"),
         hook_log: Some(HookLogBehavior {
             env: "PILOTFY_PI_HOOK_LOG",

@@ -203,7 +203,10 @@ mod tests {
         .expect("write script");
 
         let script = std::fs::read_to_string(script_path).expect("script");
-        assert!(script.contains("pi --session-id"), "script was:\n{script}");
+        assert!(
+            script.contains("pi --approve --session-id"),
+            "script was:\n{script}"
+        );
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
     }
 

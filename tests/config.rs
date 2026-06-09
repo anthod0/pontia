@@ -101,7 +101,7 @@ source = "/opt/pilotfy/dashboard"
 cache_dir = "/var/cache/pilotfy/dashboard"
 
 [runtime.pi]
-tui_command = "pi -e /tmp/pilotfy/clients/pi"
+tui_command = "pi --approve -e /tmp/pilotfy/clients/pi"
 
 [runtime.claude_code]
 tui_command = "claude --dangerously-skip-permissions"
@@ -132,7 +132,7 @@ roots = [
     assert_eq!(config.default_client_type, "claude_code");
     assert_eq!(
         config.runtime.pi.tui_command.as_deref(),
-        Some("pi -e /tmp/pilotfy/clients/pi")
+        Some("pi --approve -e /tmp/pilotfy/clients/pi")
     );
     assert_eq!(
         config.runtime.claude_code.tui_command.as_deref(),

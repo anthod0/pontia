@@ -199,7 +199,7 @@ async fn apply_plan_applies_proposed_plan_and_starts_scheduler() {
         "agent-tools tests must use a harmless pi runtime stub, got:\n{runtime_script}"
     );
     assert!(
-        !runtime_script.contains("pi --session-id"),
+        !runtime_script.contains("pi --approve --session-id"),
         "agent-tools tests must not launch the real pi runtime:\n{runtime_script}"
     );
 

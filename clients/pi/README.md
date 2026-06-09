@@ -7,7 +7,7 @@ First-party pi extension for reporting pi startup readiness and confirmed turn f
 From the pilotfy repository root, run pi with this package as a temporary extension:
 
 ```bash
-pi -e ./clients/pi
+pi --approve -e ./clients/pi
 ```
 
 Or install it into project-local pi settings:
@@ -104,7 +104,7 @@ When pi is launched by pilotfy `client_type = "pi"` runtime, the Control Plane w
 4. Run a real pi session:
 
    ```bash
-   pi -e ./clients/pi
+   pi --approve -e ./clients/pi
    ```
 
 5. Submit a prompt and verify pilotfy received `turn.output` and `turn.completed` through its event list/API or database inspection. In DAG-managed turns, ask pi to call `getContext`, `submitPlan`, `submitResult`, or `raiseSignal` and verify the backend receives `/internal/v1/agent-tools/*` requests.

@@ -64,7 +64,7 @@ mod tests {
             pi.runtime,
             RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
                 command_env: Some("PILOTFY_PI_TUI_COMMAND"),
-                default_command: "pi",
+                default_command: "pi --approve",
                 session_identity_arg: Some("--session-id"),
                 runtime_config_key: Some("pi"),
                 hook_log: Some(HookLogBehavior {

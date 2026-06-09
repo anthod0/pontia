@@ -106,7 +106,7 @@ source = "apps/dashboard/dist"
 cache_dir = "~/.cache/pilotfy/dashboard"
 
 [runtime.pi]
-tui_command = "pi -e /absolute/path/to/pilotfy/clients/pi"
+tui_command = "pi --approve -e /absolute/path/to/pilotfy/clients/pi"
 
 [runtime.claude_code]
 tui_command = "claude"

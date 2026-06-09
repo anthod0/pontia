@@ -53,7 +53,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     }
     set_runtime_config(RuntimeConfig {
         pi: RuntimeClientConfig {
-            tui_command: Some("pi -e /configured/clients/pi".to_string()),
+            tui_command: Some("pi --approve -e /configured/clients/pi".to_string()),
         },
         claude_code: RuntimeClientConfig::default(),
     });
@@ -80,7 +80,10 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         .expect("runtime dir");
     let script =
         std::fs::read_to_string(Path::new(runtime_dir).join("runtime.sh")).expect("runtime script");
-    assert!(script.contains("pi -e /configured/clients/pi"), "{script}");
+    assert!(
+        script.contains("pi --approve -e /configured/clients/pi"),
+        "{script}"
+    );
 }
 
 #[test]
