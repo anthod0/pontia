@@ -1,14 +1,15 @@
+> [!IMPORTANT]
+> DEVELOPMENT MODE
+> This project is still in active development. When choosing an approach, prefer long-term planning over short-term gains.
+> Major changes are allowed if necessary. Old branches/approaches should be deprecated and removed promptly; backward compatibility is not required unless explicitly requested.
+> Client adaptation: Only the pi client requires adaptation; adaptation for the Claude Code client is suspended.
+
 ## Project snapshot
 
 - `pilotfy` is a Rust console/control plane for coding agents with a web dashboard and client integrations.
 - Backend: Rust 2024, Axum, Tokio, SQLx/SQLite.
 - Frontend/dashboard and client plugins use pnpm.
 - Key paths: `src/`, `tests/`, `apps/dashboard/`, `clients/pi/`, `clients/claude-code/`, `spec/`, `MILESTONE.md`, `README.md`.
-
-> DEVELOPMENT MODE
-> This project is still in active development. When choosing an approach, prefer the best solution or the one closest to the final target architecture.
-> If necessary, major changes are allowed. Old branches/approaches should be deprecated and removed promptly; backward compatibility is not required unless explicitly requested.
-> Client adaptation: Only the pi client requires adaptation; adaptation for the Claude Code client is suspended.
 
 ## Architecture rules
 
