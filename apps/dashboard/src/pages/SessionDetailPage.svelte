@@ -12,13 +12,10 @@
   import * as Table from '$lib/components/ui/table/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import { formatDateTime, jsonPreview, shortId } from '../components/tasks/format'
-  import { getTimelineItemDetail } from '../api/client'
-  import { ApiError } from '../api/errors'
-  import type { DashboardStreamEvent, InboxDeliveryPolicy, SessionView, TimelineItemDetail } from '../api/types'
+  import type { InboxDeliveryPolicy, SessionView } from '../api/types'
   import { selectCurrentTurnOutput } from './sessions/currentTurnOutput'
   import { sessionEventDetailRows, sessionEventSummary, sessionEventTurnLabel } from './sessions/sessionEvents'
   import { isTerminalSession, sessionDisplayTitle } from './sessions/sessionList'
-  import { subscribeDashboardEvents } from '../services/eventStream'
   import {
     discoverSessionArtifacts,
     interruptSession,
@@ -31,12 +28,6 @@
     submitInboxMessage,
     terminateSession,
   } from '../stores/sessions'
-  import {
-    handleTimelineMessageUpdated,
-    loadSessionTimeline,
-    resetTimelineState,
-    timelineState,
-  } from '../stores/timeline'
 
   let selectedSessionId = ''
   let actionError: string | null = null
@@ -46,14 +37,9 @@
   let inboxInput = ''
   let inboxPolicy: InboxDeliveryPolicy = 'after_idle'
   let submittingInbox = false
-  let selectedTimelineDetail: TimelineItemDetail | null = null
-  let timelineDetailError: string | null = null
-  let timelineDetailLoadingRef: string | null = null
 
   onMount(() => {
     void loadSelectedSession()
-    const unsubscribe = subscribeDashboardEvents(handleDashboardStreamEvent)
-    return unsubscribe
   })
 
   $: selectedSession = $sessionDetail?.session ?? null
@@ -84,14 +70,8 @@
     selectedSessionId = nextSessionId
     actionError = null
     actionMessage = null
-    selectedTimelineDetail = null
-    timelineDetailError = null
-    resetTimelineState(nextSessionId)
     if (nextSessionId) {
-      await Promise.all([
-        loadSessionDetail(nextSessionId),
-        loadSessionTimeline(nextSessionId, { mode: 'rebuild' }),
-      ])
+      await loadSessionDetail(nextSessionId)
     }
   }
 
@@ -103,37 +83,10 @@
   async function refreshAll(): Promise<void> {
     actionError = null
     actionMessage = null
-    selectedTimelineDetail = null
-    timelineDetailError = null
     await Promise.all([
       loadSessions(),
       selectedSessionId ? loadSessionDetail(selectedSessionId) : Promise.resolve(null),
-      selectedSessionId ? loadSessionTimeline(selectedSessionId, { mode: 'rebuild' }) : Promise.resolve(null),
     ])
-  }
-
-  async function openTimelineDetail(contentRef: string): Promise<void> {
-    if (!selectedSessionId) return
-    timelineDetailLoadingRef = contentRef
-    timelineDetailError = null
-    try {
-      selectedTimelineDetail = await getTimelineItemDetail(selectedSessionId, contentRef)
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 'content_ref_invalid') resetTimelineState(selectedSessionId)
-      selectedTimelineDetail = null
-      timelineDetailError = error instanceof Error ? error.message : String(error)
-    } finally {
-      timelineDetailLoadingRef = null
-    }
-  }
-
-  function handleDashboardStreamEvent(streamEvent: DashboardStreamEvent): void {
-    if (streamEvent.kind !== 'session_event') return
-    if (streamEvent.event.session_id !== selectedSessionId) return
-    if (streamEvent.event.type !== 'session.message_updated') return
-    const rawBindingId = streamEvent.event.payload.binding_id
-    const bindingId = typeof rawBindingId === 'string' ? rawBindingId : null
-    void handleTimelineMessageUpdated(selectedSessionId, bindingId)
   }
 
   async function submitInbox(): Promise<void> {
@@ -317,70 +270,6 @@
       </Card.Root>
     </div>
 
-    <Card.Root>
-      <Card.Header>
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <Card.Title>Agent transcript timeline</Card.Title>
-            <Card.Description>
-              {$timelineState.items.length} raw timeline items from the External API{#if $timelineState.sourceId} · {$timelineState.sourceId}{/if}
-            </Card.Description>
-          </div>
-          <div class="flex gap-2">
-            <Button size="sm" variant="outline" disabled={$timelineState.loading || $timelineState.refreshing} onclick={() => void loadSessionTimeline(selectedSessionId, { mode: 'rebuild' })}><RefreshCw class="size-4" /> Refresh timeline</Button>
-            <Button size="sm" variant="outline" disabled={!$timelineState.hasMore || !$timelineState.nextCursor || $timelineState.loading || $timelineState.refreshing} onclick={() => void loadSessionTimeline(selectedSessionId, { mode: 'more' })}>Load more</Button>
-          </div>
-        </div>
-      </Card.Header>
-      <Card.Content class="space-y-3">
-        {#if $timelineState.error}
-          <Alert.Root variant="destructive">
-            <CircleAlert class="size-4" />
-            <Alert.Title>Timeline unavailable</Alert.Title>
-            <Alert.Description>{$timelineState.error}</Alert.Description>
-          </Alert.Root>
-        {/if}
-        {#if $timelineState.loading}
-          <div class="space-y-2"><Skeleton class="h-14 w-full" /><Skeleton class="h-14 w-full" /><Skeleton class="h-14 w-full" /></div>
-        {:else if $timelineState.items.length}
-          <div class="space-y-2">
-            {#each $timelineState.items as item}
-              <button type="button" class="w-full rounded-lg border p-3 text-left text-sm transition hover:bg-muted/50" onclick={() => void openTimelineDetail(item.content_ref)}>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <div class="flex min-w-0 flex-wrap items-center gap-2">
-                    <Badge variant="secondary">{item.kind}</Badge>
-                    {#if item.title}<span class="font-medium">{item.title}</span>{/if}
-                    {#if item.status}<span class="text-xs text-muted-foreground">{item.status}</span>{/if}
-                  </div>
-                  <span class="font-mono text-xs text-muted-foreground">{item.occurred_at ? formatDateTime(item.occurred_at) : shortId(item.item_id)}</span>
-                </div>
-                <p class="mt-2 line-clamp-3 whitespace-pre-wrap text-muted-foreground">{item.content_preview ?? 'Open detail'}</p>
-              </button>
-            {/each}
-          </div>
-          <p class="text-xs text-muted-foreground">Tail: {$timelineState.tailCursor ? 'tracked' : 'not available'} · {$timelineState.isTail ? 'at source tail' : 'more data available'}{#if $timelineState.refreshing} · refreshing…{/if}</p>
-        {:else}
-          <Empty.Root><Empty.Header><Empty.Title>No transcript timeline yet</Empty.Title><Empty.Description>The session may not be ready or the agent raw source may not exist yet.</Empty.Description></Empty.Header></Empty.Root>
-        {/if}
-
-        {#if timelineDetailError}
-          <Alert.Root variant="destructive">
-            <CircleAlert class="size-4" />
-            <Alert.Title>Timeline detail error</Alert.Title>
-            <Alert.Description>{timelineDetailError}</Alert.Description>
-          </Alert.Root>
-        {/if}
-        {#if selectedTimelineDetail}
-          <div class="rounded-lg border p-3">
-            <div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span>Detail · {selectedTimelineDetail.content_type} · {selectedTimelineDetail.size_bytes} bytes</span>
-              <span>{timelineDetailLoadingRef === selectedTimelineDetail.content_ref ? 'Loading…' : shortId(selectedTimelineDetail.content_ref)}</span>
-            </div>
-            <pre class="max-h-[28rem] overflow-auto whitespace-pre-wrap text-xs leading-relaxed">{selectedTimelineDetail.text}</pre>
-          </div>
-        {/if}
-      </Card.Content>
-    </Card.Root>
 
     <Card.Root>
       <Card.Header><Card.Title>Turns</Card.Title><Card.Description>{$sessionDetail.turns.length} turns with output and artifact references.</Card.Description></Card.Header>
