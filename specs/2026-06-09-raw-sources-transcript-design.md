@@ -122,7 +122,7 @@ pub struct ResolvedAgentBinding {
     pub id: String,
     pub client_type: String,
     pub format: String,
-    // path 只在后端内存中使用，不返回给 WebUI，不存 DB
+    // path 只在后端内存中使用，不存 DB；第一阶段可作为明文 source_id 的组成部分返回给 WebUI
     pub path: PathBuf,
     pub fingerprint: Option<String>,
 }
@@ -164,8 +164,6 @@ pub struct TimelineItemDetailRequest {
     pub session_id: String,
     pub source: ResolvedAgentBinding,
     pub content_ref: TimelineContentRef,
-    pub offset: Option<u64>,
-    pub limit: Option<u64>,
 }
 
 pub trait RawTranscriptParser {
@@ -181,7 +179,7 @@ Parser 可以选择：
 - 每次从头扫描 JSONL 到目标范围。
 - 根据 cursor 从某个 byte offset 继续读。
 - 根据 client 文件格式读取部分文件。
-- 对大型 external output 文件做 offset/limit 读取。
+- 根据 `content_ref` 精确读取单个 item 的完整内容。
 
 这些优化都不要求持久化 transcript 拆分结果。
 
@@ -219,7 +217,7 @@ agent client reports session.ready
 
 ```text
 GET /external/v1/sessions/{session_id}/timeline?cursor=&limit=
-GET /external/v1/sessions/{session_id}/timeline/detail?ref=&offset=&limit=
+GET /external/v1/sessions/{session_id}/timeline/detail?ref=
 ```
 
 第一阶段一个 pilotfy session 默认绑定一个 primary agent runtime；必要时后续可以加入 `binding_id` query 参数选择特定 binding。
@@ -252,23 +250,21 @@ GET /external/v1/sessions/{session_id}/timeline/detail?ref=&offset=&limit=
       "content_ref": "pi:entry:abc123:block:1"
     }
   ],
-  "next_cursor": "byte:123456",
-  "tail_cursor": "byte:123456",
+  "next_cursor": "cursor_v1_opaque_token",
+  "tail_cursor": "cursor_v1_opaque_token",
   "has_more": true,
   "is_tail": false,
-  "source_version": "size:123456:mtime:2026-06-09T00:00:02Z",
-  "cursor_scope": "binding:bind_xxx"
+  "source_id": "pi:/home/user/.local/share/pi/sessions/session.jsonl"
 }
 ```
 
 字段语义：
 
 - `next_cursor`：继续读取下一段 timeline items 的 cursor；当 `has_more = true` 时前端可用它继续请求。
-- `tail_cursor`：本次 response 已读取到的 source 位置；当前端已经持有 timeline state 时，用它作为后续 `raw_source.updated` 触发增量读取的起点。
+- `tail_cursor`：本次 response 已读取到的 source 位置；当前端已经持有 timeline state 时，用它作为后续 `session.message_updated` 触发增量读取的起点。
 - `has_more`：当前 cursor 之后仍有未返回 items。
 - `is_tail`：本次 response 是否已经追到 raw source 当前尾部。
-- `source_version`：raw source 指纹，用于检测 cursor 是否仍兼容。第一阶段可以使用 size/mtime 等 resolver 可获得的信息。
-- `cursor_scope`：cursor 所属 binding/source 范围。WebUI 不解析 cursor，但可把该字段和本地 timeline state 一起保存，用于一致性判断。
+- `source_id`：raw source identity。第一阶段使用明文 `client_type + ':' + resolved_path`，用于 WebUI 将 timeline items 与 cursor 作为同一个状态单元管理。mtime/size/inode 不作为 cursor 失效条件。
 
 `content_ref` 是 opaque token。WebUI 不解析其中结构，只把它传回 timeline detail API。
 
@@ -281,7 +277,7 @@ timeline:
   cursor/offset -> 顺序向后扫描 raw transcript -> 返回 normalized items + preview + content_ref
 
 timeline/detail:
-  content_ref(start/end/block info) + offset/limit -> bounded read -> 返回单个 item 的完整内容页
+  content_ref(start/end/block info) -> bounded read -> 返回单个 item 的完整内容
 ```
 
 设计原则：
@@ -289,8 +285,8 @@ timeline/detail:
 - `timeline` 是唯一负责发现 transcript message/block 的 API。
 - `timeline/detail` 不做 transcript discovery，也不提供从头全量提取 raw transcript 的能力。
 - `timeline` 的 cursor/offset 表示 raw transcript stream 中的扫描位置。
-- `timeline/detail` 的 `offset` 表示单个 detail content 内部的分页位置，和 timeline cursor 不是同一个概念。
-- `content_ref` 可包含后端 opaque 的定位信息，例如 binding/source scope、source_version、entry start/end byte offset、block index。WebUI 不解析这些信息。
+- `timeline/detail` 第一阶段不提供 detail 内部分页；它返回 `content_ref` 指向的单个 item 完整内容，避免 offset/limit 截断 JSON 或结构化 block 内部。
+- `content_ref` 可包含后端 opaque 的定位信息，例如 binding/source scope、source_id、entry start/end byte offset、block index。WebUI 不解析这些信息。
 
 ### Cursor-based timeline read model
 
@@ -299,6 +295,26 @@ Timeline API 只有一种读取语义：从某个 cursor 之后读取下一段 n
 - `cursor` absent/null 表示从 raw source 起点读取。
 - `cursor = next_cursor` 表示继续读取当前未读完的后续 page。
 - `cursor = tail_cursor` 表示从前端已经读到的位置之后读取新增 items。
+
+Cursor 对 WebUI 是 opaque token：WebUI 不解析、不构造、不假设其内部格式，只保存 API 返回的 cursor 并原样传回。
+
+第一阶段采用 parser-specific opaque cursor。即 cursor 的内部结构由具体 parser 决定，但对 External API consumer 不透明。pi JSONL parser 内部可使用 byte offset，并把必要上下文编码进 cursor，例如：
+
+```json
+{
+  "v": 1,
+  "kind": "timeline",
+  "client_type": "pi",
+  "format": "pi-jsonl",
+  "binding_id": "bind_xxx",
+  "source_id": "pi:/home/user/.local/share/pi/sessions/session.jsonl",
+  "offset": 123456
+}
+```
+
+实际 wire format 可以是 base64url JSON 或其它后端可解析的 token。后续其他 parser 可以使用 entry id、sequence id、timestamp 或其它定位信息，不影响 WebUI。
+
+请求携带 cursor 时，后端不做 mtime/size/inode 等提前强校验。后端 decode cursor 后 resolve 当前 path，并从 cursor offset 实际 seek/read/parse；如果读取过程中发现文件不存在、offset 无法读取、offset 不在合法边界、JSONL parse 失败或 source_id 明显不匹配，则返回 cursor invalid / source unavailable，前端清空 TimelineState 并从 `cursor = null` 重建。
 
 因此 initial rebuild 与 live follow 不是两套 API 模式：
 
@@ -322,8 +338,7 @@ type TimelineState = {
   items: TimelineItem[]
   nextCursor: string | null
   tailCursor: string | null
-  sourceVersion: string | null
-  cursorScope: string | null
+  sourceId: string | null
   hasMore: boolean
   isTail: boolean
   loading: boolean
@@ -332,14 +347,13 @@ type TimelineState = {
 }
 ```
 
-`items + nextCursor + tailCursor + sourceVersion + cursorScope` 必须一起生效、一起失效，避免重复消息、漏消息或 cursor 与列表不匹配。
+`items + nextCursor + tailCursor + sourceId` 必须一起生效、一起失效，避免重复消息、漏消息或 cursor 与列表不匹配。
 
 失效条件包括：
 
 - `session_id` 变化。
-- `binding_id` / `cursor_scope` 变化。
-- API 返回 `source_version` 与本地 state 不兼容。
-- API 返回 cursor invalid / raw source rotated / source unavailable。
+- `binding_id` / `source_id` 变化。
+- API 返回 cursor invalid / source unavailable / content_ref_invalid。
 - 用户手动 refresh。
 - append 时发现无法 reconcile 的断层或重复。
 
@@ -353,14 +367,11 @@ type TimelineState = {
   "content_ref": "pi:entry:abc123:block:1",
   "content_type": "application/json",
   "text": "{...}",
-  "offset": 0,
-  "returned_bytes": 65536,
-  "total_bytes": 1234567,
-  "next_offset": 65536
+  "size_bytes": 1234567
 }
 ```
 
-大内容不永久截断，通过 detail API 分页读取。
+第一阶段 detail API 全量返回单个 item 内容，不做 offset/limit 截断或分页。大内容保护依赖服务端统一响应大小限制或后续版本引入结构感知分页；第一阶段不在 detail API 中实现 byte-range 分页。
 
 ## pi parser 第一版映射
 
@@ -382,44 +393,55 @@ pi session JSONL 中的结构映射为统一 timeline item：
 pi timeline detail 读取规则：
 
 - 普通 entry/block：读取 pi session JSONL 中对应 entry/block。
-- `bashExecution.fullOutputPath`：优先读取该 full output 文件，支持 offset/limit。
+- `bashExecution.fullOutputPath`：优先读取该 full output 文件，第一阶段全量返回。
 - 没有 `fullOutputPath` 时，读取 JSONL entry 中的 `output` 字段。
 
-## 与 events 的关系
+## 与 events / turns 的关系
 
 `events` 仍然保存 pilotfy session/turn/domain facts。
 
 Raw transcript timeline 是按需 read model，不进入 event store。它的权威来源是 agent client raw structured output 文件。
 
+第一阶段 raw transcript timeline 以 `session_id` 为范围展示，timeline item 不做 item-level `turn_id` 归属推导；`turn_id` 仅作为 optional annotation。也就是说，WebUI 展示 agent 中间过程时可以直接使用 raw timeline 中的 role/block 结构分节，不要求每条 item 都绑定到某个 pilotfy turn。
+
+但这不弱化 Turn 在 pilotfy domain model 中的地位：Turn 仍然是执行生命周期和控制对象。Turn 的状态、完成、失败、interrupt/cancel/retry 等控制语义继续由 event store/projection 负责，不从 raw transcript 推断。
+
+后续如果某个 client 的 raw transcript 能稳定提供 pilotfy turn identity，parser 可以在 timeline item 上填充 `turn_id`；否则保持 `null`，不要通过时间窗口或 current-turn context 伪造归属。
+
 `agent_bindings` 只是 session-to-agent-runtime binding 表，不是 transcript 拆分表，也不表达 raw file 的当前可用状态。
 
-### Raw source update event
+### Message update event
 
-为了让 WebUI 知道何时刷新 timeline，新增 lightweight update event：
+为了让 WebUI 知道何时刷新 timeline，新增 domain event：
 
 ```text
-raw_source.updated
+session.message_updated
 ```
 
-示例 payload：
+`session.message_updated` 写入 `events` 表，并通过现有 dashboard/session SSE 传播。它表示 agent client transcript/timeline 中有一条可展示 message/block 新增或更新。
+
+示例 payload 保持轻量：
 
 ```json
 {
   "binding_id": "bind_xxx",
-  "source_kind": "transcript",
-  "source_version": "size:123456:mtime:2026-06-09T00:00:02Z",
-  "tail_cursor_hint": "byte:123456",
   "reason": "append"
 }
 ```
 
+`reason` 可取值：
+
+- `append`：新增了可展示 message/block。
+- `update`：已有 message/block 内容更新，例如 streaming output 继续增长。
+- `final`：终态刷新，通常在 turn completed / failed / interrupted 时强制上报。
+
 语义：
 
-- `raw_source.updated` 是 invalidation/refresh hint，不承载 transcript 内容。
-- event 不暴露 raw file physical path。
-- event 不取代 timeline API；WebUI 收到 event 后仍需调用 timeline API 获取 normalized items。
-- `tail_cursor_hint` 只是 hint，WebUI 不应直接把它写成本地 `tailCursor`；本地 cursor 以 timeline response 为准。
-- 该 event 可以通过现有 dashboard/session SSE 传播，前端只对当前打开的 session 触发增量读取。
+- `session.message_updated` 是 invalidation/refresh hint，不承载 transcript 内容。
+- event payload 只携带 `binding_id` 和轻量 `reason`；不携带 `source_id`、`content_ref`、message 内容或 tail cursor，这些信息由 timeline API response 负责返回。
+- event 不取代 timeline API；WebUI 收到 event 后仍需使用本地 `tailCursor` 调用 timeline API 获取 normalized items。
+- 该 event 不改变 session/turn/task projection；projection 必须忽略它。
+- 前端只对当前打开的 session 触发增量读取；如果 payload 中的 `binding_id` 与本地 timeline state 不匹配，可以清空 state 后从 `cursor = null` 重建。
 
 推荐触发时机：
 
@@ -428,7 +450,7 @@ raw_source.updated
 - 大量 streaming output 需要 debounce/coalesce，避免高频写入 event store。
 - turn completed / failed / interrupted 时强制触发一次 final update。
 
-第一阶段可接受事件粒度为“有一个可展示的小节发生变化就触发一次”，但 runtime/plugin 应做轻量合并，例如 busy 期间最多每 250ms~500ms 上报一次，终态事件不合并丢失。
+由于该事件会较频繁落库，payload 必须保持小且稳定。第一阶段可接受事件粒度为“有一个可展示的小节发生变化就触发一次”，但 runtime/plugin 应做轻量合并，例如 busy 期间最多每 250ms~500ms 上报一次，终态事件不合并丢失。
 
 ## 实施顺序
 
@@ -440,7 +462,7 @@ raw_source.updated
 6. 实现 pi JSONL parser。
 7. 新增 timeline API。
 8. 新增 timeline detail API。
-9. 新增 `raw_source.updated` event 类型与 runtime/plugin 上报链路。
+9. 新增 `session.message_updated` event 类型与 runtime/plugin 上报链路。
 10. WebUI 改为消费 timeline/detail API，并维护 `TimelineState`。
 
 ## 非目标
@@ -451,7 +473,7 @@ raw_source.updated
 - 增量 import job。
 - 后端 parser checkpoint/cache 或 parser 结果缓存。
 - 持久化 WebUI timeline state；第一阶段 timeline state 只作为前端页面状态。
-- 在 `raw_source.updated` event 中承载 transcript 内容。
+- 在 `session.message_updated` event 中承载 transcript 内容、source path、content refs 或 cursor。
 - agent client raw file 路径规则变化后的自动迁移。
 - WebUI 直接读取本地文件。
 - Claude Code / Codex parser 的完整实现。
@@ -461,8 +483,3 @@ raw_source.updated
 ## 待确认问题
 
 1. pi `client_session_key` 的稳定来源和写入时机。
-2. timeline cursor 格式：byte offset、entry id，还是 parser-specific opaque cursor；第一阶段 cursor 应尽量自包含，避免依赖后端 checkpoint。
-3. `source_version` 的具体组成：size/mtime 是否足够，是否需要 inode/hash 或 client-specific fingerprint。
-4. timeline detail API 默认 page size 与最大 page size。
-5. turn_id 关联是否由 raw transcript、current-turn context、时间窗口或 pilotfy events 辅助推导。
-6. `raw_source.updated` 是否作为新的 domain `EventType` 落入 `events` 表，还是作为 dashboard stream 的独立 lightweight item；若进入 event store，需要确定 projection 是否忽略它。
