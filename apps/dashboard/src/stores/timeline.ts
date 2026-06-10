@@ -97,9 +97,19 @@ export async function loadSessionTimeline(
   }));
 
   try {
-    const page = await getSessionTimeline(sessionId, { cursor: cursor ?? null, limit: options.limit ?? DEFAULT_LIMIT });
-    timelineState.update((state) => applyPage(state.sessionId === sessionId ? state : emptyState(sessionId), page, mode));
-    return page;
+    let nextCursor = cursor ?? null;
+    let nextMode: LoadMode = mode;
+    let lastPage: TimelinePage | null = null;
+
+    do {
+      const page = await getSessionTimeline(sessionId, { cursor: nextCursor, limit: options.limit ?? DEFAULT_LIMIT });
+      timelineState.update((state) => applyPage(state.sessionId === sessionId ? state : emptyState(sessionId), page, nextMode));
+      lastPage = page;
+      nextCursor = page.has_more ? page.next_cursor : null;
+      nextMode = 'more';
+    } while (nextCursor);
+
+    return lastPage;
   } catch (error) {
     const message = errorMessage(error);
     if (shouldInvalidate(error)) {

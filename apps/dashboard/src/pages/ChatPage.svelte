@@ -16,7 +16,7 @@
   import {
     canSendSessionMessage,
     isTerminalChatSession,
-    turnsToChatMessages,
+    timelineItemsToChatMessages,
   } from '$lib/session-chat/sessionChat'
   import {
     clientTypeOptionsForProfile,
@@ -54,6 +54,12 @@
     taskProposalsError,
     taskProposalsLoading,
   } from '../stores/tasks'
+  import {
+    handleTimelineMessageUpdated,
+    loadSessionTimeline,
+    resetTimelineState,
+    timelineState,
+  } from '../stores/timeline'
   import { subscribeDashboardEvents } from '../services/eventStream'
 
   let selectedSessionId = ''
@@ -81,7 +87,10 @@
     selectedSessionId = requestedSessionIdFromLocation()
     await Promise.all([loadSessions(), loadWorkspaces(), loadAgentProfiles()])
     if (!createWorkspaceId && $workspaces.length) createWorkspaceId = $workspaces[0].workspace_id
-    if (selectedSessionId) await loadSessionDetail(selectedSessionId)
+    if (selectedSessionId) {
+      resetTimelineState(selectedSessionId)
+      await Promise.all([loadSessionDetail(selectedSessionId), loadSessionTimeline(selectedSessionId, { mode: 'rebuild' })])
+    }
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
   })
 
@@ -90,7 +99,7 @@
   })
 
   $: selectedSession = selectedSessionId ? ($sessions.find((session) => session.session_id === selectedSessionId) ?? $sessionDetail?.session ?? null) : null
-  $: messages = $sessionDetail && $sessionDetail.session.session_id === selectedSessionId ? turnsToChatMessages($sessionDetail.turns) : []
+  $: messages = $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : []
   $: selectedProfile = $agentProfiles.find((profile) => profile.profile_id === createProfileId) ?? null
   $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
   $: clientTypeOptions = clientTypeOptionsForProfile(selectedProfile)
@@ -106,7 +115,7 @@
     void loadTaskProposals(plannerTaskId)
   }
   $: if (plannerTaskId && plannerTaskProposals.some((proposal) => proposal.state === 'applied')) navigateToTaskDag(plannerTaskId)
-  $: errorMessage = actionError ?? $sessionDetailError ?? $sessionsError ?? $workspacesError ?? $agentProfilesError ?? $taskProposalsError
+  $: errorMessage = actionError ?? $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError ?? $agentProfilesError ?? $taskProposalsError
   $: {
     if (errorMessage && errorMessage !== lastToastedError) {
       toast.error('Chat error', { description: errorMessage })
@@ -160,6 +169,15 @@
   }
 
   function handleDashboardEvent(streamEvent: DashboardStreamEvent): void {
+    if (streamEvent.kind === 'session_event') {
+      if (streamEvent.event.session_id !== selectedSessionId) return
+      if (streamEvent.event.type !== 'session.message_updated') return
+      const rawBindingId = streamEvent.event.payload.binding_id
+      const bindingId = typeof rawBindingId === 'string' ? rawBindingId : null
+      void handleTimelineMessageUpdated(selectedSessionId, bindingId)
+      return
+    }
+
     if (!plannerTaskId || streamEvent.kind !== 'task_event') return
     if (streamEvent.event.task_id === plannerTaskId && streamEvent.event.event_type === 'dag.approved') {
       navigateToTaskDag(plannerTaskId)
@@ -173,6 +191,7 @@
   function openNewChat(): void {
     selectedSessionId = ''
     actionError = null
+    resetTimelineState()
     navigate('/chat')
   }
 
@@ -187,7 +206,12 @@
     selectedSessionId = nextSessionId
     input = ''
     actionError = null
-    if (selectedSessionId) await loadSessionDetail(selectedSessionId)
+    if (selectedSessionId) {
+      resetTimelineState(selectedSessionId)
+      await Promise.all([loadSessionDetail(selectedSessionId), loadSessionTimeline(selectedSessionId, { mode: 'rebuild' })])
+    } else {
+      resetTimelineState()
+    }
   }
 
   function handleNewChatKeydown(event: KeyboardEvent): void {
@@ -211,8 +235,9 @@
         })
         selectedSessionId = result.planning_turn.session_id
         prompt = ''
+        resetTimelineState(result.planning_turn.session_id)
         navigate(`/chat/${result.planning_turn.session_id}`)
-        await loadSessionDetail(result.planning_turn.session_id)
+        await Promise.all([loadSessionDetail(result.planning_turn.session_id), loadSessionTimeline(result.planning_turn.session_id, { mode: 'rebuild' })])
         return
       }
 
@@ -228,7 +253,9 @@
       })
       selectedSessionId = result.session.session_id
       prompt = ''
+      resetTimelineState(result.session.session_id)
       navigate(`/chat/${result.session.session_id}`)
+      await Promise.all([loadSessionDetail(result.session.session_id), loadSessionTimeline(result.session.session_id, { mode: 'rebuild' })])
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -402,7 +429,7 @@
         {:else}
           <SessionConversation
             {messages}
-            loading={$sessionDetailLoading}
+            loading={$sessionDetailLoading || $timelineState.loading}
             {plannerTaskId}
             {draftPlannerProposal}
             draftPlannerProposalLoading={$taskProposalsLoading}

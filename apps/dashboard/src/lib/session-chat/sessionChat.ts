@@ -1,8 +1,17 @@
-import type { SessionView, TurnView } from '../../api/types';
+import type { SessionView, TimelineItem, TurnView } from '../../api/types';
 
 export type ChatSessionFilter = 'active' | 'all';
 export type ChatMessageRole = 'user' | 'assistant';
 export type ChatMessageStatus = 'sent' | 'pending' | 'failed';
+
+export interface SessionChatThoughtStep {
+  id: string;
+  kind: 'thinking' | 'tool_call' | 'tool_result';
+  title: string;
+  status: string | null;
+  content: string;
+  occurredAt: string | null;
+}
 
 export interface SessionChatMessage {
   id: string;
@@ -11,6 +20,7 @@ export interface SessionChatMessage {
   content: string;
   status: ChatMessageStatus;
   createdAt: string;
+  thoughtSteps?: SessionChatThoughtStep[];
 }
 
 const terminalStates = new Set(['exited', 'error']);
@@ -66,8 +76,66 @@ export function turnsToChatMessages(turns: TurnView[]): SessionChatMessage[] {
     });
 }
 
+export function timelineItemsToChatMessages(items: TimelineItem[]): SessionChatMessage[] {
+  const messages: SessionChatMessage[] = [];
+  let pendingThoughtSteps: SessionChatThoughtStep[] = [];
+
+  for (const item of items.slice().sort((a, b) => timelineTimestamp(a).localeCompare(timelineTimestamp(b)))) {
+    if (item.kind === 'user' || item.kind === 'assistant') {
+      const message: SessionChatMessage = {
+        id: item.item_id,
+        turnId: item.turn_id ?? item.item_id,
+        role: item.kind,
+        content: item.content_preview?.trim() || (item.kind === 'user' ? 'No input was reported.' : 'No assistant output was reported.'),
+        status: item.status === 'error' ? 'failed' : 'sent',
+        createdAt: item.occurred_at ?? '',
+      };
+      if (item.kind === 'assistant' && pendingThoughtSteps.length) {
+        message.thoughtSteps = pendingThoughtSteps;
+        pendingThoughtSteps = [];
+      }
+      messages.push(message);
+      continue;
+    }
+
+    if (isThoughtStepKind(item.kind)) {
+      pendingThoughtSteps.push({
+        id: item.item_id,
+        kind: item.kind,
+        title: item.title?.trim() || defaultThoughtStepTitle(item.kind),
+        status: item.status ?? (item.kind === 'tool_call' ? 'started' : null),
+        content: item.content_preview?.trim() || 'No details reported.',
+        occurredAt: item.occurred_at,
+      });
+    }
+  }
+
+  if (pendingThoughtSteps.length) {
+    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+    if (lastAssistant) {
+      lastAssistant.thoughtSteps = [...(lastAssistant.thoughtSteps ?? []), ...pendingThoughtSteps];
+    }
+  }
+
+  return messages;
+}
+
 export function canSendSessionMessage(session: Pick<SessionView, 'state'> | null, input: string): boolean {
   return Boolean(session && session.state !== 'error' && input.trim());
+}
+
+function isThoughtStepKind(kind: string): kind is SessionChatThoughtStep['kind'] {
+  return kind === 'thinking' || kind === 'tool_call' || kind === 'tool_result';
+}
+
+function defaultThoughtStepTitle(kind: SessionChatThoughtStep['kind']): string {
+  if (kind === 'thinking') return 'Thinking';
+  if (kind === 'tool_call') return 'Tool call';
+  return 'Tool result';
+}
+
+function timelineTimestamp(item: TimelineItem): string {
+  return item.occurred_at ?? item.item_id;
 }
 
 function assistantMessageForTurn(turn: TurnView): SessionChatMessage {

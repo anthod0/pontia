@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import ChatPage from '../../src/pages/ChatPage.svelte';
 import type { SessionConsoleDetail } from '../../src/stores/sessions';
-import type { AgentProfileView, CreateDagTaskResult, CreateSessionResult, SessionView, TurnView, WorkspaceView } from '../../src/api/types';
+import type { AgentProfileView, CreateDagTaskResult, CreateSessionResult, SessionView, TimelineItem, TurnView, WorkspaceView } from '../../src/api/types';
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => {
       set(next: T) {
         value = next;
         for (const run of subscribers) run(value);
+      },
+      get() {
+        return value;
       },
     };
   }
@@ -37,6 +40,19 @@ const mocks = vi.hoisted(() => {
   const taskProposals = writableStore<unknown[]>([]);
   const taskProposalsLoading = writableStore(false);
   const taskProposalsError = writableStore<string | null>(null);
+  const timelineState = writableStore({
+    sessionId: '',
+    bindingId: null,
+    items: [] as TimelineItem[],
+    nextCursor: null,
+    tailCursor: null,
+    sourceId: null,
+    hasMore: false,
+    isTail: true,
+    loading: false,
+    refreshing: false,
+    error: null,
+  });
   const dashboardEventListeners = new Set<(event: unknown) => void>();
 
   return {
@@ -55,6 +71,7 @@ const mocks = vi.hoisted(() => {
     taskProposals,
     taskProposalsLoading,
     taskProposalsError,
+    timelineState,
     dashboardEventListeners,
     loadedSessions: [] as SessionView[],
     loadSessions: vi.fn(async () => mocks.loadedSessions),
@@ -66,6 +83,23 @@ const mocks = vi.hoisted(() => {
     createSession: vi.fn(),
     createDagTask: vi.fn(),
     loadTaskProposals: vi.fn(async () => []),
+    loadSessionTimeline: vi.fn(async (sessionId: string) => null),
+    handleTimelineMessageUpdated: vi.fn(async () => undefined),
+    resetTimelineState: vi.fn((sessionId = '') => {
+      mocks.timelineState.set({
+        sessionId,
+        bindingId: null,
+        items: [],
+        nextCursor: null,
+        tailCursor: null,
+        sourceId: null,
+        hasMore: false,
+        isTail: true,
+        loading: false,
+        refreshing: false,
+        error: null,
+      });
+    }),
     loadWorkspaces: vi.fn(async () => undefined),
     loadAgentProfiles: vi.fn(async () => undefined),
     toastError: vi.fn(),
@@ -103,6 +137,13 @@ vi.mock('../../src/stores/tasks', () => ({
   taskProposalsLoading: mocks.taskProposalsLoading,
   taskProposalsError: mocks.taskProposalsError,
   loadTaskProposals: mocks.loadTaskProposals,
+}));
+
+vi.mock('../../src/stores/timeline', () => ({
+  timelineState: mocks.timelineState,
+  loadSessionTimeline: mocks.loadSessionTimeline,
+  handleTimelineMessageUpdated: mocks.handleTimelineMessageUpdated,
+  resetTimelineState: mocks.resetTimelineState,
 }));
 
 vi.mock('../../src/services/eventStream', () => ({
@@ -161,6 +202,35 @@ const turn = (overrides: Partial<TurnView> = {}): TurnView => ({
   metadata: {},
   ...overrides,
 });
+
+function timelineItemsFromTurns(turns: TurnView[]): TimelineItem[] {
+  return turns.flatMap((item): TimelineItem[] => [
+    {
+      item_id: `${item.turn_id}:user`,
+      kind: 'user',
+      raw_kind: 'user',
+      role: 'user',
+      title: null,
+      status: null,
+      occurred_at: item.created_at,
+      content_preview: typeof item.input?.summary === 'string' ? item.input.summary : null,
+      content_ref: `${item.turn_id}:user-ref`,
+      turn_id: item.turn_id,
+    },
+    {
+      item_id: `${item.turn_id}:assistant`,
+      kind: 'assistant',
+      raw_kind: 'text',
+      role: 'assistant',
+      title: null,
+      status: item.failure ? 'error' : null,
+      occurred_at: item.completed_at ?? item.created_at,
+      content_preview: item.output?.summary ?? (typeof item.failure?.message === 'string' ? item.failure.message : null),
+      content_ref: `${item.turn_id}:assistant-ref`,
+      turn_id: item.turn_id,
+    },
+  ]);
+}
 
 const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
   workspace_id: 'workspace-1',
@@ -221,9 +291,50 @@ beforeEach(() => {
   mocks.taskProposals.set([]);
   mocks.taskProposalsLoading.set(false);
   mocks.taskProposalsError.set(null);
+  mocks.timelineState.set({
+    sessionId: '',
+    bindingId: null,
+    items: [],
+    nextCursor: null,
+    tailCursor: null,
+    sourceId: null,
+    hasMore: false,
+    isTail: true,
+    loading: false,
+    refreshing: false,
+    error: null,
+  });
   mocks.dashboardEventListeners.clear();
   mocks.pathParams = {};
   mocks.createSession.mockResolvedValue({ session: activeSession, initial_turn: null } satisfies CreateSessionResult);
+  mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
+    const detail = mocks.sessionDetail.get();
+    const turns = detail?.turns ?? [];
+    const page = {
+      session_id: sessionId,
+      binding_id: 'binding-1',
+      items: timelineItemsFromTurns(turns),
+      next_cursor: null,
+      tail_cursor: 'tail-1',
+      has_more: false,
+      is_tail: true,
+      source_id: 'source-1',
+    };
+    mocks.timelineState.set({
+      sessionId,
+      bindingId: page.binding_id,
+      items: page.items,
+      nextCursor: page.next_cursor,
+      tailCursor: page.tail_cursor,
+      sourceId: page.source_id,
+      hasMore: page.has_more,
+      isTail: page.is_tail,
+      loading: false,
+      refreshing: false,
+      error: null,
+    });
+    return page;
+  });
   mocks.createDagTask.mockResolvedValue({
     task: {
       task_id: 'task-new',

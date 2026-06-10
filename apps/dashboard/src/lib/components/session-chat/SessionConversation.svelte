@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { Bot, GitBranch, UserRound } from '@lucide/svelte'
+  import * as ChainOfThought from '$lib/components/ai-elements/chain-of-thought/index.js'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -60,7 +61,7 @@
 
 <Conversation.Root class="h-auto min-h-0 flex-1 overflow-visible">
   {#if loading}
-    <Conversation.EmptyState title="Loading conversation…" description="Fetching the latest session turns." />
+    <Conversation.EmptyState title="Loading conversation…" description="Fetching the latest session transcript." />
   {:else if !messages.length}
     <Empty.Root class="h-full">
       <Empty.Header>
@@ -80,6 +81,16 @@
           </div>
           <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
             <Message.Response content={chatMessage.content} />
+            {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
+              <ChainOfThought.Root class="mt-3">
+                <ChainOfThought.Header>{chatMessage.thoughtSteps.length} thinking/tool steps</ChainOfThought.Header>
+                <ChainOfThought.Content>
+                  {#each chatMessage.thoughtSteps as step (step.id)}
+                    <ChainOfThought.Step title={step.title} status={step.status} kind={step.kind}>{step.content}</ChainOfThought.Step>
+                  {/each}
+                </ChainOfThought.Content>
+              </ChainOfThought.Root>
+            {/if}
           </Message.Content>
         </Message.Root>
 

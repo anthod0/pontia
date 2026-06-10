@@ -46,6 +46,7 @@ function page(overrides: Partial<TimelinePage> = {}): TimelinePage {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.getSessionTimeline.mockReset();
   resetTimelineState();
 });
 
@@ -63,6 +64,36 @@ test('rebuild stores timeline items and cursor scope as one state unit', async (
     items: [expect.objectContaining({ item_id: 'item-1' })],
     loading: false,
     error: null,
+  });
+});
+
+test('rebuild loads all timeline pages until the source tail', async () => {
+  mocks.getSessionTimeline
+    .mockResolvedValueOnce(page({
+      items: [{ ...page().items[0], item_id: 'item-1' }],
+      next_cursor: 'cursor-next-1',
+      tail_cursor: 'cursor-tail-page-1',
+      has_more: true,
+      is_tail: false,
+    }))
+    .mockResolvedValueOnce(page({
+      items: [{ ...page().items[0], item_id: 'item-2', content_ref: 'ref-2' }],
+      next_cursor: null,
+      tail_cursor: 'cursor-tail-final',
+      has_more: false,
+      is_tail: true,
+    }));
+
+  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
+
+  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(1, 'sess-1', { cursor: null, limit: 50 });
+  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(2, 'sess-1', { cursor: 'cursor-next-1', limit: 50 });
+  expect(get(timelineState)).toMatchObject({
+    items: [expect.objectContaining({ item_id: 'item-1' }), expect.objectContaining({ item_id: 'item-2' })],
+    nextCursor: null,
+    tailCursor: 'cursor-tail-final',
+    hasMore: false,
+    isTail: true,
   });
 });
 
