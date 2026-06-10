@@ -22,7 +22,7 @@ WebUI request
   -> client runtime resolver 计算原始文件位置
   -> 后端读取文件或文件片段
   -> client-specific parser 解析
-  -> 返回 normalized timeline/content
+  -> 返回 normalized timeline/detail content
 ```
 
 第一阶段不把 JSONL/transcript 拆成持久化表。拆分只发生在 parser 内存过程里：
@@ -33,36 +33,8 @@ raw JSONL / transcript bytes
   -> response DTO
 ```
 
-## 为什么需要 agent_bindings 表
-
-虽然 transcript 不做持久化拆分，但仍然需要一张 `agent_bindings` 表记录 pilotfy session 与真实 agent runtime/session 之间的稳定绑定关系。
-
-不用把这些字段直接放到 `sessions` 的原因：
-
-1. **职责更清楚**
-   - `sessions`：pilotfy runtime/session 状态。
-   - `agent_bindings`：pilotfy session 到真实 agent runtime 的绑定信息。
-
-2. **避免污染 generic session**
-   - 不同 client 的 runtime identity 不同。
-   - generic `sessions` 不需要承载 pi/Claude/Codex 各自的 session key、启动 cwd 等定位参数。
-
-3. **resolver 输入明确**
-   - parser/resolver 不需要从 session metadata 里猜。
-   - 直接读取 `agent_bindings` 的 runtime binding identity。
-
-因此最终定位关系是：
-
-```text
-pilotfy_session_id
-  -> agent_bindings row
-  -> client_type + launch_cwd + client_session_key
-  -> resolver
-  -> raw file
-  -> parser
-```
-
 ## agent_bindings schema
+
 
 `agent_bindings` 不存物理 path，只存 pilotfy session 与真实 agent runtime 的稳定绑定 identity。
 
@@ -97,9 +69,20 @@ CREATE INDEX idx_agent_bindings_identity ON agent_bindings(client_type, launch_c
 - `client_session_key`：agent client 自己的 session identity。
 - `metadata`：诊断信息；不存权威 physical path。
 
-## launch_cwd 放在 agent_bindings 中
+Agent bindings 和 sessions 的关系
 
-`launch_cwd` 是真实 agent runtime 的启动 cwd，也是后续定位 client transcript/output 的 resolver 输入；它不是 pilotfy session 状态机的核心字段。因此第一阶段放在 `agent_bindings` 中，不新增 `sessions.launch_cwd`。
+```text
+pilotfy_session_id
+  -> agent_bindings row
+  -> client_type + launch_cwd + client_session_key
+  -> resolver
+  -> raw file
+  -> parser
+```
+
+## launch_cwd snapshot
+
+`launch_cwd` 是真实 agent runtime 的启动 cwd snapshot，也是后续定位 client transcript/output 的 resolver 输入；
 
 语义：
 
@@ -121,18 +104,6 @@ agent_bindings.launch_cwd == workspaces.canonical_path
 ```
 
 但二者语义不同。
-
-## 不存 path
-
-`agent_bindings` 不存 computed file path。
-
-原因：
-
-- path 是 agent client 存储规则的结果，不是 pilotfy 的业务事实。
-- 如果 agent client 的路径规则变化到自己都无法读取旧 session，这属于 agent client 层的大变更，不是 pilotfy 第一阶段要修复的问题。
-- pilotfy 依赖稳定的 logical identity：`client_type + launch_cwd + client_session_key`。
-
-Resolver 每次请求时根据上述 identity 计算实际文件位置。
 
 ## Resolver 抽象
 
@@ -189,10 +160,10 @@ pub struct TimelinePageRequest {
     pub limit: usize,
 }
 
-pub struct RawContentRequest {
+pub struct TimelineItemDetailRequest {
     pub session_id: String,
     pub source: ResolvedAgentBinding,
-    pub item_ref: RawItemRef,
+    pub content_ref: TimelineContentRef,
     pub offset: Option<u64>,
     pub limit: Option<u64>,
 }
@@ -201,7 +172,7 @@ pub trait RawTranscriptParser {
     fn client_type(&self) -> &'static str;
     fn format(&self) -> &'static str;
     fn timeline_page(&self, request: TimelinePageRequest) -> Result<TimelinePage>;
-    fn content(&self, request: RawContentRequest) -> Result<RawContentPage>;
+    fn timeline_item_detail(&self, request: TimelineItemDetailRequest) -> Result<TimelineItemDetailPage>;
 }
 ```
 
@@ -218,13 +189,29 @@ Parser 可以选择：
 
 agent binding 需要 `session_id`、`client_type`、`launch_cwd`、`client_session_key`。
 
-推荐写入时机：
+推荐注册边界是 agent client 的 `session.ready` 事件处理过程。
 
-1. session 创建/启动时，后端知道 `session_id`、`client_type`、runtime workspace/cwd。
-2. agent client ready/startup 时，client/plugin 知道 `client_session_key`。
-3. 当两者都可用时注册或 upsert `agent_bindings`。
+原因：
 
-对于 pi，理想情况是 pi extension 在 `session_start` / ready 阶段上报 client session key；后端结合 launch cwd 注册 `agent_bindings`。
+1. session 创建/启动时，后端通常已经知道 `session_id`、`client_type`、runtime workspace/cwd。
+2. agent client ready 时，client/plugin 才稳定知道 `client_session_key`。
+3. `session.ready` 是 pilotfy session 与真实 agent runtime identity 首次同时可用的边界。
+
+因此推荐流程：
+
+```text
+agent client reports session.ready
+  -> backend 校验 session 存在
+  -> ingest/project session.ready event
+  -> 同步 upsert agent_bindings
+  -> 返回 accepted
+```
+
+如果实现上允许，`session.ready` ingest/projection 与 `agent_bindings` upsert 应尽量在同一事务内完成，避免 dashboard SSE 先暴露 ready、但 timeline API 尚无法 resolve binding 的竞态。
+
+`agent_bindings` upsert 必须幂等。重复的 `session.ready` 或 Internal Event API retry 不应创建重复 binding；同一 `session_id + client_type + client_session_key` 应稳定落到同一 binding 语义。
+
+对于 pi，理想情况是 pi extension 在 ready 阶段上报 client session key；后端结合 runtime launch context 中的 canonical cwd 注册 `agent_bindings`。如果 ready payload 与后端 launch context 都提供 cwd，第一阶段以后端 launch context 为准，ready payload 中的 cwd 仅作为诊断 metadata。
 
 ## External API
 
@@ -232,7 +219,7 @@ agent binding 需要 `session_id`、`client_type`、`launch_cwd`、`client_sessi
 
 ```text
 GET /external/v1/sessions/{session_id}/timeline?cursor=&limit=
-GET /external/v1/sessions/{session_id}/raw-content?ref=&offset=&limit=
+GET /external/v1/sessions/{session_id}/timeline/detail?ref=&offset=&limit=
 ```
 
 第一阶段一个 pilotfy session 默认绑定一个 primary agent runtime；必要时后续可以加入 `binding_id` query 参数选择特定 binding。
@@ -266,13 +253,99 @@ GET /external/v1/sessions/{session_id}/raw-content?ref=&offset=&limit=
     }
   ],
   "next_cursor": "byte:123456",
-  "has_more": true
+  "tail_cursor": "byte:123456",
+  "has_more": true,
+  "is_tail": false,
+  "source_version": "size:123456:mtime:2026-06-09T00:00:02Z",
+  "cursor_scope": "binding:bind_xxx"
 }
 ```
 
-`content_ref` 是 opaque token。WebUI 不解析其中结构，只把它传回 content API。
+字段语义：
 
-### Raw content response
+- `next_cursor`：继续读取下一段 timeline items 的 cursor；当 `has_more = true` 时前端可用它继续请求。
+- `tail_cursor`：本次 response 已读取到的 source 位置；当前端已经持有 timeline state 时，用它作为后续 `raw_source.updated` 触发增量读取的起点。
+- `has_more`：当前 cursor 之后仍有未返回 items。
+- `is_tail`：本次 response 是否已经追到 raw source 当前尾部。
+- `source_version`：raw source 指纹，用于检测 cursor 是否仍兼容。第一阶段可以使用 size/mtime 等 resolver 可获得的信息。
+- `cursor_scope`：cursor 所属 binding/source 范围。WebUI 不解析 cursor，但可把该字段和本地 timeline state 一起保存，用于一致性判断。
+
+`content_ref` 是 opaque token。WebUI 不解析其中结构，只把它传回 timeline detail API。
+
+### Timeline 与 detail 的读取边界
+
+`timeline` 与 `timeline/detail` 都可能读取同一个 agent raw transcript source，但后端逻辑不同：
+
+```text
+timeline:
+  cursor/offset -> 顺序向后扫描 raw transcript -> 返回 normalized items + preview + content_ref
+
+timeline/detail:
+  content_ref(start/end/block info) + offset/limit -> bounded read -> 返回单个 item 的完整内容页
+```
+
+设计原则：
+
+- `timeline` 是唯一负责发现 transcript message/block 的 API。
+- `timeline/detail` 不做 transcript discovery，也不提供从头全量提取 raw transcript 的能力。
+- `timeline` 的 cursor/offset 表示 raw transcript stream 中的扫描位置。
+- `timeline/detail` 的 `offset` 表示单个 detail content 内部的分页位置，和 timeline cursor 不是同一个概念。
+- `content_ref` 可包含后端 opaque 的定位信息，例如 binding/source scope、source_version、entry start/end byte offset、block index。WebUI 不解析这些信息。
+
+### Cursor-based timeline read model
+
+Timeline API 只有一种读取语义：从某个 cursor 之后读取下一段 normalized timeline items。
+
+- `cursor` absent/null 表示从 raw source 起点读取。
+- `cursor = next_cursor` 表示继续读取当前未读完的后续 page。
+- `cursor = tail_cursor` 表示从前端已经读到的位置之后读取新增 items。
+
+因此 initial rebuild 与 live follow 不是两套 API 模式：
+
+```text
+initial rebuild = cursor absent/null 的增量读取，因为起点是 0，所以表现为全量重建
+live follow     = cursor = 前端保存的 tail_cursor 的增量读取
+```
+
+前端没有本地 timeline state 时，使用 `cursor = null` 请求并 replace 本地 state；前端已有 timeline state 时，收到刷新 hint 后使用本地 `tail_cursor` 请求并 append 返回 items。
+
+### Frontend timeline state ownership
+
+第一阶段 cursor 由 WebUI 和 timeline items 作为同一个状态单元维护。后端不保存 parser checkpoint/cache。
+
+推荐前端状态：
+
+```ts
+type TimelineState = {
+  sessionId: string
+  bindingId: string | null
+  items: TimelineItem[]
+  nextCursor: string | null
+  tailCursor: string | null
+  sourceVersion: string | null
+  cursorScope: string | null
+  hasMore: boolean
+  isTail: boolean
+  loading: boolean
+  refreshing: boolean
+  error: string | null
+}
+```
+
+`items + nextCursor + tailCursor + sourceVersion + cursorScope` 必须一起生效、一起失效，避免重复消息、漏消息或 cursor 与列表不匹配。
+
+失效条件包括：
+
+- `session_id` 变化。
+- `binding_id` / `cursor_scope` 变化。
+- API 返回 `source_version` 与本地 state 不兼容。
+- API 返回 cursor invalid / raw source rotated / source unavailable。
+- 用户手动 refresh。
+- append 时发现无法 reconcile 的断层或重复。
+
+失效后 WebUI 清空 items 和 cursor，从 `cursor = null` 重新读取。
+
+### Timeline item detail response
 
 ```json
 {
@@ -287,7 +360,7 @@ GET /external/v1/sessions/{session_id}/raw-content?ref=&offset=&limit=
 }
 ```
 
-大内容不永久截断，通过分页读取。
+大内容不永久截断，通过 detail API 分页读取。
 
 ## pi parser 第一版映射
 
@@ -306,7 +379,7 @@ pi session JSONL 中的结构映射为统一 timeline item：
 | `message.role = compactionSummary` | `compaction_summary` |
 | `type = model_change` | `model_change` |
 
-pi content 读取规则：
+pi timeline detail 读取规则：
 
 - 普通 entry/block：读取 pi session JSONL 中对应 entry/block。
 - `bashExecution.fullOutputPath`：优先读取该 full output 文件，支持 offset/limit。
@@ -320,6 +393,43 @@ Raw transcript timeline 是按需 read model，不进入 event store。它的权
 
 `agent_bindings` 只是 session-to-agent-runtime binding 表，不是 transcript 拆分表，也不表达 raw file 的当前可用状态。
 
+### Raw source update event
+
+为了让 WebUI 知道何时刷新 timeline，新增 lightweight update event：
+
+```text
+raw_source.updated
+```
+
+示例 payload：
+
+```json
+{
+  "binding_id": "bind_xxx",
+  "source_kind": "transcript",
+  "source_version": "size:123456:mtime:2026-06-09T00:00:02Z",
+  "tail_cursor_hint": "byte:123456",
+  "reason": "append"
+}
+```
+
+语义：
+
+- `raw_source.updated` 是 invalidation/refresh hint，不承载 transcript 内容。
+- event 不暴露 raw file physical path。
+- event 不取代 timeline API；WebUI 收到 event 后仍需调用 timeline API 获取 normalized items。
+- `tail_cursor_hint` 只是 hint，WebUI 不应直接把它写成本地 `tailCursor`；本地 cursor 以 timeline response 为准。
+- 该 event 可以通过现有 dashboard/session SSE 传播，前端只对当前打开的 session 触发增量读取。
+
+推荐触发时机：
+
+- agent runtime 产生完整 message/block 时触发。
+- tool call / tool result 出现时触发。
+- 大量 streaming output 需要 debounce/coalesce，避免高频写入 event store。
+- turn completed / failed / interrupted 时强制触发一次 final update。
+
+第一阶段可接受事件粒度为“有一个可展示的小节发生变化就触发一次”，但 runtime/plugin 应做轻量合并，例如 busy 期间最多每 250ms~500ms 上报一次，终态事件不合并丢失。
+
 ## 实施顺序
 
 1. 新增 `agent_bindings` migration。
@@ -329,8 +439,9 @@ Raw transcript timeline 是按需 read model，不进入 event store。它的权
 5. 实现 raw transcript parser trait。
 6. 实现 pi JSONL parser。
 7. 新增 timeline API。
-8. 新增 raw content API。
-9. WebUI 改为消费 timeline/content API。
+8. 新增 timeline detail API。
+9. 新增 `raw_source.updated` event 类型与 runtime/plugin 上报链路。
+10. WebUI 改为消费 timeline/detail API，并维护 `TimelineState`。
 
 ## 非目标
 
@@ -338,7 +449,9 @@ Raw transcript timeline 是按需 read model，不进入 event store。它的权
 
 - 把 agent transcript 拆分持久化到 SQLite。
 - 增量 import job。
-- parser 结果缓存。
+- 后端 parser checkpoint/cache 或 parser 结果缓存。
+- 持久化 WebUI timeline state；第一阶段 timeline state 只作为前端页面状态。
+- 在 `raw_source.updated` event 中承载 transcript 内容。
 - agent client raw file 路径规则变化后的自动迁移。
 - WebUI 直接读取本地文件。
 - Claude Code / Codex parser 的完整实现。
@@ -348,6 +461,8 @@ Raw transcript timeline 是按需 read model，不进入 event store。它的权
 ## 待确认问题
 
 1. pi `client_session_key` 的稳定来源和写入时机。
-2. timeline cursor 格式：byte offset、entry id，还是 parser-specific opaque cursor。
-3. content API 默认 page size 与最大 page size。
-4. turn_id 关联是否由 raw transcript、current-turn context、时间窗口或 pilotfy events 辅助推导。
+2. timeline cursor 格式：byte offset、entry id，还是 parser-specific opaque cursor；第一阶段 cursor 应尽量自包含，避免依赖后端 checkpoint。
+3. `source_version` 的具体组成：size/mtime 是否足够，是否需要 inode/hash 或 client-specific fingerprint。
+4. timeline detail API 默认 page size 与最大 page size。
+5. turn_id 关联是否由 raw transcript、current-turn context、时间窗口或 pilotfy events 辅助推导。
+6. `raw_source.updated` 是否作为新的 domain `EventType` 落入 `events` 表，还是作为 dashboard stream 的独立 lightweight item；若进入 event store，需要确定 projection 是否忽略它。
