@@ -454,17 +454,36 @@ session.message_updated
 
 ## 实施顺序
 
-### 0. 先确认 pi `client_session_key` 来源
+### 0. pi `client_session_key` 来源确认
 
-开始实现前先确认 pi 的 `client_session_key` 稳定来源和写入时机。
+已确认第一阶段规则：
 
-当前第一阶段可选规则包括：
+```text
+client_session_key = pi hook 在 session_start 中读取到的真实 pi session identity
+                   = ctx.sessionManager.getSessionId()
+```
 
-1. 使用 pilotfy runtime 启动 pi 时传入的 `--session-id <pilotfy_session_id>`，即 `client_session_key = session_id`。
-2. 如果 pi extension 能从 `session_start` event 中拿到真实 pi session identity，则使用 pi 自身 session identity。
-3. 由 runtime 显式 export `PILOTFY_CLIENT_SESSION_KEY`，pi extension 在 `session.ready` payload 中上报。
+不要从 pilotfy runtime 启动命令中的 `--session-id` 推导 `client_session_key`。`--session-id` 只能作为默认启动路径下的兼容/诊断事实：当前默认 pi 启动命令通常会传入 `--session-id <pilotfy_session_id>`，因此多数情况下 pi session id 会等于 pilotfy session id；但启动命令可配置，不能把二者相等作为长期不变量。
 
-未确认该规则前，不应开始实现 resolver/parser/API，因为 `agent_bindings` 无法可靠定位真实 raw transcript source。
+pi extension 在 `session_start` hook 中读取：
+
+```ts
+const clientSessionKey = ctx.sessionManager.getSessionId();
+const clientSessionFile = ctx.sessionManager.getSessionFile();
+const clientSessionDir = ctx.sessionManager.getSessionDir();
+const clientCwd = ctx.sessionManager.getCwd();
+```
+
+并在 `session.ready` payload 中上报至少：
+
+```json
+{
+  "runtime_instance_id": "rtinst_xxx",
+  "client_session_key": "<ctx.sessionManager.getSessionId()>"
+}
+```
+
+`client_session_file`、`client_session_dir`、`client_cwd` 可作为诊断 metadata 上报，但不作为 `agent_bindings` 的权威 physical path。`agent_bindings.launch_cwd` 仍以后端 runtime launch context 的 canonical cwd 为准。
 
 ### Phase 1：后端 binding 基础设施
 
