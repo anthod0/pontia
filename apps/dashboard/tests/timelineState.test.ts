@@ -141,6 +141,24 @@ test('binding mismatch invalidates local timeline state and rebuilds from null c
   expect(get(timelineState)).toMatchObject({ bindingId: 'bind-2', items: [expect.objectContaining({ item_id: 'fresh' })] });
 });
 
+test('not ready keeps timeline empty without recording a global error', async () => {
+  mocks.getSessionTimeline
+    .mockRejectedValueOnce(new ApiError('capability unavailable: source_unavailable: pi session file missing', 'not_ready', 422));
+
+  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
+
+  expect(get(timelineState)).toMatchObject({
+    sessionId: 'sess-1',
+    bindingId: null,
+    sourceId: null,
+    tailCursor: null,
+    items: [],
+    loading: false,
+    refreshing: false,
+    error: null,
+  });
+});
+
 test('cursor invalid clears cursor-coupled state and records the error', async () => {
   mocks.getSessionTimeline
     .mockResolvedValueOnce(page())

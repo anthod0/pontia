@@ -20,6 +20,7 @@ export interface TimelineState {
 type LoadMode = 'rebuild' | 'append' | 'more';
 
 const INVALIDATING_ERROR_CODES = new Set(['cursor_invalid', 'source_unavailable', 'content_ref_invalid']);
+const NON_FATAL_ERROR_CODES = new Set(['not_ready']);
 const DEFAULT_LIMIT = 50;
 
 function emptyState(sessionId = ''): TimelineState {
@@ -71,6 +72,10 @@ function shouldInvalidate(error: unknown): boolean {
   return error instanceof ApiError && INVALIDATING_ERROR_CODES.has(error.code);
 }
 
+function isNonFatal(error: unknown): boolean {
+  return error instanceof ApiError && NON_FATAL_ERROR_CODES.has(error.code);
+}
+
 export async function loadSessionTimeline(
   sessionId: string,
   options: { mode?: LoadMode; limit?: number } = {},
@@ -112,7 +117,15 @@ export async function loadSessionTimeline(
     return lastPage;
   } catch (error) {
     const message = errorMessage(error);
-    if (shouldInvalidate(error)) {
+    if (isNonFatal(error)) {
+      timelineState.update((state) => ({
+        ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
+        sessionId,
+        loading: false,
+        refreshing: false,
+        error: null,
+      }));
+    } else if (shouldInvalidate(error)) {
       timelineState.set({ ...emptyState(sessionId), error: message });
     } else {
       timelineState.update((state) => ({ ...state, sessionId, loading: false, refreshing: false, error: message }));

@@ -12,7 +12,7 @@ use crate::application::{
     ResolvedAgentBinding, TimelineItemDetailRequest, TimelinePageRequest,
 };
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, ensure_session_exists, ok};
+use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
 
 #[derive(Debug, Deserialize)]
 pub struct TimelineQuery {
@@ -34,7 +34,10 @@ pub async fn get_session_timeline(
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
     let query_service = ExternalQueryService::new(state.db.clone());
-    ensure_session_exists(&query_service, &session_id).await?;
+    let session = query_service
+        .get_session(&session_id)
+        .await?
+        .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
 
     let binding_service = AgentBindingService::new(state.db.clone());
     let binding = binding_service
@@ -48,7 +51,7 @@ pub async fn get_session_timeline(
         })?;
 
     let parser = PiJsonlParser::new();
-    let source = resolve_binding_source(&binding).await?;
+    let source = resolve_binding_source(&binding, &session.state).await?;
     let page = parser
         .timeline_page(TimelinePageRequest {
             session_id,
@@ -56,7 +59,7 @@ pub async fn get_session_timeline(
             cursor: query.cursor,
             limit: query.limit.unwrap_or(50),
         })
-        .map_err(timeline_error_from_error)?;
+        .map_err(|error| timeline_error_from_error(error, binding.discovered, &session.state))?;
     if !binding.discovered {
         binding_service.mark_discovered(&binding.id).await?;
     }
@@ -81,7 +84,10 @@ pub async fn get_session_timeline_detail(
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
     let query_service = ExternalQueryService::new(state.db.clone());
-    ensure_session_exists(&query_service, &session_id).await?;
+    let session = query_service
+        .get_session(&session_id)
+        .await?
+        .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
 
     let binding_service = AgentBindingService::new(state.db.clone());
     let binding = binding_service
@@ -95,14 +101,14 @@ pub async fn get_session_timeline_detail(
         })?;
 
     let parser = PiJsonlParser::new();
-    let source = resolve_binding_source(&binding).await?;
+    let source = resolve_binding_source(&binding, &session.state).await?;
     let detail = parser
         .timeline_item_detail(TimelineItemDetailRequest {
             session_id,
             source,
             content_ref: query.content_ref,
         })
-        .map_err(timeline_error_from_error)?;
+        .map_err(|error| timeline_error_from_error(error, binding.discovered, &session.state))?;
     if !binding.discovered {
         binding_service.mark_discovered(&binding.id).await?;
     }
@@ -118,6 +124,7 @@ pub async fn get_session_timeline_detail(
 
 async fn resolve_binding_source(
     binding: &AgentBinding,
+    session_state: &str,
 ) -> Result<ResolvedAgentBinding, ExternalApiError> {
     PiAgentBindingResolver::new()
         .resolve(&AgentBindingResolveRequest {
@@ -127,24 +134,31 @@ async fn resolve_binding_source(
             launch_cwd: binding.launch_cwd.clone().into(),
             client_session_key: binding.client_session_key.clone(),
         })
-        .map_err(|error| timeline_error_from_binding_error(error, binding.discovered))
+        .map_err(|error| {
+            timeline_error_from_binding_error(error, binding.discovered, session_state)
+        })
 }
 
 fn timeline_error_from_binding_error(
     error: crate::error::Error,
     discovered: bool,
+    session_state: &str,
 ) -> ExternalApiError {
     let message = error.to_string();
-    if !discovered && message.contains("source_unavailable:") {
-        return timeline_error("not_ready", message);
+    if message.contains("source_unavailable:") {
+        return timeline_error(source_unavailable_code(discovered, session_state), message);
     }
-    timeline_error_from_error(error)
+    timeline_error_from_error(error, discovered, session_state)
 }
 
-fn timeline_error_from_error(error: crate::error::Error) -> ExternalApiError {
+fn timeline_error_from_error(
+    error: crate::error::Error,
+    discovered: bool,
+    session_state: &str,
+) -> ExternalApiError {
     let message = error.to_string();
     if message.contains("source_unavailable:") {
-        return timeline_error("source_unavailable", message);
+        return timeline_error(source_unavailable_code(discovered, session_state), message);
     }
     if message.contains("cursor_invalid:") {
         return timeline_error("cursor_invalid", message);
@@ -153,6 +167,14 @@ fn timeline_error_from_error(error: crate::error::Error) -> ExternalApiError {
         return timeline_error("content_ref_invalid", message);
     }
     ExternalApiError::from(error)
+}
+
+fn source_unavailable_code(discovered: bool, session_state: &str) -> &'static str {
+    if discovered && matches!(session_state, "exited" | "error") {
+        "source_unavailable"
+    } else {
+        "not_ready"
+    }
 }
 
 fn timeline_error(code: &'static str, message: impl Into<String>) -> ExternalApiError {
