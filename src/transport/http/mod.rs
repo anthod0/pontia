@@ -187,6 +187,14 @@ pub fn router(state: AppState) -> Router {
             get(external::list_turns),
         )
         .route(
+            "/external/v1/sessions/{session_id}/timeline",
+            get(external::get_session_timeline),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/timeline/detail",
+            get(external::get_session_timeline_detail),
+        )
+        .route(
             "/external/v1/sessions/{session_id}/inbox/messages",
             get(external::list_inbox_messages).post(external::submit_inbox_message),
         )

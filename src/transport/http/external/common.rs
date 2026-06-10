@@ -110,6 +110,18 @@ impl ExternalApiError {
             message: message.into(),
         }
     }
+
+    pub(super) fn custom(
+        status: StatusCode,
+        code: &'static str,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            status,
+            code,
+            message: message.into(),
+        }
+    }
 }
 
 impl From<Error> for ExternalApiError {
