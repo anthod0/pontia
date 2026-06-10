@@ -79,26 +79,67 @@ export function turnsToChatMessages(turns: TurnView[]): SessionChatMessage[] {
 export function timelineItemsToChatMessages(items: TimelineItem[]): SessionChatMessage[] {
   const messages: SessionChatMessage[] = [];
   let pendingThoughtSteps: SessionChatThoughtStep[] = [];
+  let pendingThoughtTurnId: string | null = null;
+  let pendingThoughtOccurredAt: string | null = null;
+
+  const flushPendingWorkingMessage = () => {
+    if (!pendingThoughtSteps.length) return;
+    const turnId = pendingThoughtTurnId ?? pendingThoughtSteps[0]?.id ?? 'pending';
+    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && message.turnId === turnId);
+    if (lastAssistant) {
+      lastAssistant.thoughtSteps = [...(lastAssistant.thoughtSteps ?? []), ...pendingThoughtSteps];
+    } else {
+      messages.push({
+        id: `${turnId}:working`,
+        turnId,
+        role: 'assistant',
+        content: 'Working…',
+        status: 'pending',
+        createdAt: pendingThoughtOccurredAt ?? '',
+        thoughtSteps: pendingThoughtSteps,
+      });
+    }
+    pendingThoughtSteps = [];
+    pendingThoughtTurnId = null;
+    pendingThoughtOccurredAt = null;
+  };
 
   for (const item of items.slice().sort((a, b) => timelineTimestamp(a).localeCompare(timelineTimestamp(b)))) {
-    if (item.kind === 'user' || item.kind === 'assistant') {
+    if (item.kind === 'user') {
+      flushPendingWorkingMessage();
+      messages.push({
+        id: item.item_id,
+        turnId: item.turn_id ?? item.item_id,
+        role: item.kind,
+        content: item.content_preview?.trim() || 'No input was reported.',
+        status: item.status === 'error' ? 'failed' : 'sent',
+        createdAt: item.occurred_at ?? '',
+      });
+      continue;
+    }
+
+    if (item.kind === 'assistant') {
       const message: SessionChatMessage = {
         id: item.item_id,
         turnId: item.turn_id ?? item.item_id,
         role: item.kind,
-        content: item.content_preview?.trim() || (item.kind === 'user' ? 'No input was reported.' : 'No assistant output was reported.'),
+        content: item.content_preview?.trim() || 'No assistant output was reported.',
         status: item.status === 'error' ? 'failed' : 'sent',
         createdAt: item.occurred_at ?? '',
       };
-      if (item.kind === 'assistant' && pendingThoughtSteps.length) {
+      if (pendingThoughtSteps.length) {
         message.thoughtSteps = pendingThoughtSteps;
         pendingThoughtSteps = [];
+        pendingThoughtTurnId = null;
+        pendingThoughtOccurredAt = null;
       }
       messages.push(message);
       continue;
     }
 
     if (isThoughtStepKind(item.kind)) {
+      pendingThoughtTurnId = item.turn_id ?? pendingThoughtTurnId;
+      pendingThoughtOccurredAt ??= item.occurred_at;
       pendingThoughtSteps.push({
         id: item.item_id,
         kind: item.kind,
@@ -110,12 +151,7 @@ export function timelineItemsToChatMessages(items: TimelineItem[]): SessionChatM
     }
   }
 
-  if (pendingThoughtSteps.length) {
-    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
-    if (lastAssistant) {
-      lastAssistant.thoughtSteps = [...(lastAssistant.thoughtSteps ?? []), ...pendingThoughtSteps];
-    }
-  }
+  flushPendingWorkingMessage();
 
   return messages;
 }
@@ -166,7 +202,7 @@ function assistantMessageForTurn(turn: TurnView): SessionChatMessage {
     id: `${turn.turn_id}:assistant`,
     turnId: turn.turn_id,
     role: 'assistant',
-    content: activePendingTurnStates.has(turn.state) ? 'Waiting for the assistant response…' : 'No assistant output was reported for this turn.',
+    content: activePendingTurnStates.has(turn.state) ? 'Working…' : 'No assistant output was reported for this turn.',
     status: activePendingTurnStates.has(turn.state) ? 'pending' : 'sent',
     createdAt: turn.completed_at ?? turn.created_at,
   };

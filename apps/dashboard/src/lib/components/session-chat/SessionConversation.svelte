@@ -1,7 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { Bot, GitBranch, UserRound } from '@lucide/svelte'
-  import * as ChainOfThought from '$lib/components/ai-elements/chain-of-thought/index.js'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -10,6 +9,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { chatAutoScrollKey, scrollToBottom } from '../../session-chat/autoScroll'
   import DraftDagFlow from '../../../components/dag/DraftDagFlow.svelte'
+  import ThoughtSummary from './ThoughtSummary.svelte'
   import type { DagProposalView, JsonObject } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
 
@@ -80,15 +80,8 @@
             {#if chatMessage.status !== 'sent'}<Badge variant="secondary">{chatMessage.status}</Badge>{/if}
           </div>
           <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
-            {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
-              <ChainOfThought.Root class="mb-3">
-                <ChainOfThought.Header>{chatMessage.thoughtSteps.length} thinking/tool steps</ChainOfThought.Header>
-                <ChainOfThought.Content>
-                  {#each chatMessage.thoughtSteps as step (step.id)}
-                    <ChainOfThought.Step title={step.title} status={step.status} kind={step.kind}>{step.content}</ChainOfThought.Step>
-                  {/each}
-                </ChainOfThought.Content>
-              </ChainOfThought.Root>
+            {#if chatMessage.role === 'assistant' && (chatMessage.thoughtSteps?.length || chatMessage.status === 'pending')}
+              <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps ?? []} active={chatMessage.status === 'pending'} />
             {/if}
             <Message.Response content={chatMessage.content} />
           </Message.Content>

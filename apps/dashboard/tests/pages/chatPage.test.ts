@@ -492,7 +492,7 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(composerDock?.firstElementChild).toHaveClass('max-w-7xl');
 });
 
-test('renders assistant chain-of-thought above the final assistant response', async () => {
+test('renders collapsed thought summary with latest step above the final assistant response and expands all steps', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -527,13 +527,25 @@ test('renders assistant chain-of-thought above the final assistant response', as
         turn_id: 'turn-1',
       },
       {
+        item_id: 'turn-1:tool',
+        kind: 'tool_call',
+        raw_kind: 'tool_call',
+        role: 'tool',
+        title: 'read',
+        status: 'started',
+        occurred_at: '2026-05-14T00:00:02Z',
+        content_preview: 'read {"path":"src/app.ts"}',
+        content_ref: 'turn-1:tool-ref',
+        turn_id: 'turn-1',
+      },
+      {
         item_id: 'turn-1:assistant',
         kind: 'assistant',
         raw_kind: 'text',
         role: 'assistant',
         title: null,
         status: null,
-        occurred_at: '2026-05-14T00:00:02Z',
+        occurred_at: '2026-05-14T00:00:03Z',
         content_preview: 'Final answer',
         content_ref: 'turn-1:assistant-ref',
         turn_id: 'turn-1',
@@ -549,12 +561,21 @@ test('renders assistant chain-of-thought above the final assistant response', as
     error: null,
   });
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  const timelineSnapshot = mocks.timelineState.get();
+  mocks.loadSessionTimeline.mockImplementationOnce(async () => {
+    mocks.timelineState.set(timelineSnapshot);
+    return null;
+  });
 
   render(ChatPage);
 
-  const thoughtHeader = await screen.findByText('1 thinking/tool steps');
+  const latestSummary = await screen.findByText('read {"path":"src/app.ts"}');
   const finalAnswer = screen.getByText('Final answer');
-  expect(thoughtHeader.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(latestSummary.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByText('I should inspect the code.')).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: /show all thought summaries/i }));
+  expect(await screen.findByText('I should inspect the code.')).toBeInTheDocument();
 });
 
 test('keeps whitespace preservation on message text instead of the bubble wrapper', async () => {
