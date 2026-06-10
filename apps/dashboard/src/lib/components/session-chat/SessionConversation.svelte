@@ -80,9 +80,8 @@
             {#if chatMessage.status !== 'sent'}<Badge variant="secondary">{chatMessage.status}</Badge>{/if}
           </div>
           <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
-            <Message.Response content={chatMessage.content} />
             {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
-              <ChainOfThought.Root class="mt-3">
+              <ChainOfThought.Root class="mb-3">
                 <ChainOfThought.Header>{chatMessage.thoughtSteps.length} thinking/tool steps</ChainOfThought.Header>
                 <ChainOfThought.Content>
                   {#each chatMessage.thoughtSteps as step (step.id)}
@@ -91,6 +90,7 @@
                 </ChainOfThought.Content>
               </ChainOfThought.Root>
             {/if}
+            <Message.Response content={chatMessage.content} />
           </Message.Content>
         </Message.Root>
 

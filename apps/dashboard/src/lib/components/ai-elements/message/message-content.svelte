@@ -15,7 +15,7 @@
 <div
   bind:this={ref}
   class={cn(
-    'max-w-full whitespace-pre-wrap break-words text-sm leading-relaxed',
+    'max-w-full break-words text-sm leading-relaxed',
     'group-[.is-user]:rounded-2xl group-[.is-user]:bg-primary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-primary-foreground',
     'group-[.is-assistant]:rounded-2xl group-[.is-assistant]:bg-transparent group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-assistant]:text-card-foreground',
     className,

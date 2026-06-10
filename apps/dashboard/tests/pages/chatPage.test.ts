@@ -492,6 +492,87 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(composerDock?.firstElementChild).toHaveClass('max-w-7xl');
 });
 
+test('renders assistant chain-of-thought above the final assistant response', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.timelineState.set({
+    sessionId: 'session-2',
+    bindingId: 'binding-1',
+    items: [
+      {
+        item_id: 'turn-1:user',
+        kind: 'user',
+        raw_kind: 'user',
+        role: 'user',
+        title: null,
+        status: null,
+        occurred_at: '2026-05-14T00:00:00Z',
+        content_preview: 'hello',
+        content_ref: 'turn-1:user-ref',
+        turn_id: 'turn-1',
+      },
+      {
+        item_id: 'turn-1:thinking',
+        kind: 'thinking',
+        raw_kind: 'thinking',
+        role: 'assistant',
+        title: null,
+        status: null,
+        occurred_at: '2026-05-14T00:00:01Z',
+        content_preview: 'I should inspect the code.',
+        content_ref: 'turn-1:thinking-ref',
+        turn_id: 'turn-1',
+      },
+      {
+        item_id: 'turn-1:assistant',
+        kind: 'assistant',
+        raw_kind: 'text',
+        role: 'assistant',
+        title: null,
+        status: null,
+        occurred_at: '2026-05-14T00:00:02Z',
+        content_preview: 'Final answer',
+        content_ref: 'turn-1:assistant-ref',
+        turn_id: 'turn-1',
+      },
+    ],
+    nextCursor: null,
+    tailCursor: 'tail-1',
+    sourceId: 'source-1',
+    hasMore: false,
+    isTail: true,
+    loading: false,
+    refreshing: false,
+    error: null,
+  });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  const thoughtHeader = await screen.findByText('1 thinking/tool steps');
+  const finalAnswer = screen.getByText('Final answer');
+  expect(thoughtHeader.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('keeps whitespace preservation on message text instead of the bubble wrapper', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2', input: { summary: 'hello' }, output: { summary: 'hi there' } })], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  const userText = await screen.findByText('hello');
+  const userBubble = userText.parentElement;
+  expect(userText).toHaveClass('whitespace-pre-wrap');
+  expect(userBubble).not.toHaveClass('whitespace-pre-wrap');
+});
+
 test('loads and renders an existing chat session with metadata, state, and workspace path above the prompt input without a page header', async () => {
   const selected = session({
     session_id: 'session-2',

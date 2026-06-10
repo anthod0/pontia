@@ -11,6 +11,6 @@
   let { content, class: className, ref = $bindable(null), ...restProps }: MessageResponseProps = $props()
 </script>
 
-<div bind:this={ref} class={cn('size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)} {...restProps}>
+<div bind:this={ref} class={cn('size-full whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)} {...restProps}>
   {content}
 </div>
