@@ -48,14 +48,18 @@ pub async fn get_session_timeline(
         })?;
 
     let parser = PiJsonlParser::new();
+    let source = resolve_binding_source(&binding).await?;
     let page = parser
         .timeline_page(TimelinePageRequest {
             session_id,
-            source: resolve_binding_source(&binding_service, &binding).await?,
+            source,
             cursor: query.cursor,
             limit: query.limit.unwrap_or(50),
         })
         .map_err(timeline_error_from_error)?;
+    if !binding.discovered {
+        binding_service.mark_discovered(&binding.id).await?;
+    }
 
     Ok(ok(json!({
         "session_id": page.session_id,
@@ -91,13 +95,17 @@ pub async fn get_session_timeline_detail(
         })?;
 
     let parser = PiJsonlParser::new();
+    let source = resolve_binding_source(&binding).await?;
     let detail = parser
         .timeline_item_detail(TimelineItemDetailRequest {
             session_id,
-            source: resolve_binding_source(&binding_service, &binding).await?,
+            source,
             content_ref: query.content_ref,
         })
         .map_err(timeline_error_from_error)?;
+    if !binding.discovered {
+        binding_service.mark_discovered(&binding.id).await?;
+    }
 
     Ok(ok(json!({
         "binding_id": detail.binding_id,
@@ -109,10 +117,9 @@ pub async fn get_session_timeline_detail(
 }
 
 async fn resolve_binding_source(
-    binding_service: &AgentBindingService,
     binding: &AgentBinding,
 ) -> Result<ResolvedAgentBinding, ExternalApiError> {
-    let source = PiAgentBindingResolver::new()
+    PiAgentBindingResolver::new()
         .resolve(&AgentBindingResolveRequest {
             id: binding.id.clone(),
             session_id: binding.session_id.clone(),
@@ -120,13 +127,7 @@ async fn resolve_binding_source(
             launch_cwd: binding.launch_cwd.clone().into(),
             client_session_key: binding.client_session_key.clone(),
         })
-        .map_err(|error| timeline_error_from_binding_error(error, binding.discovered))?;
-
-    if !binding.discovered {
-        binding_service.mark_discovered(&binding.id).await?;
-    }
-
-    Ok(source)
+        .map_err(|error| timeline_error_from_binding_error(error, binding.discovered))
 }
 
 fn timeline_error_from_binding_error(
