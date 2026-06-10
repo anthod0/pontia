@@ -42,6 +42,7 @@ mod inbox;
 mod mapping;
 mod prompt_rendering;
 mod queries;
+mod raw_transcripts;
 mod runtime_control;
 mod runtime_observation;
 mod runtime_readiness;
@@ -84,6 +85,11 @@ pub use graph::{
 };
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
 pub use queries::ExternalQueryService;
+pub use raw_transcripts::{
+    AgentBindingResolveRequest, AgentBindingResolver, PiAgentBindingResolver, PiJsonlParser,
+    RawTranscriptParser, ResolvedAgentBinding, TimelineItem, TimelineItemDetailPage,
+    TimelineItemDetailRequest, TimelinePage, TimelinePageRequest, resolve_and_parse_timeline_page,
+};
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};
 pub use runtime_observation::{AdapterEventOutboxService, RuntimeObservationService};
 pub use runtime_readiness::RuntimeReadinessService;
