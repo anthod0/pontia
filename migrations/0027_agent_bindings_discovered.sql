@@ -1,0 +1,1 @@
+ALTER TABLE agent_bindings ADD COLUMN discovered BOOLEAN NOT NULL DEFAULT FALSE;

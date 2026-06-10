@@ -36,7 +36,8 @@ pub async fn get_session_timeline(
     let query_service = ExternalQueryService::new(state.db.clone());
     ensure_session_exists(&query_service, &session_id).await?;
 
-    let binding = AgentBindingService::new(state.db.clone())
+    let binding_service = AgentBindingService::new(state.db.clone());
+    let binding = binding_service
         .primary_binding_for_session(&session_id)
         .await?
         .ok_or_else(|| {
@@ -50,7 +51,7 @@ pub async fn get_session_timeline(
     let page = parser
         .timeline_page(TimelinePageRequest {
             session_id,
-            source: resolve_binding_source(&binding)?,
+            source: resolve_binding_source(&binding_service, &binding).await?,
             cursor: query.cursor,
             limit: query.limit.unwrap_or(50),
         })
@@ -78,7 +79,8 @@ pub async fn get_session_timeline_detail(
     let query_service = ExternalQueryService::new(state.db.clone());
     ensure_session_exists(&query_service, &session_id).await?;
 
-    let binding = AgentBindingService::new(state.db.clone())
+    let binding_service = AgentBindingService::new(state.db.clone());
+    let binding = binding_service
         .primary_binding_for_session(&session_id)
         .await?
         .ok_or_else(|| {
@@ -92,7 +94,7 @@ pub async fn get_session_timeline_detail(
     let detail = parser
         .timeline_item_detail(TimelineItemDetailRequest {
             session_id,
-            source: resolve_binding_source(&binding)?,
+            source: resolve_binding_source(&binding_service, &binding).await?,
             content_ref: query.content_ref,
         })
         .map_err(timeline_error_from_error)?;
@@ -106,10 +108,11 @@ pub async fn get_session_timeline_detail(
     })))
 }
 
-fn resolve_binding_source(
+async fn resolve_binding_source(
+    binding_service: &AgentBindingService,
     binding: &AgentBinding,
 ) -> Result<ResolvedAgentBinding, ExternalApiError> {
-    PiAgentBindingResolver::new()
+    let source = PiAgentBindingResolver::new()
         .resolve(&AgentBindingResolveRequest {
             id: binding.id.clone(),
             session_id: binding.session_id.clone(),
@@ -117,7 +120,24 @@ fn resolve_binding_source(
             launch_cwd: binding.launch_cwd.clone().into(),
             client_session_key: binding.client_session_key.clone(),
         })
-        .map_err(timeline_error_from_error)
+        .map_err(|error| timeline_error_from_binding_error(error, binding.discovered))?;
+
+    if !binding.discovered {
+        binding_service.mark_discovered(&binding.id).await?;
+    }
+
+    Ok(source)
+}
+
+fn timeline_error_from_binding_error(
+    error: crate::error::Error,
+    discovered: bool,
+) -> ExternalApiError {
+    let message = error.to_string();
+    if !discovered && message.contains("source_unavailable:") {
+        return timeline_error("not_ready", message);
+    }
+    timeline_error_from_error(error)
 }
 
 fn timeline_error_from_error(error: crate::error::Error) -> ExternalApiError {

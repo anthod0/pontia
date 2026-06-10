@@ -192,14 +192,14 @@ async fn timeline_and_detail_external_api_read_pi_jsonl_fixture() {
 }
 
 #[tokio::test]
-async fn timeline_external_api_returns_source_unavailable_when_raw_file_is_missing() {
+async fn timeline_external_api_returns_not_ready_when_raw_file_has_not_been_discovered() {
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
     let agent_dir = temp.path().join("agent");
     unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
 
     let state = test_state().await;
-    let session_id = "sess_raw_missing_source";
+    let session_id = "sess_raw_pending_source";
     let cwd = temp.path().join("workspace");
     fs::create_dir_all(&cwd).unwrap();
     let cwd = cwd.canonicalize().unwrap();
@@ -223,7 +223,100 @@ async fn timeline_external_api_returns_source_unavailable_when_raw_file_is_missi
     .await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "not_ready");
+
+    unsafe { std::env::remove_var("PI_AGENT_DIR") };
+}
+
+#[tokio::test]
+async fn timeline_external_api_returns_source_unavailable_when_discovered_raw_file_disappears() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+
+    let state = test_state().await;
+    let session_id = "sess_raw_discovered_missing_source";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    let binding = AgentBindingService::new(state.db.clone())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: "missing-session-key".to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agent_bindings SET discovered = TRUE WHERE id = ?")
+        .bind(&binding.id)
+        .execute(&state.db)
+        .await
+        .unwrap();
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/timeline"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"]["code"], "source_unavailable");
+
+    unsafe { std::env::remove_var("PI_AGENT_DIR") };
+}
+
+#[tokio::test]
+async fn timeline_external_api_marks_binding_discovered_after_first_successful_resolve() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+
+    let state = test_state().await;
+    let session_id = "sess_raw_marks_discovered";
+    let session_key = "sess_marks_discovered_key";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    fs::write(
+        session_dir.join(format!("2026-06-09T00-00-00-000Z_{session_key}.jsonl")),
+        "{\"type\":\"message\",\"id\":\"u1\",\"message\":{\"role\":\"user\",\"content\":\"hello\"}}\n",
+    )
+    .unwrap();
+
+    let binding = AgentBindingService::new(state.db.clone())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+
+    let (status, _body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/timeline"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let discovered: bool = sqlx::query_scalar("SELECT discovered FROM agent_bindings WHERE id = ?")
+        .bind(&binding.id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+    assert!(discovered);
 
     unsafe { std::env::remove_var("PI_AGENT_DIR") };
 }

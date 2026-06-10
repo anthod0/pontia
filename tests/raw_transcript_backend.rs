@@ -239,6 +239,7 @@ async fn service_can_resolve_and_parse_primary_binding_for_session() {
         launch_cwd: cwd.to_string_lossy().to_string(),
         client_session_key: session_key.to_string(),
         metadata: json!({}),
+        discovered: false,
     };
     let resolver = PiAgentBindingResolver::with_agent_dir(agent_dir);
     let parser = PiJsonlParser::new();

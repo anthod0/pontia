@@ -8,6 +8,7 @@ pub struct AgentBinding {
     pub launch_cwd: String,
     pub client_session_key: String,
     pub metadata: Value,
+    pub discovered: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,7 +42,7 @@ impl AgentBindingService {
         session_id: &str,
     ) -> Result<Option<AgentBinding>> {
         let row = sqlx::query(
-            r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, metadata
+            r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered
                FROM agent_bindings
                WHERE session_id = ?
                ORDER BY created_at, id
@@ -52,6 +53,19 @@ impl AgentBindingService {
         .await?;
 
         row.map(row_to_agent_binding).transpose()
+    }
+
+    pub async fn mark_discovered(&self, binding_id: &str) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE agent_bindings
+               SET discovered = TRUE,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE id = ? AND discovered = FALSE"#,
+        )
+        .bind(binding_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }
 
@@ -125,7 +139,7 @@ async fn upsert_agent_binding_in_tx(
            ON CONFLICT(session_id, client_type, client_session_key) DO UPDATE SET
                metadata = excluded.metadata,
                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-           RETURNING id, session_id, client_type, launch_cwd, client_session_key, metadata"#,
+           RETURNING id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered"#,
     )
     .bind(id)
     .bind(request.session_id)
@@ -148,6 +162,7 @@ fn row_to_agent_binding(row: sqlx::sqlite::SqliteRow) -> Result<AgentBinding> {
         launch_cwd: row.try_get("launch_cwd")?,
         client_session_key: row.try_get("client_session_key")?,
         metadata: serde_json::from_str(&metadata)?,
+        discovered: row.try_get("discovered")?,
     })
 }
 
