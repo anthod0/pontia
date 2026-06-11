@@ -41,8 +41,34 @@ function emptyState(sessionId = ''): TimelineState {
 
 export const timelineState = writable<TimelineState>(emptyState());
 
+const timelineUpdateQueues = new Map<string, Promise<void>>();
+
 export function resetTimelineState(sessionId = ''): void {
   timelineState.set(emptyState(sessionId));
+  if (sessionId) {
+    timelineUpdateQueues.delete(sessionId);
+  } else {
+    timelineUpdateQueues.clear();
+  }
+}
+
+function uniqueTimelineItems(items: TimelineItem[]): TimelineItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.item_id)) return false;
+    seen.add(item.item_id);
+    return true;
+  });
+}
+
+function appendUniqueTimelineItems(currentItems: TimelineItem[], nextItems: TimelineItem[]): TimelineItem[] {
+  const seen = new Set(currentItems.map((item) => item.item_id));
+  const uniqueNext = nextItems.filter((item) => {
+    if (seen.has(item.item_id)) return false;
+    seen.add(item.item_id);
+    return true;
+  });
+  return [...uniqueTimelineItems(currentItems), ...uniqueNext];
 }
 
 function applyPage(current: TimelineState, page: TimelinePage, mode: LoadMode): TimelineState {
@@ -52,7 +78,7 @@ function applyPage(current: TimelineState, page: TimelinePage, mode: LoadMode): 
   return {
     sessionId: page.session_id,
     bindingId: page.binding_id,
-    items: append ? [...current.items, ...page.items] : page.items,
+    items: append ? appendUniqueTimelineItems(current.items, page.items) : uniqueTimelineItems(page.items),
     nextCursor: page.next_cursor,
     tailCursor: page.tail_cursor,
     sourceId: page.source_id,
@@ -134,7 +160,20 @@ export async function loadSessionTimeline(
   }
 }
 
-export async function handleTimelineMessageUpdated(sessionId: string, bindingId: string | null = null): Promise<void> {
+export function handleTimelineMessageUpdated(sessionId: string, bindingId: string | null = null): Promise<void> {
+  const previous = timelineUpdateQueues.get(sessionId) ?? Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => handleTimelineMessageUpdatedNow(sessionId, bindingId));
+
+  timelineUpdateQueues.set(sessionId, next);
+  void next.finally(() => {
+    if (timelineUpdateQueues.get(sessionId) === next) timelineUpdateQueues.delete(sessionId);
+  });
+  return next;
+}
+
+async function handleTimelineMessageUpdatedNow(sessionId: string, bindingId: string | null = null): Promise<void> {
   const current = get(timelineState);
   if (current.sessionId && current.sessionId !== sessionId) return;
 

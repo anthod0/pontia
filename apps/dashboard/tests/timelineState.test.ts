@@ -113,6 +113,58 @@ test('message update with matching binding appends from tail cursor', async () =
   expect(get(timelineState).tailCursor).toBe('cursor-tail-2');
 });
 
+test('message updates for the same session are serialized so each append uses the latest tail cursor', async () => {
+  let resolveFirstAppend: (value: TimelinePage) => void = () => {};
+  const firstAppend = new Promise<TimelinePage>((resolve) => {
+    resolveFirstAppend = resolve;
+  });
+
+  mocks.getSessionTimeline
+    .mockResolvedValueOnce(page())
+    .mockReturnValueOnce(firstAppend)
+    .mockResolvedValueOnce(page({
+      items: [],
+      tail_cursor: 'cursor-tail-2',
+    }));
+
+  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
+
+  const firstUpdate = handleTimelineMessageUpdated('sess-1', 'bind-1');
+  const secondUpdate = handleTimelineMessageUpdated('sess-1', 'bind-1');
+
+  await vi.waitFor(() => {
+    expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(2, 'sess-1', { cursor: 'cursor-tail-1', limit: 50 });
+    expect(mocks.getSessionTimeline).toHaveBeenCalledTimes(2);
+  });
+
+  resolveFirstAppend(page({
+    items: [{ ...page().items[0], item_id: 'item-2', content_ref: 'ref-2', content_preview: 'next' }],
+    tail_cursor: 'cursor-tail-2',
+  }));
+  await Promise.all([firstUpdate, secondUpdate]);
+
+  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(3, 'sess-1', { cursor: 'cursor-tail-2', limit: 50 });
+  expect(get(timelineState).items.map((item) => item.item_id)).toEqual(['item-1', 'item-2']);
+  expect(get(timelineState).tailCursor).toBe('cursor-tail-2');
+});
+
+test('append keeps timeline items unique by item id', async () => {
+  mocks.getSessionTimeline
+    .mockResolvedValueOnce(page())
+    .mockResolvedValueOnce(page({
+      items: [
+        { ...page().items[0], item_id: 'item-1' },
+        { ...page().items[0], item_id: 'item-2', content_ref: 'ref-2', content_preview: 'next' },
+      ],
+      tail_cursor: 'cursor-tail-2',
+    }));
+
+  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
+  await handleTimelineMessageUpdated('sess-1', 'bind-1');
+
+  expect(get(timelineState).items.map((item) => item.item_id)).toEqual(['item-1', 'item-2']);
+});
+
 test('append response with a new source scope replaces the cursor-coupled state', async () => {
   mocks.getSessionTimeline
     .mockResolvedValueOnce(page())
