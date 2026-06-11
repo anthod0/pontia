@@ -573,7 +573,8 @@ test('renders collapsed thought summary with latest step above the final assista
   const finalAnswer = screen.getByText('Final answer');
   expect(latestSummary.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.queryByText('I should inspect the code.')).not.toBeInTheDocument();
-  expect(screen.getByText('read')).toHaveClass('text-base');
+  expect(screen.getByText('read')).toHaveClass('text-sm');
+  expect(screen.getByText('read')).not.toHaveClass('text-base');
   expect(screen.getByText('started')).toHaveClass('text-sm');
 
   await userEvent.click(screen.getByRole('button', { name: /view thought details/i }));

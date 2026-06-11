@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { CircleDot, Hammer, Sparkles } from '@lucide/svelte'
   import { cn } from '$lib/utils.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import type { SessionChatThoughtStep } from '../../session-chat/sessionChat'
@@ -24,13 +23,6 @@
     return thoughtStep?.status ?? (active ? 'working' : null)
   }
 
-  function iconForStep(thoughtStep: SessionChatThoughtStep | null): typeof Sparkles {
-    if (!thoughtStep || thoughtStep.kind === 'thinking') return Sparkles
-    if (thoughtStep.kind === 'tool_call') return Hammer
-    return CircleDot
-  }
-
-  const Icon = $derived(iconForStep(step))
   const status = $derived(statusForStep(step))
 </script>
 
@@ -43,13 +35,10 @@
   aria-label="View thought details"
   onclick={onOpen}
 >
-  <div class="flex min-w-0 items-start gap-2.5">
-    <span class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-muted-foreground">
-      <Icon class="size-4" />
-    </span>
+  <div class="flex min-w-0 items-start">
     <span class="min-w-0 flex-1">
       <span class="flex min-w-0 items-center gap-2">
-        <span class="truncate text-base font-semibold leading-5 text-foreground">{labelForStep(step)}</span>
+        <span class="truncate text-sm font-medium leading-5 text-foreground">{labelForStep(step)}</span>
         {#if status}<Badge variant="secondary" class="shrink-0 text-sm font-medium">{status}</Badge>{/if}
         {#if active}<span class="size-2 shrink-0 animate-pulse rounded-full bg-primary" aria-label="Working"></span>{/if}
         {#if stepCount > 1}<span class="ml-auto shrink-0 text-xs text-muted-foreground">{stepCount} steps</span>{/if}
