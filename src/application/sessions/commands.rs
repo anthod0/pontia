@@ -1,0 +1,214 @@
+use super::validation::{client_dispatch_mode, client_readiness_mode, validate_handle};
+use super::*;
+use crate::agent_clients::{DispatchMode, ReadinessMode};
+
+impl SessionCommandService {
+    pub async fn create_session(
+        &self,
+        request: CreateSessionRequest,
+        idempotency_key: Option<&str>,
+    ) -> Result<CreateSessionOutcome> {
+        if !is_supported_client_type(&request.client_type) {
+            return Err(crate::error::Error::Domain(format!(
+                "unsupported client_type: {}",
+                request.client_type
+            )));
+        }
+
+        if let Some(key) = idempotency_key
+            && let Some(response) = self.idempotency_response("create_session", key).await?
+        {
+            return Ok(CreateSessionOutcome {
+                data: response,
+                duplicate: true,
+            });
+        }
+
+        let handle = request.handle.as_deref();
+        if let Some(handle) = handle {
+            validate_handle(handle)?;
+        }
+        if request.workspace.is_some() && request.workspace_id.is_some() {
+            return Err(Error::Domain(
+                "workspace and workspace_id cannot both be provided".to_string(),
+            ));
+        }
+        if let Some(handle) = handle
+            && request.workspace.is_none()
+            && request.workspace_id.is_none()
+        {
+            return Err(Error::Domain(format!(
+                "Cannot create session with handle {handle} because workspace is required."
+            )));
+        }
+
+        let workspace_record = if let Some(workspace_id) = request.workspace_id.as_deref() {
+            Some(
+                get_workspace_record(&self.pool, workspace_id)
+                    .await?
+                    .ok_or_else(|| {
+                        Error::NotFound(format!("workspace {workspace_id} not found"))
+                    })?,
+            )
+        } else if let Some(workspace) = request.workspace.as_deref() {
+            Some(upsert_workspace(&self.pool, workspace).await?)
+        } else {
+            None
+        };
+        if let (Some(workspace), Some(handle)) = (workspace_record.as_ref(), handle) {
+            self.ensure_handle_available(&workspace.workspace_id, handle)
+                .await?;
+        }
+        let runtime_workspace = workspace_record
+            .as_ref()
+            .map(|workspace| workspace.canonical_path.clone());
+
+        let session_id = new_session_id().to_string();
+        let ingest = EventIngestService::new(self.pool.clone());
+
+        ingest
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.clone(),
+                None,
+                EventSource::ExternalApi,
+                request.client_type.clone(),
+                EventType::SessionCreated,
+                json!({
+                    "workspace": runtime_workspace,
+                    "handle": request.handle,
+                    "role": request.role,
+                    "description": request.description,
+                    "execution_profile_id": request.execution_profile_id,
+                    "execution_profile_version": request.execution_profile_version,
+                    "metadata": request.metadata,
+                }),
+            ))
+            .await?;
+        ingest
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.clone(),
+                None,
+                EventSource::ExternalApi,
+                request.client_type.clone(),
+                EventType::SessionStarting,
+                json!({}),
+            ))
+            .await?;
+
+        let runtime = self.runtime.start_session(RuntimeStartRequest {
+            session_id: session_id.clone(),
+            client_type: request.client_type.clone(),
+            workspace: runtime_workspace.clone(),
+            handle: request.handle.clone(),
+            role: request.role.clone(),
+            agent_kind: pilotfy_agent_kind(&request.metadata),
+        })?;
+        self.upsert_runtime_binding(&session_id, &runtime).await?;
+        self.update_session_workspace(&session_id, workspace_record.as_ref())
+            .await?;
+
+        ingest
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.clone(),
+                None,
+                EventSource::RuntimeManager,
+                request.client_type.clone(),
+                EventType::SessionStarted,
+                json!({}),
+            ))
+            .await?;
+        if client_readiness_mode(&request.client_type)? == ReadinessMode::RuntimeManagerImmediate {
+            ingest
+                .ingest_event(DomainEvent::new(
+                    new_event_id().to_string(),
+                    session_id.clone(),
+                    None,
+                    EventSource::RuntimeManager,
+                    request.client_type.clone(),
+                    EventType::SessionReady,
+                    json!({}),
+                ))
+                .await?;
+        }
+
+        let initial_turn_id = if let Some(initial_task) = request.initial_task {
+            let turn_id = new_turn_id().to_string();
+            ingest
+                .ingest_event(DomainEvent::new(
+                    new_event_id().to_string(),
+                    session_id.clone(),
+                    Some(turn_id.clone()),
+                    EventSource::ExternalApi,
+                    request.client_type.clone(),
+                    EventType::TurnCreated,
+                    json!({
+                        "input": { "summary": initial_task.input },
+                        "metadata": initial_task.metadata,
+                    }),
+                ))
+                .await?;
+            ingest
+                .ingest_event(DomainEvent::new(
+                    new_event_id().to_string(),
+                    session_id.clone(),
+                    Some(turn_id.clone()),
+                    EventSource::ExternalApi,
+                    request.client_type.clone(),
+                    EventType::TurnQueued,
+                    json!({}),
+                ))
+                .await?;
+            match client_dispatch_mode(&request.client_type)? {
+                DispatchMode::GenericTestAdapter => {
+                    self.dispatch_initial_generic_turn(
+                        &session_id,
+                        &turn_id,
+                        &request.client_type,
+                        &initial_task.input,
+                        &runtime,
+                    )
+                    .await?;
+                }
+                DispatchMode::TmuxPaste => {
+                    self.wait_and_dispatch_initial_tui_turn(
+                        &session_id,
+                        &turn_id,
+                        &request.client_type,
+                        &initial_task.input,
+                        &runtime,
+                    )
+                    .await?;
+                }
+                DispatchMode::None => {}
+            }
+            Some(turn_id)
+        } else {
+            None
+        };
+
+        let query = ExternalQueryService::new(self.pool.clone());
+        let session = query
+            .get_session(&session_id)
+            .await?
+            .ok_or_else(|| crate::error::Error::Domain("created session missing".to_string()))?;
+        let initial_turn = if let Some(turn_id) = initial_turn_id {
+            query.get_turn(&session_id, &turn_id).await?
+        } else {
+            None
+        };
+        let data = json!({ "session": session, "initial_turn": initial_turn });
+
+        if let Some(key) = idempotency_key {
+            self.store_idempotency_response("create_session", key, &data)
+                .await?;
+        }
+
+        Ok(CreateSessionOutcome {
+            data,
+            duplicate: false,
+        })
+    }
+}
