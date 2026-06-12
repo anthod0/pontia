@@ -27,8 +27,6 @@
   let renamingWorkspace: WorkspaceView | null = null
   let renamingWorkspaceName = ''
   let savingRename = false
-  let registerEntry: WorkspaceDirectoryEntryView | null = null
-  let registerWorkspaceName = ''
 
   onMount(() => {
     const controller = new AbortController()
@@ -85,22 +83,14 @@
         deleteError = `Could not find registered workspace for ${entry.name}. Refresh and try again.`
         return
       }
-      await deleteRegisteredWorkspace(workspace.workspace_id, workspace.name ?? workspace.display_path)
+      await deleteRegisteredWorkspace(workspace.workspace_id)
       return
     }
-    registerError = null
-    registerEntry = entry
-    registerWorkspaceName = entry.name
-  }
-
-  async function confirmActivateEntry(): Promise<void> {
-    if (!registerEntry || !rootId || registering) return
+    if (!rootId || registering) return
     registering = true
     registerError = null
     try {
-      await registerWorkspace({ root_id: rootId, path: registerEntry.path, name: registerWorkspaceName.trim() || null })
-      registerEntry = null
-      registerWorkspaceName = ''
+      await registerWorkspace({ root_id: rootId, path: entry.path, name: entry.name })
       if (rootId) await openPath(browsePath)
     } catch (error) {
       registerError = error instanceof Error ? error.message : String(error)
@@ -131,8 +121,8 @@
     }
   }
 
-  async function deleteRegisteredWorkspace(workspaceId: string, label: string): Promise<void> {
-    if (deletingWorkspaceId || !confirm(`Delete workspace "${label}" from pilotfy? Files on disk will not be deleted.`)) return
+  async function deleteRegisteredWorkspace(workspaceId: string): Promise<void> {
+    if (deletingWorkspaceId) return
     deletingWorkspaceId = workspaceId
     deleteError = null
     try {
@@ -197,7 +187,7 @@
                   variant="outline"
                   aria-label={deletingWorkspaceId === workspace.workspace_id ? `Deleting ${workspaceLabel}` : `Delete ${workspaceLabel}`}
                   title={deletingWorkspaceId === workspace.workspace_id ? 'Deleting…' : 'Delete workspace'}
-                  onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id, workspaceLabel)}
+                  onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id)}
                   disabled={deletingWorkspaceId === workspace.workspace_id}
                 >
                   <Trash2 class="size-4" />
@@ -272,8 +262,16 @@
                       </button>
                     </Table.Cell>
                     <Table.Cell class="text-right">
-                      <Button size="sm" variant={entry.is_workspace ? 'secondary' : 'outline'} aria-label={entry.is_workspace ? `Deactivate ${entry.name}` : `Activate ${entry.name}`} title={entry.is_workspace ? 'Delete workspace registration' : 'Register as workspace'} onclick={() => void activateEntry(entry)}>
-                        Active
+                      {@const entryWorkspace = workspaceForEntry(entry)}
+                      <Button
+                        size="sm"
+                        variant={entry.is_workspace ? 'secondary' : 'outline'}
+                        aria-label={entry.is_workspace ? `Deactivate ${entry.name}` : `Activate ${entry.name}`}
+                        title={entry.is_workspace ? 'Remove workspace registration' : 'Register as workspace'}
+                        onclick={() => void activateEntry(entry)}
+                        disabled={registering || (!!entryWorkspace && deletingWorkspaceId === entryWorkspace.workspace_id)}
+                      >
+                        {entry.is_workspace ? 'Active' : 'Inactive'}
                         {#if entry.is_workspace}
                           <CheckCircle2 class="size-4 text-primary" />
                         {:else}
@@ -316,22 +314,3 @@
   </div>
 {/if}
 
-{#if registerEntry}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" role="presentation">
-    <form class="w-full max-w-md rounded-xl border bg-card p-5 shadow-xl" onsubmit={(event) => { event.preventDefault(); void confirmActivateEntry() }}>
-      <div class="space-y-2">
-        <h3 class="text-lg font-semibold">Confirm workspace registration</h3>
-        <p class="text-sm text-muted-foreground">Register <span class="font-medium text-foreground">{registerEntry.name}</span> as an execution workspace.</p>
-      </div>
-      <div class="mt-4 space-y-2">
-        <Label for="register-entry-name">Display name</Label>
-        <Input id="register-entry-name" bind:value={registerWorkspaceName} placeholder={registerEntry.name} />
-        <p class="text-xs text-muted-foreground">Edit the name, or clear it to keep the default registration behavior.</p>
-      </div>
-      <div class="mt-5 flex justify-end gap-2">
-        <Button type="button" variant="outline" onclick={() => { registerEntry = null; registerWorkspaceName = '' }} disabled={registering}>Cancel</Button>
-        <Button type="submit" disabled={registering}>{registering ? 'Registering…' : 'Register workspace'}</Button>
-      </div>
-    </form>
-  </div>
-{/if}

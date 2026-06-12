@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import WorkspacesPage from '../src/pages/WorkspacesPage.svelte';
@@ -119,21 +119,28 @@ test('renders a compact directory/action table and opens directories through the
   expect(mocks.browseWorkspaceRoot).toHaveBeenLastCalledWith('root-1', 'sandbox', {});
 });
 
-test('opens registration and rename dialogs from user actions', async () => {
+test('toggles workspace active state directly and keeps rename dialog for editing names', async () => {
   const user = userEvent.setup();
+  const confirmSpy = vi.spyOn(window, 'confirm');
   render(WorkspacesPage);
 
   await screen.findByRole('button', { name: 'Activate sandbox' });
   await user.click(screen.getByRole('button', { name: 'Activate sandbox' }));
 
-  expect(screen.getByRole('heading', { name: 'Confirm workspace registration' })).toBeInTheDocument();
-  expect(screen.getByLabelText('Display name')).toHaveValue('sandbox');
+  expect(mocks.registerWorkspace).toHaveBeenCalledWith({ root_id: 'root-1', path: 'sandbox', name: 'sandbox' });
+  expect(screen.queryByRole('heading', { name: 'Confirm workspace registration' })).not.toBeInTheDocument();
 
-  await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  await user.click(screen.getByRole('button', { name: 'Deactivate pilotfy' }));
+
+  expect(confirmSpy).not.toHaveBeenCalled();
+  expect(mocks.deleteWorkspace).toHaveBeenCalledWith('workspace-1');
+
   await user.click(screen.getByRole('button', { name: 'Rename pilotfy' }));
 
   expect(screen.getByRole('heading', { name: 'Confirm workspace rename' })).toBeInTheDocument();
   expect(screen.getByLabelText('Display name')).toHaveValue('pilotfy');
+
+  confirmSpy.mockRestore();
 });
 
 test('aborts initial settings workspace requests when the page unmounts', async () => {
