@@ -545,6 +545,22 @@ test('shows the initial prompt immediately after starting a chat while timeline 
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });
 
+test('shows workspace name in the selected chat composer pill while retaining full path metadata', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1', workspace: '/repo/pilotfy' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.workspaces.set([workspace({ workspace_id: 'workspace-1', name: 'Pilotfy Workspace', canonical_path: '/repo/pilotfy', display_path: '~/repo/pilotfy' })]);
+
+  render(ChatPage);
+
+  const workspacePill = await screen.findByLabelText('Workspace: /repo/pilotfy');
+  expect(workspacePill).toHaveTextContent('Pilotfy Workspace');
+  expect(workspacePill).not.toHaveTextContent('/repo/pilotfy');
+});
+
 test('lets existing chat routes use document scroll with a fixed bottom composer', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
@@ -761,7 +777,7 @@ test('highlights fenced code blocks in assistant markdown', async () => {
   expect(markdownContainer?.className).not.toContain('[&_pre_code]:p-0');
 });
 
-test('loads and renders an existing chat session with metadata, state, and workspace path above the prompt input without a page header', async () => {
+test('loads and renders an existing chat session with metadata, state, and workspace name above the prompt input without a page header', async () => {
   const selected = session({
     session_id: 'session-2',
     client_type: 'claude-code',
@@ -798,15 +814,17 @@ test('loads and renders an existing chat session with metadata, state, and works
   expect(screen.queryByText('Handle: second')).not.toBeInTheDocument();
   expect(screen.queryByText('Workspace: workspace-1')).not.toBeInTheDocument();
   const stateBadge = screen.getByText('busy').closest('[data-slot="badge"]');
-  const workspacePath = screen.getByText('~/repo/pilotfy');
+  const workspaceName = screen.getByText('pilotfy');
+  const workspaceBadge = screen.getByLabelText('Workspace: /repo/pilotfy');
   const clientDetail = screen.getByLabelText('Client: claude-code');
   const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
   expect(screen.queryByText('State: busy')).not.toBeInTheDocument();
   expect(stateBadge).not.toBeNull();
   expect(stateBadge).toHaveClass('h-7');
   expect(stateBadge?.querySelector('svg')).toHaveClass('lucide-activity');
-  expect(stateBadge?.compareDocumentPosition(workspacePath) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(workspacePath.compareDocumentPosition(clientDetail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(workspaceBadge).toContainElement(workspaceName);
+  expect(stateBadge?.compareDocumentPosition(workspaceBadge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(workspaceBadge.compareDocumentPosition(clientDetail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(clientDetail.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.queryByRole('button', { name: /new chat/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: /new chat/i })).not.toBeInTheDocument();

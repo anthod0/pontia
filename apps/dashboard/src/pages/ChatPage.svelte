@@ -162,8 +162,19 @@
     return handle || null
   }
 
+  function sessionWorkspace(session: SessionView): WorkspaceView | null {
+    if (!session.workspace_id) return null
+    return $workspaces.find((workspace) => workspace.workspace_id === session.workspace_id) ?? null
+  }
+
+  function sessionWorkspaceTitle(session: SessionView): string {
+    const workspace = sessionWorkspace(session)
+    return workspace?.name ?? workspace?.display_path ?? session.workspace ?? session.workspace_id ?? 'No workspace'
+  }
+
   function sessionWorkspacePath(session: SessionView): string {
-    return session.workspace ?? session.workspace_id ?? 'No workspace'
+    const workspace = sessionWorkspace(session)
+    return workspace?.canonical_path ?? workspace?.display_path ?? session.workspace ?? session.workspace_id ?? 'No workspace'
   }
 
   function plannerTaskIdForSession(session: SessionView | null): string | null {
@@ -485,7 +496,7 @@
                   aria-label={`Workspace: ${sessionWorkspacePath(selectedSession)}`}
                 >
                   <Folder class="size-4" aria-hidden="true" />
-                  <span class="min-w-0 truncate">{sessionWorkspacePath(selectedSession)}</span>
+                  <span class="min-w-0 truncate">{sessionWorkspaceTitle(selectedSession)}</span>
                 </Badge>
                 <Badge
                   variant="outline"
