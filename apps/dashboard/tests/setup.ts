@@ -24,5 +24,6 @@ class TestResizeObserver {
 
 Object.defineProperty(window, 'ResizeObserver', { writable: true, value: TestResizeObserver });
 Object.defineProperty(globalThis, 'ResizeObserver', { writable: true, value: TestResizeObserver });
+Object.defineProperty(window, 'scrollTo', { writable: true, value: () => {} });
 
 afterEach(() => cleanup());

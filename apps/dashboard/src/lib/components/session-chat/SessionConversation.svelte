@@ -7,7 +7,7 @@
   import * as Sheet from '$lib/components/ui/sheet/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { chatAutoScrollKey, scrollToBottom } from '../../session-chat/autoScroll'
+  import { chatAutoScrollKey, scrollDocumentToBottom } from '../../session-chat/autoScroll'
   import DraftDagFlow from '../../../components/dag/DraftDagFlow.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
   import type { DagProposalView, JsonObject } from '../../../api/types'
@@ -30,7 +30,7 @@
 
   $effect(() => {
     scrollKey
-    void tick().then(() => scrollToBottom(scrollContainer))
+    void tick().then(scrollDocumentToBottom)
   })
 
   function lastAssistantMessageId(chatMessages: SessionChatMessage[]): string | null {

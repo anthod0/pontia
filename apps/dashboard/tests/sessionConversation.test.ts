@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/svelte';
-import { expect, test } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/svelte';
+import { expect, test, vi } from 'vitest';
 import SessionConversation from '../src/lib/components/session-chat/SessionConversation.svelte';
 import type { SessionChatMessage } from '../src/lib/session-chat/sessionChat';
 
@@ -25,6 +25,18 @@ test('conversation renders messages without role headers', () => {
   expect(screen.getByText('I will inspect it now.')).toBeInTheDocument();
   expect(screen.queryByText('You')).not.toBeInTheDocument();
   expect(screen.queryByText('AI')).not.toBeInTheDocument();
+});
+
+test('conversation scrolls the document to the bottom when a new message arrives', async () => {
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
+  const { rerender } = render(SessionConversation, { props: { messages: [messages[0]] } });
+
+  await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+  scrollTo.mockClear();
+  await rerender({ messages });
+
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
 });
 
 test('conversation uses session busy state to keep thought summary active', () => {
