@@ -352,7 +352,59 @@ beforeEach(() => {
     },
     planning_turn: { task_id: 'task-new', session_id: 'session-planner', turn_id: 'turn-planner', profile_id: 'planner' },
   } satisfies CreateDagTaskResult);
+  window.localStorage.clear();
+  document.body.style.pointerEvents = '';
   vi.clearAllMocks();
+});
+
+test('prefers the last selected new chat workspace when it is still available', async () => {
+  window.localStorage.setItem('pilotfy.chat.lastWorkspaceId', 'workspace-2');
+  mocks.workspaces.set([
+    workspace({ workspace_id: 'workspace-1', name: 'pilotfy' }),
+    workspace({ workspace_id: 'workspace-2', name: 'sandbox', canonical_path: '/repo/sandbox', display_path: '~/repo/sandbox' }),
+  ]);
+
+  render(ChatPage);
+
+  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('sandbox');
+});
+
+test('falls back to the first new chat workspace when the remembered workspace is unavailable', async () => {
+  window.localStorage.setItem('pilotfy.chat.lastWorkspaceId', 'missing-workspace');
+  mocks.workspaces.set([
+    workspace({ workspace_id: 'workspace-1', name: 'pilotfy' }),
+    workspace({ workspace_id: 'workspace-2', name: 'sandbox', canonical_path: '/repo/sandbox', display_path: '~/repo/sandbox' }),
+  ]);
+
+  render(ChatPage);
+
+  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('pilotfy');
+});
+
+test('remembers the selected new chat workspace after starting a chat', async () => {
+  const user = userEvent.setup();
+  const created = session({ session_id: 'session-selected-workspace' });
+  mocks.createSession.mockResolvedValue({ session: created, initial_turn: turn({ session_id: 'session-selected-workspace' }) } satisfies CreateSessionResult);
+  mocks.workspaces.set([
+    workspace({ workspace_id: 'workspace-1', name: 'pilotfy' }),
+    workspace({ workspace_id: 'workspace-2', name: 'sandbox', canonical_path: '/repo/sandbox', display_path: '~/repo/sandbox' }),
+  ]);
+
+  render(ChatPage);
+
+  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  const workspaceSelector = screen.getByLabelText(/workspace/i);
+  await user.click(workspaceSelector);
+  await user.keyboard('{ArrowDown}{Enter}{Escape}');
+  expect(workspaceSelector).toHaveTextContent('sandbox');
+  document.body.style.pointerEvents = '';
+  await user.type(screen.getByPlaceholderText('Ask the agent to implement, inspect, or explain something…'), 'Use sandbox');
+  await user.click(screen.getByRole('button', { name: /start chat/i }));
+
+  await vi.waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({ workspace_id: 'workspace-2' })));
+  expect(window.localStorage.getItem('pilotfy.chat.lastWorkspaceId')).toBe('workspace-2');
 });
 
 test('renders a clean centered prompt input on the bare chat route instead of selecting an existing session', async () => {

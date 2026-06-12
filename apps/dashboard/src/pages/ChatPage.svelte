@@ -100,12 +100,13 @@
   }
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
+  const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pilotfy.chat.lastWorkspaceId'
   const newChatSelectorTriggerClass = 'h-7 rounded-full px-3 text-sm font-normal text-muted-foreground'
 
   onMount(async () => {
     selectedSessionId = requestedSessionIdFromLocation()
     await Promise.all([loadSessions(), loadWorkspaces(), loadAgentProfiles()])
-    if (!createWorkspaceId && $workspaces.length) createWorkspaceId = $workspaces[0].workspace_id
+    ensureCreateWorkspaceSelection()
     if (selectedSessionId) {
       resetTimelineState(selectedSessionId)
       await Promise.all([loadSessionDetail(selectedSessionId), loadSessionTimeline(selectedSessionId, { mode: 'rebuild' })])
@@ -127,11 +128,14 @@
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
   $: messages = chatMessagesWithOptimistic(selectedSessionId, $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : [], $optimisticInitialMessages)
+  $: if ($workspaces.length && (!createWorkspaceId || !$workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId))) {
+    createWorkspaceId = preferredCreateWorkspaceId()
+  }
   $: selectedProfile = $agentProfiles.find((profile) => profile.profile_id === createProfileId) ?? null
   $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
   $: clientTypeOptions = clientTypeOptionsForProfile(selectedProfile)
   $: if (!clientTypeOptions.includes(createClientType)) createClientType = clientTypeOptions[0] ?? createClientType
-  $: if (!createWorkspaceId && $workspaces.length) createWorkspaceId = $workspaces[0].workspace_id
+  $: if (createWorkspaceId && $workspaces.length) rememberCreateWorkspaceSelection(createWorkspaceId)
   $: canCreate = Boolean(prompt.trim() && createWorkspaceId && createClientType.trim() && !creating)
   $: canSend = canSendSessionMessage(selectedSession, input) && !submitting
   $: plannerTaskId = plannerTaskIdForSession(selectedSession)
@@ -157,6 +161,35 @@
 
   function workspaceTitle(workspace: WorkspaceView): string {
     return workspace.name ?? workspace.display_path ?? workspace.workspace_id
+  }
+
+  function readRememberedWorkspaceId(): string | null {
+    try {
+      return window.localStorage.getItem(LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY)
+    } catch {
+      return null
+    }
+  }
+
+  function rememberCreateWorkspaceSelection(workspaceId: string): void {
+    if (!workspaceId || !$workspaces.some((workspace) => workspace.workspace_id === workspaceId)) return
+    try {
+      window.localStorage.setItem(LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY, workspaceId)
+    } catch {
+      // Ignore unavailable storage; the workspace selector should still work.
+    }
+  }
+
+  function preferredCreateWorkspaceId(): string {
+    const rememberedWorkspaceId = readRememberedWorkspaceId()
+    if (rememberedWorkspaceId && $workspaces.some((workspace) => workspace.workspace_id === rememberedWorkspaceId)) return rememberedWorkspaceId
+    return $workspaces[0]?.workspace_id ?? ''
+  }
+
+  function ensureCreateWorkspaceSelection(): void {
+    if (!$workspaces.length) return
+    if (createWorkspaceId && $workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId)) return
+    createWorkspaceId = preferredCreateWorkspaceId()
   }
 
   function profileTitle(profile: AgentProfileView): string {
