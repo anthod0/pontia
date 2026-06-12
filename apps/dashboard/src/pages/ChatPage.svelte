@@ -12,13 +12,17 @@
   import * as Select from '$lib/components/ui/select/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
-  import type { AgentProfileView, DashboardStreamEvent, SessionView, TurnView, WorkspaceView } from '../api/types'
+  import type { AgentProfileView, DashboardStreamEvent, SessionView, WorkspaceView } from '../api/types'
   import {
     canSendSessionMessage,
     isTerminalChatSession,
     timelineItemsToChatMessages,
   } from '$lib/session-chat/sessionChat'
-  import type { SessionChatMessage } from '$lib/session-chat/sessionChat'
+  import {
+    chatMessagesWithOptimistic,
+    optimisticInitialMessages,
+    rememberOptimisticInitialMessage,
+  } from '../stores/optimisticChat'
   import {
     clientTypeOptionsForProfile,
     defaultHandleForProfile,
@@ -79,7 +83,6 @@
   let advancedControlsOpen = false
   let loadedProposalTaskId = ''
   let appliedRedirectTaskId = ''
-  let optimisticInitialMessages: Record<string, SessionChatMessage> = {}
   let unsubscribeDashboardEvents: (() => void) | null = null
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
@@ -101,7 +104,7 @@
   })
 
   $: selectedSession = selectedSessionId ? ($sessions.find((session) => session.session_id === selectedSessionId) ?? $sessionDetail?.session ?? null) : null
-  $: messages = chatMessagesWithOptimistic(selectedSessionId, $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : [])
+  $: messages = chatMessagesWithOptimistic(selectedSessionId, $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : [], $optimisticInitialMessages)
   $: selectedProfile = $agentProfiles.find((profile) => profile.profile_id === createProfileId) ?? null
   $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
   $: clientTypeOptions = clientTypeOptionsForProfile(selectedProfile)
@@ -195,33 +198,6 @@
     actionError = null
     resetTimelineState()
     navigate('/chat')
-  }
-
-  function rememberOptimisticInitialMessage(sessionId: string, input: string, turn: Pick<TurnView, 'turn_id' | 'created_at'> | null = null): void {
-    const content = input.trim()
-    if (!sessionId || !content) return
-    const turnId = turn?.turn_id ?? `${sessionId}:initial`
-    optimisticInitialMessages = {
-      ...optimisticInitialMessages,
-      [sessionId]: {
-        id: `optimistic:${turnId}:user`,
-        turnId,
-        role: 'user',
-        content,
-        status: 'sent',
-        createdAt: turn?.created_at ?? new Date().toISOString(),
-      },
-    }
-  }
-
-  function chatMessagesWithOptimistic(sessionId: string, loadedMessages: SessionChatMessage[]): SessionChatMessage[] {
-    const optimistic = optimisticInitialMessages[sessionId]
-    if (!optimistic) return loadedMessages
-    const alreadyLoaded = loadedMessages.some((message) => (
-      message.role === 'user'
-      && (message.turnId === optimistic.turnId || message.content.trim() === optimistic.content.trim())
-    ))
-    return alreadyLoaded ? loadedMessages : [optimistic, ...loadedMessages]
   }
 
   function applyProfileDefaults(): void {

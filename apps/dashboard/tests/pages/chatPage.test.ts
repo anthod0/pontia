@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import ChatPage from '../../src/pages/ChatPage.svelte';
@@ -511,6 +511,13 @@ test('shows the initial prompt immediately after starting a chat while timeline 
   await fireEvent.click(screen.getByRole('button', { name: /start chat/i }));
 
   await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new'));
+  expect(await screen.findByText('hi')).toBeInTheDocument();
+  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
+
+  cleanup();
+  mocks.pathParams = { sessionId: 'session-new' };
+  render(ChatPage);
+
   expect(await screen.findByText('hi')).toBeInTheDocument();
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });
