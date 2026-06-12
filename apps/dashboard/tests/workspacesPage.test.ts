@@ -100,9 +100,8 @@ test('renders workspace browser and active workspace cards from store data', asy
   const activeSection = screen.getByText('Active workspaces').closest('.xl\\:order-2');
   expect(activeSection).not.toBeNull();
   expect(within(activeSection as HTMLElement).getByText('pilotfy')).toBeInTheDocument();
-  expect(container.querySelector('.workspace-folder-preview')).toBeInTheDocument();
-  expect(container.querySelector('.workspace-folder-tab')).toBeInTheDocument();
-  expect(container.querySelector('.workspace-folder-body')).toBeInTheDocument();
+  expect(within(activeSection as HTMLElement).getByTestId('active-workspaces-list')).toBeInTheDocument();
+  expect(container.querySelector('.workspace-folder-preview')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Rename pilotfy' })).toBeInTheDocument();
 });
 

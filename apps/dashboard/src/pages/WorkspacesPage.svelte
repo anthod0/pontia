@@ -173,43 +173,35 @@
       {:else if !$workspaces.length}
         <Empty.Root><Empty.Header><Empty.Title>No workspaces</Empty.Title><Empty.Description>Use Active in the browser below to register a directory.</Empty.Description></Empty.Header></Empty.Root>
       {:else}
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+        <div class="divide-y rounded-lg border" data-testid="active-workspaces-list">
           {#each $workspaces as workspace}
             {@const workspaceLabel = workspace.name ?? workspace.display_path}
-            <div class="rounded-xl border bg-card p-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md">
-              <div class="flex items-start gap-3">
-                <div class="workspace-folder-preview" aria-hidden="true">
-                  <div class="workspace-folder-tab"></div>
-                  <div class="workspace-folder-body">
-                    <FolderOpen class="size-5" />
-                  </div>
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="font-medium">{workspaceLabel}</div>
-                  <div class="truncate text-muted-foreground" title={workspace.canonical_path}>{workspace.canonical_path}</div>
-                  <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="secondary">{workspace.state}</Badge><span>Updated {formatDateTime(workspace.updated_at)}</span></div>
-                </div>
-                <div class="flex shrink-0 gap-2">
-                  <Button
-                    size="icon-sm"
-                    variant="outline"
-                    aria-label={`Rename ${workspaceLabel}`}
-                    title="Rename workspace"
-                    onclick={() => startRenamingWorkspace(workspace)}
-                  >
-                    <Pencil class="size-4" />
-                  </Button>
-                  <Button
-                    size="icon-sm"
-                    variant="outline"
-                    aria-label={deletingWorkspaceId === workspace.workspace_id ? `Deleting ${workspaceLabel}` : `Delete ${workspaceLabel}`}
-                    title={deletingWorkspaceId === workspace.workspace_id ? 'Deleting…' : 'Delete workspace'}
-                    onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id, workspaceLabel)}
-                    disabled={deletingWorkspaceId === workspace.workspace_id}
-                  >
-                    <Trash2 class="size-4" />
-                  </Button>
-                </div>
+            <div class="flex flex-col gap-3 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div class="min-w-0 flex-1">
+                <div class="font-medium">{workspaceLabel}</div>
+                <div class="truncate text-muted-foreground" title={workspace.canonical_path}>{workspace.canonical_path}</div>
+                <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="secondary">{workspace.state}</Badge><span>Updated {formatDateTime(workspace.updated_at)}</span></div>
+              </div>
+              <div class="flex shrink-0 gap-2 sm:justify-end">
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label={`Rename ${workspaceLabel}`}
+                  title="Rename workspace"
+                  onclick={() => startRenamingWorkspace(workspace)}
+                >
+                  <Pencil class="size-4" />
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label={deletingWorkspaceId === workspace.workspace_id ? `Deleting ${workspaceLabel}` : `Delete ${workspaceLabel}`}
+                  title={deletingWorkspaceId === workspace.workspace_id ? 'Deleting…' : 'Delete workspace'}
+                  onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id, workspaceLabel)}
+                  disabled={deletingWorkspaceId === workspace.workspace_id}
+                >
+                  <Trash2 class="size-4" />
+                </Button>
               </div>
             </div>
           {/each}
@@ -343,57 +335,3 @@
     </form>
   </div>
 {/if}
-
-<style>
-  .workspace-folder-preview {
-    position: relative;
-    width: 4.25rem;
-    height: 3.25rem;
-    flex: none;
-    filter: drop-shadow(0 0.45rem 0.6rem oklch(0 0 0 / 12%));
-  }
-
-  .workspace-folder-tab {
-    position: absolute;
-    left: 0.35rem;
-    top: 0.15rem;
-    width: 2rem;
-    height: 0.9rem;
-    border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 6%);
-    border-bottom: 0;
-    border-radius: 0.5rem 0.5rem 0 0;
-    background: linear-gradient(135deg, color-mix(in oklch, var(--muted), var(--primary) 14%), var(--muted));
-  }
-
-  .workspace-folder-body {
-    position: absolute;
-    inset: 0.8rem 0 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 8%);
-    border-radius: 0.55rem 0.75rem 0.75rem 0.75rem;
-    background:
-      radial-gradient(circle at 78% 18%, color-mix(in oklch, var(--primary), transparent 82%), transparent 35%),
-      linear-gradient(145deg, color-mix(in oklch, var(--muted), var(--background) 14%), color-mix(in oklch, var(--muted), var(--primary) 10%));
-    color: color-mix(in oklch, var(--muted-foreground), var(--foreground) 18%);
-  }
-
-  .workspace-folder-body::after {
-    position: absolute;
-    right: -0.6rem;
-    bottom: -0.45rem;
-    width: 3.1rem;
-    height: 1.45rem;
-    content: '';
-    border-radius: 999px;
-    background: color-mix(in oklch, var(--background), transparent 62%);
-    transform: rotate(-16deg);
-  }
-
-  .workspace-folder-body :global(svg) {
-    position: relative;
-    z-index: 1;
-  }
-</style>
