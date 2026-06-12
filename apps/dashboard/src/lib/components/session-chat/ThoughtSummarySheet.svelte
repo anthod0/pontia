@@ -2,6 +2,7 @@
   import { CircleDot, Hammer, Sparkles } from '@lucide/svelte'
   import * as Sheet from '$lib/components/ui/sheet/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
+  import { Button } from '$lib/components/ui/button/index.js'
   import type { SessionChatThoughtStep } from '../../session-chat/sessionChat'
 
   interface Props {
@@ -11,6 +12,8 @@
   }
 
   let { steps, active = false, open = $bindable(false) }: Props = $props()
+  let newestFirst = $state(true)
+  let displayedSteps = $derived(newestFirst ? [...steps].reverse() : steps)
 
   function labelForStep(step: SessionChatThoughtStep): string {
     if (step.kind === 'thinking') return 'Thinking'
@@ -32,13 +35,18 @@
           <Sheet.Title>Thought details</Sheet.Title>
           <Sheet.Description>{steps.length} step{steps.length === 1 ? '' : 's'}{active ? ' · working' : ''}</Sheet.Description>
         </div>
-        {#if active}<Badge variant="secondary">working</Badge>{/if}
+        <div class="flex shrink-0 items-center gap-2">
+          {#if active}<Badge variant="secondary">working</Badge>{/if}
+          <Button variant="outline" size="sm" onclick={() => (newestFirst = !newestFirst)}>
+            {newestFirst ? 'Show oldest first' : 'Show newest first'}
+          </Button>
+        </div>
       </div>
     </Sheet.Header>
 
     <div class="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">
-      {#if steps.length}
-        {#each steps as step (step.id)}
+      {#if displayedSteps.length}
+        {#each displayedSteps as step (step.id)}
           {@const Icon = iconForStep(step)}
           <article class="rounded-xl border bg-background/70 p-3">
             <div class="mb-2 flex min-w-0 items-center gap-2">
