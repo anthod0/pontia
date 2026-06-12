@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => {
     sessions: writableStore([]),
     sessionsLoading: writableStore(false),
     loadSessions: vi.fn(async () => []),
+    updateSessionTitle: vi.fn(async () => undefined),
   };
 });
 
@@ -43,6 +44,7 @@ vi.mock('../src/stores/sessions', () => ({
   sessions: mocks.sessions,
   sessionsLoading: mocks.sessionsLoading,
   loadSessions: mocks.loadSessions,
+  updateSessionTitle: mocks.updateSessionTitle,
 }));
 
 beforeEach(() => {
@@ -141,6 +143,40 @@ test('sidebar shows recent sessions with active dot, including exited sessions, 
   await fireEvent.click(screen.getByText('main · coder'));
 
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-active');
+});
+
+test('sidebar renames a recent session from the hover edit action without opening it', async () => {
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      title: 'Original title',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-1',
+      workspace: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+  ]);
+  const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Renamed session');
+
+  render(AppSidebarHost);
+
+  await fireEvent.click(screen.getByRole('button', { name: /rename session original title/i }));
+
+  expect(promptSpy).toHaveBeenCalledWith('Rename session', 'Original title');
+  expect(mocks.updateSessionTitle).toHaveBeenCalledWith('session-active', 'Renamed session');
+  expect(mocks.navigate).not.toHaveBeenCalled();
+
+  promptSpy.mockRestore();
 });
 
 test('sidebar only marks the current route as active', () => {

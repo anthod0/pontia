@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { Activity, AtSign, Bot, Folder, GitBranch, LogOut, MoreHorizontal, Pencil, RotateCw, Terminal, TerminalSquare } from '@lucide/svelte'
+  import { Activity, AtSign, Bot, EllipsisVertical, Folder, GitBranch, LogOut, Pencil, RotateCw, Terminal, TerminalSquare } from '@lucide/svelte'
   import { toast } from 'svelte-sonner'
   import { getPathParams, navigate } from 'svelte-mini-router'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -475,17 +475,6 @@
             <div class="mx-auto w-full max-w-7xl">
             <div role="group" aria-label="Session status and controls" class="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2 px-2">
               <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                {#if sessionTitle(selectedSession)}
-                  <Badge
-                    variant="outline"
-                    class="h-7 max-w-full justify-start gap-1.5 px-3 text-sm font-medium"
-                    title={`Session: ${sessionTitle(selectedSession)}`}
-                    aria-label={`Session: ${sessionTitle(selectedSession)}`}
-                  >
-                    <Pencil class="size-4" aria-hidden="true" />
-                    <span class="min-w-0 truncate">{sessionTitle(selectedSession)}</span>
-                  </Badge>
-                {/if}
                 <Badge variant="secondary" class="h-7 gap-1.5 px-3 text-sm">
                   <Activity class="size-4" /> {selectedSession.state}
                 </Badge>
@@ -541,7 +530,7 @@
                     aria-label="Advanced session controls"
                     onclick={() => (advancedControlsOpen = !advancedControlsOpen)}
                   >
-                    <MoreHorizontal class="size-4" /> Advanced
+                    <EllipsisVertical class="size-4" />
                   </Button>
                   {#if advancedControlsOpen}
                     <div role="menu" class="absolute right-0 z-10 mt-1 w-48 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">

@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { GitBranch, Home, SquarePen } from '@lucide/svelte'
+  import { GitBranch, Home, Pencil, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
-  import { sessions, sessionsLoading } from '../../stores/sessions'
+  import { sessions, sessionsLoading, updateSessionTitle } from '../../stores/sessions'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
+  import type { SessionView } from '../../api/types'
 
   type Item = {
     label: string
@@ -20,6 +21,7 @@
   const recentSessionLimit = 8
 
   let currentPath = $state(normalizePath(window.location.pathname))
+  let renamingSessionId = $state<string | null>(null)
   let recentSessions = $derived(visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit))
 
   function normalizePath(pathname: string) {
@@ -54,6 +56,19 @@
     navigate(`/chat/${sessionId}`)
     currentPath = `/chat/${sessionId}`
     window.dispatchEvent(new PopStateEvent('popstate'))
+  }
+
+  async function renameSession(event: MouseEvent, session: SessionView) {
+    event.stopPropagation()
+    const currentTitle = session.title ?? sessionChatTitle(session)
+    const nextTitle = window.prompt('Rename session', currentTitle)
+    if (nextTitle === null) return
+    renamingSessionId = session.session_id
+    try {
+      await updateSessionTitle(session.session_id, nextTitle.trim() || null)
+    } finally {
+      renamingSessionId = null
+    }
   }
 </script>
 
@@ -102,9 +117,18 @@
                 <Sidebar.MenuButton isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
                   <span class="line-clamp-1">{sessionChatTitle(session)}</span>
                   {#if isSessionActiveState(session.state)}
-                    <span class="ml-auto size-2 shrink-0 rounded-full bg-green-500 group-data-[collapsible=icon]:hidden" aria-label="Active session"></span>
+                    <span class="ml-auto size-2 shrink-0 rounded-full bg-green-500 group-hover/menu-item:opacity-0 group-focus-within/menu-item:opacity-0 group-data-[collapsible=icon]:hidden" aria-label="Active session"></span>
                   {/if}
                 </Sidebar.MenuButton>
+                <Sidebar.MenuAction
+                  showOnHover
+                  aria-label={`Rename session ${sessionChatTitle(session)}`}
+                  title="Rename session"
+                  disabled={renamingSessionId === session.session_id}
+                  onclick={(event) => void renameSession(event, session)}
+                >
+                  <Pencil />
+                </Sidebar.MenuAction>
               </Sidebar.MenuItem>
             {/each}
           {:else}
