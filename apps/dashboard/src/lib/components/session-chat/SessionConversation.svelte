@@ -78,7 +78,7 @@
             {#if chatMessage.role === 'assistant' && (chatMessage.thoughtSteps?.length || chatMessage.status === 'pending')}
               <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps ?? []} active={chatMessage.status === 'pending'} />
             {/if}
-            <Message.Response content={chatMessage.content} />
+            <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
           </Message.Content>
         </Message.Root>
 

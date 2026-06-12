@@ -604,6 +604,31 @@ test('keeps whitespace preservation on message text instead of the bubble wrappe
   expect(userBubble).not.toHaveClass('whitespace-pre-wrap');
 });
 
+test('renders assistant output as markdown while leaving user prompts as plain text', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({
+      session_id: 'session-2',
+      input: { summary: '**literal prompt**' },
+      output: { summary: '**bold output**\n\n- first item' },
+    })],
+    inboxMessages: [],
+    events: [],
+    artifacts: [],
+  });
+
+  const { container } = render(ChatPage);
+
+  expect(await screen.findByText('**literal prompt**')).toBeInTheDocument();
+  expect(container.querySelector('strong')?.textContent).toBe('bold output');
+  expect(container.querySelector('li')?.textContent).toBe('first item');
+});
+
 test('loads and renders an existing chat session with metadata, state, and workspace path above the prompt input without a page header', async () => {
   const selected = session({
     session_id: 'session-2',
