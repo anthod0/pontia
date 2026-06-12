@@ -89,7 +89,7 @@ test('sidebar shows workflow items and omits settings from navigation', () => {
   expect(screen.queryByText('Settings')).not.toBeInTheDocument();
 });
 
-test('sidebar shows recent sessions with active dot, including exited sessions, and opens chat for the selected session', async () => {
+test('sidebar shows recent sessions with semantic status dot except exited sessions, and opens chat for the selected session', async () => {
   mocks.sessions.set([
     {
       session_id: 'session-active',
@@ -136,7 +136,8 @@ test('sidebar shows recent sessions with active dot, including exited sessions, 
   expect(closedSessionButton).not.toBeNull();
   expect(activeSessionButton?.querySelector('.lucide-message-circle')).not.toBeInTheDocument();
   expect(closedSessionButton?.querySelector('.lucide-message-circle')).not.toBeInTheDocument();
-  expect(screen.getByLabelText('Active session')).toBeInTheDocument();
+  expect(screen.getByLabelText('idle session')).toBeInTheDocument();
+  expect(screen.queryByLabelText('exited session')).not.toBeInTheDocument();
   expect(screen.queryByText('idle')).not.toBeInTheDocument();
   expect(screen.queryByText('exited')).not.toBeInTheDocument();
 

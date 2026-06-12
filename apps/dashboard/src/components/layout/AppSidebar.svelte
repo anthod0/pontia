@@ -43,8 +43,24 @@
     return activeSessionIdFromPath() === sessionId
   }
 
-  function isSessionActiveState(state: string) {
-    return state !== 'exited' && state !== 'error'
+  function isSessionVisibleState(state: string) {
+    return state !== 'exited'
+  }
+
+  function sessionStateDotClass(state: string) {
+    switch (state) {
+      case 'busy':
+      case 'starting':
+        return 'bg-blue-500'
+      case 'idle':
+        return 'bg-emerald-500'
+      case 'interrupted':
+        return 'bg-amber-500'
+      case 'error':
+        return 'bg-destructive'
+      default:
+        return 'bg-muted-foreground'
+    }
   }
 
   function notifyRouteChanged() {
@@ -121,8 +137,8 @@
               <Sidebar.MenuItem>
                 <Sidebar.MenuButton isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
                   <span class="line-clamp-1">{sessionChatTitle(session)}</span>
-                  {#if isSessionActiveState(session.state)}
-                    <span class="ml-auto size-2 shrink-0 rounded-full bg-green-500 group-hover/menu-item:opacity-0 group-focus-within/menu-item:opacity-0 group-data-[collapsible=icon]:hidden" aria-label="Active session"></span>
+                  {#if isSessionVisibleState(session.state)}
+                    <span class={`ml-auto size-2 shrink-0 rounded-full ${sessionStateDotClass(session.state)} group-hover/menu-item:opacity-0 group-focus-within/menu-item:opacity-0 group-data-[collapsible=icon]:hidden`} aria-label={`${session.state} session`}></span>
                   {/if}
                 </Sidebar.MenuButton>
                 <Sidebar.MenuAction
