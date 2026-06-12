@@ -592,7 +592,10 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
 
   const { container } = render(ChatPage);
 
-  await screen.findByPlaceholderText('Send a follow-up message…');
+  const composerInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  expect(composerInput).toHaveClass('h-10');
+  expect(composerInput).toHaveClass('min-h-10');
+  expect(composerInput).toHaveClass('md:min-h-20');
   const pageSection = container.querySelector('section');
   expect(pageSection).not.toHaveClass('h-full');
   expect(pageSection).not.toHaveClass('min-h-0');
