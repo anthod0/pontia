@@ -25,7 +25,7 @@
 </script>
 
 <Sheet.Root bind:open>
-  <Sheet.Content class="w-[92vw] gap-0 overflow-hidden p-0 sm:max-w-xl">
+  <Sheet.Content class="w-[92vw] gap-0 overflow-hidden p-0 data-[side=right]:sm:max-w-4xl sm:max-w-4xl">
     <Sheet.Header class="border-b px-6 py-4">
       <div class="flex flex-wrap items-start justify-between gap-3 pr-10">
         <div>
