@@ -236,7 +236,7 @@ export function createPilotfyPiExtension(pi: ExtensionAPI, dependencies: Pilotfy
       pendingRefreshTimer = undefined;
       if (activeTurn !== state || state.ended) return;
       void state.reporter.report(state.context, buildSessionMessageUpdatedEvent(state.context, "update"));
-    }, 1000);
+    }, 500);
   }
 
   async function reportFinalMessageRefresh(state: ActiveTurnState): Promise<void> {
