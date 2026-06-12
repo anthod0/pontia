@@ -12,12 +12,13 @@
   import * as Select from '$lib/components/ui/select/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
-  import type { AgentProfileView, DashboardStreamEvent, SessionView, WorkspaceView } from '../api/types'
+  import type { AgentProfileView, DashboardStreamEvent, SessionView, TurnView, WorkspaceView } from '../api/types'
   import {
     canSendSessionMessage,
     isTerminalChatSession,
     timelineItemsToChatMessages,
   } from '$lib/session-chat/sessionChat'
+  import type { SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
     clientTypeOptionsForProfile,
     defaultHandleForProfile,
@@ -78,6 +79,7 @@
   let advancedControlsOpen = false
   let loadedProposalTaskId = ''
   let appliedRedirectTaskId = ''
+  let optimisticInitialMessages: Record<string, SessionChatMessage> = {}
   let unsubscribeDashboardEvents: (() => void) | null = null
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
@@ -99,7 +101,7 @@
   })
 
   $: selectedSession = selectedSessionId ? ($sessions.find((session) => session.session_id === selectedSessionId) ?? $sessionDetail?.session ?? null) : null
-  $: messages = $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : []
+  $: messages = chatMessagesWithOptimistic(selectedSessionId, $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : [])
   $: selectedProfile = $agentProfiles.find((profile) => profile.profile_id === createProfileId) ?? null
   $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
   $: clientTypeOptions = clientTypeOptionsForProfile(selectedProfile)
@@ -195,6 +197,33 @@
     navigate('/chat')
   }
 
+  function rememberOptimisticInitialMessage(sessionId: string, input: string, turn: Pick<TurnView, 'turn_id' | 'created_at'> | null = null): void {
+    const content = input.trim()
+    if (!sessionId || !content) return
+    const turnId = turn?.turn_id ?? `${sessionId}:initial`
+    optimisticInitialMessages = {
+      ...optimisticInitialMessages,
+      [sessionId]: {
+        id: `optimistic:${turnId}:user`,
+        turnId,
+        role: 'user',
+        content,
+        status: 'sent',
+        createdAt: turn?.created_at ?? new Date().toISOString(),
+      },
+    }
+  }
+
+  function chatMessagesWithOptimistic(sessionId: string, loadedMessages: SessionChatMessage[]): SessionChatMessage[] {
+    const optimistic = optimisticInitialMessages[sessionId]
+    if (!optimistic) return loadedMessages
+    const alreadyLoaded = loadedMessages.some((message) => (
+      message.role === 'user'
+      && (message.turnId === optimistic.turnId || message.content.trim() === optimistic.content.trim())
+    ))
+    return alreadyLoaded ? loadedMessages : [optimistic, ...loadedMessages]
+  }
+
   function applyProfileDefaults(): void {
     if (!selectedProfile) return
     createClientType = clientTypeOptionsForProfile(selectedProfile)[0] ?? createClientType
@@ -227,13 +256,18 @@
     actionError = null
     try {
       if (taskMode) {
+        const initialPrompt = prompt.trim()
         const result = await createDagTask({
-          input: prompt.trim(),
+          input: initialPrompt,
           workspace: selectedWorkspace?.canonical_path ?? selectedWorkspace?.display_path ?? createWorkspaceId,
           client_type: createClientType.trim() || 'pi',
           metadata: { source: 'dashboard_chat', action: 'manual_task' },
         })
         selectedSessionId = result.planning_turn.session_id
+        rememberOptimisticInitialMessage(result.planning_turn.session_id, initialPrompt, {
+          turn_id: result.planning_turn.turn_id,
+          created_at: new Date().toISOString(),
+        })
         prompt = ''
         resetTimelineState(result.planning_turn.session_id)
         navigate(`/chat/${result.planning_turn.session_id}`)
@@ -241,6 +275,7 @@
         return
       }
 
+      const initialPrompt = prompt.trim()
       const result = await createSession({
         client_type: createClientType.trim(),
         workspace_id: createWorkspaceId,
@@ -248,10 +283,11 @@
         role: selectedProfile?.default_session_role ?? null,
         description: selectedProfile?.default_session_description ?? null,
         ...sessionProfileFields(selectedProfile),
-        initial_task: { input: prompt.trim(), metadata: { source: 'dashboard_chat' } },
+        initial_task: { input: initialPrompt, metadata: { source: 'dashboard_chat' } },
         metadata: { source: 'dashboard_chat' },
       })
       selectedSessionId = result.session.session_id
+      rememberOptimisticInitialMessage(result.session.session_id, initialPrompt, result.initial_turn)
       prompt = ''
       resetTimelineState(result.session.session_id)
       navigate(`/chat/${result.session.session_id}`)
@@ -430,7 +466,7 @@
           <SessionConversation
             {messages}
             sessionState={selectedSession.state}
-            loading={$sessionDetailLoading || $timelineState.loading}
+            loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
             {plannerTaskId}
             {draftPlannerProposal}
             draftPlannerProposalLoading={$taskProposalsLoading}

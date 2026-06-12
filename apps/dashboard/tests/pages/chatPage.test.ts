@@ -473,6 +473,48 @@ test('creates a session with initial prompt, workspace, and client then opens it
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new');
 });
 
+test('shows the initial prompt immediately after starting a chat while timeline is empty', async () => {
+  const user = userEvent.setup();
+  const created = session({ session_id: 'session-new', state: 'busy', current_turn_id: 'turn-new' });
+  const initialTurn = turn({
+    turn_id: 'turn-new',
+    session_id: 'session-new',
+    state: 'running',
+    input: { summary: 'hi' },
+    output: null,
+    completed_at: null,
+  });
+  mocks.createSession.mockImplementation(async () => {
+    mocks.sessions.set([created]);
+    mocks.sessionDetail.set({ session: created, turns: [initialTurn], inboxMessages: [], events: [], artifacts: [] });
+    return { session: created, initial_turn: initialTurn } satisfies CreateSessionResult;
+  });
+  mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
+    mocks.timelineState.set({
+      sessionId,
+      bindingId: null,
+      items: [],
+      nextCursor: null,
+      tailCursor: null,
+      sourceId: null,
+      hasMore: false,
+      isTail: true,
+      loading: false,
+      refreshing: false,
+      error: null,
+    });
+    return null;
+  });
+  render(ChatPage);
+
+  await user.type(screen.getByPlaceholderText('Ask the agent to implement, inspect, or explain something…'), 'hi');
+  await fireEvent.click(screen.getByRole('button', { name: /start chat/i }));
+
+  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new'));
+  expect(await screen.findByText('hi')).toBeInTheDocument();
+  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
+});
+
 test('lets existing chat routes use document scroll with a fixed bottom composer', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
