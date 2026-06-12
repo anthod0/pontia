@@ -538,7 +538,7 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(composerDock?.firstElementChild).toHaveClass('max-w-7xl');
 });
 
-test('renders collapsed thought summary with latest step above the final assistant response and expands all steps', async () => {
+test('renders idle thought summary above the final assistant response and expands all steps', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -615,18 +615,19 @@ test('renders collapsed thought summary with latest step above the final assista
 
   render(ChatPage);
 
-  const latestSummary = await screen.findByText('read {"path":"src/app.ts"}');
+  const thoughtSummary = await screen.findByText('Thought for 2 steps');
   const finalAnswer = screen.getByText('Final answer');
-  expect(latestSummary.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByText('I should inspect the code.')).toHaveClass('line-clamp-1');
-  expect(screen.getByText('read')).toHaveClass('text-sm');
-  expect(screen.getByText('read')).not.toHaveClass('text-base');
+  expect(thoughtSummary.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByText('I should inspect the code.')).not.toBeInTheDocument();
+  expect(screen.queryByText('read {"path":"src/app.ts"}')).not.toBeInTheDocument();
   expect(screen.queryByText('started')).not.toBeInTheDocument();
-  expect(screen.getByLabelText('started')).toBeInTheDocument();
+  expect(screen.queryByLabelText('started')).not.toBeInTheDocument();
 
   await userEvent.click(screen.getByRole('button', { name: /view thought details/i }));
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
-  expect(await screen.findAllByText('I should inspect the code.')).toHaveLength(2);
+  expect(await screen.findAllByText('I should inspect the code.')).toHaveLength(1);
+  expect(screen.getByText('read {"path":"src/app.ts"}')).toBeInTheDocument();
+  expect(screen.getByText('started')).toBeInTheDocument();
   expect(screen.getByText('Thought details')).toBeInTheDocument();
 });
 
