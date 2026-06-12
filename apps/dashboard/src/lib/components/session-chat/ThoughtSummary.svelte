@@ -11,8 +11,7 @@
 
   let { steps, active = false, class: className }: Props = $props()
   let sheetOpen = $state(false)
-  const latestStep = $derived(steps.at(-1) ?? null)
 </script>
 
-<ThoughtSummaryCollapsed step={latestStep} stepCount={steps.length} {active} class={className} onOpen={() => (sheetOpen = true)} />
+<ThoughtSummaryCollapsed {steps} {active} class={className} onOpen={() => (sheetOpen = true)} />
 <ThoughtSummarySheet bind:open={sheetOpen} {steps} {active} />

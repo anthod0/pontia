@@ -572,14 +572,15 @@ test('renders collapsed thought summary with latest step above the final assista
   const latestSummary = await screen.findByText('read {"path":"src/app.ts"}');
   const finalAnswer = screen.getByText('Final answer');
   expect(latestSummary.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.queryByText('I should inspect the code.')).not.toBeInTheDocument();
+  expect(screen.getByText('I should inspect the code.')).toHaveClass('line-clamp-1');
   expect(screen.getByText('read')).toHaveClass('text-sm');
   expect(screen.getByText('read')).not.toHaveClass('text-base');
-  expect(screen.getByText('started')).toHaveClass('text-sm');
+  expect(screen.queryByText('started')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('started')).toBeInTheDocument();
 
   await userEvent.click(screen.getByRole('button', { name: /view thought details/i }));
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
-  expect(await screen.findByText('I should inspect the code.')).toBeInTheDocument();
+  expect(await screen.findAllByText('I should inspect the code.')).toHaveLength(2);
   expect(screen.getByText('Thought details')).toBeInTheDocument();
 });
 
