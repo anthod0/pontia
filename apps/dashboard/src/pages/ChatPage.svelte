@@ -86,6 +86,7 @@
   let loadedProposalTaskId = ''
   let appliedRedirectTaskId = ''
   let unsubscribeDashboardEvents: (() => void) | null = null
+  let foregroundRefreshInFlight: Promise<void> | null = null
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
   const newChatSelectorTriggerClass = 'h-7 rounded-full px-3 text-sm font-normal text-muted-foreground'
@@ -99,10 +100,16 @@
       await Promise.all([loadSessionDetail(selectedSessionId), loadSessionTimeline(selectedSessionId, { mode: 'rebuild' })])
     }
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
+    window.addEventListener('focus', handleForegroundResume)
+    window.addEventListener('pageshow', handleForegroundResume)
+    document.addEventListener('visibilitychange', handleForegroundResume)
   })
 
   onDestroy(() => {
     unsubscribeDashboardEvents?.()
+    window.removeEventListener('focus', handleForegroundResume)
+    window.removeEventListener('pageshow', handleForegroundResume)
+    document.removeEventListener('visibilitychange', handleForegroundResume)
   })
 
   $: selectedSession = selectedSessionId ? ($sessions.find((session) => session.session_id === selectedSessionId) ?? $sessionDetail?.session ?? null) : null
@@ -189,6 +196,20 @@
     if (appliedRedirectTaskId === taskId) return
     appliedRedirectTaskId = taskId
     navigate(`/tasks/${taskId}/dag`)
+  }
+
+  function handleForegroundResume(): void {
+    if (document.visibilityState === 'hidden') return
+    const sessionId = selectedSessionId
+    if (!sessionId) return
+    if (foregroundRefreshInFlight) return
+
+    foregroundRefreshInFlight = Promise.all([
+      loadSessionDetail(sessionId, { showLoading: false }),
+      loadSessionTimeline(sessionId, { mode: 'rebuild' }),
+    ]).then(() => undefined).finally(() => {
+      foregroundRefreshInFlight = null
+    })
   }
 
   function handleDashboardEvent(streamEvent: DashboardStreamEvent): void {

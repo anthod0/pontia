@@ -561,6 +561,27 @@ test('shows workspace name in the selected chat composer pill while retaining fu
   expect(workspacePill).not.toHaveTextContent('/repo/pilotfy');
 });
 
+test('refreshes the selected chat when the browser returns to the foreground', async () => {
+  const selected = session({ session_id: 'session-2', state: 'running' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild' }));
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  mocks.loadSessionDetail.mockClear();
+  mocks.loadSessionTimeline.mockClear();
+
+  window.dispatchEvent(new Event('focus'));
+
+  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2', { showLoading: false }));
+  expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild' });
+});
+
 test('lets existing chat routes use document scroll with a fixed bottom composer', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
