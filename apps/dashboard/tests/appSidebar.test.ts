@@ -15,3 +15,8 @@ test('shows a simple green dot for active sidebar sessions instead of a state ba
   expect(appSidebarSource).toContain('{#if isSessionActiveState(session.state)}');
   expect(appSidebarSource).toContain('bg-green-500');
 });
+
+test('only marks New Chat active on the chat index route', () => {
+  expect(appSidebarSource).toContain("if (path === '/chat') return currentPath === '/chat'");
+  expect(appSidebarSource).not.toContain("if (path === '/chat') return currentPath === '/chat' || currentPath.startsWith('/chat/')");
+});

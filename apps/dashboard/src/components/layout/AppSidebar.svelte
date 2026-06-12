@@ -28,7 +28,7 @@
 
   function isActive(path: string) {
     if (path === '/tasks') return currentPath === '/tasks' || currentPath.startsWith('/tasks/')
-    if (path === '/chat') return currentPath === '/chat' || currentPath.startsWith('/chat/')
+    if (path === '/chat') return currentPath === '/chat'
     return currentPath === path
   }
 
