@@ -729,6 +729,13 @@ test('highlights fenced code blocks in assistant markdown', async () => {
   expect(await screen.findByText(/answer/)).toBeInTheDocument();
   expect(container.querySelector('code.hljs.language-ts')).toBeInTheDocument();
   expect(container.querySelector('.hljs-keyword')?.textContent).toBe('const');
+  const markdownContainer = Array.from(container.querySelectorAll('div')).find((element) =>
+    element.className.includes('[&_pre]:'),
+  );
+  expect(markdownContainer?.className).not.toContain('[&_pre]:bg-muted');
+  expect(markdownContainer?.className).not.toContain('[&_pre]:p-3');
+  expect(markdownContainer?.className).not.toContain('[&_pre_code]:bg-transparent');
+  expect(markdownContainer?.className).not.toContain('[&_pre_code]:p-0');
 });
 
 test('loads and renders an existing chat session with metadata, state, and workspace path above the prompt input without a page header', async () => {
