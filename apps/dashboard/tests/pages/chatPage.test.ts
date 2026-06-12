@@ -679,6 +679,34 @@ test('renders assistant output as markdown while leaving user prompts as plain t
   expect(container.querySelector('li')?.textContent).toBe('first item');
 });
 
+test('styles assistant markdown tables', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({
+      session_id: 'session-2',
+      output: { summary: '| Name | Status |\n| --- | --- |\n| Markdown | Rendered |' },
+    })],
+    inboxMessages: [],
+    events: [],
+    artifacts: [],
+  });
+
+  const { container } = render(ChatPage);
+
+  expect(await screen.findByText('Markdown')).toBeInTheDocument();
+  expect(container.querySelector('table')).toBeInTheDocument();
+  expect(container.querySelector('th')?.textContent).toBe('Name');
+  expect(container.querySelector('td')?.textContent).toBe('Markdown');
+  expect(
+    Array.from(container.querySelectorAll('div')).some((element) => element.className.includes('[&_table]:')),
+  ).toBe(true);
+});
+
 test('loads and renders an existing chat session with metadata, state, and workspace path above the prompt input without a page header', async () => {
   const selected = session({
     session_id: 'session-2',
