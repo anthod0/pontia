@@ -342,18 +342,17 @@
 
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
-<section class={selectedSessionId ? 'flex flex-col gap-4 pb-40' : 'flex h-full min-h-0 flex-col gap-4'}>
+<section class={selectedSessionId ? 'flex flex-col gap-4 pb-40' : 'flex min-h-[calc(100vh-9.5rem)] flex-col'}>
   {#if !selectedSessionId}
-    <div class="space-y-2">
-      <h2 class="text-3xl font-semibold tracking-tight">New Chat</h2>
-      <p class="max-w-3xl text-muted-foreground">Start a new agent session from a prompt, workspace, client, and profile.</p>
-    </div>
-  {/if}
+    <div data-testid="new-chat-centered-panel" class="flex min-h-0 flex-1 flex-col justify-center">
+      <div class="mx-auto w-full max-w-4xl space-y-6">
+        <div class="space-y-2">
+          <h2 class="text-3xl font-semibold tracking-tight">New Chat</h2>
+          <p class="max-w-3xl text-muted-foreground">Start a new agent session from a prompt, workspace, client, and profile.</p>
+        </div>
 
-  {#if !selectedSessionId}
-    <div class="flex min-h-0 flex-1 items-center justify-center">
-      <div class="w-full max-w-4xl space-y-3">
-        <div class="flex min-w-0 flex-wrap items-center gap-2 px-1">
+        <div class="space-y-3">
+          <div class="flex min-w-0 flex-wrap items-center gap-2 px-1">
           <Button
             type="button"
             size="sm"
@@ -396,21 +395,22 @@
           </Select.Root>
         </div>
 
-        <PromptInput.Root class="w-full" onSubmit={() => void startChat()}>
-          <PromptInput.Body>
-          <PromptInput.Textarea
-            id="chat-prompt"
-            bind:value={prompt}
-            placeholder="Ask the agent to implement, inspect, or explain something…"
-            onkeydown={handleNewChatKeydown}
-          />
-        </PromptInput.Body>
+          <PromptInput.Root class="w-full" onSubmit={() => void startChat()}>
+            <PromptInput.Body>
+              <PromptInput.Textarea
+                id="chat-prompt"
+                bind:value={prompt}
+                placeholder="Ask the agent to implement, inspect, or explain something…"
+                onkeydown={handleNewChatKeydown}
+              />
+            </PromptInput.Body>
 
-          <PromptInput.Toolbar class="justify-between gap-2 pt-1">
-            <p class="px-2 text-xs text-muted-foreground">Enter to send · Shift+Enter for newline</p>
-            <PromptInput.Submit disabled={!canCreate || creating} aria-label={creating ? (taskMode ? 'Creating task' : 'Starting chat') : (taskMode ? 'Create task' : 'Start chat')} />
-          </PromptInput.Toolbar>
-        </PromptInput.Root>
+            <PromptInput.Toolbar class="justify-between gap-2 pt-1">
+              <p class="px-2 text-xs text-muted-foreground">Enter to send · Shift+Enter for newline</p>
+              <PromptInput.Submit disabled={!canCreate || creating} aria-label={creating ? (taskMode ? 'Creating task' : 'Starting chat') : (taskMode ? 'Create task' : 'Start chat')} />
+            </PromptInput.Toolbar>
+          </PromptInput.Root>
+        </div>
       </div>
     </div>
   {:else}

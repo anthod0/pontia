@@ -359,6 +359,10 @@ test('renders a clean centered prompt input on the bare chat route instead of se
   expect(promptInput).toHaveValue('');
   expect(screen.getByRole('heading', { name: /new chat/i })).toBeInTheDocument();
   expect(screen.getByText('Start a new agent session from a prompt, workspace, client, and profile.')).toBeInTheDocument();
+  const centeredPanel = screen.getByTestId('new-chat-centered-panel');
+  expect(centeredPanel).toHaveClass('justify-center');
+  expect(centeredPanel).toContainElement(screen.getByRole('heading', { name: /new chat/i }));
+  expect(centeredPanel).toContainElement(promptInput);
   expect(screen.queryByText(/Enter the first prompt/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/^Prompt$/i)).not.toBeInTheDocument();
   expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('pilotfy');
