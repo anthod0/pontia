@@ -86,6 +86,7 @@ test('conversation renders assistant loading placeholder when session is startin
 
   expect(screen.getByText('Session starting')).toBeInTheDocument();
   expect(screen.getByText('Waiting for the agent session to become ready.')).toBeInTheDocument();
+  expect(screen.queryByTestId('blocks-wave-spinner')).not.toBeInTheDocument();
   expect(screen.queryByText('Working')).not.toBeInTheDocument();
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { Bot, GitBranch } from '@lucide/svelte'
-  import BlocksWaveSpinner from './BlocksWaveSpinner.svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -105,14 +104,9 @@
               <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.status === 'pending'} />
             {/if}
             {#if chatMessage.role === 'assistant' && loadingPlaceholder && !chatMessage.content.trim()}
-              <div class="flex max-w-md items-start gap-3 rounded-xl border bg-muted/30 p-3 text-muted-foreground" aria-live="polite">
-                <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
-                  <BlocksWaveSpinner class="size-5" />
-                </span>
-                <div class="min-w-0 space-y-1">
-                  <p class="text-sm font-medium text-foreground">{loadingPlaceholder.title}</p>
-                  <p class="text-xs leading-5">{loadingPlaceholder.description}</p>
-                </div>
+              <div class="max-w-md space-y-1 text-muted-foreground" aria-live="polite">
+                <p class="text-sm font-medium text-foreground">{loadingPlaceholder.title}</p>
+                <p class="text-xs leading-5">{loadingPlaceholder.description}</p>
               </div>
             {:else if chatMessage.content.trim()}
               <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
