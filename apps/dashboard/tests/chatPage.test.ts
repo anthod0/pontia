@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
 import ChatPage from '../src/pages/ChatPage.svelte';
 
@@ -121,17 +121,60 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test('chat composer metadata and controls share one responsive toolbar', async () => {
+test('chat composer metadata uses desktop pills and a compact mobile summary', async () => {
   render(ChatPage);
 
   const toolbar = await screen.findByLabelText('Session status and controls');
+  const desktopMetadata = within(toolbar).getByTestId('session-status-desktop-metadata');
+  const mobileMetadata = within(toolbar).getByTestId('session-status-mobile-metadata');
 
   expect(within(toolbar).getByText('idle')).toBeInTheDocument();
-  expect(within(toolbar).getByText('/work/project')).toBeInTheDocument();
-  expect(within(toolbar).getByLabelText('Client: pi')).toBeInTheDocument();
-  expect(within(toolbar).queryByText('Client: pi')).not.toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('/work/project')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByLabelText('Client: pi')).toBeInTheDocument();
+  expect(within(desktopMetadata).queryByText('Client: pi')).not.toBeInTheDocument();
+  expect(within(mobileMetadata).getByRole('button', { name: 'Session details: /work/project +1' })).toBeInTheDocument();
   expect(within(toolbar).getByRole('button', { name: /exit session/i })).toBeInTheDocument();
   expect(within(toolbar).getByRole('button', { name: /advanced session controls/i })).toBeInTheDocument();
+});
+
+test('mobile session summary expands current metadata details', async () => {
+  render(ChatPage);
+
+  const toolbar = await screen.findByLabelText('Session status and controls');
+  const mobileMetadata = within(toolbar).getByTestId('session-status-mobile-metadata');
+
+  await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: /work/project +1' }));
+
+  const details = within(mobileMetadata).getByRole('dialog', { name: 'Session details' });
+  expect(within(details).getByText('Workspace')).toBeInTheDocument();
+  expect(within(details).getByText('/work/project')).toBeInTheDocument();
+  expect(within(details).getByText('Client')).toBeInTheDocument();
+  expect(within(details).getByText('pi')).toBeInTheDocument();
+});
+
+test('advanced controls menu opens above when there is not enough space below', async () => {
+  const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+  const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this.getAttribute('aria-label') === 'Advanced session controls') {
+      return { x: 360, y: 720, top: 720, right: 388, bottom: 748, left: 360, width: 28, height: 28, toJSON: () => ({}) } as DOMRect;
+    }
+    return originalGetBoundingClientRect.call(this);
+  };
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 160 });
+
+  try {
+    render(ChatPage);
+
+    const toolbar = await screen.findByLabelText('Session status and controls');
+    await fireEvent.click(within(toolbar).getByRole('button', { name: /advanced session controls/i }));
+
+    const menu = await screen.findByRole('menu');
+    expect(menu).toHaveAttribute('data-placement', 'top');
+  } finally {
+    HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+    if (originalOffsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', originalOffsetHeight);
+  }
 });
 
 test('chat composer hides missing profile and handle metadata', async () => {

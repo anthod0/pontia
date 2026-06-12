@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import { Activity, AtSign, Bot, EllipsisVertical, Folder, GitBranch, LogOut, Pencil, RotateCw, Terminal, TerminalSquare } from '@lucide/svelte'
   import { toast } from 'svelte-sonner'
@@ -83,10 +83,21 @@
   let actionError: string | null = null
   let lastToastedError: string | null = null
   let advancedControlsOpen = false
+  let sessionDetailsOpen = false
+  let advancedControlsTriggerEl: HTMLButtonElement | null = null
+  let advancedControlsMenuEl: HTMLDivElement | null = null
+  let advancedControlsPlacement: 'top' | 'bottom' = 'bottom'
   let loadedProposalTaskId = ''
   let appliedRedirectTaskId = ''
   let unsubscribeDashboardEvents: (() => void) | null = null
   let foregroundRefreshInFlight: Promise<void> | null = null
+
+  type SessionMetadataItem = {
+    key: string
+    label: string
+    value: string
+    title: string
+  }
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
   const newChatSelectorTriggerClass = 'h-7 rounded-full px-3 text-sm font-normal text-muted-foreground'
@@ -113,6 +124,8 @@
   })
 
   $: selectedSession = selectedSessionId ? ($sessions.find((session) => session.session_id === selectedSessionId) ?? $sessionDetail?.session ?? null) : null
+  $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession) : []
+  $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
   $: messages = chatMessagesWithOptimistic(selectedSessionId, $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : [], $optimisticInitialMessages)
   $: selectedProfile = $agentProfiles.find((profile) => profile.profile_id === createProfileId) ?? null
   $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
@@ -184,6 +197,33 @@
     return workspace?.canonical_path ?? workspace?.display_path ?? session.workspace ?? session.workspace_id ?? 'No workspace'
   }
 
+  function sessionMetadataItems(session: SessionView): SessionMetadataItem[] {
+    const items: SessionMetadataItem[] = [
+      {
+        key: 'workspace',
+        label: 'Workspace',
+        value: sessionWorkspaceTitle(session),
+        title: sessionWorkspacePath(session),
+      },
+      {
+        key: 'client',
+        label: 'Client',
+        value: session.client_type,
+        title: session.client_type,
+      },
+    ]
+    const profileTitle = sessionProfileTitle(session)
+    if (profileTitle) items.push({ key: 'profile', label: 'Profile', value: profileTitle, title: profileTitle })
+    const handleTitle = sessionHandleTitle(session)
+    if (handleTitle) items.push({ key: 'handle', label: 'Handle', value: handleTitle, title: handleTitle })
+    return items
+  }
+
+  function sessionMetadataSummary(items: SessionMetadataItem[]): string {
+    const first = items[0]?.value ?? 'Session details'
+    return items.length > 1 ? `${first} +${items.length - 1}` : first
+  }
+
   function plannerTaskIdForSession(session: SessionView | null): string | null {
     if (!session?.metadata) return null
     const metadata = session.metadata
@@ -245,6 +285,23 @@
 
   function openSessionConsole(): void {
     navigate(selectedSessionId ? `/sessions/${selectedSessionId}` : '/sessions')
+  }
+
+  function updateAdvancedControlsPlacement(): void {
+    if (!advancedControlsTriggerEl || !advancedControlsMenuEl) return
+    const triggerRect = advancedControlsTriggerEl.getBoundingClientRect()
+    const menuHeight = advancedControlsMenuEl.offsetHeight || 192
+    const gap = 8
+    const spaceBelow = window.innerHeight - triggerRect.bottom
+    const spaceAbove = triggerRect.top
+    advancedControlsPlacement = spaceBelow >= menuHeight + gap || spaceBelow >= spaceAbove ? 'bottom' : 'top'
+  }
+
+  async function toggleAdvancedControls(): Promise<void> {
+    advancedControlsOpen = !advancedControlsOpen
+    if (!advancedControlsOpen) return
+    await tick()
+    updateAdvancedControlsPlacement()
   }
 
   function openNewChat(): void {
@@ -505,52 +562,81 @@
 
           <div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:left-[var(--sidebar-width)] md:p-6">
             <div class="mx-auto w-full max-w-7xl">
-            <div role="group" aria-label="Session status and controls" class="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2 px-2">
-              <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <Badge variant="secondary" class="h-7 gap-1.5 px-3 text-sm">
+            <div role="group" aria-label="Session status and controls" class="mb-2 flex min-w-0 items-center justify-between gap-2 px-2">
+              <div class="flex min-w-0 flex-1 items-center gap-2">
+                <Badge variant="secondary" class="h-7 shrink-0 gap-1.5 px-3 text-sm">
                   <Activity class="size-4" /> {selectedSession.state}
                 </Badge>
-                <Badge
-                  variant="outline"
-                  class="h-7 max-w-full justify-start gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                  title={`Workspace: ${sessionWorkspacePath(selectedSession)}`}
-                  aria-label={`Workspace: ${sessionWorkspacePath(selectedSession)}`}
-                >
-                  <Folder class="size-4" aria-hidden="true" />
-                  <span class="min-w-0 truncate">{sessionWorkspaceTitle(selectedSession)}</span>
-                </Badge>
-                <Badge
-                  variant="outline"
-                  class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                  title={`Client: ${selectedSession.client_type}`}
-                  aria-label={`Client: ${selectedSession.client_type}`}
-                >
-                  <Terminal class="size-4" aria-hidden="true" /> {selectedSession.client_type}
-                </Badge>
-                {#if sessionProfileTitle(selectedSession)}
+                <div data-testid="session-status-desktop-metadata" class="hidden min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex">
+                  <Badge
+                    variant="outline"
+                    class="h-7 max-w-full justify-start gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+                    title={`Workspace: ${sessionWorkspacePath(selectedSession)}`}
+                    aria-label={`Workspace: ${sessionWorkspacePath(selectedSession)}`}
+                  >
+                    <Folder class="size-4" aria-hidden="true" />
+                    <span class="min-w-0 truncate">{sessionWorkspaceTitle(selectedSession)}</span>
+                  </Badge>
                   <Badge
                     variant="outline"
                     class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                    title={`Profile: ${sessionProfileTitle(selectedSession)}`}
-                    aria-label={`Profile: ${sessionProfileTitle(selectedSession)}`}
+                    title={`Client: ${selectedSession.client_type}`}
+                    aria-label={`Client: ${selectedSession.client_type}`}
                   >
-                    <Bot class="size-4" aria-hidden="true" /> {sessionProfileTitle(selectedSession)}
+                    <Terminal class="size-4" aria-hidden="true" /> {selectedSession.client_type}
                   </Badge>
-                {/if}
-                {#if sessionHandleTitle(selectedSession)}
-                  <Badge
+                  {#if sessionProfileTitle(selectedSession)}
+                    <Badge
+                      variant="outline"
+                      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+                      title={`Profile: ${sessionProfileTitle(selectedSession)}`}
+                      aria-label={`Profile: ${sessionProfileTitle(selectedSession)}`}
+                    >
+                      <Bot class="size-4" aria-hidden="true" /> {sessionProfileTitle(selectedSession)}
+                    </Badge>
+                  {/if}
+                  {#if sessionHandleTitle(selectedSession)}
+                    <Badge
+                      variant="outline"
+                      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+                      title={`Handle: ${sessionHandleTitle(selectedSession)}`}
+                      aria-label={`Handle: ${sessionHandleTitle(selectedSession)}`}
+                    >
+                      <AtSign class="size-4" aria-hidden="true" /> {sessionHandleTitle(selectedSession)}
+                    </Badge>
+                  {/if}
+                </div>
+                <div data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1 sm:hidden">
+                  <Button
                     variant="outline"
-                    class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                    title={`Handle: ${sessionHandleTitle(selectedSession)}`}
-                    aria-label={`Handle: ${sessionHandleTitle(selectedSession)}`}
+                    size="sm"
+                    class="w-full justify-start px-2 text-muted-foreground"
+                    aria-haspopup="dialog"
+                    aria-expanded={sessionDetailsOpen}
+                    aria-label={`Session details: ${selectedSessionMetadataSummary}`}
+                    onclick={() => (sessionDetailsOpen = !sessionDetailsOpen)}
                   >
-                    <AtSign class="size-4" aria-hidden="true" /> {sessionHandleTitle(selectedSession)}
-                  </Badge>
-                {/if}
+                    <Folder class="size-4 shrink-0" aria-hidden="true" />
+                    <span class="min-w-0 truncate">{selectedSessionMetadataSummary}</span>
+                  </Button>
+                  {#if sessionDetailsOpen}
+                    <div role="dialog" aria-label="Session details" class="absolute bottom-full left-0 z-20 mb-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
+                      <div class="mb-2 text-sm font-medium">Session details</div>
+                      <dl class="space-y-2 text-sm">
+                        {#each selectedSessionMetadataItems as item (item.key)}
+                          <div class="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
+                            <dt class="text-muted-foreground">{item.label}</dt>
+                            <dd class="min-w-0 truncate" title={item.title}>{item.value}</dd>
+                          </div>
+                        {/each}
+                      </dl>
+                    </div>
+                  {/if}
+                </div>
               </div>
               <div class="flex shrink-0 items-center justify-end gap-2">
                 {#if !isTerminalChatSession(selectedSession)}
-                  <Button variant="destructive" size="sm" disabled={actionBusy} aria-label="Exit session" onclick={() => void runSessionLifecycle('exit')}><LogOut class="size-4" /> Exit</Button>
+                  <Button class="hidden sm:inline-flex" variant="destructive" size="sm" disabled={actionBusy} aria-label="Exit session" onclick={() => void runSessionLifecycle('exit')}><LogOut class="size-4" /> Exit</Button>
                 {/if}
                 <div class="relative">
                   <Button
@@ -559,13 +645,33 @@
                     disabled={actionBusy}
                     aria-haspopup="menu"
                     aria-expanded={advancedControlsOpen}
+                    bind:ref={advancedControlsTriggerEl}
                     aria-label="Advanced session controls"
-                    onclick={() => (advancedControlsOpen = !advancedControlsOpen)}
+                    onclick={() => void toggleAdvancedControls()}
                   >
                     <EllipsisVertical class="size-4" />
                   </Button>
                   {#if advancedControlsOpen}
-                    <div role="menu" class="absolute right-0 z-10 mt-1 w-48 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
+                    <div
+                      bind:this={advancedControlsMenuEl}
+                      role="menu"
+                      data-placement={advancedControlsPlacement}
+                      class={`absolute right-0 z-10 w-48 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md ${advancedControlsPlacement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'}`}
+                    >
+                      {#if !isTerminalChatSession(selectedSession)}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:hidden"
+                          disabled={actionBusy}
+                          onclick={() => {
+                            advancedControlsOpen = false
+                            void runSessionLifecycle('exit')
+                          }}
+                        >
+                          <LogOut class="size-4" /> Exit session
+                        </button>
+                      {/if}
                       <button
                         type="button"
                         role="menuitem"
