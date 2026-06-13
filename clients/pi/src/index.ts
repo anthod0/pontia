@@ -213,7 +213,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       pendingRefreshTimer = undefined;
       if (activeTurn !== state || state.ended) return;
       void state.reporter.report(state.context, buildSessionMessageUpdatedEvent(state.context, "update"));
-    }, 500);
+    }, 100);
   }
 
   async function reportFinalMessageRefresh(state: ActiveTurnState): Promise<void> {

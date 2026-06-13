@@ -198,7 +198,7 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.message_update({ assistantMessageEvent: { text_delta: "world" } }, {});
     expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
 
-    await vi.advanceTimersByTimeAsync(499);
+    await vi.advanceTimersByTimeAsync(99);
     expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
 
     await vi.advanceTimersByTimeAsync(1);
