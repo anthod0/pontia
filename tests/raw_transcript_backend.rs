@@ -46,17 +46,22 @@ fn pi_resolver_finds_jsonl_for_launch_cwd_and_client_session_key() {
 }
 
 #[test]
-fn pi_parser_returns_timeline_page_from_jsonl_with_cursor() {
+fn pi_parser_returns_recent_conversation_rounds_then_older_rounds() {
     let temp = tempdir().unwrap();
     let session_file = temp.path().join("session.jsonl");
     fs::write(
         &session_file,
         concat!(
             "{\"type\":\"session\",\"version\":3,\"id\":\"sess\",\"timestamp\":\"2026-06-09T00:00:00.000Z\"}\n",
-            "{\"type\":\"message\",\"id\":\"u1\",\"timestamp\":\"2026-06-09T00:00:01.000Z\",\"message\":{\"role\":\"user\",\"content\":\"hello world\",\"timestamp\":1780963201000}}\n",
-            "{\"type\":\"message\",\"id\":\"a1\",\"timestamp\":\"2026-06-09T00:00:02.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"plan\"},{\"type\":\"text\",\"text\":\"answer\"},{\"type\":\"toolCall\",\"id\":\"call_1\",\"name\":\"read\",\"arguments\":{\"path\":\"src/main.rs\"}}],\"timestamp\":1780963202000}}\n",
-            "{\"type\":\"message\",\"id\":\"t1\",\"timestamp\":\"2026-06-09T00:00:03.000Z\",\"message\":{\"role\":\"toolResult\",\"toolCallId\":\"call_1\",\"toolName\":\"read\",\"content\":[{\"type\":\"text\",\"text\":\"file contents\"}],\"isError\":false,\"timestamp\":1780963203000}}\n",
-            "{\"type\":\"model_change\",\"id\":\"m1\",\"timestamp\":\"2026-06-09T00:00:04.000Z\",\"provider\":\"openai\",\"modelId\":\"gpt-4o\"}\n",
+            "{\"type\":\"message\",\"id\":\"u1\",\"timestamp\":\"2026-06-09T00:00:01.000Z\",\"message\":{\"role\":\"user\",\"content\":\"first user\"}}\n",
+            "{\"type\":\"message\",\"id\":\"a1\",\"timestamp\":\"2026-06-09T00:00:02.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"first assistant\"}]}}\n",
+            "{\"type\":\"message\",\"id\":\"u2\",\"timestamp\":\"2026-06-09T00:00:03.000Z\",\"message\":{\"role\":\"user\",\"content\":\"second user\"}}\n",
+            "{\"type\":\"message\",\"id\":\"a2\",\"timestamp\":\"2026-06-09T00:00:04.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"plan\"},{\"type\":\"text\",\"text\":\"second assistant\"}]}}\n",
+            "{\"type\":\"message\",\"id\":\"t2\",\"timestamp\":\"2026-06-09T00:00:05.000Z\",\"message\":{\"role\":\"toolResult\",\"toolName\":\"read\",\"content\":[{\"type\":\"text\",\"text\":\"file contents\"}],\"isError\":false}}\n",
+            "{\"type\":\"message\",\"id\":\"u3\",\"timestamp\":\"2026-06-09T00:00:06.000Z\",\"message\":{\"role\":\"user\",\"content\":\"third user\"}}\n",
+            "{\"type\":\"message\",\"id\":\"a3\",\"timestamp\":\"2026-06-09T00:00:07.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"third assistant\"}]}}\n",
+            "{\"type\":\"message\",\"id\":\"u4\",\"timestamp\":\"2026-06-09T00:00:08.000Z\",\"message\":{\"role\":\"user\",\"content\":\"fourth user\"}}\n",
+            "{\"type\":\"message\",\"id\":\"a4\",\"timestamp\":\"2026-06-09T00:00:09.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"fourth assistant\"}]}}\n",
         ),
     )
     .unwrap();
@@ -65,12 +70,12 @@ fn pi_parser_returns_timeline_page_from_jsonl_with_cursor() {
         id: "bind_1".to_string(),
         client_type: "pi".to_string(),
         format: "pi-jsonl".to_string(),
-        path: session_file.clone(),
+        path: session_file,
         fingerprint: None,
     };
     let parser = PiJsonlParser::new();
 
-    let first_page = parser
+    let recent_page = parser
         .timeline_page(TimelinePageRequest {
             session_id: "sess_1".to_string(),
             source: source.clone(),
@@ -79,45 +84,53 @@ fn pi_parser_returns_timeline_page_from_jsonl_with_cursor() {
         })
         .unwrap();
 
-    assert_eq!(first_page.binding_id, "bind_1");
-    assert_eq!(first_page.items.len(), 3);
-    assert_eq!(first_page.items[0].kind, "user");
-    assert_eq!(first_page.items[0].raw_kind.as_deref(), Some("user"));
-    assert_eq!(first_page.items[0].content_preview, "hello world");
-    assert_eq!(first_page.items[1].kind, "thinking");
-    assert_eq!(first_page.items[1].raw_kind.as_deref(), Some("thinking"));
-    assert_eq!(first_page.items[2].kind, "assistant");
-    assert_eq!(first_page.items[2].raw_kind.as_deref(), Some("text"));
-    assert!(first_page.has_more);
-    assert!(!first_page.is_tail);
-    let cursor = first_page.next_cursor.clone().unwrap();
+    assert_eq!(recent_page.binding_id, "bind_1");
+    let recent_previews: Vec<_> = recent_page
+        .items
+        .iter()
+        .filter(|item| matches!(item.kind.as_str(), "user" | "assistant"))
+        .map(|item| item.content_preview.as_str())
+        .collect();
+    assert_eq!(
+        recent_previews,
+        vec![
+            "second user",
+            "second assistant",
+            "third user",
+            "third assistant",
+            "fourth user",
+            "fourth assistant",
+        ]
+    );
+    assert_eq!(recent_page.items[1].kind, "thinking");
+    assert!(
+        recent_page
+            .items
+            .iter()
+            .any(|item| item.kind == "tool_result")
+    );
+    assert!(recent_page.has_more);
+    assert!(recent_page.is_tail);
+    let cursor = recent_page.next_cursor.clone().unwrap();
 
-    let second_page = parser
+    let older_page = parser
         .timeline_page(TimelinePageRequest {
             session_id: "sess_1".to_string(),
             source,
             cursor: Some(cursor),
-            limit: 10,
+            limit: 3,
         })
         .unwrap();
 
-    let kinds: Vec<_> = second_page
+    let older_previews: Vec<_> = older_page
         .items
         .iter()
-        .map(|item| item.kind.as_str())
+        .filter(|item| matches!(item.kind.as_str(), "user" | "assistant"))
+        .map(|item| item.content_preview.as_str())
         .collect();
-    assert_eq!(kinds, vec!["tool_call", "tool_result", "model_change"]);
-    let raw_kinds: Vec<_> = second_page
-        .items
-        .iter()
-        .map(|item| item.raw_kind.as_deref())
-        .collect();
-    assert_eq!(
-        raw_kinds,
-        vec![Some("toolCall"), Some("toolResult"), Some("model_change")]
-    );
-    assert!(!second_page.has_more);
-    assert!(second_page.is_tail);
+    assert_eq!(older_previews, vec!["first user", "first assistant"]);
+    assert!(!older_page.has_more);
+    assert!(!older_page.is_tail);
 }
 
 #[test]

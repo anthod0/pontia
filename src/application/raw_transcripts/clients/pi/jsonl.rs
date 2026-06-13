@@ -42,99 +42,57 @@ impl RawTranscriptParser for PiJsonlParser {
         }
 
         let source_id = source_id(&request.source);
-        let cursor = decode_pi_cursor(request.cursor.as_deref(), &request.source.id)?;
         let bytes = fs::read(&request.source.path).map_err(|err| {
             Error::CapabilityUnavailable(format!(
                 "source_unavailable: raw source {} is unavailable: {err}",
                 request.source.path.display()
             ))
         })?;
+        let cursor = request
+            .cursor
+            .as_deref()
+            .map(|cursor| decode_pi_cursor(Some(cursor), &request.source.id))
+            .transpose()?;
+        let upper_bound = cursor.map_or(bytes.len(), |position| position.offset);
 
-        if cursor.offset > bytes.len() {
+        if upper_bound > bytes.len() {
             return Err(Error::Domain(format!(
                 "cursor_invalid: offset {} exceeds source length {}",
-                cursor.offset,
+                upper_bound,
                 bytes.len()
             )));
         }
 
         let limit = request.limit.max(1);
-        let mut items = Vec::new();
-        let mut offset = 0usize;
-        let mut next_position = CursorPosition {
-            offset: cursor.offset,
-            block_index: cursor.block_index,
-        };
-        let mut stopped_due_limit = false;
-
-        for line in bytes.split_inclusive(|byte| *byte == b'\n') {
-            let line_start = offset;
-            let line_end = offset + line.len();
-            offset = line_end;
-
-            if line_end <= cursor.offset {
-                continue;
-            }
-            if line_start < cursor.offset {
-                continue;
-            }
-
-            let text = std::str::from_utf8(line)
-                .map_err(|err| Error::Domain(format!("pi jsonl source is not utf-8: {err}")))?
-                .trim_end_matches(['\r', '\n']);
-            if text.trim().is_empty() {
-                next_position = CursorPosition {
-                    offset: line_end,
+        let ranges = line_ranges_until(&bytes, upper_bound)?;
+        let selected_start = select_recent_round_start(&bytes, &ranges, &request.source.id, limit)?;
+        let items = parse_items_in_range(&bytes, &ranges, &request.source.id, selected_start)?;
+        let has_more = has_user_round_before(&bytes, &ranges, &request.source.id, selected_start)?;
+        let next_cursor = has_more.then(|| {
+            encode_pi_cursor(
+                &request.source.id,
+                CursorPosition {
+                    offset: selected_start,
                     block_index: 0,
-                };
-                continue;
-            }
-            let entry: Value = serde_json::from_str(text)?;
-            let produced = pi_entry_to_items(&entry, &request.source.id, line_start, line_end);
-            let start_block = if line_start == cursor.offset {
-                cursor.block_index
-            } else {
-                0
-            };
-
-            for (idx, item) in produced.into_iter().enumerate().skip(start_block) {
-                if items.len() == limit {
-                    stopped_due_limit = true;
-                    next_position = CursorPosition {
-                        offset: line_start,
-                        block_index: idx,
-                    };
-                    break;
-                }
-                items.push(item);
-                next_position = CursorPosition {
-                    offset: line_start,
-                    block_index: idx + 1,
-                };
-            }
-
-            if stopped_due_limit {
-                break;
-            }
-
-            next_position = CursorPosition {
-                offset: line_end,
+                },
+            )
+        });
+        let tail_cursor = encode_pi_cursor(
+            &request.source.id,
+            CursorPosition {
+                offset: bytes.len(),
                 block_index: 0,
-            };
-        }
-
-        let has_unread_bytes = next_position.offset < bytes.len();
-        let has_more = stopped_due_limit || has_unread_bytes;
-        let cursor_token = encode_pi_cursor(&request.source.id, next_position);
+            },
+        );
 
         Ok(TimelinePage {
             session_id: request.session_id,
             binding_id: request.source.id,
             items,
-            next_cursor: Some(cursor_token.clone()),
-            tail_cursor: Some(cursor_token),
+            next_cursor,
+            tail_cursor: Some(tail_cursor),
             has_more,
-            is_tail: !has_more,
+            is_tail: request.cursor.is_none(),
             source_id,
         })
     }
@@ -174,6 +132,98 @@ impl RawTranscriptParser for PiJsonlParser {
             text,
         })
     }
+}
+
+fn line_ranges_until(bytes: &[u8], upper_bound: usize) -> Result<Vec<(usize, usize)>> {
+    let mut ranges = Vec::new();
+    let mut offset = 0usize;
+    for line in bytes[..upper_bound].split_inclusive(|byte| *byte == b'\n') {
+        let line_start = offset;
+        let line_end = offset + line.len();
+        offset = line_end;
+        ranges.push((line_start, line_end));
+    }
+    if offset != upper_bound {
+        return Err(Error::Domain(
+            "cursor_invalid: cursor does not align with readable source boundary".to_string(),
+        ));
+    }
+    Ok(ranges)
+}
+
+fn select_recent_round_start(
+    bytes: &[u8],
+    ranges: &[(usize, usize)],
+    binding_id: &str,
+    limit: usize,
+) -> Result<usize> {
+    let mut selected_start = ranges.last().map(|(start, _)| *start).unwrap_or(0);
+    let mut rounds = 0usize;
+
+    for (line_start, line_end) in ranges.iter().rev().copied() {
+        let entry = parse_jsonl_entry(bytes, line_start, line_end)?;
+        let produced = pi_entry_to_items(&entry, binding_id, line_start, line_end);
+        if produced.is_empty() {
+            continue;
+        }
+        selected_start = line_start;
+        if produced.iter().any(|item| item.kind == "user") {
+            rounds += 1;
+            if rounds == limit {
+                break;
+            }
+        }
+    }
+
+    Ok(selected_start)
+}
+
+fn parse_items_in_range(
+    bytes: &[u8],
+    ranges: &[(usize, usize)],
+    binding_id: &str,
+    selected_start: usize,
+) -> Result<Vec<super::super::super::TimelineItem>> {
+    let mut items = Vec::new();
+    for (line_start, line_end) in ranges.iter().copied() {
+        if line_start < selected_start {
+            continue;
+        }
+        let entry = parse_jsonl_entry(bytes, line_start, line_end)?;
+        items.extend(pi_entry_to_items(&entry, binding_id, line_start, line_end));
+    }
+    Ok(items)
+}
+
+fn has_user_round_before(
+    bytes: &[u8],
+    ranges: &[(usize, usize)],
+    binding_id: &str,
+    selected_start: usize,
+) -> Result<bool> {
+    for (line_start, line_end) in ranges.iter().copied() {
+        if line_start >= selected_start {
+            break;
+        }
+        let entry = parse_jsonl_entry(bytes, line_start, line_end)?;
+        if pi_entry_to_items(&entry, binding_id, line_start, line_end)
+            .iter()
+            .any(|item| item.kind == "user")
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn parse_jsonl_entry(bytes: &[u8], start: usize, end: usize) -> Result<Value> {
+    let text = std::str::from_utf8(&bytes[start..end])
+        .map_err(|err| Error::Domain(format!("pi jsonl source is not utf-8: {err}")))?
+        .trim_end_matches(['\r', '\n']);
+    if text.trim().is_empty() {
+        return Ok(Value::Null);
+    }
+    Ok(serde_json::from_str(text)?)
 }
 
 fn source_id(source: &ResolvedAgentBinding) -> String {
