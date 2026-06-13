@@ -158,9 +158,8 @@ test('mobile session summary expands current metadata details', async () => {
   await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: project · pi' }));
 
   const details = within(mobileMetadata).getByRole('dialog', { name: 'Session details' });
-  expect(details).toHaveClass('absolute');
-  expect(details).toHaveClass('bottom-full');
-  expect(details).toHaveClass('left-0');
+  expect(details).toHaveAttribute('data-slot', 'popover-content');
+  expect(details).toHaveAttribute('data-side', 'top');
   expect(within(details).queryByText('Session details')).not.toBeInTheDocument();
   expect(within(details).getByLabelText('Workspace')).toBeInTheDocument();
   expect(within(details).queryByText('Workspace')).not.toBeInTheDocument();
@@ -298,7 +297,8 @@ test('advanced controls menu opens above when there is not enough space below', 
     await fireEvent.click(within(toolbar).getByRole('button', { name: /advanced session controls/i }));
 
     const menu = await screen.findByRole('menu');
-    expect(menu).toHaveAttribute('data-placement', 'top');
+    expect(menu).toHaveAttribute('data-slot', 'dropdown-menu-content');
+    expect(menu).toHaveAttribute('data-side', 'top');
   } finally {
     HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
     if (originalOffsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', originalOffsetHeight);

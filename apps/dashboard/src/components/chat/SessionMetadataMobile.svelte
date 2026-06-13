@@ -1,5 +1,6 @@
 <script lang="ts">
   import { AtSign, Bot, Folder, Gauge, GitBranch, Terminal } from '@lucide/svelte'
+  import * as Popover from '$lib/components/ui/popover/index.js'
   import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
   import GitStatusInline from './GitStatusInline.svelte'
   import {
@@ -23,22 +24,22 @@
   let sessionDetailsOpen = $state(false)
 </script>
 
-<button type="button" class="flex h-7 w-full min-w-0 items-center justify-start bg-transparent px-0 text-sm text-muted-foreground outline-none hover:bg-transparent hover:text-foreground focus-visible:text-foreground" aria-haspopup="dialog" aria-expanded={sessionDetailsOpen} aria-label={`Session details: ${metadataSummary}`} onclick={() => (sessionDetailsOpen = !sessionDetailsOpen)}>
-  <span data-chat-session-details-summary class="block min-w-0 flex-1 truncate text-left">
-    <span>{sessionWorkspaceTitle(session, workspaces)}</span>
-    {#if gitStatus}
-      <span> ·</span>{' '}<GitStatusInline {gitStatus} />
-    {/if}
-    {#if sessionContextUsageLabel(session)}
-      <span> · {sessionContextUsageLabel(session)}</span>
-    {/if}
-    <span> · {session.client_type}</span>
-    {#if sessionProfileTitle(session)}<span> · {sessionProfileTitle(session)}</span>{/if}
-    {#if sessionHandleTitle(session)}<span> · {sessionHandleTitle(session)}</span>{/if}
-  </span>
-</button>
-{#if sessionDetailsOpen}
-  <div role="dialog" aria-label="Session details" class="absolute bottom-full left-0 z-20 mb-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
+<Popover.Root bind:open={sessionDetailsOpen}>
+  <Popover.Trigger class="flex h-7 w-full min-w-0 items-center justify-start bg-transparent px-0 text-sm text-muted-foreground outline-none hover:bg-transparent hover:text-foreground focus-visible:text-foreground" aria-label={`Session details: ${metadataSummary}`}>
+    <span data-chat-session-details-summary class="block min-w-0 flex-1 truncate text-left">
+      <span>{sessionWorkspaceTitle(session, workspaces)}</span>
+      {#if gitStatus}
+        <span> ·</span>{' '}<GitStatusInline {gitStatus} />
+      {/if}
+      {#if sessionContextUsageLabel(session)}
+        <span> · {sessionContextUsageLabel(session)}</span>
+      {/if}
+      <span> · {session.client_type}</span>
+      {#if sessionProfileTitle(session)}<span> · {sessionProfileTitle(session)}</span>{/if}
+      {#if sessionHandleTitle(session)}<span> · {sessionHandleTitle(session)}</span>{/if}
+    </span>
+  </Popover.Trigger>
+  <Popover.Content side="top" align="start" role="dialog" aria-label="Session details" portalProps={{ disabled: true }} class="w-[min(20rem,calc(100vw-2rem))] p-3">
     <dl class="space-y-2 text-sm">
       {#each metadataItems as item (item.key)}
         <div class="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2">
@@ -67,5 +68,5 @@
         </div>
       {/each}
     </dl>
-  </div>
-{/if}
+  </Popover.Content>
+</Popover.Root>

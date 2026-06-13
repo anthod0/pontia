@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { tick } from 'svelte'
   import { Activity, EllipsisVertical, Inbox, LogOut, Pencil, RotateCw, TerminalSquare } from '@lucide/svelte'
   import { Badge } from '$lib/components/ui/badge/index.js'
-  import { Button } from '$lib/components/ui/button/index.js'
+  import { Button, buttonVariants } from '$lib/components/ui/button/index.js'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
   import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
   import { canSendSessionMessage, isTerminalChatSession } from '$lib/session-chat/sessionChat'
@@ -53,26 +53,6 @@
   }: Props = $props()
 
   let advancedControlsOpen = $state(false)
-  let advancedControlsTriggerEl: HTMLButtonElement | null = $state(null)
-  let advancedControlsMenuEl: HTMLDivElement | null = $state(null)
-  let advancedControlsPlacement: 'top' | 'bottom' = $state('bottom')
-
-  function updateAdvancedControlsPlacement(): void {
-    if (!advancedControlsTriggerEl || !advancedControlsMenuEl) return
-    const triggerRect = advancedControlsTriggerEl.getBoundingClientRect()
-    const menuHeight = advancedControlsMenuEl.offsetHeight || 192
-    const gap = 8
-    const spaceBelow = window.innerHeight - triggerRect.bottom
-    const spaceAbove = triggerRect.top
-    advancedControlsPlacement = spaceBelow >= menuHeight + gap || spaceBelow >= spaceAbove ? 'bottom' : 'top'
-  }
-
-  async function toggleAdvancedControls(): Promise<void> {
-    advancedControlsOpen = !advancedControlsOpen
-    if (!advancedControlsOpen) return
-    await tick()
-    updateAdvancedControlsPlacement()
-  }
 </script>
 
 <div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:left-[var(--sidebar-width)] md:p-6">
@@ -100,28 +80,28 @@
         {#if !isTerminalChatSession(session)}
           <Button class="hidden sm:inline-flex" variant="destructive" size="sm" disabled={actionBusy} aria-label="Exit session" onclick={onExit}><LogOut class="size-4" /> Exit</Button>
         {/if}
-        <div class="relative">
-          <Button variant="outline" size="sm" disabled={actionBusy} aria-haspopup="menu" aria-expanded={advancedControlsOpen} bind:ref={advancedControlsTriggerEl} aria-label={inboxActionableCount > 0 ? `Advanced session controls, ${inboxActionableCount} inbox message${inboxActionableCount === 1 ? '' : 's'}` : 'Advanced session controls'} onclick={() => void toggleAdvancedControls()}>
-            <EllipsisVertical class="size-4" />
-          </Button>
-          {#if inboxActionableCount > 0}<Badge data-chat-mobile-inbox-count variant="secondary" class="absolute -right-2 -top-2 h-5 min-w-5 rounded-full px-1.5 text-xs shadow-sm sm:hidden">{inboxActionableCount}</Badge>{/if}
-          {#if advancedControlsOpen}
-            <div bind:this={advancedControlsMenuEl} role="menu" data-placement={advancedControlsPlacement} class={`absolute right-0 z-10 w-48 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md ${advancedControlsPlacement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
-              <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted sm:hidden" aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`} onclick={() => { advancedControlsOpen = false; onOpenInbox() }}>
-                <Inbox class="size-4" /> Inbox
-                {#if inboxActionableCount > 0}<Badge variant="secondary" class="ml-auto h-5 min-w-5 rounded-full px-1.5 text-xs">{inboxActionableCount}</Badge>{/if}
-              </button>
-              {#if !isTerminalChatSession(session)}
-                <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:hidden" disabled={actionBusy} onclick={() => { advancedControlsOpen = false; onExit() }}>
-                  <LogOut class="size-4" /> Exit session
-                </button>
-              {/if}
-              <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted" onclick={() => { advancedControlsOpen = false; onOpenConsole() }}><TerminalSquare class="size-4" /> Session Console</button>
-              <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-50" disabled={actionBusy} onclick={() => { advancedControlsOpen = false; onRename() }}><Pencil class="size-4" /> Rename session</button>
-              <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-50" disabled={actionBusy} onclick={() => { advancedControlsOpen = false; onRestart() }}><RotateCw class="size-4" /> Restart session</button>
-            </div>
-          {/if}
-        </div>
+        <DropdownMenu.Root bind:open={advancedControlsOpen}>
+          <div class="relative">
+            <DropdownMenu.Trigger class={buttonVariants({ variant: 'outline', size: 'sm' })} disabled={actionBusy} aria-label={inboxActionableCount > 0 ? `Advanced session controls, ${inboxActionableCount} inbox message${inboxActionableCount === 1 ? '' : 's'}` : 'Advanced session controls'}>
+              <EllipsisVertical class="size-4" />
+            </DropdownMenu.Trigger>
+            {#if inboxActionableCount > 0}<Badge data-chat-mobile-inbox-count variant="secondary" class="absolute -right-2 -top-2 h-5 min-w-5 rounded-full px-1.5 text-xs shadow-sm sm:hidden">{inboxActionableCount}</Badge>{/if}
+          </div>
+          <DropdownMenu.Content side="top" align="end" class="w-48">
+            <DropdownMenu.Item class="sm:hidden" aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`} onclick={() => { advancedControlsOpen = false; onOpenInbox() }}>
+              <Inbox class="size-4" /> Inbox
+              {#if inboxActionableCount > 0}<Badge variant="secondary" class="ml-auto h-5 min-w-5 rounded-full px-1.5 text-xs">{inboxActionableCount}</Badge>{/if}
+            </DropdownMenu.Item>
+            {#if !isTerminalChatSession(session)}
+              <DropdownMenu.Item variant="destructive" class="sm:hidden" disabled={actionBusy} onclick={() => { advancedControlsOpen = false; onExit() }}>
+                <LogOut class="size-4" /> Exit session
+              </DropdownMenu.Item>
+            {/if}
+            <DropdownMenu.Item onclick={() => { advancedControlsOpen = false; onOpenConsole() }}><TerminalSquare class="size-4" /> Session Console</DropdownMenu.Item>
+            <DropdownMenu.Item disabled={actionBusy} onclick={() => { advancedControlsOpen = false; onRename() }}><Pencil class="size-4" /> Rename session</DropdownMenu.Item>
+            <DropdownMenu.Item disabled={actionBusy} onclick={() => { advancedControlsOpen = false; onRestart() }}><RotateCw class="size-4" /> Restart session</DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
       </div>
     </div>
     <SessionMessageComposer bind:value={input} busy={submitting} disabled={!canSendSessionMessage(session, 'x') || submitting} submitDisabled={!canSend} onValueChange={(value) => (input = value)} onSubmit={onSend} onFocus={onFocus} />

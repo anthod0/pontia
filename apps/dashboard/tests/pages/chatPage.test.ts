@@ -1060,11 +1060,11 @@ test('opens an inbox sheet with actionable pending, failed, and dispatching mess
   expect(advancedBubble).toHaveTextContent('2');
   expect(advancedBubble).toHaveClass('sm:hidden');
 
-  await userEvent.click(advancedButton);
-  const mobileInboxMenuItem = screen.getByRole('menuitem', { name: /open inbox, 2 messages/i });
+  await fireEvent.click(advancedButton);
+  const mobileInboxMenuItem = await screen.findByRole('menuitem', { name: /open inbox, 2 messages/i });
   expect(mobileInboxMenuItem).toHaveClass('sm:hidden');
 
-  await userEvent.click(mobileInboxMenuItem);
+  await fireEvent.click(mobileInboxMenuItem);
 
   expect(container.querySelector('[data-chat-desktop-inbox]')).toHaveClass('hidden');
 
@@ -1270,15 +1270,15 @@ test('places session controls near the prompt input and keeps advanced controls 
   expect(screen.queryByRole('button', { name: /restart session/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /session console/i })).not.toBeInTheDocument();
 
-  await user.click(advancedButton);
-  await user.click(await screen.findByRole('menuitem', { name: /restart session/i }));
+  await fireEvent.click(advancedButton);
+  await fireEvent.click(await screen.findByRole('menuitem', { name: /restart session/i }));
   expect(mocks.restartSession).toHaveBeenCalledWith('session-2');
 
-  await user.click(advancedButton);
-  await user.click(await screen.findByRole('menuitem', { name: /session console/i }));
+  await fireEvent.click(advancedButton);
+  await fireEvent.click(await screen.findByRole('menuitem', { name: /session console/i }));
   expect(mocks.navigate).toHaveBeenCalledWith('/sessions/session-2');
 
-  await user.click(exitButton);
+  await fireEvent.click(exitButton);
   expect(mocks.terminateSession).toHaveBeenCalledWith('session-2');
 });
 
