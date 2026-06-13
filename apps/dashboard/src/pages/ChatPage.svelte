@@ -798,8 +798,13 @@
             <div class="mx-auto w-full max-w-7xl">
             <div role="group" aria-label="Session status and controls" class="mb-2 flex min-w-0 items-center justify-between gap-2 px-2">
               <div class="flex min-w-0 flex-1 items-center gap-2">
-                <Badge variant="secondary" class={`h-7 shrink-0 gap-1.5 px-3 text-sm ${sessionStateBadgeClass(selectedSession.state)}`}>
-                  <Activity class="size-4" /> {selectedSession.state}
+                <Badge
+                  variant="secondary"
+                  class={`h-7 shrink-0 gap-1.5 px-2 sm:px-3 text-sm ${sessionStateBadgeClass(selectedSession.state)}`}
+                  aria-label={`Session state: ${selectedSession.state}`}
+                >
+                  <Activity class="size-4" />
+                  <span data-chat-session-state-label class="hidden sm:inline">{selectedSession.state}</span>
                 </Badge>
                 <div data-testid="session-status-desktop-metadata" class="hidden min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex">
                   <Badge
@@ -873,14 +878,14 @@
                   <Button
                     variant="outline"
                     size="sm"
-                    class="w-full justify-start px-2 text-muted-foreground"
+                    class="w-full justify-start border-transparent bg-transparent px-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
                     aria-haspopup="dialog"
                     aria-expanded={sessionDetailsOpen}
                     aria-label={`Session details: ${selectedSessionMetadataSummary}`}
                     onclick={() => (sessionDetailsOpen = !sessionDetailsOpen)}
                   >
-                    <Folder class="size-4 shrink-0" aria-hidden="true" />
-                    <span class="min-w-0 truncate">{selectedSessionMetadataSummary}</span>
+                    <Folder data-chat-session-details-icon class="hidden size-4 shrink-0" aria-hidden="true" />
+                    <span data-chat-session-details-summary class="min-w-0 flex-1 truncate text-left">{selectedSessionMetadataSummary}</span>
                   </Button>
                   {#if sessionDetailsOpen}
                     <div role="dialog" aria-label="Session details" class="absolute bottom-full left-0 z-20 mb-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
@@ -898,7 +903,7 @@
                 </div>
               </div>
               <div class="flex shrink-0 items-center justify-end gap-2">
-                <div class="relative">
+                <div data-chat-desktop-inbox class="relative hidden sm:block">
                   <Button
                     variant="outline"
                     size="sm"
@@ -907,7 +912,7 @@
                     onclick={() => (inboxSheetOpen = true)}
                   >
                     <Inbox class="size-4" />
-                    <span class="hidden sm:inline">Inbox</span>
+                    <span>Inbox</span>
                   </Button>
                   {#if inboxActionableCount > 0}
                     <Badge variant="secondary" class="absolute -right-2 -top-2 h-5 min-w-5 rounded-full px-1.5 text-xs shadow-sm">{inboxActionableCount}</Badge>
@@ -924,11 +929,14 @@
                     aria-haspopup="menu"
                     aria-expanded={advancedControlsOpen}
                     bind:ref={advancedControlsTriggerEl}
-                    aria-label="Advanced session controls"
+                    aria-label={inboxActionableCount > 0 ? `Advanced session controls, ${inboxActionableCount} inbox message${inboxActionableCount === 1 ? '' : 's'}` : 'Advanced session controls'}
                     onclick={() => void toggleAdvancedControls()}
                   >
                     <EllipsisVertical class="size-4" />
                   </Button>
+                  {#if inboxActionableCount > 0}
+                    <Badge data-chat-mobile-inbox-count variant="secondary" class="absolute -right-2 -top-2 h-5 min-w-5 rounded-full px-1.5 text-xs shadow-sm sm:hidden">{inboxActionableCount}</Badge>
+                  {/if}
                   {#if advancedControlsOpen}
                     <div
                       bind:this={advancedControlsMenuEl}
@@ -936,6 +944,21 @@
                       data-placement={advancedControlsPlacement}
                       class={`absolute right-0 z-10 w-48 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md ${advancedControlsPlacement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'}`}
                     >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted sm:hidden"
+                        aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`}
+                        onclick={() => {
+                          advancedControlsOpen = false
+                          inboxSheetOpen = true
+                        }}
+                      >
+                        <Inbox class="size-4" /> Inbox
+                        {#if inboxActionableCount > 0}
+                          <Badge variant="secondary" class="ml-auto h-5 min-w-5 rounded-full px-1.5 text-xs">{inboxActionableCount}</Badge>
+                        {/if}
+                      </button>
                       {#if !isTerminalChatSession(selectedSession)}
                         <button
                           type="button"

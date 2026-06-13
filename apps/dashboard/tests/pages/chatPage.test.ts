@@ -751,6 +751,18 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(composerDock).toHaveClass('bottom-0');
   expect(composerDock?.firstElementChild).toHaveClass('mx-auto');
   expect(composerDock?.firstElementChild).toHaveClass('max-w-7xl');
+
+  const stateBadge = screen.getByLabelText('Session state: idle');
+  expect(stateBadge.querySelector('[data-chat-session-state-label]')).toHaveClass('hidden');
+  expect(stateBadge.querySelector('[data-chat-session-state-label]')).toHaveClass('sm:inline');
+
+  const sessionDetailsButton = screen.getByRole('button', { name: /session details:/i });
+  expect(sessionDetailsButton).toHaveClass('border-transparent');
+  expect(sessionDetailsButton).toHaveClass('bg-transparent');
+  expect(sessionDetailsButton).toHaveClass('px-0');
+  expect(sessionDetailsButton).toHaveClass('hover:bg-transparent');
+  expect(sessionDetailsButton.querySelector('[data-chat-session-details-icon]')).toHaveClass('hidden');
+  expect(sessionDetailsButton.querySelector('[data-chat-session-details-summary]')).toHaveClass('flex-1');
 });
 
 test('renders idle thought summary above the final assistant response and expands all steps', async () => {
@@ -992,19 +1004,26 @@ test('opens an inbox sheet with actionable pending, failed, and dispatching mess
     artifacts: [],
   });
 
-  render(ChatPage);
+  const { container } = render(ChatPage);
 
   const inboxButton = await screen.findByRole('button', { name: /open inbox, 2 messages/i });
   expect(inboxButton).toHaveTextContent('Inbox');
   expect(inboxButton).not.toHaveTextContent('2');
+  expect(inboxButton.closest('[data-chat-desktop-inbox]')).toHaveClass('hidden');
+  expect(inboxButton.closest('[data-chat-desktop-inbox]')).toHaveClass('sm:block');
 
-  const inboxBubble = screen.getByText('2');
-  expect(inboxBubble.closest('button')).not.toBe(inboxButton);
-  expect(inboxBubble).toHaveClass('absolute');
-  expect(inboxBubble).toHaveClass('-right-2');
-  expect(inboxBubble).toHaveClass('-top-2');
+  const advancedButton = screen.getByRole('button', { name: /advanced session controls, 2 inbox messages/i });
+  const advancedBubble = advancedButton.parentElement?.querySelector('[data-chat-mobile-inbox-count]');
+  expect(advancedBubble).toHaveTextContent('2');
+  expect(advancedBubble).toHaveClass('sm:hidden');
 
-  await userEvent.click(inboxButton);
+  await userEvent.click(advancedButton);
+  const mobileInboxMenuItem = screen.getByRole('menuitem', { name: /open inbox, 2 messages/i });
+  expect(mobileInboxMenuItem).toHaveClass('sm:hidden');
+
+  await userEvent.click(mobileInboxMenuItem);
+
+  expect(container.querySelector('[data-chat-desktop-inbox]')).toHaveClass('hidden');
 
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
   expect(screen.getByText('Sending now')).toBeInTheDocument();
