@@ -50,54 +50,51 @@ beforeEach(() => {
   resetTimelineState();
 });
 
-test('rebuild stores timeline items and cursor scope as one state unit', async () => {
-  mocks.getSessionTimeline.mockResolvedValueOnce(page());
+test('rebuild stores only the latest timeline page using the default three-round limit', async () => {
+  mocks.getSessionTimeline.mockResolvedValueOnce(page({ next_cursor: 'older-cursor', has_more: true }));
 
   await loadSessionTimeline('sess-1', { mode: 'rebuild' });
 
-  expect(mocks.getSessionTimeline).toHaveBeenCalledWith('sess-1', { cursor: null, limit: 50 });
+  expect(mocks.getSessionTimeline).toHaveBeenCalledTimes(1);
+  expect(mocks.getSessionTimeline).toHaveBeenCalledWith('sess-1', { cursor: null, limit: 3 });
   expect(get(timelineState)).toMatchObject({
     sessionId: 'sess-1',
     bindingId: 'bind-1',
     sourceId: 'pi:/tmp/session.jsonl',
-    tailCursor: 'cursor-tail-1',
+    nextCursor: 'older-cursor',
     items: [expect.objectContaining({ item_id: 'item-1' })],
     loading: false,
     error: null,
   });
 });
 
-test('rebuild loads all timeline pages until the source tail', async () => {
+test('more loads older rounds from next cursor and prepends them', async () => {
   mocks.getSessionTimeline
     .mockResolvedValueOnce(page({
-      items: [{ ...page().items[0], item_id: 'item-1' }],
-      next_cursor: 'cursor-next-1',
-      tail_cursor: 'cursor-tail-page-1',
+      items: [{ ...page().items[0], item_id: 'newer', content_ref: 'ref-newer' }],
+      next_cursor: 'older-cursor',
       has_more: true,
-      is_tail: false,
     }))
     .mockResolvedValueOnce(page({
-      items: [{ ...page().items[0], item_id: 'item-2', content_ref: 'ref-2' }],
+      items: [{ ...page().items[0], item_id: 'older', content_ref: 'ref-older' }],
       next_cursor: null,
-      tail_cursor: 'cursor-tail-final',
       has_more: false,
-      is_tail: true,
+      is_tail: false,
     }));
 
   await loadSessionTimeline('sess-1', { mode: 'rebuild' });
+  await loadSessionTimeline('sess-1', { mode: 'more' });
 
-  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(1, 'sess-1', { cursor: null, limit: 50 });
-  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(2, 'sess-1', { cursor: 'cursor-next-1', limit: 50 });
+  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(1, 'sess-1', { cursor: null, limit: 3 });
+  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(2, 'sess-1', { cursor: 'older-cursor', limit: 3 });
   expect(get(timelineState)).toMatchObject({
-    items: [expect.objectContaining({ item_id: 'item-1' }), expect.objectContaining({ item_id: 'item-2' })],
+    items: [expect.objectContaining({ item_id: 'older' }), expect.objectContaining({ item_id: 'newer' })],
     nextCursor: null,
-    tailCursor: 'cursor-tail-final',
     hasMore: false,
-    isTail: true,
   });
 });
 
-test('message update with matching binding appends from tail cursor', async () => {
+test('message update with matching binding merges the latest page from the tail', async () => {
   mocks.getSessionTimeline
     .mockResolvedValueOnce(page())
     .mockResolvedValueOnce(page({
@@ -108,7 +105,7 @@ test('message update with matching binding appends from tail cursor', async () =
   await loadSessionTimeline('sess-1', { mode: 'rebuild' });
   await handleTimelineMessageUpdated('sess-1', 'bind-1');
 
-  expect(mocks.getSessionTimeline).toHaveBeenLastCalledWith('sess-1', { cursor: 'cursor-tail-1', limit: 50 });
+  expect(mocks.getSessionTimeline).toHaveBeenLastCalledWith('sess-1', { cursor: null, limit: 3 });
   expect(get(timelineState).items.map((item) => item.item_id)).toEqual(['item-1', 'item-2']);
   expect(get(timelineState).tailCursor).toBe('cursor-tail-2');
 });
@@ -133,7 +130,7 @@ test('message updates for the same session are serialized so each append uses th
   const secondUpdate = handleTimelineMessageUpdated('sess-1', 'bind-1');
 
   await vi.waitFor(() => {
-    expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(2, 'sess-1', { cursor: 'cursor-tail-1', limit: 50 });
+    expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(2, 'sess-1', { cursor: null, limit: 3 });
     expect(mocks.getSessionTimeline).toHaveBeenCalledTimes(2);
   });
 
@@ -143,7 +140,7 @@ test('message updates for the same session are serialized so each append uses th
   }));
   await Promise.all([firstUpdate, secondUpdate]);
 
-  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(3, 'sess-1', { cursor: 'cursor-tail-2', limit: 50 });
+  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(3, 'sess-1', { cursor: null, limit: 3 });
   expect(get(timelineState).items.map((item) => item.item_id)).toEqual(['item-1', 'item-2']);
   expect(get(timelineState).tailCursor).toBe('cursor-tail-2');
 });
@@ -189,7 +186,7 @@ test('binding mismatch invalidates local timeline state and rebuilds from null c
   await loadSessionTimeline('sess-1', { mode: 'rebuild' });
   await handleTimelineMessageUpdated('sess-1', 'bind-2');
 
-  expect(mocks.getSessionTimeline).toHaveBeenLastCalledWith('sess-1', { cursor: null, limit: 50 });
+  expect(mocks.getSessionTimeline).toHaveBeenLastCalledWith('sess-1', { cursor: null, limit: 3 });
   expect(get(timelineState)).toMatchObject({ bindingId: 'bind-2', items: [expect.objectContaining({ item_id: 'fresh' })] });
 });
 

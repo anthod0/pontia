@@ -493,6 +493,16 @@
     }
   }
 
+  async function loadEarlierMessages(): Promise<void> {
+    if (!selectedSessionId || !$timelineState.hasMore || $timelineState.refreshing) return
+    actionError = null
+    try {
+      await loadSessionTimeline(selectedSessionId, { mode: 'more' })
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : String(error)
+    }
+  }
+
   async function interruptSelectedSession(): Promise<void> {
     if (!selectedSessionId) return
     actionBusy = true
@@ -682,7 +692,10 @@
             draftPlannerProposalLoading={DAG_TASK_ENTRIES_ENABLED && $taskProposalsLoading}
             interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
             interruptBusy={actionBusy}
+            hasMoreHistory={$timelineState.hasMore}
+            historyLoading={$timelineState.refreshing}
             onInterrupt={() => void interruptSelectedSession()}
+            onLoadMoreHistory={loadEarlierMessages}
           />
 
           <div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:left-[var(--sidebar-width)] md:p-6">

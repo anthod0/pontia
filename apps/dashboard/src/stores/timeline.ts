@@ -21,7 +21,7 @@ type LoadMode = 'rebuild' | 'append' | 'more';
 
 const INVALIDATING_ERROR_CODES = new Set(['cursor_invalid', 'source_unavailable', 'content_ref_invalid']);
 const NON_FATAL_ERROR_CODES = new Set(['not_ready']);
-const DEFAULT_LIMIT = 50;
+const DEFAULT_LIMIT = 3;
 
 function emptyState(sessionId = ''): TimelineState {
   return {
@@ -71,18 +71,34 @@ function appendUniqueTimelineItems(currentItems: TimelineItem[], nextItems: Time
   return [...uniqueTimelineItems(currentItems), ...uniqueNext];
 }
 
+function prependUniqueTimelineItems(currentItems: TimelineItem[], previousItems: TimelineItem[]): TimelineItem[] {
+  const current = uniqueTimelineItems(currentItems);
+  const seen = new Set(current.map((item) => item.item_id));
+  const uniquePrevious = previousItems.filter((item) => {
+    if (seen.has(item.item_id)) return false;
+    seen.add(item.item_id);
+    return true;
+  });
+  return [...uniqueTimelineItems(uniquePrevious), ...current];
+}
+
 function applyPage(current: TimelineState, page: TimelinePage, mode: LoadMode): TimelineState {
   const sameScope = (!current.bindingId || current.bindingId === page.binding_id)
     && (!current.sourceId || current.sourceId === page.source_id);
-  const append = mode !== 'rebuild' && current.sessionId === page.session_id && sameScope;
+  const merge = mode !== 'rebuild' && current.sessionId === page.session_id && sameScope;
+  const items = !merge
+    ? uniqueTimelineItems(page.items)
+    : mode === 'more'
+      ? prependUniqueTimelineItems(current.items, page.items)
+      : appendUniqueTimelineItems(current.items, page.items);
   return {
     sessionId: page.session_id,
     bindingId: page.binding_id,
-    items: append ? appendUniqueTimelineItems(current.items, page.items) : uniqueTimelineItems(page.items),
-    nextCursor: page.next_cursor,
+    items,
+    nextCursor: mode === 'append' && merge ? current.nextCursor : page.next_cursor,
     tailCursor: page.tail_cursor,
     sourceId: page.source_id,
-    hasMore: page.has_more,
+    hasMore: mode === 'append' && merge ? current.hasMore : page.has_more,
     isTail: page.is_tail,
     loading: false,
     refreshing: false,
@@ -114,11 +130,7 @@ export async function loadSessionTimeline(
   const mode = options.mode ?? 'rebuild';
   const current = get(timelineState);
   const existingStateMatches = current.sessionId === sessionId;
-  const cursor = mode === 'more'
-    ? (existingStateMatches ? current.nextCursor : null)
-    : mode === 'append'
-      ? (existingStateMatches ? current.tailCursor : null)
-      : null;
+  const cursor = mode === 'more' && existingStateMatches ? current.nextCursor : null;
 
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
@@ -128,19 +140,9 @@ export async function loadSessionTimeline(
   }));
 
   try {
-    let nextCursor = cursor ?? null;
-    let nextMode: LoadMode = mode;
-    let lastPage: TimelinePage | null = null;
-
-    do {
-      const page = await getSessionTimeline(sessionId, { cursor: nextCursor, limit: options.limit ?? DEFAULT_LIMIT });
-      timelineState.update((state) => applyPage(state.sessionId === sessionId ? state : emptyState(sessionId), page, nextMode));
-      lastPage = page;
-      nextCursor = page.has_more ? page.next_cursor : null;
-      nextMode = 'more';
-    } while (nextCursor);
-
-    return lastPage;
+    const page = await getSessionTimeline(sessionId, { cursor: cursor ?? null, limit: options.limit ?? DEFAULT_LIMIT });
+    timelineState.update((state) => applyPage(state.sessionId === sessionId ? state : emptyState(sessionId), page, mode));
+    return page;
   } catch (error) {
     const message = errorMessage(error);
     if (isNonFatal(error)) {
@@ -183,5 +185,5 @@ async function handleTimelineMessageUpdatedNow(sessionId: string, bindingId: str
     return;
   }
 
-  await loadSessionTimeline(sessionId, { mode: current.tailCursor ? 'append' : 'rebuild' });
+  await loadSessionTimeline(sessionId, { mode: current.items.length ? 'append' : 'rebuild' });
 }

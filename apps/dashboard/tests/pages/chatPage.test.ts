@@ -618,6 +618,37 @@ test('shows workspace name in the selected chat composer pill while retaining fu
   expect(workspacePill).not.toHaveTextContent('/repo/pontia');
 });
 
+test('loads earlier chat history when the chat scroll reaches the top', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.timelineState.set({
+    sessionId: 'session-2',
+    bindingId: 'binding-1',
+    items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
+    nextCursor: 'older-cursor',
+    tailCursor: 'tail-1',
+    sourceId: 'source-1',
+    hasMore: true,
+    isTail: true,
+    loading: false,
+    refreshing: false,
+    error: null,
+  });
+
+  render(ChatPage);
+
+  expect(screen.queryByRole('button', { name: /load earlier messages/i })).not.toBeInTheDocument();
+
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
+  window.dispatchEvent(new Event('scroll'));
+
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'more' }));
+});
+
 test('refreshes the selected chat when the browser returns to the foreground', async () => {
   const selected = session({ session_id: 'session-2', state: 'running' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');

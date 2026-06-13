@@ -27,6 +27,22 @@ test('conversation renders messages without role headers', () => {
   expect(screen.queryByText('AI')).not.toBeInTheDocument();
 });
 
+test('conversation loads earlier history when scrolled to the top', async () => {
+  const onLoadMoreHistory = vi.fn();
+  render(SessionConversation, { props: { messages, hasMoreHistory: true, onLoadMoreHistory } });
+
+  expect(screen.queryByRole('button', { name: /load earlier messages/i })).not.toBeInTheDocument();
+
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 120 });
+  window.dispatchEvent(new Event('scroll'));
+  expect(onLoadMoreHistory).not.toHaveBeenCalled();
+
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
+  window.dispatchEvent(new Event('scroll'));
+
+  await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
+});
+
 test('conversation scrolls the document to the bottom when a new message arrives', async () => {
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import { Bot, CircleStop, GitBranch } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
@@ -22,7 +22,10 @@
     draftPlannerProposalLoading?: boolean
     interruptEnabled?: boolean
     interruptBusy?: boolean
+    hasMoreHistory?: boolean
+    historyLoading?: boolean
     onInterrupt?: () => void
+    onLoadMoreHistory?: () => void | Promise<void>
   }
 
   let {
@@ -34,7 +37,10 @@
     draftPlannerProposalLoading = false,
     interruptEnabled = false,
     interruptBusy = false,
+    hasMoreHistory = false,
+    historyLoading = false,
     onInterrupt,
+    onLoadMoreHistory,
   }: Props = $props()
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let draftDagSheetOpen = $state(false)
@@ -42,6 +48,16 @@
   const displayMessages = $derived(messagesForDisplay(messages, loadingPlaceholder))
   const scrollKey = $derived(chatAutoScrollKey(displayMessages))
   const plannerDraftAnchorId = $derived(lastAssistantMessageId(displayMessages))
+  const TOP_HISTORY_LOAD_THRESHOLD_PX = 80
+  let topHistoryLoadInFlight = false
+
+  onMount(() => {
+    window.addEventListener('scroll', handleWindowScroll, { passive: true })
+  })
+
+  onDestroy(() => {
+    window.removeEventListener('scroll', handleWindowScroll)
+  })
 
   $effect(() => {
     scrollKey
@@ -95,6 +111,26 @@
     draftDagSheetOpen = true
   }
 
+  function handleWindowScroll(): void {
+    if (window.scrollY > TOP_HISTORY_LOAD_THRESHOLD_PX) return
+    if (!hasMoreHistory || historyLoading || topHistoryLoadInFlight || !onLoadMoreHistory) return
+    void loadMoreHistoryFromTop()
+  }
+
+  async function loadMoreHistoryFromTop(): Promise<void> {
+    topHistoryLoadInFlight = true
+    const previousScrollHeight = document.documentElement.scrollHeight
+    const previousScrollY = window.scrollY
+    try {
+      await onLoadMoreHistory?.()
+      await tick()
+      const heightDelta = document.documentElement.scrollHeight - previousScrollHeight
+      if (heightDelta > 0) window.scrollTo({ top: previousScrollY + heightDelta })
+    } finally {
+      topHistoryLoadInFlight = false
+    }
+  }
+
 </script>
 
 <Conversation.Root class="h-auto min-h-0 flex-1 overflow-visible">
@@ -110,6 +146,9 @@
     </Empty.Root>
   {:else}
     <Conversation.Content bind:ref={scrollContainer} data-chat-conversation-content class="overflow-visible px-0 py-4 sm:p-4">
+      {#if hasMoreHistory && historyLoading}
+        <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading earlier messages…</div>
+      {/if}
       {#each displayMessages as chatMessage (chatMessage.id)}
         <Message.Root from={chatMessage.role}>
           <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>

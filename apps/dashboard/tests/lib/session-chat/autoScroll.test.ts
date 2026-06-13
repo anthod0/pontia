@@ -20,6 +20,13 @@ test('chat auto-scroll key changes when a message is appended or the latest agen
   expect(chatAutoScrollKey(completed)).not.toBe(chatAutoScrollKey(withUserReply));
 });
 
+test('chat auto-scroll key does not change when older history is prepended', () => {
+  const latestMessages = [message({ id: 'turn-2:assistant', turnId: 'turn-2', content: 'Latest', status: 'sent' })];
+  const withOlderHistory = [message({ id: 'turn-1:user', turnId: 'turn-1', role: 'user', content: 'Earlier', status: 'sent' }), ...latestMessages];
+
+  expect(chatAutoScrollKey(withOlderHistory)).toBe(chatAutoScrollKey(latestMessages));
+});
+
 test('scrollToBottom moves the scroll container to its bottom edge', () => {
   const element = { scrollTop: 0, scrollHeight: 640 };
 
