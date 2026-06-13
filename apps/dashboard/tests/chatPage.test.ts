@@ -140,7 +140,7 @@ test('chat composer metadata uses desktop pills and a compact mobile summary', a
   expect(within(desktopMetadata).getByText('/work/project')).toBeInTheDocument();
   expect(within(desktopMetadata).getByLabelText('Client: pi')).toBeInTheDocument();
   expect(within(desktopMetadata).queryByText('Client: pi')).not.toBeInTheDocument();
-  expect(within(mobileMetadata).getByRole('button', { name: 'Session details: /work/project +1' })).toBeInTheDocument();
+  expect(within(mobileMetadata).getByRole('button', { name: 'Session details: /work/project · pi' })).toBeInTheDocument();
   expect(within(toolbar).getByRole('button', { name: /exit session/i })).toBeInTheDocument();
   expect(within(toolbar).getByRole('button', { name: /advanced session controls/i })).toBeInTheDocument();
 });
@@ -151,7 +151,7 @@ test('mobile session summary expands current metadata details', async () => {
   const toolbar = await screen.findByLabelText('Session status and controls');
   const mobileMetadata = within(toolbar).getByTestId('session-status-mobile-metadata');
 
-  await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: /work/project +1' }));
+  await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: /work/project · pi' }));
 
   const details = within(mobileMetadata).getByRole('dialog', { name: 'Session details' });
   expect(within(details).getByText('Workspace')).toBeInTheDocument();

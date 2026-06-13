@@ -756,11 +756,17 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(stateBadge.querySelector('[data-chat-session-state-label]')).toHaveClass('hidden');
   expect(stateBadge.querySelector('[data-chat-session-state-label]')).toHaveClass('sm:inline');
 
-  const sessionDetailsButton = screen.getByRole('button', { name: /session details:/i });
-  expect(sessionDetailsButton).toHaveClass('border-transparent');
+  const sessionDetailsButton = screen.getByRole('button', { name: 'Session details: pontia · pi · main' });
+  expect(sessionDetailsButton).toHaveTextContent('pontia · pi · main');
+  expect(sessionDetailsButton).not.toHaveTextContent('+2');
   expect(sessionDetailsButton).toHaveClass('bg-transparent');
   expect(sessionDetailsButton).toHaveClass('px-0');
   expect(sessionDetailsButton).toHaveClass('hover:bg-transparent');
+  expect(sessionDetailsButton).not.toHaveAttribute('data-slot', 'button');
+  expect(sessionDetailsButton.className.split(/\s+/)).not.toContain('border');
+  expect(sessionDetailsButton.className).not.toContain('focus-visible:border-ring');
+  expect(sessionDetailsButton.className).not.toContain('border-border');
+  expect(sessionDetailsButton.className).not.toContain('dark:border-input');
   expect(sessionDetailsButton.querySelector('[data-chat-session-details-icon]')).toHaveClass('hidden');
   expect(sessionDetailsButton.querySelector('[data-chat-session-details-summary]')).toHaveClass('flex-1');
 });

@@ -343,8 +343,8 @@
   }
 
   function sessionMetadataSummary(items: SessionMetadataItem[]): string {
-    const first = items[0]?.value ?? 'Session details'
-    return items.length > 1 ? `${first} +${items.length - 1}` : first
+    if (!items.length) return 'Session details'
+    return items.map((item) => item.value).join(' · ')
   }
 
   function visibleChatInboxMessages(messages: InboxMessageView[]): InboxMessageView[] {
@@ -875,10 +875,9 @@
                   {/if}
                 </div>
                 <div data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1 sm:hidden">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    class="w-full justify-start border-transparent bg-transparent px-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                  <button
+                    type="button"
+                    class="flex h-7 w-full min-w-0 items-center justify-start bg-transparent px-0 text-sm text-muted-foreground outline-none hover:bg-transparent hover:text-foreground focus-visible:text-foreground"
                     aria-haspopup="dialog"
                     aria-expanded={sessionDetailsOpen}
                     aria-label={`Session details: ${selectedSessionMetadataSummary}`}
@@ -886,7 +885,7 @@
                   >
                     <Folder data-chat-session-details-icon class="hidden size-4 shrink-0" aria-hidden="true" />
                     <span data-chat-session-details-summary class="min-w-0 flex-1 truncate text-left">{selectedSessionMetadataSummary}</span>
-                  </Button>
+                  </button>
                   {#if sessionDetailsOpen}
                     <div role="dialog" aria-label="Session details" class="absolute bottom-full left-0 z-20 mb-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
                       <div class="mb-2 text-sm font-medium">Session details</div>
