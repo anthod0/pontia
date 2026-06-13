@@ -136,9 +136,16 @@ function confidence(value: unknown): ContextUsagePayload["confidence"] | undefin
   return value === "exact" || value === "estimated" || value === "unknown" ? value : undefined;
 }
 
-export function contextUsageFromPiEvent(event: unknown): ContextUsagePayload | undefined {
-  if (!event || typeof event !== "object" || Array.isArray(event)) return undefined;
-  const raw = (event as Record<string, unknown>).context_usage;
+function modelNameFromRecord(record: Record<string, unknown>): string | null | undefined {
+  const direct = optionalNullableString(record.model);
+  if (direct !== undefined) return direct;
+  const model = record.model;
+  if (!model || typeof model !== "object" || Array.isArray(model)) return null;
+  const modelRecord = model as Record<string, unknown>;
+  return optionalNullableString(modelRecord.id) ?? optionalNullableString(modelRecord.modelId) ?? optionalNullableString(modelRecord.name);
+}
+
+function contextUsageFromPontiaShape(raw: unknown): ContextUsagePayload | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const record = raw as Record<string, unknown>;
   const used_tokens = optionalNonNegativeInteger(record.used_tokens);
@@ -176,6 +183,86 @@ export function contextUsageFromPiEvent(event: unknown): ContextUsagePayload | u
     model,
     confidence: parsedConfidence,
   };
+}
+
+function contextUsageFromPiMessage(message: unknown): ContextUsagePayload | undefined {
+  if (!message || typeof message !== "object" || Array.isArray(message)) return undefined;
+  const messageRecord = message as Record<string, unknown>;
+  if (messageRecord.role !== "assistant") return undefined;
+  const usage = messageRecord.usage;
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return undefined;
+  const usageRecord = usage as Record<string, unknown>;
+  const input_tokens = optionalNonNegativeInteger(usageRecord.input);
+  const output_tokens = optionalNonNegativeInteger(usageRecord.output);
+  const cache_read_tokens = optionalNonNegativeInteger(usageRecord.cacheRead);
+  const cache_write_tokens = optionalNonNegativeInteger(usageRecord.cacheWrite);
+  const used_tokens = optionalNonNegativeInteger(usageRecord.totalTokens);
+  const model = modelNameFromRecord(messageRecord);
+
+  if (
+    input_tokens === undefined ||
+    output_tokens === undefined ||
+    cache_read_tokens === undefined ||
+    cache_write_tokens === undefined ||
+    used_tokens === undefined ||
+    model === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    used_tokens,
+    max_tokens: null,
+    remaining_tokens: null,
+    usage_ratio: null,
+    input_tokens,
+    output_tokens,
+    cache_tokens: cache_read_tokens === null && cache_write_tokens === null ? null : (cache_read_tokens ?? 0) + (cache_write_tokens ?? 0),
+    model,
+    confidence: "estimated",
+  };
+}
+
+export function contextUsageFromPiContext(ctx: unknown): ContextUsagePayload | undefined {
+  if (!ctx || typeof ctx !== "object" || Array.isArray(ctx)) return undefined;
+  const record = ctx as Record<string, unknown>;
+  const getContextUsage = record.getContextUsage;
+  if (typeof getContextUsage !== "function") return undefined;
+
+  let rawUsage: unknown;
+  try {
+    rawUsage = getContextUsage.call(ctx);
+  } catch {
+    return undefined;
+  }
+  if (!rawUsage || typeof rawUsage !== "object" || Array.isArray(rawUsage)) return undefined;
+  const usage = rawUsage as Record<string, unknown>;
+  const used_tokens = optionalNonNegativeInteger(usage.tokens);
+  const max_tokens = optionalNonNegativeInteger(usage.contextWindow);
+  const percent = usage.percent == null ? null : typeof usage.percent === "number" && usage.percent >= 0 && usage.percent <= 100 ? usage.percent : undefined;
+  const model = modelNameFromRecord(record);
+
+  if (used_tokens === undefined || max_tokens === undefined || percent === undefined || model === undefined) {
+    return undefined;
+  }
+
+  return {
+    used_tokens,
+    max_tokens,
+    remaining_tokens: used_tokens !== null && max_tokens !== null ? Math.max(0, max_tokens - used_tokens) : null,
+    usage_ratio: percent === null ? null : percent / 100,
+    input_tokens: null,
+    output_tokens: null,
+    cache_tokens: null,
+    model,
+    confidence: "estimated",
+  };
+}
+
+export function contextUsageFromPiEvent(event: unknown): ContextUsagePayload | undefined {
+  if (!event || typeof event !== "object" || Array.isArray(event)) return undefined;
+  const record = event as Record<string, unknown>;
+  return contextUsageFromPontiaShape(record.context_usage) ?? contextUsageFromPiMessage(record.message);
 }
 
 export function buildTurnStartedEvent(context: TurnContext): InternalEvent {

@@ -184,6 +184,30 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
+  test("reports context usage from pi extension context", async () => {
+    const { handlers, reported } = install();
+
+    await handlers.agent_start({}, {});
+    await handlers.message_update({ assistantMessageEvent: { text_delta: "hello" } }, {
+      model: { id: "gpt-5.5" },
+      getContextUsage: () => ({ tokens: 6037, contextWindow: 128000, percent: 4.716 }),
+    });
+
+    expect(reported.map((event) => event.type)).toEqual(["turn.started", "session.context_usage_updated"]);
+    expect(reported[1]).toMatchObject({
+      payload: {
+        context_usage: {
+          used_tokens: 6037,
+          max_tokens: 128000,
+          remaining_tokens: 121963,
+          usage_ratio: 0.04716,
+          model: "gpt-5.5",
+          confidence: "estimated",
+        },
+      },
+    });
+  });
+
   test("does not report fake context usage when hook events do not expose usage", async () => {
     const { handlers, reported } = install();
 

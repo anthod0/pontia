@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { buildSessionContextUsageUpdatedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnCreatedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiEvent, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
+import { buildSessionContextUsageUpdatedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnCreatedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiContext, contextUsageFromPiEvent, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
 import { EventReporter } from "./reporter.js";
 import { loadSessionContext } from "./session.js";
 
@@ -222,9 +222,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     await state.reporter.report(state.context, buildSessionMessageUpdatedEvent(state.context, "final"));
   }
 
-  async function reportContextUsageFromHookEvent(event: unknown): Promise<void> {
+  async function reportContextUsageFromHookEvent(event: unknown, ctx?: unknown): Promise<void> {
     if (!activeTurn || activeTurn.ended) return;
-    const usage = contextUsageFromPiEvent(event);
+    const usage = contextUsageFromPiEvent(event) ?? contextUsageFromPiContext(ctx);
     if (!usage) return;
     const usageJson = JSON.stringify(usage);
     if (usageJson === lastContextUsageJson) return;
@@ -331,9 +331,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     }
   });
 
-  pi.on("message_update", async (event) => {
+  pi.on("message_update", async (event, ctx) => {
     if (!activeTurn || activeTurn.ended) return;
-    await reportContextUsageFromHookEvent(event);
+    await reportContextUsageFromHookEvent(event, ctx);
 
     const fullText = assistantTextFromMessage((event as unknown as Record<string, unknown> | undefined)?.message);
     if (fullText) {
@@ -349,17 +349,17 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     }
   });
 
-  pi.on("message_end", async (event) => {
+  pi.on("message_end", async (event, ctx) => {
     if (!activeTurn || activeTurn.ended) return;
-    await reportContextUsageFromHookEvent(event);
+    await reportContextUsageFromHookEvent(event, ctx);
     const fullText = assistantTextFromMessage((event as unknown as Record<string, unknown> | undefined)?.message);
     if (fullText) activeTurn.output = fullText;
     await scheduleMessageRefresh("append");
   });
 
-  pi.on("agent_end", async (event) => {
+  pi.on("agent_end", async (event, ctx) => {
     if (!activeTurn || activeTurn.ended) return;
-    await reportContextUsageFromHookEvent(event);
+    await reportContextUsageFromHookEvent(event, ctx);
     activeTurn.ended = true;
 
     const state = activeTurn;

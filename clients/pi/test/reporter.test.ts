@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { buildSessionContextUsageUpdatedEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiEvent } from "../src/events.js";
+import { buildSessionContextUsageUpdatedEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiContext, contextUsageFromPiEvent } from "../src/events.js";
 import { EventReporter } from "../src/reporter.js";
 import type { TurnContext } from "../src/context.js";
 
@@ -139,6 +139,47 @@ describe("event builders", () => {
       output_tokens: null,
       cache_tokens: null,
       model: null,
+      confidence: "estimated",
+    });
+  });
+
+  test("extracts estimated context usage from pi extension context", () => {
+    expect(
+      contextUsageFromPiContext({
+        model: { id: "gpt-5.5" },
+        getContextUsage: () => ({ tokens: 6_037, contextWindow: 128_000, percent: 4.716 }),
+      }),
+    ).toEqual({
+      used_tokens: 6037,
+      max_tokens: 128000,
+      remaining_tokens: 121963,
+      usage_ratio: 0.04716,
+      input_tokens: null,
+      output_tokens: null,
+      cache_tokens: null,
+      model: "gpt-5.5",
+      confidence: "estimated",
+    });
+  });
+
+  test("extracts estimated context usage from pi message usage fallback", () => {
+    expect(
+      contextUsageFromPiEvent({
+        message: {
+          role: "assistant",
+          model: "gpt-5.5",
+          usage: { input: 386, output: 19, cacheRead: 5632, totalTokens: 6037 },
+        },
+      }),
+    ).toEqual({
+      used_tokens: 6037,
+      max_tokens: null,
+      remaining_tokens: null,
+      usage_ratio: null,
+      input_tokens: 386,
+      output_tokens: 19,
+      cache_tokens: 5632,
+      model: "gpt-5.5",
       confidence: "estimated",
     });
   });
