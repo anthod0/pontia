@@ -1,7 +1,10 @@
 <script lang="ts">
-  import { Home, Pencil, SquarePen } from '@lucide/svelte'
+  import { Home, Pencil, Settings, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
+  import { sidebarMenuButtonVariants } from '$lib/components/ui/sidebar/sidebar-menu-button.svelte'
+  import { cn } from '$lib/utils.js'
   import { sessions, sessionsLoading, updateSessionTitle } from '../../stores/sessions'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
   import type { SessionView } from '../../api/types'
@@ -19,6 +22,12 @@
 
   const recentSessionLimit = 8
 
+  const settingsSections = [
+    { label: 'Common', path: '/settings/common' },
+    { label: 'Workspaces', path: '/settings/workspaces' },
+    { label: 'Agent Profiles', path: '/settings/agent-profiles' },
+  ]
+
   let currentPath = $state(normalizePath(window.location.pathname))
   let renamingSessionId = $state<string | null>(null)
   let recentSessions = $derived(visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit))
@@ -30,6 +39,10 @@
   function isActive(path: string) {
     if (path === '/chat') return currentPath === '/chat'
     return currentPath === path
+  }
+
+  function isSettingsActive() {
+    return currentPath === '/settings' || currentPath.startsWith('/settings/')
   }
 
   function activeSessionIdFromPath(): string | null {
@@ -68,6 +81,12 @@
   function go(path: string) {
     navigate(path)
     currentPath = normalizePath(path)
+    notifyRouteChanged()
+  }
+
+  function openSettingsSection(path: string) {
+    navigate(path)
+    currentPath = path
     notifyRouteChanged()
   }
 
@@ -159,5 +178,30 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
   </Sidebar.Content>
+  <Sidebar.Footer>
+    <Sidebar.Menu>
+      <Sidebar.MenuItem>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger
+            data-active={isSettingsActive() ? true : undefined}
+            class={cn(sidebarMenuButtonVariants(), 'w-full')}
+            aria-label="Settings"
+          >
+            <Settings />
+            <span>Settings</span>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content side="right" align="end" class="w-48">
+            <DropdownMenu.Label>Settings</DropdownMenu.Label>
+            <DropdownMenu.Separator />
+            {#each settingsSections as section}
+              <DropdownMenu.Item onclick={() => openSettingsSection(section.path)}>
+                {section.label}
+              </DropdownMenu.Item>
+            {/each}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      </Sidebar.MenuItem>
+    </Sidebar.Menu>
+  </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>

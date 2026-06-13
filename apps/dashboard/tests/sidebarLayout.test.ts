@@ -86,7 +86,7 @@ test('sidebar shows session control items and hides DAG task navigation', () => 
   expect(workflowQueries.queryByText('Session Console')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Workspaces')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Agent Profiles')).not.toBeInTheDocument();
-  expect(screen.queryByText('Settings')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
 });
 
 test('sidebar shows recent sessions with semantic status dot except exited sessions, and opens chat for the selected session', async () => {
@@ -261,14 +261,33 @@ test('sidebar highlights the matching recent session on chat and session console
   expect(screen.getByText('other').closest('button')).not.toHaveAttribute('data-active');
 });
 
-test('top bar omits static dashboard title and description copy and links settings button to common settings', () => {
+test('top bar omits static dashboard title, description copy, and settings control', () => {
   render(TopBarHost);
 
   expect(screen.queryByText('Dashboard v2')).not.toBeInTheDocument();
   expect(screen.queryByText('DAG tasks, workspaces, profiles, and execution diagnostics')).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: /new chat/i })).toHaveAttribute('href', '/dashboard/chat');
   expect(screen.queryByRole('link', { name: /browse tasks/i })).not.toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute('href', '/dashboard/settings/common');
+  expect(screen.queryByRole('button', { name: /settings/i })).not.toBeInTheDocument();
+});
+
+test('sidebar footer exposes settings as a section menu', async () => {
+  render(AppSidebarHost);
+
+  await fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+
+  expect(await screen.findByRole('menuitem', { name: /^common$/i })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: /^workspaces$/i })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: /^agent profiles$/i })).toBeInTheDocument();
+});
+
+test('sidebar settings menu navigates to settings sections without document reload', async () => {
+  render(AppSidebarHost);
+
+  await fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+  await fireEvent.click(await screen.findByRole('menuitem', { name: /^agent profiles$/i }));
+
+  expect(mocks.navigate).toHaveBeenCalledWith('/settings/agent-profiles');
 });
 
 test('top bar New Chat uses SPA navigation and notifies mounted route components', async () => {
