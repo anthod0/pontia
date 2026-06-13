@@ -1132,6 +1132,49 @@ test('loads and renders an existing chat session with metadata, state, and works
   expect(screen.queryByRole('heading', { name: /new chat/i })).not.toBeInTheDocument();
 });
 
+test('shows supported context usage in chat session metadata while hiding unsupported usage', async () => {
+  const withUsage = session({
+    session_id: 'session-usage',
+    capabilities: { context_usage: 'estimated' },
+    context_usage: {
+      used_tokens: 42000,
+      max_tokens: 128000,
+      remaining_tokens: 86000,
+      usage_ratio: 0.328125,
+      input_tokens: null,
+      output_tokens: null,
+      cache_tokens: null,
+      model: 'example-model',
+      confidence: 'estimated',
+      observed_at: '2026-06-13T00:00:00Z',
+    },
+  });
+  window.history.pushState({}, '', '/dashboard/chat/session-usage');
+  mocks.pathParams = { sessionId: 'session-usage' };
+  mocks.loadedSessions = [withUsage];
+  mocks.sessions.set([withUsage]);
+  mocks.sessionDetail.set({ session: withUsage, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  const contextBadge = await screen.findByLabelText('Context usage: Context 42k / 128k · 33%');
+  expect(contextBadge).toBeInTheDocument();
+  expect(screen.getByText('Context 42k / 128k · 33%')).toBeInTheDocument();
+
+  cleanup();
+  const unsupported = session({ session_id: 'session-unsupported', capabilities: { context_usage: 'unsupported' }, context_usage: null });
+  window.history.pushState({}, '', '/dashboard/chat/session-unsupported');
+  mocks.pathParams = { sessionId: 'session-unsupported' };
+  mocks.loadedSessions = [unsupported];
+  mocks.sessions.set([unsupported]);
+  mocks.sessionDetail.set({ session: unsupported, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  await screen.findByPlaceholderText('Send a follow-up message…');
+  expect(screen.queryByText(/context/i)).not.toBeInTheDocument();
+});
+
 test('places session controls near the prompt input and keeps advanced controls in a menu', async () => {
   const user = userEvent.setup();
   const selected = session({ session_id: 'session-2', state: 'idle' });

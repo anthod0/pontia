@@ -13,6 +13,7 @@
   import * as Select from '$lib/components/ui/select/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
+  import { contextUsageSummary } from '$lib/contextUsage'
   import type { AgentProfileView, DashboardStreamEvent, InboxMessageView, SessionView, WorkspaceGitStatusView, WorkspaceView } from '../api/types'
   import {
     canSendSessionMessage,
@@ -214,6 +215,11 @@
     return clientType || 'Client'
   }
 
+  function sessionContextUsageLabel(session: SessionView): string | null {
+    if ((session.capabilities?.context_usage ?? 'unsupported') === 'unsupported') return null
+    return session.context_usage ? contextUsageSummary(session.context_usage, { includeConfidence: false }) : 'Context waiting…'
+  }
+
   function sessionStateBadgeClass(state: string): string {
     switch (state) {
       case 'busy':
@@ -326,6 +332,8 @@
       const value = `${gitBranchLabel(gitStatus)} · ${gitStatusLabel(gitStatus)}`
       items.push({ key: 'git', label: 'Git', value, title: gitStatusTitle(session, gitStatus) })
     }
+    const contextUsageLabel = sessionContextUsageLabel(session)
+    if (contextUsageLabel) items.push({ key: 'context', label: 'Context', value: contextUsageLabel.replace(/^Context\s+/, ''), title: contextUsageLabel })
     const profileTitle = sessionProfileTitle(session)
     if (profileTitle) items.push({ key: 'profile', label: 'Profile', value: profileTitle, title: profileTitle })
     const handleTitle = sessionHandleTitle(session)
@@ -819,6 +827,16 @@
                         {#if selectedSessionGitStatus.untracked_count}<span class="text-cyan-600 dark:text-cyan-400">?{selectedSessionGitStatus.untracked_count}</span>{/if}
                         {#if selectedSessionGitStatus.conflicted_count}<span class="text-destructive">!{selectedSessionGitStatus.conflicted_count}</span>{/if}
                       {/if}
+                    </Badge>
+                  {/if}
+                  {#if sessionContextUsageLabel(selectedSession)}
+                    <Badge
+                      variant="outline"
+                      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+                      title={`Context usage: ${sessionContextUsageLabel(selectedSession)}`}
+                      aria-label={`Context usage: ${sessionContextUsageLabel(selectedSession)}`}
+                    >
+                      {sessionContextUsageLabel(selectedSession)}
                     </Badge>
                   {/if}
                   <Badge

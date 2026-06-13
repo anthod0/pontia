@@ -12,6 +12,7 @@
   import * as Table from '$lib/components/ui/table/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import { formatDateTime, jsonPreview, shortId } from '../components/tasks/format'
+  import { contextUsageRatio, contextUsageSummary } from '$lib/contextUsage'
   import type { ContextUsageView, InboxDeliveryPolicy, SessionView } from '../api/types'
   import { selectCurrentTurnOutput } from './sessions/currentTurnOutput'
   import { sessionEventDetailRows, sessionEventSummary, sessionEventTurnLabel } from './sessions/sessionEvents'
@@ -52,29 +53,6 @@
 
   function sessionTitle(session: SessionView): string {
     return sessionDisplayTitle(session)
-  }
-
-  function formatTokenCount(value: number): string {
-    if (value >= 1_000_000) return `${Math.round(value / 100_000) / 10}m`
-    if (value >= 1_000) return `${Math.round(value / 1_000)}k`
-    return String(value)
-  }
-
-  function contextUsageRatio(usage: ContextUsageView): number | null {
-    if (usage.usage_ratio !== null) return usage.usage_ratio
-    if (usage.used_tokens !== null && usage.max_tokens !== null && usage.max_tokens > 0) return usage.used_tokens / usage.max_tokens
-    return null
-  }
-
-  function contextUsageSummary(usage: ContextUsageView): string {
-    const ratio = contextUsageRatio(usage)
-    const percent = ratio === null ? null : `${Math.round(ratio * 100)}%`
-    const usageLabel = usage.used_tokens !== null && usage.max_tokens !== null
-      ? `${formatTokenCount(usage.used_tokens)} / ${formatTokenCount(usage.max_tokens)}`
-      : usage.used_tokens !== null
-        ? formatTokenCount(usage.used_tokens)
-        : 'unknown'
-    return `Context ${[usageLabel, percent, usage.confidence].filter(Boolean).join(' · ')}`
   }
 
   function contextUsageTone(usage: ContextUsageView): string {
