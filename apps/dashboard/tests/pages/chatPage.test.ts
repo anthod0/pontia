@@ -708,6 +708,40 @@ test('refreshes the selected chat when the browser returns to the foreground wit
   expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'append' });
 });
 
+test('does not toast passive fetch errors from automatic chat refreshes', async () => {
+  const selected = session({ session_id: 'session-2', state: 'running' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.timelineState.set({
+    sessionId: 'session-2',
+    bindingId: 'binding-1',
+    items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
+    nextCursor: null,
+    tailCursor: 'tail-1',
+    sourceId: 'source-1',
+    hasMore: false,
+    isTail: true,
+    loading: false,
+    refreshing: false,
+    error: null,
+  });
+
+  render(ChatPage);
+
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'append' }));
+  mocks.toastError.mockClear();
+
+  mocks.sessionDetailError.set('fetch error');
+  mocks.timelineState.set({ ...mocks.timelineState.get(), error: 'Failed to fetch' });
+  mocks.sessionsError.set('NetworkError when attempting to fetch resource.');
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(mocks.toastError).not.toHaveBeenCalled();
+});
+
 test('lets existing chat routes use document scroll with a fixed bottom composer', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   const selectedTurns = [turn({ session_id: 'session-2' })];
