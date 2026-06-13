@@ -82,6 +82,7 @@ const mocks = vi.hoisted(() => {
     loadSessionDetail: vi.fn(async () => null),
     submitInboxMessage: vi.fn(),
     cancelInboxMessage: vi.fn(),
+    dismissInboxMessage: vi.fn(),
     resumeSession: vi.fn(),
     restartSession: vi.fn(),
     interruptSession: vi.fn(),
@@ -127,6 +128,7 @@ vi.mock('../../src/stores/sessions', () => ({
   loadSessionDetail: mocks.loadSessionDetail,
   submitInboxMessage: mocks.submitInboxMessage,
   cancelInboxMessage: mocks.cancelInboxMessage,
+  dismissInboxMessage: mocks.dismissInboxMessage,
   resumeSession: mocks.resumeSession,
   restartSession: mocks.restartSession,
   interruptSession: mocks.interruptSession,
@@ -1086,7 +1088,7 @@ test('opens an inbox sheet with actionable pending, failed, and dispatching mess
   expect(articles[2]).toHaveTextContent('Cancel');
 });
 
-test('supports cancelling pending inbox messages and retrying failed inbox messages', async () => {
+test('supports cancelling pending inbox messages and retrying or removing failed inbox messages', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -1127,6 +1129,9 @@ test('supports cancelling pending inbox messages and retrying failed inbox messa
     delivery_policy: 'interrupt_now',
     metadata: { source: 'dashboard_chat', attempt: 1 },
   });
+
+  await userEvent.click(await screen.findByRole('button', { name: /remove inbox message fix the failing dashboard test/i }));
+  expect(mocks.dismissInboxMessage).toHaveBeenCalledWith('session-2', 'message-failed');
 });
 
 test('opens an empty inbox sheet when the selected chat has no inbox messages', async () => {

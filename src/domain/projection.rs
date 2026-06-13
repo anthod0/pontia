@@ -138,7 +138,8 @@ impl ProjectionState {
             | EventType::InboxMessageDispatched
             | EventType::InboxMessageCancelled
             | EventType::InboxMessageSuperseded
-            | EventType::InboxMessageFailed => Ok(()),
+            | EventType::InboxMessageFailed
+            | EventType::InboxMessageDismissed => Ok(()),
         }
     }
 

@@ -4,7 +4,7 @@ export type SessionState = 'created' | 'starting' | 'idle' | 'busy' | 'interrupt
 export type TaskState = 'created' | 'routing' | 'needs_confirmation' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 export type TurnState = 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
 export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now';
-export type InboxMessageState = 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed';
+export type InboxMessageState = 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed' | 'dismissed';
 
 export type ContextUsageCapability = 'unsupported' | 'estimated' | 'exact';
 

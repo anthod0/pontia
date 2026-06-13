@@ -15,9 +15,10 @@
     busyMessageId: string | null
     onCancel: (message: InboxMessageView) => void
     onRetry: (message: InboxMessageView) => void
+    onDismiss: (message: InboxMessageView) => void
   }
 
-  let { open = $bindable(false), inboxActionableCount, visibleInboxMessages, busyMessageId, onCancel, onRetry }: Props = $props()
+  let { open = $bindable(false), inboxActionableCount, visibleInboxMessages, busyMessageId, onCancel, onRetry, onDismiss }: Props = $props()
 </script>
 
 <Sheet.Root bind:open>
@@ -50,6 +51,9 @@
                       <X class="size-3.5" /> Cancel
                     </Button>
                   {:else if message.state === 'failed'}
+                    <Button variant="outline" size="sm" class="gap-1.5" disabled={busyMessageId === message.message_id} aria-label={`Remove inbox message ${message.input.summary}`} onclick={() => onDismiss(message)}>
+                      <X class="size-3.5" /> Remove
+                    </Button>
                     <Button variant="outline" size="sm" class="gap-1.5" disabled={busyMessageId === message.message_id} aria-label={`Retry inbox message ${message.input.summary}`} onclick={() => onRetry(message)}>
                       <RotateCcw class="size-3.5" /> Retry
                     </Button>

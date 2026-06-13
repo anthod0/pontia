@@ -28,7 +28,8 @@ pub use dag_tasks::create_dag_task;
 pub use events::{stream_dashboard_events, stream_session_events, stream_turn_events};
 pub use git_status::{get_workspace_git_status, refresh_workspace_git_status};
 pub use inbox::{
-    cancel_inbox_message, get_inbox_message, list_inbox_messages, submit_inbox_message,
+    cancel_inbox_message, dismiss_inbox_message, get_inbox_message, list_inbox_messages,
+    submit_inbox_message,
 };
 pub use sessions::{
     create_session, get_session, interrupt_session, list_sessions, restart_session, resume_session,

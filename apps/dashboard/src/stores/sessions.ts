@@ -2,6 +2,7 @@ import { writable } from 'svelte/store';
 import {
   cancelInboxMessage as apiCancelInboxMessage,
   createSession as apiCreateSession,
+  dismissInboxMessage as apiDismissInboxMessage,
   discoverArtifacts,
   getSession,
   interruptSession as apiInterruptSession,
@@ -144,6 +145,13 @@ export async function submitInboxMessage(sessionId: string, input: SubmitInboxMe
 
 export async function cancelInboxMessage(sessionId: string, messageId: string): Promise<InboxMessageView> {
   const message = await apiCancelInboxMessage(sessionId, messageId);
+  await loadSessions();
+  await loadSessionDetail(sessionId);
+  return message;
+}
+
+export async function dismissInboxMessage(sessionId: string, messageId: string): Promise<InboxMessageView> {
+  const message = await apiDismissInboxMessage(sessionId, messageId);
   await loadSessions();
   await loadSessionDetail(sessionId);
   return message;

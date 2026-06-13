@@ -67,3 +67,14 @@ pub async fn cancel_inbox_message(
     let outcome = service.cancel_message(&session_id, &message_id).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
+
+pub async fn dismiss_inbox_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((session_id, message_id)): Path<(String, String)>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = InboxCommandService::new(state.db());
+    let outcome = service.dismiss_message(&session_id, &message_id).await?;
+    Ok((StatusCode::OK, ok(outcome.data)).into_response())
+}

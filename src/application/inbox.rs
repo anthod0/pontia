@@ -266,6 +266,52 @@ impl InboxCommandService {
         })
     }
 
+    pub async fn dismiss_message(
+        &self,
+        session_id: &str,
+        message_id: &str,
+    ) -> Result<InboxCommandOutcome> {
+        let query = ExternalQueryService::new(self.pool.clone());
+        let session = query
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+
+        let result = sqlx::query(
+            r#"UPDATE inbox_messages
+               SET state = 'dismissed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE session_id = ? AND message_id = ? AND state = 'failed'"#,
+        )
+        .bind(session_id)
+        .bind(message_id)
+        .execute(&self.pool)
+        .await?;
+
+        let message = self
+            .get_message(session_id, message_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("inbox message {message_id} not found")))?;
+        if result.rows_affected() == 0 && message.state != "dismissed" {
+            return Err(Error::StateConflict(format!(
+                "inbox message {message_id} is not failed"
+            )));
+        }
+        if result.rows_affected() > 0 {
+            self.audit(
+                session_id,
+                &session.client_type,
+                EventType::InboxMessageDismissed,
+                json!({ "message_id": message_id }),
+            )
+            .await?;
+        }
+        let message = self.get_message(session_id, message_id).await?.unwrap();
+        Ok(InboxCommandOutcome {
+            data: json!({ "inbox_message": message }),
+            duplicate: false,
+        })
+    }
+
     pub async fn drain_inbox(&self, session_id: &str) -> Result<()> {
         let query = ExternalQueryService::new(self.pool.clone());
         let session = match query.get_session(session_id).await? {

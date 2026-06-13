@@ -91,6 +91,8 @@ pub enum EventType {
     InboxMessageSuperseded,
     #[serde(rename = "inbox.message_failed")]
     InboxMessageFailed,
+    #[serde(rename = "inbox.message_dismissed")]
+    InboxMessageDismissed,
 }
 
 impl EventType {
@@ -137,6 +139,7 @@ impl std::fmt::Display for EventType {
             Self::InboxMessageCancelled => "inbox.message_cancelled",
             Self::InboxMessageSuperseded => "inbox.message_superseded",
             Self::InboxMessageFailed => "inbox.message_failed",
+            Self::InboxMessageDismissed => "inbox.message_dismissed",
         })
     }
 }
@@ -170,6 +173,7 @@ impl std::str::FromStr for EventType {
             "inbox.message_cancelled" => Ok(Self::InboxMessageCancelled),
             "inbox.message_superseded" => Ok(Self::InboxMessageSuperseded),
             "inbox.message_failed" => Ok(Self::InboxMessageFailed),
+            "inbox.message_dismissed" => Ok(Self::InboxMessageDismissed),
             _ => Err(Error::Domain(format!("unknown event type: {value}"))),
         }
     }

@@ -39,6 +39,7 @@
   import {
     cancelInboxMessage,
     createSession,
+    dismissInboxMessage,
     loadSessionDetail,
     loadSessions,
     interruptSession,
@@ -232,6 +233,19 @@
         delivery_policy: message.delivery_policy === 'interrupt_now' ? 'interrupt_now' : 'after_idle',
         metadata: message.metadata,
       })
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : String(error)
+    } finally {
+      inboxActionMessageId = null
+    }
+  }
+
+  async function dismissFailedInboxMessage(message: InboxMessageView): Promise<void> {
+    if (!selectedSessionId || message.state !== 'failed') return
+    inboxActionMessageId = message.message_id
+    actionError = null
+    try {
+      await dismissInboxMessage(selectedSessionId, message.message_id)
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -597,4 +611,5 @@
   busyMessageId={inboxActionMessageId}
   onCancel={(message) => void cancelPendingInboxMessage(message)}
   onRetry={(message) => void retryFailedInboxMessage(message)}
+  onDismiss={(message) => void dismissFailedInboxMessage(message)}
 />

@@ -245,6 +245,10 @@ export async function cancelInboxMessage(sessionId: string, messageId: string): 
   return (await request<{ inbox_message: InboxMessageView }>(`/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}/cancel`, { method: 'POST', mutating: true })).inbox_message;
 }
 
+export async function dismissInboxMessage(sessionId: string, messageId: string): Promise<InboxMessageView> {
+  return (await request<{ inbox_message: InboxMessageView }>(`/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}/dismiss`, { method: 'POST', mutating: true })).inbox_message;
+}
+
 export async function listEvents(sessionId: string): Promise<EventView[]> {
   return (await request<{ events: EventView[] }>(`/sessions/${sessionId}/events`)).events;
 }

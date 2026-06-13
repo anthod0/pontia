@@ -485,3 +485,106 @@ async fn interrupt_now_without_interrupt_capability_marks_message_failed() {
     );
     assert_eq!(message["turn_id"], Value::Null);
 }
+
+#[tokio::test]
+async fn failed_inbox_message_can_be_dismissed_idempotently() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session_id = create_session(state.clone()).await;
+    let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
+    post_internal_event(
+        state.clone(),
+        event_body(
+            "evt_dismiss_fail_started",
+            "turn.started",
+            &session_id,
+            &active_turn_id,
+        ),
+    )
+    .await;
+    let (_, failed_body) = post_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        None,
+        json!({"input":"cannot interrupt","delivery_policy":"interrupt_now"}),
+    )
+    .await;
+    let message_id = failed_body["data"]["inbox_message"]["message_id"]
+        .as_str()
+        .expect("message id");
+
+    let (dismiss_status, dismiss_body) = post_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
+        None,
+        json!({}),
+    )
+    .await;
+
+    assert_eq!(dismiss_status, StatusCode::OK, "{dismiss_body:?}");
+    assert_eq!(dismiss_body["data"]["inbox_message"]["state"], "dismissed");
+    assert_eq!(
+        dismiss_body["data"]["inbox_message"]["failure_message"],
+        failed_body["data"]["inbox_message"]["failure_message"]
+    );
+
+    let (again_status, again_body) = post_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
+        None,
+        json!({}),
+    )
+    .await;
+    assert_eq!(again_status, StatusCode::OK, "{again_body:?}");
+    assert_eq!(again_body["data"]["inbox_message"]["state"], "dismissed");
+
+    let (events_status, events_body) =
+        get_json(state, &format!("/external/v1/sessions/{session_id}/events")).await;
+    assert_eq!(events_status, StatusCode::OK);
+    let dismissed_events = events_body["data"]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["type"] == "inbox.message_dismissed")
+        .count();
+    assert_eq!(dismissed_events, 1);
+}
+
+#[tokio::test]
+async fn pending_inbox_message_cannot_be_dismissed() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session_id = create_session(state.clone()).await;
+    let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
+    post_internal_event(
+        state.clone(),
+        event_body(
+            "evt_pending_dismiss_started",
+            "turn.started",
+            &session_id,
+            &active_turn_id,
+        ),
+    )
+    .await;
+    let (_, pending_body) = post_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        None,
+        json!({"input":"wait until idle"}),
+    )
+    .await;
+    let message_id = pending_body["data"]["inbox_message"]["message_id"]
+        .as_str()
+        .expect("message id");
+
+    let (status, body) = post_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
+        None,
+        json!({}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "state_conflict");
+}
