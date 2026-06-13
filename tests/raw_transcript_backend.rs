@@ -2,7 +2,7 @@ use std::fs;
 
 use pontia::application::{
     AgentBinding, AgentBindingResolveRequest, AgentBindingResolver, PiAgentBindingResolver,
-    PiJsonlParser, RawTranscriptParser, TimelinePageRequest,
+    PiJsonlParser, RawTranscriptParser, TimelinePageRequest, TimelineUpdatesRequest,
 };
 use serde_json::json;
 use tempfile::tempdir;
@@ -79,7 +79,7 @@ fn pi_parser_returns_recent_conversation_rounds_then_older_rounds() {
         .timeline_page(TimelinePageRequest {
             session_id: "sess_1".to_string(),
             source: source.clone(),
-            cursor: None,
+            older_cursor: None,
             limit: 3,
         })
         .unwrap();
@@ -110,14 +110,13 @@ fn pi_parser_returns_recent_conversation_rounds_then_older_rounds() {
             .any(|item| item.kind == "tool_result")
     );
     assert!(recent_page.has_more);
-    assert!(recent_page.is_tail);
-    let cursor = recent_page.next_cursor.clone().unwrap();
+    let cursor = recent_page.older_cursor.clone().unwrap();
 
     let older_page = parser
         .timeline_page(TimelinePageRequest {
             session_id: "sess_1".to_string(),
             source,
-            cursor: Some(cursor),
+            older_cursor: Some(cursor),
             limit: 3,
         })
         .unwrap();
@@ -130,7 +129,64 @@ fn pi_parser_returns_recent_conversation_rounds_then_older_rounds() {
         .collect();
     assert_eq!(older_previews, vec!["first user", "first assistant"]);
     assert!(!older_page.has_more);
-    assert!(!older_page.is_tail);
+}
+
+#[test]
+fn pi_parser_returns_updates_after_item_anchor_and_reports_missing_anchor() {
+    let temp = tempdir().unwrap();
+    let session_file = temp.path().join("session.jsonl");
+    fs::write(
+        &session_file,
+        concat!(
+            "{\"type\":\"message\",\"id\":\"u1\",\"timestamp\":\"2026-06-09T00:00:01.000Z\",\"message\":{\"role\":\"user\",\"content\":\"first user\"}}\n",
+            "{\"type\":\"message\",\"id\":\"a1\",\"timestamp\":\"2026-06-09T00:00:02.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"first assistant\"}]}}\n",
+            "{\"type\":\"message\",\"id\":\"u2\",\"timestamp\":\"2026-06-09T00:00:03.000Z\",\"message\":{\"role\":\"user\",\"content\":\"second user\"}}\n",
+            "{\"type\":\"message\",\"id\":\"a2\",\"timestamp\":\"2026-06-09T00:00:04.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"second assistant\"}]}}\n",
+        ),
+    )
+    .unwrap();
+
+    let source = pontia::application::ResolvedAgentBinding {
+        id: "bind_1".to_string(),
+        client_type: "pi".to_string(),
+        format: "pi-jsonl".to_string(),
+        path: session_file,
+        fingerprint: None,
+    };
+    let parser = PiJsonlParser::new();
+
+    let updates = parser
+        .timeline_updates(TimelineUpdatesRequest {
+            session_id: "sess_1".to_string(),
+            source: source.clone(),
+            after_item_id: "pi:entry:a1:block:0".to_string(),
+            max_scan_bytes: 8 * 1024 * 1024,
+        })
+        .unwrap();
+
+    assert!(updates.anchor_found);
+    assert!(!updates.truncated);
+    assert_eq!(
+        updates
+            .items
+            .iter()
+            .map(|item| item.item_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["pi:entry:u2:block:0", "pi:entry:a2:block:0"]
+    );
+
+    let missing = parser
+        .timeline_updates(TimelineUpdatesRequest {
+            session_id: "sess_1".to_string(),
+            source,
+            after_item_id: "pi:entry:missing:block:0".to_string(),
+            max_scan_bytes: 8 * 1024 * 1024,
+        })
+        .unwrap();
+
+    assert!(!missing.anchor_found);
+    assert!(!missing.truncated);
+    assert!(missing.items.is_empty());
 }
 
 #[test]
@@ -179,7 +235,7 @@ fn pi_parser_keeps_user_and_assistant_previews_full_but_truncates_other_kinds() 
         .timeline_page(TimelinePageRequest {
             session_id: "sess_1".to_string(),
             source,
-            cursor: None,
+            older_cursor: None,
             limit: 10,
         })
         .unwrap();
@@ -218,7 +274,7 @@ fn pi_parser_falls_back_to_raw_kind_for_unmapped_message_roles() {
         .timeline_page(TimelinePageRequest {
             session_id: "sess_1".to_string(),
             source,
-            cursor: None,
+            older_cursor: None,
             limit: 10,
         })
         .unwrap();

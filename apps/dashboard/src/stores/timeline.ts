@@ -1,17 +1,15 @@
 import { get, writable } from 'svelte/store';
-import { getSessionTimeline } from '../api/client';
+import { getSessionTimeline, getSessionTimelineUpdates } from '../api/client';
 import { ApiError } from '../api/errors';
-import type { TimelineItem, TimelinePage } from '../api/types';
+import type { TimelineItem, TimelinePage, TimelineUpdatesPage } from '../api/types';
 
 export interface TimelineState {
   sessionId: string;
   bindingId: string | null;
   items: TimelineItem[];
-  nextCursor: string | null;
-  tailCursor: string | null;
+  olderCursor: string | null;
   sourceId: string | null;
   hasMore: boolean;
-  isTail: boolean;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
@@ -28,11 +26,9 @@ function emptyState(sessionId = ''): TimelineState {
     sessionId,
     bindingId: null,
     items: [],
-    nextCursor: null,
-    tailCursor: null,
+    olderCursor: null,
     sourceId: null,
     hasMore: false,
-    isTail: true,
     loading: false,
     refreshing: false,
     error: null,
@@ -61,14 +57,20 @@ function uniqueTimelineItems(items: TimelineItem[]): TimelineItem[] {
   });
 }
 
-function appendUniqueTimelineItems(currentItems: TimelineItem[], nextItems: TimelineItem[]): TimelineItem[] {
-  const seen = new Set(currentItems.map((item) => item.item_id));
-  const uniqueNext = nextItems.filter((item) => {
-    if (seen.has(item.item_id)) return false;
-    seen.add(item.item_id);
-    return true;
-  });
-  return [...uniqueTimelineItems(currentItems), ...uniqueNext];
+function upsertAppendTimelineItems(currentItems: TimelineItem[], nextItems: TimelineItem[]): TimelineItem[] {
+  const positions = new Map<string, number>();
+  const merged = uniqueTimelineItems(currentItems);
+  merged.forEach((item, index) => positions.set(item.item_id, index));
+  for (const item of nextItems) {
+    const index = positions.get(item.item_id);
+    if (index === undefined) {
+      positions.set(item.item_id, merged.length);
+      merged.push(item);
+    } else {
+      merged[index] = item;
+    }
+  }
+  return merged;
 }
 
 function prependUniqueTimelineItems(currentItems: TimelineItem[], previousItems: TimelineItem[]): TimelineItem[] {
@@ -90,16 +92,14 @@ function applyPage(current: TimelineState, page: TimelinePage, mode: LoadMode): 
     ? uniqueTimelineItems(page.items)
     : mode === 'more'
       ? prependUniqueTimelineItems(current.items, page.items)
-      : appendUniqueTimelineItems(current.items, page.items);
+      : upsertAppendTimelineItems(current.items, page.items);
   return {
     sessionId: page.session_id,
     bindingId: page.binding_id,
     items,
-    nextCursor: mode === 'append' && merge ? current.nextCursor : page.next_cursor,
-    tailCursor: page.tail_cursor,
+    olderCursor: mode === 'append' && merge ? current.olderCursor : page.older_cursor,
     sourceId: page.source_id,
     hasMore: mode === 'append' && merge ? current.hasMore : page.has_more,
-    isTail: page.is_tail,
     loading: false,
     refreshing: false,
     error: null,
@@ -130,7 +130,7 @@ export async function loadSessionTimeline(
   const mode = options.mode ?? 'rebuild';
   const current = get(timelineState);
   const existingStateMatches = current.sessionId === sessionId;
-  const cursor = mode === 'more' && existingStateMatches ? current.nextCursor : null;
+  const olderCursor = mode === 'more' && existingStateMatches ? current.olderCursor : null;
 
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
@@ -140,7 +140,7 @@ export async function loadSessionTimeline(
   }));
 
   try {
-    const page = await getSessionTimeline(sessionId, { cursor: cursor ?? null, limit: options.limit ?? DEFAULT_LIMIT });
+    const page = await getSessionTimeline(sessionId, { olderCursor: olderCursor ?? null, limit: options.limit ?? DEFAULT_LIMIT });
     timelineState.update((state) => applyPage(state.sessionId === sessionId ? state : emptyState(sessionId), page, mode));
     return page;
   } catch (error) {
@@ -159,6 +159,69 @@ export async function loadSessionTimeline(
       timelineState.update((state) => ({ ...state, sessionId, loading: false, refreshing: false, error: message }));
     }
     return null;
+  }
+}
+
+function applyUpdates(current: TimelineState, updates: TimelineUpdatesPage): TimelineState {
+  const sameScope = current.sessionId === updates.session_id
+    && (!current.bindingId || current.bindingId === updates.binding_id)
+    && (!current.sourceId || current.sourceId === updates.source_id);
+  if (!sameScope) {
+    return {
+      ...emptyState(updates.session_id),
+      bindingId: updates.binding_id,
+      sourceId: updates.source_id,
+      items: uniqueTimelineItems(updates.items),
+      loading: false,
+      refreshing: false,
+      error: null,
+    };
+  }
+  return {
+    ...current,
+    bindingId: updates.binding_id,
+    sourceId: updates.source_id,
+    items: upsertAppendTimelineItems(current.items, updates.items),
+    loading: false,
+    refreshing: false,
+    error: null,
+  };
+}
+
+async function refreshSessionTimelineUpdates(sessionId: string, afterItemId: string | null): Promise<void> {
+  if (!afterItemId) {
+    await loadSessionTimeline(sessionId, { mode: 'rebuild' });
+    return;
+  }
+
+  timelineState.update((state) => ({
+    ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
+    refreshing: true,
+    error: null,
+  }));
+
+  try {
+    const updates = await getSessionTimelineUpdates(sessionId, { afterItemId });
+    if (!updates.anchor_found || updates.truncated) {
+      await loadSessionTimeline(sessionId, { mode: 'rebuild' });
+      return;
+    }
+    timelineState.update((state) => applyUpdates(state.sessionId === sessionId ? state : emptyState(sessionId), updates));
+  } catch (error) {
+    const message = errorMessage(error);
+    if (isNonFatal(error)) {
+      timelineState.update((state) => ({
+        ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
+        sessionId,
+        loading: false,
+        refreshing: false,
+        error: null,
+      }));
+    } else if (shouldInvalidate(error)) {
+      timelineState.set({ ...emptyState(sessionId), error: message });
+    } else {
+      timelineState.update((state) => ({ ...state, sessionId, loading: false, refreshing: false, error: message }));
+    }
   }
 }
 
@@ -185,5 +248,10 @@ async function handleTimelineMessageUpdatedNow(sessionId: string, bindingId: str
     return;
   }
 
-  await loadSessionTimeline(sessionId, { mode: current.items.length ? 'append' : 'rebuild' });
+  if (!current.items.length) {
+    await loadSessionTimeline(sessionId, { mode: 'rebuild' });
+    return;
+  }
+
+  await refreshSessionTimelineUpdates(sessionId, current.items.at(-1)?.item_id ?? null);
 }

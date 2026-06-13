@@ -149,13 +149,33 @@ async fn timeline_and_detail_external_api_read_pi_jsonl_fixture() {
     );
     assert_eq!(body["data"]["items"][1]["kind"], "assistant");
     assert_eq!(body["data"]["has_more"], false);
-    assert_eq!(body["data"]["is_tail"], true);
-    assert!(body["data"]["next_cursor"].is_null());
+    assert!(body["data"]["older_cursor"].is_null());
+    assert!(body["data"].get("tail_cursor").is_none());
+    assert!(body["data"].get("is_tail").is_none());
+    assert!(body["data"].get("next_cursor").is_none());
     assert!(
         body["data"]["source_id"]
             .as_str()
             .unwrap()
             .starts_with("pi:")
+    );
+
+    let (updates_status, updates_body) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/timeline/updates?after_item_id={}",
+            urlencoding_for_test("pi:entry:u1:block:0")
+        ),
+    )
+    .await;
+    assert_eq!(updates_status, StatusCode::OK);
+    assert_eq!(updates_body["data"]["after_item_id"], "pi:entry:u1:block:0");
+    assert_eq!(updates_body["data"]["anchor_found"], true);
+    assert_eq!(updates_body["data"]["truncated"], false);
+    assert_eq!(updates_body["data"]["items"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        updates_body["data"]["items"][0]["item_id"],
+        "pi:entry:a1:block:0"
     );
 
     let detail_ref = body["data"]["items"][0]["content_ref"].as_str().unwrap();
@@ -180,7 +200,7 @@ async fn timeline_and_detail_external_api_read_pi_jsonl_fixture() {
 
     let (cursor_status, cursor_body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/timeline?cursor=bad-cursor"),
+        &format!("/external/v1/sessions/{session_id}/timeline?older_cursor=bad-cursor"),
     )
     .await;
     assert_eq!(cursor_status, StatusCode::UNPROCESSABLE_ENTITY);

@@ -9,6 +9,12 @@ pub(super) fn pi_entry_to_items(
     start: usize,
     end: usize,
 ) -> Vec<TimelineItem> {
+    if entry.get("type").and_then(Value::as_str).is_some()
+        && entry.get("id").and_then(Value::as_str).is_none()
+    {
+        eprintln!("pi transcript entry at byte {start} missing stable id; skipping");
+        return Vec::new();
+    }
     match entry.get("type").and_then(Value::as_str) {
         Some("message") => pi_message_entry_to_items(entry, binding_id, start, end),
         Some("model_change") => vec![timeline_item(
@@ -238,10 +244,11 @@ fn timeline_item(
     status: Option<String>,
     preview: String,
 ) -> TimelineItem {
-    let entry_id = entry.get("id").and_then(Value::as_str).unwrap_or("unknown");
+    let item_id = timeline_item_id(entry, block_index)
+        .expect("pi_entry_to_items filters entries without stable ids before mapping");
     let kind = normalize_pi_timeline_kind(raw_kind);
     TimelineItem {
-        item_id: format!("pi:entry:{entry_id}:block:{block_index}"),
+        item_id,
         kind: kind.to_string(),
         raw_kind: Some(raw_kind.to_string()),
         role: role.to_string(),
@@ -254,6 +261,11 @@ fn timeline_item(
         content_preview: timeline_content_preview(kind, preview),
         content_ref: encode_pi_content_ref(binding_id, start, end, block_index, kind),
     }
+}
+
+fn timeline_item_id(entry: &Value, block_index: usize) -> Option<String> {
+    let entry_id = entry.get("id").and_then(Value::as_str)?;
+    Some(format!("pi:entry:{entry_id}:block:{block_index}"))
 }
 
 fn normalize_pi_timeline_kind(raw_kind: &str) -> &str {

@@ -358,10 +358,18 @@ export interface TimelinePage {
   session_id: string;
   binding_id: string;
   items: TimelineItem[];
-  next_cursor: string | null;
-  tail_cursor: string | null;
+  older_cursor: string | null;
   has_more: boolean;
-  is_tail: boolean;
+  source_id: string;
+}
+
+export interface TimelineUpdatesPage {
+  session_id: string;
+  binding_id: string;
+  after_item_id: string;
+  items: TimelineItem[];
+  anchor_found: boolean;
+  truncated: boolean;
   source_id: string;
 }
 

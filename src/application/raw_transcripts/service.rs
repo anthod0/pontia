@@ -28,7 +28,7 @@ where
     parser.timeline_page(TimelinePageRequest {
         session_id: binding.session_id.clone(),
         source,
-        cursor,
+        older_cursor: cursor,
         limit,
     })
 }

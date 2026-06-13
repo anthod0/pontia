@@ -90,7 +90,8 @@ pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
     AgentBindingResolveRequest, AgentBindingResolver, PiAgentBindingResolver, PiJsonlParser,
     RawTranscriptParser, ResolvedAgentBinding, TimelineItem, TimelineItemDetailPage,
-    TimelineItemDetailRequest, TimelinePage, TimelinePageRequest, resolve_and_parse_timeline_page,
+    TimelineItemDetailRequest, TimelinePage, TimelinePageRequest, TimelineUpdatesPage,
+    TimelineUpdatesRequest, resolve_and_parse_timeline_page,
 };
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};
 pub use runtime_observation::{AdapterEventOutboxService, RuntimeObservationService};

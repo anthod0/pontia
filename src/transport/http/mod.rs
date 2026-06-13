@@ -201,6 +201,10 @@ pub fn router(state: AppState) -> Router {
             get(external::get_session_timeline),
         )
         .route(
+            "/external/v1/sessions/{session_id}/timeline/updates",
+            get(external::get_session_timeline_updates),
+        )
+        .route(
             "/external/v1/sessions/{session_id}/timeline/detail",
             get(external::get_session_timeline_detail),
         )
