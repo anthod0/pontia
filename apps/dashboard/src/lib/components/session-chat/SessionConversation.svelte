@@ -48,6 +48,7 @@
   const displayMessages = $derived(messagesForDisplay(messages, loadingPlaceholder))
   const scrollKey = $derived(chatAutoScrollKey(displayMessages))
   const plannerDraftAnchorId = $derived(lastAssistantMessageId(displayMessages))
+  const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
   const TOP_HISTORY_LOAD_THRESHOLD_PX = 80
   const BOTTOM_AUTO_SCROLL_THRESHOLD_PX = 160
   let topHistoryLoadInFlight = false
@@ -105,6 +106,12 @@
     for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
       if (chatMessages[index]?.role === 'assistant') return chatMessages[index].id
     }
+    return null
+  }
+
+  function lastEmptyPendingAssistantMessageId(chatMessages: SessionChatMessage[]): string | null {
+    const message = chatMessages.at(-1)
+    if (message?.role === 'assistant' && message.status === 'pending' && !message.content.trim()) return message.id
     return null
   }
 
@@ -168,9 +175,9 @@
         <Message.Root from={chatMessage.role}>
           <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
             {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
-              <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.status === 'pending'} />
+              <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
             {/if}
-            {#if chatMessage.role === 'assistant' && loadingPlaceholder && !chatMessage.content.trim()}
+            {#if chatMessage.role === 'assistant' && loadingPlaceholder && chatMessage.id === activeLoadingMessageId}
               <div class="max-w-md space-y-2 text-muted-foreground" aria-live="polite">
                 <div class="space-y-1">
                   <p class="text-sm font-medium text-foreground">{loadingPlaceholder.title}</p>

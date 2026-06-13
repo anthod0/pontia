@@ -102,6 +102,80 @@ test('conversation uses session busy state to keep thought summary active withou
   expect(screen.queryByText('Working…')).not.toBeInTheDocument();
 });
 
+test('conversation shows agent working only on the latest pending assistant placeholder after an interrupt', () => {
+  render(SessionConversation, {
+    props: {
+      sessionState: 'busy',
+      messages: [
+        ...messages,
+        {
+          id: 'interrupted-turn:working',
+          turnId: 'interrupted-turn',
+          role: 'assistant',
+          content: '',
+          status: 'pending',
+          createdAt: '2026-06-11T00:00:00Z',
+          thoughtSteps: [
+            { id: 'thought-old', kind: 'thinking', title: 'Thinking', status: null, content: 'Interrupted work', occurredAt: null },
+          ],
+        },
+        {
+          id: 'message-4',
+          turnId: 'next-turn',
+          role: 'user',
+          content: 'Try a smaller change.',
+          status: 'sent',
+          createdAt: '2026-06-11T00:01:00Z',
+        },
+      ],
+      interruptEnabled: true,
+    },
+  });
+
+  expect(screen.getAllByText('Agent working')).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: /interrupt agent/i })).toHaveLength(1);
+  expect(screen.getByText('Thought for 1 step')).toBeInTheDocument();
+  expect(screen.queryByText('Interrupted work')).not.toBeInTheDocument();
+});
+
+test('conversation keeps non-trailing empty pending thought summaries idle while the session is busy', () => {
+  render(SessionConversation, {
+    props: {
+      sessionState: 'busy',
+      messages: [
+        ...messages,
+        {
+          id: 'interrupted-turn:working',
+          turnId: 'interrupted-turn',
+          role: 'assistant',
+          content: '',
+          status: 'pending',
+          createdAt: '2026-06-11T00:00:00Z',
+          thoughtSteps: [
+            { id: 'thought-old-1', kind: 'tool_call', title: 'read', status: 'started', content: 'Reading old file', occurredAt: null },
+            { id: 'thought-old-2', kind: 'tool_call', title: 'bash', status: 'started', content: 'Running old command', occurredAt: null },
+          ],
+        },
+        {
+          id: 'message-4',
+          turnId: 'next-turn',
+          role: 'assistant',
+          content: 'Recovered with a final response.',
+          status: 'sent',
+          createdAt: '2026-06-11T00:01:00Z',
+        },
+      ],
+      interruptEnabled: true,
+    },
+  });
+
+  expect(screen.queryByText('Agent working')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
+  expect(screen.getByText('Thought for 2 steps')).toBeInTheDocument();
+  expect(screen.queryByText('Reading old file')).not.toBeInTheDocument();
+  expect(screen.queryByText('Running old command')).not.toBeInTheDocument();
+});
+
 test('conversation renders an interrupt button on the agent working placeholder when enabled', async () => {
   const onInterrupt = vi.fn();
 
