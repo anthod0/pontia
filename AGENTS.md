@@ -21,6 +21,14 @@
 - Preserve idempotency behavior for mutating External API routes that accept `Idempotency-Key`.
 - Use the capability model to represent client differences. When a client cannot support an action or fact source, return an explicit unsupported/degraded result rather than fabricating success events.
 
+## Dashboard UI rules
+
+- Dashboard UI uses shadcn-svelte-style components under `apps/dashboard/src/lib/components/ui/`.
+- When a new basic UI primitive is needed, first check the shadcn-svelte component catalog and add the component through the shadcn-svelte CLI instead of hand-rolling it.
+- Prefer extending or composing existing `ui/` components before writing one-off markup for common primitives such as popovers, dialogs, checkboxes, progress bars, collapsibles, selects, menus, tabs, tables, and form fields.
+- Hand-written UI primitives are acceptable only when the component is project-specific or shadcn-svelte does not provide a suitable primitive.
+- Use pnpm for shadcn-svelte CLI commands in the dashboard, for example: `pnpm dlx shadcn-svelte@latest add <component> --cwd apps/dashboard`.
+
 ## Database migration rules
 
 - Never modify an existing SQL migration file after it has been committed or may have been applied to any database.
