@@ -5,6 +5,7 @@ mod common;
 mod dag;
 mod dag_tasks;
 mod events;
+mod git_status;
 mod inbox;
 mod sessions;
 mod tasks;
@@ -25,6 +26,7 @@ pub use dag::{
 };
 pub use dag_tasks::create_dag_task;
 pub use events::{stream_dashboard_events, stream_session_events, stream_turn_events};
+pub use git_status::{get_workspace_git_status, refresh_workspace_git_status};
 pub use inbox::{
     cancel_inbox_message, get_inbox_message, list_inbox_messages, submit_inbox_message,
 };

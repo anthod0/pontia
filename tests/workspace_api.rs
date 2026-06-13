@@ -98,6 +98,36 @@ async fn patch_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Val
     json_response(response).await
 }
 
+async fn post_empty(state: AppState, uri: &str) -> (StatusCode, Value) {
+    let response = http::router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    json_response(response).await
+}
+
+fn git(workdir: &std::path::Path, args: &[&str]) {
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(workdir)
+        .output()
+        .expect("run git");
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 async fn json_response(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let body = response
@@ -108,6 +138,98 @@ async fn json_response(response: axum::response::Response) -> (StatusCode, Value
         .to_bytes();
     let json = serde_json::from_slice(&body).expect("json body");
     (status, json)
+}
+
+#[tokio::test]
+async fn git_status_read_returns_unknown_until_workspace_is_observed() {
+    let root = tempfile::tempdir().expect("root");
+    let app = root.path().join("app");
+    std::fs::create_dir(&app).expect("app");
+    let state = test_state(vec![WorkspaceRootConfig {
+        root_id: "projects".to_string(),
+        label: "Projects".to_string(),
+        path: root.path().display().to_string(),
+    }])
+    .await;
+    let (_, body) = post_json(
+        state.clone(),
+        "/external/v1/workspaces",
+        json!({"root_id":"projects", "path":"app"}),
+    )
+    .await;
+    let workspace_id = body["data"]["workspace"]["workspace_id"].as_str().unwrap();
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/workspaces/{workspace_id}/git-status"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let git_status = &body["data"]["git_status"];
+    assert_eq!(git_status["workspace_id"], workspace_id);
+    assert_eq!(git_status["state"], "unknown");
+    assert!(git_status["observed_at"].is_null());
+}
+
+#[tokio::test]
+async fn refreshing_git_status_updates_sqlite_projection_read_by_get() {
+    let root = tempfile::tempdir().expect("root");
+    let app = root.path().join("app");
+    std::fs::create_dir(&app).expect("app");
+    git(&app, &["init", "-b", "main"]);
+    std::fs::write(app.join("README.md"), "hello\n").expect("tracked file");
+    git(&app, &["add", "README.md"]);
+    git(
+        &app,
+        &[
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Test",
+            "commit",
+            "-m",
+            "init",
+        ],
+    );
+    std::fs::write(app.join("README.md"), "hello changed\n").expect("modify tracked file");
+    std::fs::write(app.join("notes.txt"), "untracked\n").expect("untracked file");
+    let state = test_state(vec![WorkspaceRootConfig {
+        root_id: "projects".to_string(),
+        label: "Projects".to_string(),
+        path: root.path().display().to_string(),
+    }])
+    .await;
+    let (_, body) = post_json(
+        state.clone(),
+        "/external/v1/workspaces",
+        json!({"root_id":"projects", "path":"app"}),
+    )
+    .await;
+    let workspace_id = body["data"]["workspace"]["workspace_id"].as_str().unwrap();
+
+    let (status, body) = post_empty(
+        state.clone(),
+        &format!("/external/v1/workspaces/{workspace_id}/git-status/refresh"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let refreshed = &body["data"]["git_status"];
+    assert_eq!(refreshed["state"], "observed");
+    assert_eq!(refreshed["branch"], "main");
+    assert_eq!(refreshed["clean"], false);
+    assert_eq!(refreshed["unstaged_count"], 1);
+    assert_eq!(refreshed["untracked_count"], 1);
+    assert!(refreshed["observed_at"].as_str().is_some());
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/workspaces/{workspace_id}/git-status"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["git_status"], *refreshed);
 }
 
 #[tokio::test]

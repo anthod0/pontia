@@ -3,6 +3,7 @@ use super::*;
 mod artifacts;
 mod dag;
 mod events;
+mod git_status;
 mod sessions;
 mod tasks;
 mod turns;

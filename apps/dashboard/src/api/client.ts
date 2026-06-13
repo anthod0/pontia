@@ -28,6 +28,7 @@ import type {
   TurnView,
   UpdateSessionInput,
   WorkspaceDirectoryListingView,
+  WorkspaceGitStatusView,
   WorkspaceRootView,
   WorkspaceView,
 } from './types';
@@ -153,6 +154,14 @@ export async function renameWorkspace(workspaceId: string, input: RenameWorkspac
 
 export async function deleteWorkspace(workspaceId: string): Promise<WorkspaceView> {
   return (await request<{ workspace: WorkspaceView }>(`/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'DELETE', mutating: true })).workspace;
+}
+
+export async function getWorkspaceGitStatus(workspaceId: string, options: ReadRequestOptions = {}): Promise<WorkspaceGitStatusView> {
+  return (await request<{ git_status: WorkspaceGitStatusView }>(`/workspaces/${encodeURIComponent(workspaceId)}/git-status`, options)).git_status;
+}
+
+export async function refreshWorkspaceGitStatus(workspaceId: string): Promise<WorkspaceGitStatusView> {
+  return (await request<{ git_status: WorkspaceGitStatusView }>(`/workspaces/${encodeURIComponent(workspaceId)}/git-status/refresh`, { method: 'POST', mutating: true })).git_status;
 }
 
 export async function listWorkspaceRoots(options: ReadRequestOptions = {}): Promise<WorkspaceRootView[]> {

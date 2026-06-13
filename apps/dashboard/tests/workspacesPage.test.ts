@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => {
         value = next;
         for (const run of subscribers) run(value);
       },
+      update(updater: (value: T) => T) {
+        value = updater(value);
+        for (const run of subscribers) run(value);
+      },
     };
   }
 
@@ -25,12 +29,16 @@ const mocks = vi.hoisted(() => {
   const workspacesLoading = writableStore(false);
   const workspacesError = writableStore<string | null>(null);
   const workspaceRoots = writableStore<WorkspaceRootView[]>([]);
+  const workspaceGitStatuses = writableStore({});
+  const workspaceGitStatusErrors = writableStore({});
 
   return {
     workspaces,
     workspacesLoading,
     workspacesError,
     workspaceRoots,
+    workspaceGitStatuses,
+    workspaceGitStatusErrors,
     roots: [] as WorkspaceRootView[],
     listing: null as WorkspaceDirectoryListingView | null,
     loadWorkspaces: vi.fn(async () => undefined),
@@ -39,6 +47,8 @@ const mocks = vi.hoisted(() => {
       return mocks.roots;
     }),
     browseWorkspaceRoot: vi.fn(async () => mocks.listing),
+    loadWorkspaceGitStatus: vi.fn(async () => undefined),
+    refreshWorkspaceGitStatus: vi.fn(async () => undefined),
     registerWorkspace: vi.fn(async () => undefined),
     renameWorkspace: vi.fn(async () => undefined),
     deleteWorkspace: vi.fn(async () => undefined),
@@ -50,9 +60,13 @@ vi.mock('../src/stores/workspaces', () => ({
   workspacesLoading: mocks.workspacesLoading,
   workspacesError: mocks.workspacesError,
   workspaceRoots: mocks.workspaceRoots,
+  workspaceGitStatuses: mocks.workspaceGitStatuses,
+  workspaceGitStatusErrors: mocks.workspaceGitStatusErrors,
   loadWorkspaces: mocks.loadWorkspaces,
   loadWorkspaceRoots: mocks.loadWorkspaceRoots,
   browseWorkspaceRoot: mocks.browseWorkspaceRoot,
+  loadWorkspaceGitStatus: mocks.loadWorkspaceGitStatus,
+  refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
   registerWorkspace: mocks.registerWorkspace,
   renameWorkspace: mocks.renameWorkspace,
   deleteWorkspace: mocks.deleteWorkspace,
@@ -88,6 +102,8 @@ beforeEach(() => {
   mocks.workspaces.set([workspace()]);
   mocks.workspacesLoading.set(false);
   mocks.workspacesError.set(null);
+  mocks.workspaceGitStatuses.set({});
+  mocks.workspaceGitStatusErrors.set({});
   vi.clearAllMocks();
 });
 

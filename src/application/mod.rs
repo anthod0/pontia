@@ -37,6 +37,7 @@ mod dag_run_result;
 mod dag_scheduler;
 mod dag_validator;
 mod events;
+mod git_status;
 mod graph;
 mod inbox;
 mod mapping;
@@ -76,6 +77,7 @@ pub use dag_run_result::DagRunResultService;
 pub use dag_scheduler::{DagSchedulerDispatch, DagSchedulerOutcome, DagSchedulerService};
 pub use events::{EventIngestResult, EventIngestService};
 pub(crate) use events::{nested_array_strings, nested_string, remove_internal_metadata_fields};
+pub use git_status::WorkspaceGitStatusService;
 #[cfg(feature = "lbug")]
 pub use graph::LbugDagGraphStore;
 pub use graph::{

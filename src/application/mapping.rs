@@ -39,6 +39,28 @@ pub(crate) fn row_to_workspace_view(row: sqlx::sqlite::SqliteRow) -> Result<Work
     })
 }
 
+pub(crate) fn row_to_workspace_git_status_view(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<WorkspaceGitStatusView> {
+    Ok(WorkspaceGitStatusView {
+        workspace_id: row.try_get("workspace_id")?,
+        repo_root: row.try_get("repo_root")?,
+        branch: row.try_get("branch")?,
+        upstream: row.try_get("upstream")?,
+        ahead: row.try_get("ahead")?,
+        behind: row.try_get("behind")?,
+        staged_count: row.try_get("staged_count")?,
+        unstaged_count: row.try_get("unstaged_count")?,
+        untracked_count: row.try_get("untracked_count")?,
+        conflicted_count: row.try_get("conflicted_count")?,
+        clean: row.try_get("clean")?,
+        state: row.try_get("state")?,
+        failure: row.try_get("failure")?,
+        observed_at: row.try_get("observed_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
 pub(crate) fn row_to_task_view(row: sqlx::sqlite::SqliteRow) -> Result<TaskView> {
     let metadata: String = row.try_get("metadata")?;
 

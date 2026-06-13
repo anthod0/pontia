@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CheckCircle2, Circle, CircleAlert, CornerUpLeft, FolderOpen, Pencil, RefreshCw, Trash2 } from '@lucide/svelte'
+  import { CheckCircle2, Circle, CircleAlert, CornerUpLeft, FolderOpen, GitBranch, Pencil, RefreshCw, Trash2 } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -11,8 +11,8 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
   import { formatDateTime } from '../components/tasks/format'
-  import type { WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceView } from '../api/types'
-  import { browseWorkspaceRoot, deleteWorkspace, loadWorkspaceRoots, loadWorkspaces, registerWorkspace, renameWorkspace, workspaceRoots, workspaces, workspacesError, workspacesLoading } from '../stores/workspaces'
+  import type { WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceGitStatusView, WorkspaceView } from '../api/types'
+  import { browseWorkspaceRoot, deleteWorkspace, loadWorkspaceGitStatus, loadWorkspaceRoots, loadWorkspaces, refreshWorkspaceGitStatus, registerWorkspace, renameWorkspace, workspaceGitStatusErrors, workspaceGitStatuses, workspaceRoots, workspaces, workspacesError, workspacesLoading } from '../stores/workspaces'
 
   let rootId = ''
   let browsePath = ''
@@ -35,6 +35,9 @@
       await Promise.all([loadWorkspaces({ signal: controller.signal }), loadWorkspaceRoots({ signal: controller.signal }).then((roots) => {
         if (!rootId && roots.length) rootId = roots[0].root_id
       })])
+      if (!controller.signal.aborted) {
+        await Promise.all($workspaces.map((workspace) => loadWorkspaceGitStatus(workspace.workspace_id, { signal: controller.signal })))
+      }
       if (!controller.signal.aborted && rootId) await openPath('', { signal: controller.signal })
     })()
 
@@ -45,6 +48,7 @@
 
   async function refreshAll(): Promise<void> {
     await Promise.all([loadWorkspaces(), loadWorkspaceRoots()])
+    await Promise.all($workspaces.map((workspace) => refreshWorkspaceGitStatus(workspace.workspace_id)))
     if (rootId) await openPath(browsePath)
   }
 
@@ -74,6 +78,20 @@
     const canonicalPath = canonicalPathForEntry(entry)
     if (!canonicalPath) return null
     return $workspaces.find((workspace) => workspace.canonical_path === canonicalPath || workspace.display_path === canonicalPath) ?? null
+  }
+
+  function gitStatusLabel(status: WorkspaceGitStatusView | undefined): string {
+    if (!status || status.state === 'unknown') return 'Git unknown'
+    if (status.state === 'error') return 'Git error'
+    return status.clean ? 'clean' : 'dirty'
+  }
+
+  function gitBranchLabel(status: WorkspaceGitStatusView | undefined): string {
+    return status?.branch ?? 'No branch'
+  }
+
+  function hasGitChangeCounts(status: WorkspaceGitStatusView | undefined): boolean {
+    return !!status && (status.staged_count > 0 || status.unstaged_count > 0 || status.untracked_count > 0 || status.conflicted_count > 0 || status.ahead > 0 || status.behind > 0)
   }
 
   async function activateEntry(entry: WorkspaceDirectoryEntryView): Promise<void> {
@@ -166,13 +184,39 @@
         <div class="divide-y rounded-lg border" data-testid="active-workspaces-list">
           {#each $workspaces as workspace}
             {@const workspaceLabel = workspace.name ?? workspace.display_path}
+            {@const gitStatus = $workspaceGitStatuses[workspace.workspace_id]}
             <div class="flex flex-col gap-3 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
               <div class="min-w-0 flex-1">
                 <div class="font-medium">{workspaceLabel}</div>
                 <div class="truncate text-muted-foreground" title={workspace.canonical_path}>{workspace.canonical_path}</div>
-                <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="secondary">{workspace.state}</Badge><span>Updated {formatDateTime(workspace.updated_at)}</span></div>
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant="secondary">{workspace.state}</Badge>
+                  <span>Updated {formatDateTime(workspace.updated_at)}</span>
+                  <Badge variant={gitStatus?.state === 'error' ? 'destructive' : 'secondary'} class="gap-1" title={gitStatus?.failure ?? $workspaceGitStatusErrors[workspace.workspace_id] ?? undefined}>
+                    <GitBranch class="size-3" /> {gitBranchLabel(gitStatus)}
+                  </Badge>
+                  <Badge variant={gitStatus?.clean ? 'secondary' : 'default'}>{gitStatusLabel(gitStatus)}</Badge>
+                  {#if gitStatus?.ahead}<span>↑{gitStatus.ahead}</span>{/if}
+                  {#if gitStatus?.behind}<span>↓{gitStatus.behind}</span>{/if}
+                  {#if hasGitChangeCounts(gitStatus)}
+                    {#if gitStatus?.staged_count}<span>+{gitStatus.staged_count}</span>{/if}
+                    {#if gitStatus?.unstaged_count}<span>~{gitStatus.unstaged_count}</span>{/if}
+                    {#if gitStatus?.untracked_count}<span>?{gitStatus.untracked_count}</span>{/if}
+                    {#if gitStatus?.conflicted_count}<span>!{gitStatus.conflicted_count}</span>{/if}
+                  {/if}
+                  {#if gitStatus?.observed_at}<span>Git {formatDateTime(gitStatus.observed_at)}</span>{/if}
+                </div>
               </div>
               <div class="flex shrink-0 gap-2 sm:justify-end">
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label={`Refresh git status for ${workspaceLabel}`}
+                  title="Refresh git status"
+                  onclick={() => void refreshWorkspaceGitStatus(workspace.workspace_id)}
+                >
+                  <RefreshCw class="size-4" />
+                </Button>
                 <Button
                   size="icon-sm"
                   variant="outline"

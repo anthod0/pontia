@@ -95,6 +95,14 @@ pub fn router(state: AppState) -> Router {
             get(external::list_workspaces).post(external::register_workspace),
         )
         .route(
+            "/external/v1/workspaces/{workspace_id}/git-status",
+            get(external::get_workspace_git_status),
+        )
+        .route(
+            "/external/v1/workspaces/{workspace_id}/git-status/refresh",
+            post(external::refresh_workspace_git_status),
+        )
+        .route(
             "/external/v1/workspaces/{workspace_id}",
             get(external::get_workspace)
                 .patch(external::rename_workspace)

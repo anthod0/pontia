@@ -91,6 +91,24 @@ export interface WorkspaceView {
   last_used_at: string | null;
 }
 
+export interface WorkspaceGitStatusView {
+  workspace_id: string;
+  repo_root: string | null;
+  branch: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  staged_count: number;
+  unstaged_count: number;
+  untracked_count: number;
+  conflicted_count: number;
+  clean: boolean;
+  state: 'unknown' | 'observed' | 'error' | string;
+  failure: string | null;
+  observed_at: string | null;
+  updated_at: string | null;
+}
+
 export interface WorkspaceRootView {
   root_id: string;
   label: string;
