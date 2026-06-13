@@ -81,6 +81,7 @@ const mocks = vi.hoisted(() => {
     loadSessions: vi.fn(async () => mocks.loadedSessions),
     loadSessionDetail: vi.fn(async () => null),
     submitInboxMessage: vi.fn(),
+    cancelInboxMessage: vi.fn(),
     resumeSession: vi.fn(),
     restartSession: vi.fn(),
     interruptSession: vi.fn(),
@@ -125,6 +126,7 @@ vi.mock('../../src/stores/sessions', () => ({
   loadSessions: mocks.loadSessions,
   loadSessionDetail: mocks.loadSessionDetail,
   submitInboxMessage: mocks.submitInboxMessage,
+  cancelInboxMessage: mocks.cancelInboxMessage,
   resumeSession: mocks.resumeSession,
   restartSession: mocks.restartSession,
   interruptSession: mocks.interruptSession,
@@ -942,7 +944,7 @@ test('highlights fenced code blocks in assistant markdown', async () => {
   expect(markdownContainer?.className).not.toContain('[&_pre_code]:p-0');
 });
 
-test('opens an inbox sheet from the chat controls and renders inbox messages', async () => {
+test('opens an inbox sheet with actionable pending, failed, and dispatching messages only', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -953,19 +955,35 @@ test('opens an inbox sheet from the chat controls and renders inbox messages', a
     turns: [],
     inboxMessages: [
       inboxMessage({
-        message_id: 'message-2',
+        message_id: 'message-dispatched',
+        session_id: 'session-2',
+        state: 'dispatched',
+        input: { summary: 'Already sent' },
+      }),
+      inboxMessage({
+        message_id: 'message-pending-old',
+        session_id: 'session-2',
+        state: 'pending',
+        input: { summary: 'Continue implementation' },
+        updated_at: '2026-05-14T00:00:04Z',
+      }),
+      inboxMessage({
+        message_id: 'message-failed',
         session_id: 'session-2',
         state: 'failed',
         input: { summary: 'Fix the failing dashboard test' },
+        metadata: { source: 'dashboard_chat', attempt: 1 },
+        delivery_policy: 'interrupt_now',
         turn_id: 'turn-2',
         failure_message: 'runtime unavailable',
         updated_at: '2026-05-14T00:00:05Z',
       }),
       inboxMessage({
-        message_id: 'message-1',
+        message_id: 'message-dispatching',
         session_id: 'session-2',
-        state: 'pending',
-        input: { summary: 'Continue implementation' },
+        state: 'dispatching',
+        input: { summary: 'Sending now' },
+        updated_at: '2026-05-14T00:00:06Z',
       }),
     ],
     events: [],
@@ -981,11 +999,66 @@ test('opens an inbox sheet from the chat controls and renders inbox messages', a
   await userEvent.click(inboxButton);
 
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  expect(screen.getByText('Sending now')).toBeInTheDocument();
   expect(screen.getByText('Fix the failing dashboard test')).toBeInTheDocument();
   expect(screen.getByText('Continue implementation')).toBeInTheDocument();
-  expect(screen.getByText('failed')).toBeInTheDocument();
-  expect(screen.getByText('pending')).toBeInTheDocument();
+  expect(screen.queryByText('Already sent')).not.toBeInTheDocument();
   expect(screen.getByText('runtime unavailable')).toBeInTheDocument();
+
+  const articles = screen.getAllByRole('article');
+  expect(articles.map((article) => article.textContent)).toEqual([
+    expect.stringContaining('Sending now'),
+    expect.stringContaining('Fix the failing dashboard test'),
+    expect.stringContaining('Continue implementation'),
+  ]);
+  expect(articles[0]).not.toHaveTextContent('Cancel');
+  expect(articles[0]).not.toHaveTextContent('Retry');
+  expect(articles[1]).toHaveTextContent('Retry');
+  expect(articles[1]).not.toHaveTextContent('Cancel');
+  expect(articles[2]).toHaveTextContent('Cancel');
+});
+
+test('supports cancelling pending inbox messages and retrying failed inbox messages', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [],
+    inboxMessages: [
+      inboxMessage({
+        message_id: 'message-pending',
+        session_id: 'session-2',
+        state: 'pending',
+        input: { summary: 'Continue implementation' },
+      }),
+      inboxMessage({
+        message_id: 'message-failed',
+        session_id: 'session-2',
+        state: 'failed',
+        input: { summary: 'Fix the failing dashboard test' },
+        metadata: { source: 'dashboard_chat', attempt: 1 },
+        delivery_policy: 'interrupt_now',
+      }),
+    ],
+    events: [],
+    artifacts: [],
+  });
+
+  render(ChatPage);
+  await userEvent.click(await screen.findByRole('button', { name: /open inbox, 2 messages/i }));
+
+  await userEvent.click(await screen.findByRole('button', { name: /cancel inbox message continue implementation/i }));
+  expect(mocks.cancelInboxMessage).toHaveBeenCalledWith('session-2', 'message-pending');
+
+  await userEvent.click(await screen.findByRole('button', { name: /retry inbox message fix the failing dashboard test/i }));
+  expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
+    input: 'Fix the failing dashboard test',
+    delivery_policy: 'interrupt_now',
+    metadata: { source: 'dashboard_chat', attempt: 1 },
+  });
 });
 
 test('opens an empty inbox sheet when the selected chat has no inbox messages', async () => {

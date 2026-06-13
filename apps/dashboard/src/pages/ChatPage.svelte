@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
-  import { Activity, AtSign, Bot, EllipsisVertical, Folder, GitBranch, Inbox, LogOut, Pencil, RotateCw, Terminal, TerminalSquare } from '@lucide/svelte'
+  import { Activity, AtSign, Bot, EllipsisVertical, Folder, GitBranch, Inbox, LogOut, Pencil, RotateCw, RotateCcw, Terminal, TerminalSquare, X } from '@lucide/svelte'
   import { toast } from 'svelte-sonner'
   import { getPathParams, navigate } from 'svelte-mini-router'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -13,7 +13,7 @@
   import * as Select from '$lib/components/ui/select/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
-  import type { AgentProfileView, DashboardStreamEvent, SessionView, WorkspaceGitStatusView, WorkspaceView } from '../api/types'
+  import type { AgentProfileView, DashboardStreamEvent, InboxMessageView, SessionView, WorkspaceGitStatusView, WorkspaceView } from '../api/types'
   import {
     canSendSessionMessage,
     isTerminalChatSession,
@@ -44,6 +44,7 @@
     workspacesLoading,
   } from '../stores/workspaces'
   import {
+    cancelInboxMessage,
     createSession,
     loadSessionDetail,
     loadSessions,
@@ -86,6 +87,7 @@
   let input = ''
   let submitting = false
   let actionBusy = false
+  let inboxActionMessageId: string | null = null
   let actionError: string | null = null
   let lastToastedError: string | null = null
   let advancedControlsOpen = false
@@ -138,6 +140,8 @@
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
   $: messages = chatMessagesWithOptimistic(selectedSessionId, $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : [], $optimisticInitialMessages)
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
+  $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
+  $: inboxActionableCount = visibleInboxMessages.filter((message) => message.state === 'pending' || message.state === 'failed').length
   $: if ($workspaces.length && (!createWorkspaceId || !$workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId))) {
     createWorkspaceId = preferredCreateWorkspaceId()
   }
@@ -332,6 +336,54 @@
   function sessionMetadataSummary(items: SessionMetadataItem[]): string {
     const first = items[0]?.value ?? 'Session details'
     return items.length > 1 ? `${first} +${items.length - 1}` : first
+  }
+
+  function visibleChatInboxMessages(messages: InboxMessageView[]): InboxMessageView[] {
+    const actionable = messages
+      .filter((message) => message.state === 'pending' || message.state === 'failed')
+      .slice()
+      .reverse()
+    const dispatching = messages
+      .filter((message) => message.state === 'dispatching')
+      .slice()
+      .reverse()
+    return [...dispatching, ...actionable]
+  }
+
+  function inboxBadgeVariant(message: InboxMessageView): 'default' | 'secondary' | 'destructive' | 'outline' {
+    if (message.state === 'failed') return 'destructive'
+    if (message.state === 'dispatching') return 'outline'
+    return 'secondary'
+  }
+
+  async function cancelPendingInboxMessage(message: InboxMessageView): Promise<void> {
+    if (!selectedSessionId || message.state !== 'pending') return
+    inboxActionMessageId = message.message_id
+    actionError = null
+    try {
+      await cancelInboxMessage(selectedSessionId, message.message_id)
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : String(error)
+    } finally {
+      inboxActionMessageId = null
+    }
+  }
+
+  async function retryFailedInboxMessage(message: InboxMessageView): Promise<void> {
+    if (!selectedSessionId || message.state !== 'failed') return
+    inboxActionMessageId = message.message_id
+    actionError = null
+    try {
+      await submitInboxMessage(selectedSessionId, {
+        input: message.input.summary,
+        delivery_policy: message.delivery_policy === 'interrupt_now' ? 'interrupt_now' : 'after_idle',
+        metadata: message.metadata,
+      })
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : String(error)
+    } finally {
+      inboxActionMessageId = null
+    }
   }
 
   function plannerTaskIdForSession(session: SessionView | null): string | null {
@@ -831,12 +883,12 @@
                   variant="outline"
                   size="sm"
                   class="gap-2"
-                  aria-label={`Open inbox, ${selectedInboxMessages.length} message${selectedInboxMessages.length === 1 ? '' : 's'}`}
+                  aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`}
                   onclick={() => (inboxSheetOpen = true)}
                 >
                   <Inbox class="size-4" />
                   <span class="hidden sm:inline">Inbox</span>
-                  <Badge variant="secondary" class="h-5 min-w-5 rounded-full px-1.5 text-xs">{selectedInboxMessages.length}</Badge>
+                  <Badge variant="secondary" class="h-5 min-w-5 rounded-full px-1.5 text-xs">{inboxActionableCount}</Badge>
                 </Button>
                 {#if !isTerminalChatSession(selectedSession)}
                   <Button class="hidden sm:inline-flex" variant="destructive" size="sm" disabled={actionBusy} aria-label="Exit session" onclick={() => void runSessionLifecycle('exit')}><LogOut class="size-4" /> Exit</Button>
@@ -941,16 +993,16 @@
   <Sheet.Content class="w-[92vw] gap-0 overflow-hidden p-0 sm:max-w-xl">
     <Sheet.Header class="border-b px-6 py-4">
       <Sheet.Title>Inbox</Sheet.Title>
-      <Sheet.Description>{selectedInboxMessages.length} message{selectedInboxMessages.length === 1 ? '' : 's'} · follow-up input queue</Sheet.Description>
+      <Sheet.Description>{inboxActionableCount} message{inboxActionableCount === 1 ? '' : 's'} · follow-up input queue</Sheet.Description>
     </Sheet.Header>
     <div class="max-h-[calc(100vh-7rem)] overflow-y-auto p-6">
-      {#if selectedInboxMessages.length}
+      {#if visibleInboxMessages.length}
         <div class="space-y-3">
-          {#each selectedInboxMessages.slice().reverse() as message (message.message_id)}
+          {#each visibleInboxMessages as message (message.message_id)}
             <article class="rounded-lg border p-3 text-sm">
               <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
                 <p class="min-w-0 flex-1 whitespace-pre-wrap break-words font-medium">{message.input.summary}</p>
-                <Badge variant={message.state === 'failed' ? 'destructive' : 'secondary'}>{message.state}</Badge>
+                <Badge variant={inboxBadgeVariant(message)}>{message.state}</Badge>
               </div>
               <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span>{message.delivery_policy}</span>
@@ -959,6 +1011,33 @@
               </div>
               {#if message.failure_message}
                 <p class="mt-2 text-xs text-destructive">{message.failure_message}</p>
+              {/if}
+              {#if message.state === 'pending' || message.state === 'failed'}
+                <div class="mt-3 flex flex-wrap justify-end gap-2">
+                  {#if message.state === 'pending'}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="gap-1.5"
+                      disabled={inboxActionMessageId === message.message_id}
+                      aria-label={`Cancel inbox message ${message.input.summary}`}
+                      onclick={() => void cancelPendingInboxMessage(message)}
+                    >
+                      <X class="size-3.5" /> Cancel
+                    </Button>
+                  {:else if message.state === 'failed'}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="gap-1.5"
+                      disabled={inboxActionMessageId === message.message_id}
+                      aria-label={`Retry inbox message ${message.input.summary}`}
+                      onclick={() => void retryFailedInboxMessage(message)}
+                    >
+                      <RotateCcw class="size-3.5" /> Retry
+                    </Button>
+                  {/if}
+                </div>
               {/if}
             </article>
           {/each}
