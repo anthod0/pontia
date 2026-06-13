@@ -153,7 +153,7 @@
 
   <Card.Root>
     <Card.Header>
-      <Card.Title class="flex items-center gap-2"><FolderOpen class="size-5" /> Root browser</Card.Title>
+      <Card.Title class="flex items-center gap-2"><FolderOpen class="size-5" /> Browser</Card.Title>
       <Card.Description>Select a root and browse directories. Active workspaces stay pinned at the top of the browser.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">

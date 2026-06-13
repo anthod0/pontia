@@ -110,7 +110,8 @@ beforeEach(() => {
 test('renders a single root browser with active workspace controls in the directory list', async () => {
   const { container } = render(WorkspacesPage);
 
-  expect(await screen.findByText('Root browser')).toBeInTheDocument();
+  expect(await screen.findByText('Browser')).toBeInTheDocument();
+  expect(screen.queryByText('Root browser')).not.toBeInTheDocument();
   expect(screen.queryByText('Active workspaces')).not.toBeInTheDocument();
   expect(screen.queryByTestId('active-workspaces-list')).not.toBeInTheDocument();
 
