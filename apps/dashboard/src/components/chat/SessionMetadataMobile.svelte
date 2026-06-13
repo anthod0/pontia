@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { AtSign, Bot, Folder, Gauge, GitBranch, Terminal } from '@lucide/svelte'
   import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
   import GitStatusInline from './GitStatusInline.svelte'
   import {
@@ -38,11 +39,24 @@
 </button>
 {#if sessionDetailsOpen}
   <div role="dialog" aria-label="Session details" class="absolute bottom-full left-0 z-20 mb-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
-    <div class="mb-2 text-sm font-medium">Session details</div>
     <dl class="space-y-2 text-sm">
       {#each metadataItems as item (item.key)}
-        <div class="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
-          <dt class="text-muted-foreground">{item.label}</dt>
+        <div class="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2">
+          <dt class="flex items-center justify-center text-muted-foreground">
+            {#if item.key === 'workspace'}
+              <Folder class="size-4" aria-label="Workspace" />
+            {:else if item.key === 'git'}
+              <GitBranch class="size-4" aria-label="Git" />
+            {:else if item.key === 'context'}
+              <Gauge class="size-4" aria-label="Usage" />
+            {:else if item.key === 'client'}
+              <Terminal class="size-4" aria-label="Client" />
+            {:else if item.key === 'profile'}
+              <Bot class="size-4" aria-label="Profile" />
+            {:else if item.key === 'handle'}
+              <AtSign class="size-4" aria-label="Handle" />
+            {/if}
+          </dt>
           <dd class="min-w-0 truncate" title={item.title}>
             {#if item.key === 'git' && gitStatus}
               <GitStatusInline {gitStatus} />

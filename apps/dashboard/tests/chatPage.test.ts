@@ -158,9 +158,15 @@ test('mobile session summary expands current metadata details', async () => {
   await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: project · pi' }));
 
   const details = within(mobileMetadata).getByRole('dialog', { name: 'Session details' });
-  expect(within(details).getByText('Workspace')).toBeInTheDocument();
+  expect(details).toHaveClass('absolute');
+  expect(details).toHaveClass('bottom-full');
+  expect(details).toHaveClass('left-0');
+  expect(within(details).queryByText('Session details')).not.toBeInTheDocument();
+  expect(within(details).getByLabelText('Workspace')).toBeInTheDocument();
+  expect(within(details).queryByText('Workspace')).not.toBeInTheDocument();
   expect(within(details).getByText('project')).toBeInTheDocument();
-  expect(within(details).getByText('Client')).toBeInTheDocument();
+  expect(within(details).getByLabelText('Client')).toBeInTheDocument();
+  expect(within(details).queryByText('Client')).not.toBeInTheDocument();
   expect(within(details).getByText('pi')).toBeInTheDocument();
 });
 
@@ -217,7 +223,8 @@ test('chat session refreshes and shows workspace git status', async () => {
 
   await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: project · pi · main · dirty' }));
   const details = within(mobileMetadata).getByRole('dialog', { name: 'Session details' });
-  const gitRow = within(details).getByText('Git').closest('div');
+  const gitRow = within(details).getByLabelText('Git').closest('div');
+  expect(within(details).queryByText('Git')).not.toBeInTheDocument();
   expect(gitRow).not.toBeNull();
   expect(within(gitRow as HTMLElement).getByText('main')).toHaveClass('text-amber-600');
   expect(within(gitRow as HTMLElement).getByText('↑1')).toHaveClass('text-blue-600');
