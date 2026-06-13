@@ -20,5 +20,6 @@ pub async fn test_state() -> AppState {
         dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
         shutdown: Default::default(),
         volatile_events: Default::default(),
+        git_refresh: Default::default(),
     }
 }

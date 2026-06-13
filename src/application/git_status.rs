@@ -1,5 +1,12 @@
 use super::*;
-use std::{process::Command, sync::mpsc, time::Duration};
+use std::{
+    collections::HashMap,
+    future::Future,
+    process::Command,
+    sync::Arc,
+    sync::mpsc,
+    time::{Duration, Instant},
+};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ParsedGitStatus {
@@ -14,64 +21,167 @@ struct ParsedGitStatus {
     conflicted_count: i64,
 }
 
+const GIT_REFRESH_TTL: Duration = Duration::from_secs(1);
+
+#[derive(Clone)]
+pub struct GitRefreshCoordinator {
+    ttl: Duration,
+    entries: Arc<tokio::sync::Mutex<HashMap<String, Arc<GitRefreshEntry>>>>,
+}
+
+struct GitRefreshEntry {
+    singleflight: tokio::sync::Mutex<()>,
+    cache: tokio::sync::Mutex<Option<CachedGitRefresh>>,
+}
+
+struct CachedGitRefresh {
+    refreshed_at: Instant,
+    view: WorkspaceGitStatusView,
+}
+
+impl GitRefreshCoordinator {
+    pub fn new(ttl: Duration) -> Self {
+        Self {
+            ttl,
+            entries: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub async fn refresh<F, Fut>(
+        &self,
+        workspace_id: &str,
+        refresh: F,
+    ) -> Result<WorkspaceGitStatusView>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<WorkspaceGitStatusView>>,
+    {
+        let entry = self.entry(workspace_id).await;
+        let _singleflight = entry.singleflight.lock().await;
+
+        if let Some(view) = entry.fresh_cached_view(self.ttl).await {
+            return Ok(view);
+        }
+
+        let view = refresh().await?;
+        entry.store(view.clone()).await;
+        Ok(view)
+    }
+
+    async fn entry(&self, workspace_id: &str) -> Arc<GitRefreshEntry> {
+        let mut entries = self.entries.lock().await;
+        entries
+            .entry(workspace_id.to_string())
+            .or_insert_with(|| Arc::new(GitRefreshEntry::new()))
+            .clone()
+    }
+}
+
+impl Default for GitRefreshCoordinator {
+    fn default() -> Self {
+        Self::new(GIT_REFRESH_TTL)
+    }
+}
+
+impl GitRefreshEntry {
+    fn new() -> Self {
+        Self {
+            singleflight: tokio::sync::Mutex::new(()),
+            cache: tokio::sync::Mutex::new(None),
+        }
+    }
+
+    async fn fresh_cached_view(&self, ttl: Duration) -> Option<WorkspaceGitStatusView> {
+        self.cache
+            .lock()
+            .await
+            .as_ref()
+            .filter(|cached| cached.refreshed_at.elapsed() < ttl)
+            .map(|cached| cached.view.clone())
+    }
+
+    async fn store(&self, view: WorkspaceGitStatusView) {
+        *self.cache.lock().await = Some(CachedGitRefresh {
+            refreshed_at: Instant::now(),
+            view,
+        });
+    }
+}
+
 pub struct WorkspaceGitStatusService {
     pool: SqlitePool,
+    refresh_coordinator: GitRefreshCoordinator,
 }
 
 impl WorkspaceGitStatusService {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(pool: SqlitePool, refresh_coordinator: GitRefreshCoordinator) -> Self {
+        Self {
+            pool,
+            refresh_coordinator,
+        }
     }
 
     pub async fn refresh_workspace_git_status(
         &self,
         workspace_id: &str,
     ) -> Result<WorkspaceGitStatusView> {
-        let workspace = get_workspace_record(&self.pool, workspace_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))?;
-
-        let observed_at = current_timestamp(&self.pool).await?;
-        let outcome = observe_git_status(&workspace.canonical_path).await;
-        match outcome {
-            Ok(parsed) => {
-                let clean = parsed.staged_count == 0
-                    && parsed.unstaged_count == 0
-                    && parsed.untracked_count == 0
-                    && parsed.conflicted_count == 0;
-                upsert_git_status(
-                    &self.pool,
-                    workspace_id,
-                    &parsed,
-                    clean,
-                    "observed",
-                    None,
-                    &observed_at,
-                )
-                .await?;
-            }
-            Err(error) => {
-                let parsed = ParsedGitStatus::default();
-                upsert_git_status(
-                    &self.pool,
-                    workspace_id,
-                    &parsed,
-                    true,
-                    "error",
-                    Some(error.to_string()),
-                    &observed_at,
-                )
-                .await?;
-            }
-        }
-
-        ExternalQueryService::new(self.pool.clone())
-            .get_workspace_git_status(workspace_id)
-            .await?
-            .ok_or_else(|| {
-                Error::NotFound(format!("git status for workspace {workspace_id} not found"))
+        let pool = self.pool.clone();
+        self.refresh_coordinator
+            .refresh(workspace_id, || async move {
+                refresh_workspace_git_status_now(pool, workspace_id).await
             })
+            .await
     }
+}
+
+async fn refresh_workspace_git_status_now(
+    pool: SqlitePool,
+    workspace_id: &str,
+) -> Result<WorkspaceGitStatusView> {
+    let workspace = get_workspace_record(&pool, workspace_id)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))?;
+
+    let observed_at = current_timestamp(&pool).await?;
+    let outcome = observe_git_status(&workspace.canonical_path).await;
+    match outcome {
+        Ok(parsed) => {
+            let clean = parsed.staged_count == 0
+                && parsed.unstaged_count == 0
+                && parsed.untracked_count == 0
+                && parsed.conflicted_count == 0;
+            upsert_git_status(
+                &pool,
+                workspace_id,
+                &parsed,
+                clean,
+                "observed",
+                None,
+                &observed_at,
+            )
+            .await?;
+        }
+        Err(error) => {
+            let parsed = ParsedGitStatus::default();
+            upsert_git_status(
+                &pool,
+                workspace_id,
+                &parsed,
+                true,
+                "error",
+                Some(error.to_string()),
+                &observed_at,
+            )
+            .await?;
+        }
+    }
+
+    ExternalQueryService::new(pool.clone())
+        .get_workspace_git_status(workspace_id)
+        .await?
+        .ok_or_else(|| {
+            Error::NotFound(format!("git status for workspace {workspace_id} not found"))
+        })
 }
 
 async fn observe_git_status(workspace_path: &str) -> Result<ParsedGitStatus> {
@@ -230,6 +340,98 @@ async fn current_timestamp(pool: &SqlitePool) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn status_view(workspace_id: &str, branch: &str) -> WorkspaceGitStatusView {
+        WorkspaceGitStatusView {
+            workspace_id: workspace_id.to_string(),
+            repo_root: Some(format!("/tmp/{workspace_id}")),
+            branch: Some(branch.to_string()),
+            upstream: None,
+            ahead: 0,
+            behind: 0,
+            staged_count: 0,
+            unstaged_count: 0,
+            untracked_count: 0,
+            conflicted_count: 0,
+            clean: true,
+            state: "observed".to_string(),
+            failure: None,
+            observed_at: Some(branch.to_string()),
+            updated_at: Some(branch.to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn git_refresh_coordinator_reuses_fresh_result_within_ttl() {
+        let coordinator = GitRefreshCoordinator::new(Duration::from_secs(60));
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        let first = coordinator
+            .refresh("workspace-1", {
+                let calls = calls.clone();
+                move || {
+                    let calls = calls.clone();
+                    async move {
+                        calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        Ok(status_view("workspace-1", "first"))
+                    }
+                }
+            })
+            .await
+            .expect("first refresh");
+        let second = coordinator
+            .refresh("workspace-1", {
+                let calls = calls.clone();
+                move || {
+                    let calls = calls.clone();
+                    async move {
+                        calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        Ok(status_view("workspace-1", "second"))
+                    }
+                }
+            })
+            .await
+            .expect("second refresh");
+
+        assert_eq!(first.branch.as_deref(), Some("first"));
+        assert_eq!(second.branch.as_deref(), Some("first"));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn git_refresh_coordinator_singleflights_concurrent_refreshes() {
+        let coordinator = std::sync::Arc::new(GitRefreshCoordinator::new(Duration::from_secs(60)));
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+
+        let mut tasks = Vec::new();
+        for _ in 0..2 {
+            let coordinator = coordinator.clone();
+            let calls = calls.clone();
+            let barrier = barrier.clone();
+            tasks.push(tokio::spawn(async move {
+                barrier.wait().await;
+                coordinator
+                    .refresh("workspace-1", move || {
+                        let calls = calls.clone();
+                        async move {
+                            calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            tokio::time::sleep(Duration::from_millis(50)).await;
+                            Ok(status_view("workspace-1", "main"))
+                        }
+                    })
+                    .await
+                    .expect("refresh")
+            }));
+        }
+
+        let first = tasks.pop().unwrap().await.expect("task");
+        let second = tasks.pop().unwrap().await.expect("task");
+
+        assert_eq!(first.branch.as_deref(), Some("main"));
+        assert_eq!(second.branch.as_deref(), Some("main"));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
 
     #[test]
     fn parses_porcelain_v2_summary_counts() {

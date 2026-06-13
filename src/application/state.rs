@@ -37,6 +37,7 @@ pub struct AppState {
     pub dashboard: ResolvedDashboard,
     pub shutdown: ShutdownSignal,
     pub volatile_events: VolatileEventBroker,
+    pub git_refresh: GitRefreshCoordinator,
 }
 
 #[derive(Clone)]
@@ -81,5 +82,6 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
         dashboard,
         shutdown: ShutdownSignal::default(),
         volatile_events: VolatileEventBroker::default(),
+        git_refresh: GitRefreshCoordinator::default(),
     })
 }

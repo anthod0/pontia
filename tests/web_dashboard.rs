@@ -32,6 +32,7 @@ async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> AppState {
         dashboard,
         shutdown: Default::default(),
         volatile_events: Default::default(),
+        git_refresh: Default::default(),
     }
 }
 
