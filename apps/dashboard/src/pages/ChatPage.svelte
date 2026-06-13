@@ -294,6 +294,12 @@
     return status?.failure ?? error ?? gitStatusAriaLabel(status)
   }
 
+  function gitStatusToneClass(status: WorkspaceGitStatusView | undefined): string {
+    if (!status || status.state === 'unknown') return 'text-muted-foreground'
+    if (status.state === 'error') return 'text-destructive'
+    return status.clean ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+  }
+
   function sessionMetadataItems(session: SessionView, gitStatus: WorkspaceGitStatusView | undefined): SessionMetadataItem[] {
     const items: SessionMetadataItem[] = [
       {
@@ -707,8 +713,8 @@
                       title={gitStatusTitle(selectedSession, selectedSessionGitStatus)}
                       aria-label={gitStatusAriaLabel(selectedSessionGitStatus)}
                     >
-                      <GitBranch class="size-4" aria-hidden="true" />
-                      <span>{gitBranchLabel(selectedSessionGitStatus)}</span>
+                      <GitBranch class={`size-4 ${gitStatusToneClass(selectedSessionGitStatus)}`} aria-label="Git branch" />
+                      <span class={gitStatusToneClass(selectedSessionGitStatus)}>{gitBranchLabel(selectedSessionGitStatus)}</span>
                       <span class="inline-flex items-center" aria-label={gitStatusIconLabel(selectedSessionGitStatus)} title={gitStatusLabel(selectedSessionGitStatus)}>
                         {#if selectedSessionGitStatus.state === 'error'}
                           <CircleAlert class="size-4 text-destructive" aria-hidden="true" />
@@ -720,13 +726,13 @@
                           <CircleAlert class="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
                         {/if}
                       </span>
-                      {#if selectedSessionGitStatus.ahead}<span>↑{selectedSessionGitStatus.ahead}</span>{/if}
-                      {#if selectedSessionGitStatus.behind}<span>↓{selectedSessionGitStatus.behind}</span>{/if}
+                      {#if selectedSessionGitStatus.ahead}<span class="text-blue-600 dark:text-blue-400">↑{selectedSessionGitStatus.ahead}</span>{/if}
+                      {#if selectedSessionGitStatus.behind}<span class="text-violet-600 dark:text-violet-400">↓{selectedSessionGitStatus.behind}</span>{/if}
                       {#if hasGitChangeCounts(selectedSessionGitStatus)}
-                        {#if selectedSessionGitStatus.staged_count}<span>+{selectedSessionGitStatus.staged_count}</span>{/if}
-                        {#if selectedSessionGitStatus.unstaged_count}<span>~{selectedSessionGitStatus.unstaged_count}</span>{/if}
-                        {#if selectedSessionGitStatus.untracked_count}<span>?{selectedSessionGitStatus.untracked_count}</span>{/if}
-                        {#if selectedSessionGitStatus.conflicted_count}<span>!{selectedSessionGitStatus.conflicted_count}</span>{/if}
+                        {#if selectedSessionGitStatus.staged_count}<span class="text-emerald-600 dark:text-emerald-400">+{selectedSessionGitStatus.staged_count}</span>{/if}
+                        {#if selectedSessionGitStatus.unstaged_count}<span class="text-amber-600 dark:text-amber-400">~{selectedSessionGitStatus.unstaged_count}</span>{/if}
+                        {#if selectedSessionGitStatus.untracked_count}<span class="text-cyan-600 dark:text-cyan-400">?{selectedSessionGitStatus.untracked_count}</span>{/if}
+                        {#if selectedSessionGitStatus.conflicted_count}<span class="text-destructive">!{selectedSessionGitStatus.conflicted_count}</span>{/if}
                       {/if}
                     </Badge>
                   {/if}

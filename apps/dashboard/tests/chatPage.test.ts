@@ -192,12 +192,13 @@ test('chat session refreshes and shows workspace git status', async () => {
   expect(within(gitBadge).getByText('main')).toBeInTheDocument();
   expect(within(gitBadge).getByLabelText('dirty git status')).toBeInTheDocument();
   expect(within(gitBadge).queryByText('dirty')).not.toBeInTheDocument();
-  expect(within(desktopMetadata).getByText('↑1')).toBeInTheDocument();
-  expect(within(desktopMetadata).getByText('↓2')).toBeInTheDocument();
-  expect(within(desktopMetadata).getByText('+3')).toBeInTheDocument();
-  expect(within(desktopMetadata).getByText('~4')).toBeInTheDocument();
-  expect(within(desktopMetadata).getByText('?5')).toBeInTheDocument();
-  expect(within(desktopMetadata).getByText('!6')).toBeInTheDocument();
+  expect(within(gitBadge).getByLabelText('Git branch')).toHaveClass('text-amber-600');
+  expect(within(desktopMetadata).getByText('↑1')).toHaveClass('text-blue-600');
+  expect(within(desktopMetadata).getByText('↓2')).toHaveClass('text-violet-600');
+  expect(within(desktopMetadata).getByText('+3')).toHaveClass('text-emerald-600');
+  expect(within(desktopMetadata).getByText('~4')).toHaveClass('text-amber-600');
+  expect(within(desktopMetadata).getByText('?5')).toHaveClass('text-cyan-600');
+  expect(within(desktopMetadata).getByText('!6')).toHaveClass('text-destructive');
 });
 
 test('chat composer session status pill uses semantic color classes', async () => {
