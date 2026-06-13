@@ -72,7 +72,15 @@ pub(super) fn dispatch_tui_turn(
     }
 
     let status = Command::new("tmux")
-        .args(["paste-buffer", "-t", runtime_ref, "-b", &buffer_name])
+        .args([
+            "paste-buffer",
+            "-p",
+            "-r",
+            "-t",
+            runtime_ref,
+            "-b",
+            &buffer_name,
+        ])
         .status()
         .map_err(|err| Error::Domain(format!("tmux dispatch paste failed: {err}")))?;
     if !status.success() {
@@ -177,4 +185,93 @@ fn sanitize_tmux_identifier(value: &str) -> String {
         .chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, process::Stdio};
+
+    use super::*;
+
+    #[test]
+    fn dispatch_tui_turn_preserves_multiline_input_as_one_bracketed_paste() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let script = temp.path().join("fake-tui.py");
+        let output = temp.path().join("messages.log");
+        fs::write(
+            &script,
+            r#"import os
+import sys
+
+out_path = os.environ["OUT"]
+sys.stdout.write("\033[?2004h")
+sys.stdout.flush()
+
+buffer = ""
+in_paste = False
+
+def submit():
+    global buffer
+    if buffer:
+        with open(out_path, "a", encoding="utf-8") as out:
+            out.write(buffer + "\n---MESSAGE---\n")
+        buffer = ""
+
+while True:
+    chunk = os.read(0, 1024)
+    if not chunk:
+        break
+    text = chunk.decode("utf-8", errors="replace")
+    i = 0
+    while i < len(text):
+        if text.startswith("\033[200~", i):
+            in_paste = True
+            i += len("\033[200~")
+            continue
+        if text.startswith("\033[201~", i):
+            in_paste = False
+            i += len("\033[201~")
+            continue
+        ch = text[i]
+        if ch == "\n" and not in_paste:
+            submit()
+        else:
+            buffer += ch
+        i += 1
+"#,
+        )
+        .expect("write fake tui");
+
+        let session = format!("pontia_test_multiline_{}", std::process::id());
+        let command = format!("OUT={} python3 {}", output.display(), script.display());
+        let status = Command::new("tmux")
+            .args(["new-session", "-d", "-s", &session, &command])
+            .stderr(Stdio::null())
+            .status()
+            .expect("spawn tmux");
+        assert!(status.success(), "tmux session should start");
+
+        thread::sleep(Duration::from_millis(300));
+        let input = AgentInput {
+            session_id: "session_multiline".to_string(),
+            turn_id: "turn_multiline".to_string(),
+            input: "line one\nline two".to_string(),
+        };
+        let result = dispatch_tui_turn(&session, "pi", &input);
+
+        result.expect("dispatch multiline turn");
+        for _ in 0..50 {
+            if output.exists() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        let content = fs::read_to_string(&output).expect("fake tui output");
+
+        let _ = Command::new("tmux")
+            .args(["kill-session", "-t", &session])
+            .stderr(Stdio::null())
+            .status();
+        assert_eq!(content, "line one\nline two\n---MESSAGE---\n");
+    }
 }
