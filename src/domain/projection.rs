@@ -238,7 +238,6 @@ impl ProjectionState {
             "input_tokens": usage.get("input_tokens").cloned().unwrap_or(Value::Null),
             "output_tokens": usage.get("output_tokens").cloned().unwrap_or(Value::Null),
             "cache_tokens": usage.get("cache_tokens").cloned().unwrap_or(Value::Null),
-            "model": usage.get("model").cloned().unwrap_or(Value::Null),
             "confidence": usage.get("confidence").cloned().unwrap_or_else(|| json!("unknown")),
             "observed_at": observed_at,
         });
@@ -247,6 +246,9 @@ impl ProjectionState {
         }
         if let Some(metadata) = session.metadata.as_object_mut() {
             metadata.insert("context_usage".to_string(), context_usage);
+            if let Some(model) = event.payload.get("model") {
+                metadata.insert("model".to_string(), model.clone());
+            }
         }
         session.state_version += 1;
         Ok(())

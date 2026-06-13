@@ -93,6 +93,7 @@ const session = (overrides: Partial<SessionView> = {}): SessionView => ({
   workspace_id: 'workspace-1',
   workspace: null,
   capabilities: { context_usage: 'unsupported' },
+  model: null,
   context_usage: null,
   created_at: '2026-05-14T00:00:00Z',
   updated_at: '2026-05-14T00:00:00Z',
@@ -153,10 +154,10 @@ test('session detail page renders populated context usage', async () => {
       input_tokens: null,
       output_tokens: null,
       cache_tokens: null,
-      model: 'example-model',
       confidence: 'estimated',
       observed_at: '2026-06-13T00:00:00Z',
     },
+    model: 'example-model',
   });
   mocks.loadedSessions = [withUsage];
   mocks.sessions.set([withUsage]);

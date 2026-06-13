@@ -244,9 +244,9 @@ async fn external_api_exposes_projected_session_context_usage() {
                     "used_tokens": 7,
                     "max_tokens": 10,
                     "usage_ratio": 0.7,
-                    "confidence": "estimated",
-                    "model": "m"
-                }
+                    "confidence": "estimated"
+                },
+                "model": "m"
             }),
         ))
         .await
@@ -275,7 +275,12 @@ async fn external_api_exposes_projected_session_context_usage() {
         "estimated"
     );
     assert!(list_body["data"]["sessions"][0]["context_usage"]["observed_at"].is_string());
-    assert_eq!(get_body["data"]["session"]["context_usage"]["model"], "m");
+    assert_eq!(get_body["data"]["session"]["model"], "m");
+    assert!(
+        get_body["data"]["session"]["context_usage"]
+            .get("model")
+            .is_none()
+    );
     assert_eq!(get_body["data"]["session"]["metadata"]["kept"], "yes");
 }
 

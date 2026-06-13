@@ -224,12 +224,12 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   async function reportContextUsageFromHookEvent(event: unknown, ctx?: unknown): Promise<void> {
     if (!activeTurn || activeTurn.ended) return;
-    const usage = contextUsageFromPiEvent(event) ?? contextUsageFromPiContext(ctx);
-    if (!usage) return;
-    const usageJson = JSON.stringify(usage);
+    const observation = contextUsageFromPiEvent(event) ?? contextUsageFromPiContext(ctx);
+    if (!observation) return;
+    const usageJson = JSON.stringify(observation);
     if (usageJson === lastContextUsageJson) return;
     lastContextUsageJson = usageJson;
-    await activeTurn.reporter.report(activeTurn.context, buildSessionContextUsageUpdatedEvent(activeTurn.context, usage));
+    await activeTurn.reporter.report(activeTurn.context, buildSessionContextUsageUpdatedEvent(activeTurn.context, observation.context_usage, observation.model));
   }
 
   pi.on("before_agent_start", async (event) => {

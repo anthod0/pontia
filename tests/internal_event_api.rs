@@ -214,9 +214,9 @@ async fn internal_event_api_accepts_context_usage_and_updates_session_metadata_o
             "input_tokens": 40000,
             "output_tokens": 2000,
             "cache_tokens": 1000,
-            "model": "example-model",
             "confidence": "exact"
-        }
+        },
+        "model": "example-model"
     });
 
     let (status, body) = post_event(state.clone(), event).await;
@@ -236,6 +236,8 @@ async fn internal_event_api_accepts_context_usage_and_updates_session_metadata_o
     assert_eq!(session.metadata["context_usage"]["used_tokens"], 42000);
     assert_eq!(session.metadata["context_usage"]["max_tokens"], 128000);
     assert_eq!(session.metadata["context_usage"]["confidence"], "exact");
+    assert_eq!(session.metadata["model"], "example-model");
+    assert!(session.metadata["context_usage"].get("model").is_none());
     assert_eq!(
         session.metadata["context_usage"]["observed_at"],
         "2026-04-24T12:00:00Z"
@@ -261,6 +263,14 @@ async fn internal_event_api_rejects_invalid_context_usage_values() {
         (
             "evt_m2_context_missing_object",
             json!({"context_usage":null}),
+        ),
+        (
+            "evt_m2_context_model_nested",
+            json!({"context_usage":{"used_tokens":1,"model":"nested"}}),
+        ),
+        (
+            "evt_m2_context_model_type",
+            json!({"context_usage":{"used_tokens":1},"model":42}),
         ),
     ];
 

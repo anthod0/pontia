@@ -8,6 +8,10 @@ pub(crate) fn row_to_session_view(row: sqlx::sqlite::SqliteRow) -> Result<Sessio
         .cloned()
         .map(serde_json::from_value)
         .transpose()?;
+    let model = metadata
+        .get("model")
+        .and_then(Value::as_str)
+        .map(str::to_string);
 
     Ok(SessionView {
         session_id: row.try_get("session_id")?,
@@ -23,6 +27,7 @@ pub(crate) fn row_to_session_view(row: sqlx::sqlite::SqliteRow) -> Result<Sessio
         workspace_id: row.try_get("workspace_id")?,
         workspace: row.try_get("workspace_ref")?,
         capabilities: SessionCapabilities::default(),
+        model,
         context_usage,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,

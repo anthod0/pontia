@@ -38,7 +38,6 @@ pub struct ContextUsageView {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
     pub cache_tokens: Option<u64>,
-    pub model: Option<String>,
     pub confidence: String,
     pub observed_at: String,
 }
@@ -58,6 +57,7 @@ pub struct SessionView {
     pub workspace_id: Option<String>,
     pub workspace: Option<String>,
     pub capabilities: SessionCapabilities,
+    pub model: Option<String>,
     pub context_usage: Option<ContextUsageView>,
     pub created_at: String,
     pub updated_at: String,

@@ -198,6 +198,8 @@ const session = (overrides: Partial<SessionView> = {}): SessionView => ({
   workspace_id: 'workspace-1',
   workspace: null,
   capabilities: {},
+  model: null,
+  context_usage: null,
   created_at: '2026-05-14T00:00:00Z',
   updated_at: '2026-05-14T00:00:00Z',
   metadata: {},
@@ -1144,10 +1146,10 @@ test('shows supported context usage in chat session metadata while hiding unsupp
       input_tokens: null,
       output_tokens: null,
       cache_tokens: null,
-      model: 'example-model',
       confidence: 'estimated',
       observed_at: '2026-06-13T00:00:00Z',
     },
+    model: 'example-model',
   });
   window.history.pushState({}, '', '/dashboard/chat/session-usage');
   mocks.pathParams = { sessionId: 'session-usage' };

@@ -88,9 +88,8 @@ describe("event builders", () => {
       input_tokens: 40,
       output_tokens: 2,
       cache_tokens: null,
-      model: "example-model",
       confidence: "exact",
-    });
+    }, "example-model");
 
     expect(event).toMatchObject({
       session_id: "sess_1",
@@ -108,9 +107,9 @@ describe("event builders", () => {
           input_tokens: 40,
           output_tokens: 2,
           cache_tokens: null,
-          model: "example-model",
           confidence: "exact",
         },
+        model: "example-model",
       },
     });
   });
@@ -131,15 +130,17 @@ describe("event builders", () => {
         },
       }),
     ).toEqual({
-      used_tokens: 1,
-      max_tokens: 4,
-      remaining_tokens: null,
-      usage_ratio: 0.25,
-      input_tokens: null,
-      output_tokens: null,
-      cache_tokens: null,
+      context_usage: {
+        used_tokens: 1,
+        max_tokens: 4,
+        remaining_tokens: null,
+        usage_ratio: 0.25,
+        input_tokens: null,
+        output_tokens: null,
+        cache_tokens: null,
+        confidence: "estimated",
+      },
       model: null,
-      confidence: "estimated",
     });
   });
 
@@ -150,15 +151,17 @@ describe("event builders", () => {
         getContextUsage: () => ({ tokens: 6_037, contextWindow: 128_000, percent: 4.716 }),
       }),
     ).toEqual({
-      used_tokens: 6037,
-      max_tokens: 128000,
-      remaining_tokens: 121963,
-      usage_ratio: 0.04716,
-      input_tokens: null,
-      output_tokens: null,
-      cache_tokens: null,
+      context_usage: {
+        used_tokens: 6037,
+        max_tokens: 128000,
+        remaining_tokens: 121963,
+        usage_ratio: 0.04716,
+        input_tokens: null,
+        output_tokens: null,
+        cache_tokens: null,
+        confidence: "estimated",
+      },
       model: "gpt-5.5",
-      confidence: "estimated",
     });
   });
 
@@ -172,15 +175,17 @@ describe("event builders", () => {
         },
       }),
     ).toEqual({
-      used_tokens: 6037,
-      max_tokens: null,
-      remaining_tokens: null,
-      usage_ratio: null,
-      input_tokens: 386,
-      output_tokens: 19,
-      cache_tokens: 5632,
+      context_usage: {
+        used_tokens: 6037,
+        max_tokens: null,
+        remaining_tokens: null,
+        usage_ratio: null,
+        input_tokens: 386,
+        output_tokens: 19,
+        cache_tokens: 5632,
+        confidence: "estimated",
+      },
       model: "gpt-5.5",
-      confidence: "estimated",
     });
   });
 });

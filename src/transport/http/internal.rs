@@ -227,6 +227,12 @@ fn validate_context_usage_payload(payload: &Value) -> Result<(), ApiError> {
         }
     }
 
+    if usage.contains_key("model") {
+        return Err(ApiError::invalid_request(
+            "payload.context_usage.model is not supported; use payload.model",
+        ));
+    }
+
     if let Some(value) = usage.get("confidence")
         && !value.is_null()
     {
@@ -238,6 +244,15 @@ fn validate_context_usage_payload(payload: &Value) -> Result<(), ApiError> {
                 ));
             }
         }
+    }
+
+    if let Some(value) = payload.get("model")
+        && !value.is_null()
+        && value.as_str().is_none()
+    {
+        return Err(ApiError::invalid_request(
+            "payload.model must be a string or null",
+        ));
     }
 
     Ok(())

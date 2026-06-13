@@ -26,7 +26,6 @@ export interface ContextUsageView {
   input_tokens: number | null;
   output_tokens: number | null;
   cache_tokens: number | null;
-  model: string | null;
   confidence: 'exact' | 'estimated' | 'unknown';
   observed_at: string;
 }
@@ -90,6 +89,7 @@ export interface SessionView {
   workspace_id: string | null;
   workspace: string | null;
   capabilities: SessionCapabilities;
+  model: string | null;
   context_usage: ContextUsageView | null;
   created_at: string;
   updated_at: string;

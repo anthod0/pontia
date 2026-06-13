@@ -201,9 +201,9 @@ describe("pontia pi extension lifecycle", () => {
           max_tokens: 128000,
           remaining_tokens: 121963,
           usage_ratio: 0.04716,
-          model: "gpt-5.5",
           confidence: "estimated",
         },
+        model: "gpt-5.5",
       },
     });
   });

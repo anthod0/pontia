@@ -225,7 +225,7 @@
           <div class="space-y-2">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div class="font-medium">{contextUsageSummary(usage)}</div>
-              {#if usage.model}<Badge variant="secondary">{usage.model}</Badge>{/if}
+              {#if $sessionDetail.session.model}<Badge variant="secondary">{$sessionDetail.session.model}</Badge>{/if}
             </div>
             {#if ratio !== null}
               <div class="h-2 overflow-hidden rounded-full bg-muted" aria-label="Context usage progress">

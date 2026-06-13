@@ -97,9 +97,9 @@ Example Internal Event API request:
       "max_tokens": 128000,
       "remaining_tokens": 86000,
       "usage_ratio": 0.328125,
-      "confidence": "exact",
-      "model": "example-model"
-    }
+      "confidence": "exact"
+    },
+    "model": "example-model"
   }
 }
 ```
@@ -117,7 +117,6 @@ interface ContextUsageView {
   input_tokens: number | null;
   output_tokens: number | null;
   cache_tokens: number | null;
-  model: string | null;
   confidence: 'exact' | 'estimated' | 'unknown';
   observed_at: string;
 }
@@ -130,6 +129,7 @@ Validation rules:
 - Numeric token fields must be non-negative integers when present.
 - `usage_ratio` must be between `0` and `1` when present.
 - `confidence` must be `exact`, `estimated`, or `unknown`.
+- `payload.context_usage.model` is not supported; optional `payload.model` must be a string or null when present and is projected as session-level `model`.
 - `observed_at` should be set by the server projection from event `occurred_at`, not trusted from client payload.
 - Client-specific raw fields should not leak into the External API view. If raw details are needed for diagnostics, keep them under event payload metadata only.
 
@@ -157,10 +157,10 @@ Projected JSON example:
     "input_tokens": null,
     "output_tokens": null,
     "cache_tokens": null,
-    "model": "example-model",
     "confidence": "exact",
     "observed_at": "2026-06-13T00:00:00.000Z"
-  }
+  },
+  "model": "example-model"
 }
 ```
 
@@ -176,6 +176,7 @@ Projection behavior:
 Add explicit field to `SessionView`:
 
 ```rust
+pub model: Option<String>
 pub context_usage: Option<ContextUsageView>
 ```
 
@@ -184,11 +185,12 @@ Dashboard TypeScript type:
 ```ts
 export interface SessionView {
   // existing fields...
+  model: string | null;
   context_usage: ContextUsageView | null;
 }
 ```
 
-The value should be parsed from `sessions.metadata.context_usage` by the query/view layer. Do not require frontend components to inspect `metadata.context_usage` directly.
+`context_usage` should be parsed from `sessions.metadata.context_usage`, and `model` from `sessions.metadata.model`, by the query/view layer. Do not require frontend components to inspect `metadata` directly.
 
 Existing session endpoints should include the field:
 
@@ -218,15 +220,17 @@ Suggested builder:
 export function buildSessionContextUsageUpdatedEvent(
   context: TurnContext,
   usage: ContextUsagePayload,
+  model?: string | null,
 ): InternalEvent
 ```
 
 Suggested extraction function:
 
 ```ts
-function contextUsageFromPiEvent(event: unknown): ContextUsagePayload | undefined {
+function contextUsageFromPiEvent(event: unknown): ContextUsageObservation | undefined {
   // Read only documented/observed pi hook/API fields.
   // Return undefined if no usage exists.
+  // Return model separately from context_usage when observed.
 }
 ```
 
