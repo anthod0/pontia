@@ -67,7 +67,7 @@ beforeEach(() => {
   });
 });
 
-test('sidebar shows workflow items and omits settings from navigation', () => {
+test('sidebar shows session control items and hides DAG task navigation', () => {
   render(AppSidebarHost);
 
   expect(screen.queryByText('Workflow')).not.toBeInTheDocument();
@@ -77,7 +77,7 @@ test('sidebar shows workflow items and omits settings from navigation', () => {
   expect(workflow).not.toBeNull();
   const workflowQueries = within(workflow as HTMLElement);
   expect(workflowQueries.getByText('Overview')).toBeInTheDocument();
-  expect(workflowQueries.getByText('Tasks')).toBeInTheDocument();
+  expect(workflowQueries.queryByText('Tasks')).not.toBeInTheDocument();
   const newChat = workflowQueries.getByText('New Chat').closest('button');
   expect(newChat).not.toBeNull();
   expect(newChat?.querySelector('svg')).toHaveClass('lucide-square-pen');
@@ -186,16 +186,14 @@ test('sidebar only marks the current route as active', () => {
   render(AppSidebarHost);
 
   const overview = screen.getByText('Overview').closest('button');
-  const tasks = screen.getByText('Tasks').closest('button');
   const chat = screen.getByText('New Chat').closest('button');
 
   expect(overview).not.toBeNull();
-  expect(tasks).not.toBeNull();
+  expect(screen.queryByText('Tasks')).not.toBeInTheDocument();
   expect(chat).not.toBeNull();
 
   expect(chat).toHaveAttribute('data-active', 'true');
   expect(overview).not.toHaveAttribute('data-active');
-  expect(tasks).not.toHaveAttribute('data-active');
 });
 
 test('sidebar New Chat notifies mounted route components about the route change', async () => {
@@ -269,6 +267,7 @@ test('top bar omits static dashboard title and description copy and links settin
   expect(screen.queryByText('Dashboard v2')).not.toBeInTheDocument();
   expect(screen.queryByText('DAG tasks, workspaces, profiles, and execution diagnostics')).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: /new chat/i })).toHaveAttribute('href', '/dashboard/chat');
+  expect(screen.queryByRole('link', { name: /browse tasks/i })).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute('href', '/dashboard/settings/common');
 });
 

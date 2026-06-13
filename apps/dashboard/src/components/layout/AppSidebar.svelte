@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GitBranch, Home, Pencil, SquarePen } from '@lucide/svelte'
+  import { Home, Pencil, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import { sessions, sessionsLoading, updateSessionTitle } from '../../stores/sessions'
@@ -14,7 +14,6 @@
 
   const primaryItems: Item[] = [
     { label: 'Overview', path: '/overview', icon: Home },
-    { label: 'Tasks', path: '/tasks', icon: GitBranch },
     { label: 'New Chat', path: '/chat', icon: SquarePen },
   ]
 
@@ -29,7 +28,6 @@
   }
 
   function isActive(path: string) {
-    if (path === '/tasks') return currentPath === '/tasks' || currentPath.startsWith('/tasks/')
     if (path === '/chat') return currentPath === '/chat'
     return currentPath === path
   }

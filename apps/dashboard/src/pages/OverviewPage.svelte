@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { Activity, Boxes, BriefcaseBusiness, CheckCircle2, CircleAlert, RadioTower } from '@lucide/svelte'
+  import { BriefcaseBusiness, CheckCircle2, CircleAlert, RadioTower } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -9,16 +9,13 @@
   import { agentProfiles, agentProfilesError, agentProfilesLoading, loadAgentProfiles } from '../stores/agentProfiles'
   import { token } from '../stores/auth'
   import { lastConnectionError, sseStatus } from '../stores/connection'
-  import { loadTasks, tasks, tasksError, tasksLoading } from '../stores/tasks'
+  import { loadTasks, tasksError, tasksLoading } from '../stores/tasks'
   import { loadWorkspaces, workspaces, workspacesError, workspacesLoading } from '../stores/workspaces'
 
   onMount(() => {
     void Promise.all([loadTasks(), loadWorkspaces(), loadAgentProfiles()])
   })
 
-  $: activeTasks = $tasks.filter((task) => ['created', 'routing', 'needs_confirmation', 'queued', 'running', 'paused'].includes(task.state)).length
-  $: completedTasks = $tasks.filter((task) => task.state === 'completed').length
-  $: blockedTasks = $tasks.filter((task) => ['needs_confirmation', 'paused', 'failed'].includes(task.state)).length
   $: loading = $tasksLoading || $workspacesLoading || $agentProfilesLoading
   $: errors = [$tasksError, $workspacesError, $agentProfilesError].filter(Boolean)
 </script>
@@ -53,29 +50,7 @@
     </Alert.Root>
   {/if}
 
-  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-    <Card.Root>
-      <Card.Header class="flex flex-row items-center justify-between space-y-0">
-        <div>
-          <Card.Title>DAG Tasks</Card.Title>
-          <Card.Description>{activeTasks} active · {completedTasks} completed</Card.Description>
-        </div>
-        <Boxes class="size-5 text-muted-foreground" />
-      </Card.Header>
-      <Card.Content class="text-3xl font-semibold">{#if loading}<Skeleton class="h-9 w-16" />{:else}{$tasks.length}{/if}</Card.Content>
-    </Card.Root>
-
-    <Card.Root>
-      <Card.Header class="flex flex-row items-center justify-between space-y-0">
-        <div>
-          <Card.Title>Blocked / Attention</Card.Title>
-          <Card.Description>Needs confirmation, paused, or failed</Card.Description>
-        </div>
-        <CircleAlert class="size-5 text-muted-foreground" />
-      </Card.Header>
-      <Card.Content class="text-3xl font-semibold">{#if loading}<Skeleton class="h-9 w-16" />{:else}{blockedTasks}{/if}</Card.Content>
-    </Card.Root>
-
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
     <Card.Root>
       <Card.Header class="flex flex-row items-center justify-between space-y-0">
         <div>
@@ -112,7 +87,7 @@
         </div>
         {#if $lastConnectionError}<p class="text-sm text-destructive">{$lastConnectionError}</p>{/if}
       </div>
-      <Button href="/dashboard/tasks" variant="outline"><Activity class="size-4" /> View tasks</Button>
+
     </Card.Content>
   </Card.Root>
 </section>

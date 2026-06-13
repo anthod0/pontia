@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PanelLeft, Search, Settings, SquarePen, TriangleAlert, Wifi, WifiOff } from '@lucide/svelte'
+  import { PanelLeft, Settings, SquarePen, TriangleAlert, Wifi, WifiOff } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -58,10 +58,6 @@
   <Button variant="outline" size="sm" class="gap-2" href="/dashboard/chat" onclick={openNewChat}>
     <SquarePen class="size-4" />
     <span class="sr-only sm:not-sr-only">New Chat</span>
-  </Button>
-  <Button variant="outline" size="sm" class="hidden gap-2 md:inline-flex" href="/dashboard/tasks">
-    <Search class="size-4" />
-    Browse tasks
   </Button>
   <Button variant="ghost" size="sm" class="gap-2" href="/dashboard/settings/common">
     <Settings class="size-4" />

@@ -452,22 +452,19 @@ test('renders new chat selectors as compact metadata pills above the prompt inpu
   expect(clientSelector.querySelector('svg')).toHaveClass('lucide-terminal');
 });
 
-test('places task mode toggle with the metadata selectors above the prompt input', async () => {
+test('hides task mode toggle from the chat composer metadata controls', async () => {
   render(ChatPage);
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  const taskToggle = screen.getByRole('button', { name: /task mode off/i });
   const workspaceSelector = screen.getByLabelText(/workspace/i);
   const clientSelector = screen.getByLabelText(/client/i);
   const submit = screen.getByRole('button', { name: /start chat/i });
 
-  expect(taskToggle.parentElement).toBe(workspaceSelector.parentElement);
+  expect(screen.queryByRole('button', { name: /task mode off/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /task mode on/i })).not.toBeInTheDocument();
   expect(workspaceSelector.parentElement).toBe(clientSelector.parentElement);
-  expect(taskToggle).toHaveClass('h-7');
-  expect(taskToggle).toHaveClass('rounded-full');
-  expect(taskToggle.compareDocumentPosition(workspaceSelector) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(clientSelector.compareDocumentPosition(promptInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(taskToggle.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(workspaceSelector.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test('shows new chat keyboard hint and submits with Enter while preserving Shift Enter for newlines', async () => {
@@ -489,25 +486,6 @@ test('shows new chat keyboard hint and submits with Enter while preserving Shift
   })));
 });
 
-test('creates a manual DAG task from task mode and opens the planner session chat', async () => {
-  const user = userEvent.setup();
-  render(ChatPage);
-
-  await user.type(screen.getByPlaceholderText('Ask the agent to implement, inspect, or explain something…'), 'Plan this as a DAG task');
-  await fireEvent.click(screen.getByRole('button', { name: /task mode off/i }));
-  expect(screen.getByRole('button', { name: /task mode on/i })).toBeInTheDocument();
-  await fireEvent.click(screen.getByRole('button', { name: /create task/i }));
-
-  await waitFor(() => expect(mocks.createDagTask).toHaveBeenCalledWith({
-    input: 'Plan this as a DAG task',
-    workspace: '/repo/pilotfy',
-    client_type: 'pi',
-    metadata: { source: 'dashboard_chat', action: 'manual_task' },
-  }));
-  expect(mocks.createSession).not.toHaveBeenCalled();
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-planner');
-  expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-planner');
-});
 
 test('creates a session with initial prompt, workspace, and client then opens its chat', async () => {
   const user = userEvent.setup();
@@ -1054,8 +1032,7 @@ test('hides exit on exited sessions and waits for idle after automatic resume be
   expect(mocks.resumeSession.mock.invocationCallOrder[0]).toBeLessThan(mocks.submitInboxMessage.mock.invocationCallOrder[0]);
 });
 
-test('loads planner task proposals and opens the draft DAG in a side sheet from a turn button', async () => {
-  const user = userEvent.setup();
+test('hides planner draft DAG entry points in planner chat sessions', async () => {
   const planner = session({
     session_id: 'session-planner',
     execution_profile_id: 'planner',
@@ -1072,54 +1049,16 @@ test('loads planner task proposals and opens the draft DAG in a side sheet from 
     events: [],
     artifacts: [],
   });
-  mocks.taskProposals.set([
-    {
-      proposal_id: 'proposal-1',
-      task_id: 'task-new',
-      mode: 'initial_dag',
-      state: 'proposed',
-      summary: 'Implement in two steps',
-      proposal_json: {
-        mode: 'initial_dag',
-        summary: 'Implement in two steps',
-        work_items: [
-          { temp_id: 'draft-a', title: 'Design UI', description: 'Sketch chat planner UI', kind: 'implementation', action: 'Edit dashboard', execution_profile_id: 'coder', priority: 0, optional: false, parallelizable: true, acceptance_criteria: [] },
-          { temp_id: 'draft-b', title: 'Wire events', description: 'Use SSE to navigate', kind: 'implementation', action: 'Subscribe to events', execution_profile_id: 'coder', priority: 1, optional: false, parallelizable: false, acceptance_criteria: [] },
-        ],
-        edges: [{ from_work_item_id: 'draft-a', to_work_item_id: 'draft-b', edge_type: 'depends_on' }],
-      },
-      validation_json: {},
-      created_by_session_id: 'session-planner',
-      revision: 1,
-      supersedes_proposal_id: null,
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T00:00:00Z',
-    },
-  ]);
 
   render(ChatPage);
 
-  await waitFor(() => expect(mocks.loadTaskProposals).toHaveBeenCalledWith('task-new'));
   expect(await screen.findByText('I drafted a DAG below.')).toBeInTheDocument();
+  expect(mocks.loadTaskProposals).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: /view draft dag for turn/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: /planner draft dag/i })).not.toBeInTheDocument();
-  expect(screen.queryByText('Implement in two steps')).not.toBeInTheDocument();
-  expect(screen.queryByText('Design UI')).not.toBeInTheDocument();
-
-  const openDraftDagButton = await screen.findByRole('button', { name: /view draft dag for turn/i });
-  expect(openDraftDagButton).toHaveTextContent('View draft DAG');
-  expect(openDraftDagButton).toHaveTextContent('2 items');
-  await user.click(openDraftDagButton);
-
-  expect(await screen.findByRole('heading', { name: /planner draft dag/i })).toBeInTheDocument();
-  expect(screen.getByText('Implement in two steps')).toBeInTheDocument();
-  expect(screen.getByText('2 work items')).toBeInTheDocument();
-  expect(screen.getByText('1 dependencies')).toBeInTheDocument();
-  expect(screen.getAllByText('Design UI').length).toBeGreaterThan(0);
-  expect(screen.getAllByText('Wire events').length).toBeGreaterThan(0);
-  expect(screen.getAllByText('proposed').length).toBeGreaterThan(0);
 });
 
-test('navigates from planner chat to the task DAG when SSE reports approval', async () => {
+test('does not navigate from planner chat to the task DAG when SSE reports approval', async () => {
   const planner = session({
     session_id: 'session-planner',
     execution_profile_id: 'planner',
@@ -1149,10 +1088,10 @@ test('navigates from planner chat to the task DAG when SSE reports approval', as
     });
   }
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/tasks/task-new/dag');
+  expect(mocks.navigate).not.toHaveBeenCalledWith('/tasks/task-new/dag');
 });
 
-test('opens the task DAG immediately when the planner proposal was already applied', async () => {
+test('does not open the task DAG immediately when the planner proposal was already applied', async () => {
   const planner = session({
     session_id: 'session-planner',
     execution_profile_id: 'planner',
@@ -1182,5 +1121,7 @@ test('opens the task DAG immediately when the planner proposal was already appli
 
   render(ChatPage);
 
-  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/tasks/task-new/dag'));
+  await waitFor(() => expect(screen.getByRole('log')).toBeInTheDocument());
+  expect(mocks.loadTaskProposals).not.toHaveBeenCalled();
+  expect(mocks.navigate).not.toHaveBeenCalledWith('/tasks/task-new/dag');
 });

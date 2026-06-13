@@ -101,6 +101,7 @@
   }
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
+  const DAG_TASK_ENTRIES_ENABLED = false
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pilotfy.chat.lastWorkspaceId'
   const newChatSelectorTriggerClass = 'h-7 rounded-full px-3 text-sm font-normal text-muted-foreground'
 
@@ -142,11 +143,11 @@
   $: plannerTaskId = plannerTaskIdForSession(selectedSession)
   $: plannerTaskProposals = plannerTaskId ? $taskProposals.filter((proposal) => proposal.task_id === plannerTaskId) : []
   $: draftPlannerProposal = plannerTaskProposals.find((proposal) => proposal.mode === 'initial_dag' && proposal.state === 'proposed') ?? null
-  $: if (plannerTaskId && plannerTaskId !== loadedProposalTaskId) {
+  $: if (DAG_TASK_ENTRIES_ENABLED && plannerTaskId && plannerTaskId !== loadedProposalTaskId) {
     loadedProposalTaskId = plannerTaskId
     void loadTaskProposals(plannerTaskId)
   }
-  $: if (plannerTaskId && plannerTaskProposals.some((proposal) => proposal.state === 'applied')) navigateToTaskDag(plannerTaskId)
+  $: if (DAG_TASK_ENTRIES_ENABLED && plannerTaskId && plannerTaskProposals.some((proposal) => proposal.state === 'applied')) navigateToTaskDag(plannerTaskId)
   $: errorMessage = actionError ?? $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError ?? $agentProfilesError ?? $taskProposalsError
   $: {
     if (errorMessage && errorMessage !== lastToastedError) {
@@ -314,7 +315,7 @@
       return
     }
 
-    if (!plannerTaskId || streamEvent.kind !== 'task_event') return
+    if (!DAG_TASK_ENTRIES_ENABLED || !plannerTaskId || streamEvent.kind !== 'task_event') return
     if (streamEvent.event.task_id === plannerTaskId && streamEvent.event.event_type === 'dag.approved') {
       navigateToTaskDag(plannerTaskId)
     }
@@ -394,7 +395,7 @@
     creating = true
     actionError = null
     try {
-      if (taskMode) {
+      if (DAG_TASK_ENTRIES_ENABLED && taskMode) {
         const initialPrompt = prompt.trim()
         const result = await createDagTask({
           input: initialPrompt,
@@ -543,17 +544,19 @@
 
         <div class="space-y-3">
           <div class="flex min-w-0 flex-wrap items-center gap-2 px-1">
-          <Button
-            type="button"
-            size="sm"
-            variant={taskMode ? 'default' : 'outline'}
-            class="h-7 rounded-full px-3 text-sm font-normal"
-            aria-pressed={taskMode}
-            aria-label={taskMode ? 'Task mode on' : 'Task mode off'}
-            onclick={() => (taskMode = !taskMode)}
-          >
-            <GitBranch class="size-4" /> Task
-          </Button>
+          {#if DAG_TASK_ENTRIES_ENABLED}
+            <Button
+              type="button"
+              size="sm"
+              variant={taskMode ? 'default' : 'outline'}
+              class="h-7 rounded-full px-3 text-sm font-normal"
+              aria-pressed={taskMode}
+              aria-label={taskMode ? 'Task mode on' : 'Task mode off'}
+              onclick={() => (taskMode = !taskMode)}
+            >
+              <GitBranch class="size-4" /> Task
+            </Button>
+          {/if}
 
           <Select.Root type="single" bind:value={createWorkspaceId} disabled={$workspacesLoading}>
             <Select.Trigger class={`${newChatSelectorTriggerClass} max-w-56`} aria-label="Workspace" title={selectedWorkspace?.canonical_path ?? undefined}>
@@ -621,9 +624,9 @@
             {messages}
             sessionState={selectedSession.state}
             loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
-            {plannerTaskId}
-            {draftPlannerProposal}
-            draftPlannerProposalLoading={$taskProposalsLoading}
+            plannerTaskId={DAG_TASK_ENTRIES_ENABLED ? plannerTaskId : null}
+            draftPlannerProposal={DAG_TASK_ENTRIES_ENABLED ? draftPlannerProposal : null}
+            draftPlannerProposalLoading={DAG_TASK_ENTRIES_ENABLED && $taskProposalsLoading}
             interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
             interruptBusy={actionBusy}
             onInterrupt={() => void interruptSelectedSession()}
