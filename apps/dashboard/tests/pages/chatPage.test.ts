@@ -634,7 +634,7 @@ test('shows workspace name in the selected chat composer pill while retaining fu
 
   render(ChatPage);
 
-  const workspacePill = await screen.findByLabelText('Workspace: /repo/pontia');
+  const workspacePill = (await screen.findAllByLabelText('Workspace: /repo/pontia'))[0];
   expect(workspacePill).toHaveTextContent('Pontia Workspace');
   expect(workspacePill).not.toHaveTextContent('/repo/pontia');
 });
@@ -757,7 +757,9 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(stateBadge.querySelector('[data-chat-session-state-label]')).toHaveClass('sm:inline');
 
   const sessionDetailsButton = screen.getByRole('button', { name: 'Session details: pontia · pi · main' });
-  expect(sessionDetailsButton).toHaveTextContent('pontia · pi · main');
+  expect(sessionDetailsButton).toHaveTextContent('pontia');
+  expect(sessionDetailsButton).toHaveTextContent('pi');
+  expect(sessionDetailsButton).toHaveTextContent('main');
   expect(sessionDetailsButton).not.toHaveTextContent('+2');
   expect(sessionDetailsButton).toHaveClass('bg-transparent');
   expect(sessionDetailsButton).toHaveClass('px-0');
@@ -767,7 +769,6 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(sessionDetailsButton.className).not.toContain('focus-visible:border-ring');
   expect(sessionDetailsButton.className).not.toContain('border-border');
   expect(sessionDetailsButton.className).not.toContain('dark:border-input');
-  expect(sessionDetailsButton.querySelector('[data-chat-session-details-icon]')).toHaveClass('hidden');
   expect(sessionDetailsButton.querySelector('[data-chat-session-details-summary]')).toHaveClass('flex-1');
 });
 
@@ -1137,11 +1138,11 @@ test('loads and renders an existing chat session with metadata, state, and works
   expect(await screen.findByText('hi there')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: /second · reviewer/i })).not.toBeInTheDocument();
   expect(screen.queryByText('Description: Review dashboard changes')).not.toBeInTheDocument();
-  const clientBadge = screen.getByLabelText('Client: claude-code');
-  const profileBadge = screen.getByLabelText('Profile: coder@1');
+  const clientBadge = screen.getAllByLabelText('Client: claude-code')[0];
+  const profileBadge = screen.getAllByLabelText('Profile: coder@1')[0];
   expect(clientBadge).toBeInTheDocument();
   expect(profileBadge).toBeInTheDocument();
-  expect(screen.getByLabelText('Handle: second')).toBeInTheDocument();
+  expect(screen.getAllByLabelText('Handle: second')[0]).toBeInTheDocument();
   expect(clientBadge.querySelector('svg')).toHaveClass('lucide-terminal');
   expect(profileBadge.querySelector('svg')).toHaveClass('lucide-bot');
   expect(screen.queryByText('Client: claude-code')).not.toBeInTheDocument();
@@ -1149,9 +1150,9 @@ test('loads and renders an existing chat session with metadata, state, and works
   expect(screen.queryByText('Handle: second')).not.toBeInTheDocument();
   expect(screen.queryByText('Workspace: workspace-1')).not.toBeInTheDocument();
   const stateBadge = screen.getByText('busy').closest('[data-slot="badge"]');
-  const workspaceName = screen.getByText('pontia');
-  const workspaceBadge = screen.getByLabelText('Workspace: /repo/pontia');
-  const clientDetail = screen.getByLabelText('Client: claude-code');
+  const workspaceName = screen.getAllByText('pontia')[0];
+  const workspaceBadge = screen.getAllByLabelText('Workspace: /repo/pontia')[0];
+  const clientDetail = screen.getAllByLabelText('Client: claude-code')[0];
   const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
   expect(screen.queryByText('State: busy')).not.toBeInTheDocument();
   expect(stateBadge).not.toBeNull();
@@ -1190,10 +1191,10 @@ test('shows supported context usage in chat session metadata while hiding unsupp
 
   render(ChatPage);
 
-  const contextBadge = await screen.findByLabelText('Context usage: 42k / 128k · 33%');
+  const contextBadge = (await screen.findAllByLabelText('Context usage: 42k / 128k · 33%'))[0];
   expect(contextBadge).toBeInTheDocument();
   expect(contextBadge.querySelector('svg')).toHaveClass('lucide-gauge');
-  expect(screen.getByText('42k / 128k · 33%')).toBeInTheDocument();
+  expect(screen.getAllByText('42k / 128k · 33%')[0]).toBeInTheDocument();
   expect(screen.queryByText('Context 42k / 128k · 33%')).not.toBeInTheDocument();
 
   cleanup();

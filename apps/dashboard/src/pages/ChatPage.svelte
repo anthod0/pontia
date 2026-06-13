@@ -690,6 +690,79 @@
   }
 </script>
 
+{#snippet gitStatusBadge(session: SessionView, gitStatus: WorkspaceGitStatusView)}
+  <Badge
+    variant={gitStatus.state === 'error' ? 'destructive' : 'outline'}
+    class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+    title={gitStatusTitle(session, gitStatus)}
+    aria-label={gitStatusAriaLabel(gitStatus)}
+  >
+    <GitBranch class={`size-4 ${gitStatusToneClass(gitStatus)}`} aria-label="Git branch" />
+    <span class={gitStatusToneClass(gitStatus)}>{gitBranchLabel(gitStatus)}</span>
+    {#if gitStatus.ahead}<span class="text-blue-600 dark:text-blue-400">↑{gitStatus.ahead}</span>{/if}
+    {#if gitStatus.behind}<span class="text-violet-600 dark:text-violet-400">↓{gitStatus.behind}</span>{/if}
+    {#if hasGitChangeCounts(gitStatus)}
+      {#if gitStatus.staged_count}<span class="text-emerald-600 dark:text-emerald-400">+{gitStatus.staged_count}</span>{/if}
+      {#if gitStatus.unstaged_count}<span class="text-amber-600 dark:text-amber-400">~{gitStatus.unstaged_count}</span>{/if}
+      {#if gitStatus.untracked_count}<span class="text-cyan-600 dark:text-cyan-400">?{gitStatus.untracked_count}</span>{/if}
+      {#if gitStatus.conflicted_count}<span class="text-destructive">!{gitStatus.conflicted_count}</span>{/if}
+    {/if}
+  </Badge>
+{/snippet}
+
+{#snippet sessionMetadataBadges(session: SessionView, gitStatus: WorkspaceGitStatusView | undefined)}
+  <Badge
+    variant="outline"
+    class="h-7 max-w-full justify-start gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+    title={`Workspace: ${sessionWorkspacePath(session)}`}
+    aria-label={`Workspace: ${sessionWorkspacePath(session)}`}
+  >
+    <Folder class="size-4" aria-hidden="true" />
+    <span class="min-w-0 truncate">{sessionWorkspaceTitle(session)}</span>
+  </Badge>
+  {#if gitStatus}
+    {@render gitStatusBadge(session, gitStatus)}
+  {/if}
+  {#if sessionContextUsageLabel(session)}
+    <Badge
+      variant="outline"
+      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+      title={`Context usage: ${sessionContextUsageLabel(session)}`}
+      aria-label={`Context usage: ${sessionContextUsageLabel(session)}`}
+    >
+      <Gauge class="size-4" aria-hidden="true" /> {sessionContextUsageLabel(session)}
+    </Badge>
+  {/if}
+  <Badge
+    variant="outline"
+    class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+    title={`Client: ${session.client_type}`}
+    aria-label={`Client: ${session.client_type}`}
+  >
+    <Terminal class="size-4" aria-hidden="true" /> {session.client_type}
+  </Badge>
+  {#if sessionProfileTitle(session)}
+    <Badge
+      variant="outline"
+      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+      title={`Profile: ${sessionProfileTitle(session)}`}
+      aria-label={`Profile: ${sessionProfileTitle(session)}`}
+    >
+      <Bot class="size-4" aria-hidden="true" /> {sessionProfileTitle(session)}
+    </Badge>
+  {/if}
+  {#if sessionHandleTitle(session)}
+    <Badge
+      variant="outline"
+      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+      title={`Handle: ${sessionHandleTitle(session)}`}
+      aria-label={`Handle: ${sessionHandleTitle(session)}`}
+    >
+      <AtSign class="size-4" aria-hidden="true" /> {sessionHandleTitle(session)}
+    </Badge>
+  {/if}
+{/snippet}
+
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
 <section class={selectedSessionId ? 'flex flex-col gap-4 pb-40' : 'flex min-h-[calc(100vh-9.5rem)] flex-col'}>
@@ -807,72 +880,7 @@
                   <span data-chat-session-state-label class="hidden sm:inline">{selectedSession.state}</span>
                 </Badge>
                 <div data-testid="session-status-desktop-metadata" class="hidden min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex">
-                  <Badge
-                    variant="outline"
-                    class="h-7 max-w-full justify-start gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                    title={`Workspace: ${sessionWorkspacePath(selectedSession)}`}
-                    aria-label={`Workspace: ${sessionWorkspacePath(selectedSession)}`}
-                  >
-                    <Folder class="size-4" aria-hidden="true" />
-                    <span class="min-w-0 truncate">{sessionWorkspaceTitle(selectedSession)}</span>
-                  </Badge>
-                  {#if selectedSessionGitStatus}
-                    <Badge
-                      variant={selectedSessionGitStatus.state === 'error' ? 'destructive' : 'outline'}
-                      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                      title={gitStatusTitle(selectedSession, selectedSessionGitStatus)}
-                      aria-label={gitStatusAriaLabel(selectedSessionGitStatus)}
-                    >
-                      <GitBranch class={`size-4 ${gitStatusToneClass(selectedSessionGitStatus)}`} aria-label="Git branch" />
-                      <span class={gitStatusToneClass(selectedSessionGitStatus)}>{gitBranchLabel(selectedSessionGitStatus)}</span>
-                      {#if selectedSessionGitStatus.ahead}<span class="text-blue-600 dark:text-blue-400">↑{selectedSessionGitStatus.ahead}</span>{/if}
-                      {#if selectedSessionGitStatus.behind}<span class="text-violet-600 dark:text-violet-400">↓{selectedSessionGitStatus.behind}</span>{/if}
-                      {#if hasGitChangeCounts(selectedSessionGitStatus)}
-                        {#if selectedSessionGitStatus.staged_count}<span class="text-emerald-600 dark:text-emerald-400">+{selectedSessionGitStatus.staged_count}</span>{/if}
-                        {#if selectedSessionGitStatus.unstaged_count}<span class="text-amber-600 dark:text-amber-400">~{selectedSessionGitStatus.unstaged_count}</span>{/if}
-                        {#if selectedSessionGitStatus.untracked_count}<span class="text-cyan-600 dark:text-cyan-400">?{selectedSessionGitStatus.untracked_count}</span>{/if}
-                        {#if selectedSessionGitStatus.conflicted_count}<span class="text-destructive">!{selectedSessionGitStatus.conflicted_count}</span>{/if}
-                      {/if}
-                    </Badge>
-                  {/if}
-                  {#if sessionContextUsageLabel(selectedSession)}
-                    <Badge
-                      variant="outline"
-                      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                      title={`Context usage: ${sessionContextUsageLabel(selectedSession)}`}
-                      aria-label={`Context usage: ${sessionContextUsageLabel(selectedSession)}`}
-                    >
-                      <Gauge class="size-4" aria-hidden="true" /> {sessionContextUsageLabel(selectedSession)}
-                    </Badge>
-                  {/if}
-                  <Badge
-                    variant="outline"
-                    class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                    title={`Client: ${selectedSession.client_type}`}
-                    aria-label={`Client: ${selectedSession.client_type}`}
-                  >
-                    <Terminal class="size-4" aria-hidden="true" /> {selectedSession.client_type}
-                  </Badge>
-                  {#if sessionProfileTitle(selectedSession)}
-                    <Badge
-                      variant="outline"
-                      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                      title={`Profile: ${sessionProfileTitle(selectedSession)}`}
-                      aria-label={`Profile: ${sessionProfileTitle(selectedSession)}`}
-                    >
-                      <Bot class="size-4" aria-hidden="true" /> {sessionProfileTitle(selectedSession)}
-                    </Badge>
-                  {/if}
-                  {#if sessionHandleTitle(selectedSession)}
-                    <Badge
-                      variant="outline"
-                      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-                      title={`Handle: ${sessionHandleTitle(selectedSession)}`}
-                      aria-label={`Handle: ${sessionHandleTitle(selectedSession)}`}
-                    >
-                      <AtSign class="size-4" aria-hidden="true" /> {sessionHandleTitle(selectedSession)}
-                    </Badge>
-                  {/if}
+                  {@render sessionMetadataBadges(selectedSession, selectedSessionGitStatus)}
                 </div>
                 <div data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1 sm:hidden">
                   <button
@@ -883,8 +891,22 @@
                     aria-label={`Session details: ${selectedSessionMetadataSummary}`}
                     onclick={() => (sessionDetailsOpen = !sessionDetailsOpen)}
                   >
-                    <Folder data-chat-session-details-icon class="hidden size-4 shrink-0" aria-hidden="true" />
-                    <span data-chat-session-details-summary class="min-w-0 flex-1 truncate text-left">{selectedSessionMetadataSummary}</span>
+                    <span data-chat-session-details-summary class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left">
+                      <span class="min-w-0 shrink truncate">{sessionWorkspaceTitle(selectedSession)}</span>
+                      {#if selectedSessionGitStatus}
+                        {@render gitStatusBadge(selectedSession, selectedSessionGitStatus)}
+                      {/if}
+                      {#if sessionContextUsageLabel(selectedSession)}
+                        <span class="shrink-0 text-muted-foreground">{sessionContextUsageLabel(selectedSession)}</span>
+                      {/if}
+                      <span class="shrink-0 text-muted-foreground">{selectedSession.client_type}</span>
+                      {#if sessionProfileTitle(selectedSession)}
+                        <span class="shrink-0 text-muted-foreground">{sessionProfileTitle(selectedSession)}</span>
+                      {/if}
+                      {#if sessionHandleTitle(selectedSession)}
+                        <span class="shrink-0 text-muted-foreground">{sessionHandleTitle(selectedSession)}</span>
+                      {/if}
+                    </span>
                   </button>
                   {#if sessionDetailsOpen}
                     <div role="dialog" aria-label="Session details" class="absolute bottom-full left-0 z-20 mb-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
