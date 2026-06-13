@@ -1,10 +1,7 @@
 <script lang="ts">
-  import { GitBranch } from '@lucide/svelte'
   import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
   import GitStatusInline from './GitStatusInline.svelte'
   import {
-    gitStatusAriaLabel,
-    gitStatusTitle,
     sessionContextUsageLabel,
     sessionHandleTitle,
     sessionProfileTitle,
@@ -21,29 +18,22 @@
     metadataSummary: string
   }
 
-  let { session, gitStatus, gitStatusErrors = {}, workspaces, metadataItems, metadataSummary }: Props = $props()
+  let { session, gitStatus, workspaces, metadataItems, metadataSummary }: Props = $props()
   let sessionDetailsOpen = $state(false)
 </script>
 
 <button type="button" class="flex h-7 w-full min-w-0 items-center justify-start bg-transparent px-0 text-sm text-muted-foreground outline-none hover:bg-transparent hover:text-foreground focus-visible:text-foreground" aria-haspopup="dialog" aria-expanded={sessionDetailsOpen} aria-label={`Session details: ${metadataSummary}`} onclick={() => (sessionDetailsOpen = !sessionDetailsOpen)}>
-  <span data-chat-session-details-summary class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left">
-    <span class="min-w-0 shrink truncate">{sessionWorkspaceTitle(session, workspaces)}</span>
+  <span data-chat-session-details-summary class="block min-w-0 flex-1 truncate text-left">
+    <span>{sessionWorkspaceTitle(session, workspaces)}</span>
     {#if gitStatus}
-      <span
-        class="inline-flex h-7 shrink-0 items-center gap-1.5 text-sm font-normal text-muted-foreground"
-        title={gitStatusTitle(session, gitStatus, gitStatusErrors)}
-        aria-label={gitStatusAriaLabel(gitStatus)}
-      >
-        <GitBranch class="size-4" aria-label="Git branch" />
-        <GitStatusInline {gitStatus} />
-      </span>
+      <span> ·</span>{' '}<GitStatusInline {gitStatus} />
     {/if}
     {#if sessionContextUsageLabel(session)}
-      <span class="shrink-0 text-muted-foreground">{sessionContextUsageLabel(session)}</span>
+      <span> · {sessionContextUsageLabel(session)}</span>
     {/if}
-    <span class="shrink-0 text-muted-foreground">{session.client_type}</span>
-    {#if sessionProfileTitle(session)}<span class="shrink-0 text-muted-foreground">{sessionProfileTitle(session)}</span>{/if}
-    {#if sessionHandleTitle(session)}<span class="shrink-0 text-muted-foreground">{sessionHandleTitle(session)}</span>{/if}
+    <span> · {session.client_type}</span>
+    {#if sessionProfileTitle(session)}<span> · {sessionProfileTitle(session)}</span>{/if}
+    {#if sessionHandleTitle(session)}<span> · {sessionHandleTitle(session)}</span>{/if}
   </span>
 </button>
 {#if sessionDetailsOpen}
@@ -53,7 +43,13 @@
       {#each metadataItems as item (item.key)}
         <div class="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
           <dt class="text-muted-foreground">{item.label}</dt>
-          <dd class="min-w-0 truncate" title={item.title}>{item.value}</dd>
+          <dd class="min-w-0 truncate" title={item.title}>
+            {#if item.key === 'git' && gitStatus}
+              <GitStatusInline {gitStatus} />
+            {:else}
+              {item.value}
+            {/if}
+          </dd>
         </div>
       {/each}
     </dl>

@@ -124,6 +124,7 @@ vi.mock('../src/stores/tasks', () => ({
 
 beforeEach(() => {
   window.history.pushState({}, '', '/dashboard/chat/session-1');
+  mocks.workspaces.set([{ workspace_id: 'workspace-1', canonical_path: '/work/project', display_path: '/work/project', name: 'project', state: 'active', metadata: {}, created_at: '2026-05-14T00:00:00Z', updated_at: '2026-05-14T01:00:00Z', last_used_at: null }]);
   mocks.workspaceGitStatuses.set({});
   mocks.workspaceGitStatusErrors.set({});
   vi.clearAllMocks();
@@ -137,10 +138,10 @@ test('chat composer metadata uses desktop pills and a compact mobile summary', a
   const mobileMetadata = within(toolbar).getByTestId('session-status-mobile-metadata');
 
   expect(within(toolbar).getByText('idle')).toBeInTheDocument();
-  expect(within(desktopMetadata).getByText('/work/project')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('project')).toBeInTheDocument();
   expect(within(desktopMetadata).getByLabelText('Client: pi')).toBeInTheDocument();
   expect(within(desktopMetadata).queryByText('Client: pi')).not.toBeInTheDocument();
-  const mobileDetailsButton = within(mobileMetadata).getByRole('button', { name: 'Session details: /work/project · pi' });
+  const mobileDetailsButton = within(mobileMetadata).getByRole('button', { name: 'Session details: project · pi' });
   expect(mobileDetailsButton).toBeInTheDocument();
   expect(within(mobileMetadata).queryByLabelText('Workspace: /work/project')).not.toBeInTheDocument();
   expect(within(mobileMetadata).queryByLabelText('Client: pi')).not.toBeInTheDocument();
@@ -154,11 +155,11 @@ test('mobile session summary expands current metadata details', async () => {
   const toolbar = await screen.findByLabelText('Session status and controls');
   const mobileMetadata = within(toolbar).getByTestId('session-status-mobile-metadata');
 
-  await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: /work/project · pi' }));
+  await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: project · pi' }));
 
   const details = within(mobileMetadata).getByRole('dialog', { name: 'Session details' });
   expect(within(details).getByText('Workspace')).toBeInTheDocument();
-  expect(within(details).getByText('/work/project')).toBeInTheDocument();
+  expect(within(details).getByText('project')).toBeInTheDocument();
   expect(within(details).getByText('Client')).toBeInTheDocument();
   expect(within(details).getByText('pi')).toBeInTheDocument();
 });
@@ -206,14 +207,20 @@ test('chat session refreshes and shows workspace git status', async () => {
 
   expect(within(mobileMetadata).queryByLabelText('Workspace: /work/project')).not.toBeInTheDocument();
   expect(within(mobileMetadata).queryByLabelText('Client: pi')).not.toBeInTheDocument();
-  const mobileGitBadge = within(mobileMetadata).getByLabelText('Git status: main, dirty');
-  expect(within(mobileGitBadge).getByLabelText('Git branch')).not.toHaveClass('text-amber-600');
-  expect(within(mobileGitBadge).getByText('↑1')).toHaveClass('text-blue-600');
-  expect(within(mobileGitBadge).getByText('↓2')).toHaveClass('text-violet-600');
-  expect(within(mobileGitBadge).getByText('+3')).toHaveClass('text-emerald-600');
-  expect(within(mobileGitBadge).getByText('~4')).toHaveClass('text-amber-600');
-  expect(within(mobileGitBadge).getByText('?5')).toHaveClass('text-cyan-600');
-  expect(within(mobileGitBadge).getByText('!6')).toHaveClass('text-destructive');
+  expect(within(mobileMetadata).queryByLabelText('Git status: main, dirty')).not.toBeInTheDocument();
+  expect(within(mobileMetadata).queryByLabelText('Git branch')).not.toBeInTheDocument();
+  const mobileSummary = mobileMetadata.querySelector('[data-chat-session-details-summary]');
+  expect(mobileSummary).toHaveClass('truncate');
+  expect(mobileSummary).toHaveTextContent('project · main ↑1 ↓2 +3 ~4 ?5 !6 · pi');
+  expect(within(mobileMetadata).getByText('main')).toHaveClass('text-amber-600');
+  expect(within(mobileMetadata).getByText('↑1')).toHaveClass('text-blue-600');
+
+  await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: project · pi · main · dirty' }));
+  const details = within(mobileMetadata).getByRole('dialog', { name: 'Session details' });
+  const gitRow = within(details).getByText('Git').closest('div');
+  expect(gitRow).not.toBeNull();
+  expect(within(gitRow as HTMLElement).getByText('main')).toHaveClass('text-amber-600');
+  expect(within(gitRow as HTMLElement).getByText('↑1')).toHaveClass('text-blue-600');
 });
 
 test('chat refreshes workspace git status when the composer receives focus', async () => {

@@ -79,6 +79,20 @@ export function hasGitChangeCounts(status: WorkspaceGitStatusView | undefined): 
   return !!status && (status.staged_count > 0 || status.unstaged_count > 0 || status.untracked_count > 0 || status.conflicted_count > 0 || status.ahead > 0 || status.behind > 0)
 }
 
+export function gitStatusCompactText(status: WorkspaceGitStatusView | undefined): string | null {
+  if (!status) return null
+  const parts = [gitBranchLabel(status)]
+  if (status.ahead) parts.push(`↑${status.ahead}`)
+  if (status.behind) parts.push(`↓${status.behind}`)
+  if (hasGitChangeCounts(status)) {
+    if (status.staged_count) parts.push(`+${status.staged_count}`)
+    if (status.unstaged_count) parts.push(`~${status.unstaged_count}`)
+    if (status.untracked_count) parts.push(`?${status.untracked_count}`)
+    if (status.conflicted_count) parts.push(`!${status.conflicted_count}`)
+  }
+  return parts.join(' ')
+}
+
 export function gitStatusAriaLabel(status: WorkspaceGitStatusView | undefined): string {
   return `Git status: ${gitBranchLabel(status)}, ${gitStatusLabel(status)}`
 }
