@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import ChatPage from '../../src/pages/ChatPage.svelte';
 import type { SessionConsoleDetail } from '../../src/stores/sessions';
 import type { AgentProfileView, CreateDagTaskResult, CreateSessionResult, InboxMessageView, SessionView, TimelineItem, TurnView, WorkspaceView } from '../../src/api/types';
@@ -300,6 +300,10 @@ const profile = (overrides: Partial<AgentProfileView> = {}): AgentProfileView =>
   created_at: '2026-05-14T00:00:00Z',
   updated_at: '2026-05-14T00:00:00Z',
   ...overrides,
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 beforeEach(() => {
@@ -687,11 +691,24 @@ test('refreshes the selected chat when the browser returns to the foreground wit
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   mocks.loadSessionDetail.mockClear();
   mocks.loadSessionTimeline.mockClear();
+  mocks.handleTimelineMessageUpdated.mockClear();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  mocks.loadSessionTimeline.mockClear();
+  mocks.handleTimelineMessageUpdated.mockClear();
+  mocks.timelineState.set({
+    ...mocks.timelineState.get(),
+    sessionId: 'session-2',
+    items: timelineItemsFromTurns([
+      turn({ turn_id: 'turn-older', session_id: 'session-2', input: { summary: 'older question' }, output: { summary: 'older answer' } }),
+      turn({ turn_id: 'turn-latest', session_id: 'session-2', input: { summary: 'latest question' }, output: { summary: 'latest answer' } }),
+    ]),
+  });
 
   window.dispatchEvent(new Event('focus'));
 
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2', { showLoading: false }));
-  expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'append' });
+  expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2');
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'append' });
 });
 
 test('does not toast passive fetch errors from automatic chat refreshes', async () => {

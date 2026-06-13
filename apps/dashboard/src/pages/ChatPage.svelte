@@ -273,9 +273,14 @@
     if (!sessionId) return
     if (foregroundRefreshInFlight) return
 
+    const currentTimeline = get(timelineState)
+    const timelineRefresh = currentTimeline.sessionId === sessionId && currentTimeline.items.length
+      ? handleTimelineMessageUpdated(sessionId)
+      : loadSessionTimeline(sessionId, { mode: 'rebuild' })
+
     foregroundRefreshInFlight = Promise.all([
       loadSessionDetail(sessionId, { showLoading: false }),
-      loadSessionTimeline(sessionId, { mode: timelineRefreshMode(sessionId) }),
+      timelineRefresh,
     ]).then(() => undefined).finally(() => {
       foregroundRefreshInFlight = null
     })
