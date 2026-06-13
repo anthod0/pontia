@@ -7,7 +7,6 @@ import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnCreatedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
 import { EventReporter } from "./reporter.js";
 import { loadSessionContext } from "./session.js";
-import { buildPontiaTools } from "./tools.js";
 
 interface ReporterLike {
   report(context: { internalEventUrl: string }, event: InternalEvent): Promise<boolean>;
@@ -28,18 +27,6 @@ interface ActiveTurnState {
   reporter: ReporterLike;
   output: string;
   ended: boolean;
-}
-
-type PontiaAgentKind = "planner" | "executor";
-
-const TOOL_NAMES_BY_AGENT_KIND: Record<PontiaAgentKind, Set<string>> = {
-  planner: new Set(["getContext", "submitPlan", "applyPlan", "raiseSignal"]),
-  executor: new Set(["getContext", "submitResult", "raiseSignal"]),
-};
-
-function allowedToolNamesForAgentKind(kind: string | undefined): Set<string> {
-  if (kind === "planner" || kind === "executor") return TOOL_NAMES_BY_AGENT_KIND[kind];
-  return new Set();
 }
 
 function textFromContent(content: unknown): string | undefined {
@@ -200,16 +187,6 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   const writeContext = dependencies.writeContext ?? writeCurrentTurnContext;
   const fetchImpl = dependencies.fetch ?? fetch;
-  const allowedToolNames = allowedToolNamesForAgentKind(env.PONTIA_AGENT_KIND);
-  for (const tool of buildPontiaTools({
-    env,
-    loadContext: contextLoader,
-    logDiagnostic,
-    fetch: fetchImpl,
-  })) {
-    if (!allowedToolNames.has(tool.name)) continue;
-    pi.registerTool(tool as any);
-  }
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;

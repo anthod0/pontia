@@ -98,10 +98,10 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("registers pi lifecycle handlers", () => {
+  test("registers pi lifecycle handlers without DAG agent tools", () => {
     const { pi } = fakePi();
     createPontiaPiExtension(pi as any, {
-      env: {},
+      env: { PONTIA_AGENT_KIND: "planner" },
       loadContext: vi.fn(),
       makeReporter: vi.fn(),
       logDiagnostic: vi.fn(),
@@ -113,6 +113,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(pi.on).toHaveBeenCalledWith("message_update", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_end", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("agent_end", expect.any(Function));
+    expect(pi.registerTool).not.toHaveBeenCalled();
   });
 
   test("appends profile system prompt from external API before agent starts", async () => {

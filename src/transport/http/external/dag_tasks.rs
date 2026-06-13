@@ -14,6 +14,9 @@ pub async fn create_dag_task(
     headers: HeaderMap,
     Json(request): Json<CreateDagTaskRequest>,
 ) -> Result<Response, ExternalApiError> {
+    // DAG task development is currently frozen. Keep this API behavior intact for
+    // existing callers/tests and future revival, but avoid extending this path while
+    // product focus is session-first Web UI and bidirectional session control.
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
     let service = TaskCommandService::with_runtime(state.db, state.graph);

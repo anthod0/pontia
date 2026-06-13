@@ -63,6 +63,9 @@ pub async fn scheduler_tick(
     headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
+    // DAG task development is currently frozen. Keep scheduler tick behavior intact
+    // for existing callers/tests and future revival, but avoid extending this path
+    // while focusing on session-first Web UI and bidirectional session control.
     authenticate(&state, &headers)?;
     let query = ExternalQueryService::with_graph(state.db.clone(), state.graph.clone());
     ensure_task_exists(&query, &task_id).await?;

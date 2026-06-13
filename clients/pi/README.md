@@ -57,16 +57,7 @@ The extension does not parse TUI screen contents and does not infer completion f
 
 ## pontia tools
 
-The pi extension registers four agent-visible DAG tools from `clients/tools/pontia-tools.v1.json`:
-
-- `getContext`
-- `submitPlan`
-- `submitResult`
-- `raiseSignal`
-
-Each tool handler reads the current turn context from `PONTIA_CURRENT_TURN_FILE` / environment, builds `{ session_id, turn_id, runtime_instance_id, input }`, and forwards it to `/internal/v1/agent-tools/{tool}`. The extension does not interpret DAG business logic and never accepts task, WorkItem, or run IDs as authority; pontia derives authorization server-side.
-
-Backend errors are returned to the agent as clear tool failures and written to `PONTIA_PI_HOOK_LOG` diagnostics. Environment values such as API tokens are not included in agent-visible tool results.
+DAG task development is currently frozen while pontia focuses on session-first Web UI and bidirectional session control. The pi extension no longer registers agent-visible DAG tools. The shared contract at `clients/tools/pontia-tools.v1.json` is retained for backend compatibility and future revival.
 
 ## Manual validation
 
@@ -107,9 +98,9 @@ When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane wr
    pi --approve -e ./clients/pi
    ```
 
-5. Submit a prompt and verify pontia received `turn.output` and `turn.completed` through its event list/API or database inspection. In DAG-managed turns, ask pi to call `getContext`, `submitPlan`, `submitResult`, or `raiseSignal` and verify the backend receives `/internal/v1/agent-tools/*` requests.
+5. Submit a prompt and verify pontia received `turn.output` and `turn.completed` through its event list/API or database inspection.
 
-6. If reporting or tool forwarding fails, inspect diagnostics:
+6. If reporting fails, inspect diagnostics:
 
    ```bash
    tail -f "$PONTIA_RUNTIME_DIR/pi-hook.log"
