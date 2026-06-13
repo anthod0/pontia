@@ -231,23 +231,57 @@ impl ProjectionState {
             .occurred_at
             .format(&time::format_description::well_known::Rfc3339)
             .map_err(|err| Error::Domain(format!("invalid event timestamp: {err}")))?;
-        let context_usage = json!({
-            "used_tokens": usage.get("used_tokens").cloned().unwrap_or(Value::Null),
-            "max_tokens": usage.get("max_tokens").cloned().unwrap_or(Value::Null),
-            "remaining_tokens": usage.get("remaining_tokens").cloned().unwrap_or(Value::Null),
-            "usage_ratio": usage.get("usage_ratio").cloned().unwrap_or(Value::Null),
-            "input_tokens": usage.get("input_tokens").cloned().unwrap_or(Value::Null),
-            "output_tokens": usage.get("output_tokens").cloned().unwrap_or(Value::Null),
-            "cache_tokens": usage.get("cache_tokens").cloned().unwrap_or(Value::Null),
-            "confidence": usage.get("confidence").cloned().unwrap_or_else(|| json!("unknown")),
-            "observed_at": observed_at,
-        });
+        let has_observed_usage = [
+            "used_tokens",
+            "max_tokens",
+            "remaining_tokens",
+            "usage_ratio",
+            "input_tokens",
+            "output_tokens",
+            "cache_tokens",
+        ]
+        .iter()
+        .any(|field| usage.get(*field).is_some_and(|value| !value.is_null()));
+
         if !session.metadata.is_object() {
             session.metadata = json!({});
         }
         if let Some(metadata) = session.metadata.as_object_mut() {
-            metadata.insert("context_usage".to_string(), context_usage);
-            if let Some(model) = event.payload.get("model") {
+            let existing = metadata
+                .get("context_usage")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            if has_observed_usage || !existing.is_empty() {
+                let mut context_usage = serde_json::Map::new();
+                for field in [
+                    "used_tokens",
+                    "max_tokens",
+                    "remaining_tokens",
+                    "usage_ratio",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_tokens",
+                ] {
+                    let value = usage
+                        .get(field)
+                        .filter(|value| !value.is_null())
+                        .cloned()
+                        .or_else(|| existing.get(field).cloned())
+                        .unwrap_or(Value::Null);
+                    context_usage.insert(field.to_string(), value);
+                }
+                let confidence = usage
+                    .get("confidence")
+                    .filter(|value| !value.is_null())
+                    .cloned()
+                    .or_else(|| existing.get("confidence").cloned())
+                    .unwrap_or_else(|| json!("unknown"));
+                context_usage.insert("confidence".to_string(), confidence);
+                context_usage.insert("observed_at".to_string(), json!(observed_at));
+                metadata.insert("context_usage".to_string(), Value::Object(context_usage));
+            }
+            if let Some(model) = event.payload.get("model").filter(|model| !model.is_null()) {
                 metadata.insert("model".to_string(), model.clone());
             }
         }

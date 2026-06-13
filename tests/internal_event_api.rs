@@ -245,6 +245,78 @@ async fn internal_event_api_accepts_context_usage_and_updates_session_metadata_o
 }
 
 #[tokio::test]
+async fn internal_event_api_merges_partial_context_usage_without_clearing_existing_values() {
+    let state = test_state().await;
+    let mut created = event_body(
+        "evt_m2_context_merge_created",
+        "session.created",
+        "sess_m2_context_merge",
+        None,
+        1,
+    );
+    created["payload"] = json!({"metadata":{"purpose":"context-merge-test"}});
+    assert_eq!(post_event(state.clone(), created).await.0, StatusCode::OK);
+
+    let mut full = event_body(
+        "evt_m2_context_merge_full",
+        "session.context_usage_updated",
+        "sess_m2_context_merge",
+        Some("turn_m2_context_merge"),
+        2,
+    );
+    full["payload"] = json!({
+        "context_usage": {
+            "used_tokens": 6037,
+            "max_tokens": 128000,
+            "remaining_tokens": 121963,
+            "usage_ratio": 0.04716,
+            "confidence": "estimated"
+        },
+        "model": "ctx-model"
+    });
+    assert_eq!(post_event(state.clone(), full).await.0, StatusCode::OK);
+
+    let mut partial = event_body(
+        "evt_m2_context_merge_partial",
+        "session.context_usage_updated",
+        "sess_m2_context_merge",
+        Some("turn_m2_context_merge"),
+        3,
+    );
+    partial["payload"] = json!({
+        "context_usage": {
+            "used_tokens": null,
+            "max_tokens": null,
+            "input_tokens": 386,
+            "output_tokens": 19,
+            "cache_tokens": 5632,
+            "confidence": "estimated"
+        },
+        "model": null
+    });
+    let (status, body) = post_event(state.clone(), partial).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    let service = EventIngestService::new(state.db());
+    let session = service
+        .get_session("sess_m2_context_merge")
+        .await
+        .expect("session query")
+        .expect("session projection");
+    assert_eq!(session.metadata["context_usage"]["used_tokens"], 6037);
+    assert_eq!(session.metadata["context_usage"]["max_tokens"], 128000);
+    assert_eq!(
+        session.metadata["context_usage"]["remaining_tokens"],
+        121963
+    );
+    assert_eq!(session.metadata["context_usage"]["usage_ratio"], 0.04716);
+    assert_eq!(session.metadata["context_usage"]["input_tokens"], 386);
+    assert_eq!(session.metadata["context_usage"]["output_tokens"], 19);
+    assert_eq!(session.metadata["context_usage"]["cache_tokens"], 5632);
+    assert_eq!(session.metadata["model"], "ctx-model");
+}
+
+#[tokio::test]
 async fn internal_event_api_rejects_invalid_context_usage_values() {
     let state = test_state().await;
     let invalid_cases = [

@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { buildSessionContextUsageUpdatedEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiContext, contextUsageFromPiEvent } from "../src/events.js";
+import { buildSessionContextUsageUpdatedEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiContext, contextUsageFromPiEvent, contextUsageFromPiHook } from "../src/events.js";
 import { EventReporter } from "../src/reporter.js";
 import type { TurnContext } from "../src/context.js";
 
@@ -79,15 +79,15 @@ describe("event builders", () => {
     });
   });
 
-  test("builds session.context_usage_updated payload shape", () => {
+  test("builds session.context_usage_updated payload without null usage fields", () => {
     const event = buildSessionContextUsageUpdatedEvent(context, {
       used_tokens: 42,
-      max_tokens: 100,
-      remaining_tokens: 58,
-      usage_ratio: 0.42,
+      max_tokens: null,
+      remaining_tokens: null,
+      usage_ratio: null,
       input_tokens: 40,
       output_tokens: 2,
-      cache_tokens: null,
+      cache_tokens: 0,
       confidence: "exact",
     }, "example-model");
 
@@ -101,22 +101,23 @@ describe("event builders", () => {
       payload: {
         context_usage: {
           used_tokens: 42,
-          max_tokens: 100,
-          remaining_tokens: 58,
-          usage_ratio: 0.42,
           input_tokens: 40,
           output_tokens: 2,
-          cache_tokens: null,
+          cache_tokens: 0,
           confidence: "exact",
         },
         model: "example-model",
       },
     });
+    expect(event.payload.context_usage).not.toHaveProperty("max_tokens");
+    expect(event.payload.context_usage).not.toHaveProperty("remaining_tokens");
+    expect(event.payload.context_usage).not.toHaveProperty("usage_ratio");
   });
 
-  test("does not extract context usage from unsupported pi hook payloads", () => {
+  test("does not extract context usage from unsupported or empty pi hook payloads", () => {
     expect(contextUsageFromPiEvent({ assistantMessageEvent: { text_delta: "hello" } })).toBeUndefined();
     expect(contextUsageFromPiEvent({ messages: [] })).toBeUndefined();
+    expect(contextUsageFromPiEvent({ context_usage: { used_tokens: null, max_tokens: null, confidence: "estimated" } })).toBeUndefined();
   });
 
   test("extracts context usage only when a hook payload exposes a valid context_usage object", () => {
@@ -180,6 +181,35 @@ describe("event builders", () => {
         max_tokens: null,
         remaining_tokens: null,
         usage_ratio: null,
+        input_tokens: 386,
+        output_tokens: 19,
+        cache_tokens: 5632,
+        confidence: "estimated",
+      },
+      model: "gpt-5.5",
+    });
+  });
+
+  test("merges partial pi message usage with context window usage from hook context", () => {
+    expect(
+      contextUsageFromPiHook(
+        {
+          message: {
+            role: "assistant",
+            usage: { input: 386, output: 19, cacheRead: 5632, totalTokens: 6037 },
+          },
+        },
+        {
+          model: { id: "gpt-5.5" },
+          getContextUsage: () => ({ tokens: 6037, contextWindow: 128000, percent: 4.716 }),
+        },
+      ),
+    ).toEqual({
+      context_usage: {
+        used_tokens: 6037,
+        max_tokens: 128000,
+        remaining_tokens: 121963,
+        usage_ratio: 0.04716,
         input_tokens: 386,
         output_tokens: 19,
         cache_tokens: 5632,

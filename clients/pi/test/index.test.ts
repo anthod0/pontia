@@ -176,7 +176,6 @@ describe("pontia pi extension lifecycle", () => {
         context_usage: {
           used_tokens: 2,
           max_tokens: 8,
-          remaining_tokens: null,
           usage_ratio: 0.25,
           confidence: "estimated",
         },
