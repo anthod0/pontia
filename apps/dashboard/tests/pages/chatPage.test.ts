@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => {
   const workspaces = writableStore<WorkspaceView[]>([]);
   const workspacesLoading = writableStore(false);
   const workspacesError = writableStore<string | null>(null);
+  const workspaceGitStatuses = writableStore({});
+  const workspaceGitStatusErrors = writableStore({});
   const agentProfiles = writableStore<AgentProfileView[]>([]);
   const agentProfilesLoading = writableStore(false);
   const agentProfilesError = writableStore<string | null>(null);
@@ -65,6 +67,8 @@ const mocks = vi.hoisted(() => {
     workspaces,
     workspacesLoading,
     workspacesError,
+    workspaceGitStatuses,
+    workspaceGitStatusErrors,
     agentProfiles,
     agentProfilesLoading,
     agentProfilesError,
@@ -103,6 +107,7 @@ const mocks = vi.hoisted(() => {
       });
     }),
     loadWorkspaces: vi.fn(async () => undefined),
+    refreshWorkspaceGitStatus: vi.fn(async () => undefined),
     loadAgentProfiles: vi.fn(async () => undefined),
     toastError: vi.fn(),
     navigate: vi.fn(),
@@ -132,7 +137,10 @@ vi.mock('../../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
   workspacesError: mocks.workspacesError,
+  workspaceGitStatuses: mocks.workspaceGitStatuses,
+  workspaceGitStatusErrors: mocks.workspaceGitStatusErrors,
   loadWorkspaces: mocks.loadWorkspaces,
+  refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
 }));
 
 vi.mock('../../src/stores/tasks', () => ({
@@ -290,6 +298,8 @@ beforeEach(() => {
   mocks.workspaces.set([workspace()]);
   mocks.workspacesLoading.set(false);
   mocks.workspacesError.set(null);
+  mocks.workspaceGitStatuses.set({});
+  mocks.workspaceGitStatusErrors.set({});
   mocks.agentProfiles.set([profile()]);
   mocks.agentProfilesLoading.set(false);
   mocks.agentProfilesError.set(null);

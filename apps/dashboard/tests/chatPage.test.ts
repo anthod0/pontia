@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
 import ChatPage from '../src/pages/ChatPage.svelte';
 
@@ -52,6 +52,8 @@ const mocks = vi.hoisted(() => {
     workspaces: writableStore([]),
     workspacesLoading: writableStore(false),
     workspacesError: writableStore(null),
+    workspaceGitStatuses: writableStore({}),
+    workspaceGitStatusErrors: writableStore({}),
     agentProfiles: writableStore([]),
     agentProfilesLoading: writableStore(false),
     agentProfilesError: writableStore(null),
@@ -61,6 +63,7 @@ const mocks = vi.hoisted(() => {
     loadSessions: vi.fn(async () => undefined),
     loadSessionDetail: vi.fn(async () => null),
     loadWorkspaces: vi.fn(async () => undefined),
+    refreshWorkspaceGitStatus: vi.fn(async () => undefined),
     loadAgentProfiles: vi.fn(async () => undefined),
     loadTaskProposals: vi.fn(async () => undefined),
     createSession: vi.fn(),
@@ -96,7 +99,10 @@ vi.mock('../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
   workspacesError: mocks.workspacesError,
+  workspaceGitStatuses: mocks.workspaceGitStatuses,
+  workspaceGitStatusErrors: mocks.workspaceGitStatusErrors,
   loadWorkspaces: mocks.loadWorkspaces,
+  refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
 }));
 vi.mock('../src/stores/agentProfiles', async () => {
   const actual = await vi.importActual<typeof import('../src/stores/agentProfiles')>('../src/stores/agentProfiles');
@@ -118,6 +124,8 @@ vi.mock('../src/stores/tasks', () => ({
 
 beforeEach(() => {
   window.history.pushState({}, '', '/dashboard/chat/session-1');
+  mocks.workspaceGitStatuses.set({});
+  mocks.workspaceGitStatusErrors.set({});
   vi.clearAllMocks();
 });
 
@@ -150,6 +158,44 @@ test('mobile session summary expands current metadata details', async () => {
   expect(within(details).getByText('/work/project')).toBeInTheDocument();
   expect(within(details).getByText('Client')).toBeInTheDocument();
   expect(within(details).getByText('pi')).toBeInTheDocument();
+});
+
+test('chat session refreshes and shows workspace git status', async () => {
+  mocks.workspaceGitStatuses.set({
+    'workspace-1': {
+      workspace_id: 'workspace-1',
+      repo_root: '/work/project',
+      branch: 'main',
+      upstream: 'origin/main',
+      ahead: 1,
+      behind: 2,
+      staged_count: 3,
+      unstaged_count: 4,
+      untracked_count: 5,
+      conflicted_count: 6,
+      clean: false,
+      state: 'observed',
+      failure: null,
+      observed_at: '2026-05-14T01:30:00Z',
+      updated_at: '2026-05-14T01:30:00Z',
+    },
+  });
+
+  render(ChatPage);
+
+  const toolbar = await screen.findByLabelText('Session status and controls');
+  const desktopMetadata = within(toolbar).getByTestId('session-status-desktop-metadata');
+
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
+  expect(within(desktopMetadata).getByLabelText('Git status: main, dirty')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('main')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('dirty')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('↑1')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('↓2')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('+3')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('~4')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('?5')).toBeInTheDocument();
+  expect(within(desktopMetadata).getByText('!6')).toBeInTheDocument();
 });
 
 test('chat composer session status pill uses semantic color classes', async () => {

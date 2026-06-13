@@ -12,7 +12,7 @@
   import * as Select from '$lib/components/ui/select/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
-  import type { AgentProfileView, DashboardStreamEvent, SessionView, WorkspaceView } from '../api/types'
+  import type { AgentProfileView, DashboardStreamEvent, SessionView, WorkspaceGitStatusView, WorkspaceView } from '../api/types'
   import {
     canSendSessionMessage,
     isTerminalChatSession,
@@ -35,6 +35,9 @@
   } from '../stores/agentProfiles'
   import {
     loadWorkspaces,
+    refreshWorkspaceGitStatus,
+    workspaceGitStatuses,
+    workspaceGitStatusErrors,
     workspaces,
     workspacesError,
     workspacesLoading,
@@ -112,6 +115,7 @@
     if (selectedSessionId) {
       resetTimelineState(selectedSessionId)
       await Promise.all([loadSessionDetail(selectedSessionId), loadSessionTimeline(selectedSessionId, { mode: 'rebuild' })])
+      await refreshSessionGitStatus(currentSelectedSession())
     }
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
     window.addEventListener('focus', handleForegroundResume)
@@ -127,7 +131,8 @@
   })
 
   $: selectedSession = selectedSessionId ? ($sessions.find((session) => session.session_id === selectedSessionId) ?? $sessionDetail?.session ?? null) : null
-  $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession) : []
+  $: selectedSessionGitStatus = selectedSession ? $workspaceGitStatuses[selectedSession.workspace_id ?? ''] : undefined
+  $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, selectedSessionGitStatus) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
   $: messages = chatMessagesWithOptimistic(selectedSessionId, $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : [], $optimisticInitialMessages)
   $: if ($workspaces.length && (!createWorkspaceId || !$workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId))) {
@@ -250,7 +255,42 @@
     return workspace?.canonical_path ?? workspace?.display_path ?? session.workspace ?? session.workspace_id ?? 'No workspace'
   }
 
-  function sessionMetadataItems(session: SessionView): SessionMetadataItem[] {
+  function currentSelectedSession(): SessionView | null {
+    if (!selectedSessionId) return null
+    const detail = get(sessionDetail)
+    if (detail?.session.session_id === selectedSessionId) return detail.session
+    return get(sessions).find((session) => session.session_id === selectedSessionId) ?? null
+  }
+
+  async function refreshSessionGitStatus(session: SessionView | null): Promise<void> {
+    if (!session?.workspace_id) return
+    await refreshWorkspaceGitStatus(session.workspace_id)
+  }
+
+  function gitStatusLabel(status: WorkspaceGitStatusView | undefined): string {
+    if (!status || status.state === 'unknown') return 'Git unknown'
+    if (status.state === 'error') return 'Git error'
+    return status.clean ? 'clean' : 'dirty'
+  }
+
+  function gitBranchLabel(status: WorkspaceGitStatusView | undefined): string {
+    return status?.branch ?? 'No branch'
+  }
+
+  function hasGitChangeCounts(status: WorkspaceGitStatusView | undefined): boolean {
+    return !!status && (status.staged_count > 0 || status.unstaged_count > 0 || status.untracked_count > 0 || status.conflicted_count > 0 || status.ahead > 0 || status.behind > 0)
+  }
+
+  function gitStatusAriaLabel(status: WorkspaceGitStatusView | undefined): string {
+    return `Git status: ${gitBranchLabel(status)}, ${gitStatusLabel(status)}`
+  }
+
+  function gitStatusTitle(session: SessionView, status: WorkspaceGitStatusView | undefined): string {
+    const error = session.workspace_id ? $workspaceGitStatusErrors[session.workspace_id] : null
+    return status?.failure ?? error ?? gitStatusAriaLabel(status)
+  }
+
+  function sessionMetadataItems(session: SessionView, gitStatus: WorkspaceGitStatusView | undefined): SessionMetadataItem[] {
     const items: SessionMetadataItem[] = [
       {
         key: 'workspace',
@@ -265,6 +305,10 @@
         title: session.client_type,
       },
     ]
+    if (gitStatus) {
+      const value = `${gitBranchLabel(gitStatus)} · ${gitStatusLabel(gitStatus)}`
+      items.push({ key: 'git', label: 'Git', value, title: gitStatusTitle(session, gitStatus) })
+    }
     const profileTitle = sessionProfileTitle(session)
     if (profileTitle) items.push({ key: 'profile', label: 'Profile', value: profileTitle, title: profileTitle })
     const handleTitle = sessionHandleTitle(session)
@@ -378,6 +422,7 @@
     if (selectedSessionId) {
       resetTimelineState(selectedSessionId)
       await Promise.all([loadSessionDetail(selectedSessionId), loadSessionTimeline(selectedSessionId, { mode: 'rebuild' })])
+      await refreshSessionGitStatus(currentSelectedSession())
     } else {
       resetTimelineState()
     }
@@ -412,6 +457,7 @@
         resetTimelineState(result.planning_turn.session_id)
         navigate(`/chat/${result.planning_turn.session_id}`)
         await Promise.all([loadSessionDetail(result.planning_turn.session_id), loadSessionTimeline(result.planning_turn.session_id, { mode: 'rebuild' })])
+        await refreshSessionGitStatus(currentSelectedSession())
         return
       }
 
@@ -433,6 +479,7 @@
       resetTimelineState(result.session.session_id)
       navigate(`/chat/${result.session.session_id}`)
       await Promise.all([loadSessionDetail(result.session.session_id), loadSessionTimeline(result.session.session_id, { mode: 'rebuild' })])
+      await refreshSessionGitStatus(currentSelectedSession())
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -649,6 +696,26 @@
                     <Folder class="size-4" aria-hidden="true" />
                     <span class="min-w-0 truncate">{sessionWorkspaceTitle(selectedSession)}</span>
                   </Badge>
+                  {#if selectedSessionGitStatus}
+                    <Badge
+                      variant={selectedSessionGitStatus.state === 'error' ? 'destructive' : 'outline'}
+                      class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
+                      title={gitStatusTitle(selectedSession, selectedSessionGitStatus)}
+                      aria-label={gitStatusAriaLabel(selectedSessionGitStatus)}
+                    >
+                      <GitBranch class="size-4" aria-hidden="true" />
+                      <span>{gitBranchLabel(selectedSessionGitStatus)}</span>
+                      <span>{gitStatusLabel(selectedSessionGitStatus)}</span>
+                      {#if selectedSessionGitStatus.ahead}<span>↑{selectedSessionGitStatus.ahead}</span>{/if}
+                      {#if selectedSessionGitStatus.behind}<span>↓{selectedSessionGitStatus.behind}</span>{/if}
+                      {#if hasGitChangeCounts(selectedSessionGitStatus)}
+                        {#if selectedSessionGitStatus.staged_count}<span>+{selectedSessionGitStatus.staged_count}</span>{/if}
+                        {#if selectedSessionGitStatus.unstaged_count}<span>~{selectedSessionGitStatus.unstaged_count}</span>{/if}
+                        {#if selectedSessionGitStatus.untracked_count}<span>?{selectedSessionGitStatus.untracked_count}</span>{/if}
+                        {#if selectedSessionGitStatus.conflicted_count}<span>!{selectedSessionGitStatus.conflicted_count}</span>{/if}
+                      {/if}
+                    </Badge>
+                  {/if}
                   <Badge
                     variant="outline"
                     class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
