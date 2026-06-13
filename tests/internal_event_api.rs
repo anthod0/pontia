@@ -19,16 +19,7 @@ async fn test_state() -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: None,
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db).external_api_token(None).build()
 }
 
 fn event_body(
@@ -91,7 +82,7 @@ async fn internal_event_api_accepts_session_event_and_updates_projection() {
     assert_eq!(body["state_version"], 1);
     assert_eq!(body["warnings"], json!([]));
 
-    let service = EventIngestService::new(state.db);
+    let service = EventIngestService::new(state.db());
     let session = service
         .get_session("sess_m2_1")
         .await
@@ -126,7 +117,7 @@ async fn internal_event_api_accepts_turn_events_and_updates_projection() {
     assert_eq!(body["turn_id"], "turn_m2_1");
     assert_eq!(body["state_version"], 3);
 
-    let service = EventIngestService::new(state.db);
+    let service = EventIngestService::new(state.db());
     let session = service.get_session("sess_m2_2").await.unwrap().unwrap();
     let turn = service.get_turn("turn_m2_1").await.unwrap().unwrap();
     assert_eq!(session.state, SessionState::Busy);
@@ -211,12 +202,12 @@ async fn internal_event_api_accepts_session_message_updated_without_changing_pro
 
     let event_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id = ?")
         .bind("sess_m2_message_updated")
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .expect("event count");
     assert_eq!(event_count, 1);
 
-    let service = EventIngestService::new(state.db);
+    let service = EventIngestService::new(state.db());
     let session = service
         .get_session("sess_m2_message_updated")
         .await
@@ -250,7 +241,7 @@ async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id_
     )
     .bind("sess_m2_ready")
     .bind(json!({"runtime_instance_id":"rtinst_test", "workspace": launch_cwd.display().to_string()}).to_string())
-    .execute(&state.db)
+    .execute(&state.db())
     .await
     .expect("runtime binding");
 
@@ -273,7 +264,7 @@ async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id_
         "SELECT session_id, client_type, launch_cwd, client_session_key, metadata FROM agent_bindings WHERE session_id = ?",
     )
     .bind("sess_m2_ready")
-    .fetch_one(&state.db)
+    .fetch_one(&state.db())
     .await
     .expect("agent binding row");
     let session_id: String = sqlx::Row::try_get(&row, "session_id").unwrap();
@@ -313,7 +304,7 @@ async fn internal_event_api_ready_agent_binding_is_idempotent_for_retries() {
     )
     .bind("sess_m2_ready_retry")
     .bind(json!({"runtime_instance_id":"rtinst_retry", "workspace": launch_cwd.display().to_string()}).to_string())
-    .execute(&state.db)
+    .execute(&state.db())
     .await
     .expect("runtime binding");
 
@@ -329,7 +320,7 @@ async fn internal_event_api_ready_agent_binding_is_idempotent_for_retries() {
 
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings WHERE session_id = ?")
         .bind("sess_m2_ready_retry")
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .expect("agent binding count");
     assert_eq!(count, 1);
@@ -360,7 +351,7 @@ async fn internal_event_api_rejects_agent_client_ready_for_unknown_session() {
             .unwrap()
             .contains("unknown session")
     );
-    let service = EventIngestService::new(state.db);
+    let service = EventIngestService::new(state.db());
     assert!(
         service
             .get_session("sess_m2_unknown_ready")
@@ -440,7 +431,7 @@ async fn internal_event_api_is_idempotent_for_duplicate_event_id() {
     assert_eq!(second.1["duplicate"], true);
     assert_eq!(second.1["state_version"], 1);
 
-    let service = EventIngestService::new(state.db);
+    let service = EventIngestService::new(state.db());
     assert_eq!(service.list_events("sess_m2_5").await.unwrap().len(), 1);
 }
 

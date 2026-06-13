@@ -25,16 +25,9 @@ async fn test_state() -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 async fn post_json(
@@ -463,7 +456,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
     assert_eq!(first.0, StatusCode::CREATED);
     let first_session_id = first.1["data"]["session"]["session_id"].as_str().unwrap();
 
-    EventIngestService::new(state.db.clone())
+    EventIngestService::new(state.db())
         .ingest_event(DomainEvent::new(
             "evt_session_exited_for_handle_reuse".to_string(),
             first_session_id.to_string(),

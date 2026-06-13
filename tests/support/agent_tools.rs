@@ -25,16 +25,11 @@ pub async fn test_state() -> AppState {
     let db = connect_sqlite("sqlite://:memory:").await.expect("connect");
     run_migrations(&db).await.expect("migrate");
     let config = AppConfig::from_vars(&std::collections::HashMap::new()).expect("default config");
-    AppState {
-        db,
-        external_api_token: None,
-        graph: config.graph,
-        workspace_browser: config.workspace_browser,
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(None)
+        .graph(config.graph)
+        .workspace_browser(config.workspace_browser)
+        .build()
 }
 
 fn configure_test_runtime_env() {

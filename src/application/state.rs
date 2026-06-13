@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 use crate::{
     application::set_default_client_type,
@@ -30,14 +32,183 @@ impl Default for VolatileEventBroker {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db: sqlx::SqlitePool,
-    pub external_api_token: Option<String>,
-    pub graph: GraphRuntimeConfig,
-    pub workspace_browser: WorkspaceBrowserConfig,
-    pub dashboard: ResolvedDashboard,
-    pub shutdown: ShutdownSignal,
-    pub volatile_events: VolatileEventBroker,
-    pub git_refresh: GitRefreshCoordinator,
+    inner: Arc<AppStateInner>,
+}
+
+struct AppStateInner {
+    persistence: PersistenceState,
+    config: AppRuntimeState,
+    dashboard: DashboardState,
+    events: EventState,
+    lifecycle: LifecycleState,
+    integrations: IntegrationState,
+}
+
+struct PersistenceState {
+    db: sqlx::SqlitePool,
+}
+
+struct AppRuntimeState {
+    external_api_token: Option<String>,
+    graph: GraphRuntimeConfig,
+    workspace_browser: WorkspaceBrowserConfig,
+}
+
+struct DashboardState {
+    resolved: ResolvedDashboard,
+}
+
+struct EventState {
+    volatile_events: VolatileEventBroker,
+}
+
+struct LifecycleState {
+    shutdown: ShutdownSignal,
+}
+
+struct IntegrationState {
+    git_refresh: GitRefreshCoordinator,
+}
+
+pub struct AppStateBuilder {
+    db: sqlx::SqlitePool,
+    external_api_token: Option<String>,
+    graph: GraphRuntimeConfig,
+    workspace_browser: WorkspaceBrowserConfig,
+    dashboard: ResolvedDashboard,
+    shutdown: ShutdownSignal,
+    volatile_events: VolatileEventBroker,
+    git_refresh: GitRefreshCoordinator,
+}
+
+impl AppState {
+    pub fn builder(db: sqlx::SqlitePool) -> AppStateBuilder {
+        AppStateBuilder {
+            db,
+            external_api_token: None,
+            graph: GraphRuntimeConfig::default(),
+            workspace_browser: WorkspaceBrowserConfig::default(),
+            dashboard: ResolvedDashboard::local_default(),
+            shutdown: ShutdownSignal::default(),
+            volatile_events: VolatileEventBroker::default(),
+            git_refresh: GitRefreshCoordinator::default(),
+        }
+    }
+
+    pub fn db(&self) -> sqlx::SqlitePool {
+        self.inner.persistence.db.clone()
+    }
+
+    pub fn external_api_token(&self) -> Option<&str> {
+        self.inner.config.external_api_token.as_deref()
+    }
+
+    pub fn graph(&self) -> GraphRuntimeConfig {
+        self.inner.config.graph.clone()
+    }
+
+    pub fn workspace_browser(&self) -> WorkspaceBrowserConfig {
+        self.inner.config.workspace_browser.clone()
+    }
+
+    pub fn dashboard(&self) -> &ResolvedDashboard {
+        &self.inner.dashboard.resolved
+    }
+
+    pub fn shutdown(&self) -> ShutdownSignal {
+        self.inner.lifecycle.shutdown.clone()
+    }
+
+    pub fn volatile_events(&self) -> VolatileEventBroker {
+        self.inner.events.volatile_events.clone()
+    }
+
+    pub fn git_refresh(&self) -> GitRefreshCoordinator {
+        self.inner.integrations.git_refresh.clone()
+    }
+
+    pub fn with_graph(&self, graph: GraphRuntimeConfig) -> Self {
+        self.rebuild().graph(graph).build()
+    }
+
+    pub fn with_external_api_token(&self, external_api_token: Option<String>) -> Self {
+        self.rebuild()
+            .external_api_token(external_api_token)
+            .build()
+    }
+
+    fn rebuild(&self) -> AppStateBuilder {
+        AppState::builder(self.db())
+            .external_api_token(self.inner.config.external_api_token.clone())
+            .graph(self.graph())
+            .workspace_browser(self.workspace_browser())
+            .dashboard(self.dashboard().clone())
+            .shutdown(self.shutdown())
+            .volatile_events(self.volatile_events())
+            .git_refresh(self.git_refresh())
+    }
+}
+
+impl AppStateBuilder {
+    pub fn external_api_token(mut self, external_api_token: Option<String>) -> Self {
+        self.external_api_token = external_api_token;
+        self
+    }
+
+    pub fn graph(mut self, graph: GraphRuntimeConfig) -> Self {
+        self.graph = graph;
+        self
+    }
+
+    pub fn workspace_browser(mut self, workspace_browser: WorkspaceBrowserConfig) -> Self {
+        self.workspace_browser = workspace_browser;
+        self
+    }
+
+    pub fn dashboard(mut self, dashboard: ResolvedDashboard) -> Self {
+        self.dashboard = dashboard;
+        self
+    }
+
+    pub fn shutdown(mut self, shutdown: ShutdownSignal) -> Self {
+        self.shutdown = shutdown;
+        self
+    }
+
+    pub fn volatile_events(mut self, volatile_events: VolatileEventBroker) -> Self {
+        self.volatile_events = volatile_events;
+        self
+    }
+
+    pub fn git_refresh(mut self, git_refresh: GitRefreshCoordinator) -> Self {
+        self.git_refresh = git_refresh;
+        self
+    }
+
+    pub fn build(self) -> AppState {
+        AppState {
+            inner: Arc::new(AppStateInner {
+                persistence: PersistenceState { db: self.db },
+                config: AppRuntimeState {
+                    external_api_token: self.external_api_token,
+                    graph: self.graph,
+                    workspace_browser: self.workspace_browser,
+                },
+                dashboard: DashboardState {
+                    resolved: self.dashboard,
+                },
+                events: EventState {
+                    volatile_events: self.volatile_events,
+                },
+                lifecycle: LifecycleState {
+                    shutdown: self.shutdown,
+                },
+                integrations: IntegrationState {
+                    git_refresh: self.git_refresh,
+                },
+            }),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -74,14 +245,10 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     set_runtime_external_api_token(config.external_api_token.clone());
     let dashboard = crate::transport::http::dashboard::resolve_dashboard(&config.dashboard).await;
 
-    Ok(AppState {
-        db,
-        external_api_token: config.external_api_token.clone(),
-        graph: config.graph.clone(),
-        workspace_browser: config.workspace_browser.clone(),
-        dashboard,
-        shutdown: ShutdownSignal::default(),
-        volatile_events: VolatileEventBroker::default(),
-        git_refresh: GitRefreshCoordinator::default(),
-    })
+    Ok(AppState::builder(db)
+        .external_api_token(config.external_api_token.clone())
+        .graph(config.graph.clone())
+        .workspace_browser(config.workspace_browser.clone())
+        .dashboard(dashboard)
+        .build())
 }

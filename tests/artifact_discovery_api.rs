@@ -23,16 +23,9 @@ async fn test_state(name: &str) -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 fn event(
@@ -54,7 +47,7 @@ fn event(
 }
 
 async fn seed_idle_session(state: &AppState, workspace: &Path) {
-    let service = EventIngestService::new(state.db.clone());
+    let service = EventIngestService::new(state.db());
     service
         .ingest_event(event(
             "evt_m2_session_created",
@@ -78,7 +71,7 @@ async fn seed_idle_session(state: &AppState, workspace: &Path) {
     sqlx::query("UPDATE sessions SET workspace_ref = ? WHERE session_id = ?")
         .bind(workspace.display().to_string())
         .bind("sess_m2_1")
-        .execute(&state.db)
+        .execute(&state.db())
         .await
         .unwrap();
 }

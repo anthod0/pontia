@@ -32,16 +32,9 @@ async fn test_state(name: &str) -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 fn assert_tmux_available() {
@@ -166,7 +159,7 @@ async fn report_ready(state: AppState, session_id: &str) {
 async fn binding_metadata(state: &AppState, session_id: &str) -> Value {
     let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
         .bind(session_id)
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .expect("runtime binding");
     let metadata: String = row.try_get("metadata").expect("metadata");
@@ -329,7 +322,7 @@ async fn pi_adapter_event_outbox_projects_output_and_completed() {
     )
     .expect("write adapter event log");
 
-    AdapterEventOutboxService::new(state.db.clone())
+    AdapterEventOutboxService::new(state.db())
         .observe_session(&session_id)
         .await
         .expect("observe adapter outbox");
@@ -394,7 +387,7 @@ async fn pi_adapter_event_outbox_reports_malformed_records_without_forging_turn_
         .expect("adapter event log");
     std::fs::write(adapter_event_log, "{not-json}\n").expect("write malformed adapter event");
 
-    AdapterEventOutboxService::new(state.db.clone())
+    AdapterEventOutboxService::new(state.db())
         .observe_session(&session_id)
         .await
         .expect("observe adapter outbox");

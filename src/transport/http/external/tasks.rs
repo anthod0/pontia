@@ -39,7 +39,7 @@ pub async fn pause_task(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::new(state.db);
+    let service = TaskCommandService::new(state.db());
     let outcome = service.pause_task(&task_id, idempotency_key).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
@@ -51,7 +51,7 @@ pub async fn resume_task(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::new(state.db);
+    let service = TaskCommandService::new(state.db());
     let outcome = service.resume_task(&task_id, idempotency_key).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
@@ -64,7 +64,7 @@ pub async fn create_human_signal(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::new(state.db);
+    let service = TaskCommandService::new(state.db());
     let outcome = service
         .create_human_signal(&task_id, request, idempotency_key)
         .await?;
@@ -83,7 +83,7 @@ pub async fn interrupt_task(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::new(state.db);
+    let service = TaskCommandService::new(state.db());
     let outcome = service.interrupt_task(&task_id, idempotency_key).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
@@ -95,7 +95,7 @@ pub async fn cancel_task(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::new(state.db);
+    let service = TaskCommandService::new(state.db());
     let outcome = service.cancel_task(&task_id, idempotency_key).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
@@ -105,7 +105,7 @@ pub async fn list_tasks(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::new(state.db());
     let tasks = service.list_tasks().await?;
     Ok(ok(json!({ "tasks": tasks })))
 }
@@ -116,7 +116,7 @@ pub async fn get_task(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::new(state.db());
     let task = service
         .get_task(&task_id)
         .await?
@@ -130,7 +130,7 @@ pub async fn list_task_events(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::new(state.db());
     service
         .get_task(&task_id)
         .await?
@@ -145,7 +145,7 @@ pub async fn list_task_proposals(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::new(state.db());
     service
         .get_task(&task_id)
         .await?
@@ -160,11 +160,11 @@ pub async fn get_task_provenance(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    ExternalQueryService::new(state.db.clone())
+    ExternalQueryService::new(state.db())
         .get_task(&task_id)
         .await?
         .ok_or_else(|| ExternalApiError::not_found(format!("task {task_id} not found")))?;
-    let provenance = GraphProjectionService::new(state.db, state.graph)
+    let provenance = GraphProjectionService::new(state.db(), state.graph())
         .task_provenance(&task_id)
         .await?;
     Ok(ok(json!(provenance)))

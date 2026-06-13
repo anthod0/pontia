@@ -21,7 +21,7 @@ async fn insert_running_task(state: &pontia::application::AppState) -> String {
     let task_id = new_task_id().to_string();
     sqlx::query("INSERT INTO tasks (task_id, state, input) VALUES (?, 'running', 'dag api task')")
         .bind(&task_id)
-        .execute(&state.db)
+        .execute(&state.db())
         .await
         .expect("insert task");
     task_id
@@ -72,7 +72,7 @@ async fn dag_external_api_exposes_summary_work_items_runs_and_signals_from_proje
     let state = test_state().await;
     scope.enable_builtin_profiles(&state).await;
     let task_id = insert_running_task(&state).await;
-    DagService::new(state.db.clone())
+    DagService::new(state.db())
         .apply_initial_dag(&task_id, &initial_plan())
         .await
         .expect("apply dag");
@@ -105,7 +105,7 @@ async fn dag_external_api_exposes_summary_work_items_runs_and_signals_from_proje
     .bind(work_item_id)
     .bind(run_id)
     .bind(session_id)
-    .execute(&state.db)
+    .execute(&state.db())
     .await
     .expect("insert signal");
 

@@ -8,9 +8,9 @@ use serde_json::json;
 #[tokio::test]
 async fn rejects_runtime_mismatch_and_non_dag_managed_turns() {
     let state = test_state().await;
-    insert_task(&state.db, "task_plan").await;
+    insert_task(&state.db(), "task_plan").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_plan",
         "turn_plan",
         "rt_expected",
@@ -37,7 +37,7 @@ async fn rejects_runtime_mismatch_and_non_dag_managed_turns() {
     assert_eq!(body["error"]["code"], "state_conflict");
 
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_plain",
         "turn_plain",
         "rt_plain",

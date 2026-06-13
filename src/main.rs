@@ -24,7 +24,7 @@ async fn main() -> pontia::error::Result<()> {
     info!(addr = %bound_addr, "starting pontia control plane");
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
-    let shutdown = state.shutdown.clone();
+    let shutdown = state.shutdown();
     http::serve_with_shutdown_timeout(
         listener,
         http::router(state),

@@ -30,7 +30,7 @@ pub async fn stream_dashboard_events(
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db.clone());
+    let service = ExternalQueryService::new(state.db());
     let cursor = match query.after.as_deref() {
         Some(after) => service.parse_dashboard_stream_cursor(after)?,
         None => DashboardStreamCursor {
@@ -50,7 +50,7 @@ pub async fn stream_session_events(
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db.clone());
+    let service = ExternalQueryService::new(state.db());
     ensure_session_exists(&service, &session_id).await?;
     let after_rowid = match query.after.as_deref() {
         Some(after) => {
@@ -82,7 +82,7 @@ pub async fn stream_turn_events(
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db.clone());
+    let service = ExternalQueryService::new(state.db());
     ensure_session_exists(&service, &session_id).await?;
     service
         .get_turn(&session_id, &turn_id)
@@ -136,9 +136,9 @@ fn dashboard_sse_stream(
     let (sender, receiver) = mpsc::channel(32);
 
     tokio::spawn(async move {
-        let mut shutdown = state.shutdown.subscribe();
-        let service = ExternalQueryService::new(state.db);
-        let mut volatile_events = state.volatile_events.subscribe();
+        let mut shutdown = state.shutdown().subscribe();
+        let service = ExternalQueryService::new(state.db());
+        let mut volatile_events = state.volatile_events().subscribe();
         let mut cursor = after_cursor;
 
         loop {
@@ -215,9 +215,9 @@ fn event_sse_stream(
     let (sender, receiver) = mpsc::channel(32);
 
     tokio::spawn(async move {
-        let mut shutdown = state.shutdown.subscribe();
-        let service = ExternalQueryService::new(state.db);
-        let mut volatile_events = state.volatile_events.subscribe();
+        let mut shutdown = state.shutdown().subscribe();
+        let service = ExternalQueryService::new(state.db());
+        let mut volatile_events = state.volatile_events().subscribe();
         let mut cursor = after_rowid;
 
         loop {

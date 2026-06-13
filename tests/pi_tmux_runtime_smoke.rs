@@ -54,16 +54,9 @@ async fn test_state(name: &str) -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 fn assert_tmux_available() {
@@ -127,7 +120,7 @@ async fn create_session(state: AppState, client_type: &str) -> String {
 async fn binding_metadata(state: &AppState, session_id: &str) -> Value {
     let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
         .bind(session_id)
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .expect("runtime binding");
     let metadata: String = row.try_get("metadata").expect("metadata");

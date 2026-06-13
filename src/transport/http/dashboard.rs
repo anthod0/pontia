@@ -316,13 +316,21 @@ fn unique_suffix() -> String {
 }
 
 pub async fn dashboard(State(state): State<AppState>) -> Response {
-    let Some(root) = state.dashboard.root() else {
-        return (StatusCode::NOT_FOUND, state.dashboard.unavailable_message()).into_response();
+    let Some(root) = state.dashboard().root() else {
+        return (
+            StatusCode::NOT_FOUND,
+            state.dashboard().unavailable_message(),
+        )
+            .into_response();
     };
 
     match tokio::fs::read(root.join("index.html")).await {
         Ok(bytes) => ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], bytes).into_response(),
-        Err(_) => (StatusCode::NOT_FOUND, state.dashboard.unavailable_message()).into_response(),
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            state.dashboard().unavailable_message(),
+        )
+            .into_response(),
     }
 }
 
@@ -352,7 +360,7 @@ async fn dashboard_dist_file(state: AppState, relative_path: &str) -> Response {
 }
 
 async fn try_dashboard_dist_file(state: &AppState, relative_path: &str) -> Option<Response> {
-    let root = state.dashboard.root()?;
+    let root = state.dashboard().root()?;
     let safe_path = safe_asset_path(relative_path)?;
     let path = root.join(&safe_path);
     let metadata = tokio::fs::metadata(&path).await.ok()?;

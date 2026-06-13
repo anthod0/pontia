@@ -25,16 +25,9 @@ async fn test_state() -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 async fn request(
@@ -379,7 +372,7 @@ async fn resume_rejects_error_session() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    pontia::application::EventIngestService::new(state.db.clone())
+    pontia::application::EventIngestService::new(state.db())
         .ingest_event(pontia::domain::DomainEvent::new(
             pontia::ids::new_event_id().to_string(),
             session_id.clone(),

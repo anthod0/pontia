@@ -25,16 +25,9 @@ async fn test_state(name: &str) -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 fn event(
@@ -56,7 +49,7 @@ fn event(
 }
 
 async fn ingest(state: &AppState, event: DomainEvent) {
-    EventIngestService::new(state.db.clone())
+    EventIngestService::new(state.db())
         .ingest_event(event)
         .await
         .expect("ingest event");
@@ -67,14 +60,14 @@ async fn seed_task_event(state: &AppState) {
         r#"INSERT INTO tasks (task_id, state, input, routing_state, metadata)
            VALUES ('task_stream_1', 'running', 'stream task', 'ready', '{}')"#,
     )
-    .execute(&state.db)
+    .execute(&state.db())
     .await
     .expect("insert task");
     sqlx::query(
         r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
            VALUES ('task_evt_stream_1', 'task_stream_1', 'dag.work_item_completed', '{"work_item_id":"wi_1"}')"#,
     )
-    .execute(&state.db)
+    .execute(&state.db())
     .await
     .expect("insert task event");
 }
@@ -393,7 +386,7 @@ async fn dashboard_event_stream_pushes_volatile_session_message_updated_after_cu
         .expect("bind listener");
     let addr = listener.local_addr().expect("local addr");
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    let shutdown = state.shutdown.clone();
+    let shutdown = state.shutdown();
 
     let server = tokio::spawn(http::serve_with_shutdown_timeout(
         listener,
@@ -478,7 +471,7 @@ async fn session_event_stream_pushes_volatile_session_message_updated_after_curs
         .expect("bind listener");
     let addr = listener.local_addr().expect("local addr");
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    let shutdown = state.shutdown.clone();
+    let shutdown = state.shutdown();
 
     let server = tokio::spawn(http::serve_with_shutdown_timeout(
         listener,
@@ -558,7 +551,7 @@ async fn graceful_shutdown_closes_event_stream_without_waiting_for_timeout() {
         .expect("bind listener");
     let addr = listener.local_addr().expect("local addr");
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    let shutdown = state.shutdown.clone();
+    let shutdown = state.shutdown();
 
     let server = tokio::spawn(http::serve_with_shutdown_timeout(
         listener,

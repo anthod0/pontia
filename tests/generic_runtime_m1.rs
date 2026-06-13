@@ -27,16 +27,9 @@ async fn test_state(name: &str) -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 async fn request(
@@ -74,7 +67,7 @@ async fn request(
 async fn binding_metadata(state: &AppState, session_id: &str) -> Value {
     let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
         .bind(session_id)
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .expect("runtime binding");
     let metadata: String = row.try_get("metadata").expect("metadata");
@@ -184,7 +177,7 @@ async fn observe_missing_generic_runtime_projects_session_error() {
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
     scope.reset_runtime_registry();
 
-    RuntimeObservationService::new(state.db.clone())
+    RuntimeObservationService::new(state.db())
         .observe_session(&session_id)
         .await
         .expect("observe runtime");
@@ -214,7 +207,7 @@ async fn observe_missing_generic_runtime_fails_active_turn() {
     assert_eq!(scope.recorded_inputs().len(), 1);
     scope.reset_runtime_registry();
 
-    RuntimeObservationService::new(state.db.clone())
+    RuntimeObservationService::new(state.db())
         .observe_session(&session_id)
         .await
         .expect("observe runtime");

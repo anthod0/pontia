@@ -25,7 +25,7 @@ pub async fn list_workspaces(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::new(state.db());
     let workspaces = service.list_workspaces().await?;
     Ok(ok(json!({ "workspaces": workspaces })))
 }
@@ -36,7 +36,7 @@ pub async fn get_workspace(
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::new(state.db());
     let workspace = service.get_workspace(&workspace_id).await?.ok_or_else(|| {
         ExternalApiError::not_found(format!("workspace {workspace_id} not found"))
     })?;
@@ -50,7 +50,7 @@ pub async fn rename_workspace(
     Json(request): Json<RenameWorkspaceRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = WorkspaceBrowserService::new(state.db, state.workspace_browser);
+    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let workspace = service.rename_workspace(&workspace_id, request).await?;
     Ok(ok(json!({ "workspace": workspace })))
 }
@@ -61,7 +61,7 @@ pub async fn delete_workspace(
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = WorkspaceBrowserService::new(state.db, state.workspace_browser);
+    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let workspace = service.delete_workspace(&workspace_id).await?;
     Ok(ok(json!({ "workspace": workspace })))
 }
@@ -71,7 +71,7 @@ pub async fn list_workspace_roots(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = WorkspaceBrowserService::new(state.db, state.workspace_browser);
+    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let roots = service.list_roots().await;
     Ok(ok(json!({ "roots": roots })))
 }
@@ -83,7 +83,7 @@ pub async fn list_workspace_root_entries(
     Query(query): Query<WorkspaceEntriesQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = WorkspaceBrowserService::new(state.db, state.workspace_browser);
+    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let listing = service.list_entries(&root_id, &query.path).await?;
     Ok(ok(json!({
         "root_id": listing.root_id,
@@ -101,7 +101,7 @@ pub async fn register_workspace(
     Json(request): Json<RegisterWorkspaceRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = WorkspaceBrowserService::new(state.db, state.workspace_browser);
+    let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let workspace = service.register_workspace(request).await?;
     Ok((StatusCode::CREATED, ok(json!({ "workspace": workspace }))).into_response())
 }

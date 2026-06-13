@@ -28,16 +28,9 @@ async fn test_state(name: &str) -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 async fn post_json(
@@ -185,7 +178,7 @@ async fn generic_test_adapter_can_expose_pi_like_capabilities_without_pi_runtime
     let metadata: String =
         sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
             .bind(&session_id)
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("runtime metadata");
     let metadata: Value = serde_json::from_str(&metadata).expect("metadata json");
@@ -249,7 +242,7 @@ async fn generic_dispatch_starts_turn_and_writes_current_turn_context_in_process
     let metadata: String =
         sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
             .bind(&session_id)
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("runtime metadata");
     let metadata: Value = serde_json::from_str(&metadata).expect("metadata json");
@@ -370,7 +363,7 @@ async fn artifact_source_provider_registers_readable_artifacts_without_exposing_
         size_bytes: Some(21),
         metadata: json!({"preview":"artifact from adapter","source_ref":"must stay internal"}),
     };
-    ArtifactRegistrationService::new(state.db.clone())
+    ArtifactRegistrationService::new(state.db())
         .register(registration)
         .await
         .expect("register artifact");

@@ -36,7 +36,7 @@ pub(super) async fn ensure_session_exists(
 }
 
 pub(super) fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<(), ExternalApiError> {
-    let Some(expected) = &state.external_api_token else {
+    let Some(expected) = state.external_api_token() else {
         return Err(ExternalApiError::authentication_failed(
             "external API token is not configured",
         ));

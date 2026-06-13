@@ -23,7 +23,7 @@ async fn insert_running_task(state: &pontia::application::AppState) -> String {
         "INSERT INTO tasks (task_id, state, input) VALUES (?, 'running', 'human control task')",
     )
     .bind(&task_id)
-    .execute(&state.db)
+    .execute(&state.db())
     .await
     .expect("insert task");
     task_id
@@ -95,7 +95,7 @@ async fn pause_prevents_scheduler_dispatch_until_resume() {
     let state = test_state().await;
     scope.enable_builtin_profiles(&state).await;
     let task_id = insert_running_task(&state).await;
-    DagService::new(state.db.clone())
+    DagService::new(state.db())
         .apply_initial_dag(&task_id, &initial_plan())
         .await
         .expect("apply dag");
@@ -109,7 +109,7 @@ async fn pause_prevents_scheduler_dispatch_until_resume() {
     assert_eq!(pause_status, StatusCode::OK);
     assert_eq!(pause_body["data"]["task"]["state"], "paused");
 
-    let paused_outcome = DagSchedulerService::new(state.db.clone())
+    let paused_outcome = DagSchedulerService::new(state.db())
         .schedule_task(&task_id)
         .await
         .expect("scheduler respects pause");
@@ -118,7 +118,7 @@ async fn pause_prevents_scheduler_dispatch_until_resume() {
     let run_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM work_item_runs WHERE task_id = ?")
             .bind(&task_id)
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("run count");
     assert_eq!(run_count, 0);

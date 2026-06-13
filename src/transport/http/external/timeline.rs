@@ -33,13 +33,13 @@ pub async fn get_session_timeline(
     Query(query): Query<TimelineQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let query_service = ExternalQueryService::new(state.db.clone());
+    let query_service = ExternalQueryService::new(state.db());
     let session = query_service
         .get_session(&session_id)
         .await?
         .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
 
-    let binding_service = AgentBindingService::new(state.db.clone());
+    let binding_service = AgentBindingService::new(state.db());
     let binding = binding_service
         .primary_binding_for_session(&session_id)
         .await?
@@ -83,13 +83,13 @@ pub async fn get_session_timeline_detail(
     Query(query): Query<TimelineDetailQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let query_service = ExternalQueryService::new(state.db.clone());
+    let query_service = ExternalQueryService::new(state.db());
     let session = query_service
         .get_session(&session_id)
         .await?
         .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
 
-    let binding_service = AgentBindingService::new(state.db.clone());
+    let binding_service = AgentBindingService::new(state.db());
     let binding = binding_service
         .primary_binding_for_session(&session_id)
         .await?

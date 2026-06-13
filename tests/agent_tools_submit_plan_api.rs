@@ -11,9 +11,9 @@ use serde_json::json;
 #[tokio::test]
 async fn submit_plan_from_planner_saves_applies_and_schedules_initial_dag() {
     let state = test_state().await;
-    insert_task(&state.db, "task_submit_plan").await;
+    insert_task(&state.db(), "task_submit_plan").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_planner_submit",
         "turn_planner_submit",
         "rt_planner_submit",
@@ -61,33 +61,33 @@ async fn submit_plan_from_planner_saves_applies_and_schedules_initial_dag() {
     )
     .bind(result["proposal_id"].as_str().unwrap())
     .bind("sess_planner_submit")
-    .fetch_one(&state.db)
+    .fetch_one(&state.db())
     .await
     .expect("proposal state");
     assert_eq!(proposal_state, "applied");
     let task_state: String = sqlx::query_scalar("SELECT state FROM tasks WHERE task_id = ?")
         .bind("task_submit_plan")
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .expect("task state");
     assert_eq!(task_state, "running");
     let planner_session_state: String =
         sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
             .bind("sess_planner_submit")
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("planner session state");
     assert_eq!(planner_session_state, "exited");
 
-    cleanup_runtime_sessions(&state.db).await;
+    cleanup_runtime_sessions(&state.db()).await;
 }
 
 #[tokio::test]
 async fn submit_plan_enforces_planner_replanner_and_worker_modes() {
     let state = test_state().await;
-    insert_task(&state.db, "task_submit_modes").await;
+    insert_task(&state.db(), "task_submit_modes").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_planner_modes",
         "turn_planner_modes",
         "rt_planner_modes",
@@ -99,7 +99,7 @@ async fn submit_plan_enforces_planner_replanner_and_worker_modes() {
     )
     .await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_replanner_modes",
         "turn_replanner_modes",
         "rt_replanner_modes",
@@ -111,7 +111,7 @@ async fn submit_plan_enforces_planner_replanner_and_worker_modes() {
     )
     .await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_worker_modes",
         "turn_worker_modes",
         "rt_worker_modes",
@@ -119,7 +119,7 @@ async fn submit_plan_enforces_planner_replanner_and_worker_modes() {
     )
     .await;
     insert_execution_run(
-        &state.db,
+        &state.db(),
         "task_submit_modes",
         "wi_worker_modes",
         "run_worker_modes",
@@ -189,9 +189,9 @@ async fn submit_plan_enforces_planner_replanner_and_worker_modes() {
 #[tokio::test]
 async fn submit_plan_rejects_malformed_work_item_as_bad_request() {
     let state = test_state().await;
-    insert_task(&state.db, "task_malformed_plan").await;
+    insert_task(&state.db(), "task_malformed_plan").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_malformed_plan",
         "turn_malformed_plan",
         "rt_malformed_plan",
@@ -233,9 +233,9 @@ async fn submit_plan_rejects_malformed_work_item_as_bad_request() {
 #[tokio::test]
 async fn submit_plan_accepts_structured_risks_from_tool_contract() {
     let state = test_state().await;
-    insert_task(&state.db, "task_structured_risks").await;
+    insert_task(&state.db(), "task_structured_risks").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_structured_risks",
         "turn_structured_risks",
         "rt_structured_risks",
@@ -268,21 +268,21 @@ async fn submit_plan_accepts_structured_risks_from_tool_contract() {
     )
     .bind("task_structured_risks")
     .bind("sess_structured_risks")
-    .fetch_one(&state.db)
+    .fetch_one(&state.db())
     .await
     .expect("proposal json");
     let proposal: serde_json::Value = serde_json::from_str(&proposal_json).unwrap();
     assert_eq!(proposal["risks"][0]["summary"], "May need fixture updates");
 
-    cleanup_runtime_sessions(&state.db).await;
+    cleanup_runtime_sessions(&state.db()).await;
 }
 
 #[tokio::test]
 async fn submit_plan_rejects_invalid_dag_without_partial_apply() {
     let state = test_state().await;
-    insert_task(&state.db, "task_invalid_plan").await;
+    insert_task(&state.db(), "task_invalid_plan").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_invalid_plan",
         "turn_invalid_plan",
         "rt_invalid_plan",
@@ -315,11 +315,11 @@ async fn submit_plan_rejects_invalid_dag_without_partial_apply() {
     )
     .bind("task_invalid_plan")
     .bind("sess_invalid_plan")
-    .fetch_one(&state.db)
+    .fetch_one(&state.db())
     .await
     .expect("rejected proposal");
     assert_eq!(proposal_state, "rejected");
-    let graph = SqliteDagGraphStore::new(state.db.clone())
+    let graph = SqliteDagGraphStore::new(state.db())
         .task_graph("task_invalid_plan")
         .await
         .expect("task graph");
@@ -329,9 +329,9 @@ async fn submit_plan_rejects_invalid_dag_without_partial_apply() {
 #[tokio::test]
 async fn submit_plan_rejects_invalid_patch_without_partial_apply() {
     let state = test_state().await;
-    insert_task(&state.db, "task_invalid_patch").await;
+    insert_task(&state.db(), "task_invalid_patch").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_invalid_patch",
         "turn_invalid_patch",
         "rt_invalid_patch",
@@ -372,11 +372,11 @@ async fn submit_plan_rejects_invalid_patch_without_partial_apply() {
     )
     .bind("task_invalid_patch")
     .bind("sess_invalid_patch")
-    .fetch_one(&state.db)
+    .fetch_one(&state.db())
     .await
     .expect("rejected patch proposal");
     assert_eq!(proposal_state, "rejected");
-    let graph = SqliteDagGraphStore::new(state.db.clone())
+    let graph = SqliteDagGraphStore::new(state.db())
         .task_graph("task_invalid_patch")
         .await
         .expect("task graph");

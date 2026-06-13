@@ -26,16 +26,9 @@ async fn test_state() -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
@@ -73,7 +66,7 @@ fn pi_session_dir(agent_dir: &std::path::Path, cwd: &std::path::Path) -> std::pa
 }
 
 async fn seed_session(state: &AppState, session_id: &str) {
-    let service = EventIngestService::new(state.db.clone());
+    let service = EventIngestService::new(state.db());
     service
         .ingest_event(DomainEvent::new(
             format!("evt_{session_id}_created"),
@@ -89,7 +82,7 @@ async fn seed_session(state: &AppState, session_id: &str) {
 }
 
 async fn seed_session_exited(state: &AppState, session_id: &str) {
-    EventIngestService::new(state.db.clone())
+    EventIngestService::new(state.db())
         .ingest_event(DomainEvent::new(
             format!("evt_{session_id}_exited"),
             session_id.to_string(),
@@ -129,7 +122,7 @@ async fn timeline_and_detail_external_api_read_pi_jsonl_fixture() {
     )
     .unwrap();
 
-    AgentBindingService::new(state.db.clone())
+    AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
@@ -222,7 +215,7 @@ async fn timeline_external_api_returns_not_ready_when_raw_file_has_not_been_disc
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
-    AgentBindingService::new(state.db.clone())
+    AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
@@ -259,7 +252,7 @@ async fn timeline_external_api_returns_source_unavailable_when_discovered_raw_fi
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
-    let binding = AgentBindingService::new(state.db.clone())
+    let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
@@ -271,7 +264,7 @@ async fn timeline_external_api_returns_source_unavailable_when_discovered_raw_fi
         .unwrap();
     sqlx::query("UPDATE agent_bindings SET discovered = TRUE WHERE id = ?")
         .bind(&binding.id)
-        .execute(&state.db)
+        .execute(&state.db())
         .await
         .unwrap();
     seed_session_exited(&state, session_id).await;
@@ -302,7 +295,7 @@ async fn timeline_external_api_returns_not_ready_for_missing_discovered_source_i
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
-    let binding = AgentBindingService::new(state.db.clone())
+    let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
@@ -314,7 +307,7 @@ async fn timeline_external_api_returns_not_ready_for_missing_discovered_source_i
         .unwrap();
     sqlx::query("UPDATE agent_bindings SET discovered = TRUE WHERE id = ?")
         .bind(&binding.id)
-        .execute(&state.db)
+        .execute(&state.db())
         .await
         .unwrap();
 
@@ -350,7 +343,7 @@ async fn timeline_external_api_does_not_mark_binding_discovered_until_timeline_p
     let source_path = session_dir.join(format!("2026-06-09T00-00-00-000Z_{session_key}.jsonl"));
     fs::create_dir_all(&source_path).unwrap();
 
-    let binding = AgentBindingService::new(state.db.clone())
+    let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
@@ -371,7 +364,7 @@ async fn timeline_external_api_does_not_mark_binding_discovered_until_timeline_p
     assert_eq!(body["error"]["code"], "not_ready");
     let discovered: bool = sqlx::query_scalar("SELECT discovered FROM agent_bindings WHERE id = ?")
         .bind(&binding.id)
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .unwrap();
     assert!(!discovered);
@@ -412,7 +405,7 @@ async fn timeline_external_api_marks_binding_discovered_after_first_successful_p
     )
     .unwrap();
 
-    let binding = AgentBindingService::new(state.db.clone())
+    let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
@@ -432,7 +425,7 @@ async fn timeline_external_api_marks_binding_discovered_after_first_successful_p
     assert_eq!(status, StatusCode::OK);
     let discovered: bool = sqlx::query_scalar("SELECT discovered FROM agent_bindings WHERE id = ?")
         .bind(&binding.id)
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .unwrap();
     assert!(discovered);

@@ -28,7 +28,7 @@ pub async fn post_agent_tool(
     // backend API behavior intact for existing tests/data and future revival, but
     // avoid extending this path while focusing on session-first control.
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let result = AgentToolService::with_graph(state.db, state.graph)
+    let result = AgentToolService::with_graph(state.db(), state.graph())
         .call(&tool_name, request)
         .await?;
     Ok(Json(InternalAgentToolResponse {

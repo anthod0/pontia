@@ -18,7 +18,7 @@ pub async fn submit_inbox_message(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
-    let service = InboxCommandService::new(state.db);
+    let service = InboxCommandService::new(state.db());
     let outcome = service
         .submit_message(&session_id, request, idempotency_key)
         .await?;
@@ -36,7 +36,7 @@ pub async fn list_inbox_messages(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = InboxCommandService::new(state.db);
+    let service = InboxCommandService::new(state.db());
     let messages = service.list_messages(&session_id).await?;
     Ok(ok(json!({ "inbox_messages": messages })))
 }
@@ -47,7 +47,7 @@ pub async fn get_inbox_message(
     Path((session_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = InboxCommandService::new(state.db);
+    let service = InboxCommandService::new(state.db());
     let message = service
         .get_message(&session_id, &message_id)
         .await?
@@ -63,7 +63,7 @@ pub async fn cancel_inbox_message(
     Path((session_id, message_id)): Path<(String, String)>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = InboxCommandService::new(state.db);
+    let service = InboxCommandService::new(state.db());
     let outcome = service.cancel_message(&session_id, &message_id).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }

@@ -24,16 +24,10 @@ async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some("test-token".to_owned()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard,
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some("test-token".to_owned()))
+        .dashboard(dashboard)
+        .build()
 }
 
 #[tokio::test]

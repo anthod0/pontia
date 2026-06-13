@@ -11,9 +11,14 @@ use pontia::transport::http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-fn isolate_graph(state: &mut pontia::application::AppState, dir: &tempfile::TempDir) {
-    state.graph.enabled = true;
-    state.graph.db_dir = Some(dir.path().join("lbug").display().to_string());
+fn isolate_graph(
+    state: pontia::application::AppState,
+    dir: &tempfile::TempDir,
+) -> pontia::application::AppState {
+    let mut graph = state.graph();
+    graph.enabled = true;
+    graph.db_dir = Some(dir.path().join("lbug").display().to_string());
+    state.with_graph(graph)
 }
 
 async fn get_external(state: pontia::application::AppState, uri: &str) -> (StatusCode, Value) {
@@ -43,11 +48,10 @@ async fn get_external(state: pontia::application::AppState, uri: &str) -> (Statu
 #[tokio::test]
 async fn submit_plan_only_saves_pending_proposal_until_apply_plan_runs() {
     let graph_dir = tempfile::tempdir().expect("graph dir");
-    let mut state = test_state().await;
-    isolate_graph(&mut state, &graph_dir);
-    insert_task(&state.db, "task_submit_pending").await;
+    let state = isolate_graph(test_state().await, &graph_dir);
+    insert_task(&state.db(), "task_submit_pending").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_submit_pending",
         "turn_submit_pending",
         "rt_submit_pending",
@@ -90,14 +94,14 @@ async fn submit_plan_only_saves_pending_proposal_until_apply_plan_runs() {
     )
     .bind(proposal_id)
     .bind("sess_submit_pending")
-    .fetch_one(&state.db)
+    .fetch_one(&state.db())
     .await
     .expect("proposal row");
     assert_eq!(row, ("proposed".to_string(), 1));
 
     let task_state: String = sqlx::query_scalar("SELECT state FROM tasks WHERE task_id = ?")
         .bind("task_submit_pending")
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .expect("task state");
     assert_eq!(task_state, "awaiting_approval");
@@ -105,7 +109,7 @@ async fn submit_plan_only_saves_pending_proposal_until_apply_plan_runs() {
     let planner_session_state: String =
         sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
             .bind("sess_submit_pending")
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("planner session state");
     assert_eq!(planner_session_state, "busy");
@@ -113,22 +117,21 @@ async fn submit_plan_only_saves_pending_proposal_until_apply_plan_runs() {
     let work_item_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM work_item_runtime_projection WHERE task_id = ?")
             .bind("task_submit_pending")
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("work item count");
     assert_eq!(work_item_count, 0);
 
-    cleanup_runtime_sessions(&state.db).await;
+    cleanup_runtime_sessions(&state.db()).await;
 }
 
 #[tokio::test]
 async fn apply_plan_applies_proposed_plan_and_starts_scheduler() {
     let graph_dir = tempfile::tempdir().expect("graph dir");
-    let mut state = test_state().await;
-    isolate_graph(&mut state, &graph_dir);
-    insert_task(&state.db, "task_apply_plan").await;
+    let state = isolate_graph(test_state().await, &graph_dir);
+    insert_task(&state.db(), "task_apply_plan").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_apply_plan",
         "turn_apply_plan",
         "rt_apply_plan",
@@ -183,7 +186,7 @@ async fn apply_plan_applies_proposed_plan_and_starts_scheduler() {
     let runtime_metadata: String =
         sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
             .bind(executor_session_id)
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("executor runtime metadata");
     let runtime_metadata: Value =
@@ -206,14 +209,14 @@ async fn apply_plan_applies_proposed_plan_and_starts_scheduler() {
     let proposal_state: String =
         sqlx::query_scalar("SELECT state FROM dag_proposals WHERE proposal_id = ?")
             .bind(proposal_id)
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("proposal state");
     assert_eq!(proposal_state, "applied");
 
     let task_state: String = sqlx::query_scalar("SELECT state FROM tasks WHERE task_id = ?")
         .bind("task_apply_plan")
-        .fetch_one(&state.db)
+        .fetch_one(&state.db())
         .await
         .expect("task state");
     assert_eq!(task_state, "running");
@@ -221,22 +224,21 @@ async fn apply_plan_applies_proposed_plan_and_starts_scheduler() {
     let work_item_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM work_item_runtime_projection WHERE task_id = ?")
             .bind("task_apply_plan")
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("work item count");
     assert_eq!(work_item_count, 1);
 
-    cleanup_runtime_sessions(&state.db).await;
+    cleanup_runtime_sessions(&state.db()).await;
 }
 
 #[tokio::test]
 async fn submit_plan_creates_revisions_and_supersedes_previous_pending_proposal() {
     let graph_dir = tempfile::tempdir().expect("graph dir");
-    let mut state = test_state().await;
-    isolate_graph(&mut state, &graph_dir);
-    insert_task(&state.db, "task_plan_revisions").await;
+    let state = isolate_graph(test_state().await, &graph_dir);
+    insert_task(&state.db(), "task_plan_revisions").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_plan_revisions",
         "turn_plan_revisions",
         "rt_plan_revisions",
@@ -285,7 +287,7 @@ async fn submit_plan_creates_revisions_and_supersedes_previous_pending_proposal(
         "SELECT proposal_id, state, revision, supersedes_proposal_id FROM dag_proposals WHERE task_id = ? ORDER BY revision ASC",
     )
     .bind("task_plan_revisions")
-    .fetch_all(&state.db)
+    .fetch_all(&state.db())
     .await
     .expect("proposal rows");
 
@@ -323,18 +325,21 @@ async fn submit_plan_creates_revisions_and_supersedes_previous_pending_proposal(
             .contains("not proposed")
     );
 
-    cleanup_runtime_sessions(&state.db).await;
+    cleanup_runtime_sessions(&state.db()).await;
 }
 
 #[tokio::test]
 async fn list_task_proposals_returns_all_revisions_with_full_body() {
     let graph_dir = tempfile::tempdir().expect("graph dir");
-    let mut state = test_state().await;
-    state.external_api_token = Some("test-token".to_string());
-    isolate_graph(&mut state, &graph_dir);
-    insert_task(&state.db, "task_list_proposals").await;
+    let state = isolate_graph(
+        test_state()
+            .await
+            .with_external_api_token(Some("test-token".to_string())),
+        &graph_dir,
+    );
+    insert_task(&state.db(), "task_list_proposals").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_list_proposals",
         "turn_list_proposals",
         "rt_list_proposals",
@@ -422,5 +427,5 @@ async fn list_task_proposals_returns_all_revisions_with_full_body() {
         get_external(state.clone(), "/external/v1/tasks/missing_task/proposals").await;
     assert_eq!(missing_status, StatusCode::NOT_FOUND, "{missing_body:#}");
 
-    cleanup_runtime_sessions(&state.db).await;
+    cleanup_runtime_sessions(&state.db()).await;
 }

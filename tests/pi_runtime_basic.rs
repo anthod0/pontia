@@ -55,16 +55,9 @@ async fn test_state(name: &str) -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 async fn request_json(
@@ -122,7 +115,7 @@ async fn binding_metadata(state: &AppState, session_id: &str) -> Value {
     let metadata: String =
         sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("binding");
     serde_json::from_str(&metadata).expect("metadata json")
@@ -176,7 +169,7 @@ async fn cleanup_session_runtime(state: &AppState, session_id: &str) {
         "SELECT metadata FROM runtime_bindings WHERE session_id = ?",
     )
     .bind(session_id)
-    .fetch_optional(&state.db)
+    .fetch_optional(&state.db())
     .await
         && let Ok(metadata) = serde_json::from_str::<Value>(&metadata)
         && let Some(tmux_session) = metadata["tmux_session"].as_str()
@@ -229,7 +222,7 @@ async fn pi_initial_task_waits_for_agent_client_ready_before_dispatch() {
         if let Some(row) = sqlx::query_as::<_, (String, String)>(
             "SELECT session_id, metadata FROM runtime_bindings LIMIT 1",
         )
-        .fetch_optional(&state.db)
+        .fetch_optional(&state.db())
         .await
         .expect("binding poll")
         {

@@ -56,7 +56,7 @@ impl GenericClientTestScope {
     pub async fn runtime_ref(&self, state: &AppState, session_id: &str) -> String {
         sqlx::query_scalar("SELECT runtime_ref FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("runtime ref")
     }
@@ -68,7 +68,7 @@ impl GenericClientTestScope {
                SET supported_client_types = '["generic"]'
                WHERE profile_id IN ('default', 'planner', 'replanner', 'implementer', 'reviewer', 'tester', 'debugger')"#,
         )
-        .execute(&state.db)
+        .execute(&state.db())
         .await
         .expect("enable generic builtin profiles");
     }
@@ -76,7 +76,7 @@ impl GenericClientTestScope {
     pub async fn runtime_metadata(&self, state: &AppState, session_id: &str) -> Value {
         let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)
-            .fetch_one(&state.db)
+            .fetch_one(&state.db())
             .await
             .expect("runtime binding");
         let metadata: String = row.try_get("metadata").expect("metadata");

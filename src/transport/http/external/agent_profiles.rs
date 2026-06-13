@@ -29,7 +29,7 @@ pub async fn list_agent_profiles(
     Query(query): Query<AgentProfilesQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db);
+    let service = AgentProfileService::new(state.db());
     let profiles = if query.include_archived {
         service.list_latest_including_archived().await?
     } else {
@@ -44,7 +44,7 @@ pub async fn get_agent_profile(
     Path(profile_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db);
+    let service = AgentProfileService::new(state.db());
     let profile = service.get_latest(&profile_id).await?.ok_or_else(|| {
         ExternalApiError::not_found(format!("agent profile {profile_id} not found"))
     })?;
@@ -57,7 +57,7 @@ pub async fn create_agent_profile(
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db);
+    let service = AgentProfileService::new(state.db());
     let outcome = service
         .create_profile(request, idempotency_key(&headers))
         .await?;
@@ -75,7 +75,7 @@ pub async fn delete_agent_profile(
     Path(profile_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db);
+    let service = AgentProfileService::new(state.db());
     let outcome = service
         .archive_profile(&profile_id, idempotency_key(&headers))
         .await?;
@@ -89,7 +89,7 @@ pub async fn list_agent_profile_versions(
     Query(query): Query<AgentProfileVersionsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db);
+    let service = AgentProfileService::new(state.db());
     let versions = service
         .list_versions(&profile_id, query.include_archived)
         .await?;
@@ -108,7 +108,7 @@ pub async fn create_agent_profile_version(
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db);
+    let service = AgentProfileService::new(state.db());
     let outcome = service
         .create_profile_version(&profile_id, request, idempotency_key(&headers))
         .await?;
@@ -126,7 +126,7 @@ pub async fn get_agent_profile_version(
     Path((profile_id, version)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db);
+    let service = AgentProfileService::new(state.db());
     let profile = service
         .get_version(&profile_id, &version)
         .await?
@@ -143,7 +143,7 @@ pub async fn update_agent_profile_version(
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db);
+    let service = AgentProfileService::new(state.db());
     let outcome = service
         .update_version(&profile_id, &version, request, idempotency_key(&headers))
         .await?;
@@ -156,7 +156,7 @@ pub async fn delete_agent_profile_version(
     Path((profile_id, version)): Path<(String, String)>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db);
+    let service = AgentProfileService::new(state.db());
     let outcome = service
         .archive_version(&profile_id, &version, idempotency_key(&headers))
         .await?;

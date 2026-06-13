@@ -18,7 +18,7 @@ pub async fn list_artifacts(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::new(state.db());
     ensure_session_exists(&service, &session_id).await?;
     let artifacts = service.list_artifacts(&session_id).await?;
     Ok(ok(json!({ "artifacts": artifacts })))
@@ -30,7 +30,7 @@ pub async fn discover_artifacts(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ArtifactDiscoveryService::new(state.db);
+    let service = ArtifactDiscoveryService::new(state.db());
     let outcome = service.discover(&session_id).await?;
     Ok(ok(json!({ "artifacts": outcome.artifacts })))
 }
@@ -41,7 +41,7 @@ pub async fn get_artifact(
     Path(artifact_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db);
+    let service = ExternalQueryService::new(state.db());
     let artifact = service
         .get_artifact(&artifact_id)
         .await?
@@ -55,7 +55,7 @@ pub async fn get_artifact_content(
     Path(artifact_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ArtifactContentService::new(state.db);
+    let service = ArtifactContentService::new(state.db());
     let content = service.read_content(&artifact_id).await?;
     Ok((
         StatusCode::OK,

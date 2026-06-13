@@ -21,16 +21,9 @@ async fn test_state() -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState {
-        db,
-        external_api_token: Some(TOKEN.to_string()),
-        graph: Default::default(),
-        workspace_browser: Default::default(),
-        dashboard: pontia::transport::http::dashboard::ResolvedDashboard::local_default(),
-        shutdown: Default::default(),
-        volatile_events: Default::default(),
-        git_refresh: Default::default(),
-    }
+    AppState::builder(db)
+        .external_api_token(Some(TOKEN.to_string()))
+        .build()
 }
 
 fn event(
@@ -52,7 +45,7 @@ fn event(
 }
 
 async fn seed_session_turn(state: &AppState) {
-    let service = EventIngestService::new(state.db.clone());
+    let service = EventIngestService::new(state.db());
     service
         .ingest_event(event(
             "evt_m3_1",
@@ -116,7 +109,7 @@ async fn seed_session_turn(state: &AppState) {
     sqlx::query(
         "UPDATE events SET created_at = '2026-04-24T12:00:00.000Z' WHERE event_id IN ('evt_m3_4', 'evt_m3_0')",
     )
-    .execute(&state.db)
+    .execute(&state.db())
     .await
     .unwrap();
 
@@ -133,7 +126,7 @@ async fn seed_session_turn(state: &AppState) {
     .bind("registered://agent.log")
     .bind(12_i64)
     .bind(json!({"preview":"hello world", "source_ref":"internal-path"}).to_string())
-    .execute(&state.db)
+    .execute(&state.db())
     .await
     .unwrap();
 }

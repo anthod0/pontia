@@ -33,9 +33,9 @@ async fn rejects_unknown_tool_and_invalid_requests() {
 #[tokio::test]
 async fn authorizes_planning_context_from_session_turn_and_runtime_binding() {
     let state = test_state().await;
-    insert_task(&state.db, "task_plan").await;
+    insert_task(&state.db(), "task_plan").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_plan",
         "turn_plan",
         "rt_plan",
@@ -74,10 +74,10 @@ async fn authorizes_planning_context_from_session_turn_and_runtime_binding() {
 #[tokio::test]
 async fn authorizes_execution_context_from_current_work_item_run_not_request_input() {
     let state = test_state().await;
-    insert_task(&state.db, "task_exec").await;
-    insert_task(&state.db, "task_other").await;
+    insert_task(&state.db(), "task_exec").await;
+    insert_task(&state.db(), "task_other").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_exec",
         "turn_exec",
         "rt_exec",
@@ -85,7 +85,7 @@ async fn authorizes_execution_context_from_current_work_item_run_not_request_inp
     )
     .await;
     insert_execution_run(
-        &state.db,
+        &state.db(),
         "task_exec",
         "wi_exec",
         "run_exec",
@@ -118,9 +118,9 @@ async fn authorizes_execution_context_from_current_work_item_run_not_request_inp
 #[tokio::test]
 async fn get_context_returns_planning_view_from_authoritative_task_state() {
     let state = test_state().await;
-    insert_task(&state.db, "task_plan").await;
+    insert_task(&state.db(), "task_plan").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_plan",
         "turn_plan",
         "rt_plan",
@@ -132,7 +132,7 @@ async fn get_context_returns_planning_view_from_authoritative_task_state() {
     )
     .await;
     insert_work_item(
-        &state.db,
+        &state.db(),
         "task_plan",
         "wi_plan",
         "Existing item",
@@ -140,9 +140,9 @@ async fn get_context_returns_planning_view_from_authoritative_task_state() {
         json!(["accept it"]),
     )
     .await;
-    insert_signal(&state.db, "sig_open", "task_plan", None, None, "open").await;
+    insert_signal(&state.db(), "sig_open", "task_plan", None, None, "open").await;
     insert_signal(
-        &state.db,
+        &state.db(),
         "sig_resolved",
         "task_plan",
         None,
@@ -150,7 +150,7 @@ async fn get_context_returns_planning_view_from_authoritative_task_state() {
         "resolved",
     )
     .await;
-    insert_proposal(&state.db, "prop_pending", "task_plan", "proposed").await;
+    insert_proposal(&state.db(), "prop_pending", "task_plan", "proposed").await;
 
     let (status, body) = post_tool(
         state,
@@ -187,10 +187,10 @@ async fn get_context_returns_planning_view_from_authoritative_task_state() {
 #[tokio::test]
 async fn get_context_returns_execution_view_scoped_to_current_run() {
     let state = test_state().await;
-    insert_task(&state.db, "task_exec").await;
-    insert_task(&state.db, "task_other").await;
+    insert_task(&state.db(), "task_exec").await;
+    insert_task(&state.db(), "task_other").await;
     insert_dag_session(
-        &state.db,
+        &state.db(),
         "sess_exec",
         "turn_exec",
         "rt_exec",
@@ -198,7 +198,7 @@ async fn get_context_returns_execution_view_scoped_to_current_run() {
     )
     .await;
     insert_work_item(
-        &state.db,
+        &state.db(),
         "task_exec",
         "wi_upstream",
         "Upstream item",
@@ -207,7 +207,7 @@ async fn get_context_returns_execution_view_scoped_to_current_run() {
     )
     .await;
     insert_execution_run(
-        &state.db,
+        &state.db(),
         "task_exec",
         "wi_exec",
         "run_exec",
@@ -215,9 +215,9 @@ async fn get_context_returns_execution_view_scoped_to_current_run() {
         "turn_exec",
     )
     .await;
-    insert_edge(&state.db, "task_exec", "wi_upstream", "wi_exec").await;
+    insert_edge(&state.db(), "task_exec", "wi_upstream", "wi_exec").await;
     insert_work_item(
-        &state.db,
+        &state.db(),
         "task_other",
         "wi_other",
         "Other task item",
@@ -226,7 +226,7 @@ async fn get_context_returns_execution_view_scoped_to_current_run() {
     )
     .await;
     insert_signal(
-        &state.db,
+        &state.db(),
         "sig_run",
         "task_exec",
         Some("wi_exec"),
@@ -234,7 +234,7 @@ async fn get_context_returns_execution_view_scoped_to_current_run() {
         "open",
     )
     .await;
-    insert_signal(&state.db, "sig_other", "task_other", None, None, "open").await;
+    insert_signal(&state.db(), "sig_other", "task_other", None, None, "open").await;
 
     let (status, body) = post_tool(
         state,

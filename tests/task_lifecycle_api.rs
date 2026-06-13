@@ -16,7 +16,7 @@ async fn task_events_endpoint_returns_task_lifecycle_history() {
     let task_id = new_task_id().to_string();
     sqlx::query("INSERT INTO tasks (task_id, state, input) VALUES (?, 'created', 'show events')")
         .bind(&task_id)
-        .execute(&state.db)
+        .execute(&state.db())
         .await
         .expect("insert task");
     sqlx::query(
@@ -24,7 +24,7 @@ async fn task_events_endpoint_returns_task_lifecycle_history() {
     )
     .bind(&task_id)
     .bind(json!({"mode":"dag"}).to_string())
-    .execute(&state.db)
+    .execute(&state.db())
     .await
     .expect("insert task event");
 
