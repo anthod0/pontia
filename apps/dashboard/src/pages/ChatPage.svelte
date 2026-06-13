@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
-  import { Activity, AtSign, Bot, EllipsisVertical, Folder, GitBranch, Inbox, LogOut, Pencil, RotateCw, RotateCcw, Terminal, TerminalSquare, X } from '@lucide/svelte'
+  import { Activity, AtSign, Bot, EllipsisVertical, Folder, Gauge, GitBranch, Inbox, LogOut, Pencil, RotateCw, RotateCcw, Terminal, TerminalSquare, X } from '@lucide/svelte'
   import { toast } from 'svelte-sonner'
   import { getPathParams, navigate } from 'svelte-mini-router'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -217,7 +217,8 @@
 
   function sessionContextUsageLabel(session: SessionView): string | null {
     if ((session.capabilities?.context_usage ?? 'unsupported') === 'unsupported') return null
-    return session.context_usage ? contextUsageSummary(session.context_usage, { includeConfidence: false }) : 'Context waiting…'
+    const summary = session.context_usage ? contextUsageSummary(session.context_usage, { includeConfidence: false }) : 'Context waiting…'
+    return summary.replace(/^Context\s+/, '')
   }
 
   function sessionStateBadgeClass(state: string): string {
@@ -333,7 +334,7 @@
       items.push({ key: 'git', label: 'Git', value, title: gitStatusTitle(session, gitStatus) })
     }
     const contextUsageLabel = sessionContextUsageLabel(session)
-    if (contextUsageLabel) items.push({ key: 'context', label: 'Context', value: contextUsageLabel.replace(/^Context\s+/, ''), title: contextUsageLabel })
+    if (contextUsageLabel) items.push({ key: 'context', label: 'Usage', value: contextUsageLabel, title: `Context usage: ${contextUsageLabel}` })
     const profileTitle = sessionProfileTitle(session)
     if (profileTitle) items.push({ key: 'profile', label: 'Profile', value: profileTitle, title: profileTitle })
     const handleTitle = sessionHandleTitle(session)
@@ -836,7 +837,7 @@
                       title={`Context usage: ${sessionContextUsageLabel(selectedSession)}`}
                       aria-label={`Context usage: ${sessionContextUsageLabel(selectedSession)}`}
                     >
-                      {sessionContextUsageLabel(selectedSession)}
+                      <Gauge class="size-4" aria-hidden="true" /> {sessionContextUsageLabel(selectedSession)}
                     </Badge>
                   {/if}
                   <Badge
