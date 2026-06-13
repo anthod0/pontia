@@ -996,7 +996,13 @@ test('opens an inbox sheet with actionable pending, failed, and dispatching mess
 
   const inboxButton = await screen.findByRole('button', { name: /open inbox, 2 messages/i });
   expect(inboxButton).toHaveTextContent('Inbox');
-  expect(inboxButton).toHaveTextContent('2');
+  expect(inboxButton).not.toHaveTextContent('2');
+
+  const inboxBubble = screen.getByText('2');
+  expect(inboxBubble.closest('button')).not.toBe(inboxButton);
+  expect(inboxBubble).toHaveClass('absolute');
+  expect(inboxBubble).toHaveClass('-right-2');
+  expect(inboxBubble).toHaveClass('-top-2');
 
   await userEvent.click(inboxButton);
 

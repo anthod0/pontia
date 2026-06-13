@@ -898,17 +898,21 @@
                 </div>
               </div>
               <div class="flex shrink-0 items-center justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="gap-2"
-                  aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`}
-                  onclick={() => (inboxSheetOpen = true)}
-                >
-                  <Inbox class="size-4" />
-                  <span class="hidden sm:inline">Inbox</span>
-                  <Badge variant="secondary" class="h-5 min-w-5 rounded-full px-1.5 text-xs">{inboxActionableCount}</Badge>
-                </Button>
+                <div class="relative">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="gap-2"
+                    aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`}
+                    onclick={() => (inboxSheetOpen = true)}
+                  >
+                    <Inbox class="size-4" />
+                    <span class="hidden sm:inline">Inbox</span>
+                  </Button>
+                  {#if inboxActionableCount > 0}
+                    <Badge variant="secondary" class="absolute -right-2 -top-2 h-5 min-w-5 rounded-full px-1.5 text-xs shadow-sm">{inboxActionableCount}</Badge>
+                  {/if}
+                </div>
                 {#if !isTerminalChatSession(selectedSession)}
                   <Button class="hidden sm:inline-flex" variant="destructive" size="sm" disabled={actionBusy} aria-label="Exit session" onclick={() => void runSessionLifecycle('exit')}><LogOut class="size-4" /> Exit</Button>
                 {/if}
