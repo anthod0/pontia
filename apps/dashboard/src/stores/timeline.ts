@@ -1,13 +1,14 @@
 import { get, writable } from 'svelte/store';
-import { getSessionTimeline, getSessionTimelineUpdates } from '../api/client';
+import { getSessionTimeline } from '../api/client';
 import { ApiError } from '../api/errors';
-import type { TimelineItem, TimelinePage, TimelineUpdatesPage } from '../api/types';
+import type { TimelineItem, TimelinePage } from '../api/types';
 
 export interface TimelineState {
   sessionId: string;
   bindingId: string | null;
   items: TimelineItem[];
-  olderCursor: string | null;
+  headCursor: string | null;
+  tailCursor: string | null;
   sourceId: string | null;
   hasMore: boolean;
   loading: boolean;
@@ -26,7 +27,8 @@ function emptyState(sessionId = ''): TimelineState {
     sessionId,
     bindingId: null,
     items: [],
-    olderCursor: null,
+    headCursor: null,
+    tailCursor: null,
     sourceId: null,
     hasMore: false,
     loading: false,
@@ -97,7 +99,8 @@ function applyPage(current: TimelineState, page: TimelinePage, mode: LoadMode): 
     sessionId: page.session_id,
     bindingId: page.binding_id,
     items,
-    olderCursor: mode === 'append' && merge ? current.olderCursor : page.older_cursor,
+    headCursor: mode === 'append' && merge ? current.headCursor : page.head_cursor,
+    tailCursor: mode === 'more' && merge ? current.tailCursor : page.tail_cursor,
     sourceId: page.source_id,
     hasMore: mode === 'append' && merge ? current.hasMore : page.has_more,
     loading: false,
@@ -130,7 +133,7 @@ export async function loadSessionTimeline(
   const mode = options.mode ?? 'rebuild';
   const current = get(timelineState);
   const existingStateMatches = current.sessionId === sessionId;
-  const olderCursor = mode === 'more' && existingStateMatches ? current.olderCursor : null;
+  const headCursor = mode === 'more' && existingStateMatches ? current.headCursor : null;
 
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
@@ -140,7 +143,7 @@ export async function loadSessionTimeline(
   }));
 
   try {
-    const page = await getSessionTimeline(sessionId, { olderCursor: olderCursor ?? null, limit: options.limit ?? DEFAULT_LIMIT });
+    const page = await getSessionTimeline(sessionId, { before: headCursor ?? null, limit: options.limit ?? DEFAULT_LIMIT });
     timelineState.update((state) => applyPage(state.sessionId === sessionId ? state : emptyState(sessionId), page, mode));
     return page;
   } catch (error) {
@@ -162,7 +165,7 @@ export async function loadSessionTimeline(
   }
 }
 
-function applyUpdates(current: TimelineState, updates: TimelineUpdatesPage): TimelineState {
+function applyUpdates(current: TimelineState, updates: TimelinePage): TimelineState {
   const sameScope = current.sessionId === updates.session_id
     && (!current.bindingId || current.bindingId === updates.binding_id)
     && (!current.sourceId || current.sourceId === updates.source_id);
@@ -172,6 +175,9 @@ function applyUpdates(current: TimelineState, updates: TimelineUpdatesPage): Tim
       bindingId: updates.binding_id,
       sourceId: updates.source_id,
       items: uniqueTimelineItems(updates.items),
+      headCursor: updates.head_cursor,
+      tailCursor: updates.tail_cursor,
+      hasMore: updates.has_more,
       loading: false,
       refreshing: false,
       error: null,
@@ -182,14 +188,15 @@ function applyUpdates(current: TimelineState, updates: TimelineUpdatesPage): Tim
     bindingId: updates.binding_id,
     sourceId: updates.source_id,
     items: upsertAppendTimelineItems(current.items, updates.items),
+    tailCursor: updates.tail_cursor,
     loading: false,
     refreshing: false,
     error: null,
   };
 }
 
-async function refreshSessionTimelineUpdates(sessionId: string, afterItemId: string | null): Promise<void> {
-  if (!afterItemId) {
+async function refreshSessionTimelineUpdates(sessionId: string, tailCursor: string | null): Promise<void> {
+  if (!tailCursor) {
     await loadSessionTimeline(sessionId, { mode: 'rebuild' });
     return;
   }
@@ -201,11 +208,7 @@ async function refreshSessionTimelineUpdates(sessionId: string, afterItemId: str
   }));
 
   try {
-    const updates = await getSessionTimelineUpdates(sessionId, { afterItemId });
-    if (!updates.anchor_found || updates.truncated) {
-      await loadSessionTimeline(sessionId, { mode: 'rebuild' });
-      return;
-    }
+    const updates = await getSessionTimeline(sessionId, { after: tailCursor });
     timelineState.update((state) => applyUpdates(state.sessionId === sessionId ? state : emptyState(sessionId), updates));
   } catch (error) {
     const message = errorMessage(error);
@@ -253,5 +256,5 @@ async function handleTimelineMessageUpdatedNow(sessionId: string, bindingId: str
     return;
   }
 
-  await refreshSessionTimelineUpdates(sessionId, current.items.at(-1)?.item_id ?? null);
+  await refreshSessionTimelineUpdates(sessionId, current.tailCursor);
 }

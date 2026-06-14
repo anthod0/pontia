@@ -24,16 +24,9 @@ pub struct ResolvedAgentBinding {
 pub struct TimelinePageRequest {
     pub session_id: String,
     pub source: ResolvedAgentBinding,
-    pub older_cursor: Option<String>,
-    pub limit: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TimelineUpdatesRequest {
-    pub session_id: String,
-    pub source: ResolvedAgentBinding,
-    pub after_item_id: String,
-    pub max_scan_bytes: usize,
+    pub before: Option<String>,
+    pub after: Option<String>,
+    pub limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,19 +54,9 @@ pub struct TimelinePage {
     pub session_id: String,
     pub binding_id: String,
     pub items: Vec<TimelineItem>,
-    pub older_cursor: Option<String>,
+    pub head_cursor: Option<String>,
+    pub tail_cursor: Option<String>,
     pub has_more: bool,
-    pub source_id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TimelineUpdatesPage {
-    pub session_id: String,
-    pub binding_id: String,
-    pub after_item_id: String,
-    pub items: Vec<TimelineItem>,
-    pub anchor_found: bool,
-    pub truncated: bool,
     pub source_id: String,
 }
 

@@ -20,7 +20,6 @@ import type {
   SubmitInboxMessageInput,
   TimelineItemDetail,
   TimelinePage,
-  TimelineUpdatesPage,
   UpsertAgentProfileInput,
   TaskDagView,
   TaskEventView,
@@ -256,21 +255,14 @@ export async function listEvents(sessionId: string): Promise<EventView[]> {
 
 export async function getSessionTimeline(
   sessionId: string,
-  options: { olderCursor?: string | null; limit?: number; signal?: AbortSignal } = {},
+  options: { before?: string | null; after?: string | null; limit?: number; signal?: AbortSignal } = {},
 ): Promise<TimelinePage> {
   const params = new URLSearchParams();
-  if (options.olderCursor) params.set('older_cursor', options.olderCursor);
+  if (options.before) params.set('before', options.before);
+  if (options.after) params.set('after', options.after);
   if (options.limit !== undefined) params.set('limit', String(options.limit));
   const query = params.toString() ? `?${params.toString()}` : '';
   return request<TimelinePage>(`/sessions/${encodeURIComponent(sessionId)}/timeline${query}`, { signal: options.signal });
-}
-
-export async function getSessionTimelineUpdates(
-  sessionId: string,
-  options: { afterItemId: string; signal?: AbortSignal },
-): Promise<TimelineUpdatesPage> {
-  const query = `?after_item_id=${encodeURIComponent(options.afterItemId)}`;
-  return request<TimelineUpdatesPage>(`/sessions/${encodeURIComponent(sessionId)}/timeline/updates${query}`, { signal: options.signal });
 }
 
 export async function getTimelineItemDetail(

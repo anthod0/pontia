@@ -9,7 +9,7 @@ use crate::error::{Error, Result};
 
 use super::super::super::{
     RawTranscriptParser, ResolvedAgentBinding, TimelineItemDetailPage, TimelineItemDetailRequest,
-    TimelinePage, TimelinePageRequest, TimelineUpdatesPage, TimelineUpdatesRequest,
+    TimelinePage, TimelinePageRequest,
 };
 use super::{
     mapping::pi_entry_to_items,
@@ -44,10 +44,43 @@ impl RawTranscriptParser for PiJsonlParser {
             )));
         }
 
+        if request.before.is_some() && request.after.is_some() {
+            return Err(Error::Domain(
+                "cursor_invalid: before and after are mutually exclusive".to_string(),
+            ));
+        }
+
         let source_id = source_id(&request.source);
         let source_len = source_len(&request.source)?;
+
+        if let Some(after) = request.after.as_deref() {
+            let cursor = decode_pi_cursor(Some(after), &request.source.id)?;
+            if cursor.offset > source_len {
+                return Err(Error::Domain(format!(
+                    "cursor_invalid: offset {} exceeds source length {}",
+                    cursor.offset, source_len
+                )));
+            }
+            let items = read_forward_items_from_source(&request.source, cursor.offset, source_len)?;
+            return Ok(TimelinePage {
+                session_id: request.session_id,
+                binding_id: request.source.id.clone(),
+                items,
+                head_cursor: None,
+                tail_cursor: Some(encode_pi_cursor(
+                    &request.source.id,
+                    CursorPosition {
+                        offset: source_len,
+                        block_index: 0,
+                    },
+                )),
+                has_more: false,
+                source_id,
+            });
+        }
+
         let cursor = request
-            .older_cursor
+            .before
             .as_deref()
             .map(|cursor| decode_pi_cursor(Some(cursor), &request.source.id))
             .transpose()?;
@@ -60,7 +93,7 @@ impl RawTranscriptParser for PiJsonlParser {
             )));
         }
 
-        let limit = request.limit.max(1);
+        let limit = request.limit.unwrap_or(50).max(1);
         let window = read_recent_round_window(&request.source, upper_bound, limit)?;
         let ranges = line_ranges_until(&window.bytes, window.base_offset, upper_bound, false)?;
         let selected_start = select_recent_round_start(
@@ -78,7 +111,7 @@ impl RawTranscriptParser for PiJsonlParser {
             selected_start,
         )?;
         let has_more = window.has_more;
-        let older_cursor = has_more.then(|| {
+        let head_cursor = has_more.then(|| {
             encode_pi_cursor(
                 &request.source.id,
                 CursorPosition {
@@ -87,84 +120,20 @@ impl RawTranscriptParser for PiJsonlParser {
                 },
             )
         });
+        let tail_cursor = Some(encode_pi_cursor(
+            &request.source.id,
+            CursorPosition {
+                offset: upper_bound,
+                block_index: 0,
+            },
+        ));
         Ok(TimelinePage {
             session_id: request.session_id,
             binding_id: request.source.id,
             items,
-            older_cursor,
+            head_cursor,
+            tail_cursor,
             has_more,
-            source_id,
-        })
-    }
-
-    fn timeline_updates(&self, request: TimelineUpdatesRequest) -> Result<TimelineUpdatesPage> {
-        if request.source.client_type != self.client_type()
-            || request.source.format != self.format()
-        {
-            return Err(Error::CapabilityUnavailable(format!(
-                "unsupported source {}/{} for pi jsonl parser",
-                request.source.client_type, request.source.format
-            )));
-        }
-        if request.after_item_id.trim().is_empty() {
-            return Err(Error::Domain(
-                "after_item_id_invalid: after_item_id is required".to_string(),
-            ));
-        }
-
-        let source_id = source_id(&request.source);
-        let source_len = source_len(&request.source)?;
-        let max_scan_bytes = request.max_scan_bytes.max(1);
-        let scan_start = source_len.saturating_sub(max_scan_bytes);
-        let bytes = read_range_from_source(&request.source, scan_start, source_len)?;
-        let ranges = line_ranges_until(&bytes, scan_start, source_len, scan_start > 0)?;
-        let mut newer_ranges = Vec::new();
-        let mut anchor_found = false;
-        let mut truncated = false;
-
-        for (line_start, line_end) in ranges.iter().rev().copied() {
-            if line_end <= scan_start {
-                truncated = true;
-                break;
-            }
-            let entry = parse_jsonl_entry(&bytes, scan_start, line_start, line_end)?;
-            let items = pi_entry_to_items(&entry, &request.source.id, line_start, line_end);
-            if items
-                .iter()
-                .any(|item| item.item_id == request.after_item_id)
-            {
-                anchor_found = true;
-                break;
-            }
-            if !items.is_empty() {
-                newer_ranges.push((line_start, line_end));
-            }
-        }
-
-        let items = if anchor_found {
-            newer_ranges.reverse();
-            let mut items = Vec::new();
-            for (line_start, line_end) in newer_ranges {
-                let entry = parse_jsonl_entry(&bytes, scan_start, line_start, line_end)?;
-                items.extend(pi_entry_to_items(
-                    &entry,
-                    &request.source.id,
-                    line_start,
-                    line_end,
-                ));
-            }
-            items
-        } else {
-            Vec::new()
-        };
-
-        Ok(TimelineUpdatesPage {
-            session_id: request.session_id,
-            binding_id: request.source.id,
-            after_item_id: request.after_item_id,
-            items,
-            anchor_found,
-            truncated: !anchor_found && truncated,
             source_id,
         })
     }
@@ -174,13 +143,14 @@ impl RawTranscriptParser for PiJsonlParser {
         request: TimelineItemDetailRequest,
     ) -> Result<TimelineItemDetailPage> {
         let detail_ref = decode_pi_content_ref(&request.content_ref, &request.source.id)?;
-        let bytes = fs::read(&request.source.path)?;
-        if detail_ref.start > detail_ref.end || detail_ref.end > bytes.len() {
+        let source_len = source_len(&request.source)?;
+        if detail_ref.start > detail_ref.end || detail_ref.end > source_len {
             return Err(Error::Domain(
                 "content_ref_invalid: byte range outside source".to_string(),
             ));
         }
-        let line = std::str::from_utf8(&bytes[detail_ref.start..detail_ref.end])
+        let bytes = read_range_from_source(&request.source, detail_ref.start, detail_ref.end)?;
+        let line = std::str::from_utf8(&bytes)
             .map_err(|err| {
                 Error::Domain(format!("content_ref_invalid: source is not utf-8: {err}"))
             })?
@@ -287,6 +257,69 @@ fn read_recent_round_window(
         bytes: bytes[relative_start..].to_vec(),
         has_more,
     })
+}
+
+fn read_forward_items_from_source(
+    source: &ResolvedAgentBinding,
+    start: usize,
+    end: usize,
+) -> Result<Vec<super::super::super::TimelineItem>> {
+    let mut file = File::open(&source.path).map_err(|err| {
+        Error::CapabilityUnavailable(format!(
+            "source_unavailable: raw source {} is unavailable: {err}",
+            source.path.display()
+        ))
+    })?;
+    file.seek(SeekFrom::Start(start as u64)).map_err(|err| {
+        Error::CapabilityUnavailable(format!(
+            "source_unavailable: raw source {} is unavailable: {err}",
+            source.path.display()
+        ))
+    })?;
+
+    let mut items = Vec::new();
+    let mut buffer = Vec::new();
+    let mut buffer_start = start;
+    let mut read_offset = start;
+    let mut chunk = vec![0; REVERSE_READ_CHUNK_SIZE.min(end.saturating_sub(start).max(1))];
+
+    while read_offset < end {
+        let to_read = chunk.len().min(end - read_offset);
+        file.read_exact(&mut chunk[..to_read]).map_err(|err| {
+            Error::CapabilityUnavailable(format!(
+                "source_unavailable: raw source {} is unavailable: {err}",
+                source.path.display()
+            ))
+        })?;
+        buffer.extend_from_slice(&chunk[..to_read]);
+        read_offset += to_read;
+
+        while let Some(newline_index) = buffer.iter().position(|byte| *byte == b'\n') {
+            let line_end = buffer_start + newline_index + 1;
+            let entry = parse_jsonl_entry(&buffer, buffer_start, buffer_start, line_end)?;
+            items.extend(pi_entry_to_items(
+                &entry,
+                &source.id,
+                buffer_start,
+                line_end,
+            ));
+            buffer.drain(..=newline_index);
+            buffer_start = line_end;
+        }
+    }
+
+    if !buffer.is_empty() {
+        let line_end = buffer_start + buffer.len();
+        let entry = parse_jsonl_entry(&buffer, buffer_start, buffer_start, line_end)?;
+        items.extend(pi_entry_to_items(
+            &entry,
+            &source.id,
+            buffer_start,
+            line_end,
+        ));
+    }
+
+    Ok(items)
 }
 
 fn read_range_from_source(

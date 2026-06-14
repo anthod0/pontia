@@ -9,20 +9,16 @@ use serde_json::{Value, json};
 use crate::application::{
     AgentBinding, AgentBindingResolveRequest, AgentBindingResolver, AgentBindingService, AppState,
     ExternalQueryService, PiAgentBindingResolver, PiJsonlParser, RawTranscriptParser,
-    ResolvedAgentBinding, TimelineItemDetailRequest, TimelinePageRequest, TimelineUpdatesRequest,
+    ResolvedAgentBinding, TimelineItemDetailRequest, TimelinePageRequest,
 };
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
 
 #[derive(Debug, Deserialize)]
 pub struct TimelineQuery {
-    older_cursor: Option<String>,
+    before: Option<String>,
+    after: Option<String>,
     limit: Option<usize>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct TimelineUpdatesQuery {
-    after_item_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -61,8 +57,9 @@ pub async fn get_session_timeline(
         .timeline_page(TimelinePageRequest {
             session_id,
             source,
-            older_cursor: query.older_cursor,
-            limit: query.limit.unwrap_or(50),
+            before: query.before,
+            after: query.after,
+            limit: query.limit,
         })
         .map_err(|error| timeline_error_from_error(error, binding.discovered, &session.state))?;
     if !binding.discovered {
@@ -73,57 +70,9 @@ pub async fn get_session_timeline(
         "session_id": page.session_id,
         "binding_id": page.binding_id,
         "items": page.items,
-        "older_cursor": page.older_cursor,
+        "head_cursor": page.head_cursor,
+        "tail_cursor": page.tail_cursor,
         "has_more": page.has_more,
-        "source_id": page.source_id,
-    })))
-}
-
-pub async fn get_session_timeline_updates(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(session_id): Path<String>,
-    Query(query): Query<TimelineUpdatesQuery>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
-    authenticate(&state, &headers)?;
-    let query_service = ExternalQueryService::new(state.db());
-    let session = query_service
-        .get_session(&session_id)
-        .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
-
-    let binding_service = AgentBindingService::new(state.db());
-    let binding = binding_service
-        .primary_binding_for_session(&session_id)
-        .await?
-        .ok_or_else(|| {
-            timeline_error(
-                "not_ready",
-                format!("session {session_id} has no agent binding"),
-            )
-        })?;
-
-    let parser = PiJsonlParser::new();
-    let source = resolve_binding_source(&binding, &session.state).await?;
-    let page = parser
-        .timeline_updates(TimelineUpdatesRequest {
-            session_id,
-            source,
-            after_item_id: query.after_item_id,
-            max_scan_bytes: 8 * 1024 * 1024,
-        })
-        .map_err(|error| timeline_error_from_error(error, binding.discovered, &session.state))?;
-    if !binding.discovered {
-        binding_service.mark_discovered(&binding.id).await?;
-    }
-
-    Ok(ok(json!({
-        "session_id": page.session_id,
-        "binding_id": page.binding_id,
-        "after_item_id": page.after_item_id,
-        "items": page.items,
-        "anchor_found": page.anchor_found,
-        "truncated": page.truncated,
         "source_id": page.source_id,
     })))
 }
@@ -214,9 +163,6 @@ fn timeline_error_from_error(
     }
     if message.contains("cursor_invalid:") {
         return timeline_error("cursor_invalid", message);
-    }
-    if message.contains("after_item_id_invalid:") {
-        return timeline_error("validation_error", message);
     }
     if message.contains("content_ref_invalid:") {
         return timeline_error("content_ref_invalid", message);

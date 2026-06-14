@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, io::Write};
 
 use axum::{
     body::Body,
@@ -149,8 +149,9 @@ async fn timeline_and_detail_external_api_read_pi_jsonl_fixture() {
     );
     assert_eq!(body["data"]["items"][1]["kind"], "assistant");
     assert_eq!(body["data"]["has_more"], false);
-    assert!(body["data"]["older_cursor"].is_null());
-    assert!(body["data"].get("tail_cursor").is_none());
+    assert!(body["data"]["head_cursor"].is_null());
+    assert!(body["data"]["tail_cursor"].as_str().is_some());
+    assert!(body["data"].get("older_cursor").is_none());
     assert!(body["data"].get("is_tail").is_none());
     assert!(body["data"].get("next_cursor").is_none());
     assert!(
@@ -160,23 +161,32 @@ async fn timeline_and_detail_external_api_read_pi_jsonl_fixture() {
             .starts_with("pi:")
     );
 
+    let tail_cursor = body["data"]["tail_cursor"].as_str().unwrap();
+    fs::OpenOptions::new()
+        .append(true)
+        .open(session_dir.join(format!("2026-06-09T00-00-00-000Z_{session_key}.jsonl")))
+        .unwrap()
+        .write_all(
+            b"{\"type\":\"message\",\"id\":\"u2\",\"timestamp\":\"2026-06-09T00:00:03.000Z\",\"message\":{\"role\":\"user\",\"content\":\"new update\"}}\n",
+        )
+        .unwrap();
     let (updates_status, updates_body) = get_json(
         state.clone(),
         &format!(
-            "/external/v1/sessions/{session_id}/timeline/updates?after_item_id={}",
-            urlencoding_for_test("pi:entry:u1:block:0")
+            "/external/v1/sessions/{session_id}/timeline?after={}",
+            urlencoding_for_test(tail_cursor)
         ),
     )
     .await;
     assert_eq!(updates_status, StatusCode::OK);
-    assert_eq!(updates_body["data"]["after_item_id"], "pi:entry:u1:block:0");
-    assert_eq!(updates_body["data"]["anchor_found"], true);
-    assert_eq!(updates_body["data"]["truncated"], false);
     assert_eq!(updates_body["data"]["items"].as_array().unwrap().len(), 1);
     assert_eq!(
         updates_body["data"]["items"][0]["item_id"],
-        "pi:entry:a1:block:0"
+        "pi:entry:u2:block:0"
     );
+    assert!(updates_body["data"]["tail_cursor"].as_str().is_some());
+    assert!(updates_body["data"].get("after_item_id").is_none());
+    assert!(updates_body["data"].get("anchor_found").is_none());
 
     let detail_ref = body["data"]["items"][0]["content_ref"].as_str().unwrap();
     let (detail_status, detail_body) = get_json(
@@ -200,7 +210,7 @@ async fn timeline_and_detail_external_api_read_pi_jsonl_fixture() {
 
     let (cursor_status, cursor_body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/timeline?older_cursor=bad-cursor"),
+        &format!("/external/v1/sessions/{session_id}/timeline?before=bad-cursor"),
     )
     .await;
     assert_eq!(cursor_status, StatusCode::UNPROCESSABLE_ENTITY);

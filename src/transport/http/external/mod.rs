@@ -39,9 +39,7 @@ pub use tasks::{
     cancel_task, create_human_signal, create_task, get_task, get_task_provenance, interrupt_task,
     list_task_events, list_task_proposals, list_tasks, pause_task, resume_task,
 };
-pub use timeline::{
-    get_session_timeline, get_session_timeline_detail, get_session_timeline_updates,
-};
+pub use timeline::{get_session_timeline, get_session_timeline_detail};
 pub use turns::{get_turn, interrupt_turn, list_session_events, list_turn_events, list_turns};
 pub use workspaces::{
     delete_workspace, get_workspace, list_workspace_root_entries, list_workspace_roots,
