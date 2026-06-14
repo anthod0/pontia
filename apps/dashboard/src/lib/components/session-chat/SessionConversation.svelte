@@ -156,15 +156,41 @@
     void loadMoreHistoryFromTop()
   }
 
+  interface ScrollAnchor {
+    messageId: string
+    top: number
+  }
+
+  function messageElements(): HTMLElement[] {
+    return Array.from(document.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
+  }
+
+  function captureScrollAnchor(): ScrollAnchor | null {
+    const anchor = messageElements().find((element) => element.getBoundingClientRect().bottom > 0)
+    if (!anchor?.dataset.chatMessageId) return null
+    return { messageId: anchor.dataset.chatMessageId, top: anchor.getBoundingClientRect().top }
+  }
+
+  function restoreScrollAnchor(anchor: ScrollAnchor | null): boolean {
+    if (!anchor) return false
+    const element = messageElements().find((candidate) => candidate.dataset.chatMessageId === anchor.messageId)
+    if (!element) return false
+    const topDelta = element.getBoundingClientRect().top - anchor.top
+    if (topDelta !== 0) window.scrollTo({ top: window.scrollY + topDelta })
+    return true
+  }
+
   async function loadMoreHistoryFromTop(): Promise<void> {
     topHistoryLoadInFlight = true
+    const anchor = captureScrollAnchor()
     const previousScrollHeight = document.documentElement.scrollHeight
     const previousScrollY = window.scrollY
     try {
       await onLoadMoreHistory?.()
       await tick()
+      const restoredAnchor = restoreScrollAnchor(anchor)
       const heightDelta = document.documentElement.scrollHeight - previousScrollHeight
-      if (heightDelta > 0) window.scrollTo({ top: previousScrollY + heightDelta })
+      if (!restoredAnchor && heightDelta > 0) window.scrollTo({ top: previousScrollY + heightDelta })
     } finally {
       topHistoryLoadInFlight = false
     }
@@ -189,7 +215,7 @@
         <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading earlier messages…</div>
       {/if}
       {#each displayMessages as chatMessage (chatMessage.id)}
-        <Message.Root from={chatMessage.role}>
+        <Message.Root from={chatMessage.role} data-chat-message-id={chatMessage.id}>
           <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
             {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
               <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />

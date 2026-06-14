@@ -590,7 +590,7 @@
             interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
             interruptBusy={actionBusy}
             hasMoreHistory={$timelineState.hasMore}
-            historyLoading={$timelineState.refreshing}
+            historyLoading={$timelineState.refreshKind === 'history'}
             autoScrollKey={$timelineState.sessionId === selectedSessionId ? $timelineState.tailCursor : null}
             onInterrupt={() => void interruptSelectedSession()}
             onLoadMoreHistory={loadEarlierMessages}

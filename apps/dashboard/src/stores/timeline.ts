@@ -3,6 +3,8 @@ import { getSessionTimeline } from '../api/client';
 import { ApiError } from '../api/errors';
 import type { TimelineItem, TimelinePage } from '../api/types';
 
+export type TimelineRefreshKind = 'history' | 'append' | 'tail' | null;
+
 export interface TimelineState {
   sessionId: string;
   bindingId: string | null;
@@ -13,6 +15,7 @@ export interface TimelineState {
   hasMore: boolean;
   loading: boolean;
   refreshing: boolean;
+  refreshKind: TimelineRefreshKind;
   error: string | null;
 }
 
@@ -33,8 +36,15 @@ function emptyState(sessionId = ''): TimelineState {
     hasMore: false,
     loading: false,
     refreshing: false,
+    refreshKind: null,
     error: null,
   };
+}
+
+function refreshKindForLoadMode(mode: LoadMode): TimelineRefreshKind {
+  if (mode === 'more') return 'history';
+  if (mode === 'append') return 'append';
+  return null;
 }
 
 export const timelineState = writable<TimelineState>(emptyState());
@@ -105,6 +115,7 @@ function applyPage(current: TimelineState, page: TimelinePage, mode: LoadMode): 
     hasMore: mode === 'append' && merge ? current.hasMore : page.has_more,
     loading: false,
     refreshing: false,
+    refreshKind: null,
     error: null,
   };
 }
@@ -139,6 +150,7 @@ export async function loadSessionTimeline(
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
     loading: mode === 'rebuild',
     refreshing: mode !== 'rebuild',
+    refreshKind: refreshKindForLoadMode(mode),
     error: null,
   }));
 
@@ -154,12 +166,13 @@ export async function loadSessionTimeline(
         sessionId,
         loading: false,
         refreshing: false,
+        refreshKind: null,
         error: null,
       }));
     } else if (shouldInvalidate(error)) {
       timelineState.set({ ...emptyState(sessionId), error: message });
     } else {
-      timelineState.update((state) => ({ ...state, sessionId, loading: false, refreshing: false, error: message }));
+      timelineState.update((state) => ({ ...state, sessionId, loading: false, refreshing: false, refreshKind: null, error: message }));
     }
     return null;
   }
@@ -180,6 +193,7 @@ function applyUpdates(current: TimelineState, updates: TimelinePage): TimelineSt
       hasMore: updates.has_more,
       loading: false,
       refreshing: false,
+      refreshKind: null,
       error: null,
     };
   }
@@ -191,6 +205,7 @@ function applyUpdates(current: TimelineState, updates: TimelinePage): TimelineSt
     tailCursor: updates.tail_cursor,
     loading: false,
     refreshing: false,
+    refreshKind: null,
     error: null,
   };
 }
@@ -204,6 +219,7 @@ async function refreshSessionTimelineUpdates(sessionId: string, tailCursor: stri
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
     refreshing: true,
+    refreshKind: 'tail',
     error: null,
   }));
 
@@ -218,12 +234,13 @@ async function refreshSessionTimelineUpdates(sessionId: string, tailCursor: stri
         sessionId,
         loading: false,
         refreshing: false,
+        refreshKind: null,
         error: null,
       }));
     } else if (shouldInvalidate(error)) {
       timelineState.set({ ...emptyState(sessionId), error: message });
     } else {
-      timelineState.update((state) => ({ ...state, sessionId, loading: false, refreshing: false, error: message }));
+      timelineState.update((state) => ({ ...state, sessionId, loading: false, refreshing: false, refreshKind: null, error: message }));
     }
   }
 }

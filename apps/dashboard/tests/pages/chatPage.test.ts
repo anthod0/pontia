@@ -719,6 +719,33 @@ test('refreshes the selected chat when the browser returns to the foreground wit
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'append' });
 });
 
+test('does not show the earlier-history loading row for foreground tail refreshes', async () => {
+  const selected = session({ session_id: 'session-2', state: 'running' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.timelineState.set({
+    sessionId: 'session-2',
+    bindingId: 'binding-1',
+    items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
+    headCursor: 'older-cursor',
+    tailCursor: 'tail-cursor',
+        sourceId: 'source-1',
+    hasMore: true,
+        loading: false,
+    refreshing: true,
+    refreshKind: 'tail',
+    error: null,
+  });
+
+  render(ChatPage);
+
+  expect(await screen.findByText('hi there')).toBeInTheDocument();
+  expect(screen.queryByText('Loading earlier messages…')).not.toBeInTheDocument();
+});
+
 test('coalesces bursty selected-session idle events into one git status refresh', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');

@@ -52,6 +52,28 @@ test('conversation auto-loads earlier history when initial content is already at
   await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
 });
 
+test('conversation keeps the first visible message anchored after prepending history', async () => {
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 1000 });
+  let firstMessageTop = 100;
+  const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    if (this.dataset.chatMessageId === 'message-1') {
+      return { top: firstMessageTop, bottom: firstMessageTop + 40, left: 0, right: 100, width: 100, height: 40, x: 0, y: firstMessageTop, toJSON: () => ({}) };
+    }
+    return { top: -100, bottom: -60, left: 0, right: 100, width: 100, height: 40, x: 0, y: -100, toJSON: () => ({}) };
+  });
+  const onLoadMoreHistory = vi.fn(async () => {
+    firstMessageTop = 132;
+  });
+
+  render(SessionConversation, { props: { messages, hasMoreHistory: true, onLoadMoreHistory } });
+
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 72 }));
+  rectSpy.mockRestore();
+  scrollTo.mockRestore();
+});
+
 test('conversation does not scroll the document to the bottom on initial render', async () => {
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });

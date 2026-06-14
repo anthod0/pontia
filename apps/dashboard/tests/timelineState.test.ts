@@ -93,7 +93,44 @@ test('more loads older rounds from next cursor and prepends them', async () => {
     headCursor: null,
     tailCursor: 'tail-cursor',
     hasMore: false,
+    refreshKind: null,
   });
+});
+
+test('tracks history refresh separately from tail updates', async () => {
+  let resolveHistory: (value: TimelinePage) => void = () => {};
+  const historyRequest = new Promise<TimelinePage>((resolve) => {
+    resolveHistory = resolve;
+  });
+
+  mocks.getSessionTimeline
+    .mockResolvedValueOnce(page({ head_cursor: 'head-cursor', tail_cursor: 'tail-cursor', has_more: true }))
+    .mockReturnValueOnce(historyRequest);
+
+  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
+  const loadingHistory = loadSessionTimeline('sess-1', { mode: 'more' });
+
+  expect(get(timelineState)).toMatchObject({ refreshing: true, refreshKind: 'history' });
+
+  resolveHistory(page({ items: [], head_cursor: null, tail_cursor: 'ignored', has_more: false }));
+  await loadingHistory;
+
+  expect(get(timelineState)).toMatchObject({ refreshing: false, refreshKind: null });
+
+  let resolveTail: (value: TimelinePage) => void = () => {};
+  const tailRequest = new Promise<TimelinePage>((resolve) => {
+    resolveTail = resolve;
+  });
+  mocks.getSessionTimeline.mockReturnValueOnce(tailRequest);
+
+  const loadingTail = handleTimelineMessageUpdated('sess-1', 'bind-1');
+
+  await vi.waitFor(() => expect(get(timelineState)).toMatchObject({ refreshing: true, refreshKind: 'tail' }));
+
+  resolveTail(page({ items: [], tail_cursor: 'tail-next' }));
+  await loadingTail;
+
+  expect(get(timelineState)).toMatchObject({ refreshing: false, refreshKind: null });
 });
 
 test('message update with matching binding loads updates after the saved tail cursor', async () => {
