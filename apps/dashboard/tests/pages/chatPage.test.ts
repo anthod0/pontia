@@ -719,6 +719,45 @@ test('refreshes the selected chat when the browser returns to the foreground wit
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'append' });
 });
 
+test('coalesces bursty selected-session idle events into one git status refresh', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
+  mocks.refreshWorkspaceGitStatus.mockClear();
+
+  const idleEvent = (eventId: string, type: string) => ({
+    kind: 'session_event' as const,
+    id: eventId,
+    occurred_at: '2026-05-14T00:00:00Z',
+    event: {
+      event_id: eventId,
+      session_id: 'session-2',
+      turn_id: null,
+      source: 'runtime',
+      type,
+      time: '2026-05-14T00:00:00Z',
+      payload: {},
+    },
+  });
+
+  for (const listener of mocks.dashboardEventListeners) {
+    listener(idleEvent('evt-ready', 'session.ready'));
+    listener(idleEvent('evt-completed', 'turn.completed'));
+    listener(idleEvent('evt-failed', 'turn.failed'));
+  }
+
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1));
+  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
+});
+
 test('does not toast passive fetch errors from automatic chat refreshes', async () => {
   const selected = session({ session_id: 'session-2', state: 'running' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');

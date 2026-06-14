@@ -201,9 +201,21 @@
     return get(sessions).find((session) => session.session_id === selectedSessionId) ?? null
   }
 
+  const gitStatusRefreshesInFlight = new Map<string, Promise<void>>()
+
   async function refreshSessionGitStatus(session: SessionView | null): Promise<void> {
-    if (!session?.workspace_id) return
-    await refreshWorkspaceGitStatus(session.workspace_id)
+    const workspaceId = session?.workspace_id
+    if (!workspaceId) return
+    const existing = gitStatusRefreshesInFlight.get(workspaceId)
+    if (existing) {
+      await existing
+      return
+    }
+    const refresh = refreshWorkspaceGitStatus(workspaceId).finally(() => {
+      if (gitStatusRefreshesInFlight.get(workspaceId) === refresh) gitStatusRefreshesInFlight.delete(workspaceId)
+    })
+    gitStatusRefreshesInFlight.set(workspaceId, refresh)
+    await refresh
   }
 
   async function refreshCurrentSessionGitStatus(): Promise<void> {

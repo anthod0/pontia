@@ -198,12 +198,32 @@ async fn dashboard_event_stream_rejects_missing_or_wrong_bearer_token() {
 }
 
 #[tokio::test]
-async fn dashboard_event_stream_emits_session_events() {
-    let state = test_state("dashboard_session").await;
+async fn dashboard_event_stream_without_cursor_starts_at_current_tail() {
+    let state = test_state("dashboard_tail").await;
     seed_session_events(&state).await;
+    seed_task_event(&state).await;
 
     let (status, content_type, body) =
         stream_get(state, "/external/v1/dashboard/events/stream", Some(TOKEN)).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(content_type.starts_with("text/event-stream"));
+    assert!(!body.contains(r#""event_id":"evt_stream_1""#));
+    assert!(!body.contains(r#""event_id":"evt_stream_2""#));
+    assert!(!body.contains(r#""event_id":"task_evt_stream_1""#));
+}
+
+#[tokio::test]
+async fn dashboard_event_stream_emits_session_events_after_explicit_zero_cursor() {
+    let state = test_state("dashboard_session").await;
+    seed_session_events(&state).await;
+
+    let (status, content_type, body) = stream_get(
+        state,
+        "/external/v1/dashboard/events/stream?after=session:0;task:0",
+        Some(TOKEN),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(content_type.starts_with("text/event-stream"));
@@ -215,12 +235,16 @@ async fn dashboard_event_stream_emits_session_events() {
 }
 
 #[tokio::test]
-async fn dashboard_event_stream_emits_task_events() {
+async fn dashboard_event_stream_emits_task_events_after_explicit_zero_cursor() {
     let state = test_state("dashboard_task").await;
     seed_task_event(&state).await;
 
-    let (status, _, body) =
-        stream_get(state, "/external/v1/dashboard/events/stream", Some(TOKEN)).await;
+    let (status, _, body) = stream_get(
+        state,
+        "/external/v1/dashboard/events/stream?after=session:0;task:0",
+        Some(TOKEN),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.contains("event: dashboard_event"));
@@ -237,7 +261,7 @@ async fn dashboard_event_stream_after_cursor_does_not_repeat_read_events() {
 
     let (status, _, first_body) = stream_get(
         state.clone(),
-        "/external/v1/dashboard/events/stream",
+        "/external/v1/dashboard/events/stream?after=session:0;task:0",
         Some(TOKEN),
     )
     .await;

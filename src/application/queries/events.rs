@@ -65,6 +65,21 @@ impl ExternalQueryService {
         Ok(row.try_get("rowid")?)
     }
 
+    pub async fn current_dashboard_stream_cursor(&self) -> Result<DashboardStreamCursor> {
+        let session_rowid = sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(rowid) FROM events")
+            .fetch_one(&self.pool)
+            .await?
+            .unwrap_or(0);
+        let task_rowid = sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(rowid) FROM task_events")
+            .fetch_one(&self.pool)
+            .await?
+            .unwrap_or(0);
+        Ok(DashboardStreamCursor {
+            session_rowid,
+            task_rowid,
+        })
+    }
+
     pub fn parse_dashboard_stream_cursor(&self, cursor: &str) -> Result<DashboardStreamCursor> {
         let mut session_rowid = None;
         let mut task_rowid = None;

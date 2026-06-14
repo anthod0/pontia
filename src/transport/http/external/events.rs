@@ -33,10 +33,7 @@ pub async fn stream_dashboard_events(
     let service = ExternalQueryService::new(state.db());
     let cursor = match query.after.as_deref() {
         Some(after) => service.parse_dashboard_stream_cursor(after)?,
-        None => DashboardStreamCursor {
-            session_rowid: 0,
-            task_rowid: 0,
-        },
+        None => service.current_dashboard_stream_cursor().await?,
     };
     let stream_once = is_test_stream_once(&headers);
 
