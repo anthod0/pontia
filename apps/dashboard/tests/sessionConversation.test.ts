@@ -43,6 +43,15 @@ test('conversation loads earlier history when scrolled to the top', async () => 
   await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
 });
 
+test('conversation auto-loads earlier history when initial content is already at the top', async () => {
+  const onLoadMoreHistory = vi.fn();
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+
+  render(SessionConversation, { props: { messages, hasMoreHistory: true, onLoadMoreHistory } });
+
+  await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
+});
+
 test('conversation does not scroll the document to the bottom on initial render', async () => {
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });

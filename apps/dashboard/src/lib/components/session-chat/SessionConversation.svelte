@@ -139,7 +139,18 @@
     draftDagSheetOpen = true
   }
 
+  $effect(() => {
+    displayMessages.length
+    hasMoreHistory
+    historyLoading
+    void tick().then(maybeLoadMoreHistoryFromTop)
+  })
+
   function handleWindowScroll(): void {
+    void maybeLoadMoreHistoryFromTop()
+  }
+
+  function maybeLoadMoreHistoryFromTop(): void {
     if (window.scrollY > TOP_HISTORY_LOAD_THRESHOLD_PX) return
     if (!hasMoreHistory || historyLoading || topHistoryLoadInFlight || !onLoadMoreHistory) return
     void loadMoreHistoryFromTop()
