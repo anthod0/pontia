@@ -3,7 +3,7 @@ import { getSessionTimeline } from '../api/client';
 import { ApiError } from '../api/errors';
 import type { TimelineItem, TimelinePage } from '../api/types';
 
-export type TimelineRefreshKind = 'history' | 'append' | 'tail' | null;
+export type TimelineRefreshKind = 'history' | 'tail' | null;
 
 export interface TimelineState {
   sessionId: string;
@@ -19,7 +19,7 @@ export interface TimelineState {
   error: string | null;
 }
 
-type LoadMode = 'rebuild' | 'append' | 'more';
+type LoadMode = 'rebuild' | 'more';
 
 const INVALIDATING_ERROR_CODES = new Set(['cursor_invalid', 'source_unavailable', 'content_ref_invalid']);
 const NON_FATAL_ERROR_CODES = new Set(['not_ready']);
@@ -43,7 +43,6 @@ function emptyState(sessionId = ''): TimelineState {
 
 function refreshKindForLoadMode(mode: LoadMode): TimelineRefreshKind {
   if (mode === 'more') return 'history';
-  if (mode === 'append') return 'append';
   return null;
 }
 
@@ -109,10 +108,10 @@ function applyPage(current: TimelineState, page: TimelinePage, mode: LoadMode): 
     sessionId: page.session_id,
     bindingId: page.binding_id,
     items,
-    headCursor: mode === 'append' && merge ? current.headCursor : page.head_cursor,
+    headCursor: page.head_cursor,
     tailCursor: mode === 'more' && merge ? current.tailCursor : page.tail_cursor,
     sourceId: page.source_id,
-    hasMore: mode === 'append' && merge ? current.hasMore : page.has_more,
+    hasMore: page.has_more,
     loading: false,
     refreshing: false,
     refreshKind: null,

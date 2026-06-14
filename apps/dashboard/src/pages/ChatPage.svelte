@@ -377,15 +377,14 @@
     }
   }
 
-  function timelineRefreshMode(sessionId: string): 'rebuild' | 'append' {
-    const currentTimeline = get(timelineState)
-    return currentTimeline.sessionId === sessionId && currentTimeline.items.length ? 'append' : 'rebuild'
-  }
-
   async function loadSelectedSession(sessionId: string): Promise<void> {
-    const mode = timelineRefreshMode(sessionId)
-    if (mode === 'rebuild') resetTimelineState(sessionId)
-    await Promise.all([loadSessionDetail(sessionId), loadSessionTimeline(sessionId, { mode })])
+    const currentTimeline = get(timelineState)
+    const hasLoadedTimeline = currentTimeline.sessionId === sessionId && currentTimeline.items.length > 0
+    if (!hasLoadedTimeline) resetTimelineState(sessionId)
+    await Promise.all([
+      loadSessionDetail(sessionId),
+      hasLoadedTimeline ? handleTimelineMessageUpdated(sessionId) : loadSessionTimeline(sessionId, { mode: 'rebuild' }),
+    ])
   }
 
   function handleNewChatKeydown(event: KeyboardEvent): void {

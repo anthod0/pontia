@@ -180,7 +180,7 @@ test('message updates for the same session are serialized so each refresh uses t
   expect(get(timelineState).items.map((item) => item.item_id)).toEqual(['item-1', 'item-2']);
 });
 
-test('append keeps timeline items unique by item id', async () => {
+test('tail update keeps timeline items unique by item id', async () => {
   mocks.getSessionTimeline
     .mockResolvedValueOnce(page())
     .mockResolvedValueOnce(page({
@@ -194,10 +194,11 @@ test('append keeps timeline items unique by item id', async () => {
   await loadSessionTimeline('sess-1', { mode: 'rebuild' });
   await handleTimelineMessageUpdated('sess-1', 'bind-1');
 
+  expect(mocks.getSessionTimeline).toHaveBeenLastCalledWith('sess-1', { after: 'tail-1' });
   expect(get(timelineState).items.map((item) => item.item_id)).toEqual(['item-1', 'item-2']);
 });
 
-test('append response with a new source scope replaces the cursor-coupled state', async () => {
+test('tail response with a new source scope replaces the cursor-coupled state', async () => {
   mocks.getSessionTimeline
     .mockResolvedValueOnce(page())
     .mockResolvedValueOnce(page({
@@ -208,6 +209,7 @@ test('append response with a new source scope replaces the cursor-coupled state'
   await loadSessionTimeline('sess-1', { mode: 'rebuild' });
   await handleTimelineMessageUpdated('sess-1', 'bind-1');
 
+  expect(mocks.getSessionTimeline).toHaveBeenLastCalledWith('sess-1', { after: 'tail-1' });
   expect(get(timelineState).items.map((item) => item.item_id)).toEqual(['fresh-source']);
   expect(get(timelineState).sourceId).toBe('pi:/tmp/new-session.jsonl');
 });

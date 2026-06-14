@@ -669,7 +669,7 @@ test('loads earlier chat history when the chat scroll reaches the top', async ()
   await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'more' }));
 });
 
-test('refreshes the selected chat when the browser returns to the foreground without rebuilding loaded history', async () => {
+test('refreshes an already-loaded selected chat through the tail cursor without rebuilding loaded history', async () => {
   const selected = session({ session_id: 'session-2', state: 'running' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -694,7 +694,8 @@ test('refreshes the selected chat when the browser returns to the foreground wit
 
   render(ChatPage);
 
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'append' }));
+  await waitFor(() => expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2'));
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'rebuild' });
   expect(mocks.resetTimelineState).not.toHaveBeenCalledWith('session-2');
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   mocks.loadSessionDetail.mockClear();
@@ -716,7 +717,6 @@ test('refreshes the selected chat when the browser returns to the foreground wit
 
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2', { showLoading: false }));
   expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2');
-  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'append' });
 });
 
 test('does not show the earlier-history loading row for foreground tail refreshes', async () => {
@@ -807,7 +807,8 @@ test('does not toast passive fetch errors from automatic chat refreshes', async 
 
   render(ChatPage);
 
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'append' }));
+  await waitFor(() => expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2'));
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
   mocks.toastError.mockClear();
 
   mocks.sessionDetailError.set('fetch error');
