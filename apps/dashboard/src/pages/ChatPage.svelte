@@ -579,6 +579,7 @@
             interruptBusy={actionBusy}
             hasMoreHistory={$timelineState.hasMore}
             historyLoading={$timelineState.refreshing}
+            autoScrollKey={$timelineState.sessionId === selectedSessionId ? $timelineState.tailCursor : null}
             onInterrupt={() => void interruptSelectedSession()}
             onLoadMoreHistory={loadEarlierMessages}
           />

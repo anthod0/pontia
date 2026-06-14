@@ -24,6 +24,7 @@
     interruptBusy?: boolean
     hasMoreHistory?: boolean
     historyLoading?: boolean
+    autoScrollKey?: string | null
     onInterrupt?: () => void
     onLoadMoreHistory?: () => void | Promise<void>
   }
@@ -39,6 +40,7 @@
     interruptBusy = false,
     hasMoreHistory = false,
     historyLoading = false,
+    autoScrollKey = null,
     onInterrupt,
     onLoadMoreHistory,
   }: Props = $props()
@@ -46,7 +48,7 @@
   let draftDagSheetOpen = $state(false)
   const loadingPlaceholder = $derived(assistantLoadingPlaceholder(sessionState))
   const displayMessages = $derived(messagesForDisplay(messages, loadingPlaceholder))
-  const scrollKey = $derived(chatAutoScrollKey(displayMessages))
+  const scrollKey = $derived(autoScrollKey ?? chatAutoScrollKey(displayMessages))
   const plannerDraftAnchorId = $derived(lastAssistantMessageId(displayMessages))
   const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
   const TOP_HISTORY_LOAD_THRESHOLD_PX = 80
@@ -70,6 +72,10 @@
 
   $effect(() => {
     const nextScrollKey = scrollKey
+    if (previousScrollKey === null) {
+      previousScrollKey = nextScrollKey
+      return
+    }
     if (previousScrollKey === nextScrollKey) return
     previousScrollKey = nextScrollKey
     if (shouldAutoScrollAfterUpdate) void tick().then(scrollDocumentToBottom)
