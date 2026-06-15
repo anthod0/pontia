@@ -150,7 +150,7 @@
   $: if (DAG_TASK_ENTRIES_ENABLED && plannerTaskId && plannerTaskProposals.some((proposal) => proposal.state === 'applied')) navigateToTaskDag(plannerTaskId)
   $: passiveErrorMessage = $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError ?? $agentProfilesError ?? $taskProposalsError
   $: errorMessage = actionError ?? passiveErrorMessage
-  $: shouldToastError = Boolean(actionError || (passiveErrorMessage && !isTransientFetchError(passiveErrorMessage)))
+  $: shouldToastError = Boolean(errorMessage)
   $: {
     if (errorMessage && shouldToastError && errorMessage !== lastToastedError) {
       toast.error('Chat error', { description: errorMessage })
@@ -159,9 +159,6 @@
     if (!errorMessage) lastToastedError = null
   }
 
-  function isTransientFetchError(message: string): boolean {
-    return /fetch|network|load failed/i.test(message)
-  }
 
   function requestedSessionIdFromLocation(): string {
     return getPathParams().sessionId ?? new URLSearchParams(window.location.search).get('session') ?? ''
