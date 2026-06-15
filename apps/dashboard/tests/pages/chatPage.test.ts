@@ -197,7 +197,7 @@ const session = (overrides: Partial<SessionView> = {}): SessionView => ({
   current_turn_id: null,
   workspace_id: 'workspace-1',
   workspace: null,
-  capabilities: {},
+  capabilities: { accept_task: true },
   model: null,
   context_usage: null,
   created_at: '2026-05-14T00:00:00Z',
@@ -1355,6 +1355,34 @@ test('places session controls near the prompt input and keeps advanced controls 
 
   await fireEvent.click(exitButton);
   expect(mocks.terminateSession).toHaveBeenCalledWith('session-2');
+});
+
+test('disables follow-up input for sessions that do not advertise web-write capability while keeping output visible', async () => {
+  const user = userEvent.setup();
+  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { accept_task: false, stream_output: true } });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: 'session-2', input: { summary: 'tui input' }, output: { summary: 'tui output' } })],
+    inboxMessages: [],
+    events: [],
+    artifacts: [],
+  });
+
+  render(ChatPage);
+
+  expect(await screen.findByText('tui output')).toBeInTheDocument();
+  const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
+  expect(followUpInput).toBeDisabled();
+  expect(screen.getByText('此 session 当前不可从 Web 写入')).toBeInTheDocument();
+
+  await user.type(followUpInput, 'should not send');
+  await user.click(screen.getByRole('button', { name: /send/i }));
+
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 });
 
 test('queues follow-up messages without rendering inline success chrome', async () => {

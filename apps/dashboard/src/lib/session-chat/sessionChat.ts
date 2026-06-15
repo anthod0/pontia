@@ -174,8 +174,8 @@ export function timelineItemsToChatMessages(items: TimelineItem[]): SessionChatM
   return messages;
 }
 
-export function canSendSessionMessage(session: Pick<SessionView, 'state'> | null, input: string): boolean {
-  return Boolean(session && session.state !== 'error' && input.trim());
+export function canSendSessionMessage(session: Pick<SessionView, 'state' | 'capabilities'> | null, input: string): boolean {
+  return Boolean(session && session.state !== 'error' && session.capabilities?.accept_task === true && input.trim());
 }
 
 function isThoughtStepKind(kind: string): kind is SessionChatThoughtStep['kind'] {

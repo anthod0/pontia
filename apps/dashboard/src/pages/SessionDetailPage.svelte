@@ -44,7 +44,8 @@
 
   $: selectedSession = $sessionDetail?.session ?? null
   $: currentTurnOutput = $sessionDetail ? selectCurrentTurnOutput($sessionDetail.session, $sessionDetail.turns) : null
-  $: canSubmitInbox = Boolean(selectedSessionId && inboxInput.trim() && !submittingInbox)
+  $: inboxSubmitReason = inboxSubmitUnsupportedReason(selectedSession)
+  $: canSubmitInbox = Boolean(selectedSessionId && inboxInput.trim() && !submittingInbox && !inboxSubmitReason)
   $: normalTurnReason = 'Direct POST /sessions/:id/turns is not exposed by the External API in this build. Use the inbox controls below.'
   $: interruptReason = interruptUnsupportedReason(selectedSession)
   $: restartReason = selectedSession && isTerminalSession(selectedSession) ? 'Terminal sessions cannot be restarted.' : null
@@ -59,6 +60,12 @@
     if (ratio === null || ratio < 0.7) return 'bg-emerald-500'
     if (ratio <= 0.9) return 'bg-amber-500'
     return 'bg-destructive'
+  }
+
+  function inboxSubmitUnsupportedReason(session: SessionView | null): string | null {
+    if (!session) return 'Select a session first.'
+    if (session.capabilities?.accept_task !== true) return '此 session 当前不可从 Web 写入'
+    return null
   }
 
   function interruptUnsupportedReason(session: SessionView | null): string | null {
@@ -283,7 +290,11 @@
         <Card.Header><Card.Title>Submit input</Card.Title><Card.Description>Normal turn submission is shown explicitly as unsupported when the API does not expose it.</Card.Description></Card.Header>
         <Card.Content class="space-y-3">
           <div class="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">{normalTurnReason}</div>
-          <div class="space-y-2"><Label for="inbox-input">Inbox message</Label><Textarea id="inbox-input" bind:value={inboxInput} placeholder="Send follow-up instructions…" /></div>
+          <div class="space-y-2">
+            <Label for="inbox-input">Inbox message</Label>
+            <Textarea id="inbox-input" bind:value={inboxInput} placeholder="Send follow-up instructions…" disabled={Boolean(inboxSubmitReason)} />
+            {#if inboxSubmitReason}<p class="text-xs text-muted-foreground">{inboxSubmitReason}</p>{/if}
+          </div>
           <div class="space-y-2">
             <Label for="inbox-policy">Delivery policy</Label>
             <select id="inbox-policy" bind:value={inboxPolicy} class="h-9 w-full rounded-md border bg-transparent px-3 text-sm">

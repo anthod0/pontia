@@ -52,6 +52,9 @@
   }: Props = $props()
 
   let advancedControlsOpen = $state(false)
+
+  let canAcceptWebInput = $derived(session.capabilities?.accept_task === true)
+  let composerDisabled = $derived(!canAcceptWebInput || session.state === 'error' || submitting)
 </script>
 
 <div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:left-[var(--sidebar-width)] md:p-6">
@@ -100,8 +103,10 @@
         </DropdownMenu.Root>
       </div>
     </div>
-    <SessionMessageComposer bind:value={input} busy={submitting} disabled={!canSendSessionMessage(session, 'x') || submitting} submitDisabled={!canSend} onValueChange={(value) => (input = value)} onSubmit={onSend} onFocus={onFocus} />
-    {#if session.state === 'exited'}
+    <SessionMessageComposer bind:value={input} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} onValueChange={(value) => (input = value)} onSubmit={onSend} onFocus={onFocus} />
+    {#if !canAcceptWebInput}
+      <p class="mt-2 text-xs text-muted-foreground">此 session 当前不可从 Web 写入</p>
+    {:else if session.state === 'exited'}
       <p class="mt-2 text-xs text-muted-foreground">Sending a message will resume this session automatically.</p>
     {:else if canSendSessionMessage(session, 'x') === false}
       <p class="mt-2 text-xs text-muted-foreground">This session cannot accept new messages.</p>

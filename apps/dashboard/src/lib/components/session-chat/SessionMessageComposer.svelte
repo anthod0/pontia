@@ -30,7 +30,7 @@
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      if (!disabled && !busy) onSubmit()
+      if (!disabled && !submitDisabled && !busy) onSubmit()
     }
   }
 </script>

@@ -35,7 +35,7 @@ const mocks = vi.hoisted(() => {
     current_turn_id: null,
     workspace_id: 'workspace-1',
     workspace: '/work/project',
-    capabilities: {},
+    capabilities: { accept_task: true },
     created_at: '2026-05-14T00:00:00Z',
     updated_at: '2026-05-14T01:00:00Z',
     metadata: {},

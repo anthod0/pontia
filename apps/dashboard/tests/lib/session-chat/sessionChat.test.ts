@@ -169,10 +169,12 @@ test('renders failed turns as messages and pending turns as empty assistant plac
   expect(messages[3].content).toBe('');
 });
 
-test('allows sending non-empty messages unless the session is missing or errored', () => {
-  expect(canSendSessionMessage(session({ state: 'idle' }), 'hello')).toBe(true);
-  expect(canSendSessionMessage(session({ state: 'exited' }), 'hello')).toBe(true);
-  expect(canSendSessionMessage(session({ state: 'error' }), 'hello')).toBe(false);
-  expect(canSendSessionMessage(session({ state: 'idle' }), '   ')).toBe(false);
+test('allows sending non-empty messages only when the session advertises web-write capability', () => {
+  expect(canSendSessionMessage(session({ state: 'idle', capabilities: { accept_task: true } }), 'hello')).toBe(true);
+  expect(canSendSessionMessage(session({ state: 'exited', capabilities: { accept_task: true } }), 'hello')).toBe(true);
+  expect(canSendSessionMessage(session({ state: 'idle', capabilities: { accept_task: false } }), 'hello')).toBe(false);
+  expect(canSendSessionMessage(session({ state: 'idle', capabilities: {} }), 'hello')).toBe(false);
+  expect(canSendSessionMessage(session({ state: 'error', capabilities: { accept_task: true } }), 'hello')).toBe(false);
+  expect(canSendSessionMessage(session({ state: 'idle', capabilities: { accept_task: true } }), '   ')).toBe(false);
   expect(canSendSessionMessage(null, 'hello')).toBe(false);
 });
