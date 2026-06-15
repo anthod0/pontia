@@ -19,8 +19,8 @@
   let currentDisplayedSteps: Array<SessionChatThoughtStep | null> = []
   let rollTimer: ReturnType<typeof setTimeout> | null = null
 
-  const latestTwoSteps = $derived(steps.slice(-2))
-  const latestStepId = $derived(latestTwoSteps.at(-1)?.id ?? null)
+  const latestVisibleSteps = $derived(steps.slice(-1))
+  const latestStepId = $derived(latestVisibleSteps.at(-1)?.id ?? null)
   const rows = $derived(displayedSteps.length ? displayedSteps : [null])
 
   function labelForStep(thoughtStep: SessionChatThoughtStep | null): string {
@@ -43,35 +43,35 @@
   }
 
   function finishRolling(): void {
-    setDisplayed(latestTwoSteps)
+    setDisplayed(latestVisibleSteps)
     rolling = false
     rollTimer = null
   }
 
   $effect(() => {
-    const nextLatestTwoSteps = latestTwoSteps
+    const nextLatestVisibleSteps = latestVisibleSteps
     const nextLatestStepId = latestStepId
 
     if (previousLatestStepId === null) {
       previousLatestStepId = nextLatestStepId
-      setDisplayed(nextLatestTwoSteps)
+      setDisplayed(nextLatestVisibleSteps)
       return
     }
 
     if (nextLatestStepId && nextLatestStepId !== previousLatestStepId) {
-      const enteringStep = nextLatestTwoSteps.at(-1)
-      const rollingSteps = enteringStep ? [...currentDisplayedSteps, enteringStep] : nextLatestTwoSteps
+      const enteringStep = nextLatestVisibleSteps.at(-1)
+      const rollingSteps = enteringStep ? [...currentDisplayedSteps, enteringStep] : nextLatestVisibleSteps
       const dedupedRollingSteps = rollingSteps.filter((step, index, allSteps) => {
         if (!step) return index === allSteps.length - 1
         return allSteps.findIndex((candidate) => candidate?.id === step.id) === index
       })
 
       if (rollTimer) clearTimeout(rollTimer)
-      setDisplayed(dedupedRollingSteps.slice(-3))
-      rolling = dedupedRollingSteps.length > 2
+      setDisplayed(dedupedRollingSteps.slice(-2))
+      rolling = dedupedRollingSteps.length > 1
       rollTimer = setTimeout(finishRolling, 520)
     } else if (!rolling) {
-      setDisplayed(nextLatestTwoSteps)
+      setDisplayed(nextLatestVisibleSteps)
     }
 
     previousLatestStepId = nextLatestStepId
@@ -135,7 +135,7 @@
 <style>
   .thought-summary-viewport {
     --thought-summary-row-height: 2.75rem;
-    max-height: calc(var(--thought-summary-row-height) * 2 + 0.25rem);
+    max-height: var(--thought-summary-row-height);
     mask-image: linear-gradient(to bottom, transparent 0, black 0.35rem, black calc(100% - 0.35rem), transparent 100%);
   }
 

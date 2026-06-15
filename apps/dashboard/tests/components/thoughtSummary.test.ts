@@ -34,7 +34,7 @@ test('idle thought summary collapses to a step count', () => {
   expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
 });
 
-test('busy thought summary shows recent steps with a loading icon', () => {
+test('busy thought summary shows the latest step with a loading icon', () => {
   render(ThoughtSummary, {
     props: {
       steps: [
@@ -49,7 +49,7 @@ test('busy thought summary shows recent steps with a loading icon', () => {
   expect(screen.queryByText('Thought for 3 steps')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Thinking in progress')).toBeInTheDocument();
   expect(screen.queryByText('Planning changes')).not.toBeInTheDocument();
-  expect(screen.getByText('bash')).toBeInTheDocument();
+  expect(screen.queryByText('bash')).not.toBeInTheDocument();
   expect(screen.getByText('read')).toBeInTheDocument();
 });
 
