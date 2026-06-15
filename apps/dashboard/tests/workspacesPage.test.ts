@@ -165,6 +165,7 @@ test('toggles workspace active state directly and keeps rename dialog for editin
 
   await user.click(screen.getByRole('button', { name: 'Rename pontia' }));
 
+  expect(screen.getByRole('dialog', { name: 'Confirm workspace rename' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Confirm workspace rename' })).toBeInTheDocument();
   expect(screen.getByLabelText('Display name')).toHaveValue('pontia');
 

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { Bot, CircleAlert, CopyPlus, Pencil, Plus, RefreshCw, Trash2 } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
+  import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
@@ -46,6 +47,8 @@
   let mutationError: string | null = null
   let mutationSuccess: string | null = null
   let saving = false
+  let archiveDialogOpen = false
+  let pendingArchive: 'profile' | 'version' | null = null
   let pageAbortController: AbortController | null = null
 
   onMount(() => {
@@ -75,6 +78,11 @@
     { label: 'Expected output schema', value: selectedVersionProfile.expected_output_schema ?? 'Not configured' },
   ] : []
   $: builtinSelected = Boolean(selectedVersionProfile?.metadata?.builtin)
+  $: archiveDialogTitle = pendingArchive === 'profile' ? 'Archive profile?' : 'Archive profile version?'
+  $: archiveDialogDescription = pendingArchive === 'profile'
+    ? selectedProfile ? `Archive profile ${selectedProfile.profile_id} and all active versions?` : ''
+    : selectedVersionProfile ? `Archive version ${selectedVersionProfile.profile_id}@${selectedVersionProfile.version}?` : ''
+  $: if (!archiveDialogOpen && pendingArchive && !saving) pendingArchive = null
 
   async function refreshProfiles(options: { signal?: AbortSignal } = {}): Promise<void> {
     await loadAgentProfiles(includeArchivedProfiles, options)
@@ -168,9 +176,20 @@
     }
   }
 
+  function requestArchiveSelectedProfile(): void {
+    if (!selectedProfile) return
+    pendingArchive = 'profile'
+    archiveDialogOpen = true
+  }
+
+  function requestArchiveSelectedVersion(): void {
+    if (!selectedVersionProfile) return
+    pendingArchive = 'version'
+    archiveDialogOpen = true
+  }
+
   async function archiveSelectedProfile(): Promise<void> {
     if (!selectedProfile) return
-    if (!confirm(`Archive profile ${selectedProfile.profile_id} and all active versions?`)) return
     mutationError = null
     mutationSuccess = null
     saving = true
@@ -192,7 +211,6 @@
 
   async function archiveSelectedVersion(): Promise<void> {
     if (!selectedVersionProfile) return
-    if (!confirm(`Archive version ${selectedVersionProfile.profile_id}@${selectedVersionProfile.version}?`)) return
     mutationError = null
     mutationSuccess = null
     saving = true
@@ -204,6 +222,17 @@
       mutationError = error instanceof Error ? error.message : String(error)
     } finally {
       saving = false
+    }
+  }
+
+  async function confirmPendingArchive(): Promise<void> {
+    const archiveTarget = pendingArchive
+    archiveDialogOpen = false
+    pendingArchive = null
+    if (archiveTarget === 'profile') {
+      await archiveSelectedProfile()
+    } else if (archiveTarget === 'version') {
+      await archiveSelectedVersion()
     }
   }
 
@@ -406,8 +435,8 @@
                 <div class="flex flex-wrap gap-2">
                   <Button variant="outline" onclick={() => startNewVersion(selectedVersionProfile)} disabled={saving || builtinSelected}><CopyPlus class="size-4" /> New version</Button>
                   <Button variant="outline" onclick={() => startEdit(selectedVersionProfile)} disabled={saving || builtinSelected || !selectedVersionProfile.active}><Pencil class="size-4" /> Edit</Button>
-                  <Button variant="outline" onclick={() => void archiveSelectedVersion()} disabled={saving || builtinSelected || !selectedVersionProfile.active}><Trash2 class="size-4" /> Delete version</Button>
-                  <Button variant="destructive" onclick={() => void archiveSelectedProfile()} disabled={saving || builtinSelected}><Trash2 class="size-4" /> Delete profile</Button>
+                  <Button variant="outline" onclick={requestArchiveSelectedVersion} disabled={saving || builtinSelected || !selectedVersionProfile.active}><Trash2 class="size-4" /> Delete version</Button>
+                  <Button variant="destructive" onclick={requestArchiveSelectedProfile} disabled={saving || builtinSelected}><Trash2 class="size-4" /> Delete profile</Button>
                 </div>
               </div>
             </Card.Header>
@@ -490,3 +519,20 @@
     </div>
   {/if}
 </section>
+
+<AlertDialog.Root bind:open={archiveDialogOpen}>
+  {#if pendingArchive}
+    <AlertDialog.Content>
+      <AlertDialog.Header>
+        <AlertDialog.Title>{archiveDialogTitle}</AlertDialog.Title>
+        <AlertDialog.Description>{archiveDialogDescription}</AlertDialog.Description>
+      </AlertDialog.Header>
+      <AlertDialog.Footer>
+        <AlertDialog.Cancel disabled={saving}>Cancel</AlertDialog.Cancel>
+        <AlertDialog.Action variant="destructive" onclick={() => void confirmPendingArchive()} disabled={saving}>
+          {saving ? 'Archiving…' : 'Archive'}
+        </AlertDialog.Action>
+      </AlertDialog.Footer>
+    </AlertDialog.Content>
+  {/if}
+</AlertDialog.Root>

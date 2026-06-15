@@ -4,6 +4,7 @@
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
+  import * as Dialog from '$lib/components/ui/dialog/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
@@ -24,6 +25,7 @@
   let renameError: string | null = null
   let renamingWorkspace: WorkspaceView | null = null
   let renamingWorkspaceName = ''
+  let renameWorkspaceDialogOpen = false
   let savingRename = false
 
   onMount(() => {
@@ -40,6 +42,10 @@
   })
 
   $: selectedRoot = $workspaceRoots.find((root) => root.root_id === rootId) ?? null
+  $: if (!renameWorkspaceDialogOpen && renamingWorkspace && !savingRename) {
+    renamingWorkspace = null
+    renamingWorkspaceName = ''
+  }
 
   async function refreshAll(): Promise<void> {
     await Promise.all([loadWorkspaces(), loadWorkspaceRoots()])
@@ -101,6 +107,13 @@
     renameError = null
     renamingWorkspace = workspace
     renamingWorkspaceName = workspace.name ?? workspace.display_path
+    renameWorkspaceDialogOpen = true
+  }
+
+  function cancelRenamingWorkspace(): void {
+    renameWorkspaceDialogOpen = false
+    renamingWorkspace = null
+    renamingWorkspaceName = ''
   }
 
   async function confirmRenameWorkspace(): Promise<void> {
@@ -109,6 +122,7 @@
     renameError = null
     try {
       await renameWorkspace(renamingWorkspace.workspace_id, { name: renamingWorkspaceName.trim() || null })
+      renameWorkspaceDialogOpen = false
       renamingWorkspace = null
       renamingWorkspaceName = ''
       if (rootId) await openPath(browsePath)
@@ -260,23 +274,27 @@
   </Card.Root>
 </section>
 
-{#if renamingWorkspace}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" role="presentation">
-    <form class="w-full max-w-md rounded-xl border bg-card p-5 shadow-xl" onsubmit={(event) => { event.preventDefault(); void confirmRenameWorkspace() }}>
-      <div class="space-y-2">
-        <h3 class="text-lg font-semibold">Confirm workspace rename</h3>
-        <p class="text-sm text-muted-foreground">Rename <span class="font-medium text-foreground">{renamingWorkspace.name ?? renamingWorkspace.display_path}</span>.</p>
-      </div>
-      <div class="mt-4 space-y-2">
-        <Label for="rename-workspace-name">Display name</Label>
-        <Input id="rename-workspace-name" bind:value={renamingWorkspaceName} placeholder={renamingWorkspace.display_path} />
-        <p class="text-xs text-muted-foreground">Clear the name to display the workspace path.</p>
-      </div>
-      <div class="mt-5 flex justify-end gap-2">
-        <Button type="button" variant="outline" onclick={() => { renamingWorkspace = null; renamingWorkspaceName = '' }} disabled={savingRename}>Cancel</Button>
-        <Button type="submit" disabled={savingRename}>{savingRename ? 'Saving…' : 'Rename workspace'}</Button>
-      </div>
-    </form>
-  </div>
-{/if}
+<Dialog.Root bind:open={renameWorkspaceDialogOpen}>
+  {#if renamingWorkspace}
+    <Dialog.Content class="max-w-md">
+      <form onsubmit={(event) => { event.preventDefault(); void confirmRenameWorkspace() }}>
+        <Dialog.Header>
+          <Dialog.Title>Confirm workspace rename</Dialog.Title>
+          <Dialog.Description>
+            Rename <span class="font-medium text-foreground">{renamingWorkspace.name ?? renamingWorkspace.display_path}</span>.
+          </Dialog.Description>
+        </Dialog.Header>
+        <div class="mt-4 space-y-2">
+          <Label for="rename-workspace-name">Display name</Label>
+          <Input id="rename-workspace-name" bind:value={renamingWorkspaceName} placeholder={renamingWorkspace.display_path} />
+          <p class="text-xs text-muted-foreground">Clear the name to display the workspace path.</p>
+        </div>
+        <Dialog.Footer class="mt-5">
+          <Button type="button" variant="outline" onclick={cancelRenamingWorkspace} disabled={savingRename}>Cancel</Button>
+          <Button type="submit" disabled={savingRename}>{savingRename ? 'Saving…' : 'Rename workspace'}</Button>
+        </Dialog.Footer>
+      </form>
+    </Dialog.Content>
+  {/if}
+</Dialog.Root>
 
