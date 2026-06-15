@@ -11,7 +11,9 @@ use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
-    application::{AppState, EventIngestService},
+    application::{
+        AppState, EventIngestService, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
+    },
     domain::{DomainEvent, EventSource, EventType},
     error::Error,
 };
@@ -41,6 +43,17 @@ pub struct InternalEventResponse {
     turn_id: Option<String>,
     state_version: i64,
     warnings: Vec<String>,
+}
+
+pub async fn upsert_runtime_binding(
+    State(state): State<AppState>,
+    request: Result<Json<RuntimeBindingUpsertRequest>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
+    let response = RuntimeBindingUpsertService::new(state.db())
+        .upsert(request)
+        .await?;
+    Ok(Json(response))
 }
 
 pub async fn post_event(

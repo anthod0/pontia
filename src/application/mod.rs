@@ -8,7 +8,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool};
-use time::format_description::well_known::Rfc3339;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     adapters::ArtifactRegistration,
@@ -44,6 +44,7 @@ mod mapping;
 mod prompt_rendering;
 mod queries;
 mod raw_transcripts;
+mod runtime_bindings;
 mod runtime_control;
 mod runtime_observation;
 mod runtime_readiness;
@@ -92,6 +93,7 @@ pub use raw_transcripts::{
     RawTranscriptParser, ResolvedAgentBinding, TimelineItem, TimelineItemDetailPage,
     TimelineItemDetailRequest, TimelinePage, TimelinePageRequest, resolve_and_parse_timeline_page,
 };
+pub use runtime_bindings::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};
 pub use runtime_observation::{AdapterEventOutboxService, RuntimeObservationService};
 pub use runtime_readiness::RuntimeReadinessService;

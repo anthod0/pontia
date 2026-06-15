@@ -64,6 +64,10 @@ pub fn router(state: AppState) -> Router {
         .route("/dashboard/{*path}", get(dashboard::dashboard_path))
         .route("/internal/v1/events", post(internal::post_event))
         .route(
+            "/internal/v1/runtime-bindings/upsert",
+            post(internal::upsert_runtime_binding),
+        )
+        .route(
             "/internal/v1/agent-tools/{tool_name}",
             post(internal_agent_tools::post_agent_tool),
         )
