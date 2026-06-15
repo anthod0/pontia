@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
+import type { BoundPontiaContext } from "../src/attach.js";
 
 interface HandlerMap {
   [event: string]: (event: any, ctx: any) => Promise<any> | any;
@@ -44,6 +45,7 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
     }) })),
     logDiagnostic: vi.fn(async () => undefined),
     writeContext: vi.fn(async () => undefined),
+    attachRuntimeBinding: undefined,
     ...overrides,
   });
   return { handlers, reported };
@@ -82,6 +84,117 @@ describe("pontia pi extension lifecycle", () => {
         client_cwd: "/workspace",
       },
     });
+  });
+
+  test("session_start auto-upserts when runtime env is absent and reports ready", async () => {
+    const bound: BoundPontiaContext = {
+      sessionId: "sess_auto",
+      clientType: "pi",
+      runtimeInstanceId: "rtinst_auto",
+      internalEventUrl: "http://localhost/internal/v1/events",
+      currentTurnFile: "/tmp/current-turn.json",
+    };
+    const attachRuntimeBinding = vi.fn(async () => ({ ok: true as const, context: bound, logFile: "hook.log" }));
+    const { handlers, reported } = install({
+      env: {},
+      attachRuntimeBinding,
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: {
+        getSessionId: () => "pi_session_auto",
+        getSessionFile: () => "/tmp/pi/session.jsonl",
+        getSessionDir: () => "/tmp/pi",
+        getCwd: () => "/workspace",
+      },
+    });
+
+    expect(attachRuntimeBinding).toHaveBeenCalledWith(expect.objectContaining({
+      session: expect.objectContaining({ clientSessionKey: "pi_session_auto", clientCwd: "/workspace" }),
+    }));
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_auto",
+      payload: { runtime_instance_id: "rtinst_auto", client_session_key: "pi_session_auto" },
+    });
+  });
+
+  test("session_start marks server-unavailable sessions unbound and ignores later lifecycle events", async () => {
+    const attachRuntimeBinding = vi.fn(async () => ({ ok: false as const, code: "upsert_failed", reason: "connect refused", logFile: "hook.log" }));
+    const logDiagnostic = vi.fn(async () => undefined);
+    const { handlers, reported } = install({
+      env: {},
+      attachRuntimeBinding,
+      logDiagnostic,
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: {
+        getSessionId: () => "pi_session_unbound",
+        getCwd: () => "/workspace",
+      },
+    });
+    await handlers.agent_start({}, {});
+    await handlers.agent_end({ messages: [{ role: "assistant", content: "ignored" }] }, {});
+
+    expect(reported).toEqual([]);
+    expect(logDiagnostic).toHaveBeenCalledWith("hook.log", expect.objectContaining({ code: "pontia_auto_attach_unbound" }));
+  });
+
+  test("agent_start creates a pontia turn for direct TUI input after auto-upsert when current-turn is missing", async () => {
+    const bound: BoundPontiaContext = {
+      sessionId: "sess_auto_direct",
+      clientType: "pi",
+      runtimeInstanceId: "rtinst_auto_direct",
+      internalEventUrl: "http://localhost/internal/v1/events",
+      currentTurnFile: "/tmp/current-turn.json",
+    };
+    const writeContext = vi.fn(async () => undefined);
+    const { handlers, reported } = install({
+      env: {},
+      attachRuntimeBinding: vi.fn(async () => ({ ok: true as const, context: bound, logFile: "hook.log" })),
+      loadContext: vi.fn(async () => ({ ok: false as const, reason: "current-turn file is missing", contextFile: "/tmp/current-turn.json", logFile: "hook.log", silent: true })),
+      writeContext,
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: {
+        getSessionId: () => "pi_session_direct",
+        getCwd: () => "/workspace",
+      },
+    });
+    await handlers.before_agent_start({ prompt: "typed in tui", systemPrompt: "Base prompt" }, {});
+    await handlers.agent_start({}, {});
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.created", "turn.started"]);
+    expect(reported[1]).toMatchObject({ session_id: "sess_auto_direct", payload: { input: { summary: "typed in tui" } } });
+    expect(reported[2]).toMatchObject({ turn_id: reported[1].turn_id, payload: { runtime_instance_id: "rtinst_auto_direct", input: { summary: "typed in tui" } } });
+    expect(writeContext).toHaveBeenCalledWith("/tmp/current-turn.json", expect.objectContaining({
+      sessionId: "sess_auto_direct",
+      runtimeInstanceId: "rtinst_auto_direct",
+      input: "typed in tui",
+    }));
+  });
+
+  test("session_start does not auto-upsert when managed runtime env is partial invalid", async () => {
+    const attachRuntimeBinding = vi.fn(async () => ({ ok: true as const, context: {
+      sessionId: "sess_should_not_attach",
+      clientType: "pi" as const,
+      runtimeInstanceId: "rtinst_should_not_attach",
+      internalEventUrl: "http://localhost/internal/v1/events",
+      currentTurnFile: "/tmp/current-turn.json",
+    }, logFile: "hook.log" }));
+    const { handlers, reported } = install({
+      env: { PONTIA_SESSION_ID: "sess_partial" },
+      attachRuntimeBinding,
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: { getSessionId: () => "pi_session_partial", getCwd: () => "/workspace" },
+    });
+
+    expect(attachRuntimeBinding).not.toHaveBeenCalled();
+    expect(reported).toEqual([]);
   });
 
   test("session_start non-startup does not report ready", async () => {

@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
+import { attachRuntimeBinding, type AttachRuntimeBindingResult, type BoundPontiaContext } from "./attach.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnCreatedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
 import { EventReporter } from "./reporter.js";
@@ -19,6 +20,7 @@ export interface PontiaPiExtensionDependencies {
   logDiagnostic?: (logFile: string, entry: DiagnosticEntry) => Promise<void>;
   writeContext?: (contextFile: string, context: TurnContext) => Promise<void>;
   fetch?: typeof fetch;
+  attachRuntimeBinding?: (options: { env: EnvLike; session: ReturnType<typeof piSessionDetailsFromHookContext>; fetch: typeof fetch }) => Promise<AttachRuntimeBindingResult>;
 }
 
 interface ActiveTurnState {
@@ -113,6 +115,16 @@ function externalApiUrl(env: EnvLike): string | undefined {
   return optionalString(env.PONTIA_EXTERNAL_API_URL)?.replace(/\/+$/, "");
 }
 
+function hasManagedRuntimeEnvIntent(env: EnvLike): boolean {
+  return Boolean(
+    optionalString(env.PONTIA_RUNTIME_DIR) ||
+      optionalString(env.PONTIA_CURRENT_TURN_FILE) ||
+      optionalString(env.PONTIA_SESSION_ID) ||
+      optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ||
+      optionalString(env.PONTIA_INTERNAL_EVENT_URL),
+  );
+}
+
 function freshTurnId(): string {
   return `turn_${randomUUID()}`;
 }
@@ -187,9 +199,12 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   const writeContext = dependencies.writeContext ?? writeCurrentTurnContext;
   const fetchImpl = dependencies.fetch ?? fetch;
+  const attachRuntime = dependencies.attachRuntimeBinding ?? attachRuntimeBinding;
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
+  let autoBoundContext: BoundPontiaContext | undefined;
+  let unboundForSession = false;
   let pendingPrompt: string | undefined;
   let pendingRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let lastContextUsageJson: string | undefined;
@@ -252,24 +267,44 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("session_start", async (event, ctx) => {
-    if (readyReported) return;
+    if (readyReported || unboundForSession) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
     if (reason !== "startup") return;
 
     try {
-      const loaded = await loadSessionContext(env);
-      if (!loaded.ok) return;
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
-      if (!sessionDetails.clientSessionKey) {
-        await logDiagnostic(loaded.logFile, {
-          level: "error",
-          code: "missing_pi_client_session_key",
-          message: "ctx.sessionManager.getSessionId() is required to report pontia ready signal",
+      const loaded = await loadSessionContext(env);
+      if (loaded.ok) {
+        if (!sessionDetails.clientSessionKey) {
+          await logDiagnostic(loaded.logFile, {
+            level: "error",
+            code: "missing_pi_client_session_key",
+            message: "ctx.sessionManager.getSessionId() is required to report pontia ready signal",
+          });
+          return;
+        }
+        const context = { ...loaded.context, ...sessionDetails };
+        readyReported = await makeReporter(loaded.logFile).report(context, buildSessionReadyEvent(context));
+        return;
+      }
+
+      if (hasManagedRuntimeEnvIntent(env)) return;
+
+      const attached = await attachRuntime({ env, session: sessionDetails, fetch: fetchImpl });
+      if (!attached.ok) {
+        unboundForSession = true;
+        await logDiagnostic(attached.logFile, {
+          level: "warn",
+          code: "pontia_auto_attach_unbound",
+          message: "pontia server unavailable or runtime binding upsert failed; this pi session will not report pontia events",
+          details: { code: attached.code, reason: attached.reason },
         });
         return;
       }
-      const context = { ...loaded.context, ...sessionDetails };
-      readyReported = await makeReporter(loaded.logFile).report(context, buildSessionReadyEvent(context));
+
+      autoBoundContext = attached.context;
+      const context = { ...attached.context, ...sessionDetails };
+      readyReported = await makeReporter(attached.logFile).report(context, buildSessionReadyEvent(context));
     } catch (error) {
       const logFile = env.PONTIA_PI_HOOK_LOG ?? "pi-hook.log";
       await logDiagnostic(logFile, {
@@ -282,27 +317,68 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("agent_start", async (_event, ctx) => {
+    if (unboundForSession) return;
     try {
-      const loaded = await contextLoader(env);
-      if (!loaded.ok) {
-        activeTurn = undefined;
-        if (!loaded.silent && ctx?.hasUI) ctx.ui.notify(`pontia: ${loaded.reason}`, "warning");
-        return;
-      }
-
-      let context = loaded.context;
+      const contextEnv = autoBoundContext
+        ? {
+            ...env,
+            PONTIA_CURRENT_TURN_FILE: autoBoundContext.currentTurnFile,
+            PONTIA_INTERNAL_EVENT_URL: autoBoundContext.internalEventUrl,
+            PONTIA_RUNTIME_INSTANCE_ID: autoBoundContext.runtimeInstanceId,
+          }
+        : env;
+      const loaded = await contextLoader(contextEnv);
+      let context: TurnContext;
+      let contextFile: string;
+      let logFile: string;
       let createdFromTuiPrompt = false;
-      if (endedTurnIds.has(context.turnId)) {
+
+      if (!loaded.ok) {
+        if (!autoBoundContext) {
+          activeTurn = undefined;
+          if (!loaded.silent && ctx?.hasUI) ctx.ui.notify(`pontia: ${loaded.reason}`, "warning");
+          return;
+        }
         context = {
-          ...context,
+          sessionId: autoBoundContext.sessionId,
           turnId: freshTurnId(),
-          input: pendingPrompt ?? context.input,
+          runtimeInstanceId: autoBoundContext.runtimeInstanceId,
+          input: pendingPrompt,
+          clientType: "pi",
+          internalEventUrl: autoBoundContext.internalEventUrl,
         };
+        contextFile = autoBoundContext.currentTurnFile;
+        logFile = loaded.logFile;
         createdFromTuiPrompt = true;
-        await writeContext(loaded.contextFile, context);
+        await writeContext(contextFile, context);
+      } else {
+        context = loaded.context;
+        contextFile = loaded.contextFile;
+        logFile = loaded.logFile;
+        if (autoBoundContext && (context.sessionId !== autoBoundContext.sessionId || context.runtimeInstanceId !== autoBoundContext.runtimeInstanceId || context.clientType !== "pi")) {
+          context = {
+            sessionId: autoBoundContext.sessionId,
+            turnId: freshTurnId(),
+            runtimeInstanceId: autoBoundContext.runtimeInstanceId,
+            input: pendingPrompt,
+            clientType: "pi",
+            internalEventUrl: autoBoundContext.internalEventUrl,
+          };
+          contextFile = autoBoundContext.currentTurnFile;
+          createdFromTuiPrompt = true;
+          await writeContext(contextFile, context);
+        } else if (endedTurnIds.has(context.turnId)) {
+          context = {
+            ...context,
+            turnId: freshTurnId(),
+            input: pendingPrompt ?? context.input,
+          };
+          createdFromTuiPrompt = true;
+          await writeContext(contextFile, context);
+        }
       }
 
-      const reporter = makeReporter(loaded.logFile);
+      const reporter = makeReporter(logFile);
       lastContextUsageJson = undefined;
       activeTurn = {
         context,
