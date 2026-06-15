@@ -5,11 +5,13 @@ import { describe, expect, test } from 'vitest';
 const componentPath = (...parts: string[]) => resolve(__dirname, '../src/components/chat', ...parts);
 
 describe('session metadata component boundaries', () => {
-  test('composer dock uses viewport-specific session metadata components', () => {
+  test('composer dock uses the compact session metadata component for all viewports', () => {
     const source = readFileSync(componentPath('SessionComposerDock.svelte'), 'utf8');
 
-    expect(source).toContain("import SessionMetadataDesktop from './SessionMetadataDesktop.svelte'");
+    expect(source).not.toContain("import SessionMetadataDesktop from './SessionMetadataDesktop.svelte'");
     expect(source).toContain("import SessionMetadataMobile from './SessionMetadataMobile.svelte'");
+    expect(source).not.toContain('data-testid="session-status-desktop-metadata"');
+    expect(source).not.toContain('data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1 sm:hidden"');
     expect(source).not.toContain('SessionMetadataBadges');
   });
 

@@ -130,21 +130,18 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test('chat composer metadata uses desktop pills and a compact mobile summary', async () => {
+test('chat composer metadata uses the compact summary for all viewports', async () => {
   render(ChatPage);
 
   const toolbar = await screen.findByLabelText('Session status and controls');
-  const desktopMetadata = within(toolbar).getByTestId('session-status-desktop-metadata');
-  const mobileMetadata = within(toolbar).getByTestId('session-status-mobile-metadata');
+  const metadata = within(toolbar).getByTestId('session-status-mobile-metadata');
 
   expect(within(toolbar).getByText('idle')).toBeInTheDocument();
-  expect(within(desktopMetadata).getByText('project')).toBeInTheDocument();
-  expect(within(desktopMetadata).getByLabelText('Client: pi')).toBeInTheDocument();
-  expect(within(desktopMetadata).queryByText('Client: pi')).not.toBeInTheDocument();
-  const mobileDetailsButton = within(mobileMetadata).getByRole('button', { name: 'Session details: project · pi' });
-  expect(mobileDetailsButton).toBeInTheDocument();
-  expect(within(mobileMetadata).queryByLabelText('Workspace: /work/project')).not.toBeInTheDocument();
-  expect(within(mobileMetadata).queryByLabelText('Client: pi')).not.toBeInTheDocument();
+  expect(within(toolbar).queryByTestId('session-status-desktop-metadata')).not.toBeInTheDocument();
+  const detailsButton = within(metadata).getByRole('button', { name: 'Session details: project · pi' });
+  expect(detailsButton).toBeInTheDocument();
+  expect(within(metadata).queryByLabelText('Workspace: /work/project')).not.toBeInTheDocument();
+  expect(within(metadata).queryByLabelText('Client: pi')).not.toBeInTheDocument();
   expect(within(toolbar).getByRole('button', { name: /exit session/i })).toBeInTheDocument();
   expect(within(toolbar).getByRole('button', { name: /advanced session controls/i })).toBeInTheDocument();
 });
@@ -193,23 +190,10 @@ test('chat session refreshes and shows workspace git status', async () => {
   render(ChatPage);
 
   const toolbar = await screen.findByLabelText('Session status and controls');
-  const desktopMetadata = within(toolbar).getByTestId('session-status-desktop-metadata');
   const mobileMetadata = within(toolbar).getByTestId('session-status-mobile-metadata');
 
   await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
-  const gitBadge = within(desktopMetadata).getByLabelText('Git status: main, dirty');
-  expect(gitBadge).toBeInTheDocument();
-  expect(within(gitBadge).getByText('main')).toBeInTheDocument();
-  expect(within(gitBadge).queryByLabelText('dirty git status')).not.toBeInTheDocument();
-  expect(within(gitBadge).queryByText('dirty')).not.toBeInTheDocument();
-  expect(within(gitBadge).getByLabelText('Git branch')).not.toHaveClass('text-amber-600');
-  expect(within(desktopMetadata).getByText('↑1')).toHaveClass('text-blue-600');
-  expect(within(desktopMetadata).getByText('↓2')).toHaveClass('text-violet-600');
-  expect(within(desktopMetadata).getByText('+3')).toHaveClass('text-emerald-600');
-  expect(within(desktopMetadata).getByText('~4')).toHaveClass('text-amber-600');
-  expect(within(desktopMetadata).getByText('?5')).toHaveClass('text-cyan-600');
-  expect(within(desktopMetadata).getByText('!6')).toHaveClass('text-destructive');
-
+  expect(within(toolbar).queryByTestId('session-status-desktop-metadata')).not.toBeInTheDocument();
   expect(within(mobileMetadata).queryByLabelText('Workspace: /work/project')).not.toBeInTheDocument();
   expect(within(mobileMetadata).queryByLabelText('Client: pi')).not.toBeInTheDocument();
   expect(within(mobileMetadata).queryByLabelText('Git status: main, dirty')).not.toBeInTheDocument();

@@ -6,7 +6,6 @@
   import SessionMessageComposer from '$lib/components/session-chat/SessionMessageComposer.svelte'
   import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
   import { canSendSessionMessage, isTerminalChatSession } from '$lib/session-chat/sessionChat'
-  import SessionMetadataDesktop from './SessionMetadataDesktop.svelte'
   import SessionMetadataMobile from './SessionMetadataMobile.svelte'
   import { sessionStateBadgeClass, type SessionMetadataItem } from './sessionMetadata'
 
@@ -63,10 +62,7 @@
           <Activity class="size-4" />
           <span data-chat-session-state-label class="hidden sm:inline">{session.state}</span>
         </Badge>
-        <div data-testid="session-status-desktop-metadata" class="hidden min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex">
-          <SessionMetadataDesktop {session} {gitStatus} {gitStatusErrors} {workspaces} />
-        </div>
-        <div data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1 sm:hidden">
+        <div data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1">
           <SessionMetadataMobile {session} {gitStatus} {gitStatusErrors} {workspaces} {metadataItems} {metadataSummary} />
         </div>
       </div>
