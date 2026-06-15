@@ -201,7 +201,7 @@ test('chat session refreshes and shows workspace git status', async () => {
   const mobileSummary = mobileMetadata.querySelector('[data-chat-session-details-summary]');
   expect(mobileSummary).toHaveClass('truncate');
   expect(mobileSummary).toHaveTextContent('project · main ↑1 ↓2 +3 ~4 ?5 !6 · pi');
-  expect(within(mobileMetadata).getByText('main')).toHaveClass('text-amber-600');
+  expect(within(mobileMetadata).getByText('main')).not.toHaveClass('text-amber-600');
   expect(within(mobileMetadata).getByText('↑1')).toHaveClass('text-blue-600');
 
   await fireEvent.click(within(mobileMetadata).getByRole('button', { name: 'Session details: project · pi · main · dirty' }));
@@ -209,7 +209,7 @@ test('chat session refreshes and shows workspace git status', async () => {
   const gitRow = within(details).getByLabelText('Git').closest('div');
   expect(within(details).queryByText('Git')).not.toBeInTheDocument();
   expect(gitRow).not.toBeNull();
-  expect(within(gitRow as HTMLElement).getByText('main')).toHaveClass('text-amber-600');
+  expect(within(gitRow as HTMLElement).getByText('main')).not.toHaveClass('text-amber-600');
   expect(within(gitRow as HTMLElement).getByText('↑1')).toHaveClass('text-blue-600');
 });
 

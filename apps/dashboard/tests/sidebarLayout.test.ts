@@ -167,17 +167,17 @@ test('sidebar renames a recent session from the hover edit action without openin
       metadata: {},
     },
   ]);
-  const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Renamed session');
-
   render(AppSidebarHost);
 
   await fireEvent.click(screen.getByRole('button', { name: /rename session original title/i }));
 
-  expect(promptSpy).toHaveBeenCalledWith('Rename session', 'Original title');
+  const dialog = screen.getByRole('dialog', { name: 'Rename session' });
+  const titleInput = within(dialog).getByLabelText('Session title');
+  await fireEvent.input(titleInput, { target: { value: 'Renamed session' } });
+  await fireEvent.click(within(dialog).getByRole('button', { name: 'Rename session' }));
+
   expect(mocks.updateSessionTitle).toHaveBeenCalledWith('session-active', 'Renamed session');
   expect(mocks.navigate).not.toHaveBeenCalled();
-
-  promptSpy.mockRestore();
 });
 
 test('sidebar only marks the current route as active', () => {

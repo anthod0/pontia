@@ -85,7 +85,7 @@
               <AtSign class="size-4" aria-label="Handle" />
             {/if}
           </dt>
-          <dd class="min-w-0 truncate" title={item.title}>
+          <dd class="min-w-0 truncate" title={item.title} aria-label={`${item.label}: ${item.title}`}>
             {#if item.key === 'git' && gitStatus}
               <GitStatusInline {gitStatus} />
             {:else}

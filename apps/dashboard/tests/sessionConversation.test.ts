@@ -156,7 +156,7 @@ test('conversation uses session busy state to keep thought summary active withou
   });
 
   expect(screen.getByLabelText('Thinking in progress')).toBeInTheDocument();
-  expect(screen.getByText('bash')).toBeInTheDocument();
+  expect(screen.queryByText('bash')).not.toBeInTheDocument();
   expect(screen.getByText('read')).toBeInTheDocument();
   expect(screen.getByText('Agent working')).toBeInTheDocument();
   expect(screen.queryByText('Working…')).not.toBeInTheDocument();

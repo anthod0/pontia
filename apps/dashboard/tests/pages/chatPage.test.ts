@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import ChatPage from '../../src/pages/ChatPage.svelte';
@@ -627,6 +627,7 @@ test('shows the initial prompt immediately after starting a chat while timeline 
 });
 
 test('shows workspace name in the selected chat composer pill while retaining full path metadata', async () => {
+  const user = userEvent.setup();
   const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1', workspace: '/repo/pontia' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -637,9 +638,14 @@ test('shows workspace name in the selected chat composer pill while retaining fu
 
   render(ChatPage);
 
-  const workspacePill = (await screen.findAllByLabelText('Workspace: /repo/pontia'))[0];
+  const sessionDetailsButton = (await screen.findByText('Pontia Workspace')).closest('button');
+  expect(sessionDetailsButton).not.toBeNull();
+  expect(sessionDetailsButton).toHaveTextContent('Pontia Workspace');
+  expect(sessionDetailsButton).not.toHaveTextContent('/repo/pontia');
+
+  await user.click(sessionDetailsButton as HTMLButtonElement);
+  const workspacePill = screen.getByLabelText('Workspace: /repo/pontia');
   expect(workspacePill).toHaveTextContent('Pontia Workspace');
-  expect(workspacePill).not.toHaveTextContent('/repo/pontia');
 });
 
 test('loads earlier chat history when the chat scroll reaches the top', async () => {
@@ -1245,6 +1251,7 @@ test('loads and renders an existing chat session with metadata, state, and works
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.workspaces.set([workspace({ workspace_id: 'workspace-1', name: 'pontia', canonical_path: '/repo/pontia', display_path: '~/repo/pontia' })]);
 
   render(ChatPage);
 
@@ -1252,20 +1259,22 @@ test('loads and renders an existing chat session with metadata, state, and works
   expect(await screen.findByText('hi there')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: /second · reviewer/i })).not.toBeInTheDocument();
   expect(screen.queryByText('Description: Review dashboard changes')).not.toBeInTheDocument();
+  const sessionDetailsButton = screen.getByRole('button', { name: /Session details: pontia · claude-code · coder@1 · second/i });
+  await userEvent.click(sessionDetailsButton);
   const clientBadge = screen.getAllByLabelText('Client: claude-code')[0];
   const profileBadge = screen.getAllByLabelText('Profile: coder@1')[0];
   expect(clientBadge).toBeInTheDocument();
   expect(profileBadge).toBeInTheDocument();
   expect(screen.getAllByLabelText('Handle: second')[0]).toBeInTheDocument();
-  expect(clientBadge.querySelector('svg')).toHaveClass('lucide-terminal');
-  expect(profileBadge.querySelector('svg')).toHaveClass('lucide-bot');
+  expect(within(clientBadge.closest('div') as HTMLElement).getByLabelText('Client')).toHaveClass('lucide-terminal');
+  expect(within(profileBadge.closest('div') as HTMLElement).getByLabelText('Profile')).toHaveClass('lucide-bot');
   expect(screen.queryByText('Client: claude-code')).not.toBeInTheDocument();
   expect(screen.queryByText('Profile: coder@1')).not.toBeInTheDocument();
   expect(screen.queryByText('Handle: second')).not.toBeInTheDocument();
   expect(screen.queryByText('Workspace: workspace-1')).not.toBeInTheDocument();
   const stateBadge = screen.getByText('busy').closest('[data-slot="badge"]');
-  const workspaceName = screen.getAllByText('pontia')[0];
   const workspaceBadge = screen.getAllByLabelText('Workspace: /repo/pontia')[0];
+  const workspaceName = within(workspaceBadge).getByText('pontia');
   const clientDetail = screen.getAllByLabelText('Client: claude-code')[0];
   const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
   expect(screen.queryByText('State: busy')).not.toBeInTheDocument();
