@@ -20,7 +20,7 @@ export function contextUsageSummary(usage: ContextUsageView, options: { includeC
     : usage.used_tokens !== null
       ? formatTokenCount(usage.used_tokens)
       : 'unknown';
-  const parts = [usageLabel, percent];
+  const parts = [percent, usageLabel];
   if (options.includeConfidence !== false) parts.push(usage.confidence);
   return `Context ${parts.filter(Boolean).join(' · ')}`;
 }

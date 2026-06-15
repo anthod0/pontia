@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { WorkspaceGitStatusView } from '../../api/types'
-  import { gitBranchLabel, gitStatusToneClass, hasGitChangeCounts } from './sessionMetadata'
+  import { gitBranchLabel, hasGitChangeCounts } from './sessionMetadata'
 
   interface Props {
     gitStatus: WorkspaceGitStatusView
@@ -9,7 +9,7 @@
   let { gitStatus }: Props = $props()
 </script>
 
-<span class={gitStatusToneClass(gitStatus)}>{gitBranchLabel(gitStatus)}</span>
+<span>{gitBranchLabel(gitStatus)}</span>
 {#if gitStatus.ahead}<span class="text-blue-600 dark:text-blue-400">↑{gitStatus.ahead}</span>{/if}
 {#if gitStatus.behind}<span class="text-violet-600 dark:text-violet-400">↓{gitStatus.behind}</span>{/if}
 {#if hasGitChangeCounts(gitStatus)}

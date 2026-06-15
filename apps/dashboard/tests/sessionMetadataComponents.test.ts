@@ -32,4 +32,23 @@ describe('session metadata component boundaries', () => {
     expect(source).not.toContain('absolute bottom-full');
     expect(source).not.toContain('{#if sessionDetailsOpen}');
   });
+
+  test('git inline status does not color the branch name', () => {
+    const source = readFileSync(componentPath('GitStatusInline.svelte'), 'utf8');
+
+    expect(source).not.toContain('gitStatusToneClass');
+    expect(source).toContain('<span>{gitBranchLabel(gitStatus)}</span>');
+  });
+
+  test('session metadata trigger inlines desktop-only icons', () => {
+    const source = readFileSync(componentPath('SessionMetadataMobile.svelte'), 'utf8');
+    const triggerSource = source.slice(source.indexOf('<Popover.Trigger'), source.indexOf('</Popover.Trigger>'));
+
+    expect(triggerSource).toContain('<Folder class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
+    expect(triggerSource).toContain('<GitBranch class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
+    expect(triggerSource).toContain('<Gauge class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
+    expect(triggerSource).toContain('<Terminal class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
+    expect(triggerSource).toContain('<Bot class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
+    expect(triggerSource).toContain('<AtSign class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
+  });
 });

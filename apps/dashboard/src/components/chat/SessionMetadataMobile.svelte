@@ -27,16 +27,43 @@
 <Popover.Root bind:open={sessionDetailsOpen}>
   <Popover.Trigger class="flex h-7 w-full min-w-0 items-center justify-start bg-transparent px-0 text-sm text-muted-foreground outline-none hover:bg-transparent hover:text-foreground focus-visible:text-foreground" aria-label={`Session details: ${metadataSummary}`}>
     <span data-chat-session-details-summary class="block min-w-0 flex-1 truncate text-left">
-      <span>{sessionWorkspaceTitle(session, workspaces)}</span>
+      <span class="inline-flex min-w-0 items-center gap-1 align-middle">
+        <Folder class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />
+        <span class="min-w-0 truncate">{sessionWorkspaceTitle(session, workspaces)}</span>
+      </span>
       {#if gitStatus}
-        <span> ·</span>{' '}<GitStatusInline {gitStatus} />
+        <span> ·</span>{' '}
+        <span class="inline-flex items-center gap-1 align-middle">
+          <GitBranch class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />
+          <GitStatusInline {gitStatus} />
+        </span>
       {/if}
       {#if sessionContextUsageLabel(session)}
-        <span> · {sessionContextUsageLabel(session)}</span>
+        <span> ·</span>{' '}
+        <span class="inline-flex items-center gap-1 align-middle">
+          <Gauge class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />
+          <span>{sessionContextUsageLabel(session)}</span>
+        </span>
       {/if}
-      <span> · {session.client_type}</span>
-      {#if sessionProfileTitle(session)}<span> · {sessionProfileTitle(session)}</span>{/if}
-      {#if sessionHandleTitle(session)}<span> · {sessionHandleTitle(session)}</span>{/if}
+      <span> ·</span>{' '}
+      <span class="inline-flex items-center gap-1 align-middle">
+        <Terminal class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />
+        <span>{session.client_type}</span>
+      </span>
+      {#if sessionProfileTitle(session)}
+        <span> ·</span>{' '}
+        <span class="inline-flex items-center gap-1 align-middle">
+          <Bot class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />
+          <span>{sessionProfileTitle(session)}</span>
+        </span>
+      {/if}
+      {#if sessionHandleTitle(session)}
+        <span> ·</span>{' '}
+        <span class="inline-flex items-center gap-1 align-middle">
+          <AtSign class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />
+          <span>{sessionHandleTitle(session)}</span>
+        </span>
+      {/if}
     </span>
   </Popover.Trigger>
   <Popover.Content side="top" align="start" role="dialog" aria-label="Session details" portalProps={{ disabled: true }} class="w-[min(20rem,calc(100vw-2rem))] p-3">

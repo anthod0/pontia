@@ -1305,11 +1305,11 @@ test('shows supported context usage in chat session metadata while hiding unsupp
 
   render(ChatPage);
 
-  const contextBadge = (await screen.findAllByLabelText('Context usage: 42k / 128k · 33%'))[0];
+  const contextBadge = await screen.findByRole('button', { name: /Session details: .*33% · 42k \/ 128k/i });
   expect(contextBadge).toBeInTheDocument();
-  expect(contextBadge.querySelector('svg')).toHaveClass('lucide-gauge');
-  expect(screen.getAllByText('42k / 128k · 33%')[0]).toBeInTheDocument();
-  expect(screen.queryByText('Context 42k / 128k · 33%')).not.toBeInTheDocument();
+  expect(contextBadge.querySelector('.lucide-gauge')).toBeInTheDocument();
+  expect(screen.getAllByText('33% · 42k / 128k')[0]).toBeInTheDocument();
+  expect(screen.queryByText('Context 33% · 42k / 128k')).not.toBeInTheDocument();
 
   cleanup();
   const unsupported = session({ session_id: 'session-unsupported', capabilities: { context_usage: 'unsupported' }, context_usage: null });

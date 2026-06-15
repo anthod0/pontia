@@ -166,7 +166,7 @@ test('session detail page renders populated context usage', async () => {
 
   render(SessionDetailPage);
 
-  expect(await screen.findByText(/context 42k \/ 128k · 33% · estimated/i)).toBeInTheDocument();
+  expect(await screen.findByText(/context 33% · 42k \/ 128k · estimated/i)).toBeInTheDocument();
   expect(screen.getByText(/example-model/i)).toBeInTheDocument();
 });
 
