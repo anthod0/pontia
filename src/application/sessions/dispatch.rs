@@ -78,8 +78,18 @@ impl SessionCommandService {
                 Ok(())
             })
             .and_then(|()| {
+                let socket_path = runtime.tmux_socket_path().ok_or_else(|| {
+                    Error::Domain(format!(
+                        "session {session_id} runtime cannot accept tasks: missing tmux socket path"
+                    ))
+                })?;
+                let pane_id = runtime.tmux_pane_id().ok_or_else(|| {
+                    Error::Domain(format!(
+                        "session {session_id} runtime cannot accept tasks: missing tmux pane id"
+                    ))
+                })?;
                 self.runtime
-                    .dispatch_tui_turn(&runtime.runtime_ref, client_type, &agent_input)
+                    .dispatch_tui_turn(socket_path, pane_id, client_type, &agent_input)
             });
 
         match dispatch_result {

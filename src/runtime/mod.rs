@@ -39,6 +39,7 @@ mod tests {
                 handle: None,
                 role: None,
                 agent_kind: None,
+                start_command: None,
             })
             .expect("generic runtime should start");
 
@@ -68,6 +69,7 @@ mod tests {
                 handle: Some("@planner".to_string()),
                 role: Some("execution reviewer".to_string()),
                 agent_kind: None,
+                start_command: None,
             })
             .expect("generic runtime should start");
 
@@ -87,6 +89,7 @@ mod tests {
             handle: None,
             role: None,
             agent_kind: None,
+            start_command: None,
         };
 
         let first = manager
@@ -134,6 +137,7 @@ mod tests {
                 handle: None,
                 role: None,
                 agent_kind: Some("planner".to_string()),
+                start_command: None,
             },
             "rtinst_1",
         )

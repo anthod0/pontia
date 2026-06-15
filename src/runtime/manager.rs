@@ -11,7 +11,9 @@ use crate::{
     time::utc_now,
 };
 
-use super::{AgentInput, RuntimeStartRequest, RuntimeStartResult, in_process, paths, script, tmux};
+use super::{
+    AgentInput, RuntimeStartRequest, RuntimeStartResult, config, in_process, paths, script, tmux,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct GenericRuntimeManager;
@@ -39,6 +41,24 @@ impl GenericRuntimeManager {
             return in_process::start_session(request, capabilities, restart_count);
         }
 
+        let start_command = request.start_command.clone().or_else(|| {
+            client_spec.tmux_runtime().map(|runtime| {
+                runtime
+                    .command_env
+                    .and_then(|env| std::env::var(env).ok())
+                    .or_else(|| config::configured_tui_command(&request.client_type))
+                    .unwrap_or_else(|| {
+                        let mut command = runtime.default_command.to_string();
+                        if let Some(session_identity_arg) = runtime.session_identity_arg {
+                            command.push(' ');
+                            command.push_str(session_identity_arg);
+                            command.push(' ');
+                            command.push_str(&request.session_id);
+                        }
+                        command
+                    })
+            })
+        });
         let tmux_session = tmux::tmux_session_name(&request);
         let workspace = paths::workspace_path(&request)?;
         script::run_startup_hooks(client_spec.startup_hooks, &workspace)?;
@@ -76,6 +96,7 @@ impl GenericRuntimeManager {
             )));
         }
 
+        let pane_binding = tmux::pane_binding(&tmux_session);
         let started_at = utc_now()
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
@@ -112,7 +133,14 @@ impl GenericRuntimeManager {
             "started_at": started_at,
             "restart_count": restart_count,
             "runtime_instance_id": runtime_instance_id,
+            "start_command": start_command,
         });
+        if let Some(binding) = pane_binding
+            && let Some(object) = metadata.as_object_mut()
+        {
+            object.insert("tmux_socket_path".to_string(), json!(binding.socket_path));
+            object.insert("tmux_pane_id".to_string(), json!(binding.pane_id));
+        }
         if let Some((metadata_key, path)) = hook_log_metadata
             && let Some(object) = metadata.as_object_mut()
         {
@@ -132,17 +160,23 @@ impl GenericRuntimeManager {
 
     pub fn dispatch_tui_turn(
         &self,
-        runtime_ref: &str,
+        socket_path: &str,
+        pane_id: &str,
         client_type: &str,
         input: &AgentInput,
     ) -> Result<()> {
-        tmux::dispatch_tui_turn(runtime_ref, client_type, input)
+        tmux::dispatch_tui_turn(socket_path, pane_id, client_type, input)
     }
 
-    pub fn interrupt_session(&self, runtime_ref: &str, behavior: InterruptBehavior) -> Result<()> {
+    pub fn interrupt_session(
+        &self,
+        socket_path: &str,
+        pane_id: &str,
+        behavior: InterruptBehavior,
+    ) -> Result<()> {
         match behavior {
             InterruptBehavior::Unsupported => Ok(()),
-            InterruptBehavior::TmuxInterrupt => tmux::interrupt_session(runtime_ref),
+            InterruptBehavior::TmuxInterrupt => tmux::interrupt_session(socket_path, pane_id),
         }
     }
 

@@ -26,7 +26,7 @@ fn interrupt_session_sends_escape_key() {
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
 
     GenericRuntimeManager
-        .interrupt_session("runtime-ref", InterruptBehavior::TmuxInterrupt)
+        .interrupt_session("/tmp/tmux-test", "%42", InterruptBehavior::TmuxInterrupt)
         .expect("interrupt session");
 
     restore_fake_tmux(original_path);
@@ -34,7 +34,7 @@ fn interrupt_session_sends_escape_key() {
     let log = std::fs::read_to_string(tmux_log).expect("tmux log");
     let escape_sends = log
         .lines()
-        .filter(|line| *line == "send-keys -t runtime-ref Escape")
+        .filter(|line| *line == "-S /tmp/tmux-test send-keys -t %42 Escape")
         .count();
     assert_eq!(escape_sends, 1, "{log}");
 }
@@ -66,6 +66,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
             handle: None,
             role: None,
             agent_kind: None,
+            start_command: None,
         })
         .expect("start session");
 
@@ -113,6 +114,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
             handle: None,
             role: None,
             agent_kind: None,
+            start_command: None,
         })
         .expect("start session");
 
@@ -144,7 +146,7 @@ fn interrupt_session_succeeds_when_runtime_exits_after_escape() {
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, Some(&tmux_state));
 
     GenericRuntimeManager
-        .interrupt_session("runtime-ref", InterruptBehavior::TmuxInterrupt)
+        .interrupt_session("/tmp/tmux-test", "%42", InterruptBehavior::TmuxInterrupt)
         .expect("interrupt session should send escape successfully");
 
     restore_fake_tmux(original_path);
@@ -152,7 +154,7 @@ fn interrupt_session_succeeds_when_runtime_exits_after_escape() {
     let log = std::fs::read_to_string(tmux_log).expect("tmux log");
     let escape_sends = log
         .lines()
-        .filter(|line| *line == "send-keys -t runtime-ref Escape")
+        .filter(|line| *line == "-S /tmp/tmux-test send-keys -t %42 Escape")
         .count();
     assert_eq!(escape_sends, 1, "{log}");
 }

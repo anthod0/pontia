@@ -85,16 +85,21 @@ impl RuntimeControlService {
                 "session {session_id} runtime does not support interrupt"
             )));
         }
-        let runtime_target = self.runtime_target(session_id).await?.ok_or_else(|| {
-            Error::StateConflict(format!("session {session_id} has no runtime binding"))
+        let tmux_binding = self.tmux_pane_binding(session_id).await?.ok_or_else(|| {
+            Error::CapabilityUnavailable(format!(
+                "session {session_id} runtime does not support interrupt: missing tmux pane binding"
+            ))
         })?;
         let interrupt_behavior = get_client_spec(&session.client_type)
             .map(|spec| spec.interrupt)
             .ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", session.client_type))
             })?;
-        self.runtime
-            .interrupt_session(&runtime_target, interrupt_behavior)?;
+        self.runtime.interrupt_session(
+            &tmux_binding.socket_path,
+            &tmux_binding.pane_id,
+            interrupt_behavior,
+        )?;
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
@@ -242,6 +247,7 @@ impl RuntimeControlService {
                 handle: session.handle.clone(),
                 role: session.role.clone(),
                 agent_kind: pontia_agent_kind(&session.metadata),
+                start_command: self.start_command(session_id).await?,
             },
             prior_restart_count + 1,
         )?;
@@ -338,6 +344,7 @@ impl RuntimeControlService {
                 handle: session.handle.clone(),
                 role: session.role.clone(),
                 agent_kind: pontia_agent_kind(&session.metadata),
+                start_command: self.start_command(session_id).await?,
             },
             prior_restart_count + 1,
         )?;

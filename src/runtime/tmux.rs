@@ -10,6 +10,12 @@ use crate::error::{Error, Result};
 
 use super::{AgentInput, RuntimeStartRequest, utils::shell_quote};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct TmuxPaneBinding {
+    pub(super) socket_path: String,
+    pub(super) pane_id: String,
+}
+
 pub(super) fn spawn_tmux_session(
     tmux_session: &str,
     workspace: &Path,
@@ -39,19 +45,20 @@ pub(super) fn spawn_tmux_session(
 }
 
 pub(super) fn dispatch_tui_turn(
-    runtime_ref: &str,
+    socket_path: &str,
+    pane_id: &str,
     client_type: &str,
     input: &AgentInput,
 ) -> Result<()> {
-    if !is_alive(runtime_ref) {
+    if !is_pane_alive(socket_path, pane_id) {
         return Err(Error::Domain(format!(
-            "{client_type} runtime {runtime_ref} is not alive"
+            "{client_type} runtime pane {pane_id} is not alive"
         )));
     }
 
     let buffer_name = format!("pontia_{}", sanitize_tmux_identifier(&input.turn_id));
     let mut child = Command::new("tmux")
-        .args(["load-buffer", "-b", &buffer_name, "-"])
+        .args(["-S", socket_path, "load-buffer", "-b", &buffer_name, "-"])
         .stdin(Stdio::piped())
         .spawn()
         .map_err(|err| Error::Domain(format!("tmux dispatch buffer failed: {err}")))?;
@@ -73,14 +80,17 @@ pub(super) fn dispatch_tui_turn(
 
     let status = Command::new("tmux")
         .args([
+            "-S",
+            socket_path,
             "paste-buffer",
             "-p",
             "-r",
             "-t",
-            runtime_ref,
+            pane_id,
             "-b",
             &buffer_name,
         ])
+        .stderr(Stdio::null())
         .status()
         .map_err(|err| Error::Domain(format!("tmux dispatch paste failed: {err}")))?;
     if !status.success() {
@@ -90,7 +100,8 @@ pub(super) fn dispatch_tui_turn(
     }
 
     let status = Command::new("tmux")
-        .args(["send-keys", "-t", runtime_ref, "Enter"])
+        .args(["-S", socket_path, "send-keys", "-t", pane_id, "Enter"])
+        .stderr(Stdio::null())
         .status()
         .map_err(|err| Error::Domain(format!("tmux dispatch submit failed: {err}")))?;
     if !status.success() {
@@ -100,19 +111,20 @@ pub(super) fn dispatch_tui_turn(
     }
 
     let _ = Command::new("tmux")
-        .args(["delete-buffer", "-b", &buffer_name])
+        .args(["-S", socket_path, "delete-buffer", "-b", &buffer_name])
         .status();
     Ok(())
 }
 
-pub(super) fn interrupt_session(runtime_ref: &str) -> Result<()> {
-    if !is_alive(runtime_ref) {
+pub(super) fn interrupt_session(socket_path: &str, pane_id: &str) -> Result<()> {
+    if !is_pane_alive(socket_path, pane_id) {
         return Err(Error::Domain(format!(
-            "tmux runtime {runtime_ref} is not alive"
+            "tmux runtime pane {pane_id} is not alive"
         )));
     }
     let status = Command::new("tmux")
-        .args(["send-keys", "-t", runtime_ref, "Escape"])
+        .args(["-S", socket_path, "send-keys", "-t", pane_id, "Escape"])
+        .stderr(Stdio::null())
         .status()
         .map_err(|err| Error::Domain(format!("tmux runtime interrupt failed: {err}")))?;
     if !status.success() {
@@ -144,6 +156,51 @@ pub(super) fn is_alive(runtime_ref: &str) -> bool {
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|status| status.success())
+}
+
+pub(super) fn is_pane_alive(socket_path: &str, pane_id: &str) -> bool {
+    Command::new("tmux")
+        .args([
+            "-S",
+            socket_path,
+            "display-message",
+            "-p",
+            "-t",
+            pane_id,
+            "#{pane_id}",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+pub(super) fn pane_binding(runtime_ref: &str) -> Option<TmuxPaneBinding> {
+    let output = Command::new("tmux")
+        .args([
+            "display-message",
+            "-p",
+            "-t",
+            runtime_ref,
+            "#{socket_path}\t#{pane_id}",
+        ])
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let mut parts = text.trim().split('\t');
+    let socket_path = parts.next()?.to_string();
+    let pane_id = parts.next()?.to_string();
+    if socket_path.is_empty() || pane_id.is_empty() {
+        return None;
+    }
+    Some(TmuxPaneBinding {
+        socket_path,
+        pane_id,
+    })
 }
 
 pub(super) fn tmux_session_name(request: &RuntimeStartRequest) -> String {
@@ -192,6 +249,58 @@ mod tests {
     use std::{fs, process::Stdio};
 
     use super::*;
+
+    #[test]
+    fn dispatch_tui_turn_targets_bound_pane_with_socket_path() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let output = temp.path().join("messages.log");
+        let session = format!("pontia_test_pane_{}", std::process::id());
+        let command = format!("cat > {}", output.display());
+        let status = Command::new("tmux")
+            .args(["new-session", "-d", "-s", &session, &command])
+            .stderr(Stdio::null())
+            .status()
+            .expect("spawn tmux");
+        assert!(status.success(), "tmux session should start");
+
+        let socket_path = Command::new("tmux")
+            .args(["display-message", "-p", "-t", &session, "#{socket_path}"])
+            .output()
+            .expect("query socket path");
+        assert!(
+            socket_path.status.success(),
+            "socket path query should succeed"
+        );
+        let socket_path = String::from_utf8(socket_path.stdout)
+            .expect("socket path utf8")
+            .trim()
+            .to_string();
+        let pane_id = Command::new("tmux")
+            .args(["display-message", "-p", "-t", &session, "#{pane_id}"])
+            .output()
+            .expect("query pane id");
+        assert!(pane_id.status.success(), "pane id query should succeed");
+        let pane_id = String::from_utf8(pane_id.stdout)
+            .expect("pane id utf8")
+            .trim()
+            .to_string();
+
+        let input = AgentInput {
+            session_id: "session_pane".to_string(),
+            turn_id: "turn_pane".to_string(),
+            input: "pane-bound input".to_string(),
+        };
+        let result = dispatch_tui_turn(&socket_path, &pane_id, "pi", &input);
+
+        result.expect("dispatch to bound pane");
+        thread::sleep(Duration::from_millis(200));
+        let _ = Command::new("tmux")
+            .args(["kill-session", "-t", &session])
+            .stderr(Stdio::null())
+            .status();
+        let content = fs::read_to_string(&output).expect("fake tui output");
+        assert!(content.contains("pane-bound input"));
+    }
 
     #[test]
     fn dispatch_tui_turn_preserves_multiline_input_as_one_bracketed_paste() {
@@ -252,12 +361,33 @@ while True:
         assert!(status.success(), "tmux session should start");
 
         thread::sleep(Duration::from_millis(300));
+        let socket_path = Command::new("tmux")
+            .args(["display-message", "-p", "-t", &session, "#{socket_path}"])
+            .output()
+            .expect("query socket path");
+        assert!(
+            socket_path.status.success(),
+            "socket path query should succeed"
+        );
+        let socket_path = String::from_utf8(socket_path.stdout)
+            .expect("socket path utf8")
+            .trim()
+            .to_string();
+        let pane_id = Command::new("tmux")
+            .args(["display-message", "-p", "-t", &session, "#{pane_id}"])
+            .output()
+            .expect("query pane id");
+        assert!(pane_id.status.success(), "pane id query should succeed");
+        let pane_id = String::from_utf8(pane_id.stdout)
+            .expect("pane id utf8")
+            .trim()
+            .to_string();
         let input = AgentInput {
             session_id: "session_multiline".to_string(),
             turn_id: "turn_multiline".to_string(),
             input: "line one\nline two".to_string(),
         };
-        let result = dispatch_tui_turn(&session, "pi", &input);
+        let result = dispatch_tui_turn(&socket_path, &pane_id, "pi", &input);
 
         result.expect("dispatch multiline turn");
         for _ in 0..50 {

@@ -11,6 +11,7 @@ pub struct RuntimeStartRequest {
     pub handle: Option<String>,
     pub role: Option<String>,
     pub agent_kind: Option<String>,
+    pub start_command: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

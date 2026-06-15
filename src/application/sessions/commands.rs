@@ -105,6 +105,7 @@ impl SessionCommandService {
             handle: request.handle.clone(),
             role: request.role.clone(),
             agent_kind: pontia_agent_kind(&request.metadata),
+            start_command: None,
         })?;
         self.upsert_runtime_binding(&session_id, &runtime).await?;
         self.update_session_workspace(&session_id, workspace_record.as_ref())

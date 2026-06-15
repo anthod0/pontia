@@ -33,12 +33,18 @@ pub(super) fn write_runtime_script(
     })?;
     let (log_setup, runtime_body) = match client_spec.runtime {
         RuntimeBehavior::Tmux(tmux_runtime) => {
-            let mut command = tmux_runtime
-                .command_env
-                .and_then(|env| std::env::var(env).ok())
+            let mut command = request
+                .start_command
+                .clone()
+                .or_else(|| {
+                    tmux_runtime
+                        .command_env
+                        .and_then(|env| std::env::var(env).ok())
+                })
                 .or_else(|| configured_tui_command(&request.client_type))
                 .unwrap_or_else(|| tmux_runtime.default_command.to_string());
-            if let Some(session_identity_arg) = tmux_runtime.session_identity_arg
+            if request.start_command.is_none()
+                && let Some(session_identity_arg) = tmux_runtime.session_identity_arg
                 && command.trim() == tmux_runtime.default_command
             {
                 command.push(' ');
@@ -197,6 +203,7 @@ mod tests {
             handle: None,
             role: None,
             agent_kind: None,
+            start_command: None,
         };
 
         write_runtime_script(
@@ -234,6 +241,7 @@ mod tests {
             handle: None,
             role: None,
             agent_kind: Some("planner".to_string()),
+            start_command: None,
         };
 
         unsafe {
@@ -290,6 +298,7 @@ mod tests {
             handle: None,
             role: None,
             agent_kind: None,
+            start_command: None,
         };
 
         write_runtime_script(
@@ -310,6 +319,40 @@ mod tests {
             !script.contains("export PONTIA_PI_HOOK_LOG="),
             "script was:\n{script}"
         );
+    }
+
+    #[test]
+    fn runtime_script_prefers_explicit_start_command() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let paths = RuntimePaths {
+            runtime_dir: tempdir.path(),
+            log_path: &tempdir.path().join("runtime.log"),
+            adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
+            current_turn_file: &tempdir.path().join("current-turn.json"),
+        };
+        let request = RuntimeStartRequest {
+            session_id: "sess_explicit_start".to_string(),
+            client_type: "pi".to_string(),
+            workspace: Some(tempdir.path().display().to_string()),
+            handle: None,
+            role: None,
+            agent_kind: None,
+            start_command: Some("pi --resume-user-command".to_string()),
+        };
+        let script_path = tempdir.path().join("runtime.sh");
+
+        write_runtime_script(
+            &script_path,
+            tempdir.path(),
+            &paths,
+            &request,
+            "rtinst_explicit",
+        )
+        .expect("write runtime script");
+
+        let content = std::fs::read_to_string(script_path).expect("runtime script");
+        assert!(content.contains("pi --resume-user-command"));
+        assert!(!content.contains("--session-id sess_explicit_start"));
     }
 
     #[test]

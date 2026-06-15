@@ -51,10 +51,15 @@ impl TurnCommandService {
         }
 
         if !session.capabilities.accept_task {
-            return Err(Error::Domain(format!(
+            return Err(Error::CapabilityUnavailable(format!(
                 "session {session_id} runtime cannot accept tasks"
             )));
         }
+        let tmux_binding = if dispatch_mode == DispatchMode::TmuxPaste {
+            Some(self.required_tmux_pane_binding(session_id).await?)
+        } else {
+            None
+        };
 
         let turn_id = new_turn_id().to_string();
         let agent_input = AgentInput {
@@ -93,8 +98,7 @@ impl TurnCommandService {
         if dispatch_mode == DispatchMode::GenericTestAdapter {
             let behavior = GenericTestAdapter::behavior();
             if behavior.write_current_turn_context
-                && let Some((_runtime_ref, binding_metadata)) =
-                    self.runtime_binding_metadata(session_id).await?
+                && let Some(binding_metadata) = self.runtime_binding_metadata(session_id).await?
             {
                 write_client_current_turn_context(
                     &binding_metadata,
@@ -120,7 +124,10 @@ impl TurnCommandService {
 
         if dispatch_mode == DispatchMode::TmuxPaste {
             match self.runtime_binding_metadata(session_id).await? {
-                Some((runtime_ref, binding_metadata)) => {
+                Some(binding_metadata) => {
+                    let tmux_binding = tmux_binding
+                        .as_ref()
+                        .expect("tmux binding was validated before turn creation");
                     match self
                         .wait_for_tui_readiness_if_needed(
                             &session.client_type,
@@ -141,7 +148,8 @@ impl TurnCommandService {
                         })
                         .and_then(|()| {
                             self.runtime.dispatch_tui_turn(
-                                &runtime_ref,
+                                &tmux_binding.socket_path,
+                                &tmux_binding.pane_id,
                                 &session.client_type,
                                 &agent_input,
                             )
@@ -218,27 +226,47 @@ impl TurnCommandService {
             .await
     }
 
-    async fn runtime_binding_metadata(&self, session_id: &str) -> Result<Option<(String, Value)>> {
+    async fn runtime_binding_metadata(&self, session_id: &str) -> Result<Option<Value>> {
         let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)
             .fetch_optional(&self.pool)
             .await?;
         row.map(|row| {
             let metadata: String = row.try_get("metadata")?;
-            let metadata: Value = serde_json::from_str(&metadata)?;
-            let runtime_target = runtime_target_from_metadata(&metadata).unwrap_or_default();
-            Ok((runtime_target, metadata))
+            serde_json::from_str(&metadata).map_err(Into::into)
         })
         .transpose()
     }
+
+    async fn required_tmux_pane_binding(&self, session_id: &str) -> Result<TmuxPaneBinding> {
+        let row = sqlx::query(
+            "SELECT tmux_socket_path, tmux_pane_id FROM runtime_bindings WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| Error::Domain(format!("session {session_id} has no runtime binding")))?;
+        let socket_path: Option<String> = row.try_get("tmux_socket_path")?;
+        let pane_id: Option<String> = row.try_get("tmux_pane_id")?;
+        match (socket_path, pane_id) {
+            (Some(socket_path), Some(pane_id))
+                if !socket_path.trim().is_empty() && !pane_id.trim().is_empty() =>
+            {
+                Ok(TmuxPaneBinding {
+                    socket_path,
+                    pane_id,
+                })
+            }
+            _ => Err(Error::CapabilityUnavailable(format!(
+                "session {session_id} runtime cannot accept tasks: missing tmux pane binding"
+            ))),
+        }
+    }
 }
 
-fn runtime_target_from_metadata(metadata: &Value) -> Option<String> {
-    metadata["tmux"]["session_name"]
-        .as_str()
-        .or_else(|| metadata["tmux_session"].as_str())
-        .or_else(|| metadata["in_process"]["runtime_key"].as_str())
-        .map(ToString::to_string)
+struct TmuxPaneBinding {
+    socket_path: String,
+    pane_id: String,
 }
 
 pub(crate) fn write_client_current_turn_context(
@@ -347,6 +375,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn pi_tmux_turn_dispatch_requires_bound_tmux_pane_before_creating_turn() {
+        let pool = test_pool().await;
+        let session_id = new_session_id().to_string();
+        let runtime_instance_id = "rtinst_no_pane";
+
+        let ingest = EventIngestService::new(pool.clone());
+        ingest_session_event(
+            &ingest,
+            &session_id,
+            EventType::SessionCreated,
+            EventSource::ExternalApi,
+            json!({"metadata": {}}),
+        )
+        .await;
+        ingest_session_event(
+            &ingest,
+            &session_id,
+            EventType::SessionStarted,
+            EventSource::RuntimeManager,
+            json!({}),
+        )
+        .await;
+        ingest_session_event(
+            &ingest,
+            &session_id,
+            EventType::SessionReady,
+            EventSource::AgentClient,
+            json!({"runtime_instance_id": runtime_instance_id}),
+        )
+        .await;
+
+        sqlx::query(
+            "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata) VALUES (?, 'pi_tui', ?, ?)",
+        )
+        .bind(&session_id)
+        .bind(runtime_instance_id)
+        .bind(json!({
+            "runtime_instance_id": runtime_instance_id,
+            "current_turn_file": "/tmp/unused-current-turn.json",
+            "capabilities": {
+                "accept_task": true,
+                "report_turn_started": true,
+                "report_turn_finished": true,
+                "interrupt": true,
+                "stream_output": true,
+                "heartbeat": false,
+                "artifact_sources": true
+            }
+        }).to_string())
+        .execute(&pool)
+        .await
+        .expect("insert runtime binding");
+
+        let error = TurnCommandService::new(pool.clone())
+            .create_and_dispatch_turn(&session_id, "cannot web write".to_string(), json!({}))
+            .await
+            .expect_err("missing pane binding should reject dispatch");
+        assert!(
+            error.to_string().contains("runtime cannot accept tasks"),
+            "unexpected error: {error}"
+        );
+        let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+            .bind(&session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("turn count");
+        assert_eq!(turn_count, 0);
+    }
+
+    #[tokio::test]
     async fn pi_tmux_turn_dispatch_waits_for_agent_client_ready() {
         let pool = test_pool().await;
         let session_id = new_session_id().to_string();
@@ -363,6 +461,33 @@ mod tests {
             .status()
             .expect("spawn tmux");
         assert!(status.success(), "tmux session should start");
+        let socket_path = Command::new("tmux")
+            .args([
+                "display-message",
+                "-p",
+                "-t",
+                &runtime_ref,
+                "#{socket_path}",
+            ])
+            .output()
+            .expect("query socket path");
+        assert!(
+            socket_path.status.success(),
+            "socket path query should succeed"
+        );
+        let socket_path = String::from_utf8(socket_path.stdout)
+            .expect("socket path utf8")
+            .trim()
+            .to_string();
+        let pane_id = Command::new("tmux")
+            .args(["display-message", "-p", "-t", &runtime_ref, "#{pane_id}"])
+            .output()
+            .expect("query pane id");
+        assert!(pane_id.status.success(), "pane id query should succeed");
+        let pane_id = String::from_utf8(pane_id.stdout)
+            .expect("pane id utf8")
+            .trim()
+            .to_string();
 
         let ingest = EventIngestService::new(pool.clone());
         ingest_session_event(
@@ -391,10 +516,12 @@ mod tests {
         .await;
 
         sqlx::query(
-            "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata) VALUES (?, 'tmux', ?, ?)",
+            "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, tmux_socket_path, tmux_pane_id, metadata) VALUES (?, 'tmux', ?, ?, ?, ?)",
         )
         .bind(&session_id)
         .bind(runtime_instance_id)
+        .bind(&socket_path)
+        .bind(&pane_id)
         .bind(json!({
             "runtime_instance_id": runtime_instance_id,
             "tmux": { "session_name": runtime_ref },

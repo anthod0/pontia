@@ -8,6 +8,12 @@ fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
         .map(ToString::to_string)
 }
 
+#[derive(Debug, Clone)]
+pub(super) struct TmuxPaneBinding {
+    pub(super) socket_path: String,
+    pub(super) pane_id: String,
+}
+
 impl RuntimeControlService {
     pub(super) async fn runtime_target(&self, session_id: &str) -> Result<Option<String>> {
         let metadata: Option<String> =
@@ -22,6 +28,46 @@ impl RuntimeControlService {
             .transpose()
             .map_err(Into::into)
             .map(Option::flatten)
+    }
+
+    pub(super) async fn tmux_pane_binding(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<TmuxPaneBinding>> {
+        let row = sqlx::query(
+            "SELECT tmux_socket_path, tmux_pane_id FROM runtime_bindings WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(|row| {
+            let socket_path: Option<String> = row.try_get("tmux_socket_path")?;
+            let pane_id: Option<String> = row.try_get("tmux_pane_id")?;
+            Ok(match (socket_path, pane_id) {
+                (Some(socket_path), Some(pane_id))
+                    if !socket_path.trim().is_empty() && !pane_id.trim().is_empty() =>
+                {
+                    Some(TmuxPaneBinding {
+                        socket_path,
+                        pane_id,
+                    })
+                }
+                _ => None,
+            })
+        })
+        .transpose()
+        .map(Option::flatten)
+    }
+
+    pub(super) async fn start_command(&self, session_id: &str) -> Result<Option<String>> {
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT start_command FROM runtime_bindings WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map(Option::flatten)
+        .map_err(Into::into)
     }
 
     pub(super) async fn restart_count(&self, session_id: &str) -> Result<Option<i64>> {
