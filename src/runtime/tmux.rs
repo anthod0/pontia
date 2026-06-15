@@ -135,13 +135,13 @@ pub(super) fn interrupt_session(socket_path: &str, pane_id: &str) -> Result<()> 
     Ok(())
 }
 
-pub(super) fn terminate_session(runtime_ref: &str) -> Result<()> {
+pub(super) fn terminate_session(runtime_handle: &str) -> Result<()> {
     let status = Command::new("tmux")
-        .args(["kill-session", "-t", runtime_ref])
+        .args(["kill-session", "-t", runtime_handle])
         .stderr(Stdio::null())
         .status()
         .map_err(|err| Error::Domain(format!("tmux runtime terminate failed: {err}")))?;
-    if status.success() || !is_alive(runtime_ref) {
+    if status.success() || !is_alive(runtime_handle) {
         Ok(())
     } else {
         Err(Error::Domain(format!(
@@ -150,9 +150,9 @@ pub(super) fn terminate_session(runtime_ref: &str) -> Result<()> {
     }
 }
 
-pub(super) fn is_alive(runtime_ref: &str) -> bool {
+pub(super) fn is_alive(runtime_handle: &str) -> bool {
     Command::new("tmux")
-        .args(["has-session", "-t", runtime_ref])
+        .args(["has-session", "-t", runtime_handle])
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|status| status.success())
@@ -175,13 +175,13 @@ pub(super) fn is_pane_alive(socket_path: &str, pane_id: &str) -> bool {
         .is_ok_and(|status| status.success())
 }
 
-pub(super) fn pane_binding(runtime_ref: &str) -> Option<TmuxPaneBinding> {
+pub(super) fn pane_binding(runtime_handle: &str) -> Option<TmuxPaneBinding> {
     let output = Command::new("tmux")
         .args([
             "display-message",
             "-p",
             "-t",
-            runtime_ref,
+            runtime_handle,
             "#{socket_path}\t#{pane_id}",
         ])
         .stderr(Stdio::null())

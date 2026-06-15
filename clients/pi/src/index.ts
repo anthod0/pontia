@@ -290,21 +290,21 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
       if (hasManagedRuntimeEnvIntent(env)) return;
 
-      const attached = await attachRuntime({ env, session: sessionDetails, fetch: fetchImpl });
-      if (!attached.ok) {
+      const bindingResult = await attachRuntime({ env, session: sessionDetails, fetch: fetchImpl });
+      if (!bindingResult.ok) {
         unboundForSession = true;
-        await logDiagnostic(attached.logFile, {
+        await logDiagnostic(bindingResult.logFile, {
           level: "warn",
           code: "pontia_auto_attach_unbound",
           message: "pontia server unavailable or runtime binding upsert failed; this pi session will not report pontia events",
-          details: { code: attached.code, reason: attached.reason },
+          details: { code: bindingResult.code, reason: bindingResult.reason },
         });
         return;
       }
 
-      autoBoundContext = attached.context;
-      const context = { ...attached.context, ...sessionDetails };
-      readyReported = await makeReporter(attached.logFile).report(context, buildSessionReadyEvent(context));
+      autoBoundContext = bindingResult.context;
+      const context = { ...bindingResult.context, ...sessionDetails };
+      readyReported = await makeReporter(bindingResult.logFile).report(context, buildSessionReadyEvent(context));
     } catch (error) {
       const logFile = env.PONTIA_PI_HOOK_LOG ?? "pi-hook.log";
       await logDiagnostic(logFile, {

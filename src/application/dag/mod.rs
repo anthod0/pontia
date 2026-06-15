@@ -15,7 +15,7 @@ mod proposals;
 use helpers::{
     append_task_event, ensure_task_exists, ensure_work_item_exists, ensure_work_item_not_running,
     expand_patch_operations, new_prefixed_id, parse_json_string, resolve_patch_ref,
-    resolve_runtime_ref, validate_supersede_policy, work_item_event_payload,
+    resolve_temp_id_ref, validate_supersede_policy, work_item_event_payload,
 };
 use projection::initialize_projection;
 

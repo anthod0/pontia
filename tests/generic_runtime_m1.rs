@@ -99,7 +99,7 @@ async fn submit_turn(state: AppState, session_id: &str) -> String {
 }
 
 #[tokio::test]
-async fn generic_runtime_ref_includes_handle_role_and_short_session_id() {
+async fn generic_runtime_handle_includes_handle_role_and_short_session_id() {
     let scope = GenericClientTestScope::new().await;
     let state = test_state("generic_named_runtime").await;
     let workspace = tempfile::tempdir().expect("workspace");
@@ -115,7 +115,7 @@ async fn generic_runtime_ref_includes_handle_role_and_short_session_id() {
     )
     .await;
     let metadata = binding_metadata(&state, &session_id).await;
-    let runtime_ref = scope.runtime_ref(&state, &session_id).await;
+    let runtime_handle = scope.runtime_handle(&state, &session_id).await;
     let id_body = session_id.rsplit('_').next().unwrap_or(&session_id);
     let short_id = id_body[id_body.len() - 8..].to_string();
 
@@ -123,10 +123,10 @@ async fn generic_runtime_ref_includes_handle_role_and_short_session_id() {
     assert_eq!(metadata["handle"], "@planner");
     assert_eq!(metadata["role"], "execution reviewer");
     assert_eq!(
-        runtime_ref,
+        runtime_handle,
         format!("generic:planner:execution_reviewer:{short_id}")
     );
-    assert!(scope.is_runtime_alive(&runtime_ref));
+    assert!(scope.is_runtime_alive(&runtime_handle));
 }
 
 #[tokio::test]
@@ -136,8 +136,8 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
     let first = binding_metadata(&state, &session_id).await;
-    let runtime_ref = scope.runtime_ref(&state, &session_id).await;
-    assert!(scope.is_runtime_alive(&runtime_ref));
+    let runtime_handle = scope.runtime_handle(&state, &session_id).await;
+    assert!(scope.is_runtime_alive(&runtime_handle));
 
     let (status, body) = request(
         state.clone(),
@@ -150,11 +150,14 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["data"]["session"]["state"], "idle");
-    assert_eq!(scope.runtime_ref(&state, &session_id).await, runtime_ref);
+    assert_eq!(
+        scope.runtime_handle(&state, &session_id).await,
+        runtime_handle
+    );
     assert_eq!(second["restart_count"], 1);
     assert_ne!(first["runtime_instance_id"], second["runtime_instance_id"]);
     assert_ne!(first["started_at"], second["started_at"]);
-    assert!(scope.is_runtime_alive(&runtime_ref));
+    assert!(scope.is_runtime_alive(&runtime_handle));
 
     let (status, body) = request(
         state.clone(),
@@ -166,7 +169,7 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["data"]["session"]["state"], "exited");
-    assert!(!scope.is_runtime_alive(&runtime_ref));
+    assert!(!scope.is_runtime_alive(&runtime_handle));
 }
 
 #[tokio::test]

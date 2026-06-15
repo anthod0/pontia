@@ -105,7 +105,7 @@ pub(super) fn expand_patch_operations(operations: &[PatchOperation]) -> Vec<Patc
     expanded
 }
 
-pub(super) fn resolve_runtime_ref(value: &str, temp_id_map: &HashMap<String, String>) -> String {
+pub(super) fn resolve_temp_id_ref(value: &str, temp_id_map: &HashMap<String, String>) -> String {
     temp_id_map
         .get(value)
         .cloned()

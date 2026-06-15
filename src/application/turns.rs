@@ -448,16 +448,16 @@ mod tests {
     async fn pi_tmux_turn_dispatch_waits_for_agent_client_ready() {
         let pool = test_pool().await;
         let session_id = new_session_id().to_string();
-        let runtime_ref = tmux_session_name(&session_id);
+        let tmux_session_name = tmux_session_name(&session_id);
         let _guard = TmuxSessionGuard {
-            tmux_session: runtime_ref.clone(),
+            tmux_session: tmux_session_name.clone(),
         };
         let runtime_dir = tempfile::tempdir().expect("runtime dir");
         let current_turn_file = runtime_dir.path().join("current-turn.json");
         let runtime_instance_id = "rtinst_wait_for_ready";
 
         let status = Command::new("tmux")
-            .args(["new-session", "-d", "-s", &runtime_ref, "sleep", "30"])
+            .args(["new-session", "-d", "-s", &tmux_session_name, "sleep", "30"])
             .status()
             .expect("spawn tmux");
         assert!(status.success(), "tmux session should start");
@@ -466,7 +466,7 @@ mod tests {
                 "display-message",
                 "-p",
                 "-t",
-                &runtime_ref,
+                &tmux_session_name,
                 "#{socket_path}",
             ])
             .output()
@@ -480,7 +480,13 @@ mod tests {
             .trim()
             .to_string();
         let pane_id = Command::new("tmux")
-            .args(["display-message", "-p", "-t", &runtime_ref, "#{pane_id}"])
+            .args([
+                "display-message",
+                "-p",
+                "-t",
+                &tmux_session_name,
+                "#{pane_id}",
+            ])
             .output()
             .expect("query pane id");
         assert!(pane_id.status.success(), "pane id query should succeed");
@@ -524,7 +530,7 @@ mod tests {
         .bind(&pane_id)
         .bind(json!({
             "runtime_instance_id": runtime_instance_id,
-            "tmux": { "session_name": runtime_ref },
+            "tmux": { "session_name": tmux_session_name },
             "current_turn_file": current_turn_file.display().to_string(),
             "capabilities": {
                 "accept_task": true,

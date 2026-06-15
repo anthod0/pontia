@@ -34,7 +34,7 @@ A coding-agent session should not belong to one terminal window.
 
 Start it from a desktop TUI, check it from a phone, continue it from the Web UI, or interrupt it from another device. The same session should stay alive, keep its context, and remain observable wherever the developer is.
 
-Current state: partially implemented with the Web Dashboard, tmux-backed runtimes, pi integrations.
+Current state: partially implemented with the Web Dashboard, tmux-backed runtimes, pi integrations, and pi runtime binding upsert. A pi TUI that loads the pontia extension binds to a pontia session at startup: tmux-backed pi sessions can accept Web input through their bound pane, while non-tmux pi sessions remain observable but are not writable from the Web UI.
 
 ### Agent-planned WorkItem DAGs
 
@@ -68,7 +68,7 @@ Current state: early task, DAG, work-item, proposal, scheduler, and provenance m
 
 - **Use real agent TUIs as runtimes**: pi, Claude Code, and future clients run as long-lived real TUI processes, currently hosted through tmux, rather than short-lived subprocess commands such as `claude -p`. This keeps sessions alive while preserving official client behavior and legitimate subscription-based usage.
 - **pontia owns the durable control state**: sessions, turns, tasks, DAG nodes, events, artifacts, and projections live outside the agent process.
-- **Every UI is a control surface**: desktop TUI, Web Dashboard, mobile Web, HTTP API, and future clients should attach to the same underlying session instead of creating separate worlds.
+- **Every UI is a control surface**: desktop TUI, Web Dashboard, mobile Web, HTTP API, and future clients should attach to the same underlying session instead of creating separate worlds. Runtime bindings and capabilities describe what each live client can do; for example, a pi TUI outside tmux is still observable but reports `accept_task = false`, so the Web composer is disabled.
 - **Long-running tasks are WorkItem DAGs**: large tasks are represented as ordered dependency graphs. A Planner creates and repairs the graph, while Workers stay intentionally simple and execute work items mechanically. Failures, new information, or human interruptions should patch the DAG into a new execution path, with each node remaining inspectable, retryable, and repairable.
 
 ## Local development quick start

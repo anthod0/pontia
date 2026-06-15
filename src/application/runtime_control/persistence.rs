@@ -4,6 +4,7 @@ fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
     metadata["tmux"]["session_name"]
         .as_str()
         .or_else(|| metadata["tmux_session"].as_str())
+        .or_else(|| metadata["in_process"]["runtime_handle"].as_str())
         .or_else(|| metadata["in_process"]["runtime_key"].as_str())
         .map(ToString::to_string)
 }

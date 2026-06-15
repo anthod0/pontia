@@ -83,8 +83,8 @@ impl DagService {
                     .await?;
                 }
                 PatchOperation::AddEdge { edge } => {
-                    let from = resolve_runtime_ref(&edge.from_work_item_id, &temp_id_map);
-                    let to = resolve_runtime_ref(&edge.to_work_item_id, &temp_id_map);
+                    let from = resolve_temp_id_ref(&edge.from_work_item_id, &temp_id_map);
+                    let to = resolve_temp_id_ref(&edge.to_work_item_id, &temp_id_map);
                     append_task_event(
                         &mut tx,
                         task_id,
@@ -99,8 +99,8 @@ impl DagService {
                     .await?;
                 }
                 PatchOperation::RemoveEdge { edge } => {
-                    let from = resolve_runtime_ref(&edge.from_work_item_id, &temp_id_map);
-                    let to = resolve_runtime_ref(&edge.to_work_item_id, &temp_id_map);
+                    let from = resolve_temp_id_ref(&edge.from_work_item_id, &temp_id_map);
+                    let to = resolve_temp_id_ref(&edge.to_work_item_id, &temp_id_map);
                     append_task_event(
                         &mut tx,
                         task_id,

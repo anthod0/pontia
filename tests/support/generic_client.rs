@@ -45,18 +45,18 @@ impl GenericClientTestScope {
         GenericTestAdapter::recorded_inputs()
     }
 
-    pub fn is_runtime_alive(&self, runtime_ref: &str) -> bool {
-        GenericRuntimeManager.is_alive(runtime_ref)
+    pub fn is_runtime_alive(&self, runtime_handle: &str) -> bool {
+        GenericRuntimeManager.is_alive(runtime_handle)
     }
 
     pub fn reset_runtime_registry(&self) {
         GenericRuntimeManager::reset_in_process_test_registry();
     }
 
-    pub async fn runtime_ref(&self, state: &AppState, session_id: &str) -> String {
-        self.runtime_metadata(state, session_id).await["in_process"]["runtime_key"]
+    pub async fn runtime_handle(&self, state: &AppState, session_id: &str) -> String {
+        self.runtime_metadata(state, session_id).await["in_process"]["runtime_handle"]
             .as_str()
-            .expect("runtime key")
+            .expect("runtime handle")
             .to_string()
     }
 

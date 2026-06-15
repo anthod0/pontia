@@ -44,7 +44,7 @@ mod tests {
             .expect("generic runtime should start");
 
         assert_eq!(runtime.runtime_kind, "in_process_test");
-        assert_eq!(runtime.runtime_ref, format!("generic:{session_id}"));
+        assert_eq!(runtime.runtime_handle, format!("generic:{session_id}"));
         assert_eq!(runtime.metadata["backend"], "in_process_test");
         assert_eq!(runtime.metadata["test_runtime"], true);
         assert!(
@@ -57,7 +57,7 @@ mod tests {
     }
 
     #[test]
-    fn generic_runtime_ref_uses_handle_role_and_short_session_id() {
+    fn generic_runtime_handle_uses_handle_role_and_short_session_id() {
         let manager = GenericRuntimeManager;
         let session_id = "sess_1234567890abcdef".to_string();
 
@@ -74,7 +74,7 @@ mod tests {
             .expect("generic runtime should start");
 
         assert_eq!(
-            runtime.runtime_ref,
+            runtime.runtime_handle,
             "generic:planner:execution_reviewer:90abcdef"
         );
     }
@@ -95,18 +95,18 @@ mod tests {
         let first = manager
             .start_session(request.clone())
             .expect("generic runtime should start");
-        assert!(manager.is_alive(&first.runtime_ref));
+        assert!(manager.is_alive(&first.runtime_handle));
 
         manager
-            .terminate_session(&first.runtime_ref)
+            .terminate_session(&first.runtime_handle)
             .expect("terminate generic runtime");
-        assert!(!manager.is_alive(&first.runtime_ref));
+        assert!(!manager.is_alive(&first.runtime_handle));
 
         let second = manager
             .start_session_with_restart_count(request, 1)
             .expect("generic runtime should restart");
-        assert_eq!(second.runtime_ref, first.runtime_ref);
-        assert!(manager.is_alive(&second.runtime_ref));
+        assert_eq!(second.runtime_handle, first.runtime_handle);
+        assert!(manager.is_alive(&second.runtime_handle));
         assert_ne!(
             first.metadata["runtime_instance_id"],
             second.metadata["runtime_instance_id"]

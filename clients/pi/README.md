@@ -1,6 +1,6 @@
 # @pontia/pi-client-plugin
 
-First-party pi extension for reporting pi startup readiness and confirmed turn facts back to pontia.
+First-party pi extension for binding pi TUI sessions to pontia and reporting startup readiness plus confirmed turn facts back to pontia.
 
 ## Install locally
 
@@ -16,6 +16,16 @@ Or install it into project-local pi settings:
 pi install -l ./clients/pi
 ```
 
+## Runtime binding
+
+On `session_start`, the extension first looks for a managed pontia runtime environment. If `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_INTERNAL_EVENT_URL` are present, it reports against that existing pontia session.
+
+If the managed environment is absent, the extension attempts to bind the current pi TUI by calling `POST /internal/v1/runtime-bindings/upsert`. The upsert uses the real pi session id as `client_session_key`, records pi session file/dir/cwd metadata, and records tmux socket + pane id when the TUI is running inside tmux.
+
+- In tmux: pontia records the bound pane and returns capabilities such as `accept_task: true` and `interrupt: true`, allowing Web submit/interrupt through that pane.
+- Outside tmux: pontia still creates/reuses an observable session, but returns `accept_task: false` and `interrupt: false`; the Web UI shows turns/output/usage/transcript but disables Web input.
+- If pontia is unavailable during `session_start`, the pi session is left unbound and continues normally without reporting pontia events.
+
 ## Runtime environment
 
 The extension reads configuration from environment variables:
@@ -24,10 +34,10 @@ The extension reads configuration from environment variables:
 | --- | --- | --- |
 | `PONTIA_WORKSPACE` | recommended | pi process cwd |
 | `PONTIA_RUNTIME_DIR` | recommended | pi process cwd |
-| `PONTIA_SESSION_ID` | required for startup ready | none |
-| `PONTIA_RUNTIME_INSTANCE_ID` | required for startup ready | none |
+| `PONTIA_SESSION_ID` | required only for managed runtime mode | none |
+| `PONTIA_RUNTIME_INSTANCE_ID` | required only for managed runtime mode | none |
 | `PONTIA_CURRENT_TURN_FILE` | recommended | `$PONTIA_RUNTIME_DIR/current-turn.json` |
-| `PONTIA_INTERNAL_EVENT_URL` | required for startup ready, required for turns unless present in context file | none |
+| `PONTIA_INTERNAL_EVENT_URL` | required for managed mode; otherwise used to derive the upsert URL when present | none |
 | `PONTIA_PI_HOOK_LOG` | recommended | `$PONTIA_RUNTIME_DIR/pi-hook.log` |
 
 Expected `current-turn.json`:
@@ -47,7 +57,7 @@ Expected `current-turn.json`:
 
 ## What the extension reports
 
-- On `session_start` with reason `startup`, it posts a one-time `session.ready` signal from `agent_client` with the current `runtime_instance_id` plus the real pi session identity from `ctx.sessionManager.getSessionId()` as `client_session_key`.
+- On `session_start` with reason `startup`, it binds or reuses a pontia session, then posts a one-time `session.ready` signal from `agent_client` with the current `runtime_instance_id` plus the real pi session identity from `ctx.sessionManager.getSessionId()` as `client_session_key`.
 - On `agent_start`, it reads the current turn context.
 - On assistant message updates/end events, it collects assistant-visible text from pi lifecycle event payloads.
 - When pi exposes context usage through hook events, message usage, or `ctx.getContextUsage()`, it posts `session.context_usage_updated`; it does not parse session files or fabricate usage when pi does not provide it.
@@ -62,7 +72,7 @@ DAG task development is currently frozen while pontia focuses on session-first W
 
 ## Manual validation
 
-When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_RUNTIME_DIR`, `PONTIA_CURRENT_TURN_FILE`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_PI_HOOK_LOG` for the hook. The steps below are useful for standalone plugin validation.
+When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_RUNTIME_DIR`, `PONTIA_CURRENT_TURN_FILE`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_PI_HOOK_LOG` for the hook. For a manually opened pi TUI, start pontia first and set `PONTIA_INTERNAL_API_URL` or `PONTIA_INTERNAL_EVENT_URL` if the default `http://127.0.0.1:8080/internal/v1/runtime-bindings/upsert` is not correct. The steps below are useful for standalone plugin validation.
 
 1. Start pontia so `/internal/v1/events` is reachable.
 2. Create the current turn file in a runtime directory:

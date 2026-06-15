@@ -44,20 +44,23 @@ pub(super) fn start_session(
     let log_path = log_path.display().to_string();
     let adapter_event_log = adapter_event_log.display().to_string();
     let current_turn_file = current_turn_file.display().to_string();
-    let runtime_ref = runtime_ref(&request);
+    let runtime_handle = runtime_handle(&request);
     registry()
         .lock()
         .expect("in-process runtime registry lock")
-        .insert(runtime_ref.clone(), InProcessRuntimeState { alive: true });
+        .insert(
+            runtime_handle.clone(),
+            InProcessRuntimeState { alive: true },
+        );
     Ok(RuntimeStartResult {
         runtime_kind: "in_process_test".to_string(),
-        runtime_ref: runtime_ref.clone(),
+        runtime_handle: runtime_handle.clone(),
         capabilities: capabilities.into(),
         metadata: json!({
             "backend": "in_process_test",
             "test_runtime": true,
             "in_process": {
-                "runtime_key": runtime_ref,
+                "runtime_handle": runtime_handle,
             },
             "runtime_dir": runtime_dir,
             "runtime_log": log_path,
@@ -75,11 +78,11 @@ pub(super) fn start_session(
     })
 }
 
-pub(super) fn terminate_session(runtime_ref: &str) -> bool {
+pub(super) fn terminate_session(runtime_handle: &str) -> bool {
     if let Some(runtime) = registry()
         .lock()
         .expect("in-process runtime registry lock")
-        .get_mut(runtime_ref)
+        .get_mut(runtime_handle)
     {
         runtime.alive = false;
         return true;
@@ -87,11 +90,11 @@ pub(super) fn terminate_session(runtime_ref: &str) -> bool {
     false
 }
 
-pub(super) fn is_alive(runtime_ref: &str) -> Option<bool> {
+pub(super) fn is_alive(runtime_handle: &str) -> Option<bool> {
     registry()
         .lock()
         .expect("in-process runtime registry lock")
-        .get(runtime_ref)
+        .get(runtime_handle)
         .map(|runtime| runtime.alive)
 }
 
@@ -107,7 +110,7 @@ fn registry() -> &'static Mutex<HashMap<String, InProcessRuntimeState>> {
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn runtime_ref(request: &RuntimeStartRequest) -> String {
+fn runtime_handle(request: &RuntimeStartRequest) -> String {
     let handle = request
         .handle
         .as_deref()

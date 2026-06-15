@@ -148,7 +148,7 @@ impl GenericRuntimeManager {
         }
         Ok(RuntimeStartResult {
             runtime_kind: "tmux".to_string(),
-            runtime_ref: tmux_session.clone(),
+            runtime_handle: tmux_session.clone(),
             capabilities: capabilities.into(),
             metadata,
         })
@@ -180,22 +180,22 @@ impl GenericRuntimeManager {
         }
     }
 
-    pub fn terminate_session(&self, runtime_ref: &str) -> Result<()> {
-        if in_process::terminate_session(runtime_ref) {
+    pub fn terminate_session(&self, runtime_handle: &str) -> Result<()> {
+        if in_process::terminate_session(runtime_handle) {
             return Ok(());
         }
-        tmux::terminate_session(runtime_ref)
+        tmux::terminate_session(runtime_handle)
     }
 
     pub fn restart_session(&self, request: RuntimeStartRequest) -> Result<RuntimeStartResult> {
         self.start_session(request)
     }
 
-    pub fn is_alive(&self, runtime_ref: &str) -> bool {
-        if let Some(alive) = in_process::is_alive(runtime_ref) {
+    pub fn is_alive(&self, runtime_handle: &str) -> bool {
+        if let Some(alive) = in_process::is_alive(runtime_handle) {
             return alive;
         }
-        tmux::is_alive(runtime_ref)
+        tmux::is_alive(runtime_handle)
     }
 
     pub fn reset_in_process_test_registry() {

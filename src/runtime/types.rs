@@ -17,7 +17,7 @@ pub struct RuntimeStartRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RuntimeStartResult {
     pub runtime_kind: String,
-    pub runtime_ref: String,
+    pub runtime_handle: String,
     pub capabilities: SessionCapabilities,
     pub metadata: Value,
 }
