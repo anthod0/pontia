@@ -557,6 +557,7 @@ test('interrupts a busy interrupt-capable session from the agent working placeho
 });
 
 test('renames the selected chat session from advanced controls', async () => {
+  const user = userEvent.setup();
   const selected = session({ session_id: 'session-2', title: 'Old title' });
   const renamed = session({ session_id: 'session-2', title: 'New title' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
@@ -565,14 +566,16 @@ test('renames the selected chat session from advanced controls', async () => {
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
   mocks.updateSessionTitle.mockResolvedValue(renamed);
-  const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('New title');
   render(ChatPage);
 
   await fireEvent.click(await screen.findByRole('button', { name: /advanced session controls/i }));
-  await fireEvent.click(screen.getByRole('menuitem', { name: /rename session/i }));
+  await fireEvent.click(await screen.findByRole('menuitem', { name: /rename session/i }));
+  const titleInput = await screen.findByLabelText(/session title/i);
+  await user.clear(titleInput);
+  await user.type(titleInput, 'New title');
+  await user.click(screen.getByRole('button', { name: /rename session/i }));
 
   await waitFor(() => expect(mocks.updateSessionTitle).toHaveBeenCalledWith('session-2', 'New title'));
-  promptSpy.mockRestore();
 });
 
 test('shows the initial prompt immediately after starting a chat while timeline is empty', async () => {
