@@ -115,6 +115,33 @@ test('maps timeline items into primary chat messages with assistant thought step
   ]);
 });
 
+test('keeps managed tool use data and formats display content from structured inputs', () => {
+  const messages = timelineItemsToChatMessages([
+    timelineItem({
+      item_id: '1',
+      kind: 'tool_call',
+      role: 'tool',
+      title: 'read',
+      content_preview: 'read {"path":"src/app.ts","start_line":5}',
+      occurred_at: '2026-01-01T00:00:00Z',
+      turn_id: 'turn-live',
+      managed_tool_use: {
+        tool_name: 'read',
+        input: { type: 'read', path: 'src/app.ts', start_line: 5 },
+      },
+    }),
+  ]);
+
+  expect(messages[0].thoughtSteps?.[0]).toMatchObject({
+    title: 'Read file',
+    content: 'src/app.ts:5',
+    managedToolUse: {
+      tool_name: 'read',
+      input: { type: 'read', path: 'src/app.ts', start_line: 5 },
+    },
+  });
+});
+
 test('creates a pending assistant placeholder message for live thought steps before final output', () => {
   const messages = timelineItemsToChatMessages([
     timelineItem({ item_id: '1', kind: 'user', role: 'user', content_preview: 'Build the feature', occurred_at: '2026-01-01T00:00:00Z', turn_id: 'turn-live' }),

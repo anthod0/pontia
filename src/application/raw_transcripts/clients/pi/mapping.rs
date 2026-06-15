@@ -1,7 +1,7 @@
 use serde_json::Value;
 
-use super::super::super::TimelineItem;
-use super::refs::encode_pi_content_ref;
+use super::super::super::{ManagedToolUse, TimelineItem, ToolUseParser};
+use super::{refs::encode_pi_content_ref, tool_use::PiToolUseParser};
 
 pub(super) fn pi_entry_to_items(
     entry: &Value,
@@ -28,6 +28,7 @@ pub(super) fn pi_entry_to_items(
             model_change_title(entry),
             None,
             model_change_title(entry).unwrap_or_default(),
+            None,
         )],
         _ => Vec::new(),
     }
@@ -54,6 +55,7 @@ fn pi_message_entry_to_items(
             None,
             None,
             content_preview(message.get("content")),
+            None,
         )],
         Some("assistant") => message
             .get("content")
@@ -88,6 +90,7 @@ fn pi_message_entry_to_items(
                 },
             ),
             content_preview(message.get("content")),
+            None,
         )],
         Some("bashExecution") => vec![timeline_item(
             binding_id,
@@ -107,6 +110,7 @@ fn pi_message_entry_to_items(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
+            None,
         )],
         Some("custom") => vec![timeline_item(
             binding_id,
@@ -122,6 +126,7 @@ fn pi_message_entry_to_items(
                 .map(ToString::to_string),
             None,
             content_preview(message.get("content")),
+            None,
         )],
         Some("branchSummary") => vec![timeline_item(
             binding_id,
@@ -138,6 +143,7 @@ fn pi_message_entry_to_items(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
+            None,
         )],
         Some("compactionSummary") => vec![timeline_item(
             binding_id,
@@ -154,6 +160,7 @@ fn pi_message_entry_to_items(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
+            None,
         )],
         Some(raw_kind) => vec![timeline_item(
             binding_id,
@@ -166,6 +173,7 @@ fn pi_message_entry_to_items(
             Some(raw_kind.to_string()),
             None,
             content_preview(message.get("content")),
+            None,
         )],
         _ => Vec::new(),
     }
@@ -195,6 +203,7 @@ fn assistant_block_item(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
+            None,
         )),
         Some("thinking") => Some(timeline_item(
             binding_id,
@@ -211,6 +220,7 @@ fn assistant_block_item(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
+            None,
         )),
         Some("toolCall") => Some(timeline_item(
             binding_id,
@@ -226,6 +236,7 @@ fn assistant_block_item(
                 .map(ToString::to_string),
             Some("started".to_string()),
             tool_call_preview(block),
+            managed_tool_use_from_tool_call(block),
         )),
         _ => None,
     }
@@ -243,6 +254,7 @@ fn timeline_item(
     title: Option<String>,
     status: Option<String>,
     preview: String,
+    managed_tool_use: Option<ManagedToolUse>,
 ) -> TimelineItem {
     let item_id = timeline_item_id(entry, block_index)
         .expect("pi_entry_to_items filters entries without stable ids before mapping");
@@ -260,7 +272,14 @@ fn timeline_item(
             .map(ToString::to_string),
         content_preview: timeline_content_preview(kind, preview),
         content_ref: encode_pi_content_ref(binding_id, start, end, block_index, kind),
+        managed_tool_use,
     }
+}
+
+fn managed_tool_use_from_tool_call(block: &Value) -> Option<ManagedToolUse> {
+    let name = block.get("name").and_then(Value::as_str)?;
+    let arguments = block.get("arguments").unwrap_or(&Value::Null);
+    PiToolUseParser.parse_tool_use(name, arguments)
 }
 
 fn timeline_item_id(entry: &Value, block_index: usize) -> Option<String> {

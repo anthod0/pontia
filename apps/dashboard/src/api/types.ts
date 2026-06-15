@@ -341,6 +341,17 @@ export interface EventView {
   payload: JsonObject;
 }
 
+export type ManagedToolUseInput =
+  | { type: 'read'; path: string; start_line?: number | null; end_line?: number | null }
+  | { type: 'edit'; path: string; edits_count: number }
+  | { type: 'write'; path: string }
+  | { type: 'bash'; command: string; timeout?: number | null };
+
+export interface ManagedToolUse {
+  tool_name: string;
+  input: ManagedToolUseInput;
+}
+
 export interface TimelineItem {
   item_id: string;
   kind: string;
@@ -352,6 +363,7 @@ export interface TimelineItem {
   content_preview: string | null;
   content_ref: string;
   turn_id?: string | null;
+  managed_tool_use?: ManagedToolUse | null;
 }
 
 export interface TimelinePage {

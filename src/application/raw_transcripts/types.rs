@@ -47,6 +47,38 @@ pub struct TimelineItem {
     pub occurred_at: Option<String>,
     pub content_preview: String,
     pub content_ref: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub managed_tool_use: Option<ManagedToolUse>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManagedToolUse {
+    pub tool_name: String,
+    pub input: ManagedToolUseInput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ManagedToolUseInput {
+    Read {
+        path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        start_line: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        end_line: Option<u64>,
+    },
+    Edit {
+        path: String,
+        edits_count: u64,
+    },
+    Write {
+        path: String,
+    },
+    Bash {
+        command: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        timeout: Option<u64>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

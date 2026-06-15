@@ -1,7 +1,9 @@
 use crate::error::Result;
 
+use serde_json::Value;
+
 use super::{
-    AgentBindingResolveRequest, ResolvedAgentBinding, TimelineItemDetailPage,
+    AgentBindingResolveRequest, ManagedToolUse, ResolvedAgentBinding, TimelineItemDetailPage,
     TimelineItemDetailRequest, TimelinePage, TimelinePageRequest,
 };
 
@@ -18,4 +20,8 @@ pub trait RawTranscriptParser {
         &self,
         request: TimelineItemDetailRequest,
     ) -> Result<TimelineItemDetailPage>;
+}
+
+pub trait ToolUseParser {
+    fn parse_tool_use(&self, tool_name: &str, arguments: &Value) -> Option<ManagedToolUse>;
 }

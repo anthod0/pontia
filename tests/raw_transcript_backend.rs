@@ -205,6 +205,95 @@ fn pi_parser_returns_updates_after_tail_cursor_without_reverse_anchor_scan() {
 }
 
 #[test]
+fn pi_parser_parses_started_managed_tool_uses_into_structured_inputs() {
+    let temp = tempdir().unwrap();
+    let session_file = temp.path().join("session.jsonl");
+    let lines = [
+        json!({
+            "type": "message",
+            "id": "a1",
+            "timestamp": "2026-06-09T00:00:01.000Z",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type":"toolCall", "name":"read", "arguments":{"path":"src/main.rs", "start_line": 10, "end_line": 20}},
+                    {"type":"toolCall", "name":"edit", "arguments":{"path":"src/main.rs", "edits":[{"oldText":"old", "newText":"new"}]}},
+                    {"type":"toolCall", "name":"write", "arguments":{"path":"README.md", "content":"hello"}},
+                    {"type":"toolCall", "name":"bash", "arguments":{"command":"cargo test", "timeout": 120}},
+                    {"type":"toolCall", "name":"unknown", "arguments":{"value":true}}
+                ],
+            },
+        }),
+        json!({
+            "type": "message",
+            "id": "t1",
+            "timestamp": "2026-06-09T00:00:02.000Z",
+            "message": {"role":"toolResult", "toolName":"read", "content":"done", "isError":false},
+        }),
+    ]
+    .into_iter()
+    .map(|line| line.to_string())
+    .collect::<Vec<_>>()
+    .join("\n");
+    fs::write(&session_file, format!("{lines}\n")).unwrap();
+
+    let source = pontia::application::ResolvedAgentBinding {
+        id: "bind_1".to_string(),
+        client_type: "pi".to_string(),
+        format: "pi-jsonl".to_string(),
+        path: session_file,
+        fingerprint: None,
+    };
+    let parser = PiJsonlParser::new();
+
+    let page = parser
+        .timeline_page(TimelinePageRequest {
+            session_id: "sess_1".to_string(),
+            source,
+            before: None,
+            after: None,
+            limit: Some(10),
+        })
+        .unwrap();
+
+    let tool_uses = page
+        .items
+        .iter()
+        .filter(|item| item.kind == "tool_call")
+        .map(|item| {
+            item.managed_tool_use
+                .as_ref()
+                .map(|tool| serde_json::to_value(tool).unwrap())
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        tool_uses,
+        vec![
+            Some(
+                json!({"tool_name":"read","input":{"type":"read","path":"src/main.rs","start_line":10,"end_line":20}})
+            ),
+            Some(
+                json!({"tool_name":"edit","input":{"type":"edit","path":"src/main.rs","edits_count":1}})
+            ),
+            Some(json!({"tool_name":"write","input":{"type":"write","path":"README.md"}})),
+            Some(
+                json!({"tool_name":"bash","input":{"type":"bash","command":"cargo test","timeout":120}})
+            ),
+            None,
+        ]
+    );
+    assert!(
+        page.items
+            .iter()
+            .find(|item| item.kind == "tool_result")
+            .unwrap()
+            .managed_tool_use
+            .is_none()
+    );
+}
+
+#[test]
 fn pi_parser_keeps_user_and_assistant_previews_full_but_truncates_other_kinds() {
     let temp = tempdir().unwrap();
     let session_file = temp.path().join("session.jsonl");

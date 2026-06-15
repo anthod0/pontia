@@ -1,4 +1,4 @@
-import type { SessionView, TimelineItem, TurnView } from '../../api/types';
+import type { ManagedToolUse, SessionView, TimelineItem, TurnView } from '../../api/types';
 
 export type ChatSessionFilter = 'active' | 'all';
 export type ChatMessageRole = 'user' | 'assistant';
@@ -11,6 +11,7 @@ export interface SessionChatThoughtStep {
   status: string | null;
   content: string;
   occurredAt: string | null;
+  managedToolUse?: ManagedToolUse;
 }
 
 export interface SessionChatMessage {
@@ -155,13 +156,15 @@ export function timelineItemsToChatMessages(items: TimelineItem[]): SessionChatM
     if (isThoughtStepKind(item.kind)) {
       pendingThoughtTurnId = item.turn_id ?? pendingThoughtTurnId;
       pendingThoughtOccurredAt ??= item.occurred_at;
+      const managedToolUse = item.kind === 'tool_call' ? item.managed_tool_use ?? undefined : undefined;
       pendingThoughtSteps.push({
         id: item.item_id,
         kind: item.kind,
-        title: item.title?.trim() || defaultThoughtStepTitle(item.kind),
+        title: managedToolUse ? managedToolUseTitle(managedToolUse) : item.title?.trim() || defaultThoughtStepTitle(item.kind),
         status: item.status ?? (item.kind === 'tool_call' ? 'started' : null),
-        content: item.content_preview?.trim() || 'No details reported.',
+        content: managedToolUse ? managedToolUseContent(managedToolUse) : item.content_preview?.trim() || 'No details reported.',
         occurredAt: item.occurred_at,
+        ...(managedToolUse ? { managedToolUse } : {}),
       });
     }
   }
@@ -183,6 +186,32 @@ function defaultThoughtStepTitle(kind: SessionChatThoughtStep['kind']): string {
   if (kind === 'thinking') return 'Thinking';
   if (kind === 'tool_call') return 'Tool call';
   return 'Tool result';
+}
+
+function managedToolUseTitle(toolUse: ManagedToolUse): string {
+  switch (toolUse.input.type) {
+    case 'read': return 'Read file';
+    case 'edit': return 'Edit file';
+    case 'write': return 'Write file';
+    case 'bash': return 'Run command';
+  }
+}
+
+function managedToolUseContent(toolUse: ManagedToolUse): string {
+  const input = toolUse.input;
+  switch (input.type) {
+    case 'read': return formatReadTarget(input.path, input.start_line, input.end_line);
+    case 'edit': return `${input.path}${input.edits_count ? ` · ${input.edits_count} edit${input.edits_count === 1 ? '' : 's'}` : ''}`;
+    case 'write': return input.path;
+    case 'bash': return input.command;
+  }
+}
+
+function formatReadTarget(path: string, startLine?: number | null, endLine?: number | null): string {
+  if (startLine !== undefined && startLine !== null && endLine !== undefined && endLine !== null) return `${path}:${startLine}-${endLine}`;
+  if (startLine !== undefined && startLine !== null) return `${path}:${startLine}`;
+  if (endLine !== undefined && endLine !== null) return `${path}:1-${endLine}`;
+  return path;
 }
 
 function timelineTimestamp(item: TimelineItem): string {
