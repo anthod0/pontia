@@ -7,6 +7,7 @@
   import { cn } from '$lib/utils.js'
   import { sessions, sessionsLoading, updateSessionTitle } from '../../stores/sessions'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
+  import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import type { SessionView } from '../../api/types'
 
   type Item = {
@@ -30,7 +31,14 @@
 
   let currentPath = $state(normalizePath(window.location.pathname))
   let renamingSessionId = $state<string | null>(null)
+  let renamingSession = $state<SessionView | null>(null)
+  let renameDialogOpen = $state(false)
+  let renameError = $state<string | null>(null)
   let recentSessions = $derived(visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit))
+
+  $effect(() => {
+    if (!renameDialogOpen && renamingSession && renamingSessionId === null) cancelRenameSession()
+  })
 
   function normalizePath(pathname: string) {
     return pathname.replace(/^\/dashboard/, '') || '/'
@@ -96,17 +104,31 @@
     notifyRouteChanged()
   }
 
-  async function renameSession(event: MouseEvent, session: SessionView) {
+  function startRenamingSession(event: MouseEvent, session: SessionView) {
     event.stopPropagation()
-    const currentTitle = session.title ?? sessionChatTitle(session)
-    const nextTitle = window.prompt('Rename session', currentTitle)
-    if (nextTitle === null) return
-    renamingSessionId = session.session_id
+    renamingSession = session
+    renameError = null
+    renameDialogOpen = true
+  }
+
+  async function confirmRenameSession(title: string | null): Promise<void> {
+    if (!renamingSession) return
+    renamingSessionId = renamingSession.session_id
+    renameError = null
     try {
-      await updateSessionTitle(session.session_id, nextTitle.trim() || null)
+      await updateSessionTitle(renamingSession.session_id, title)
+      renameDialogOpen = false
+      renamingSession = null
+    } catch (error) {
+      renameError = error instanceof Error ? error.message : String(error)
     } finally {
       renamingSessionId = null
     }
+  }
+
+  function cancelRenameSession(): void {
+    renameError = null
+    renamingSession = null
   }
 </script>
 
@@ -163,7 +185,7 @@
                   aria-label={`Rename session ${sessionChatTitle(session)}`}
                   title="Rename session"
                   disabled={renamingSessionId === session.session_id}
-                  onclick={(event) => void renameSession(event, session)}
+                  onclick={(event) => startRenamingSession(event, session)}
                 >
                   <Pencil />
                 </Sidebar.MenuAction>
@@ -205,3 +227,12 @@
   </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>
+
+<RenameSessionDialog
+  bind:open={renameDialogOpen}
+  session={renamingSession}
+  busy={renamingSessionId !== null}
+  error={renameError}
+  onConfirm={(title) => void confirmRenameSession(title)}
+  onCancel={cancelRenameSession}
+/>

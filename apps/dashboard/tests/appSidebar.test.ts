@@ -36,3 +36,9 @@ test('opens the settings menu above the trigger to avoid mobile viewport overflo
   expect(appSidebarSource).toContain('<DropdownMenu.Content side="top" align="end" class="w-48">');
   expect(appSidebarSource).not.toContain('<DropdownMenu.Content side="right" align="end" class="w-48">');
 });
+
+test('uses the shared dialog instead of window.prompt for renaming sessions', () => {
+  expect(appSidebarSource).toContain("import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'");
+  expect(appSidebarSource).toContain('<RenameSessionDialog');
+  expect(appSidebarSource).not.toContain('window.prompt');
+});

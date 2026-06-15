@@ -71,6 +71,7 @@
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
   import InboxSheet from '../components/chat/InboxSheet.svelte'
+  import RenameSessionDialog from '../components/chat/RenameSessionDialog.svelte'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
 
   let selectedSessionId = ''
@@ -88,6 +89,7 @@
   let actionError: string | null = null
   let lastToastedError: string | null = null
   let inboxSheetOpen = false
+  let renameSessionDialogOpen = false
   let loadedProposalTaskId = ''
   let appliedRedirectTaskId = ''
   let unsubscribeDashboardEvents: (() => void) | null = null
@@ -332,14 +334,19 @@
     }
   }
 
-  async function renameSelectedSession(): Promise<void> {
+  function openRenameSelectedSessionDialog(): void {
     if (!selectedSessionId || !selectedSession) return
-    const nextTitle = window.prompt('Rename session', selectedSession.title ?? '')
-    if (nextTitle === null) return
+    actionError = null
+    renameSessionDialogOpen = true
+  }
+
+  async function renameSelectedSession(title: string | null): Promise<void> {
+    if (!selectedSessionId || !selectedSession) return
     actionBusy = true
     actionError = null
     try {
-      await updateSessionTitle(selectedSessionId, nextTitle.trim() || null)
+      await updateSessionTitle(selectedSessionId, title)
+      renameSessionDialogOpen = false
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -610,7 +617,7 @@
             onOpenInbox={() => (inboxSheetOpen = true)}
             onExit={() => void runSessionLifecycle('exit')}
             onOpenConsole={openSessionConsole}
-            onRename={() => void renameSelectedSession()}
+            onRename={openRenameSelectedSessionDialog}
             onRestart={() => void runSessionLifecycle('restart')}
             onSend={() => void sendMessage()}
             onFocus={() => void refreshCurrentSessionGitStatus()}
@@ -620,6 +627,15 @@
     </div>
   {/if}
 </section>
+
+<RenameSessionDialog
+  bind:open={renameSessionDialogOpen}
+  session={selectedSession}
+  busy={actionBusy}
+  error={actionError}
+  onConfirm={(title) => void renameSelectedSession(title)}
+  onCancel={() => (actionError = null)}
+/>
 
 <InboxSheet
   bind:open={inboxSheetOpen}
