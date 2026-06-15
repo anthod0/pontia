@@ -54,11 +54,10 @@ impl GenericClientTestScope {
     }
 
     pub async fn runtime_ref(&self, state: &AppState, session_id: &str) -> String {
-        sqlx::query_scalar("SELECT runtime_ref FROM runtime_bindings WHERE session_id = ?")
-            .bind(session_id)
-            .fetch_one(&state.db())
-            .await
-            .expect("runtime ref")
+        self.runtime_metadata(state, session_id).await["in_process"]["runtime_key"]
+            .as_str()
+            .expect("runtime key")
+            .to_string()
     }
 
     #[allow(dead_code)]

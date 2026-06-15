@@ -96,7 +96,11 @@ impl GenericRuntimeManager {
         let mut metadata = json!({
             "backend": "tmux",
             "tmux_session": tmux_session,
+            "tmux": {
+                "session_name": tmux_session,
+            },
             "workspace": workspace,
+            "launch_cwd": workspace,
             "runtime_dir": runtime_dir,
             "runtime_log": log_path,
             "log_path": log_path,

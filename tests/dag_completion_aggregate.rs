@@ -67,7 +67,7 @@ async fn submit_result_marks_task_completed_from_runtime_projection_even_without
     .await
     .expect("insert turn");
     sqlx::query(
-        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_ref, metadata) VALUES (?, 'generic', 'generic:aggregate', '{}')",
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, metadata) VALUES (?, 'generic', '{}')",
     )
     .bind(session_id)
     .execute(&pool)

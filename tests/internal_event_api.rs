@@ -433,9 +433,10 @@ async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id_
     created["client_type"] = json!("pi");
     post_event(state.clone(), created).await;
     sqlx::query(
-        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_ref, metadata) VALUES (?, 'tmux', 'pontia-test', ?)",
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'tmux', 'rtinst_test', ?, ?)",
     )
     .bind("sess_m2_ready")
+    .bind(launch_cwd.display().to_string())
     .bind(json!({"runtime_instance_id":"rtinst_test", "workspace": launch_cwd.display().to_string()}).to_string())
     .execute(&state.db())
     .await
@@ -496,9 +497,10 @@ async fn internal_event_api_ready_agent_binding_is_idempotent_for_retries() {
     created["client_type"] = json!("pi");
     post_event(state.clone(), created).await;
     sqlx::query(
-        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_ref, metadata) VALUES (?, 'tmux', 'pontia-test', ?)",
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'tmux', 'rtinst_retry', ?, ?)",
     )
     .bind("sess_m2_ready_retry")
+    .bind(launch_cwd.display().to_string())
     .bind(json!({"runtime_instance_id":"rtinst_retry", "workspace": launch_cwd.display().to_string()}).to_string())
     .execute(&state.db())
     .await

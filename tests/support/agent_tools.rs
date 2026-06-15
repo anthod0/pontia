@@ -82,13 +82,15 @@ pub async fn insert_task(pool: &SqlitePool, task_id: &str) {
 }
 
 pub async fn cleanup_runtime_sessions(pool: &SqlitePool) {
-    let refs: Vec<String> = sqlx::query_scalar("SELECT runtime_ref FROM runtime_bindings")
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
-    for runtime_ref in refs {
+    let targets: Vec<String> = sqlx::query_scalar(
+        "SELECT json_extract(metadata, '$.tmux.session_name') FROM runtime_bindings WHERE json_extract(metadata, '$.tmux.session_name') IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    for target in targets {
         let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &runtime_ref])
+            .args(["kill-session", "-t", &target])
             .stderr(Stdio::null())
             .status();
     }
@@ -121,10 +123,10 @@ pub async fn insert_dag_session(
     .await
     .expect("insert turn");
     sqlx::query(
-        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_ref, metadata) VALUES (?, 'tmux', ?, ?)",
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata) VALUES (?, 'tmux', ?, ?)",
     )
     .bind(session_id)
-    .bind(format!("rtref_{session_id}"))
+    .bind(runtime_instance_id)
     .bind(json!({"runtime_instance_id": runtime_instance_id}).to_string())
     .execute(pool)
     .await

@@ -1,6 +1,14 @@
 use super::*;
 use crate::agent_clients::{self, AdapterEventBehavior};
 
+fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
+    metadata["tmux"]["session_name"]
+        .as_str()
+        .or_else(|| metadata["tmux_session"].as_str())
+        .or_else(|| metadata["in_process"]["runtime_key"].as_str())
+        .map(ToString::to_string)
+}
+
 #[derive(Clone)]
 pub struct RuntimeObservationService {
     pool: SqlitePool,
@@ -25,15 +33,21 @@ impl RuntimeObservationService {
             return Ok(());
         }
 
-        let runtime_ref: Option<String> =
-            sqlx::query_scalar("SELECT runtime_ref FROM runtime_bindings WHERE session_id = ?")
+        let metadata: Option<String> =
+            sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
                 .bind(session_id)
                 .fetch_optional(&self.pool)
                 .await?;
-        let Some(runtime_ref) = runtime_ref else {
+        let Some(runtime_target) = metadata
+            .map(|metadata| {
+                serde_json::from_str::<Value>(&metadata).map(runtime_target_from_metadata)
+            })
+            .transpose()?
+            .flatten()
+        else {
             return Ok(());
         };
-        if self.runtime.is_alive(&runtime_ref) {
+        if self.runtime.is_alive(&runtime_target) {
             return Ok(());
         }
 

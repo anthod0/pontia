@@ -219,19 +219,26 @@ impl TurnCommandService {
     }
 
     async fn runtime_binding_metadata(&self, session_id: &str) -> Result<Option<(String, Value)>> {
-        let row =
-            sqlx::query("SELECT runtime_ref, metadata FROM runtime_bindings WHERE session_id = ?")
-                .bind(session_id)
-                .fetch_optional(&self.pool)
-                .await?;
+        let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_optional(&self.pool)
+            .await?;
         row.map(|row| {
-            let runtime_ref: String = row.try_get("runtime_ref")?;
             let metadata: String = row.try_get("metadata")?;
-            let metadata = serde_json::from_str(&metadata)?;
-            Ok((runtime_ref, metadata))
+            let metadata: Value = serde_json::from_str(&metadata)?;
+            let runtime_target = runtime_target_from_metadata(&metadata).unwrap_or_default();
+            Ok((runtime_target, metadata))
         })
         .transpose()
     }
+}
+
+fn runtime_target_from_metadata(metadata: &Value) -> Option<String> {
+    metadata["tmux"]["session_name"]
+        .as_str()
+        .or_else(|| metadata["tmux_session"].as_str())
+        .or_else(|| metadata["in_process"]["runtime_key"].as_str())
+        .map(ToString::to_string)
 }
 
 pub(crate) fn write_client_current_turn_context(
@@ -384,12 +391,13 @@ mod tests {
         .await;
 
         sqlx::query(
-            "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_ref, metadata) VALUES (?, 'tmux', ?, ?)",
+            "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata) VALUES (?, 'tmux', ?, ?)",
         )
         .bind(&session_id)
-        .bind(&runtime_ref)
+        .bind(runtime_instance_id)
         .bind(json!({
             "runtime_instance_id": runtime_instance_id,
+            "tmux": { "session_name": runtime_ref },
             "current_turn_file": current_turn_file.display().to_string(),
             "capabilities": {
                 "accept_task": true,

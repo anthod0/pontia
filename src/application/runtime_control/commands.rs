@@ -85,7 +85,7 @@ impl RuntimeControlService {
                 "session {session_id} runtime does not support interrupt"
             )));
         }
-        let runtime_ref = self.runtime_ref(session_id).await?.ok_or_else(|| {
+        let runtime_target = self.runtime_target(session_id).await?.ok_or_else(|| {
             Error::StateConflict(format!("session {session_id} has no runtime binding"))
         })?;
         let interrupt_behavior = get_client_spec(&session.client_type)
@@ -94,7 +94,7 @@ impl RuntimeControlService {
                 Error::Domain(format!("unsupported client_type: {}", session.client_type))
             })?;
         self.runtime
-            .interrupt_session(&runtime_ref, interrupt_behavior)?;
+            .interrupt_session(&runtime_target, interrupt_behavior)?;
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
@@ -162,8 +162,8 @@ impl RuntimeControlService {
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
         if !matches!(session.state.as_str(), "exited" | "error") {
-            if let Some(runtime_ref) = self.runtime_ref(session_id).await? {
-                self.runtime.terminate_session(&runtime_ref)?;
+            if let Some(runtime_target) = self.runtime_target(session_id).await? {
+                self.runtime.terminate_session(&runtime_target)?;
             }
             EventIngestService::new(self.pool.clone())
                 .ingest_event(DomainEvent::new(
@@ -314,8 +314,8 @@ impl RuntimeControlService {
         }
 
         let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
-        if let Some(runtime_ref) = self.runtime_ref(session_id).await? {
-            self.runtime.terminate_session(&runtime_ref)?;
+        if let Some(runtime_target) = self.runtime_target(session_id).await? {
+            self.runtime.terminate_session(&runtime_target)?;
         }
 
         let ingest = EventIngestService::new(self.pool.clone());

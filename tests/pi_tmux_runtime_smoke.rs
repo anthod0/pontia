@@ -127,6 +127,25 @@ async fn binding_metadata(state: &AppState, session_id: &str) -> Value {
     serde_json::from_str(&metadata).expect("metadata json")
 }
 
+async fn binding_structured_fields(
+    state: &AppState,
+    session_id: &str,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let row = sqlx::query(
+        "SELECT runtime_instance_id, launch_cwd, last_seen_at FROM runtime_bindings WHERE session_id = ?",
+    )
+    .bind(session_id)
+    .fetch_one(&state.db())
+    .await
+    .expect("runtime binding");
+    (
+        row.try_get("runtime_instance_id")
+            .expect("runtime_instance_id"),
+        row.try_get("launch_cwd").expect("launch_cwd"),
+        row.try_get("last_seen_at").expect("last_seen_at"),
+    )
+}
+
 fn tmux_has_session(tmux_session: &str) -> bool {
     Command::new("tmux")
         .args(["has-session", "-t", tmux_session])
@@ -150,8 +169,21 @@ async fn create_tmux_client_session_creates_real_tmux_runtime() {
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"].as_str().expect("tmux session");
 
+    let (runtime_instance_id, launch_cwd, last_seen_at) =
+        binding_structured_fields(&state, &session_id).await;
+
     assert_eq!(metadata["backend"], "tmux");
     assert_eq!(metadata["restart_count"], 0);
+    assert_eq!(
+        runtime_instance_id.as_deref(),
+        metadata["runtime_instance_id"].as_str()
+    );
+    assert_eq!(launch_cwd.as_deref(), metadata["workspace"].as_str());
+    assert!(
+        last_seen_at
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
+    );
     assert!(
         metadata["workspace"]
             .as_str()

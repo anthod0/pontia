@@ -51,4 +51,28 @@ impl RuntimeStartResult {
         }
         metadata
     }
+
+    pub fn runtime_instance_id(&self) -> Option<&str> {
+        self.metadata["runtime_instance_id"].as_str()
+    }
+
+    pub fn launch_cwd(&self) -> Option<&str> {
+        self.metadata["launch_cwd"]
+            .as_str()
+            .or_else(|| self.metadata["workspace"].as_str())
+    }
+
+    pub fn last_seen_at(&self) -> Option<&str> {
+        self.metadata["last_seen_at"]
+            .as_str()
+            .or_else(|| self.metadata["started_at"].as_str())
+    }
+
+    pub fn tmux_socket_path(&self) -> Option<&str> {
+        self.metadata["tmux_socket_path"].as_str()
+    }
+
+    pub fn tmux_pane_id(&self) -> Option<&str> {
+        self.metadata["tmux_pane_id"].as_str()
+    }
 }

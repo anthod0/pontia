@@ -23,16 +23,15 @@ async fn test_pool() -> SqlitePool {
 }
 
 async fn cleanup_scheduler_tmux_sessions(pool: &SqlitePool) {
-    let refs: Vec<String> = sqlx::query_scalar("SELECT runtime_ref FROM runtime_bindings")
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
-    for runtime_ref in refs {
-        if runtime_ref.starts_with("generic:") {
-            continue;
-        }
+    let targets: Vec<String> = sqlx::query_scalar(
+        "SELECT json_extract(metadata, '$.tmux.session_name') FROM runtime_bindings WHERE json_extract(metadata, '$.tmux.session_name') IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    for target in targets {
         let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &runtime_ref])
+            .args(["kill-session", "-t", &target])
             .status();
     }
 }

@@ -51,16 +51,20 @@ pub(super) fn start_session(
         .insert(runtime_ref.clone(), InProcessRuntimeState { alive: true });
     Ok(RuntimeStartResult {
         runtime_kind: "in_process_test".to_string(),
-        runtime_ref,
+        runtime_ref: runtime_ref.clone(),
         capabilities: capabilities.into(),
         metadata: json!({
             "backend": "in_process_test",
             "test_runtime": true,
+            "in_process": {
+                "runtime_key": runtime_ref,
+            },
             "runtime_dir": runtime_dir,
             "runtime_log": log_path,
             "log_path": log_path,
             "adapter_event_log": adapter_event_log,
             "current_turn_file": current_turn_file,
+            "launch_cwd": request.workspace,
             "internal_event_url": "in-process://internal-events",
             "handle": request.handle,
             "role": request.role,
