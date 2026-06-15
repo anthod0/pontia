@@ -18,7 +18,6 @@
   import { sessionEventDetailRows, sessionEventSummary, sessionEventTurnLabel } from './sessions/sessionEvents'
   import { isTerminalSession, sessionDisplayTitle } from './sessions/sessionList'
   import {
-    discoverSessionArtifacts,
     interruptSession,
     loadSessionDetail,
     loadSessions,
@@ -117,7 +116,7 @@
     }
   }
 
-  async function runControl(action: 'interrupt' | 'restart' | 'terminate' | 'discover'): Promise<void> {
+  async function runControl(action: 'interrupt' | 'restart' | 'terminate'): Promise<void> {
     if (!selectedSessionId) return
     actionBusy = true
     actionError = null
@@ -126,8 +125,7 @@
       if (action === 'interrupt') await interruptSession(selectedSessionId)
       if (action === 'restart') await restartSession(selectedSessionId)
       if (action === 'terminate') await terminateSession(selectedSessionId)
-      if (action === 'discover') await discoverSessionArtifacts(selectedSessionId)
-      actionMessage = action === 'discover' ? 'Artifact discovery refreshed.' : `Session ${action} request accepted.`
+      actionMessage = `Session ${action} request accepted.`
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -154,7 +152,7 @@
   <Alert.Root>
     <ShieldAlert class="size-4" />
     <Alert.Title>External API only</Alert.Title>
-    <Alert.Description>This detail view uses session projections, turns, inbox messages, events, and artifacts returned by `/external/v1/*`; it does not infer state from runtime files, tmux, SQLite, or workspace contents.</Alert.Description>
+    <Alert.Description>This detail view uses session projections, turns, inbox messages, and events returned by `/external/v1/*`; it does not infer state from runtime files, tmux, SQLite, or workspace contents.</Alert.Description>
   </Alert.Root>
 
   {#if $sessionDetailError || actionError}
@@ -201,7 +199,6 @@
           <Button size="sm" variant="outline" disabled={actionBusy || Boolean(interruptReason)} title={interruptReason ?? 'Interrupt current turn'} onclick={() => void runControl('interrupt')}>Interrupt</Button>
           <Button size="sm" variant="outline" disabled={actionBusy || Boolean(restartReason)} title={restartReason ?? 'Restart session'} onclick={() => void runControl('restart')}>Restart</Button>
           <Button size="sm" variant="destructive" disabled={actionBusy || Boolean(terminateReason)} title={terminateReason ?? 'Terminate session'} onclick={() => void runControl('terminate')}>Terminate/exit</Button>
-          <Button size="sm" variant="outline" disabled={actionBusy} onclick={() => void runControl('discover')}>Discover artifacts</Button>
         </div>
         {#if interruptReason || restartReason || terminateReason}
           <p class="text-xs text-muted-foreground">Unsupported/degraded controls: {interruptReason ?? restartReason ?? terminateReason}</p>
@@ -353,22 +350,6 @@
         </Card.Content>
       </Card.Root>
 
-      <Card.Root>
-        <Card.Header><Card.Title>Artifacts / output refs</Card.Title><Card.Description>{$sessionDetail.artifacts.length} artifacts discovered through the External API.</Card.Description></Card.Header>
-        <Card.Content class="space-y-3">
-          {#if $sessionDetail.artifacts.length}
-            {#each $sessionDetail.artifacts as artifact}
-              <div class="rounded-lg border p-3 text-sm">
-                <div class="flex flex-wrap items-center justify-between gap-2"><span class="font-medium">{artifact.name}</span><Badge variant="secondary">{artifact.kind}</Badge></div>
-                <div class="mt-1 text-xs text-muted-foreground">{shortId(artifact.artifact_id)} · turn {shortId(artifact.turn_id)} · {formatDateTime(artifact.created_at)}</div>
-                {#if artifact.preview}<p class="mt-2 line-clamp-3 text-xs text-muted-foreground">{artifact.preview}</p>{/if}
-              </div>
-            {/each}
-          {:else}
-            <Empty.Root><Empty.Header><Empty.Title>No artifacts</Empty.Title><Empty.Description>No session artifacts have been discovered yet.</Empty.Description></Empty.Header></Empty.Root>
-          {/if}
-        </Card.Content>
-      </Card.Root>
     </div>
 
     <Card.Root>

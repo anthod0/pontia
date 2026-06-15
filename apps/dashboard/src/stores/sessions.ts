@@ -6,7 +6,6 @@ import {
   discoverArtifacts,
   getSession,
   interruptSession as apiInterruptSession,
-  listArtifacts,
   listEvents,
   listInboxMessages,
   listSessions,
@@ -102,14 +101,13 @@ export async function loadSessionDetail(sessionId: string, options: LoadOptions 
   if (showLoading) sessionDetailLoading.set(true);
   sessionDetailError.set(null);
   try {
-    const [session, turns, inboxMessages, events, artifacts] = await Promise.all([
+    const [session, turns, inboxMessages, events] = await Promise.all([
       getSession(sessionId),
       listTurns(sessionId),
       listInboxMessages(sessionId),
       listEvents(sessionId),
-      listArtifacts(sessionId),
     ]);
-    const detail = { session, turns, inboxMessages, events, artifacts } satisfies SessionConsoleDetail;
+    const detail = { session, turns, inboxMessages, events, artifacts: [] } satisfies SessionConsoleDetail;
     sessionDetail.set(detail);
     sessions.update((items) => items.map((item) => item.session_id === session.session_id ? session : item));
     return detail;
