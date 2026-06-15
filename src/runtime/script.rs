@@ -7,7 +7,10 @@ use crate::{
 
 use super::{
     RuntimeStartRequest, claude_code,
-    config::{configured_external_api_token, configured_tui_command},
+    config::{
+        configured_external_api_token, configured_external_api_url, configured_internal_event_url,
+        configured_tui_command,
+    },
     utils::shell_quote,
 };
 
@@ -123,12 +126,16 @@ fn hook_log_path(
 
 pub(super) fn internal_event_url() -> String {
     std::env::var("PONTIA_INTERNAL_EVENT_URL")
-        .unwrap_or_else(|_| default_internal_event_url().to_string())
+        .ok()
+        .or_else(configured_internal_event_url)
+        .unwrap_or_else(|| default_internal_event_url().to_string())
 }
 
 fn external_api_url() -> String {
     std::env::var("PONTIA_EXTERNAL_API_URL")
-        .unwrap_or_else(|_| default_external_api_url().to_string())
+        .ok()
+        .or_else(configured_external_api_url)
+        .unwrap_or_else(|| default_external_api_url().to_string())
 }
 
 #[cfg(test)]
@@ -306,7 +313,38 @@ mod tests {
     }
 
     #[test]
+    fn runtime_script_derives_api_urls_from_configured_bind_port() {
+        unsafe {
+            std::env::remove_var("PONTIA_INTERNAL_EVENT_URL");
+            std::env::remove_var("PONTIA_EXTERNAL_API_URL");
+        }
+        crate::runtime::set_runtime_bind_addr("127.0.0.1:18080".parse().expect("bind addr"));
+
+        assert_eq!(
+            internal_event_url(),
+            "http://127.0.0.1:18080/internal/v1/events"
+        );
+        assert_eq!(external_api_url(), "http://127.0.0.1:18080/external/v1");
+    }
+
+    #[test]
+    fn runtime_script_uses_loopback_host_with_configured_bind_port() {
+        unsafe {
+            std::env::remove_var("PONTIA_INTERNAL_EVENT_URL");
+            std::env::remove_var("PONTIA_EXTERNAL_API_URL");
+        }
+        crate::runtime::set_runtime_bind_addr("0.0.0.0:18081".parse().expect("bind addr"));
+
+        assert_eq!(
+            internal_event_url(),
+            "http://127.0.0.1:18081/internal/v1/events"
+        );
+        assert_eq!(external_api_url(), "http://127.0.0.1:18081/external/v1");
+    }
+
+    #[test]
     fn test_defaults_use_non_listening_ports() {
+        crate::runtime::reset_runtime_bind_addr_for_tests();
         assert_eq!(
             default_internal_event_url(),
             "http://127.0.0.1:9/internal/v1/events"

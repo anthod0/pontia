@@ -257,7 +257,9 @@ pub(crate) fn write_client_current_turn_context(
     }
     let internal_event_url = metadata["internal_event_url"]
         .as_str()
-        .unwrap_or("http://127.0.0.1:8080/internal/v1/events");
+        .map(ToString::to_string)
+        .or_else(crate::runtime::configured_internal_event_url)
+        .unwrap_or_else(|| "http://127.0.0.1:8080/internal/v1/events".to_string());
     let runtime_instance_id = metadata["runtime_instance_id"].as_str().ok_or_else(|| {
         Error::Domain(format!(
             "{client_type} runtime metadata missing runtime_instance_id"

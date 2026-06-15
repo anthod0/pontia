@@ -4,7 +4,7 @@ use super::*;
 use crate::{
     application::set_default_client_type,
     domain::DomainEvent,
-    runtime::{set_runtime_config, set_runtime_external_api_token},
+    runtime::{set_runtime_bind_addr, set_runtime_config, set_runtime_external_api_token},
     transport::http::dashboard::ResolvedDashboard,
 };
 
@@ -243,6 +243,7 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     set_default_client_type(config.default_client_type.clone());
     set_runtime_config(config.runtime.clone());
     set_runtime_external_api_token(config.external_api_token.clone());
+    set_runtime_bind_addr(config.bind_addr);
     let dashboard = crate::transport::http::dashboard::resolve_dashboard(&config.dashboard).await;
 
     Ok(AppState::builder(db)

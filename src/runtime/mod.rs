@@ -13,7 +13,12 @@ mod tmux;
 mod types;
 mod utils;
 
-pub use config::{set_runtime_config, set_runtime_external_api_token};
+#[cfg(test)]
+pub use config::reset_runtime_bind_addr_for_tests;
+pub use config::{
+    configured_internal_event_url, set_runtime_bind_addr, set_runtime_config,
+    set_runtime_external_api_token,
+};
 pub use manager::GenericRuntimeManager;
 pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult};
 
