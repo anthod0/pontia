@@ -1,5 +1,7 @@
 use pontia::storage::sqlite::{
-    connect_sqlite, repositories::tasks::SqliteTaskRepository, run_migrations,
+    connect_sqlite,
+    repositories::tasks::{CreateTaskRecord, SqliteTaskRepository},
+    run_migrations,
 };
 use serde_json::json;
 
@@ -71,4 +73,52 @@ async fn sqlite_task_repository_lists_task_events_with_existing_order_and_payloa
     let ids: Vec<_> = rows.iter().map(|row| row.event_id.as_str()).collect();
     assert_eq!(ids, vec!["evt_a", "evt_b", "evt_c"]);
     assert_eq!(rows[0].payload, json!({"order": "a"}).to_string());
+}
+
+#[tokio::test]
+async fn sqlite_task_repository_creates_updates_and_records_task_events() {
+    let pool = test_pool().await;
+    let repository = SqliteTaskRepository::new(pool.clone());
+
+    repository
+        .create_task(CreateTaskRecord {
+            task_id: "task_write".to_string(),
+            state: "created".to_string(),
+            input: "write path".to_string(),
+            workspace_id: None,
+            routing_state: "pending".to_string(),
+            routing_confidence: None,
+            metadata: json!({"source": "test"}).to_string(),
+        })
+        .await
+        .expect("create task");
+    repository
+        .update_task_state("task_write", "running")
+        .await
+        .expect("update state");
+    repository
+        .record_task_event(
+            "evt_write",
+            "task_write",
+            "task.started",
+            &json!({"ok": true}).to_string(),
+        )
+        .await
+        .expect("record event");
+
+    let row = repository
+        .get_task("task_write")
+        .await
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(row.state, "running");
+    assert_eq!(row.metadata, json!({"source": "test"}).to_string());
+
+    let events = repository
+        .list_task_events("task_write")
+        .await
+        .expect("list events");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_id, "evt_write");
+    assert_eq!(events[0].payload, json!({"ok": true}).to_string());
 }

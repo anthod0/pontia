@@ -1,4 +1,5 @@
 use super::*;
+use crate::storage::sqlite::repositories::tasks::{CreateTaskRecord, SqliteTaskRepository};
 
 impl TaskCommandService {
     pub async fn create_dag_task(
@@ -59,16 +60,17 @@ impl TaskCommandService {
             });
         }
 
-        sqlx::query(
-            r#"INSERT INTO tasks (task_id, state, input, workspace_id, routing_state, routing_confidence, metadata)
-               VALUES (?, 'created', ?, ?, 'matched', 1.0, ?)"#,
-        )
-        .bind(&task_id)
-        .bind(&request.input)
-        .bind(&workspace_record.workspace_id)
-        .bind(serde_json::to_string(&metadata)?)
-        .execute(&self.pool)
-        .await?;
+        SqliteTaskRepository::new(self.pool.clone())
+            .create_task(CreateTaskRecord {
+                task_id: task_id.clone(),
+                state: "created".to_string(),
+                input: request.input.clone(),
+                workspace_id: Some(workspace_record.workspace_id.clone()),
+                routing_state: "matched".to_string(),
+                routing_confidence: Some(1.0),
+                metadata: serde_json::to_string(&metadata)?,
+            })
+            .await?;
         self.record_task_event(&task_id, "task.created", json!({ "mode": "dag" }))
             .await?;
         self.record_task_event(
@@ -122,14 +124,9 @@ impl TaskCommandService {
             )));
         }
 
-        sqlx::query(
-            r#"UPDATE tasks
-               SET state = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE task_id = ?"#,
-        )
-        .bind(task_id)
-        .execute(&self.pool)
-        .await?;
+        SqliteTaskRepository::new(self.pool.clone())
+            .update_task_state(task_id, "paused")
+            .await?;
         self.record_task_event(task_id, "task.paused", json!({}))
             .await?;
         let task = ExternalQueryService::with_graph(self.pool.clone(), self.graph.clone())
@@ -178,14 +175,9 @@ impl TaskCommandService {
             )));
         }
 
-        sqlx::query(
-            r#"UPDATE tasks
-               SET state = 'running', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE task_id = ?"#,
-        )
-        .bind(task_id)
-        .execute(&self.pool)
-        .await?;
+        SqliteTaskRepository::new(self.pool.clone())
+            .update_task_state(task_id, "running")
+            .await?;
         self.record_task_event(task_id, "task.resumed", json!({}))
             .await?;
         let scheduler = DagSchedulerService::with_graph(self.pool.clone(), self.graph.clone())
@@ -372,14 +364,9 @@ impl TaskCommandService {
             return self.interrupt_task(task_id, idempotency_key).await;
         }
 
-        sqlx::query(
-            r#"UPDATE tasks
-               SET state = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE task_id = ?"#,
-        )
-        .bind(task_id)
-        .execute(&self.pool)
-        .await?;
+        SqliteTaskRepository::new(self.pool.clone())
+            .update_task_state(task_id, "cancelled")
+            .await?;
         self.record_task_event(
             task_id,
             "task.cancelled",

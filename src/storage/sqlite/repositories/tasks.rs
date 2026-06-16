@@ -6,6 +6,17 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
+pub struct CreateTaskRecord {
+    pub task_id: String,
+    pub state: String,
+    pub input: String,
+    pub workspace_id: Option<String>,
+    pub routing_state: String,
+    pub routing_confidence: Option<f64>,
+    pub metadata: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct SqliteTaskRepository {
     pool: SqlitePool,
 }
@@ -13,6 +24,56 @@ pub struct SqliteTaskRepository {
 impl SqliteTaskRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
+    }
+
+    pub async fn create_task(&self, task: CreateTaskRecord) -> Result<()> {
+        sqlx::query(
+            r#"INSERT INTO tasks (task_id, state, input, workspace_id, routing_state, routing_confidence, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(task.task_id)
+        .bind(task.state)
+        .bind(task.input)
+        .bind(task.workspace_id)
+        .bind(task.routing_state)
+        .bind(task.routing_confidence)
+        .bind(task.metadata)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn update_task_state(&self, task_id: &str, state: &str) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE tasks
+               SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE task_id = ?"#,
+        )
+        .bind(state)
+        .bind(task_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn record_task_event(
+        &self,
+        event_id: &str,
+        task_id: &str,
+        event_type: &str,
+        payload: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
+               VALUES (?, ?, ?, ?)"#,
+        )
+        .bind(event_id)
+        .bind(task_id)
+        .bind(event_type)
+        .bind(payload)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn list_tasks(&self) -> Result<Vec<TaskRow>> {

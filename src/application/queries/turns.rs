@@ -1,19 +1,14 @@
 use super::*;
+use crate::storage::sqlite::repositories::turns::SqliteTurnRepository;
 
 impl ExternalQueryService {
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnView>> {
-        let rows = sqlx::query(
-            r#"SELECT turn_id, session_id, state, input_summary, output_summary,
-                      failure_message, metadata, created_at, updated_at
-               FROM turns WHERE session_id = ? ORDER BY created_at, turn_id"#,
-        )
-        .bind(session_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteTurnRepository::new(self.pool.clone());
+        let rows = repository.list_turns(session_id).await?;
 
         let mut turns = rows
             .into_iter()
-            .map(row_to_turn_view)
+            .map(turn_row_to_view)
             .collect::<Result<Vec<_>>>()?;
         for turn in &mut turns {
             self.enrich_turn_view(turn).await?;
@@ -22,39 +17,25 @@ impl ExternalQueryService {
     }
 
     pub async fn get_turn(&self, session_id: &str, turn_id: &str) -> Result<Option<TurnView>> {
-        let row = sqlx::query(
-            r#"SELECT turn_id, session_id, state, input_summary, output_summary,
-                      failure_message, metadata, created_at, updated_at
-               FROM turns WHERE session_id = ? AND turn_id = ?"#,
-        )
-        .bind(session_id)
-        .bind(turn_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        let Some(row) = row else {
+        let repository = SqliteTurnRepository::new(self.pool.clone());
+        let Some(row) = repository.get_turn(session_id, turn_id).await? else {
             return Ok(None);
         };
-        let mut turn = row_to_turn_view(row)?;
+        let mut turn = turn_row_to_view(row)?;
         self.enrich_turn_view(&mut turn).await?;
         Ok(Some(turn))
     }
 
     pub(crate) async fn enrich_turn_view(&self, turn: &mut TurnView) -> Result<()> {
-        let rows = sqlx::query(
-            r#"SELECT event_type, occurred_at, payload
-               FROM events WHERE session_id = ? AND turn_id = ? ORDER BY rowid"#,
-        )
-        .bind(&turn.session_id)
-        .bind(&turn.turn_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteTurnRepository::new(self.pool.clone());
+        let rows = repository
+            .list_turn_event_enrichment_rows(&turn.session_id, &turn.turn_id)
+            .await?;
 
         for row in rows {
-            let event_type: String = row.try_get("event_type")?;
-            let occurred_at: String = row.try_get("occurred_at")?;
-            let payload: String = row.try_get("payload")?;
-            let payload: Value = serde_json::from_str(&payload)?;
+            let event_type = row.event_type;
+            let occurred_at = row.occurred_at;
+            let payload: Value = serde_json::from_str(&row.payload)?;
 
             match event_type.as_str() {
                 "turn.created" | "turn.queued" | "turn.started" => {

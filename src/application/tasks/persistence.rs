@@ -1,4 +1,5 @@
 use super::*;
+use crate::storage::sqlite::repositories::tasks::SqliteTaskRepository;
 
 impl TaskCommandService {
     pub(super) async fn idempotency_response(
@@ -45,16 +46,11 @@ impl TaskCommandService {
         event_type: &str,
         payload: Value,
     ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
-               VALUES (?, ?, ?, ?)"#,
-        )
-        .bind(new_event_id().to_string())
-        .bind(task_id)
-        .bind(event_type)
-        .bind(serde_json::to_string(&payload)?)
-        .execute(&self.pool)
-        .await?;
+        let event_id = new_event_id().to_string();
+        let payload = serde_json::to_string(&payload)?;
+        SqliteTaskRepository::new(self.pool.clone())
+            .record_task_event(&event_id, task_id, event_type, &payload)
+            .await?;
         if self.graph.enabled
             && let Err(error) = GraphProjectionService::new(self.pool.clone(), self.graph.clone())
                 .project_task(task_id)

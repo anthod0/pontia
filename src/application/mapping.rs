@@ -1,9 +1,12 @@
 use super::*;
-use crate::storage::sqlite::models::tasks::{TaskEventRow, TaskRow};
+use crate::storage::sqlite::models::{
+    sessions::SessionRow,
+    tasks::{TaskEventRow, TaskRow},
+    turns::TurnRow,
+};
 
-pub(crate) fn row_to_session_view(row: sqlx::sqlite::SqliteRow) -> Result<SessionView> {
-    let metadata: String = row.try_get("metadata")?;
-    let metadata: Value = serde_json::from_str(&metadata)?;
+pub(crate) fn session_row_to_view(row: SessionRow) -> Result<SessionView> {
+    let metadata: Value = serde_json::from_str(&row.metadata)?;
     let context_usage = metadata
         .get("context_usage")
         .cloned()
@@ -15,23 +18,23 @@ pub(crate) fn row_to_session_view(row: sqlx::sqlite::SqliteRow) -> Result<Sessio
         .map(str::to_string);
 
     Ok(SessionView {
-        session_id: row.try_get("session_id")?,
-        client_type: row.try_get("client_type")?,
-        title: row.try_get("title")?,
-        handle: row.try_get("handle")?,
-        role: row.try_get("role")?,
-        description: row.try_get("description")?,
-        execution_profile_id: row.try_get("execution_profile_id")?,
-        execution_profile_version: row.try_get("execution_profile_version")?,
-        state: row.try_get("state")?,
-        current_turn_id: row.try_get("current_turn_id")?,
-        workspace_id: row.try_get("workspace_id")?,
-        workspace: row.try_get("workspace_ref")?,
+        session_id: row.session_id,
+        client_type: row.client_type,
+        title: row.title,
+        handle: row.handle,
+        role: row.role,
+        description: row.description,
+        execution_profile_id: row.execution_profile_id,
+        execution_profile_version: row.execution_profile_version,
+        state: row.state,
+        current_turn_id: row.current_turn_id,
+        workspace_id: row.workspace_id,
+        workspace: row.workspace_ref,
         capabilities: SessionCapabilities::default(),
         model,
         context_usage,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
         metadata,
     })
 }
@@ -233,9 +236,8 @@ pub(crate) fn row_to_dag_proposal(row: sqlx::sqlite::SqliteRow) -> Result<DagPro
     })
 }
 
-pub(crate) fn row_to_turn_view(row: sqlx::sqlite::SqliteRow) -> Result<TurnView> {
-    let metadata: String = row.try_get("metadata")?;
-    let metadata_json: Value = serde_json::from_str(&metadata)?;
+pub(crate) fn turn_row_to_view(row: TurnRow) -> Result<TurnView> {
+    let metadata_json: Value = serde_json::from_str(&row.metadata)?;
     let artifact_ids = metadata_json
         .get("artifact_ids")
         .and_then(Value::as_array)
@@ -248,22 +250,22 @@ pub(crate) fn row_to_turn_view(row: sqlx::sqlite::SqliteRow) -> Result<TurnView>
         .unwrap_or_default();
 
     Ok(TurnView {
-        turn_id: row.try_get("turn_id")?,
-        session_id: row.try_get("session_id")?,
-        state: row.try_get("state")?,
+        turn_id: row.turn_id,
+        session_id: row.session_id,
+        state: row.state,
         input: TurnInputView {
-            summary: row.try_get("input_summary")?,
+            summary: row.input_summary,
             artifact_id: metadata_json
                 .get("input_artifact_id")
                 .and_then(Value::as_str)
                 .map(ToString::to_string),
         },
         output: TurnOutputView {
-            summary: row.try_get("output_summary")?,
+            summary: row.output_summary,
             artifact_ids,
         },
-        failure: row.try_get("failure_message")?,
-        created_at: row.try_get("created_at")?,
+        failure: row.failure_message,
+        created_at: row.created_at,
         started_at: None,
         completed_at: None,
         metadata: metadata_json,
