@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
 import type { SessionContext } from "./session.js";
 
-export type InternalEventType = "session.ready" | "session.message_updated" | "session.context_usage_updated" | "turn.created" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
+export type InternalEventType = "session.ready" | "session.message_updated" | "session.context_usage_updated" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
 
 export interface ContextUsagePayload {
   used_tokens: number | null;
@@ -50,11 +50,6 @@ export type InternalEvent =
     })
   | (BaseInternalEvent & {
       turn_id: string;
-      source: "agent_client";
-      type: "turn.created";
-    })
-  | (BaseInternalEvent & {
-      turn_id: string;
       source: "agent_adapter";
       type: "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
     });
@@ -71,24 +66,6 @@ function baseAdapterTurnEvent(context: TurnContext, type: AdapterTurnInternalEve
     type,
     time: new Date().toISOString(),
     seq: null,
-  };
-}
-
-export function buildTurnCreatedEvent(context: TurnContext): InternalEvent {
-  return {
-    event_id: `evt_${randomUUID()}`,
-    session_id: context.sessionId,
-    turn_id: context.turnId,
-    source: "agent_client",
-    client_type: "pi",
-    type: "turn.created",
-    time: new Date().toISOString(),
-    seq: null,
-    payload: {
-      runtime_instance_id: context.runtimeInstanceId,
-      input: context.input ? { summary: context.input } : {},
-      metadata: { source: "pi_tui" },
-    },
   };
 }
 
