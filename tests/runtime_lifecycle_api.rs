@@ -85,6 +85,21 @@ async fn create_session(state: AppState) -> String {
         .to_string()
 }
 
+async fn mark_session_exited(state: &AppState, session_id: &str) {
+    pontia::application::EventIngestService::new(state.db())
+        .ingest_event(pontia::domain::DomainEvent::new(
+            pontia::ids::new_event_id().to_string(),
+            session_id.to_string(),
+            None,
+            pontia::domain::EventSource::AgentClient,
+            "generic".to_string(),
+            pontia::domain::EventType::SessionExited,
+            json!({ "reason": "quit" }),
+        ))
+        .await
+        .expect("ingest session exited");
+}
+
 async fn submit_turn(state: AppState, session_id: &str) -> String {
     let (status, body) = request(
         state,
@@ -163,7 +178,8 @@ async fn interrupt_specified_turn_returns_capability_unavailable_for_generic_run
 }
 
 #[tokio::test]
-async fn terminate_session_emits_terminal_state_and_is_idempotent() {
+async fn terminate_session_requests_runtime_shutdown_without_emitting_exit_event_and_is_idempotent()
+{
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
@@ -190,7 +206,7 @@ async fn terminate_session_emits_terminal_state_and_is_idempotent() {
     assert_eq!(first.0, StatusCode::OK);
     assert_eq!(second.0, StatusCode::OK);
     assert_eq!(second.1["data"], first.1["data"]);
-    assert_eq!(first.1["data"]["session"]["state"], "exited");
+    assert_eq!(first.1["data"]["session"]["state"], "idle");
     assert_eq!(first.1["data"]["session"]["current_turn_id"], Value::Null);
 
     let (events_status, events_body) = request(
@@ -209,7 +225,7 @@ async fn terminate_session_emits_terminal_state_and_is_idempotent() {
         .iter()
         .filter(|event| event["type"] == "session.exited")
         .count();
-    assert_eq!(exited_count, 1);
+    assert_eq!(exited_count, 0);
 }
 
 #[tokio::test]
@@ -291,6 +307,7 @@ async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
     )
     .await;
     assert_eq!(terminate.0, StatusCode::OK);
+    mark_session_exited(&state, &session_id).await;
 
     let first = request(
         state.clone(),
@@ -414,6 +431,7 @@ async fn restart_rejects_terminal_session() {
     )
     .await;
     assert_eq!(terminate.0, StatusCode::OK);
+    mark_session_exited(&state, &session_id).await;
 
     let (status, body) = request(
         state,

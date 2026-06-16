@@ -207,7 +207,49 @@ describe("pontia pi extension lifecycle", () => {
     expect(pi.on).toHaveBeenCalledWith("message_update", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_end", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("agent_end", expect.any(Function));
+    expect(pi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
     expect(pi.registerTool).not.toHaveBeenCalled();
+  });
+
+  test("session_shutdown quit reports session exited for managed runtime", async () => {
+    const { handlers, reported } = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_exit",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+      },
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: { getSessionId: () => "pi_session_1", getCwd: () => "/workspace" },
+    });
+    await handlers.session_shutdown({ reason: "quit" }, {});
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready", "session.exited"]);
+    expect(reported[1]).toMatchObject({
+      session_id: "sess_exit",
+      turn_id: null,
+      source: "agent_client",
+      client_type: "pi",
+      payload: { reason: "quit", runtime_instance_id: "rtinst_1" },
+    });
+  });
+
+  test("session_shutdown replacement does not report session exited", async () => {
+    const { handlers, reported } = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_exit",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+      },
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: { getSessionId: () => "pi_session_1", getCwd: () => "/workspace" },
+    });
+    await handlers.session_shutdown({ reason: "reload" }, {});
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
   });
 
   test("appends profile system prompt from external API before agent starts", async () => {

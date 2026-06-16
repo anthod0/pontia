@@ -168,7 +168,7 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
     .await;
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(body["data"]["session"]["state"], "exited");
+    assert_eq!(body["data"]["session"]["state"], "idle");
     assert!(!scope.is_runtime_alive(&runtime_handle));
 }
 

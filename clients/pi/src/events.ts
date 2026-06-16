@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
 import type { SessionContext } from "./session.js";
 
-export type InternalEventType = "session.ready" | "session.message_updated" | "session.context_usage_updated" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
+export type InternalEventType = "session.ready" | "session.exited" | "session.message_updated" | "session.context_usage_updated" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
 
 export interface ContextUsagePayload {
   used_tokens: number | null;
@@ -42,6 +42,11 @@ export type InternalEvent =
       turn_id: null;
       source: "agent_client";
       type: "session.message_updated";
+    })
+  | (BaseInternalEvent & {
+      turn_id: null;
+      source: "agent_client";
+      type: "session.exited";
     })
   | (BaseInternalEvent & {
       turn_id: string | null;
@@ -332,5 +337,22 @@ export function buildSessionReadyEvent(context: SessionContext): InternalEvent {
     time: new Date().toISOString(),
     seq: null,
     payload,
+  };
+}
+
+export function buildSessionExitedEvent(context: SessionContext, reason: string): InternalEvent {
+  return {
+    event_id: `evt_${randomUUID()}`,
+    session_id: context.sessionId,
+    turn_id: null,
+    source: "agent_client",
+    client_type: "pi",
+    type: "session.exited",
+    time: new Date().toISOString(),
+    seq: null,
+    payload: {
+      reason,
+      runtime_instance_id: context.runtimeInstanceId,
+    },
   };
 }

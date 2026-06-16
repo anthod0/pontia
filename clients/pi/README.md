@@ -59,8 +59,9 @@ Expected `current-turn.json` for backend-delivered input:
 - When pi exposes context usage through hook events, message usage, or `ctx.getContextUsage()`, it posts `session.context_usage_updated`; it does not parse session files or fabricate usage when pi does not provide it.
 - On `agent_end`, it posts `turn.output` when text was collected, then posts `turn.completed` for the plugin-generated turn id.
 - If pi exposes an explicit agent-end error, it posts `turn.failed`.
+- On `session_shutdown` with reason `quit`, it posts `session.exited` from the pi lifecycle hook.
 
-The extension does not parse TUI screen contents and does not infer completion from tmux, process state, or runtime exit.
+The extension does not parse TUI screen contents and does not infer turn completion from tmux, process state, or runtime exit.
 
 ## pontia tools
 

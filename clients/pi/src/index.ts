@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { buildSessionContextUsageUpdatedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, newPontiaTurnId, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
+import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, newPontiaTurnId, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
 import { EventReporter } from "./reporter.js";
 import { loadSessionContext, type SessionContext } from "./session.js";
 
@@ -321,6 +321,27 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         level: "error",
         code: "unexpected_extension_exception",
         message: "failed to report pontia ready signal",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  pi.on("session_shutdown", async (event) => {
+    const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
+    if (reason !== "quit") return;
+
+    try {
+      const loaded = await loadSessionContext(env);
+      const logFile = loaded.logFile;
+      const context = boundSessionContext ?? (loaded.ok ? loaded.context : undefined);
+      if (!context) return;
+      await makeReporter(logFile).report(context, buildSessionExitedEvent(context, reason));
+    } catch (error) {
+      const logFile = env.PONTIA_PI_HOOK_LOG ?? "pi-hook.log";
+      await logDiagnostic(logFile, {
+        level: "error",
+        code: "unexpected_extension_exception",
+        message: "failed to report pontia exited signal",
         details: error instanceof Error ? error.message : String(error),
       });
     }
