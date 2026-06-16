@@ -127,11 +127,12 @@ async fn apply_plan_applies_proposed_plan_and_starts_scheduler() {
     let graph_dir = tempfile::tempdir().expect("graph dir");
     let state = isolate_graph(test_state().await, &graph_dir);
     insert_task(&state.db(), "task_apply_plan").await;
-    insert_dag_session(
+    insert_dag_session_with_client(
         &state.db(),
         "sess_apply_plan",
         "turn_apply_plan",
         "rt_apply_plan",
+        "generic",
         json!({
             "dag_managed": true,
             "dag_planning_role": "planner",

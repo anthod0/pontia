@@ -103,11 +103,31 @@ pub async fn insert_dag_session(
     runtime_instance_id: &str,
     metadata: Value,
 ) {
+    insert_dag_session_with_client(
+        pool,
+        session_id,
+        turn_id,
+        runtime_instance_id,
+        "pi",
+        metadata,
+    )
+    .await;
+}
+
+pub async fn insert_dag_session_with_client(
+    pool: &SqlitePool,
+    session_id: &str,
+    turn_id: &str,
+    runtime_instance_id: &str,
+    client_type: &str,
+    metadata: Value,
+) {
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, state, current_turn_id, metadata)
-           VALUES (?, 'pi', 'busy', ?, ?)"#,
+           VALUES (?, ?, 'busy', ?, ?)"#,
     )
     .bind(session_id)
+    .bind(client_type)
     .bind(turn_id)
     .bind(metadata.to_string())
     .execute(pool)
