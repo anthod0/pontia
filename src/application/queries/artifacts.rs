@@ -1,27 +1,18 @@
 use super::*;
+use crate::storage::sqlite::repositories::artifacts::SqliteArtifactRepository;
 
 impl ExternalQueryService {
     pub async fn list_artifacts(&self, session_id: &str) -> Result<Vec<ArtifactView>> {
-        let rows = sqlx::query(
-            r#"SELECT artifact_id, session_id, turn_id, kind, name, size_bytes, metadata, created_at
-               FROM artifacts WHERE session_id = ? ORDER BY created_at, artifact_id"#,
-        )
-        .bind(session_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteArtifactRepository::new(self.pool.clone());
+        let rows = repository.list_artifacts(session_id).await?;
 
-        rows.into_iter().map(row_to_artifact_view).collect()
+        rows.into_iter().map(artifact_row_to_view).collect()
     }
 
     pub async fn get_artifact(&self, artifact_id: &str) -> Result<Option<ArtifactView>> {
-        let row = sqlx::query(
-            r#"SELECT artifact_id, session_id, turn_id, kind, name, size_bytes, metadata, created_at
-               FROM artifacts WHERE artifact_id = ?"#,
-        )
-        .bind(artifact_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let repository = SqliteArtifactRepository::new(self.pool.clone());
+        let row = repository.get_artifact(artifact_id).await?;
 
-        row.map(row_to_artifact_view).transpose()
+        row.map(artifact_row_to_view).transpose()
     }
 }

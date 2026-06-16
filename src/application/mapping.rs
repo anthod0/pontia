@@ -1,8 +1,11 @@
 use super::*;
 use crate::storage::sqlite::models::{
+    artifacts::ArtifactRow,
+    events::{EventRow, EventStreamRow, TaskEventStreamRow},
     sessions::SessionRow,
     tasks::{TaskEventRow, TaskRow},
     turns::TurnRow,
+    workspaces::WorkspaceRow,
 };
 
 pub(crate) fn session_row_to_view(row: SessionRow) -> Result<SessionView> {
@@ -39,19 +42,17 @@ pub(crate) fn session_row_to_view(row: SessionRow) -> Result<SessionView> {
     })
 }
 
-pub(crate) fn row_to_workspace_view(row: sqlx::sqlite::SqliteRow) -> Result<WorkspaceView> {
-    let metadata: String = row.try_get("metadata")?;
-
+pub(crate) fn workspace_row_to_view(row: WorkspaceRow) -> Result<WorkspaceView> {
     Ok(WorkspaceView {
-        workspace_id: row.try_get("workspace_id")?,
-        canonical_path: row.try_get("canonical_path")?,
-        display_path: row.try_get("display_path")?,
-        name: row.try_get("name")?,
-        state: row.try_get("state")?,
-        metadata: serde_json::from_str(&metadata)?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
-        last_used_at: row.try_get("last_used_at")?,
+        workspace_id: row.workspace_id,
+        canonical_path: row.canonical_path,
+        display_path: row.display_path,
+        name: row.name,
+        state: row.state,
+        metadata: serde_json::from_str(&row.metadata)?,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        last_used_at: row.last_used_at,
     })
 }
 
@@ -104,15 +105,13 @@ pub(crate) fn task_event_row_to_view(row: TaskEventRow) -> Result<TaskEventView>
     })
 }
 
-pub(crate) fn row_to_task_event_view(row: sqlx::sqlite::SqliteRow) -> Result<TaskEventView> {
-    let payload: String = row.try_get("payload")?;
-
+pub(crate) fn task_event_stream_row_to_view(row: TaskEventStreamRow) -> Result<TaskEventView> {
     Ok(TaskEventView {
-        event_id: row.try_get("event_id")?,
-        task_id: row.try_get("task_id")?,
-        event_type: row.try_get("event_type")?,
-        payload: serde_json::from_str(&payload)?,
-        created_at: row.try_get("created_at")?,
+        event_id: row.event_id,
+        task_id: row.task_id,
+        event_type: row.event_type,
+        payload: serde_json::from_str(&row.payload)?,
+        created_at: row.created_at,
     })
 }
 
@@ -294,43 +293,52 @@ pub(crate) fn row_to_inbox_message_view(row: sqlx::sqlite::SqliteRow) -> Result<
     })
 }
 
-pub(crate) fn row_to_event_view(row: sqlx::sqlite::SqliteRow) -> Result<EventView> {
-    let payload: String = row.try_get("payload")?;
-
+pub(crate) fn event_row_to_view(row: EventRow) -> Result<EventView> {
     Ok(EventView {
-        event_id: row.try_get("event_id")?,
-        session_id: row.try_get("session_id")?,
-        turn_id: row.try_get("turn_id")?,
-        source: row.try_get("source")?,
-        event_type: row.try_get("event_type")?,
-        time: row.try_get("occurred_at")?,
-        payload: serde_json::from_str(&payload)?,
+        event_id: row.event_id,
+        session_id: row.session_id,
+        turn_id: row.turn_id,
+        source: row.source,
+        event_type: row.event_type,
+        time: row.occurred_at,
+        payload: serde_json::from_str(&row.payload)?,
     })
 }
 
-pub(crate) fn row_to_event_stream_item(row: sqlx::sqlite::SqliteRow) -> Result<EventStreamItem> {
-    let rowid = row.try_get("rowid")?;
-    let event = row_to_event_view(row)?;
+pub(crate) fn event_stream_row_to_view(row: EventStreamRow) -> Result<EventView> {
+    event_row_to_view(EventRow {
+        event_id: row.event_id,
+        session_id: row.session_id,
+        turn_id: row.turn_id,
+        source: row.source,
+        event_type: row.event_type,
+        occurred_at: row.occurred_at,
+        payload: row.payload,
+    })
+}
+
+pub(crate) fn event_stream_row_to_item(row: EventStreamRow) -> Result<EventStreamItem> {
+    let rowid = row.rowid;
+    let event = event_stream_row_to_view(row)?;
     Ok(EventStreamItem { rowid, event })
 }
 
-pub(crate) fn row_to_artifact_view(row: sqlx::sqlite::SqliteRow) -> Result<ArtifactView> {
-    let metadata: String = row.try_get("metadata")?;
-    let mut metadata_json: Value = serde_json::from_str(&metadata)?;
+pub(crate) fn artifact_row_to_view(row: ArtifactRow) -> Result<ArtifactView> {
+    let mut metadata_json: Value = serde_json::from_str(&row.metadata)?;
     remove_internal_metadata_fields(&mut metadata_json);
 
     Ok(ArtifactView {
-        artifact_id: row.try_get("artifact_id")?,
-        session_id: row.try_get("session_id")?,
-        turn_id: row.try_get("turn_id")?,
-        kind: row.try_get("kind")?,
-        name: row.try_get("name")?,
-        size_bytes: row.try_get("size_bytes")?,
+        artifact_id: row.artifact_id,
+        session_id: row.session_id,
+        turn_id: row.turn_id,
+        kind: row.kind,
+        name: row.name,
+        size_bytes: row.size_bytes,
         preview: metadata_json
             .get("preview")
             .and_then(Value::as_str)
             .map(ToString::to_string),
-        created_at: row.try_get("created_at")?,
+        created_at: row.created_at,
         metadata: metadata_json,
     })
 }

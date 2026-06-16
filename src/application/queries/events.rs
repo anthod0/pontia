@@ -1,16 +1,12 @@
 use super::*;
+use crate::storage::sqlite::repositories::events::SqliteEventRepository;
 
 impl ExternalQueryService {
     pub async fn list_session_events(&self, session_id: &str) -> Result<Vec<EventView>> {
-        let rows = sqlx::query(
-            r#"SELECT event_id, session_id, turn_id, source, event_type, occurred_at, payload
-               FROM events WHERE session_id = ? ORDER BY rowid"#,
-        )
-        .bind(session_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteEventRepository::new(self.pool.clone());
+        let rows = repository.list_session_events(session_id).await?;
 
-        rows.into_iter().map(row_to_event_view).collect()
+        rows.into_iter().map(event_row_to_view).collect()
     }
 
     pub async fn list_turn_events(
@@ -18,16 +14,10 @@ impl ExternalQueryService {
         session_id: &str,
         turn_id: &str,
     ) -> Result<Vec<EventView>> {
-        let rows = sqlx::query(
-            r#"SELECT event_id, session_id, turn_id, source, event_type, occurred_at, payload
-               FROM events WHERE session_id = ? AND turn_id = ? ORDER BY rowid"#,
-        )
-        .bind(session_id)
-        .bind(turn_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteEventRepository::new(self.pool.clone());
+        let rows = repository.list_turn_events(session_id, turn_id).await?;
 
-        rows.into_iter().map(row_to_event_view).collect()
+        rows.into_iter().map(event_row_to_view).collect()
     }
 
     pub async fn resolve_event_cursor(
@@ -35,48 +25,35 @@ impl ExternalQueryService {
         scope: EventStreamScope<'_>,
         after_event_id: &str,
     ) -> Result<i64> {
-        let row = match scope {
+        let repository = SqliteEventRepository::new(self.pool.clone());
+        let rowid = match scope {
             EventStreamScope::Session { session_id } => {
-                sqlx::query("SELECT rowid FROM events WHERE session_id = ? AND event_id = ?")
-                    .bind(session_id)
-                    .bind(after_event_id)
-                    .fetch_optional(&self.pool)
+                repository
+                    .resolve_session_event_cursor(session_id, after_event_id)
                     .await?
             }
             EventStreamScope::Turn {
                 session_id,
                 turn_id,
-            } => sqlx::query(
-                "SELECT rowid FROM events WHERE session_id = ? AND turn_id = ? AND event_id = ?",
-            )
-            .bind(session_id)
-            .bind(turn_id)
-            .bind(after_event_id)
-            .fetch_optional(&self.pool)
-            .await?,
+            } => {
+                repository
+                    .resolve_turn_event_cursor(session_id, turn_id, after_event_id)
+                    .await?
+            }
         };
 
-        let Some(row) = row else {
-            return Err(Error::Domain(format!(
+        rowid.ok_or_else(|| {
+            Error::Domain(format!(
                 "event cursor {after_event_id} is not valid for requested stream"
-            )));
-        };
-
-        Ok(row.try_get("rowid")?)
+            ))
+        })
     }
 
     pub async fn current_dashboard_stream_cursor(&self) -> Result<DashboardStreamCursor> {
-        let session_rowid = sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(rowid) FROM events")
-            .fetch_one(&self.pool)
-            .await?
-            .unwrap_or(0);
-        let task_rowid = sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(rowid) FROM task_events")
-            .fetch_one(&self.pool)
-            .await?
-            .unwrap_or(0);
+        let repository = SqliteEventRepository::new(self.pool.clone());
         Ok(DashboardStreamCursor {
-            session_rowid,
-            task_rowid,
+            session_rowid: repository.current_session_stream_rowid().await?,
+            task_rowid: repository.current_task_stream_rowid().await?,
         })
     }
 
@@ -113,27 +90,18 @@ impl ExternalQueryService {
         cursor: DashboardStreamCursor,
         limit: i64,
     ) -> Result<Vec<DashboardStreamItem>> {
-        let session_rows = sqlx::query(
-            r#"SELECT rowid, event_id, session_id, turn_id, source, event_type, occurred_at, payload
-               FROM events WHERE rowid > ? ORDER BY rowid LIMIT ?"#,
-        )
-        .bind(cursor.session_rowid)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await?;
-        let task_rows = sqlx::query(
-            r#"SELECT rowid, event_id, task_id, event_type, payload, created_at
-               FROM task_events WHERE rowid > ? ORDER BY rowid LIMIT ?"#,
-        )
-        .bind(cursor.task_rowid)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteEventRepository::new(self.pool.clone());
+        let session_rows = repository
+            .list_session_stream_rows_after(cursor.session_rowid, limit)
+            .await?;
+        let task_rows = repository
+            .list_task_stream_rows_after(cursor.task_rowid, limit)
+            .await?;
 
         let mut items = Vec::new();
         for row in session_rows {
-            let rowid = row.try_get("rowid")?;
-            let event = row_to_event_view(row)?;
+            let rowid = row.rowid;
+            let event = event_stream_row_to_view(row)?;
             let occurred_at = event.time.clone();
             items.push(DashboardStreamItem {
                 cursor: DashboardStreamCursor {
@@ -149,8 +117,8 @@ impl ExternalQueryService {
             });
         }
         for row in task_rows {
-            let rowid = row.try_get("rowid")?;
-            let event = row_to_task_event_view(row)?;
+            let rowid = row.rowid;
+            let event = task_event_stream_row_to_view(row)?;
             let occurred_at = event.created_at.clone();
             items.push(DashboardStreamItem {
                 cursor: DashboardStreamCursor {
@@ -188,35 +156,23 @@ impl ExternalQueryService {
         after_rowid: i64,
         limit: i64,
     ) -> Result<Vec<EventStreamItem>> {
+        let repository = SqliteEventRepository::new(self.pool.clone());
         let rows = match scope {
             EventStreamScope::Session { session_id } => {
-                sqlx::query(
-                    r#"SELECT rowid, event_id, session_id, turn_id, source, event_type, occurred_at, payload
-                       FROM events WHERE session_id = ? AND rowid > ? ORDER BY rowid LIMIT ?"#,
-                )
-                .bind(session_id)
-                .bind(after_rowid)
-                .bind(limit)
-                .fetch_all(&self.pool)
-                .await?
+                repository
+                    .list_session_event_stream_rows_after(session_id, after_rowid, limit)
+                    .await?
             }
             EventStreamScope::Turn {
                 session_id,
                 turn_id,
             } => {
-                sqlx::query(
-                    r#"SELECT rowid, event_id, session_id, turn_id, source, event_type, occurred_at, payload
-                       FROM events WHERE session_id = ? AND turn_id = ? AND rowid > ? ORDER BY rowid LIMIT ?"#,
-                )
-                .bind(session_id)
-                .bind(turn_id)
-                .bind(after_rowid)
-                .bind(limit)
-                .fetch_all(&self.pool)
-                .await?
+                repository
+                    .list_turn_event_stream_rows_after(session_id, turn_id, after_rowid, limit)
+                    .await?
             }
         };
 
-        rows.into_iter().map(row_to_event_stream_item).collect()
+        rows.into_iter().map(event_stream_row_to_item).collect()
     }
 }
