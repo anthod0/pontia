@@ -83,10 +83,29 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test("session_start without managed runtime env does not attach or report ready", async () => {
-    const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 500 }));
+  test("session_start without managed runtime env binds through internal upsert and reports ready", async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("http://localhost/internal/v1/runtime-bindings/upsert");
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        client_type: "pi",
+        client_session_key: "pi_session_manual",
+        client_session_file: "/tmp/pi/session.jsonl",
+        client_session_dir: "/tmp/pi",
+        client_cwd: "/workspace",
+        launch_cwd: "/workspace",
+        runtime_instance_id: expect.stringMatching(/^rtinst_/),
+      });
+      return new Response(JSON.stringify({
+        session: { session_id: "sess_bound" },
+        runtime: {
+          runtime_instance_id: "rtinst_bound",
+          internal_event_url: "http://localhost/internal/v1/events",
+          current_turn_file: "/tmp/pontia/current-turn.json",
+        },
+      }), { status: 200 });
+    });
     const { handlers, reported } = install({
-      env: {},
+      env: { PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events" },
       fetch: fetchImpl as any,
     });
 
@@ -99,8 +118,49 @@ describe("pontia pi extension lifecycle", () => {
       },
     });
 
-    expect(fetchImpl).not.toHaveBeenCalled();
-    expect(reported).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_bound",
+      payload: {
+        runtime_instance_id: "rtinst_bound",
+        client_session_key: "pi_session_manual",
+      },
+    });
+  });
+
+  test("manual tui agent_start uses the bound session when current-turn context is absent", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      session: { session_id: "sess_bound" },
+      runtime: {
+        runtime_instance_id: "rtinst_bound",
+        internal_event_url: "http://localhost/internal/v1/events",
+        current_turn_file: "/tmp/pontia/current-turn.json",
+      },
+    }), { status: 200 }));
+    const { handlers, reported } = install({
+      env: { PONTIA_INTERNAL_BINDING_UPSERT_URL: "http://localhost/internal/v1/runtime-bindings/upsert" },
+      fetch: fetchImpl as any,
+      loadContext: vi.fn(async () => ({
+        ok: false as const,
+        reason: "current-turn file is missing or unreadable: fallback/current-turn.json",
+        contextFile: "fallback/current-turn.json",
+        logFile: "fallback/pi-hook.log",
+        silent: true,
+      })),
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => "/workspace" },
+    });
+    await handlers.agent_start({}, {});
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
+    expect(reported[1]).toMatchObject({
+      session_id: "sess_bound",
+      turn_id: expect.stringMatching(/^turn_/),
+      payload: { runtime_instance_id: "rtinst_bound", input: {} },
+    });
   });
 
   test("session_start with partial managed runtime env does not attach or report ready", async () => {

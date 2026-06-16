@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, newPontiaTurnId, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
 import { EventReporter } from "./reporter.js";
-import { loadSessionContext } from "./session.js";
+import { loadSessionContext, type SessionContext } from "./session.js";
 
 interface ReporterLike {
   report(context: { internalEventUrl: string }, event: InternalEvent): Promise<boolean>;
@@ -109,6 +110,68 @@ function externalApiUrl(env: EnvLike): string | undefined {
   return optionalString(env.PONTIA_EXTERNAL_API_URL)?.replace(/\/+$/, "");
 }
 
+function hasPreboundSessionIntent(env: EnvLike): boolean {
+  return Boolean(optionalString(env.PONTIA_SESSION_ID));
+}
+
+function bindingUpsertUrl(env: EnvLike): string | undefined {
+  const explicit = optionalString(env.PONTIA_INTERNAL_BINDING_UPSERT_URL);
+  if (explicit) return explicit;
+  const eventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL);
+  if (!eventUrl) return undefined;
+  return eventUrl.replace(/\/events\/?$/, "/runtime-bindings/upsert");
+}
+
+function newRuntimeInstanceId(): string {
+  return `rtinst_${randomUUID()}`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+async function bindManualSession(env: EnvLike, fetchImpl: typeof fetch, sessionDetails: Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">): Promise<SessionContext | undefined> {
+  if (hasPreboundSessionIntent(env)) return undefined;
+  if (!sessionDetails.clientSessionKey) return undefined;
+  const url = bindingUpsertUrl(env);
+  if (!url) return undefined;
+
+  const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? newRuntimeInstanceId();
+  const response = await fetchImpl(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_type: "pi",
+      client_session_key: sessionDetails.clientSessionKey,
+      client_session_file: sessionDetails.clientSessionFile,
+      client_session_dir: sessionDetails.clientSessionDir,
+      client_cwd: sessionDetails.clientCwd,
+      launch_cwd: sessionDetails.clientCwd,
+      runtime_instance_id: runtimeInstanceId,
+      start_command: "pi",
+    }),
+  });
+  const body = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(`runtime binding upsert failed: ${response.status} ${response.statusText}`);
+
+  const record = asRecord(body);
+  const session = asRecord(record?.session);
+  const runtime = asRecord(record?.runtime);
+  const sessionId = optionalString(session?.session_id);
+  const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id) ?? runtimeInstanceId;
+  const internalEventUrl = optionalString(runtime?.internal_event_url) ?? optionalString(env.PONTIA_INTERNAL_EVENT_URL);
+  if (!sessionId) throw new Error("runtime binding upsert response missing session.session_id");
+  if (!internalEventUrl) throw new Error("runtime binding upsert response missing runtime.internal_event_url");
+
+  return {
+    sessionId,
+    clientType: "pi",
+    internalEventUrl,
+    runtimeInstanceId: resolvedRuntimeInstanceId,
+    ...sessionDetails,
+  };
+}
+
 async function parseJsonResponse(response: Response): Promise<unknown> {
   const text = await response.text().catch(() => "");
   if (!text) return null;
@@ -165,6 +228,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
+  let boundSessionContext: SessionContext | undefined;
   let pendingRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let lastContextUsageJson: string | undefined;
 
@@ -231,18 +295,26 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
       const loaded = await loadSessionContext(env);
-      if (!loaded.ok) return;
+      const logFile = loaded.logFile;
+      let context: SessionContext | undefined;
 
-      if (!sessionDetails.clientSessionKey) {
-        await logDiagnostic(loaded.logFile, {
-          level: "error",
-          code: "missing_pi_client_session_key",
-          message: "ctx.sessionManager.getSessionId() is required to report pontia ready signal",
-        });
-        return;
+      if (loaded.ok) {
+        if (!sessionDetails.clientSessionKey) {
+          await logDiagnostic(logFile, {
+            level: "error",
+            code: "missing_pi_client_session_key",
+            message: "ctx.sessionManager.getSessionId() is required to report pontia ready signal",
+          });
+          return;
+        }
+        context = { ...loaded.context, ...sessionDetails };
+      } else {
+        context = await bindManualSession(env, fetchImpl, sessionDetails);
       }
-      const context = { ...loaded.context, ...sessionDetails };
-      readyReported = await makeReporter(loaded.logFile).report(context, buildSessionReadyEvent(context));
+
+      if (!context) return;
+      boundSessionContext = context;
+      readyReported = await makeReporter(logFile).report(context, buildSessionReadyEvent(context));
     } catch (error) {
       const logFile = env.PONTIA_PI_HOOK_LOG ?? "pi-hook.log";
       await logDiagnostic(logFile, {
@@ -257,17 +329,30 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   pi.on("agent_start", async (_event, ctx) => {
     try {
       const loaded = await contextLoader(env);
-      if (!loaded.ok) {
+      let turnContext: TurnContext | undefined;
+      let logFile: string;
+      if (loaded.ok) {
+        turnContext = loaded.context;
+        logFile = loaded.logFile;
+      } else if (loaded.silent && boundSessionContext) {
+        turnContext = {
+          sessionId: boundSessionContext.sessionId,
+          runtimeInstanceId: boundSessionContext.runtimeInstanceId,
+          clientType: "pi",
+          internalEventUrl: boundSessionContext.internalEventUrl,
+        };
+        logFile = loaded.logFile;
+      } else {
         activeTurn = undefined;
         if (!loaded.silent && ctx?.hasUI) ctx.ui.notify(`pontia: ${loaded.reason}`, "warning");
         return;
       }
 
-      const reporter = makeReporter(loaded.logFile);
+      const reporter = makeReporter(logFile);
       lastContextUsageJson = undefined;
       activeTurn = {
-        context: { ...loaded.context, turnId: loaded.context.turnId ?? newPontiaTurnId() },
-        logFile: loaded.logFile,
+        context: { ...turnContext, turnId: turnContext.turnId ?? newPontiaTurnId() },
+        logFile,
         reporter,
         output: "",
         ended: false,

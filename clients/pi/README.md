@@ -18,9 +18,9 @@ pi install -l ./clients/pi
 
 ## Runtime binding
 
-The extension does not create or auto-attach pontia sessions after pi has started. WebUI-launched and TUI-launched sessions must both be bound before the `pi` process starts, and the launcher must inject the same managed runtime environment into pi.
+On `session_start`, the extension first tries the managed pre-bound runtime environment (`PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_INTERNAL_EVENT_URL`). If it is complete, the extension reports against that existing pontia session.
 
-On `session_start`, the extension reads `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_INTERNAL_EVENT_URL`. If that managed runtime environment is complete, it reports against that existing pontia session. If it is absent or incomplete, the extension skips pontia reporting for that pi process instead of calling pontia APIs or guessing a default server address.
+When `PONTIA_SESSION_ID` is absent, the extension can bind a manually started pi TUI by calling the Internal runtime binding upsert API. Configure either `PONTIA_INTERNAL_BINDING_UPSERT_URL` directly or `PONTIA_INTERNAL_EVENT_URL` so the upsert URL can be derived by replacing `/events` with `/runtime-bindings/upsert`. The backend creates or reuses the pontia `session_id`; the extension only reports the real pi `client_session_key` from `ctx.sessionManager.getSessionId()`. If no Internal API URL is configured, the extension skips pontia reporting instead of guessing a default server address.
 
 ## Runtime environment
 
@@ -33,7 +33,8 @@ The extension reads configuration from environment variables:
 | `PONTIA_SESSION_ID` | required for reporting | none |
 | `PONTIA_RUNTIME_INSTANCE_ID` | required for reporting | none |
 | `PONTIA_CURRENT_TURN_FILE` | recommended | `$PONTIA_RUNTIME_DIR/current-turn.json` |
-| `PONTIA_INTERNAL_EVENT_URL` | required for reporting | none |
+| `PONTIA_INTERNAL_EVENT_URL` | required for pre-bound reporting; optional for deriving binding upsert URL | none |
+| `PONTIA_INTERNAL_BINDING_UPSERT_URL` | optional for manual TUI binding | derived from `PONTIA_INTERNAL_EVENT_URL` |
 | `PONTIA_PI_HOOK_LOG` | recommended | `$PONTIA_RUNTIME_DIR/pi-hook.log` |
 
 Expected `current-turn.json` for backend-delivered input:
@@ -67,7 +68,7 @@ DAG task development is currently frozen while pontia focuses on session-first W
 
 ## Manual validation
 
-When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_RUNTIME_DIR`, `PONTIA_CURRENT_TURN_FILE`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_PI_HOOK_LOG` for the hook. A manually opened pi TUI must be launched through an equivalent pre-binding launcher that exports the same environment before pi starts. The steps below are useful for standalone plugin validation.
+When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_RUNTIME_DIR`, `PONTIA_CURRENT_TURN_FILE`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_PI_HOOK_LOG` for the hook. A manually opened pi TUI can instead bind on startup through `PONTIA_INTERNAL_BINDING_UPSERT_URL` or `PONTIA_INTERNAL_EVENT_URL`. The steps below are useful for standalone plugin validation.
 
 1. Start pontia so `/internal/v1/events` is reachable.
 2. Create the current turn file in a runtime directory:
