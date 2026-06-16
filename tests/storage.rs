@@ -1,57 +1,14 @@
-use pontia::storage::sqlite::{connect_sqlite, normalize_sqlite_database_url, run_migrations};
-use sqlx::Row;
-
-#[test]
-fn expands_tilde_sqlite_database_urls_before_connecting() {
-    let normalized =
-        normalize_sqlite_database_url("sqlite://~/.local/share/pontia/pontia.db", "/home/alice")
-            .expect("normalize");
-
-    assert_eq!(
-        normalized,
-        "sqlite:///home/alice/.local/share/pontia/pontia.db"
-    );
-}
-
-#[tokio::test]
-async fn connects_to_sqlite_and_runs_migrations() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("control-plane.db");
-    let database_url = format!("sqlite://{}", db_path.display());
-
-    let pool = connect_sqlite(&database_url).await.expect("connect sqlite");
-    run_migrations(&pool).await.expect("run migrations");
-
-    let migration_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations")
-        .fetch_one(&pool)
-        .await
-        .expect("query migrations");
-
-    assert!(migration_count >= 1);
-}
-
-#[tokio::test]
-async fn runtime_bindings_schema_uses_structured_runtime_fields_without_runtime_ref() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("runtime-bindings-schema.db");
-    let database_url = format!("sqlite://{}", db_path.display());
-
-    let pool = connect_sqlite(&database_url).await.expect("connect sqlite");
-    run_migrations(&pool).await.expect("run migrations");
-
-    let columns = sqlx::query("PRAGMA table_info(runtime_bindings)")
-        .fetch_all(&pool)
-        .await
-        .expect("runtime_bindings columns")
-        .into_iter()
-        .map(|row| row.get::<String, _>("name"))
-        .collect::<Vec<_>>();
-
-    assert!(columns.contains(&"runtime_instance_id".to_string()));
-    assert!(columns.contains(&"start_command".to_string()));
-    assert!(columns.contains(&"launch_cwd".to_string()));
-    assert!(columns.contains(&"last_seen_at".to_string()));
-    assert!(columns.contains(&"tmux_socket_path".to_string()));
-    assert!(columns.contains(&"tmux_pane_id".to_string()));
-    assert!(!columns.contains(&"runtime_ref".to_string()));
-}
+#[path = "storage/config.rs"]
+mod config;
+#[path = "storage/foundations.rs"]
+mod foundations;
+#[path = "storage/mod_storage.rs"]
+mod mod_storage;
+#[path = "storage/raw_transcript_backend.rs"]
+mod raw_transcript_backend;
+#[path = "storage/sqlite_dag_repository.rs"]
+mod sqlite_dag_repository;
+#[path = "storage/sqlite_session_turn_repositories.rs"]
+mod sqlite_session_turn_repositories;
+#[path = "storage/sqlite_task_repository.rs"]
+mod sqlite_task_repository;

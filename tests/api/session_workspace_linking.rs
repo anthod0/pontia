@@ -1,8 +1,8 @@
-#[path = "support/generic_client.rs"]
+#[path = "../support/generic_client.rs"]
 mod generic_client;
-#[path = "support/http.rs"]
+#[path = "../support/http.rs"]
 mod http;
-#[path = "support/task_state.rs"]
+#[path = "../support/task_state.rs"]
 mod task_state;
 
 use axum::http::StatusCode;

@@ -1,4 +1,4 @@
-#[path = "support/generic_client.rs"]
+#[path = "../support/generic_client.rs"]
 mod generic_client;
 
 use axum::{

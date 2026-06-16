@@ -1,6 +1,6 @@
-#[path = "support/http.rs"]
+#[path = "../support/http.rs"]
 mod http;
-#[path = "support/task_state.rs"]
+#[path = "../support/task_state.rs"]
 mod task_state;
 
 use axum::http::StatusCode;

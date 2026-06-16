@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
-#[path = "support/generic_client.rs"]
+#[path = "../support/generic_client.rs"]
 mod generic_client;
 
 use generic_client::GenericClientTestScope;

@@ -1,4 +1,4 @@
-#[path = "support/agent_tools.rs"]
+#[path = "../support/agent_tools.rs"]
 mod agent_tools;
 
 use agent_tools::*;
