@@ -5,7 +5,7 @@ dev:
     ./scripts/dev-dashboard.sh
 
 backend:
-    PONTIA_EXTERNAL_API_TOKEN=${PONTIA_EXTERNAL_API_TOKEN:-dev-token} cargo run
+    DATABASE_URL="$(./scripts/sqlx-check-db.sh)" PONTIA_EXTERNAL_API_TOKEN=${PONTIA_EXTERNAL_API_TOKEN:-dev-token} cargo run
 
 dashboard:
     pnpm --dir=apps/dashboard run dev
@@ -16,13 +16,19 @@ fmt:
 fmt-check:
     cargo fmt --check
 
+sqlx-db:
+    ./scripts/sqlx-check-db.sh
+
+sqlx-check:
+    DATABASE_URL="$(./scripts/sqlx-check-db.sh)" cargo check --all-targets --all-features
+
 clippy:
-    cargo clippy --all-targets --all-features -- -D warnings
+    DATABASE_URL="$(./scripts/sqlx-check-db.sh)" cargo clippy --all-targets --all-features -- -D warnings
 
 test:
-    cargo test
+    DATABASE_URL="$(./scripts/sqlx-check-db.sh)" cargo test
 
 dashboard-check:
     pnpm --dir=apps/dashboard run check
 
-check: fmt-check clippy test dashboard-check
+check: fmt-check sqlx-check clippy test dashboard-check

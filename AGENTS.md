@@ -55,9 +55,12 @@
 ## Common commands
 
 - Backend checks/tests:
-  - `cargo fmt --check`
-  - `cargo test`
-  - `cargo clippy --all-targets --all-features -- -D warnings`
+  - `just fmt-check`
+  - `just test`
+  - `just clippy`
+  - `just sqlx-check`
+- Full project check:
+  - `just check`
 - Dashboard:
   - `pnpm --dir=apps/dashboard run check`
   - `pnpm --dir=apps/dashboard run build`
@@ -73,4 +76,6 @@
 
 Notes:
 
+- SQLx compile-time query checks use a temporary SQLite database generated from `migrations/*.sql` by `scripts/sqlx-check-db.sh` / `just sqlx-db`.
+- Do not commit `.sqlx/`; run backend cargo commands through the `just` targets so `DATABASE_URL` points at the generated check database.
 - Client plugin packages currently have `test` and `typecheck` scripts, not `build` scripts.

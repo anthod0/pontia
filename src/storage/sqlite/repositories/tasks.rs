@@ -27,30 +27,30 @@ impl SqliteTaskRepository {
     }
 
     pub async fn create_task(&self, task: CreateTaskRecord) -> Result<()> {
-        sqlx::query(
+        sqlx::query!(
             r#"INSERT INTO tasks (task_id, state, input, workspace_id, routing_state, routing_confidence, metadata)
                VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+            task.task_id,
+            task.state,
+            task.input,
+            task.workspace_id,
+            task.routing_state,
+            task.routing_confidence,
+            task.metadata,
         )
-        .bind(task.task_id)
-        .bind(task.state)
-        .bind(task.input)
-        .bind(task.workspace_id)
-        .bind(task.routing_state)
-        .bind(task.routing_confidence)
-        .bind(task.metadata)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
     pub async fn update_task_state(&self, task_id: &str, state: &str) -> Result<()> {
-        sqlx::query(
+        sqlx::query!(
             r#"UPDATE tasks
                SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE task_id = ?"#,
+            state,
+            task_id,
         )
-        .bind(state)
-        .bind(task_id)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -63,21 +63,22 @@ impl SqliteTaskRepository {
         event_type: &str,
         payload: &str,
     ) -> Result<()> {
-        sqlx::query(
+        sqlx::query!(
             r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
                VALUES (?, ?, ?, ?)"#,
+            event_id,
+            task_id,
+            event_type,
+            payload,
         )
-        .bind(event_id)
-        .bind(task_id)
-        .bind(event_type)
-        .bind(payload)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
     pub async fn list_tasks(&self) -> Result<Vec<TaskRow>> {
-        Ok(sqlx::query_as::<_, TaskRow>(
+        Ok(sqlx::query_as!(
+            TaskRow,
             r#"SELECT task_id, state, input, workspace_id, session_id, turn_id,
                       routing_state, routing_reason, routing_confidence, metadata,
                       created_at, updated_at
@@ -88,23 +89,25 @@ impl SqliteTaskRepository {
     }
 
     pub async fn get_task(&self, task_id: &str) -> Result<Option<TaskRow>> {
-        Ok(sqlx::query_as::<_, TaskRow>(
+        Ok(sqlx::query_as!(
+            TaskRow,
             r#"SELECT task_id, state, input, workspace_id, session_id, turn_id,
                       routing_state, routing_reason, routing_confidence, metadata,
                       created_at, updated_at
                FROM tasks WHERE task_id = ?"#,
+            task_id,
         )
-        .bind(task_id)
         .fetch_optional(&self.pool)
         .await?)
     }
 
     pub async fn list_task_events(&self, task_id: &str) -> Result<Vec<TaskEventRow>> {
-        Ok(sqlx::query_as::<_, TaskEventRow>(
+        Ok(sqlx::query_as!(
+            TaskEventRow,
             r#"SELECT event_id, task_id, event_type, payload, created_at
                FROM task_events WHERE task_id = ? ORDER BY created_at, event_id"#,
+            task_id,
         )
-        .bind(task_id)
         .fetch_all(&self.pool)
         .await?)
     }

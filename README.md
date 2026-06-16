@@ -78,9 +78,31 @@ Current state: early task, DAG, work-item, proposal, scheduler, and provenance m
 Install:
 
 - Rust / Cargo
+- just
+- sqlite3 CLI
 - tmux
 - pnpm
 - pi CLI and/or Claude Code if you want to run those clients locally
+
+### SQLx compile-time checks
+
+Pontia uses SQLx compile-time query macros for SQLite repository SQL. The project does not commit `.sqlx/` offline cache files. Instead, backend commands generate a temporary SQLite check database from `migrations/*.sql` and set `DATABASE_URL` for compilation.
+
+Use the `just` targets for backend development:
+
+```bash
+just sqlx-db      # create /tmp/pontia_sqlx_check.db and print its DATABASE_URL
+just sqlx-check   # compile with SQLx query checks against the temporary database
+just test
+just clippy
+just check
+```
+
+If you run cargo directly after editing SQL or migrations, set `DATABASE_URL` yourself:
+
+```bash
+DATABASE_URL="$(./scripts/sqlx-check-db.sh)" cargo test
+```
 
 ### Build the dashboard
 
@@ -122,7 +144,13 @@ Environment variables and `.env` are also supported. See [`.env.example`](.env.e
 ### Run the server
 
 ```bash
-cargo run
+just backend
+```
+
+Or, when running cargo directly:
+
+```bash
+DATABASE_URL="$(./scripts/sqlx-check-db.sh)" cargo run
 ```
 
 Check health:
