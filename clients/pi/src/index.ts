@@ -127,6 +127,14 @@ function newRuntimeInstanceId(): string {
   return `rtinst_${randomUUID()}`;
 }
 
+function tmuxBindingFromEnv(env: EnvLike): { socket_path: string; pane_id: string } | undefined {
+  const tmux = optionalString(env.TMUX);
+  const paneId = optionalString(env.TMUX_PANE);
+  const socketPath = optionalString(tmux?.split(",", 1)[0]);
+  if (!socketPath || !paneId) return undefined;
+  return { socket_path: socketPath, pane_id: paneId };
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
@@ -139,6 +147,7 @@ async function bindManualSession(env: EnvLike, fetchImpl: typeof fetch, sessionD
   if (!url) return undefined;
 
   const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? newRuntimeInstanceId();
+  const tmux = tmuxBindingFromEnv(env);
   const response = await fetchImpl(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -151,6 +160,7 @@ async function bindManualSession(env: EnvLike, fetchImpl: typeof fetch, sessionD
       launch_cwd: sessionDetails.clientCwd,
       runtime_instance_id: runtimeInstanceId,
       start_command: "pi",
+      ...(tmux ? { tmux } : {}),
     }),
   });
   const body = await parseJsonResponse(response);

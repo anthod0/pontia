@@ -107,6 +107,10 @@ describe("pontia pi extension lifecycle", () => {
         client_cwd: "/workspace",
         launch_cwd: "/workspace",
         runtime_instance_id: expect.stringMatching(/^rtinst_/),
+        tmux: {
+          socket_path: "/tmp/tmux-1000/default",
+          pane_id: "%42",
+        },
       });
       return new Response(JSON.stringify({
         session: { session_id: "sess_bound" },
@@ -118,7 +122,11 @@ describe("pontia pi extension lifecycle", () => {
       }), { status: 200 });
     });
     const { handlers, reported } = install({
-      env: { PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events" },
+      env: {
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+        TMUX: "/tmp/tmux-1000/default,2071,502",
+        TMUX_PANE: "%42",
+      },
       fetch: fetchImpl as any,
     });
 
@@ -181,6 +189,32 @@ describe("pontia pi extension lifecycle", () => {
       session_id: "sess_discovered",
       payload: { runtime_instance_id: "rtinst_discovered", client_session_key: "pi_session_discovered" },
     });
+  });
+
+  test("manual session binding omits tmux when pane identity is incomplete", async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).not.toHaveProperty("tmux");
+      return new Response(JSON.stringify({
+        session: { session_id: "sess_bound" },
+        runtime: {
+          runtime_instance_id: "rtinst_bound",
+          internal_event_url: "http://localhost/internal/v1/events",
+        },
+      }), { status: 200 });
+    });
+    const { handlers } = install({
+      env: {
+        PONTIA_INTERNAL_BINDING_UPSERT_URL: "http://localhost/internal/v1/runtime-bindings/upsert",
+        TMUX: "/tmp/tmux-1000/default,2071,502",
+      },
+      fetch: fetchImpl as any,
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => "/workspace" },
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   test("manual tui agent_start uses the bound session when current-turn context is absent", async () => {
