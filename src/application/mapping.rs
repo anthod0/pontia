@@ -1,4 +1,5 @@
 use super::*;
+use crate::storage::sqlite::models::tasks::{TaskEventRow, TaskRow};
 
 pub(crate) fn row_to_session_view(row: sqlx::sqlite::SqliteRow) -> Result<SessionView> {
     let metadata: String = row.try_get("metadata")?;
@@ -73,22 +74,30 @@ pub(crate) fn row_to_workspace_git_status_view(
     })
 }
 
-pub(crate) fn row_to_task_view(row: sqlx::sqlite::SqliteRow) -> Result<TaskView> {
-    let metadata: String = row.try_get("metadata")?;
-
+pub(crate) fn task_row_to_view(row: TaskRow) -> Result<TaskView> {
     Ok(TaskView {
-        task_id: row.try_get("task_id")?,
-        state: row.try_get("state")?,
-        input: row.try_get("input")?,
-        workspace_id: row.try_get("workspace_id")?,
-        session_id: row.try_get("session_id")?,
-        turn_id: row.try_get("turn_id")?,
-        routing_state: row.try_get("routing_state")?,
-        routing_reason: row.try_get("routing_reason")?,
-        routing_confidence: row.try_get("routing_confidence")?,
-        metadata: serde_json::from_str(&metadata)?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
+        task_id: row.task_id,
+        state: row.state,
+        input: row.input,
+        workspace_id: row.workspace_id,
+        session_id: row.session_id,
+        turn_id: row.turn_id,
+        routing_state: row.routing_state,
+        routing_reason: row.routing_reason,
+        routing_confidence: row.routing_confidence,
+        metadata: serde_json::from_str(&row.metadata)?,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    })
+}
+
+pub(crate) fn task_event_row_to_view(row: TaskEventRow) -> Result<TaskEventView> {
+    Ok(TaskEventView {
+        event_id: row.event_id,
+        task_id: row.task_id,
+        event_type: row.event_type,
+        payload: serde_json::from_str(&row.payload)?,
+        created_at: row.created_at,
     })
 }
 

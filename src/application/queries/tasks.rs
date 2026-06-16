@@ -1,43 +1,26 @@
 use super::*;
+use crate::storage::sqlite::repositories::tasks::SqliteTaskRepository;
 
 impl ExternalQueryService {
     pub async fn list_tasks(&self) -> Result<Vec<TaskView>> {
-        let rows = sqlx::query(
-            r#"SELECT task_id, state, input, workspace_id, session_id, turn_id,
-                      routing_state, routing_reason, routing_confidence, metadata,
-                      created_at, updated_at
-               FROM tasks ORDER BY created_at DESC, task_id"#,
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteTaskRepository::new(self.pool.clone());
+        let rows = repository.list_tasks().await?;
 
-        rows.into_iter().map(row_to_task_view).collect()
+        rows.into_iter().map(task_row_to_view).collect()
     }
 
     pub async fn get_task(&self, task_id: &str) -> Result<Option<TaskView>> {
-        let row = sqlx::query(
-            r#"SELECT task_id, state, input, workspace_id, session_id, turn_id,
-                      routing_state, routing_reason, routing_confidence, metadata,
-                      created_at, updated_at
-               FROM tasks WHERE task_id = ?"#,
-        )
-        .bind(task_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let repository = SqliteTaskRepository::new(self.pool.clone());
+        let row = repository.get_task(task_id).await?;
 
-        row.map(row_to_task_view).transpose()
+        row.map(task_row_to_view).transpose()
     }
 
     pub async fn list_task_events(&self, task_id: &str) -> Result<Vec<TaskEventView>> {
-        let rows = sqlx::query(
-            r#"SELECT event_id, task_id, event_type, payload, created_at
-               FROM task_events WHERE task_id = ? ORDER BY created_at, event_id"#,
-        )
-        .bind(task_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteTaskRepository::new(self.pool.clone());
+        let rows = repository.list_task_events(task_id).await?;
 
-        rows.into_iter().map(row_to_task_event_view).collect()
+        rows.into_iter().map(task_event_row_to_view).collect()
     }
 
     pub async fn list_task_dag_proposals(&self, task_id: &str) -> Result<Vec<DagProposalView>> {
