@@ -3,7 +3,7 @@ use crate::{
     agent_clients::types::{
         AdapterEventBehavior, AgentClientSpec, ClientSessionIdentityBehavior, DispatchBehavior,
         InterruptBehavior, ReadinessBehavior, RuntimeBehavior, SystemPromptInjectionBehavior,
-        TurnContextBehavior,
+        TerminateBehavior, TurnContextBehavior,
     },
     application::ContextUsageCapability,
 };
@@ -27,6 +27,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     readiness: ReadinessBehavior::RuntimeManagerImmediate,
     client_session_identity: ClientSessionIdentityBehavior::Unsupported,
     interrupt: InterruptBehavior::Unsupported,
+    terminate: TerminateBehavior::RuntimeManager,
     turn_context: TurnContextBehavior::Disabled,
     adapter_events: AdapterEventBehavior::Disabled,
     system_prompt_injection: SystemPromptInjectionBehavior::Disabled,

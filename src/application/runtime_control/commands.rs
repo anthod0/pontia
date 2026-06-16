@@ -1,5 +1,5 @@
 use super::*;
-use crate::agent_clients::{ReadinessMode, get_client_spec};
+use crate::agent_clients::{ReadinessMode, TerminateBehavior, get_client_spec};
 
 impl RuntimeControlService {
     pub async fn interrupt_current_turn(
@@ -167,8 +167,34 @@ impl RuntimeControlService {
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
         if !matches!(session.state.as_str(), "exited" | "error") {
-            if let Some(runtime_target) = self.runtime_target(session_id).await? {
-                self.runtime.terminate_session(&runtime_target)?;
+            let terminate_behavior = get_client_spec(&session.client_type)
+                .map(|spec| spec.terminate)
+                .ok_or_else(|| {
+                    Error::Domain(format!("unsupported client_type: {}", session.client_type))
+                })?;
+            let runtime_target = self.runtime_target(session_id).await?;
+            match (
+                self.tmux_pane_binding(session_id).await?,
+                terminate_behavior,
+            ) {
+                (Some(tmux_binding), TerminateBehavior::TmuxSendKeys(keys)) => {
+                    if let Err(err) = self.runtime.send_tmux_keys(
+                        &tmux_binding.socket_path,
+                        &tmux_binding.pane_id,
+                        keys,
+                    ) {
+                        if let Some(runtime_target) = runtime_target {
+                            self.runtime.terminate_session(&runtime_target)?;
+                        } else {
+                            return Err(err);
+                        }
+                    }
+                }
+                _ => {
+                    if let Some(runtime_target) = runtime_target {
+                        self.runtime.terminate_session(&runtime_target)?;
+                    }
+                }
             }
             EventIngestService::new(self.pool.clone())
                 .ingest_event(DomainEvent::new(

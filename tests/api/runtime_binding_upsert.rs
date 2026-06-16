@@ -10,6 +10,7 @@ use pontia::{
 };
 use serde_json::{Value, json};
 use sqlx::Row;
+use std::process::{Command, Stdio};
 use tower::ServiceExt;
 
 async fn test_state() -> AppState {
@@ -19,17 +20,50 @@ async fn test_state() -> AppState {
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState::builder(db).external_api_token(None).build()
+    AppState::builder(db)
+        .external_api_token(Some("test-token".to_string()))
+        .build()
 }
 
 async fn post_upsert(state: AppState, body: Value) -> (StatusCode, Value) {
+    request_json(
+        state,
+        "POST",
+        "/internal/v1/runtime-bindings/upsert",
+        Some(body),
+    )
+    .await
+}
+
+async fn delete_session(state: AppState, session_id: &str) -> (StatusCode, Value) {
+    request_json(
+        state,
+        "DELETE",
+        &format!("/external/v1/sessions/{session_id}"),
+        None,
+    )
+    .await
+}
+
+async fn request_json(
+    state: AppState,
+    method: &str,
+    uri: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder().method(method).uri(uri);
+    if body.is_some() {
+        builder = builder.header(header::CONTENT_TYPE, "application/json");
+    }
+    if uri.starts_with("/external/v1/") {
+        builder = builder.header(header::AUTHORIZATION, "Bearer test-token");
+    }
     let response = http::router(state)
         .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/internal/v1/runtime-bindings/upsert")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body.to_string()))
+            builder
+                .body(Body::from(
+                    body.map(|body| body.to_string()).unwrap_or_default(),
+                ))
                 .expect("request"),
         )
         .await
@@ -47,11 +81,20 @@ async fn post_upsert(state: AppState, body: Value) -> (StatusCode, Value) {
 }
 
 fn upsert_body(workspace: &str, pane_id: Option<&str>) -> Value {
+    upsert_body_with_tmux(workspace, "/tmp/tmux-1000/default", pane_id, Some("dev"))
+}
+
+fn upsert_body_with_tmux(
+    workspace: &str,
+    socket_path: &str,
+    pane_id: Option<&str>,
+    session_name: Option<&str>,
+) -> Value {
     let tmux = pane_id.map(|pane_id| {
         json!({
-            "socket_path": "/tmp/tmux-1000/default",
+            "socket_path": socket_path,
             "session_id": "$1",
-            "session_name": "dev",
+            "session_name": session_name,
             "window_id": "@3",
             "window_index": 0,
             "pane_id": pane_id,
@@ -219,4 +262,107 @@ async fn upsert_non_tmux_pi_session_is_observable_but_not_web_writable() {
     assert!(row.get::<Option<String>, _>("tmux_pane_id").is_none());
     let metadata: Value = serde_json::from_str(&row.get::<String, _>("metadata")).unwrap();
     assert_eq!(metadata["capabilities"]["accept_task"], false);
+}
+
+#[tokio::test]
+async fn terminate_manually_bound_tui_session_sends_pi_exit_sequence_to_bound_pane() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+    let signal_log = tempfile::NamedTempFile::new().expect("signal log");
+    let signal_log_path = signal_log.path().display().to_string();
+    let tmux_session = format!("pontia_manual_terminate_{}", std::process::id());
+    let _guard = TmuxSessionGuard(tmux_session.clone());
+
+    let command = format!(
+        "python3 -c {}",
+        shell_quote(&format!(
+            "import signal,time; f=open({:?}, 'a', buffering=1); signal.signal(signal.SIGINT, lambda *_: f.write('int\\n')); time.sleep(30)",
+            signal_log_path
+        ))
+    );
+    let status = Command::new("tmux")
+        .args(["new-session", "-d", "-s", &tmux_session, &command])
+        .status()
+        .expect("spawn tmux");
+    assert!(status.success(), "tmux session should start");
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let socket_path = tmux_display(&tmux_session, "#{socket_path}");
+    let pane_id = tmux_display(&tmux_session, "#{pane_id}");
+
+    let (upsert_status, upsert) = post_upsert(
+        state.clone(),
+        upsert_body_with_tmux(&workspace, &socket_path, Some(&pane_id), None),
+    )
+    .await;
+    assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
+    let session_id = upsert["session"]["session_id"].as_str().unwrap();
+
+    let (terminate_status, terminate) = delete_session(state.clone(), session_id).await;
+
+    assert_eq!(terminate_status, StatusCode::OK, "{terminate:?}");
+    assert_eq!(terminate["data"]["session"]["state"], "exited");
+    assert!(tmux_pane_alive(&socket_path, &pane_id));
+    assert_eq!(wait_for_signal_count(signal_log.path(), 2), 2);
+}
+
+fn tmux_display(target: &str, format: &str) -> String {
+    let output = Command::new("tmux")
+        .args(["display-message", "-p", "-t", target, format])
+        .output()
+        .expect("tmux display");
+    assert!(output.status.success(), "tmux display should succeed");
+    String::from_utf8(output.stdout)
+        .expect("utf8")
+        .trim()
+        .to_string()
+}
+
+fn tmux_pane_alive(socket_path: &str, pane_id: &str) -> bool {
+    let output = Command::new("tmux")
+        .args(["-S", socket_path, "list-panes", "-a", "-F", "#{pane_id}"])
+        .stderr(Stdio::null())
+        .output();
+    output.is_ok_and(|output| {
+        output.status.success()
+            && String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|line| line == pane_id)
+    })
+}
+
+fn wait_for_signal_count(path: &std::path::Path, expected: usize) -> usize {
+    for _ in 0..20 {
+        let count = std::fs::read_to_string(path)
+            .unwrap_or_default()
+            .lines()
+            .count();
+        if count >= expected {
+            return count;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .count()
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+struct TmuxSessionGuard(String);
+
+impl Drop for TmuxSessionGuard {
+    fn drop(&mut self) {
+        let _ = Command::new("tmux")
+            .args(["kill-session", "-t", &self.0])
+            .stderr(Stdio::null())
+            .status();
+    }
 }

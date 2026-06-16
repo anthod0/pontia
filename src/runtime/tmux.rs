@@ -150,6 +150,32 @@ pub(super) fn terminate_session(runtime_handle: &str) -> Result<()> {
     }
 }
 
+pub(super) fn send_keys(socket_path: &str, pane_id: &str, keys: &[&str]) -> Result<()> {
+    if !is_pane_alive(socket_path, pane_id) {
+        return Err(Error::Domain(format!(
+            "tmux runtime pane {pane_id} is not alive"
+        )));
+    }
+    if keys.is_empty() {
+        return Ok(());
+    }
+
+    for key in keys {
+        let status = Command::new("tmux")
+            .args(["-S", socket_path, "send-keys", "-t", pane_id, key])
+            .stderr(Stdio::null())
+            .status()
+            .map_err(|err| Error::Domain(format!("tmux send-keys failed: {err}")))?;
+        if !status.success() {
+            return Err(Error::Domain(format!(
+                "tmux send-keys failed with status {status}"
+            )));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    Ok(())
+}
+
 pub(super) fn is_alive(runtime_handle: &str) -> bool {
     Command::new("tmux")
         .args(["has-session", "-t", runtime_handle])
@@ -159,20 +185,16 @@ pub(super) fn is_alive(runtime_handle: &str) -> bool {
 }
 
 pub(super) fn is_pane_alive(socket_path: &str, pane_id: &str) -> bool {
-    Command::new("tmux")
-        .args([
-            "-S",
-            socket_path,
-            "display-message",
-            "-p",
-            "-t",
-            pane_id,
-            "#{pane_id}",
-        ])
-        .stdout(Stdio::null())
+    let output = Command::new("tmux")
+        .args(["-S", socket_path, "list-panes", "-a", "-F", "#{pane_id}"])
         .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+        .output();
+    output.is_ok_and(|output| {
+        output.status.success()
+            && String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|line| line == pane_id)
+    })
 }
 
 pub(super) fn pane_binding(runtime_handle: &str) -> Option<TmuxPaneBinding> {

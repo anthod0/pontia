@@ -3,7 +3,7 @@ use crate::{
     agent_clients::types::{
         AdapterEventBehavior, AgentClientSpec, ClientSessionIdentityBehavior, DispatchBehavior,
         HookLogBehavior, InterruptBehavior, ReadinessBehavior, RuntimeBehavior, StartupHook,
-        SystemPromptInjectionBehavior, TmuxRuntimeBehavior, TurnContextBehavior,
+        SystemPromptInjectionBehavior, TerminateBehavior, TmuxRuntimeBehavior, TurnContextBehavior,
     },
     application::ContextUsageCapability,
 };
@@ -37,6 +37,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     readiness: ReadinessBehavior::AgentClientEvent,
     client_session_identity: ClientSessionIdentityBehavior::OptionalOnReady,
     interrupt: InterruptBehavior::Unsupported,
+    terminate: TerminateBehavior::TmuxSendKeys(&["C-c"]),
     turn_context: TurnContextBehavior::CurrentTurnFile,
     adapter_events: AdapterEventBehavior::Disabled,
     system_prompt_injection: SystemPromptInjectionBehavior::Disabled,

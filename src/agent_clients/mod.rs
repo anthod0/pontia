@@ -53,6 +53,7 @@ mod tests {
             ReadinessBehavior::RuntimeManagerImmediate
         );
         assert_eq!(generic.interrupt, InterruptBehavior::Unsupported);
+        assert_eq!(generic.terminate, TerminateBehavior::RuntimeManager);
         assert_eq!(generic.turn_context, TurnContextBehavior::Disabled);
         assert_eq!(generic.adapter_events, AdapterEventBehavior::Disabled);
         assert_eq!(
@@ -96,6 +97,10 @@ mod tests {
         assert_eq!(pi.dispatch, DispatchBehavior::TmuxPaste);
         assert_eq!(pi.readiness, ReadinessBehavior::AgentClientEvent);
         assert_eq!(pi.interrupt, InterruptBehavior::TmuxInterrupt);
+        assert_eq!(
+            pi.terminate,
+            TerminateBehavior::TmuxSendKeys(&["C-c", "C-c"])
+        );
         assert_eq!(pi.turn_context, TurnContextBehavior::CurrentTurnFile);
         assert_eq!(
             pi.system_prompt_injection,
@@ -126,6 +131,7 @@ mod tests {
         assert_eq!(claude.dispatch, DispatchBehavior::TmuxPaste);
         assert_eq!(claude.readiness, ReadinessBehavior::AgentClientEvent);
         assert_eq!(claude.interrupt, InterruptBehavior::Unsupported);
+        assert_eq!(claude.terminate, TerminateBehavior::TmuxSendKeys(&["C-c"]));
         assert_eq!(claude.turn_context, TurnContextBehavior::CurrentTurnFile);
         assert_eq!(
             claude.system_prompt_injection,

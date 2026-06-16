@@ -53,6 +53,12 @@ pub enum InterruptBehavior {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerminateBehavior {
+    RuntimeManager,
+    TmuxSendKeys(&'static [&'static str]),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TurnContextBehavior {
     Disabled,
     CurrentTurnFile,
@@ -84,6 +90,7 @@ pub struct AgentClientSpec {
     pub readiness: ReadinessBehavior,
     pub client_session_identity: ClientSessionIdentityBehavior,
     pub interrupt: InterruptBehavior,
+    pub terminate: TerminateBehavior,
     pub turn_context: TurnContextBehavior,
     pub adapter_events: AdapterEventBehavior,
     pub system_prompt_injection: SystemPromptInjectionBehavior,

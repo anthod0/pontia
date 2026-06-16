@@ -187,6 +187,10 @@ impl GenericRuntimeManager {
         tmux::terminate_session(runtime_handle)
     }
 
+    pub fn send_tmux_keys(&self, socket_path: &str, pane_id: &str, keys: &[&str]) -> Result<()> {
+        tmux::send_keys(socket_path, pane_id, keys)
+    }
+
     pub fn restart_session(&self, request: RuntimeStartRequest) -> Result<RuntimeStartResult> {
         self.start_session(request)
     }
