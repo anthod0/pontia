@@ -36,12 +36,11 @@ The extension reads configuration from environment variables:
 | `PONTIA_INTERNAL_EVENT_URL` | required for reporting | none |
 | `PONTIA_PI_HOOK_LOG` | recommended | `$PONTIA_RUNTIME_DIR/pi-hook.log` |
 
-Expected `current-turn.json`:
+Expected `current-turn.json` for backend-delivered input:
 
 ```json
 {
   "session_id": "sess_xxx",
-  "turn_id": "turn_xxx",
   "input": "user task",
   "client_type": "pi",
   "runtime_instance_id": "rtinst_xxx",
@@ -49,15 +48,15 @@ Expected `current-turn.json`:
 }
 ```
 
-`session_id`, `turn_id`, `runtime_instance_id`, and `client_type: "pi"` are required. `PONTIA_INTERNAL_EVENT_URL` and `PONTIA_RUNTIME_INSTANCE_ID` override file values when present.
+`session_id`, `runtime_instance_id`, and `client_type: "pi"` are required. `turn_id` is intentionally omitted for pi: the plugin generates the authoritative pontia turn id when pi reports a real `agent_start`. `PONTIA_INTERNAL_EVENT_URL` and `PONTIA_RUNTIME_INSTANCE_ID` override file values when present.
 
 ## What the extension reports
 
 - On `session_start` with reason `startup`, it posts a one-time `session.ready` signal from `agent_client` for the pre-bound session with the current `runtime_instance_id` plus the real pi session identity from `ctx.sessionManager.getSessionId()` as `client_session_key`.
-- On `agent_start`, it reads the current turn context.
+- On `agent_start`, it reads the pending input context, generates a fresh pontia `turn_id`, and posts `turn.started`.
 - On assistant message updates/end events, it collects assistant-visible text from pi lifecycle event payloads.
 - When pi exposes context usage through hook events, message usage, or `ctx.getContextUsage()`, it posts `session.context_usage_updated`; it does not parse session files or fabricate usage when pi does not provide it.
-- On `agent_end`, it posts `turn.output` when text was collected, then posts `turn.completed`.
+- On `agent_end`, it posts `turn.output` when text was collected, then posts `turn.completed` for the plugin-generated turn id.
 - If pi exposes an explicit agent-end error, it posts `turn.failed`.
 
 The extension does not parse TUI screen contents and does not infer completion from tmux, process state, or runtime exit.
@@ -79,7 +78,6 @@ When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane wr
    cat > "$PONTIA_RUNTIME_DIR/current-turn.json" <<'JSON'
    {
      "session_id": "sess_xxx",
-     "turn_id": "turn_xxx",
      "input": "hello",
      "client_type": "pi",
      "runtime_instance_id": "rtinst_xxx",

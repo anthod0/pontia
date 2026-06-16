@@ -123,11 +123,37 @@ describe("loadTurnContext", () => {
     expect(log).toContain("missing_current_turn_file");
   });
 
-  test("rejects missing ids and non-pi client type", async () => {
+  test("accepts pending input context without turn_id because pi plugin owns turn identity", async () => {
+    const workspace = await tempWorkspace();
+    const contextFile = join(workspace, "turn.json");
+    await writeFile(
+      contextFile,
+      JSON.stringify({
+        session_id: "sess_3",
+        input: "typed in web ui",
+        client_type: "pi",
+        runtime_instance_id: "rtinst_file_3",
+        internal_event_url: "http://from-file/internal/v1/events",
+      }),
+    );
+
+    const result = await loadTurnContext({ PONTIA_WORKSPACE: workspace, PONTIA_CURRENT_TURN_FILE: contextFile });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected context");
+    expect(result.context).toMatchObject({
+      sessionId: "sess_3",
+      turnId: undefined,
+      input: "typed in web ui",
+      runtimeInstanceId: "rtinst_file_3",
+    });
+  });
+
+  test("rejects missing session/runtime ids and non-pi client type", async () => {
     const workspace = await tempWorkspace();
     const contextFile = join(workspace, "turn.json");
     const logFile = join(workspace, "hook.log");
-    await writeFile(contextFile, JSON.stringify({ session_id: "sess_3", client_type: "generic" }));
+    await writeFile(contextFile, JSON.stringify({ session_id: "sess_4", client_type: "generic" }));
 
     const result = await loadTurnContext({
       PONTIA_WORKSPACE: workspace,
@@ -139,8 +165,8 @@ describe("loadTurnContext", () => {
     expect(result.ok).toBe(false);
     const log = await readFile(logFile, "utf8");
     expect(log).toContain("invalid_current_turn_context");
-    expect(log).toContain("turn_id is required");
     expect(log).toContain("client_type must be pi");
     expect(log).toContain("runtime_instance_id or PONTIA_RUNTIME_INSTANCE_ID is required");
+    expect(log).not.toContain("turn_id is required");
   });
 });

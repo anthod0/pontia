@@ -400,6 +400,9 @@ impl DagPlanningService {
                 }),
             )
             .await?;
+        let turn = turn.ok_or_else(|| {
+            Error::Domain("dag planning dispatch requires an immediate backend turn".to_string())
+        })?;
         Ok(DagPlanningTurn {
             task_id: task_id.to_string(),
             session_id,

@@ -56,7 +56,13 @@ export type InternalEvent =
 
 type AdapterTurnInternalEvent = Extract<InternalEvent, { source: "agent_adapter" }>;
 
-function baseAdapterTurnEvent(context: TurnContext, type: AdapterTurnInternalEvent["type"]): Omit<AdapterTurnInternalEvent, "payload"> {
+type ActiveTurnContext = TurnContext & { turnId: string };
+
+export function newPontiaTurnId(): string {
+  return `turn_${randomUUID()}`;
+}
+
+function baseAdapterTurnEvent(context: ActiveTurnContext, type: AdapterTurnInternalEvent["type"]): Omit<AdapterTurnInternalEvent, "payload"> {
   return {
     event_id: `evt_${randomUUID()}`,
     session_id: context.sessionId,
@@ -276,7 +282,7 @@ export function contextUsageFromPiHook(event: unknown, ctx?: unknown): ContextUs
   return mergeContextUsageObservations(contextUsageFromPiEvent(event), contextUsageFromPiContext(ctx));
 }
 
-export function buildTurnStartedEvent(context: TurnContext): InternalEvent {
+export function buildTurnStartedEvent(context: ActiveTurnContext): InternalEvent {
   return {
     ...baseAdapterTurnEvent(context, "turn.started"),
     payload: {
@@ -286,21 +292,21 @@ export function buildTurnStartedEvent(context: TurnContext): InternalEvent {
   };
 }
 
-export function buildTurnOutputEvent(context: TurnContext, output: string): InternalEvent {
+export function buildTurnOutputEvent(context: ActiveTurnContext, output: string): InternalEvent {
   return {
     ...baseAdapterTurnEvent(context, "turn.output"),
     payload: { output: { summary: output } },
   };
 }
 
-export function buildTurnCompletedEvent(context: TurnContext): InternalEvent {
+export function buildTurnCompletedEvent(context: ActiveTurnContext): InternalEvent {
   return {
     ...baseAdapterTurnEvent(context, "turn.completed"),
     payload: {},
   };
 }
 
-export function buildTurnFailedEvent(context: TurnContext, message: string): InternalEvent {
+export function buildTurnFailedEvent(context: ActiveTurnContext, message: string): InternalEvent {
   return {
     ...baseAdapterTurnEvent(context, "turn.failed"),
     payload: { failure: { message } },

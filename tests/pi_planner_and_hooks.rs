@@ -175,18 +175,7 @@ async fn submit_pi_turn(state: AppState, session_id: &str, input: &str) -> Value
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn_id = body["data"]["inbox_message"]["turn_id"]
-        .as_str()
-        .expect("turn id");
-    let (turn_status, turn_body) = request_json(
-        state,
-        "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
-        None,
-    )
-    .await;
-    assert_eq!(turn_status, StatusCode::OK, "{turn_body:?}");
-    turn_body["data"]["turn"].clone()
+    body["data"]["inbox_message"].clone()
 }
 
 fn cleanup_tmux(tmux_session: &str) {
@@ -246,37 +235,23 @@ async fn pi_turn_dispatch_failure_projects_failed_without_started() {
         .to_string();
     cleanup_tmux(&tmux_session);
 
-    let turn = submit_pi_turn(
+    let inbox = submit_pi_turn(
         state.clone(),
         &session_id,
         "this dispatch cannot reach the pi tui",
     )
     .await;
-    let turn_id = turn["turn_id"].as_str().expect("turn id");
-    assert_eq!(turn["state"], "failed");
-    assert!(
-        turn["failure"].as_str().is_some_and(|message| {
-            message.contains("not alive") || message.contains("dispatch")
-        })
-    );
+    assert_eq!(inbox["state"], "failed");
+    assert!(inbox["turn_id"].is_null());
 
-    let (events_status, events_body) = request_json(
-        state,
-        "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
-        None,
-    )
-    .await;
-    assert_eq!(events_status, StatusCode::OK);
-    let event_types: Vec<&str> = events_body["data"]["events"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|event| event["type"].as_str().unwrap())
-        .collect();
+    let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+        .bind(&session_id)
+        .fetch_one(&state.db())
+        .await
+        .expect("turn count");
     assert_eq!(
-        event_types,
-        vec!["turn.created", "turn.queued", "turn.failed"]
+        turn_count, 0,
+        "backend must not forge a failed pi turn when dispatch cannot reach the client"
     );
 }
 
@@ -291,13 +266,32 @@ async fn pi_adapter_event_outbox_projects_output_and_completed() {
         .expect("tmux session")
         .to_string();
 
-    let turn = submit_pi_turn(
+    let inbox = submit_pi_turn(
         state.clone(),
         &session_id,
         "dispatch and await outbox facts",
     )
     .await;
-    let turn_id = turn["turn_id"].as_str().expect("turn id");
+    assert!(inbox["turn_id"].is_null());
+    let turn_id = "turn_plugin_outbox_completed";
+    let (started_status, started_body) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "event_id": "evt_plugin_outbox_started",
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "source": "agent_adapter",
+            "client_type": "pi",
+            "type": "turn.started",
+            "time": "2026-05-08T12:01:00Z",
+            "seq": null,
+            "payload": { "runtime_instance_id": metadata["runtime_instance_id"] }
+        })),
+    )
+    .await;
+    assert_eq!(started_status, StatusCode::OK, "{started_body:?}");
 
     let adapter_event_log = metadata["adapter_event_log"]
         .as_str()
@@ -374,13 +368,13 @@ async fn pi_adapter_event_outbox_reports_malformed_records_without_forging_turn_
         .expect("tmux session")
         .to_string();
 
-    let turn = submit_pi_turn(
+    let inbox = submit_pi_turn(
         state.clone(),
         &session_id,
         "dispatch before malformed adapter event",
     )
     .await;
-    let turn_id = turn["turn_id"].as_str().expect("turn id");
+    assert!(inbox["turn_id"].is_null());
 
     let adapter_event_log = metadata["adapter_event_log"]
         .as_str()
@@ -392,21 +386,15 @@ async fn pi_adapter_event_outbox_reports_malformed_records_without_forging_turn_
         .await
         .expect("observe adapter outbox");
 
-    let (turn_events_status, turn_events_body) = request_json(
-        state.clone(),
-        "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
-        None,
-    )
-    .await;
-    assert_eq!(turn_events_status, StatusCode::OK);
-    let turn_event_types: Vec<&str> = turn_events_body["data"]["events"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|event| event["type"].as_str().unwrap())
-        .collect();
-    assert!(!turn_event_types.contains(&"turn.failed"));
+    let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+        .bind(&session_id)
+        .fetch_one(&state.db())
+        .await
+        .expect("turn count");
+    assert_eq!(
+        turn_count, 0,
+        "malformed adapter records must not forge turn failures"
+    );
 
     let (session_events_status, session_events_body) = request_json(
         state,
@@ -442,8 +430,8 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
         .expect("tmux session")
         .to_string();
 
-    let turn = submit_pi_turn(state, &session_id, "write context for hook").await;
-    let turn_id = turn["turn_id"].as_str().expect("turn id");
+    let inbox = submit_pi_turn(state, &session_id, "write context for hook").await;
+    assert!(inbox["turn_id"].is_null());
 
     assert!(!workspace.path().join(".pontia").exists());
     let context_path = PathBuf::from(
@@ -457,7 +445,10 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
     )
     .expect("context json");
     assert_eq!(context["session_id"], session_id);
-    assert_eq!(context["turn_id"], turn_id);
+    assert!(
+        context.get("turn_id").is_none(),
+        "pi plugin owns turn_id generation"
+    );
     assert_eq!(context["input"], "write context for hook");
     assert_eq!(context["client_type"], "pi");
     assert_eq!(
@@ -521,16 +512,13 @@ async fn pi_turn_dispatches_to_long_running_tmux_tui_and_marks_started_only() {
         .expect("tmux session")
         .to_string();
 
-    let turn = submit_pi_turn(
+    let inbox = submit_pi_turn(
         state.clone(),
         &session_id,
         "dispatch this to the long-running pi tui",
     )
     .await;
-    let turn_id = turn["turn_id"].as_str().expect("turn id");
-    assert_eq!(turn["state"], "running");
-    assert!(turn["started_at"].as_str().is_some());
-    assert!(turn["completed_at"].is_null());
+    assert!(inbox["turn_id"].is_null());
     assert!(GenericTestAdapter::recorded_inputs().is_empty());
 
     wait_for_file_contains(
@@ -539,23 +527,14 @@ async fn pi_turn_dispatches_to_long_running_tmux_tui_and_marks_started_only() {
     )
     .await;
 
-    let (events_status, events_body) = request_json(
-        state,
-        "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
-        None,
-    )
-    .await;
-    assert_eq!(events_status, StatusCode::OK);
-    let event_types: Vec<&str> = events_body["data"]["events"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|event| event["type"].as_str().unwrap())
-        .collect();
+    let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+        .bind(&session_id)
+        .fetch_one(&state.db())
+        .await
+        .expect("turn count");
     assert_eq!(
-        event_types,
-        vec!["turn.created", "turn.queued", "turn.started"]
+        turn_count, 0,
+        "backend paste dispatch must not create turn.created/queued/started for pi"
     );
 
     cleanup_tmux(&tmux_session);

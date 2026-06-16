@@ -138,31 +138,35 @@ impl SessionCommandService {
 
         let initial_turn_id = if let Some(initial_task) = request.initial_task {
             let turn_id = new_turn_id().to_string();
-            ingest
-                .ingest_event(DomainEvent::new(
-                    new_event_id().to_string(),
-                    session_id.clone(),
-                    Some(turn_id.clone()),
-                    EventSource::ExternalApi,
-                    request.client_type.clone(),
-                    EventType::TurnCreated,
-                    json!({
-                        "input": { "summary": initial_task.input },
-                        "metadata": initial_task.metadata,
-                    }),
-                ))
-                .await?;
-            ingest
-                .ingest_event(DomainEvent::new(
-                    new_event_id().to_string(),
-                    session_id.clone(),
-                    Some(turn_id.clone()),
-                    EventSource::ExternalApi,
-                    request.client_type.clone(),
-                    EventType::TurnQueued,
-                    json!({}),
-                ))
-                .await?;
+            let plugin_owns_turn = request.client_type == "pi"
+                && client_dispatch_mode(&request.client_type)? == DispatchMode::TmuxPaste;
+            if !plugin_owns_turn {
+                ingest
+                    .ingest_event(DomainEvent::new(
+                        new_event_id().to_string(),
+                        session_id.clone(),
+                        Some(turn_id.clone()),
+                        EventSource::ExternalApi,
+                        request.client_type.clone(),
+                        EventType::TurnCreated,
+                        json!({
+                            "input": { "summary": initial_task.input },
+                            "metadata": initial_task.metadata,
+                        }),
+                    ))
+                    .await?;
+                ingest
+                    .ingest_event(DomainEvent::new(
+                        new_event_id().to_string(),
+                        session_id.clone(),
+                        Some(turn_id.clone()),
+                        EventSource::ExternalApi,
+                        request.client_type.clone(),
+                        EventType::TurnQueued,
+                        json!({}),
+                    ))
+                    .await?;
+            }
             match client_dispatch_mode(&request.client_type)? {
                 DispatchMode::GenericTestAdapter => {
                     self.dispatch_initial_generic_turn(
@@ -186,7 +190,11 @@ impl SessionCommandService {
                 }
                 DispatchMode::None => {}
             }
-            Some(turn_id)
+            if plugin_owns_turn {
+                None
+            } else {
+                Some(turn_id)
+            }
         } else {
             None
         };

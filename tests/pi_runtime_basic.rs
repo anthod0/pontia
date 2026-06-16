@@ -243,8 +243,8 @@ async fn pi_initial_task_waits_for_agent_client_ready_before_dispatch() {
         .expect("create session should finish after ready")
         .expect("join create");
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    assert_eq!(body["data"]["session"]["state"], "busy");
-    assert_eq!(body["data"]["initial_turn"]["state"], "running");
+    assert_eq!(body["data"]["session"]["state"], "idle");
+    assert!(body["data"]["initial_turn"].is_null());
     wait_for_file_contains(&temp.path().join("pi-tui-input.log"), "boot prompt").await;
 
     let context_path = Path::new(metadata["current_turn_file"].as_str().unwrap());
@@ -320,21 +320,13 @@ async fn pi_resume_drains_message_submitted_before_ready() {
     assert_eq!(message_status, StatusCode::OK, "{message_body:?}");
     let message = &message_body["data"]["inbox_message"];
     assert_eq!(message["state"], "dispatched");
-    let turn_id = message["turn_id"].as_str().expect("turn id");
-
-    let (turn_status, turn_body) = request_json(
-        state.clone(),
-        "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
-        None,
-    )
-    .await;
-    assert_eq!(turn_status, StatusCode::OK, "{turn_body:?}");
-    assert_eq!(turn_body["data"]["turn"]["state"], "running");
-    assert_eq!(
-        turn_body["data"]["turn"]["input"]["summary"],
-        "continue after resume"
-    );
+    assert!(message["turn_id"].is_null());
+    let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+        .bind(&session_id)
+        .fetch_one(&state.db())
+        .await
+        .expect("turn count");
+    assert_eq!(turn_count, 0);
 
     cleanup_session_runtime(&state, &session_id).await;
 }
@@ -355,46 +347,17 @@ async fn pi_turn_submit_dispatches_to_tui_and_starts_without_completion() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
-    let turn_id = body["data"]["inbox_message"]["turn_id"]
-        .as_str()
-        .expect("turn id");
-    let (turn_status, turn_body) = request_json(
-        state.clone(),
-        "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
-        None,
-    )
-    .await;
-    assert_eq!(turn_status, StatusCode::OK);
-    let turn = &turn_body["data"]["turn"];
-    assert_eq!(turn["state"], "running");
-    assert!(turn["output"]["summary"].is_null());
-    assert!(
-        turn["output"]["artifact_ids"]
-            .as_array()
-            .is_none_or(Vec::is_empty)
-    );
+    assert!(body["data"]["inbox_message"]["turn_id"].is_null());
     assert!(GenericTestAdapter::recorded_inputs().is_empty());
-
-    let (events_status, events_body) = request_json(
-        state.clone(),
-        "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
-        None,
-    )
-    .await;
-    assert_eq!(events_status, StatusCode::OK);
-    let event_types: Vec<&str> = events_body["data"]["events"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|event| event["type"].as_str().unwrap())
-        .collect();
-    assert!(event_types.contains(&"turn.created"));
-    assert!(event_types.contains(&"turn.queued"));
-    assert!(event_types.contains(&"turn.started"));
-    assert!(!event_types.contains(&"turn.output"));
-    assert!(!event_types.contains(&"turn.completed"));
+    let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+        .bind(&session_id)
+        .fetch_one(&state.db())
+        .await
+        .expect("turn count");
+    assert_eq!(
+        turn_count, 0,
+        "pi plugin must report turn.started before a turn exists"
+    );
 
     cleanup_session_runtime(&state, &session_id).await;
 }
@@ -415,10 +378,7 @@ async fn pi_interrupt_now_interrupts_active_turn_and_dispatches_next_message() {
     )
     .await;
     assert_eq!(first_status, StatusCode::CREATED, "{first_body:?}");
-    let first_turn_id = first_body["data"]["inbox_message"]["turn_id"]
-        .as_str()
-        .expect("first turn id")
-        .to_string();
+    assert!(first_body["data"]["inbox_message"]["turn_id"].is_null());
 
     let (interrupt_status, interrupt_body) = request_json(
         state.clone(),
@@ -430,30 +390,17 @@ async fn pi_interrupt_now_interrupts_active_turn_and_dispatches_next_message() {
     assert_eq!(interrupt_status, StatusCode::CREATED, "{interrupt_body:?}");
     let interrupt_message = &interrupt_body["data"]["inbox_message"];
     assert_eq!(interrupt_message["state"], "dispatched");
-    let second_turn_id = interrupt_message["turn_id"]
-        .as_str()
-        .expect("second turn id");
-    assert_ne!(second_turn_id, first_turn_id);
+    assert!(interrupt_message["turn_id"].is_null());
 
-    let (first_turn_status, first_turn_body) = request_json(
-        state.clone(),
-        "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{first_turn_id}"),
-        None,
-    )
-    .await;
-    assert_eq!(first_turn_status, StatusCode::OK);
-    assert_eq!(first_turn_body["data"]["turn"]["state"], "interrupted");
-
-    let (second_turn_status, second_turn_body) = request_json(
-        state.clone(),
-        "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{second_turn_id}"),
-        None,
-    )
-    .await;
-    assert_eq!(second_turn_status, StatusCode::OK);
-    assert_eq!(second_turn_body["data"]["turn"]["state"], "running");
+    let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+        .bind(&session_id)
+        .fetch_one(&state.db())
+        .await
+        .expect("turn count");
+    assert_eq!(
+        turn_count, 0,
+        "interrupt_now must not forge pi turn lifecycle facts before hooks report them"
+    );
 
     cleanup_session_runtime(&state, &session_id).await;
 }

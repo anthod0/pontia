@@ -370,21 +370,26 @@ impl InboxCommandService {
             .await
         {
             Ok(turn) => {
+                let turn_id = turn.as_ref().map(|turn| turn.turn_id.as_str());
                 sqlx::query(
                     r#"UPDATE inbox_messages
                        SET state = 'dispatched', turn_id = ?, dispatched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                        WHERE message_id = ?"#,
                 )
-                .bind(&turn.turn_id)
+                .bind(turn_id)
                 .bind(&message_id)
                 .execute(&self.pool)
                 .await?;
+                let mut payload = json!({ "message_id": message_id });
+                if let Some(turn) = turn {
+                    payload["turn_id"] = json!(turn.turn_id);
+                }
                 self.audit(
                     session_id,
                     &session.client_type,
                     EventType::InboxMessageDispatched,
-                    json!({ "message_id": message_id, "turn_id": turn.turn_id }),
+                    payload,
                 )
                 .await?;
             }

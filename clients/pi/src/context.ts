@@ -5,7 +5,7 @@ import { appendDiagnostic } from "./diagnostics.js";
 
 export interface TurnContext {
   sessionId: string;
-  turnId: string;
+  turnId?: string;
   runtimeInstanceId: string;
   input?: string;
   clientType: "pi";
@@ -95,7 +95,6 @@ export async function loadTurnContext(env: EnvLike = process.env): Promise<LoadT
   const input = optionalString(record?.input);
 
   if (!sessionId) errors.push("session_id is required");
-  if (!turnId) errors.push("turn_id is required");
   if (clientType !== "pi") errors.push("client_type must be pi");
   if (!internalEventUrl) errors.push("internal_event_url or PONTIA_INTERNAL_EVENT_URL is required");
   if (!runtimeInstanceId) errors.push("runtime_instance_id or PONTIA_RUNTIME_INSTANCE_ID is required");
@@ -117,7 +116,7 @@ export async function loadTurnContext(env: EnvLike = process.env): Promise<LoadT
     logFile,
     context: {
       sessionId: sessionId!,
-      turnId: turnId!,
+      turnId,
       runtimeInstanceId: runtimeInstanceId!,
       input,
       clientType: "pi",

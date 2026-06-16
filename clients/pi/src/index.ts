@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { buildSessionContextUsageUpdatedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
+import { buildSessionContextUsageUpdatedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, newPontiaTurnId, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
 import { EventReporter } from "./reporter.js";
 import { loadSessionContext } from "./session.js";
 
@@ -18,7 +18,7 @@ export interface PontiaPiExtensionDependencies {
 }
 
 interface ActiveTurnState {
-  context: TurnContext;
+  context: TurnContext & { turnId: string };
   logFile: string;
   reporter: ReporterLike;
   output: string;
@@ -266,13 +266,13 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       const reporter = makeReporter(loaded.logFile);
       lastContextUsageJson = undefined;
       activeTurn = {
-        context: loaded.context,
+        context: { ...loaded.context, turnId: loaded.context.turnId ?? newPontiaTurnId() },
         logFile: loaded.logFile,
         reporter,
         output: "",
         ended: false,
       };
-      await reporter.report(loaded.context, buildTurnStartedEvent(loaded.context));
+      await reporter.report(activeTurn.context, buildTurnStartedEvent(activeTurn.context));
     } catch (error) {
       activeTurn = undefined;
       const logFile = env.PONTIA_PI_HOOK_LOG ?? "pi-hook.log";

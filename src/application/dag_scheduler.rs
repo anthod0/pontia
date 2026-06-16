@@ -420,7 +420,12 @@ impl DagSchedulerService {
                     "dag_managed": true,
                 }),
             )
-            .await?;
+            .await?
+            .ok_or_else(|| {
+                Error::Domain(
+                    "dag scheduler dispatch requires an immediate backend turn".to_string(),
+                )
+            })?;
         sqlx::query("UPDATE turns SET input_summary = ? WHERE turn_id = ?")
             .bind(&prompt)
             .bind(&turn.turn_id)

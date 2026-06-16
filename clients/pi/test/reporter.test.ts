@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { buildSessionContextUsageUpdatedEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiContext, contextUsageFromPiEvent, contextUsageFromPiHook } from "../src/events.js";
 import { EventReporter } from "../src/reporter.js";
-import type { TurnContext } from "../src/context.js";
-
 const tmpDirs: string[] = [];
 
 afterEach(async () => {
@@ -19,13 +17,13 @@ async function tempLogFile() {
   return join(dir, "pi-hook.log");
 }
 
-const context: TurnContext = {
+const context = {
   sessionId: "sess_1",
   turnId: "turn_1",
   runtimeInstanceId: "rtinst_1",
   clientType: "pi",
   internalEventUrl: "http://127.0.0.1:8080/internal/v1/events",
-};
+} as const;
 
 describe("event builders", () => {
   test("builds turn.started payload shape", () => {

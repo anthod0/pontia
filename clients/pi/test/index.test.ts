@@ -305,8 +305,15 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported[4]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
   });
 
-  test("does not create a fresh pontia turn after the dispatched turn completed", async () => {
-    const { handlers, reported } = install();
+  test("generates a fresh pontia turn id for each real pi agent_start", async () => {
+    const { handlers, reported } = install({
+      loadContext: vi.fn(async () => ({
+        ok: true as const,
+        context: { ...context, turnId: undefined },
+        contextFile: "turn.json",
+        logFile: "hook.log",
+      })),
+    });
 
     await handlers.before_agent_start({ prompt: "first from dashboard", systemPrompt: "Base prompt" }, {});
     await handlers.agent_start({}, {});
@@ -316,18 +323,16 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_start({}, {});
     await handlers.agent_end({ messages: [{ role: "assistant", content: "second answer" }] }, {});
 
-    expect(reported.map((event) => event.type)).toEqual([
-      "turn.started",
-      "turn.output",
-      "turn.completed",
-      "session.message_updated",
-      "turn.started",
-      "turn.output",
-      "turn.completed",
-      "session.message_updated",
+    const started = reported.filter((event) => event.type === "turn.started");
+    expect(started).toHaveLength(2);
+    expect(started[0].turn_id).toMatch(/^turn_/);
+    expect(started[1].turn_id).toMatch(/^turn_/);
+    expect(started[1].turn_id).not.toBe(started[0].turn_id);
+    expect(reported.filter((event) => event.type === "turn.output").map((event) => event.turn_id)).toEqual([
+      started[0].turn_id,
+      started[1].turn_id,
     ]);
     expect(reported.map((event) => event.type)).not.toContain("turn.created");
-    expect(reported[4]).toMatchObject({ turn_id: "turn_1", payload: { runtime_instance_id: "rtinst_1", input: {} } });
   });
 
   test("does not report completion when context is missing", async () => {

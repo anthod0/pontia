@@ -23,7 +23,7 @@ impl TurnCommandService {
         session_id: &str,
         input: String,
         metadata: Value,
-    ) -> Result<TurnView> {
+    ) -> Result<Option<TurnView>> {
         let query = ExternalQueryService::new(self.pool.clone());
         let session = query
             .get_session(session_id)
@@ -60,6 +60,47 @@ impl TurnCommandService {
         } else {
             None
         };
+
+        let plugin_owns_turn = dispatch_mode == DispatchMode::TmuxPaste
+            && session.client_type == "pi"
+            && metadata.get("dag_managed").and_then(Value::as_bool) != Some(true)
+            && metadata.get("dag_planning_role").is_none();
+
+        if plugin_owns_turn {
+            let binding_metadata = self
+                .runtime_binding_metadata(session_id)
+                .await?
+                .ok_or_else(|| Error::Domain("pi runtime binding not found".to_string()))?;
+            let tmux_binding = tmux_binding
+                .as_ref()
+                .expect("tmux binding was validated before pi dispatch");
+            let agent_input = AgentInput {
+                session_id: session_id.to_string(),
+                turn_id: new_turn_id().to_string(),
+                input,
+            };
+            self.wait_for_tui_readiness_if_needed(
+                &session.client_type,
+                readiness_mode,
+                session_id,
+                &binding_metadata,
+            )
+            .await?;
+            if client_spec.turn_context == TurnContextBehavior::CurrentTurnFile {
+                write_client_current_turn_context(
+                    &binding_metadata,
+                    &agent_input,
+                    &session.client_type,
+                )?;
+            }
+            self.runtime.dispatch_tui_turn(
+                &tmux_binding.socket_path,
+                &tmux_binding.pane_id,
+                &session.client_type,
+                &agent_input,
+            )?;
+            return Ok(None);
+        }
 
         let turn_id = new_turn_id().to_string();
         let agent_input = AgentInput {
@@ -203,7 +244,7 @@ impl TurnCommandService {
             .await?
             .ok_or_else(|| Error::Domain("submitted turn missing".to_string()))?;
         query.enrich_turn_view(&mut turn).await?;
-        Ok(turn)
+        Ok(Some(turn))
     }
 
     async fn wait_for_tui_readiness_if_needed(
@@ -300,14 +341,16 @@ pub(crate) fn write_client_current_turn_context(
             "{client_type} runtime metadata missing runtime_instance_id"
         ))
     })?;
-    let context = json!({
+    let mut context = json!({
         "session_id": input.session_id,
-        "turn_id": input.turn_id,
         "input": input.input,
         "client_type": client_type,
         "runtime_instance_id": runtime_instance_id,
         "internal_event_url": internal_event_url,
     });
+    if client_type != "pi" {
+        context["turn_id"] = json!(input.turn_id);
+    }
     std::fs::write(current_turn_file, serde_json::to_vec_pretty(&context)?)?;
     Ok(())
 }
@@ -372,6 +415,38 @@ mod tests {
             ))
             .await
             .expect("ingest event");
+    }
+
+    #[test]
+    fn pi_current_turn_context_omits_backend_turn_id() {
+        let runtime_dir = tempfile::tempdir().expect("runtime dir");
+        let current_turn_file = runtime_dir.path().join("current-turn.json");
+        let input = AgentInput {
+            session_id: "sess_plugin_owned".to_string(),
+            turn_id: "turn_backend_should_not_escape".to_string(),
+            input: "hello".to_string(),
+        };
+
+        write_client_current_turn_context(
+            &json!({
+                "current_turn_file": current_turn_file.display().to_string(),
+                "runtime_instance_id": "rtinst_plugin_owned",
+                "internal_event_url": "http://127.0.0.1:8080/internal/v1/events",
+            }),
+            &input,
+            "pi",
+        )
+        .expect("write context");
+
+        let context: Value =
+            serde_json::from_slice(&std::fs::read(&current_turn_file).expect("read context"))
+                .expect("json context");
+        assert_eq!(context["session_id"], "sess_plugin_owned");
+        assert_eq!(context["input"], "hello");
+        assert!(
+            context.get("turn_id").is_none(),
+            "pi plugin must generate the authoritative turn id"
+        );
     }
 
     #[tokio::test]
@@ -573,11 +648,19 @@ mod tests {
         )
         .await;
 
-        let turn = tokio::time::timeout(Duration::from_secs(2), dispatch)
+        tokio::time::timeout(Duration::from_secs(2), dispatch)
             .await
             .expect("dispatch should finish after ready")
             .expect("dispatch task should not panic")
             .expect("dispatch should succeed");
-        assert_eq!(turn.state, "running");
+        let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+            .bind(&session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("turn count");
+        assert_eq!(
+            turn_count, 0,
+            "tmux paste dispatch must not create authoritative turn facts before pi hook reports agent_start"
+        );
     }
 }

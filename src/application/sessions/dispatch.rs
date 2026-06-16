@@ -94,17 +94,19 @@ impl SessionCommandService {
 
         match dispatch_result {
             Ok(()) => {
-                ingest
-                    .ingest_event(DomainEvent::new(
-                        new_event_id().to_string(),
-                        session_id.to_string(),
-                        Some(turn_id.to_string()),
-                        EventSource::AgentAdapter,
-                        client_type.to_string(),
-                        EventType::TurnStarted,
-                        json!({}),
-                    ))
-                    .await?;
+                if client_type != "pi" {
+                    ingest
+                        .ingest_event(DomainEvent::new(
+                            new_event_id().to_string(),
+                            session_id.to_string(),
+                            Some(turn_id.to_string()),
+                            EventSource::AgentAdapter,
+                            client_type.to_string(),
+                            EventType::TurnStarted,
+                            json!({}),
+                        ))
+                        .await?;
+                }
             }
             Err(error) => {
                 ingest
