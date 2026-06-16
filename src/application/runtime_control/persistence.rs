@@ -69,6 +69,51 @@ impl RuntimeControlService {
         .map_err(Into::into)
     }
 
+    pub(super) async fn resume_start_command(
+        &self,
+        session_id: &str,
+        client_type: &str,
+    ) -> Result<Option<String>> {
+        let Some(command) = self.start_command(session_id).await? else {
+            return Ok(None);
+        };
+        let Some(session_identity_arg) = crate::agent_clients::get_client_spec(client_type)
+            .and_then(|spec| spec.tmux_runtime())
+            .and_then(|runtime| runtime.session_identity_arg)
+        else {
+            return Ok(Some(command));
+        };
+        let Some(client_session_key) = self
+            .latest_client_session_key(session_id, client_type)
+            .await?
+        else {
+            return Ok(Some(command));
+        };
+        Ok(Some(format!(
+            "{command} {session_identity_arg} {}",
+            shell_quote(&client_session_key)
+        )))
+    }
+
+    async fn latest_client_session_key(
+        &self,
+        session_id: &str,
+        client_type: &str,
+    ) -> Result<Option<String>> {
+        sqlx::query_scalar(
+            r#"SELECT client_session_key
+               FROM agent_bindings
+               WHERE session_id = ? AND client_type = ?
+               ORDER BY updated_at DESC, id DESC
+               LIMIT 1"#,
+        )
+        .bind(session_id)
+        .bind(client_type)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
     pub(super) async fn restart_count(&self, session_id: &str) -> Result<Option<i64>> {
         let metadata: Option<String> =
             sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
@@ -126,4 +171,8 @@ impl RuntimeControlService {
         .await?;
         Ok(())
     }
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
