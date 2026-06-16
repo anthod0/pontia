@@ -136,6 +136,23 @@ fn event_body(event_id: &str, event_type: &str, session_id: &str, turn_id: &str)
     })
 }
 
+async fn started_event_body(
+    state: &AppState,
+    event_id: &str,
+    session_id: &str,
+    turn_id: &str,
+) -> Value {
+    let runtime_instance_id: String =
+        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("runtime instance id");
+    let mut event = event_body(event_id, "turn.started", session_id, turn_id);
+    event["payload"] = json!({"runtime_instance_id": runtime_instance_id});
+    event
+}
+
 #[tokio::test]
 async fn dag_planner_inbox_turn_inherits_planning_context() {
     let _scope = GenericClientTestScope::new().await;
@@ -230,12 +247,7 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     let (started_status, _) = post_internal_event(
         state.clone(),
-        event_body(
-            "evt_inbox_started",
-            "turn.started",
-            &session_id,
-            &active_turn_id,
-        ),
+        started_event_body(&state, "evt_inbox_started", &session_id, &active_turn_id).await,
     )
     .await;
     assert_eq!(started_status, StatusCode::OK);
@@ -335,12 +347,7 @@ async fn cancel_pending_message_prevents_later_dispatch() {
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
         state.clone(),
-        event_body(
-            "evt_cancel_started",
-            "turn.started",
-            &session_id,
-            &active_turn_id,
-        ),
+        started_event_body(&state, "evt_cancel_started", &session_id, &active_turn_id).await,
     )
     .await;
 
@@ -457,12 +464,13 @@ async fn interrupt_now_without_interrupt_capability_marks_message_failed() {
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
         state.clone(),
-        event_body(
+        started_event_body(
+            &state,
             "evt_interrupt_fail_started",
-            "turn.started",
             &session_id,
             &active_turn_id,
-        ),
+        )
+        .await,
     )
     .await;
 
@@ -494,12 +502,13 @@ async fn failed_inbox_message_can_be_dismissed_idempotently() {
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
         state.clone(),
-        event_body(
+        started_event_body(
+            &state,
             "evt_dismiss_fail_started",
-            "turn.started",
             &session_id,
             &active_turn_id,
-        ),
+        )
+        .await,
     )
     .await;
     let (_, failed_body) = post_json(
@@ -558,12 +567,13 @@ async fn pending_inbox_message_cannot_be_dismissed() {
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
         state.clone(),
-        event_body(
+        started_event_body(
+            &state,
             "evt_pending_dismiss_started",
-            "turn.started",
             &session_id,
             &active_turn_id,
-        ),
+        )
+        .await,
     )
     .await;
     let (_, pending_body) = post_json(
