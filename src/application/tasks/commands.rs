@@ -1,5 +1,8 @@
 use super::*;
-use crate::storage::sqlite::repositories::tasks::{CreateTaskRecord, SqliteTaskRepository};
+use crate::storage::sqlite::repositories::{
+    dag::SqliteDagRepository,
+    tasks::{CreateTaskRecord, SqliteTaskRepository},
+};
 
 impl TaskCommandService {
     pub async fn create_dag_task(
@@ -264,15 +267,11 @@ impl TaskCommandService {
         GraphProjectionService::new(self.pool.clone(), self.graph.clone())
             .project_task(task_id)
             .await?;
-        let row = sqlx::query(
-            r#"SELECT signal_id, task_id, work_item_id, run_id, source_session_id, source, kind,
-                      summary, detail, severity, related_refs, state, created_at, updated_at
-               FROM dag_signals WHERE signal_id = ?"#,
-        )
-        .bind(&signal_id)
-        .fetch_one(&self.pool)
-        .await?;
-        let signal = row_to_dag_signal_record(row)?;
+        let row = SqliteDagRepository::new(self.pool.clone())
+            .get_dag_signal(&signal_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("signal {signal_id} not found")))?;
+        let signal = dag_signal_row_to_record(row)?;
         let data = json!({ "signal": signal });
         if let Some(key) = idempotency_key {
             self.store_idempotency_response(&format!("human_signal:{task_id}"), key, &data)

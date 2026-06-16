@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::tasks::SqliteTaskRepository;
+use crate::storage::sqlite::repositories::{dag::SqliteDagRepository, tasks::SqliteTaskRepository};
 
 impl ExternalQueryService {
     pub async fn list_tasks(&self) -> Result<Vec<TaskView>> {
@@ -24,34 +24,16 @@ impl ExternalQueryService {
     }
 
     pub async fn list_task_dag_proposals(&self, task_id: &str) -> Result<Vec<DagProposalView>> {
-        let rows = sqlx::query(
-            r#"SELECT proposal_id, task_id, mode, state, summary, proposal_json,
-                      validation_json, created_by_session_id, created_by_turn_id, revision,
-                      supersedes_proposal_id, created_at, updated_at
-               FROM dag_proposals
-               WHERE task_id = ?
-               ORDER BY revision DESC, created_at DESC, proposal_id DESC"#,
-        )
-        .bind(task_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteDagRepository::new(self.pool.clone());
+        let rows = repository.list_task_dag_proposals(task_id).await?;
 
-        rows.into_iter().map(row_to_dag_proposal_view).collect()
+        rows.into_iter().map(dag_proposal_row_to_view).collect()
     }
 
     pub async fn list_relevant_dag_proposals(&self, task_id: &str) -> Result<Vec<DagProposal>> {
-        let rows = sqlx::query(
-            r#"SELECT proposal_id, task_id, mode, state, summary, proposal_json,
-                      validation_json, created_by_session_id, created_by_turn_id, revision,
-                      supersedes_proposal_id, created_at, updated_at
-               FROM dag_proposals
-               WHERE task_id = ? AND state IN ('proposed', 'validated', 'rejected', 'superseded')
-               ORDER BY revision DESC, created_at DESC, proposal_id"#,
-        )
-        .bind(task_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteDagRepository::new(self.pool.clone());
+        let rows = repository.list_relevant_dag_proposals(task_id).await?;
 
-        rows.into_iter().map(row_to_dag_proposal).collect()
+        rows.into_iter().map(dag_proposal_row_to_record).collect()
     }
 }

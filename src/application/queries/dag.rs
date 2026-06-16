@@ -1,4 +1,5 @@
 use super::*;
+use crate::storage::sqlite::repositories::dag::SqliteDagRepository;
 
 impl ExternalQueryService {
     pub async fn get_task_dag(&self, task_id: &str) -> Result<TaskDagView> {
@@ -84,92 +85,43 @@ impl ExternalQueryService {
     }
 
     pub async fn list_work_item_runs(&self, task_id: &str) -> Result<Vec<WorkItemRunRecord>> {
-        let rows = sqlx::query(
-            r#"SELECT run_id, work_item_id, task_id, attempt, state, session_id, turn_id,
-                      client_type, execution_profile_id, execution_profile_version,
-                      rendered_prompt_ref, output_summary, failure, created_at, updated_at,
-                      started_at, completed_at
-               FROM work_item_runs WHERE task_id = ? ORDER BY created_at, run_id"#,
-        )
-        .bind(task_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteDagRepository::new(self.pool.clone());
+        let rows = repository.list_work_item_runs(task_id).await?;
 
-        rows.into_iter().map(row_to_work_item_run_record).collect()
+        rows.into_iter().map(work_item_run_row_to_record).collect()
     }
 
     pub async fn list_dag_signals(&self, task_id: &str) -> Result<Vec<DagSignalRecord>> {
-        let rows = sqlx::query(
-            r#"SELECT signal_id, task_id, work_item_id, run_id, source_session_id, source, kind,
-                      summary, detail, severity, related_refs, state, created_at, updated_at
-               FROM dag_signals WHERE task_id = ? ORDER BY created_at, signal_id"#,
-        )
-        .bind(task_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteDagRepository::new(self.pool.clone());
+        let rows = repository.list_dag_signals(task_id).await?;
 
-        rows.into_iter().map(row_to_dag_signal_record).collect()
+        rows.into_iter().map(dag_signal_row_to_record).collect()
     }
 
     async fn runtime_map(
         &self,
         task_id: &str,
     ) -> Result<std::collections::HashMap<String, WorkItemRuntimeView>> {
-        let rows = sqlx::query(
-            r#"SELECT work_item_id, current_run_id, current_state, current_attempt, ready_at,
-                      blocked_reason, outcome_state, outcome_reason, replanned_from_state,
-                      retry_count, max_retries, priority, optional,
-                      parallelizable, session_id, turn_id, updated_at
-               FROM work_item_runtime_projection
-               WHERE task_id = ?"#,
-        )
-        .bind(task_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let repository = SqliteDagRepository::new(self.pool.clone());
+        let rows = repository.list_runtime_projection(task_id).await?;
 
         let mut runtime = std::collections::HashMap::new();
         for row in rows {
-            runtime.insert(
-                row.try_get("work_item_id")?,
-                WorkItemRuntimeView {
-                    current_run_id: row.try_get("current_run_id")?,
-                    current_state: row.try_get("current_state")?,
-                    current_attempt: row.try_get("current_attempt")?,
-                    ready_at: row.try_get("ready_at")?,
-                    blocked_reason: row.try_get("blocked_reason")?,
-                    outcome_state: row.try_get("outcome_state")?,
-                    outcome_reason: row.try_get("outcome_reason")?,
-                    replanned_from_state: row.try_get("replanned_from_state")?,
-                    retry_count: row.try_get("retry_count")?,
-                    max_retries: row.try_get("max_retries")?,
-                    priority: row.try_get("priority")?,
-                    optional: row.try_get("optional")?,
-                    parallelizable: row.try_get("parallelizable")?,
-                    session_id: row.try_get("session_id")?,
-                    turn_id: row.try_get("turn_id")?,
-                    updated_at: row.try_get("updated_at")?,
-                },
-            );
+            runtime.insert(row.work_item_id.clone(), work_item_runtime_row_to_view(row));
         }
         Ok(runtime)
     }
 
     async fn count_open_signals(&self, task_id: &str) -> Result<i64> {
-        Ok(sqlx::query_scalar(
-            "SELECT COUNT(*) FROM dag_signals WHERE task_id = ? AND state = 'open'",
-        )
-        .bind(task_id)
-        .fetch_one(&self.pool)
-        .await?)
+        SqliteDagRepository::new(self.pool.clone())
+            .count_open_signals(task_id)
+            .await
     }
 
     async fn count_work_item_runs(&self, task_id: &str) -> Result<i64> {
-        Ok(
-            sqlx::query_scalar("SELECT COUNT(*) FROM work_item_runs WHERE task_id = ?")
-                .bind(task_id)
-                .fetch_one(&self.pool)
-                .await?,
-        )
+        SqliteDagRepository::new(self.pool.clone())
+            .count_work_item_runs(task_id)
+            .await
     }
 
     async fn task_graph_snapshot(&self, task_id: &str) -> Result<TaskGraphSnapshot> {

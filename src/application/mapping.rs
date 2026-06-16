@@ -1,6 +1,7 @@
 use super::*;
 use crate::storage::sqlite::models::{
     artifacts::ArtifactRow,
+    dag::{DagProposalRow, DagSignalRow, WorkItemRunRow, WorkItemRuntimeProjectionRow},
     events::{EventRow, EventStreamRow, TaskEventStreamRow},
     sessions::SessionRow,
     tasks::{TaskEventRow, TaskRow},
@@ -115,24 +116,21 @@ pub(crate) fn task_event_stream_row_to_view(row: TaskEventStreamRow) -> Result<T
     })
 }
 
-pub(crate) fn row_to_dag_proposal_view(row: sqlx::sqlite::SqliteRow) -> Result<DagProposalView> {
-    let proposal_json: String = row.try_get("proposal_json")?;
-    let validation_json: String = row.try_get("validation_json")?;
-
+pub(crate) fn dag_proposal_row_to_view(row: DagProposalRow) -> Result<DagProposalView> {
     Ok(DagProposalView {
-        proposal_id: row.try_get("proposal_id")?,
-        task_id: row.try_get("task_id")?,
-        mode: row.try_get("mode")?,
-        state: row.try_get("state")?,
-        summary: row.try_get("summary")?,
-        proposal_json: serde_json::from_str(&proposal_json)?,
-        validation_json: serde_json::from_str(&validation_json)?,
-        created_by_session_id: row.try_get("created_by_session_id")?,
-        created_by_turn_id: row.try_get("created_by_turn_id")?,
-        revision: row.try_get("revision")?,
-        supersedes_proposal_id: row.try_get("supersedes_proposal_id")?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
+        proposal_id: row.proposal_id,
+        task_id: row.task_id,
+        mode: row.mode,
+        state: row.state,
+        summary: row.summary,
+        proposal_json: serde_json::from_str(&row.proposal_json)?,
+        validation_json: serde_json::from_str(&row.validation_json)?,
+        created_by_session_id: row.created_by_session_id,
+        created_by_turn_id: row.created_by_turn_id,
+        revision: row.revision,
+        supersedes_proposal_id: row.supersedes_proposal_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     })
 }
 
@@ -168,70 +166,88 @@ pub(crate) fn graph_edge_record_to_view(edge: WorkItemEdgeRecord) -> WorkItemEdg
     }
 }
 
-pub(crate) fn row_to_work_item_run_record(
-    row: sqlx::sqlite::SqliteRow,
-) -> Result<WorkItemRunRecord> {
-    let failure: Option<String> = row.try_get("failure")?;
+pub(crate) fn work_item_run_row_to_record(row: WorkItemRunRow) -> Result<WorkItemRunRecord> {
     Ok(WorkItemRunRecord {
-        run_id: row.try_get("run_id")?,
-        work_item_id: row.try_get("work_item_id")?,
-        task_id: row.try_get("task_id")?,
-        attempt: row.try_get("attempt")?,
-        state: row.try_get("state")?,
-        session_id: row.try_get("session_id")?,
-        turn_id: row.try_get("turn_id")?,
-        client_type: row.try_get("client_type")?,
-        execution_profile_id: row.try_get("execution_profile_id")?,
-        execution_profile_version: row.try_get("execution_profile_version")?,
-        rendered_prompt_ref: row.try_get("rendered_prompt_ref")?,
-        output_summary: row.try_get("output_summary")?,
-        failure: failure
+        run_id: row.run_id,
+        work_item_id: row.work_item_id,
+        task_id: row.task_id,
+        attempt: row.attempt,
+        state: row.state,
+        session_id: row.session_id,
+        turn_id: row.turn_id,
+        client_type: row.client_type,
+        execution_profile_id: row.execution_profile_id,
+        execution_profile_version: row.execution_profile_version,
+        rendered_prompt_ref: row.rendered_prompt_ref,
+        output_summary: row.output_summary,
+        failure: row
+            .failure
             .map(|value| serde_json::from_str(&value))
             .transpose()?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
-        started_at: row.try_get("started_at")?,
-        completed_at: row.try_get("completed_at")?,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        started_at: row.started_at,
+        completed_at: row.completed_at,
     })
 }
 
-pub(crate) fn row_to_dag_signal_record(row: sqlx::sqlite::SqliteRow) -> Result<DagSignalRecord> {
-    let related_refs: String = row.try_get("related_refs")?;
+pub(crate) fn dag_signal_row_to_record(row: DagSignalRow) -> Result<DagSignalRecord> {
     Ok(DagSignalRecord {
-        signal_id: row.try_get("signal_id")?,
-        task_id: row.try_get("task_id")?,
-        work_item_id: row.try_get("work_item_id")?,
-        run_id: row.try_get("run_id")?,
-        source_session_id: row.try_get("source_session_id")?,
-        source: row.try_get("source")?,
-        kind: row.try_get("kind")?,
-        summary: row.try_get("summary")?,
-        detail: row.try_get("detail")?,
-        severity: row.try_get("severity")?,
-        related_refs: serde_json::from_str(&related_refs)?,
-        state: row.try_get("state")?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
+        signal_id: row.signal_id,
+        task_id: row.task_id,
+        work_item_id: row.work_item_id,
+        run_id: row.run_id,
+        source_session_id: row.source_session_id,
+        source: row.source,
+        kind: row.kind,
+        summary: row.summary,
+        detail: row.detail,
+        severity: row.severity,
+        related_refs: serde_json::from_str(&row.related_refs)?,
+        state: row.state,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     })
 }
 
-pub(crate) fn row_to_dag_proposal(row: sqlx::sqlite::SqliteRow) -> Result<DagProposal> {
-    let proposal_json: String = row.try_get("proposal_json")?;
-    let validation_json: String = row.try_get("validation_json")?;
+pub(crate) fn work_item_runtime_row_to_view(
+    row: WorkItemRuntimeProjectionRow,
+) -> WorkItemRuntimeView {
+    WorkItemRuntimeView {
+        current_run_id: row.current_run_id,
+        current_state: row.current_state,
+        current_attempt: row.current_attempt,
+        ready_at: row.ready_at,
+        blocked_reason: row.blocked_reason,
+        outcome_state: row.outcome_state,
+        outcome_reason: row.outcome_reason,
+        replanned_from_state: row.replanned_from_state,
+        retry_count: row.retry_count,
+        max_retries: row.max_retries,
+        priority: row.priority,
+        optional: row.optional,
+        parallelizable: row.parallelizable,
+        session_id: row.session_id,
+        turn_id: row.turn_id,
+        updated_at: row.updated_at,
+    }
+}
+
+pub(crate) fn dag_proposal_row_to_record(row: DagProposalRow) -> Result<DagProposal> {
     Ok(DagProposal {
-        proposal_id: row.try_get("proposal_id")?,
-        task_id: row.try_get("task_id")?,
-        mode: row.try_get("mode")?,
-        state: row.try_get("state")?,
-        summary: row.try_get("summary")?,
-        proposal_json: serde_json::from_str(&proposal_json)?,
-        validation_json: serde_json::from_str(&validation_json)?,
-        created_by_session_id: row.try_get("created_by_session_id")?,
-        created_by_turn_id: row.try_get("created_by_turn_id")?,
-        revision: row.try_get("revision")?,
-        supersedes_proposal_id: row.try_get("supersedes_proposal_id")?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
+        proposal_id: row.proposal_id,
+        task_id: row.task_id,
+        mode: row.mode,
+        state: row.state,
+        summary: row.summary,
+        proposal_json: serde_json::from_str(&row.proposal_json)?,
+        validation_json: serde_json::from_str(&row.validation_json)?,
+        created_by_session_id: row.created_by_session_id,
+        created_by_turn_id: row.created_by_turn_id,
+        revision: row.revision,
+        supersedes_proposal_id: row.supersedes_proposal_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     })
 }
 
