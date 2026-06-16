@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
+import { resolvePontiaConnection } from "./discovery.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, newPontiaTurnId, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
 import { EventReporter } from "./reporter.js";
 import { loadSessionContext, type SessionContext } from "./session.js";
@@ -133,7 +134,8 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 async function bindManualSession(env: EnvLike, fetchImpl: typeof fetch, sessionDetails: Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">): Promise<SessionContext | undefined> {
   if (hasPreboundSessionIntent(env)) return undefined;
   if (!sessionDetails.clientSessionKey) return undefined;
-  const url = bindingUpsertUrl(env);
+  const discovered = bindingUpsertUrl(env) ? undefined : await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const url = bindingUpsertUrl(env) ?? discovered?.bindingUpsertUrl;
   if (!url) return undefined;
 
   const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? newRuntimeInstanceId();

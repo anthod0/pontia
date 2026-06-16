@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { TurnContext } from "../src/context.js";
@@ -28,9 +31,19 @@ const context: TurnContext = {
   internalEventUrl: "http://localhost/internal/v1/events",
 };
 
-afterEach(() => {
+const tmpDirs: string[] = [];
+
+afterEach(async () => {
   vi.useRealTimers();
+  await Promise.all(tmpDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+  tmpDirs.length = 0;
 });
+
+async function tempDir() {
+  const dir = await mkdtemp(join(tmpdir(), "pontia-pi-index-"));
+  tmpDirs.push(dir);
+  return dir;
+}
 
 function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1]> = {}) {
   const { pi, handlers } = fakePi();
@@ -126,6 +139,47 @@ describe("pontia pi extension lifecycle", () => {
         runtime_instance_id: "rtinst_bound",
         client_session_key: "pi_session_manual",
       },
+    });
+  });
+
+  test("session_start without pontia env reads pi settings pontia config and binds through discovered backend", async () => {
+    const root = await tempDir();
+    const settingsFile = join(root, ".pi", "agent", "settings.json");
+    const pontiaConfig = join(root, ".config", "pontia-stable", "config.toml");
+    await mkdir(join(root, ".pi", "agent"), { recursive: true });
+    await mkdir(join(root, ".config", "pontia-stable"), { recursive: true });
+    await writeFile(settingsFile, JSON.stringify({ pontia: { config: pontiaConfig } }));
+    await writeFile(pontiaConfig, 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "stable-token"\n');
+
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "http://127.0.0.1:18080/healthz") {
+        return new Response("ok", { status: 200 });
+      }
+      expect(url).toBe("http://127.0.0.1:18080/internal/v1/runtime-bindings/upsert");
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        client_type: "pi",
+        client_session_key: "pi_session_discovered",
+        client_cwd: "/workspace",
+      });
+      return new Response(JSON.stringify({
+        session: { session_id: "sess_discovered" },
+        runtime: {
+          runtime_instance_id: "rtinst_discovered",
+          internal_event_url: "http://127.0.0.1:18080/internal/v1/events",
+        },
+      }), { status: 200 });
+    });
+    const { handlers, reported } = install({ env: { HOME: root }, fetch: fetchImpl as any });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: { getSessionId: () => "pi_session_discovered", getCwd: () => "/workspace" },
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_discovered",
+      payload: { runtime_instance_id: "rtinst_discovered", client_session_key: "pi_session_discovered" },
     });
   });
 

@@ -1,4 +1,7 @@
-import { describe, expect, test, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { LoadTurnContextResult } from "../src/context.js";
 
@@ -15,6 +18,19 @@ function fakePi() {
   };
 }
 
+const tmpDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tmpDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+  tmpDirs.length = 0;
+});
+
+async function tempHome() {
+  const dir = await mkdtemp(join(tmpdir(), "pontia-pi-no-auto-"));
+  tmpDirs.push(dir);
+  return dir;
+}
+
 describe("pontia pi extension startup boundary", () => {
   test("does not auto-attach or create runtime context after pi has started", async () => {
     const { pi, handlers } = fakePi();
@@ -28,8 +44,10 @@ describe("pontia pi extension startup boundary", () => {
       silent: true,
     }));
 
+    const home = await tempHome();
+
     createPontiaPiExtension(pi as any, {
-      env: {},
+      env: { HOME: home },
       fetch: fetchImpl as any,
       loadContext,
       makeReporter,
