@@ -345,7 +345,7 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
     )
     .await;
     assert_eq!(terminate_status, StatusCode::OK);
-    assert_eq!(terminate_body["data"]["session"]["state"], "idle");
+    assert_eq!(terminate_body["data"]["session"]["state"], "exited");
 }
 
 #[tokio::test]

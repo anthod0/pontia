@@ -170,6 +170,17 @@ impl RuntimeControlService {
             if let Some(runtime_target) = self.runtime_target(session_id).await? {
                 self.runtime.terminate_session(&runtime_target)?;
             }
+            EventIngestService::new(self.pool.clone())
+                .ingest_event(DomainEvent::new(
+                    new_event_id().to_string(),
+                    session_id.to_string(),
+                    None,
+                    EventSource::ExternalApi,
+                    session.client_type.clone(),
+                    EventType::SessionExited,
+                    json!({ "reason": "terminate_requested" }),
+                ))
+                .await?;
         }
 
         let session = query

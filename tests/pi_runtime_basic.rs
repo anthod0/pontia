@@ -148,26 +148,6 @@ async fn report_ready_with_event(state: AppState, session_id: &str, event_id: &s
     assert_eq!(status, StatusCode::OK, "{body:?}");
 }
 
-async fn report_exited(state: AppState, session_id: &str) {
-    let metadata = binding_metadata(&state, session_id).await;
-    let exited = json!({
-        "event_id": format!("evt_exited_{session_id}"),
-        "session_id":session_id,
-        "turn_id":null,
-        "source":"agent_client",
-        "client_type":"pi",
-        "type":"session.exited",
-        "time":"2026-05-08T12:00:01Z",
-        "seq":2,
-        "payload":{
-            "runtime_instance_id":metadata["runtime_instance_id"],
-            "reason":"quit"
-        }
-    });
-    let (status, body) = post_internal_event(state, exited).await;
-    assert_eq!(status, StatusCode::OK, "{body:?}");
-}
-
 async fn create_pi_session(state: AppState, workspace: &Path) -> (String, Value) {
     let (status, body) = request_json(
         state,
@@ -301,9 +281,7 @@ async fn pi_resume_drains_message_submitted_before_ready() {
     )
     .await;
     assert_eq!(terminate_status, StatusCode::OK, "{terminate_body:?}");
-    assert_eq!(terminate_body["data"]["session"]["state"], "starting");
-
-    report_exited(state.clone(), &session_id).await;
+    assert_eq!(terminate_body["data"]["session"]["state"], "exited");
 
     let (resume_status, resume_body) = request_json(
         state.clone(),
