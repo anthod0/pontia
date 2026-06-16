@@ -1,4 +1,5 @@
 import type { ManagedToolUse, SessionView, TimelineItem, TurnView } from '../../api/types';
+import { untitledSessionLabel } from '../sessionTitle';
 
 export type ChatSessionFilter = 'active' | 'all';
 export type ChatMessageRole = 'user' | 'assistant';
@@ -31,7 +32,7 @@ export function isTerminalChatSession(session: Pick<SessionView, 'state'>): bool
   return terminalStates.has(session.state);
 }
 
-export function sessionChatTitle(session: Pick<SessionView, 'session_id' | 'title' | 'handle' | 'role' | 'description'>): string {
+export function sessionChatTitle(session: Pick<SessionView, 'client_type' | 'title' | 'handle' | 'role' | 'description'>): string {
   const title = session.title?.trim();
   const handle = session.handle?.trim();
   const role = session.role?.trim();
@@ -41,7 +42,7 @@ export function sessionChatTitle(session: Pick<SessionView, 'session_id' | 'titl
   if (handle) return handle;
   if (description) return description;
   if (role) return role;
-  return shortId(session.session_id);
+  return untitledSessionLabel(session.client_type);
 }
 
 export function titleFromInitialPrompt(prompt: string, maxLength = 60): string | null {

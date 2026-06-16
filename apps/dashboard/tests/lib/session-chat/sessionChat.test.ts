@@ -65,6 +65,10 @@ test('uses friendly chat title without exposing raw ids when metadata exists', (
   expect(sessionChatTitle(session({ handle: null, role: null, description: 'Website polish' }))).toBe('Website polish');
 });
 
+test('falls back to an untitled client session label when no display metadata exists', () => {
+  expect(sessionChatTitle(session({ client_type: 'pi', title: null, handle: null, role: null, description: null }))).toBe('Untitled pi session');
+});
+
 test('generates a compact title from the initial prompt', () => {
   expect(titleFromInitialPrompt('  Implement automatic session titles\n\nDetails...')).toBe('Implement automatic session titles');
   expect(titleFromInitialPrompt('```ts\nconst answer = 42\n```')).toBe('const answer = 42');

@@ -23,10 +23,10 @@ test('uses handle and role as the primary session display title', () => {
   expect(sessionDisplayTitle(session({ handle: '@planner', role: 'execution reviewer', session_id: 'sess_abcdef123456' }))).toBe('@planner · execution reviewer');
 });
 
-test('falls back to handle, role, then short session id in display title', () => {
+test('falls back to handle, role, then an untitled client session label in display title', () => {
   expect(sessionDisplayTitle(session({ handle: '@planner', role: null }))).toBe('@planner');
   expect(sessionDisplayTitle(session({ session_id: 'active-old', handle: null, role: 'reviewer' }))).toBe('reviewer · active-old');
-  expect(sessionDisplayTitle(session({ session_id: 'active-old', handle: null, role: null }))).toBe('active-old');
+  expect(sessionDisplayTitle(session({ session_id: 'active-old', client_type: 'pi', handle: null, role: null }))).toBe('Untitled pi session');
 });
 
 test('shows active sessions by default and sorts newest first', () => {

@@ -1,4 +1,5 @@
 import type { SessionView } from '../../api/types';
+import { untitledSessionLabel } from '../../lib/sessionTitle';
 
 export type SessionFilter = 'active' | 'exited' | 'all';
 
@@ -17,7 +18,7 @@ export function sortSessionsForConsole<T extends Pick<SessionView, 'state' | 'up
   });
 }
 
-export function sessionDisplayTitle(session: Pick<SessionView, 'session_id' | 'title' | 'handle' | 'role'>): string {
+export function sessionDisplayTitle(session: Pick<SessionView, 'session_id' | 'client_type' | 'title' | 'handle' | 'role'>): string {
   const title = session.title?.trim();
   const handle = session.handle?.trim();
   const role = session.role?.trim();
@@ -26,7 +27,7 @@ export function sessionDisplayTitle(session: Pick<SessionView, 'session_id' | 't
   if (handle && role) return `${handle} · ${role}`;
   if (handle) return handle;
   if (role) return `${role} · ${short}`;
-  return short;
+  return untitledSessionLabel(session.client_type);
 }
 
 function shortSessionId(sessionId: string): string {
