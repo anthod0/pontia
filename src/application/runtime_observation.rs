@@ -1,11 +1,9 @@
 use super::*;
-use crate::agent_clients::{self, AdapterEventBehavior};
+use crate::agent_clients::{self, AdapterEventBehavior, RuntimeBehavior};
 
 fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
-    metadata["tmux"]["session_name"]
+    metadata["in_process"]["runtime_handle"]
         .as_str()
-        .or_else(|| metadata["tmux_session"].as_str())
-        .or_else(|| metadata["in_process"]["runtime_handle"].as_str())
         .or_else(|| metadata["in_process"]["runtime_key"].as_str())
         .map(ToString::to_string)
 }
@@ -34,22 +32,53 @@ impl RuntimeObservationService {
             return Ok(());
         }
 
-        let metadata: Option<String> =
-            sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+        let Some(client_spec) = agent_clients::get_client_spec(&session.client_type) else {
+            return Ok(());
+        };
+        match client_spec.runtime {
+            RuntimeBehavior::Tmux(_) => {
+                let row = sqlx::query(
+                    "SELECT tmux_socket_path, tmux_pane_id FROM runtime_bindings WHERE session_id = ?",
+                )
                 .bind(session_id)
                 .fetch_optional(&self.pool)
                 .await?;
-        let Some(runtime_target) = metadata
-            .map(|metadata| {
-                serde_json::from_str::<Value>(&metadata).map(runtime_target_from_metadata)
-            })
-            .transpose()?
-            .flatten()
-        else {
-            return Ok(());
-        };
-        if self.runtime.is_alive(&runtime_target) {
-            return Ok(());
+                let Some(row) = row else {
+                    return Ok(());
+                };
+                let socket_path: Option<String> = row.try_get("tmux_socket_path")?;
+                let pane_id: Option<String> = row.try_get("tmux_pane_id")?;
+                let Some((socket_path, pane_id)) =
+                    socket_path.zip(pane_id).filter(|(socket_path, pane_id)| {
+                        !socket_path.trim().is_empty() && !pane_id.trim().is_empty()
+                    })
+                else {
+                    return Ok(());
+                };
+                if self.runtime.is_tmux_pane_alive(&socket_path, &pane_id) {
+                    return Ok(());
+                }
+            }
+            RuntimeBehavior::InProcessTest => {
+                let metadata: Option<String> = sqlx::query_scalar(
+                    "SELECT metadata FROM runtime_bindings WHERE session_id = ?",
+                )
+                .bind(session_id)
+                .fetch_optional(&self.pool)
+                .await?;
+                let Some(runtime_target) = metadata
+                    .map(|metadata| {
+                        serde_json::from_str::<Value>(&metadata).map(runtime_target_from_metadata)
+                    })
+                    .transpose()?
+                    .flatten()
+                else {
+                    return Ok(());
+                };
+                if self.runtime.is_alive(&runtime_target) {
+                    return Ok(());
+                }
+            }
         }
 
         let ingest = EventIngestService::new(self.pool.clone());

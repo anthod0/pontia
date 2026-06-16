@@ -135,6 +135,69 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
 }
 
 #[test]
+fn terminate_tmux_pane_kills_bound_pane_when_send_keys_fails() {
+    let _guard = path_env_lock().lock().expect("path env lock");
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let tmux_log = tempdir.path().join("tmux.log");
+    let fake_tmux = tempdir.path().join("tmux");
+    write_fake_tmux(&fake_tmux);
+
+    let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
+    unsafe {
+        std::env::set_var("TMUX_SEND_KEYS_FAIL", "1");
+    }
+
+    GenericRuntimeManager
+        .terminate_tmux_pane("/tmp/tmux-test", "%42", &["C-c", "C-c"])
+        .expect("terminate tmux pane should fallback to kill-pane");
+
+    unsafe {
+        std::env::remove_var("TMUX_SEND_KEYS_FAIL");
+    }
+    restore_fake_tmux(original_path);
+
+    let log = std::fs::read_to_string(tmux_log).expect("tmux log");
+    assert!(
+        log.lines()
+            .any(|line| line == "-S /tmp/tmux-test send-keys -t %42 C-c"),
+        "{log}"
+    );
+    assert!(
+        log.lines()
+            .any(|line| line == "-S /tmp/tmux-test kill-pane -t %42"),
+        "{log}"
+    );
+    assert!(
+        !log.lines().any(|line| line.contains("kill-session")),
+        "{log}"
+    );
+}
+
+#[test]
+fn kill_tmux_pane_targets_bound_socket_and_pane() {
+    let _guard = path_env_lock().lock().expect("path env lock");
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let tmux_log = tempdir.path().join("tmux.log");
+    let fake_tmux = tempdir.path().join("tmux");
+    write_fake_tmux(&fake_tmux);
+
+    let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
+
+    GenericRuntimeManager
+        .kill_tmux_pane("/tmp/tmux-test", "%42")
+        .expect("kill tmux pane");
+
+    restore_fake_tmux(original_path);
+
+    let log = std::fs::read_to_string(tmux_log).expect("tmux log");
+    assert!(
+        log.lines()
+            .any(|line| line == "-S /tmp/tmux-test kill-pane -t %42"),
+        "{log}"
+    );
+}
+
+#[test]
 fn interrupt_session_succeeds_when_runtime_exits_after_escape() {
     let _guard = path_env_lock().lock().expect("path env lock");
     let tempdir = tempfile::tempdir().expect("tempdir");
@@ -189,7 +252,17 @@ printf '%s\n' "$*" >> "$TMUX_LOG"
 if [ "$1" = "has-session" ] && [ -n "${TMUX_STATE:-}" ] && [ -f "$TMUX_STATE" ]; then
   exit 1
 fi
+if [ "$1" = "-S" ] && [ "$3" = "list-panes" ]; then
+  printf '%%42\n'
+  exit 0
+fi
+if [ "$1" = "-S" ] && [ "$3" = "send-keys" ] && [ -n "${TMUX_SEND_KEYS_FAIL:-}" ]; then
+  exit 1
+fi
 if [ "$1" = "send-keys" ] && [ -n "${TMUX_STATE:-}" ]; then
+  : > "$TMUX_STATE"
+fi
+if [ "$1" = "-S" ] && [ "$3" = "send-keys" ] && [ -n "${TMUX_STATE:-}" ]; then
   : > "$TMUX_STATE"
 fi
 exit 0

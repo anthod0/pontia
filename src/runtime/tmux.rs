@@ -150,6 +150,21 @@ pub(super) fn terminate_session(runtime_handle: &str) -> Result<()> {
     }
 }
 
+pub(super) fn kill_pane(socket_path: &str, pane_id: &str) -> Result<()> {
+    let status = Command::new("tmux")
+        .args(["-S", socket_path, "kill-pane", "-t", pane_id])
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|err| Error::Domain(format!("tmux kill-pane failed: {err}")))?;
+    if status.success() || !is_pane_alive(socket_path, pane_id) {
+        Ok(())
+    } else {
+        Err(Error::Domain(format!(
+            "tmux kill-pane failed with status {status}"
+        )))
+    }
+}
+
 pub(super) fn send_keys(socket_path: &str, pane_id: &str, keys: &[&str]) -> Result<()> {
     if !is_pane_alive(socket_path, pane_id) {
         return Err(Error::Domain(format!(

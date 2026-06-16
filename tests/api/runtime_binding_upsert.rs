@@ -265,6 +265,47 @@ async fn upsert_non_tmux_pi_session_is_observable_but_not_web_writable() {
 }
 
 #[tokio::test]
+async fn terminate_manually_bound_tui_without_pane_binding_ignores_tmux_session_metadata() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let (upsert_status, upsert) = post_upsert(
+        state.clone(),
+        upsert_body_with_tmux(
+            &workspace,
+            "/tmp/tmux-1000/default",
+            Some("%42"),
+            Some("old-dev"),
+        ),
+    )
+    .await;
+    assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
+    let session_id = upsert["session"]["session_id"].as_str().unwrap();
+
+    sqlx::query(
+        "UPDATE runtime_bindings SET tmux_socket_path = NULL, tmux_pane_id = NULL WHERE session_id = ?",
+    )
+    .bind(session_id)
+    .execute(&state.db())
+    .await
+    .expect("remove pane binding");
+
+    let (terminate_status, terminate) = delete_session(state.clone(), session_id).await;
+
+    assert_eq!(
+        terminate_status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{terminate:?}"
+    );
+    assert_eq!(terminate["error"]["code"], "capability_unavailable");
+}
+
+#[tokio::test]
 async fn terminate_manually_bound_tui_session_sends_pi_exit_sequence_to_bound_pane() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
