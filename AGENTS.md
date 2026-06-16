@@ -18,6 +18,7 @@
 - `/internal/v1/events` is for runtime / adapter / agent-client confirmed facts only.
 - Keep client-specific behavior inside adapter/runtime/client-plugin boundaries (`src/adapters/`, `src/runtime/`, `clients/*/`). Do not leak pi/Claude-specific fields into generic domain events or External API view models.
 - pi and Claude Code turn output/completion/failure must be reported by hooks through the Internal Event API. Do not parse TUI screen contents, runtime logs, or tmux process exit as turn completion facts.
+- Strong bidirectional binding principle: Web UI and TUI differ only in startup and input delivery. Web UI control agent client through the backend API. TUI control agent client manually by the user. After the agent client starts, pontia behavior such as lifecycle tracking, turn facts, event reporting, projections, capabilities, and diagnostics must be identical for WebUI-launched and TUI-launched sessions.
 - Preserve idempotency behavior for mutating External API routes that accept `Idempotency-Key`.
 - Use the capability model to represent client differences. When a client cannot support an action or fact source, return an explicit unsupported/degraded result rather than fabricating success events.
 
