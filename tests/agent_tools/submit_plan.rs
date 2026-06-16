@@ -1,9 +1,6 @@
 #![cfg(any())]
 
-#[path = "../support/agent_tools.rs"]
-mod agent_tools;
-
-use agent_tools::*;
+use crate::agent_tools_support::*;
 use axum::http::StatusCode;
 use pontia::application::SqliteDagGraphStore;
 use serde_json::json;

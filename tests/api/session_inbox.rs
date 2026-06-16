@@ -11,10 +11,7 @@ use pontia::{
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-#[path = "../support/generic_client.rs"]
-mod generic_client;
-
-use generic_client::GenericClientTestScope;
+use crate::generic_client::GenericClientTestScope;
 
 const TOKEN: &str = "test-token";
 

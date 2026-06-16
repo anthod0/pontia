@@ -1,3 +1,6 @@
+#[path = "support/agent_tools.rs"]
+mod agent_tools_support;
+
 #[path = "agent_tools/authorization.rs"]
 mod authorization;
 #[path = "agent_tools/context.rs"]

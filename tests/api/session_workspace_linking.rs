@@ -1,15 +1,10 @@
-#[path = "../support/generic_client.rs"]
-mod generic_client;
-#[path = "../support/http.rs"]
-mod http;
-#[path = "../support/task_state.rs"]
-mod task_state;
-
+use crate::{
+    generic_client::GenericClientTestScope,
+    http::{get_json, post_json},
+    task_state::test_state,
+};
 use axum::http::StatusCode;
-use generic_client::GenericClientTestScope;
-use http::{get_json, post_json};
 use serde_json::json;
-use task_state::test_state;
 
 #[tokio::test]
 async fn create_session_upserts_canonical_workspace_and_links_session() {

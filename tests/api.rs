@@ -1,3 +1,11 @@
+#[path = "support/generic_client.rs"]
+mod generic_client;
+#[allow(dead_code)]
+#[path = "support/http.rs"]
+mod http;
+#[path = "support/task_state.rs"]
+mod task_state;
+
 #[path = "api/agent_profile.rs"]
 mod agent_profile;
 #[path = "api/artifact_content.rs"]

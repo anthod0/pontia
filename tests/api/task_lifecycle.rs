@@ -1,14 +1,7 @@
-#[allow(dead_code)]
-#[path = "../support/http.rs"]
-mod http;
-#[path = "../support/task_state.rs"]
-mod task_state;
-
+use crate::{http::get_json, task_state::test_state};
 use axum::http::StatusCode;
-use http::get_json;
 use pontia::ids::new_task_id;
 use serde_json::json;
-use task_state::test_state;
 
 #[tokio::test]
 async fn task_events_endpoint_returns_task_lifecycle_history() {

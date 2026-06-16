@@ -1,11 +1,8 @@
-#[path = "../support/generic_client.rs"]
-mod generic_client;
-
+use crate::generic_client::GenericClientTestScope;
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
-use generic_client::GenericClientTestScope;
 use http_body_util::BodyExt;
 use pontia::{
     application::{AppState, EventIngestService},
