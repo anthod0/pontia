@@ -233,6 +233,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let boundSessionContext: SessionContext | undefined;
   let pendingRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let lastContextUsageJson: string | undefined;
+  let pendingPrompt: string | undefined;
 
   function clearPendingRefresh(): void {
     if (!pendingRefreshTimer) return;
@@ -273,6 +274,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   pi.on("before_agent_start", async (event) => {
     const eventRecord = event as unknown as Record<string, unknown>;
+    pendingPrompt = optionalString(eventRecord.prompt);
     const currentSystemPrompt = typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
     try {
       const profilePrompt = await loadProfileSystemPrompt(env, fetchImpl);
@@ -363,6 +365,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           runtimeInstanceId: boundSessionContext.runtimeInstanceId,
           clientType: "pi",
           internalEventUrl: boundSessionContext.internalEventUrl,
+          input: pendingPrompt,
         };
         logFile = loaded.logFile;
       } else {
@@ -371,6 +374,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         return;
       }
 
+      pendingPrompt = undefined;
       const reporter = makeReporter(logFile);
       lastContextUsageJson = undefined;
       activeTurn = {
@@ -382,6 +386,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       };
       await reporter.report(activeTurn.context, buildTurnStartedEvent(activeTurn.context));
     } catch (error) {
+      pendingPrompt = undefined;
       activeTurn = undefined;
       const logFile = env.PONTIA_PI_HOOK_LOG ?? "pi-hook.log";
       await logDiagnostic(logFile, {

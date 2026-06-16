@@ -207,13 +207,14 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.session_start({ reason: "startup" }, {
       sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => "/workspace" },
     });
+    await handlers.before_agent_start({ prompt: "typed in tui", systemPrompt: "Base prompt" }, {});
     await handlers.agent_start({}, {});
 
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
     expect(reported[1]).toMatchObject({
       session_id: "sess_bound",
       turn_id: expect.stringMatching(/^turn_/),
-      payload: { runtime_instance_id: "rtinst_bound", input: {} },
+      payload: { runtime_instance_id: "rtinst_bound", input: { summary: "typed in tui" } },
     });
   });
 

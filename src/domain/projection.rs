@@ -350,6 +350,15 @@ impl ProjectionState {
                 metadata: Value::Object(Default::default()),
             });
 
+        if session
+            .title
+            .as_ref()
+            .is_none_or(|title| title.trim().is_empty())
+            && let Some(title) = title_from_turn_input(&event.payload)
+        {
+            session.title = Some(title);
+        }
+
         match new_state {
             TurnState::Queued | TurnState::Running => {
                 session.current_turn_id = Some(turn_id.to_string());
@@ -378,4 +387,39 @@ impl ProjectionState {
 
         Ok(())
     }
+}
+
+fn title_from_turn_input(payload: &Value) -> Option<String> {
+    let raw = payload
+        .pointer("/input/summary")
+        .or_else(|| payload.get("input_summary"))?
+        .as_str()?;
+    let trimmed = raw.trim_start();
+    let without_fence = if let Some(rest) = trimmed.strip_prefix("```") {
+        rest.trim_start_matches(|ch: char| ch.is_alphanumeric() || ch == '-' || ch == '_')
+            .trim_start()
+    } else {
+        trimmed
+    };
+    let normalized = without_fence
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())?
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if normalized.is_empty() {
+        return None;
+    }
+    const MAX_TITLE_CHARS: usize = 60;
+    if normalized.chars().count() <= MAX_TITLE_CHARS {
+        return Some(normalized);
+    }
+    let mut title = normalized
+        .chars()
+        .take(MAX_TITLE_CHARS - 1)
+        .collect::<String>();
+    title = title.trim_end().to_string();
+    title.push('…');
+    Some(title)
 }

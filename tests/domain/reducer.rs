@@ -108,6 +108,31 @@ fn reducer_does_not_let_late_events_change_terminal_session_or_turn() {
 }
 
 #[test]
+fn reducer_derives_missing_session_title_from_first_turn_input() {
+    let mut projection = ProjectionState::default();
+
+    projection
+        .apply(&event(EventType::SessionCreated, "sess_1", None))
+        .unwrap();
+    projection
+        .apply(&DomainEvent::new(
+            "evt_turn_started_title".to_string(),
+            "sess_1".to_string(),
+            Some("turn_1".to_string()),
+            EventSource::AgentAdapter,
+            "pi".to_string(),
+            EventType::TurnStarted,
+            json!({ "input": { "summary": "  inspect TUI-created task titles\nwith details" } }),
+        ))
+        .unwrap();
+
+    assert_eq!(
+        projection.session("sess_1").unwrap().title.as_deref(),
+        Some("inspect TUI-created task titles")
+    );
+}
+
+#[test]
 fn reducer_rejects_second_active_turn_in_same_session() {
     let mut projection = ProjectionState::default();
 
