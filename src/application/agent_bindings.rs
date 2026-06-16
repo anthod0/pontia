@@ -73,10 +73,7 @@ pub(crate) async fn register_agent_binding_for_ready_event_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event: &DomainEvent,
 ) -> Result<Option<AgentBinding>> {
-    if event.event_type != EventType::SessionReady
-        || event.source != EventSource::AgentClient
-        || event.client_type != "pi"
-    {
+    if event.event_type != EventType::SessionReady || event.source != EventSource::AgentClient {
         return Ok(None);
     }
 

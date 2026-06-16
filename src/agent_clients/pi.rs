@@ -1,9 +1,9 @@
 use crate::{
     adapters::AdapterCapabilities,
     agent_clients::types::{
-        AdapterEventBehavior, AgentClientSpec, DispatchBehavior, HookLogBehavior,
-        InterruptBehavior, ReadinessBehavior, RuntimeBehavior, SystemPromptInjectionBehavior,
-        TmuxRuntimeBehavior, TurnContextBehavior,
+        AdapterEventBehavior, AgentClientSpec, ClientSessionIdentityBehavior, DispatchBehavior,
+        HookLogBehavior, InterruptBehavior, ReadinessBehavior, RuntimeBehavior,
+        SystemPromptInjectionBehavior, TmuxRuntimeBehavior, TurnContextBehavior,
     },
     application::ContextUsageCapability,
 };
@@ -35,6 +35,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     }),
     dispatch: DispatchBehavior::TmuxPaste,
     readiness: ReadinessBehavior::AgentClientEvent,
+    client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
     interrupt: InterruptBehavior::TmuxInterrupt,
     turn_context: TurnContextBehavior::CurrentTurnFile,
     adapter_events: AdapterEventBehavior::JsonlOutbox {

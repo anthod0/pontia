@@ -55,6 +55,25 @@ mod tests {
         assert_eq!(generic.interrupt, InterruptBehavior::Unsupported);
         assert_eq!(generic.turn_context, TurnContextBehavior::Disabled);
         assert_eq!(generic.adapter_events, AdapterEventBehavior::Disabled);
+        assert_eq!(
+            generic.client_session_identity,
+            ClientSessionIdentityBehavior::Unsupported
+        );
+    }
+
+    #[test]
+    fn client_session_identity_requirement_is_declared_by_client_spec() {
+        let pi = get_client_spec("pi").expect("pi spec");
+        assert_eq!(
+            pi.client_session_identity,
+            ClientSessionIdentityBehavior::RequiredOnReady
+        );
+
+        let claude = get_client_spec("claude_code").expect("claude spec");
+        assert_eq!(
+            claude.client_session_identity,
+            ClientSessionIdentityBehavior::OptionalOnReady
+        );
     }
 
     #[test]

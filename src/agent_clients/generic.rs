@@ -1,8 +1,9 @@
 use crate::{
     adapters::AdapterCapabilities,
     agent_clients::types::{
-        AdapterEventBehavior, AgentClientSpec, DispatchBehavior, InterruptBehavior,
-        ReadinessBehavior, RuntimeBehavior, SystemPromptInjectionBehavior, TurnContextBehavior,
+        AdapterEventBehavior, AgentClientSpec, ClientSessionIdentityBehavior, DispatchBehavior,
+        InterruptBehavior, ReadinessBehavior, RuntimeBehavior, SystemPromptInjectionBehavior,
+        TurnContextBehavior,
     },
     application::ContextUsageCapability,
 };
@@ -24,6 +25,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     runtime: RuntimeBehavior::InProcessTest,
     dispatch: DispatchBehavior::GenericTestAdapter,
     readiness: ReadinessBehavior::RuntimeManagerImmediate,
+    client_session_identity: ClientSessionIdentityBehavior::Unsupported,
     interrupt: InterruptBehavior::Unsupported,
     turn_context: TurnContextBehavior::Disabled,
     adapter_events: AdapterEventBehavior::Disabled,

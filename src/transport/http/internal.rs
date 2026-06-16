@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
+    agent_clients::{ClientSessionIdentityBehavior, get_client_spec},
     application::{
         AppState, EventIngestService, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
     },
@@ -177,6 +178,12 @@ fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {
     )
 }
 
+fn client_session_identity_required_on_ready(client_type: &str) -> bool {
+    get_client_spec(client_type).is_some_and(|spec| {
+        spec.client_session_identity == ClientSessionIdentityBehavior::RequiredOnReady
+    })
+}
+
 impl InternalEventRequest {
     fn into_domain_event(self) -> Result<DomainEvent, ApiError> {
         let source = EventSource::from_str(&self.source)
@@ -209,16 +216,17 @@ impl InternalEventRequest {
                     "session.ready from agent_client requires payload.runtime_instance_id",
                 ));
             }
-            if self.client_type == "pi" {
+            if client_session_identity_required_on_ready(&self.client_type) {
                 let client_session_key = self
                     .payload
                     .get("client_session_key")
                     .and_then(Value::as_str)
                     .unwrap_or_default();
                 if client_session_key.trim().is_empty() {
-                    return Err(ApiError::invalid_request(
-                        "pi session.ready from agent_client requires payload.client_session_key",
-                    ));
+                    return Err(ApiError::invalid_request(format!(
+                        "{} session.ready from agent_client requires payload.client_session_key",
+                        self.client_type
+                    )));
                 }
             }
         }

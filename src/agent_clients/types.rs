@@ -18,6 +18,13 @@ pub enum ReadinessBehavior {
 pub type ReadinessMode = ReadinessBehavior;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientSessionIdentityBehavior {
+    RequiredOnReady,
+    OptionalOnReady,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeBehavior {
     InProcessTest,
     Tmux(TmuxRuntimeBehavior),
@@ -75,6 +82,7 @@ pub struct AgentClientSpec {
     pub runtime: RuntimeBehavior,
     pub dispatch: DispatchBehavior,
     pub readiness: ReadinessBehavior,
+    pub client_session_identity: ClientSessionIdentityBehavior,
     pub interrupt: InterruptBehavior,
     pub turn_context: TurnContextBehavior,
     pub adapter_events: AdapterEventBehavior,

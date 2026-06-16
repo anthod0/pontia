@@ -1,8 +1,8 @@
 use crate::{
     adapters::AdapterCapabilities,
     agent_clients::types::{
-        AdapterEventBehavior, AgentClientSpec, DispatchBehavior, HookLogBehavior,
-        InterruptBehavior, ReadinessBehavior, RuntimeBehavior, StartupHook,
+        AdapterEventBehavior, AgentClientSpec, ClientSessionIdentityBehavior, DispatchBehavior,
+        HookLogBehavior, InterruptBehavior, ReadinessBehavior, RuntimeBehavior, StartupHook,
         SystemPromptInjectionBehavior, TmuxRuntimeBehavior, TurnContextBehavior,
     },
     application::ContextUsageCapability,
@@ -35,6 +35,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     }),
     dispatch: DispatchBehavior::TmuxPaste,
     readiness: ReadinessBehavior::AgentClientEvent,
+    client_session_identity: ClientSessionIdentityBehavior::OptionalOnReady,
     interrupt: InterruptBehavior::Unsupported,
     turn_context: TurnContextBehavior::CurrentTurnFile,
     adapter_events: AdapterEventBehavior::Disabled,
