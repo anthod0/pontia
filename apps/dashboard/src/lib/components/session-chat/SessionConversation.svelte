@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
-  import { Bot, CircleStop, GitBranch } from '@lucide/svelte'
+  import { Bot, GitBranch, Square } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -228,7 +228,7 @@
                 </div>
                 {#if loadingPlaceholder.title === 'Agent working' && interruptEnabled}
                   <Button type="button" variant="ghost" size="icon-sm" disabled={interruptBusy} aria-label="Interrupt agent" title={interruptBusy ? 'Interrupting…' : 'Interrupt agent'} onclick={onInterrupt}>
-                    <CircleStop class="size-4" />
+                    <Square class="size-4" />
                   </Button>
                 {/if}
               </div>

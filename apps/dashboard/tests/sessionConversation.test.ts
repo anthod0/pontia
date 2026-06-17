@@ -260,7 +260,7 @@ test('conversation renders an interrupt button on the agent working placeholder 
   expect(interruptButton).toBeInTheDocument();
   expect(interruptButton).toHaveAttribute('title', 'Interrupt agent');
   expect(interruptButton.textContent?.trim()).toBe('');
-  expect(interruptButton.querySelector('svg')).toBeInTheDocument();
+  expect(interruptButton.querySelector('svg.lucide-square')).toBeInTheDocument();
   expect(interruptButton).not.toHaveClass('border-border');
 
   await fireEvent.click(interruptButton);
