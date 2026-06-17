@@ -150,7 +150,7 @@ test('conversation does not scroll the document to the bottom when refreshing wh
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test('conversation uses session busy state to keep thought summary active without showing Working text', () => {
+test('conversation uses session busy state to keep thought summary active without showing the agent working placeholder', () => {
   render(SessionConversation, {
     props: {
       sessionState: 'busy',
@@ -175,7 +175,8 @@ test('conversation uses session busy state to keep thought summary active withou
   expect(screen.getByLabelText('Thinking in progress')).toBeInTheDocument();
   expect(screen.queryByText('bash')).not.toBeInTheDocument();
   expect(screen.getByText('read')).toBeInTheDocument();
-  expect(screen.getByText('Agent working')).toBeInTheDocument();
+  expect(screen.queryByText('Agent working')).not.toBeInTheDocument();
+  expect(screen.queryByText('Waiting for the agent to report its next output.')).not.toBeInTheDocument();
   expect(screen.queryByText('Working…')).not.toBeInTheDocument();
 });
 

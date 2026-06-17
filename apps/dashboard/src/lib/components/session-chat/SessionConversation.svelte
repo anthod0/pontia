@@ -235,7 +235,7 @@
             {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
               <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
             {/if}
-            {#if chatMessage.role === 'assistant' && loadingPlaceholder && chatMessage.id === activeLoadingMessageId}
+            {#if chatMessage.role === 'assistant' && loadingPlaceholder && chatMessage.id === activeLoadingMessageId && !chatMessage.thoughtSteps?.length}
               <div class="max-w-md space-y-2 text-muted-foreground" aria-live="polite">
                 <div class="space-y-1">
                   <p class="text-sm font-medium text-foreground">{loadingPlaceholder.title}</p>
