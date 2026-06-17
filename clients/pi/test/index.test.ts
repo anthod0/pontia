@@ -104,6 +104,45 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
+  test("session_start new reports agent client ready from runtime env", async () => {
+    const workspace = await realpath(await tempDir());
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(url).toBe("http://localhost/external/v1/workspaces");
+      return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    });
+    const { handlers, reported } = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_new",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_new",
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
+        PONTIA_EXTERNAL_API_TOKEN: "token",
+      },
+      fetch: fetchImpl as any,
+    });
+
+    await handlers.session_start({ reason: "new" }, {
+      sessionManager: {
+        getSessionId: () => "pi_session_new",
+        getSessionFile: () => "/tmp/pi/new-session.jsonl",
+        getSessionDir: () => "/tmp/pi",
+        getCwd: () => workspace,
+      },
+    });
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_new",
+      payload: {
+        runtime_instance_id: "rtinst_new",
+        client_session_key: "pi_session_new",
+        client_session_file: "/tmp/pi/new-session.jsonl",
+        client_session_dir: "/tmp/pi",
+        client_cwd: workspace,
+      },
+    });
+  });
+
   test("session_start without managed runtime env binds through internal upsert and reports ready", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {

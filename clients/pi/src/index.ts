@@ -342,7 +342,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   pi.on("session_start", async (event, ctx) => {
     if (readyReported) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
-    if (reason !== "startup") return;
+    if (reason !== "startup" && reason !== "new") return;
 
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
