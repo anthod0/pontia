@@ -28,6 +28,15 @@ impl GenericRuntimeManager {
         request: RuntimeStartRequest,
         restart_count: i64,
     ) -> Result<RuntimeStartResult> {
+        self.start_session_with_restart_count_and_reuse_target(request, restart_count, None)
+    }
+
+    pub fn start_session_with_restart_count_and_reuse_target(
+        &self,
+        request: RuntimeStartRequest,
+        restart_count: i64,
+        reuse_target: Option<(&str, &str)>,
+    ) -> Result<RuntimeStartResult> {
         let client_spec =
             agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", request.client_type))
@@ -59,7 +68,17 @@ impl GenericRuntimeManager {
                     })
             })
         });
-        let tmux_session = tmux::tmux_session_name(&request);
+        let base_tmux_session = tmux::tmux_session_name(&request);
+        let reuse_target = reuse_target.filter(|(socket_path, pane_id)| {
+            tmux::is_reusable_pontia_shell_pane(socket_path, pane_id, &request.session_id)
+        });
+        let tmux_session = if reuse_target.is_some() {
+            base_tmux_session.clone()
+        } else if restart_count > 0 && tmux::is_alive(&base_tmux_session) {
+            format!("{base_tmux_session}_r{restart_count}")
+        } else {
+            base_tmux_session
+        };
         let workspace = paths::workspace_path(&request)?;
         script::run_startup_hooks(client_spec.startup_hooks, &workspace)?;
         let runtime_dir = paths::runtime_dir(&request.session_id)?;
@@ -88,15 +107,30 @@ impl GenericRuntimeManager {
             &runtime_instance_id,
         )?;
 
-        let status = tmux::spawn_tmux_session(&tmux_session, &workspace, &script_path)
-            .map_err(|err| Error::Domain(format!("tmux runtime spawn failed: {err}")))?;
-        if !status.success() {
-            return Err(Error::Domain(format!(
-                "tmux runtime spawn failed with status {status}"
-            )));
+        let pane_binding = if let Some((socket_path, pane_id)) = reuse_target {
+            tmux::run_script_in_pane(socket_path, pane_id, &script_path)?;
+            Some(tmux::TmuxPaneBinding {
+                socket_path: socket_path.to_string(),
+                pane_id: pane_id.to_string(),
+            })
+        } else {
+            let status = tmux::spawn_tmux_session(&tmux_session, &workspace, &script_path)
+                .map_err(|err| Error::Domain(format!("tmux runtime spawn failed: {err}")))?;
+            if !status.success() {
+                return Err(Error::Domain(format!(
+                    "tmux runtime spawn failed with status {status}"
+                )));
+            }
+            tmux::pane_binding(&tmux_session)
+        };
+        if let Some(binding) = pane_binding.as_ref() {
+            tmux::mark_pontia_pane(
+                &binding.socket_path,
+                &binding.pane_id,
+                &request.session_id,
+                &runtime_instance_id,
+            )?;
         }
-
-        let pane_binding = tmux::pane_binding(&tmux_session);
         let started_at = utc_now()
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;

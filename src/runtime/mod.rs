@@ -24,6 +24,12 @@ pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult};
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        process::{Command, Stdio},
+        thread,
+        time::Duration,
+    };
+
     use super::*;
 
     #[test]
@@ -112,6 +118,58 @@ mod tests {
             second.metadata["runtime_instance_id"]
         );
         assert_ne!(first.metadata["started_at"], second.metadata["started_at"]);
+    }
+
+    #[test]
+    fn tmux_runtime_reuses_marked_shell_pane_when_requested() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let output = dir.path().join("reused.log");
+        let session_id = "sess_tmux_reuse_shell".to_string();
+        let tmux_session = format!("pontia_test_reuse_manager_{}", std::process::id());
+        let status = Command::new("tmux")
+            .args(["new-session", "-d", "-s", &tmux_session, "sh"])
+            .stderr(Stdio::null())
+            .status()
+            .expect("spawn tmux");
+        assert!(status.success(), "tmux session should start");
+        let binding = tmux::pane_binding(&tmux_session).expect("pane binding");
+        tmux::mark_pontia_pane(
+            &binding.socket_path,
+            &binding.pane_id,
+            &session_id,
+            "rtinst_previous",
+        )
+        .expect("mark pane");
+
+        let manager = GenericRuntimeManager;
+        let runtime = manager
+            .start_session_with_restart_count_and_reuse_target(
+                RuntimeStartRequest {
+                    session_id: session_id.clone(),
+                    client_type: "pi".to_string(),
+                    workspace: Some(dir.path().display().to_string()),
+                    handle: None,
+                    role: None,
+                    agent_kind: None,
+                    start_command: Some(format!("printf reused > {}", output.display())),
+                },
+                1,
+                Some((&binding.socket_path, &binding.pane_id)),
+            )
+            .expect("start by reusing pane");
+
+        assert_eq!(runtime.tmux_pane_id(), Some(binding.pane_id.as_str()));
+        for _ in 0..50 {
+            if output.exists() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        let _ = Command::new("tmux")
+            .args(["kill-session", "-t", &tmux_session])
+            .stderr(Stdio::null())
+            .status();
+        assert_eq!(std::fs::read_to_string(output).expect("output"), "reused");
     }
 
     #[test]

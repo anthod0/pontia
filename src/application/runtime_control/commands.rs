@@ -260,20 +260,26 @@ impl RuntimeControlService {
                 json!({}),
             ))
             .await?;
-        let runtime = self.runtime.start_session_with_restart_count(
-            RuntimeStartRequest {
-                session_id: session_id.to_string(),
-                client_type: session.client_type.clone(),
-                workspace: session.workspace.clone(),
-                handle: session.handle.clone(),
-                role: session.role.clone(),
-                agent_kind: pontia_agent_kind(&session.metadata),
-                start_command: self
-                    .resume_start_command(session_id, &session.client_type)
-                    .await?,
-            },
-            prior_restart_count + 1,
-        )?;
+        let tmux_binding = self.tmux_pane_binding(session_id).await?;
+        let runtime = self
+            .runtime
+            .start_session_with_restart_count_and_reuse_target(
+                RuntimeStartRequest {
+                    session_id: session_id.to_string(),
+                    client_type: session.client_type.clone(),
+                    workspace: session.workspace.clone(),
+                    handle: session.handle.clone(),
+                    role: session.role.clone(),
+                    agent_kind: pontia_agent_kind(&session.metadata),
+                    start_command: self
+                        .resume_start_command(session_id, &session.client_type)
+                        .await?,
+                },
+                prior_restart_count + 1,
+                tmux_binding
+                    .as_ref()
+                    .map(|binding| (binding.socket_path.as_str(), binding.pane_id.as_str())),
+            )?;
         self.upsert_runtime_binding(session_id, &runtime).await?;
         ingest
             .ingest_event(DomainEvent::new(
