@@ -1,3 +1,4 @@
+import { Activity, Check, Loader, LogOut, Pause, TriangleAlert } from '@lucide/svelte'
 import { contextUsageSummary } from '$lib/contextUsage'
 import type { InboxMessageView, SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
 
@@ -26,11 +27,10 @@ export function sessionStateBadgeClass(state: string): string {
   switch (state) {
     case 'busy':
     case 'starting':
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300'
-    case 'idle':
-      return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-    case 'interrupted':
       return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+    case 'idle':
+    case 'interrupted':
+      return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
     case 'exited':
       return 'border-muted-foreground/25 bg-muted text-muted-foreground'
     case 'error':
@@ -38,6 +38,28 @@ export function sessionStateBadgeClass(state: string): string {
     default:
       return ''
   }
+}
+
+export function sessionStateIcon(state: string): typeof Activity {
+  switch (state) {
+    case 'busy':
+    case 'starting':
+      return Loader
+    case 'idle':
+      return Check
+    case 'interrupted':
+      return Pause
+    case 'exited':
+      return LogOut
+    case 'error':
+      return TriangleAlert
+    default:
+      return Activity
+  }
+}
+
+export function sessionStateIconClass(state: string): string {
+  return state === 'busy' || state === 'starting' ? 'size-4 animate-spin' : 'size-4'
 }
 
 export function sessionProfileTitle(session: SessionView): string | null {

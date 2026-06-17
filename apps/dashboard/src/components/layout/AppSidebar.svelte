@@ -70,11 +70,10 @@
     switch (state) {
       case 'busy':
       case 'starting':
-        return 'bg-blue-500'
-      case 'idle':
-        return 'bg-emerald-500'
-      case 'interrupted':
         return 'bg-amber-500'
+      case 'idle':
+      case 'interrupted':
+        return 'bg-emerald-500'
       case 'error':
         return 'bg-destructive'
       default:

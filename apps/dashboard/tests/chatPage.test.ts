@@ -136,7 +136,8 @@ test('chat composer metadata uses the compact summary for all viewports', async 
   const toolbar = await screen.findByLabelText('Session status and controls');
   const metadata = within(toolbar).getByTestId('session-status-mobile-metadata');
 
-  expect(within(toolbar).getByText('idle')).toBeInTheDocument();
+  expect(within(toolbar).getByLabelText('Session state: idle')).toBeInTheDocument();
+  expect(within(toolbar).queryByText('idle')).not.toBeInTheDocument();
   expect(within(toolbar).queryByTestId('session-status-desktop-metadata')).not.toBeInTheDocument();
   const detailsButton = within(metadata).getByRole('button', { name: 'Session details: project · pi' });
   expect(detailsButton).toBeInTheDocument();
@@ -260,7 +261,9 @@ test('chat composer session status pill uses semantic color classes', async () =
   render(ChatPage);
 
   const toolbar = await screen.findByLabelText('Session status and controls');
-  expect(within(toolbar).getByText('busy').closest('[data-slot="badge"]')).toHaveClass('border-blue-500/30', 'bg-blue-500/10', 'text-blue-700');
+  const statusBadge = within(toolbar).getByLabelText('Session state: busy');
+  expect(statusBadge).toHaveClass('border-amber-500/30', 'bg-amber-500/10', 'text-amber-700');
+  expect(within(statusBadge).queryByText('busy')).not.toBeInTheDocument();
 });
 
 test('advanced controls menu opens above when there is not enough space below', async () => {

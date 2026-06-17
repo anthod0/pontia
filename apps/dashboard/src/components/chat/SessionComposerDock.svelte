@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, EllipsisVertical, Inbox, LogOut, Pencil, RotateCw, TerminalSquare } from '@lucide/svelte'
+  import { EllipsisVertical, Inbox, LogOut, Pencil, RotateCw, TerminalSquare } from '@lucide/svelte'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button, buttonVariants } from '$lib/components/ui/button/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -7,7 +7,7 @@
   import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
   import { canSendSessionMessage, isTerminalChatSession } from '$lib/session-chat/sessionChat'
   import SessionMetadataMobile from './SessionMetadataMobile.svelte'
-  import { sessionStateBadgeClass, type SessionMetadataItem } from './sessionMetadata'
+  import { sessionStateBadgeClass, sessionStateIcon, sessionStateIconClass, type SessionMetadataItem } from './sessionMetadata'
 
   interface Props {
     session: SessionView
@@ -55,15 +55,15 @@
 
   let canAcceptWebInput = $derived(session.capabilities?.accept_task === true)
   let composerDisabled = $derived(!canAcceptWebInput || session.state === 'error' || submitting)
+  let SessionStateIcon = $derived(sessionStateIcon(session.state))
 </script>
 
 <div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:left-[var(--sidebar-width)] md:p-6">
   <div class="mx-auto w-full max-w-7xl">
     <div role="group" aria-label="Session status and controls" class="mb-2 flex min-w-0 items-center justify-between gap-2 px-2">
       <div class="flex min-w-0 flex-1 items-center gap-2">
-        <Badge variant="secondary" class={`h-7 shrink-0 gap-1.5 px-2 sm:px-3 text-sm ${sessionStateBadgeClass(session.state)}`} aria-label={`Session state: ${session.state}`}>
-          <Activity class="size-4" />
-          <span data-chat-session-state-label class="hidden sm:inline">{session.state}</span>
+        <Badge variant="secondary" class={`h-7 w-7 shrink-0 p-0 ${sessionStateBadgeClass(session.state)}`} aria-label={`Session state: ${session.state}`} title={session.state}>
+          <SessionStateIcon class={sessionStateIconClass(session.state)} />
         </Badge>
         <div data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1">
           <SessionMetadataMobile {session} {gitStatus} {gitStatusErrors} {workspaces} {metadataItems} {metadataSummary} />

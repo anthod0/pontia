@@ -16,8 +16,10 @@ test('shows a semantic status dot for non-exited sidebar sessions instead of a s
   expect(appSidebarSource).toContain('{#if isSessionVisibleState(session.state)}');
   expect(appSidebarSource).toContain('sessionStateDotClass(session.state)');
   expect(appSidebarSource).toContain("case 'busy':");
-  expect(appSidebarSource).toContain('bg-blue-500');
+  expect(appSidebarSource).toContain('bg-amber-500');
+  expect(appSidebarSource).not.toContain('bg-blue-500');
   expect(appSidebarSource).toContain("case 'idle':");
+  expect(appSidebarSource).toContain("case 'interrupted':");
   expect(appSidebarSource).toContain('bg-emerald-500');
   expect(appSidebarSource).toContain("return state !== 'exited'");
 });
