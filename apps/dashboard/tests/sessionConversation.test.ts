@@ -27,6 +27,23 @@ test('conversation renders messages without role headers', () => {
   expect(screen.queryByText('AI')).not.toBeInTheDocument();
 });
 
+test('conversation copies assistant reply content with the http-compatible fallback', async () => {
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+  document.execCommand = vi.fn().mockReturnValue(true);
+  const execCommand = vi.mocked(document.execCommand);
+
+  render(SessionConversation, { props: { messages } });
+
+  expect(screen.queryByRole('button', { name: /copy user message/i })).not.toBeInTheDocument();
+  const copyButton = screen.getByRole('button', { name: /copy assistant reply/i });
+  expect(copyButton.parentElement).toHaveClass('justify-start');
+  expect(copyButton.parentElement).not.toHaveClass('justify-end');
+  await fireEvent.click(copyButton);
+
+  expect(execCommand).toHaveBeenCalledWith('copy');
+  expect(screen.getByRole('button', { name: /assistant reply copied/i })).toBeInTheDocument();
+});
+
 test('conversation loads earlier history when scrolled to the top', async () => {
   const onLoadMoreHistory = vi.fn();
   render(SessionConversation, { props: { messages, hasMoreHistory: true, onLoadMoreHistory } });

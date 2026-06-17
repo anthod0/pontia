@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
-  import { Bot, GitBranch, Square } from '@lucide/svelte'
+  import { Bot, Check, Copy, GitBranch, Square } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Sheet from '$lib/components/ui/sheet/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
+  import { copyText } from '$lib/copyText'
   import { chatAutoScrollKey, scrollDocumentToBottom } from '../../session-chat/autoScroll'
   import DraftDagFlow from '../../../components/dag/DraftDagFlow.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
@@ -46,6 +47,8 @@
   }: Props = $props()
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let draftDagSheetOpen = $state(false)
+  let copiedMessageId = $state<string | null>(null)
+  let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const loadingPlaceholder = $derived(assistantLoadingPlaceholder(sessionState))
   const displayMessages = $derived(messagesForDisplay(messages, loadingPlaceholder))
   const scrollKey = $derived(autoScrollKey ?? chatAutoScrollKey(displayMessages))
@@ -63,6 +66,7 @@
 
   onDestroy(() => {
     window.removeEventListener('scroll', handleWindowScroll)
+    if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
   })
 
   $effect.pre(() => {
@@ -137,6 +141,17 @@
 
   function openDraftDagSheet(): void {
     draftDagSheetOpen = true
+  }
+
+  async function copyAssistantReply(message: SessionChatMessage): Promise<void> {
+    const copied = await copyText(message.content)
+    if (!copied) return
+    copiedMessageId = message.id
+    if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
+    copiedMessageResetTimer = setTimeout(() => {
+      copiedMessageId = null
+      copiedMessageResetTimer = null
+    }, 1600)
   }
 
   $effect(() => {
@@ -234,6 +249,25 @@
               </div>
             {:else if chatMessage.content.trim()}
               <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
+              {#if chatMessage.role === 'assistant'}
+                {@const isCopied = copiedMessageId === chatMessage.id}
+                <div class="mt-2 flex justify-start">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={isCopied ? 'Assistant reply copied' : 'Copy assistant reply'}
+                    title={isCopied ? 'Copied' : 'Copy assistant reply'}
+                    onclick={() => copyAssistantReply(chatMessage)}
+                  >
+                    {#if isCopied}
+                      <Check class="size-3.5" /> Copied
+                    {:else}
+                      <Copy class="size-3.5" /> Copy
+                    {/if}
+                  </Button>
+                </div>
+              {/if}
             {/if}
           </Message.Content>
         </Message.Root>
