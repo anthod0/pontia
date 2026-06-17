@@ -484,7 +484,36 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test("session_shutdown replacement does not report session exited", async () => {
+  test.each(["new", "resume"])("session_shutdown %s reports session exited for managed runtime", async (shutdownReason) => {
+    const workspace = await realpath(await tempDir());
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 }));
+    const { handlers, reported } = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_exit",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
+        PONTIA_EXTERNAL_API_TOKEN: "token",
+      },
+      fetch: fetchImpl as any,
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: { getSessionId: () => "pi_session_1", getCwd: () => workspace },
+    });
+    await handlers.session_shutdown({ reason: shutdownReason }, {});
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready", "session.exited"]);
+    expect(reported[1]).toMatchObject({
+      session_id: "sess_exit",
+      turn_id: null,
+      source: "agent_client",
+      client_type: "pi",
+      payload: { reason: shutdownReason, runtime_instance_id: "rtinst_1" },
+    });
+  });
+
+  test("session_shutdown reload does not report session exited", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 }));
     const { handlers, reported } = install({
