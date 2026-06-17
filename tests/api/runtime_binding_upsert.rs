@@ -368,7 +368,7 @@ async fn webui_resume_of_manually_bound_tui_appends_pi_session_id_to_start_comma
 }
 
 #[tokio::test]
-async fn terminate_manually_bound_tui_without_pane_binding_ignores_tmux_session_metadata() {
+async fn terminate_manually_bound_tui_without_pane_binding_marks_session_exited() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -400,12 +400,41 @@ async fn terminate_manually_bound_tui_without_pane_binding_ignores_tmux_session_
 
     let (terminate_status, terminate) = delete_session(state.clone(), session_id).await;
 
-    assert_eq!(
-        terminate_status,
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "{terminate:?}"
-    );
-    assert_eq!(terminate["error"]["code"], "capability_unavailable");
+    assert_eq!(terminate_status, StatusCode::OK, "{terminate:?}");
+    assert_eq!(terminate["data"]["session"]["state"], "exited");
+
+    let exit_event_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM events WHERE session_id = ? AND event_type = 'session.exited'",
+    )
+    .bind(session_id)
+    .fetch_one(&state.db())
+    .await
+    .expect("exit event count");
+    assert_eq!(exit_event_count, 1);
+}
+
+#[tokio::test]
+async fn terminate_non_tmux_manually_bound_tui_marks_session_exited() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let (upsert_status, upsert) = post_upsert(
+        state.clone(),
+        upsert_body_with_tmux(&workspace, "/tmp/tmux-1000/default", None, None),
+    )
+    .await;
+    assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
+    let session_id = upsert["session"]["session_id"].as_str().unwrap();
+
+    let (terminate_status, terminate) = delete_session(state.clone(), session_id).await;
+
+    assert_eq!(terminate_status, StatusCode::OK, "{terminate:?}");
+    assert_eq!(terminate["data"]["session"]["state"], "exited");
 }
 
 #[tokio::test]
