@@ -196,6 +196,8 @@ pub fn router(state: AppState) -> Router {
             "/external/v1/sessions/{session_id}/resume",
             post(external::resume_session),
         )
+        // Read-only turn history. Direct turn dispatch via POST is intentionally not exposed:
+        // Web input is submitted through the inbox API, and hook/internal events own turn lifecycle facts.
         .route(
             "/external/v1/sessions/{session_id}/turns",
             get(external::list_turns),

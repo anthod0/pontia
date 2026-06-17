@@ -46,7 +46,7 @@
   $: currentTurnOutput = $sessionDetail ? selectCurrentTurnOutput($sessionDetail.session, $sessionDetail.turns) : null
   $: inboxSubmitReason = inboxSubmitUnsupportedReason(selectedSession)
   $: canSubmitInbox = Boolean(selectedSessionId && inboxInput.trim() && !submittingInbox && !inboxSubmitReason)
-  $: normalTurnReason = 'Direct POST /sessions/:id/turns is not exposed by the External API in this build. Use the inbox controls below.'
+  $: normalTurnReason = 'GET /sessions/:id/turns is read-only history. Direct POST is not exposed; use the inbox controls below.'
   $: interruptReason = interruptUnsupportedReason(selectedSession)
   $: restartReason = selectedSession && isTerminalSession(selectedSession) ? 'Terminal sessions cannot be restarted.' : null
   $: terminateReason = selectedSession && isTerminalSession(selectedSession) ? 'Session is already terminal.' : null

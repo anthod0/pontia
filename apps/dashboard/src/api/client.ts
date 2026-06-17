@@ -229,6 +229,8 @@ export async function getSession(sessionId: string): Promise<SessionView> {
   return (await request<{ session: SessionView }>(`/sessions/${sessionId}`)).session;
 }
 
+// GET /sessions/:id/turns is read-only turn history. WebUI dispatch must use
+// submitInboxMessage(); hook/internal events remain authoritative for turn lifecycle facts.
 export async function listTurns(sessionId: string): Promise<TurnView[]> {
   return (await request<{ turns: TurnView[] }>(`/sessions/${sessionId}/turns`)).turns;
 }
