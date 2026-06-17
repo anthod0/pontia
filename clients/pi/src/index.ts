@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { unlink } from "node:fs/promises";
+import { realpath, unlink } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
@@ -110,6 +111,40 @@ function piSessionDetailsFromHookContext(ctx: unknown): Pick<import("./session.j
 
 function externalApiUrl(env: EnvLike): string | undefined {
   return optionalString(env.PONTIA_EXTERNAL_API_URL)?.replace(/\/+$/, "");
+}
+
+async function canonicalPath(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+async function resolveWorkspaceApi(env: EnvLike, fetchImpl: typeof fetch): Promise<{ externalApiUrl: string; externalApiToken: string } | undefined> {
+  const explicitUrl = externalApiUrl(env);
+  const explicitToken = optionalString(env.PONTIA_EXTERNAL_API_TOKEN);
+  if (explicitUrl && explicitToken) return { externalApiUrl: explicitUrl, externalApiToken: explicitToken };
+
+  const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
+  if (!discovered?.externalApiToken) return undefined;
+  return { externalApiUrl: discovered.externalApiUrl, externalApiToken: discovered.externalApiToken };
+}
+
+async function isActiveRegisteredWorkspace(env: EnvLike, fetchImpl: typeof fetch, clientCwd: string | undefined): Promise<boolean | undefined> {
+  if (!clientCwd) return false;
+  const api = await resolveWorkspaceApi(env, fetchImpl);
+  if (!api) return undefined;
+
+  const workspacePath = await canonicalPath(clientCwd);
+  const body = await fetchJson(fetchImpl, `${api.externalApiUrl}/workspaces`, api.externalApiToken);
+  const workspaces = responseDataRecord(body)?.workspaces;
+  if (!Array.isArray(workspaces)) return false;
+
+  return workspaces.some((workspace) => {
+    const record = asRecord(workspace);
+    return record?.state === "active" && record.canonical_path === workspacePath;
+  });
 }
 
 function hasPreboundSessionIntent(env: EnvLike): boolean {
@@ -242,6 +277,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
   let boundSessionContext: SessionContext | undefined;
+  let pontiaDisabled = false;
   let pendingRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
@@ -286,6 +322,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   pi.on("before_agent_start", async (event) => {
     const eventRecord = event as unknown as Record<string, unknown>;
     pendingPrompt = optionalString(eventRecord.prompt);
+    if (pontiaDisabled) return { systemPrompt: typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "" };
     const currentSystemPrompt = typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
     try {
       const profilePrompt = await loadProfileSystemPrompt(env, fetchImpl);
@@ -312,6 +349,20 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       const loaded = await loadSessionContext(env);
       const logFile = loaded.logFile;
       let context: SessionContext | undefined;
+
+      const workspaceActive = await isActiveRegisteredWorkspace(env, fetchImpl, sessionDetails.clientCwd);
+      if (workspaceActive !== true) {
+        pontiaDisabled = true;
+        await logDiagnostic(logFile, {
+          level: "info",
+          code: workspaceActive === false ? "workspace_not_active" : "workspace_check_unavailable",
+          message: workspaceActive === false
+            ? "current pi workspace is not an active registered pontia workspace; pontia reporting disabled"
+            : "could not verify active registered pontia workspace; pontia reporting disabled",
+          details: { client_cwd: sessionDetails.clientCwd },
+        });
+        return;
+      }
 
       if (loaded.ok) {
         if (!sessionDetails.clientSessionKey) {
@@ -342,6 +393,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("session_shutdown", async (event) => {
+    if (pontiaDisabled) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
     if (reason !== "quit") return;
 
@@ -363,6 +415,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("agent_start", async (_event, ctx) => {
+    if (pontiaDisabled) return;
     try {
       const loaded = await contextLoader(env);
       let turnContext: TurnContext | undefined;

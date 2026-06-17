@@ -20,7 +20,9 @@ pi install -l ./clients/pi
 
 On `session_start`, the extension first tries the managed pre-bound runtime environment (`PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_INTERNAL_EVENT_URL`). If it is complete, the extension reports against that existing pontia session.
 
-When `PONTIA_SESSION_ID` is absent, the extension can bind a manually started pi TUI by calling the Internal runtime binding upsert API. Configure either `PONTIA_INTERNAL_BINDING_UPSERT_URL` directly or `PONTIA_INTERNAL_EVENT_URL` so the upsert URL can be derived by replacing `/events` with `/runtime-bindings/upsert`. The backend creates or reuses the pontia `session_id`; the extension only reports the real pi `client_session_key` from `ctx.sessionManager.getSessionId()`. If no Internal API URL is configured, the extension skips pontia reporting instead of guessing a default server address.
+On startup, the extension first verifies that the pi cwd is an active, explicitly registered pontia workspace through the External workspace API. If the workspace is missing, deleted, or pontia cannot be reached for this check, the extension disables pontia reporting for that pi process.
+
+When `PONTIA_SESSION_ID` is absent and the active workspace check passes, the extension can bind a manually started pi TUI by calling the Internal runtime binding upsert API. Configure either `PONTIA_INTERNAL_BINDING_UPSERT_URL` directly or `PONTIA_INTERNAL_EVENT_URL` so the upsert URL can be derived by replacing `/events` with `/runtime-bindings/upsert`. The backend creates or reuses the pontia `session_id`; the extension only reports the real pi `client_session_key` from `ctx.sessionManager.getSessionId()`. If no Internal API URL is configured, the extension skips pontia reporting instead of guessing a default server address.
 
 ## Runtime environment
 
