@@ -22,7 +22,7 @@ On `session_start`, the extension first tries the managed pre-bound runtime envi
 
 On startup, the extension first verifies that the pi cwd is an active, explicitly registered pontia workspace through the External workspace API. If the workspace is missing, deleted, or pontia cannot be reached for this check, the extension disables pontia reporting for that pi process.
 
-When `PONTIA_SESSION_ID` is absent and the active workspace check passes, the extension can bind a manually started pi TUI by calling the Internal runtime binding upsert API. Configure either `PONTIA_INTERNAL_BINDING_UPSERT_URL` directly or `PONTIA_INTERNAL_EVENT_URL` so the upsert URL can be derived by replacing `/events` with `/runtime-bindings/upsert`. The backend creates or reuses the pontia `session_id`; the extension only reports the real pi `client_session_key` from `ctx.sessionManager.getSessionId()`. If no Internal API URL is configured, the extension skips pontia reporting instead of guessing a default server address.
+When `PONTIA_SESSION_ID` is absent and the active workspace check passes, the extension defers binding a manually started pi TUI until the first real `agent_start`. This matches pi's behavior where a startup-only client session can be discarded when the user exits without sending a prompt, so pontia does not persist an empty session just because pi opened. On first turn, the extension calls the Internal runtime binding upsert API. Configure either `PONTIA_INTERNAL_BINDING_UPSERT_URL` directly or `PONTIA_INTERNAL_EVENT_URL` so the upsert URL can be derived by replacing `/events` with `/runtime-bindings/upsert`. The backend creates or reuses the pontia `session_id`; the extension only reports the real pi `client_session_key` from `ctx.sessionManager.getSessionId()`. If no Internal API URL is configured, the extension skips pontia reporting instead of guessing a default server address.
 
 ## Runtime environment
 
@@ -56,7 +56,7 @@ Expected `current-turn.json` for backend-delivered input:
 
 ## What the extension reports
 
-- On `session_start` with reason `startup`, it posts a one-time `session.ready` signal from `agent_client` for the pre-bound session with the current `runtime_instance_id` plus the real pi session identity from `ctx.sessionManager.getSessionId()` as `client_session_key`.
+- On `session_start` with reason `startup`, it posts a one-time `session.ready` signal from `agent_client` for pre-bound managed sessions with the current `runtime_instance_id` plus the real pi session identity from `ctx.sessionManager.getSessionId()` as `client_session_key`. Manual pi TUI sessions defer binding and `session.ready` until the first `agent_start`.
 - On `agent_start`, it reads the pending input context, generates a fresh pontia `turn_id`, posts `turn.started` with any `inbox_message_id` metadata, then consumes the pending context file so later manual TUI input is not attached to stale Web input.
 - On assistant message updates/end events, it collects assistant-visible text from pi lifecycle event payloads.
 - When pi exposes context usage through hook events, message usage, or `ctx.getContextUsage()`, it posts `session.context_usage_updated`; it does not parse session files or fabricate usage when pi does not provide it.

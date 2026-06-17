@@ -277,6 +277,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
   let boundSessionContext: SessionContext | undefined;
+  let deferredManualSessionDetails: Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd"> | undefined;
   let pontiaDisabled = false;
   let pendingRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let lastContextUsageJson: string | undefined;
@@ -346,6 +347,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
+      deferredManualSessionDetails = sessionDetails;
       const loaded = await loadSessionContext(env);
       const logFile = loaded.logFile;
       let context: SessionContext | undefined;
@@ -375,10 +377,14 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         }
         context = { ...loaded.context, ...sessionDetails };
       } else {
-        context = await bindManualSession(env, fetchImpl, sessionDetails);
+        await logDiagnostic(logFile, {
+          level: "info",
+          code: "manual_pi_binding_deferred",
+          message: "manual pi session binding deferred until first agent turn",
+        });
+        return;
       }
 
-      if (!context) return;
       boundSessionContext = context;
       readyReported = await makeReporter(logFile).report(context, buildSessionReadyEvent(context));
     } catch (error) {
@@ -423,15 +429,49 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       if (loaded.ok) {
         turnContext = loaded.context;
         logFile = loaded.logFile;
-      } else if (loaded.silent && boundSessionContext) {
-        turnContext = {
-          sessionId: boundSessionContext.sessionId,
-          runtimeInstanceId: boundSessionContext.runtimeInstanceId,
-          clientType: "pi",
-          internalEventUrl: boundSessionContext.internalEventUrl,
-          input: pendingPrompt,
-        };
+      } else if (loaded.silent) {
         logFile = loaded.logFile;
+        if (!boundSessionContext) {
+          const hookSessionDetails = piSessionDetailsFromHookContext(ctx);
+          const sessionDetails = hookSessionDetails.clientSessionKey ? hookSessionDetails : deferredManualSessionDetails;
+          if (!sessionDetails) {
+            activeTurn = undefined;
+            pendingPrompt = undefined;
+            return;
+          }
+          const workspaceActive = await isActiveRegisteredWorkspace(env, fetchImpl, sessionDetails.clientCwd);
+          if (workspaceActive !== true) {
+            pontiaDisabled = true;
+            await logDiagnostic(logFile, {
+              level: "info",
+              code: workspaceActive === false ? "workspace_not_active" : "workspace_check_unavailable",
+              message: workspaceActive === false
+                ? "current pi workspace is not an active registered pontia workspace; pontia reporting disabled"
+                : "could not verify active registered pontia workspace; pontia reporting disabled",
+              details: { client_cwd: sessionDetails.clientCwd },
+            });
+            activeTurn = undefined;
+            pendingPrompt = undefined;
+            return;
+          }
+          boundSessionContext = await bindManualSession(env, fetchImpl, sessionDetails);
+          if (boundSessionContext && !readyReported) {
+            readyReported = await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext));
+          }
+        }
+        if (boundSessionContext) {
+          turnContext = {
+            sessionId: boundSessionContext.sessionId,
+            runtimeInstanceId: boundSessionContext.runtimeInstanceId,
+            clientType: "pi",
+            internalEventUrl: boundSessionContext.internalEventUrl,
+            input: pendingPrompt,
+          };
+        } else {
+          activeTurn = undefined;
+          pendingPrompt = undefined;
+          return;
+        }
       } else {
         activeTurn = undefined;
         if (!loaded.silent && ctx?.hasUI) ctx.ui.notify(`pontia: ${loaded.reason}`, "warning");

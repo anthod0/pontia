@@ -143,34 +143,13 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test("session_start without managed runtime env binds through internal upsert and reports ready", async () => {
+  test("session_start without managed runtime env does not create a pontia session before first turn", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchImpl = vi.fn(async (url: string) => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      expect(url).toBe("http://localhost/internal/v1/runtime-bindings/upsert");
-      expect(JSON.parse(String(init?.body))).toMatchObject({
-        client_type: "pi",
-        client_session_key: "pi_session_manual",
-        client_session_file: "/tmp/pi/session.jsonl",
-        client_session_dir: "/tmp/pi",
-        client_cwd: workspace,
-        launch_cwd: workspace,
-        runtime_instance_id: expect.stringMatching(/^rtinst_/),
-        tmux: {
-          socket_path: "/tmp/tmux-1000/default",
-          pane_id: "%42",
-        },
-      });
-      return new Response(JSON.stringify({
-        session: { session_id: "sess_bound" },
-        runtime: {
-          runtime_instance_id: "rtinst_bound",
-          internal_event_url: "http://localhost/internal/v1/events",
-          current_turn_file: "/tmp/pontia/current-turn.json",
-        },
-      }), { status: 200 });
+      return new Response("unexpected", { status: 500 });
     });
     const { handlers, reported } = install({
       env: {
@@ -192,15 +171,8 @@ describe("pontia pi extension lifecycle", () => {
       },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
-    expect(reported[0]).toMatchObject({
-      session_id: "sess_bound",
-      payload: {
-        runtime_instance_id: "rtinst_bound",
-        client_session_key: "pi_session_manual",
-      },
-    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(reported).toEqual([]);
   });
 
   test("session_start skips manual binding when current workspace is not active", async () => {
@@ -257,7 +229,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("session_start without pontia env reads pi settings pontia config and binds through discovered backend", async () => {
+  test("session_start without pontia env reads pi settings pontia config but defers binding until first turn", async () => {
     const root = await tempDir();
     const workspace = await realpath(await tempDir());
     const settingsFile = join(root, ".pi", "agent", "settings.json");
@@ -267,26 +239,14 @@ describe("pontia pi extension lifecycle", () => {
     await writeFile(settingsFile, JSON.stringify({ pontia: { config: pontiaConfig } }));
     await writeFile(pontiaConfig, 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "stable-token"\n');
 
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchImpl = vi.fn(async (url: string) => {
       if (url === "http://127.0.0.1:18080/healthz") {
         return new Response("ok", { status: 200 });
       }
       if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      expect(url).toBe("http://127.0.0.1:18080/internal/v1/runtime-bindings/upsert");
-      expect(JSON.parse(String(init?.body))).toMatchObject({
-        client_type: "pi",
-        client_session_key: "pi_session_discovered",
-        client_cwd: workspace,
-      });
-      return new Response(JSON.stringify({
-        session: { session_id: "sess_discovered" },
-        runtime: {
-          runtime_instance_id: "rtinst_discovered",
-          internal_event_url: "http://127.0.0.1:18080/internal/v1/events",
-        },
-      }), { status: 200 });
+      return new Response("unexpected", { status: 500 });
     });
     const { handlers, reported } = install({ env: { HOME: root }, fetch: fetchImpl as any });
 
@@ -294,15 +254,11 @@ describe("pontia pi extension lifecycle", () => {
       sessionManager: { getSessionId: () => "pi_session_discovered", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
-    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
-    expect(reported[0]).toMatchObject({
-      session_id: "sess_discovered",
-      payload: { runtime_instance_id: "rtinst_discovered", client_session_key: "pi_session_discovered" },
-    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(reported).toEqual([]);
   });
 
-  test("manual session binding omits tmux when pane identity is incomplete", async () => {
+  test("manual session binding on first turn omits tmux when pane identity is incomplete", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "http://localhost/external/v1/workspaces") {
@@ -325,13 +281,24 @@ describe("pontia pi extension lifecycle", () => {
         TMUX: "/tmp/tmux-1000/default,2071,502",
       },
       fetch: fetchImpl as any,
+      loadContext: vi.fn(async () => ({
+        ok: false as const,
+        reason: "current-turn file is missing or unreadable: fallback/current-turn.json",
+        contextFile: "fallback/current-turn.json",
+        logFile: "fallback/pi-hook.log",
+        silent: true,
+      })),
     });
 
     await handlers.session_start({ reason: "startup" }, {
       sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => workspace },
     });
+    await handlers.before_agent_start({ prompt: "typed in tui", systemPrompt: "Base prompt" }, {});
+    await handlers.agent_start({}, {
+      sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => workspace },
+    });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
   test("agent_start consumes backend-delivered current-turn context after reporting started", async () => {
