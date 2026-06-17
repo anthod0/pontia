@@ -273,6 +273,7 @@ async fn pi_adapter_event_outbox_projects_output_and_completed() {
     )
     .await;
     assert!(inbox["turn_id"].is_null());
+    let message_id = inbox["message_id"].as_str().expect("inbox message id");
     let turn_id = "turn_plugin_outbox_completed";
     let (started_status, started_body) = request_json(
         state.clone(),
@@ -287,11 +288,24 @@ async fn pi_adapter_event_outbox_projects_output_and_completed() {
             "type": "turn.started",
             "time": "2026-05-08T12:01:00Z",
             "seq": null,
-            "payload": { "runtime_instance_id": metadata["runtime_instance_id"] }
+            "payload": {
+                "runtime_instance_id": metadata["runtime_instance_id"],
+                "metadata": { "inbox_message_id": message_id }
+            }
         })),
     )
     .await;
     assert_eq!(started_status, StatusCode::OK, "{started_body:?}");
+
+    let (inbox_status, inbox_body) = request_json(
+        state.clone(),
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(inbox_status, StatusCode::OK, "{inbox_body:?}");
+    assert_eq!(inbox_body["data"]["inbox_message"]["turn_id"], turn_id);
 
     let adapter_event_log = metadata["adapter_event_log"]
         .as_str()
@@ -331,6 +345,7 @@ async fn pi_adapter_event_outbox_projects_output_and_completed() {
     assert_eq!(turn_status, StatusCode::OK, "{turn_body:?}");
     let turn = &turn_body["data"]["turn"];
     assert_eq!(turn["state"], "completed");
+    assert_eq!(turn["metadata"]["inbox_message_id"], message_id);
     assert_eq!(turn["output"]["summary"], "partial output");
     assert!(turn["completed_at"].as_str().is_some());
 
@@ -450,6 +465,7 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
         "pi plugin owns turn_id generation"
     );
     assert_eq!(context["input"], "write context for hook");
+    assert_eq!(context["inbox_message_id"], inbox["message_id"]);
     assert_eq!(context["client_type"], "pi");
     assert_eq!(
         context["runtime_instance_id"],

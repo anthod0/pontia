@@ -330,6 +330,18 @@ impl ProjectionState {
         {
             turn.metadata = metadata.clone();
         }
+        if event.event_type == EventType::TurnStarted
+            && let Some(metadata) = event.payload.get("metadata").and_then(Value::as_object)
+        {
+            if !turn.metadata.is_object() {
+                turn.metadata = json!({});
+            }
+            if let Some(turn_metadata) = turn.metadata.as_object_mut() {
+                for (key, value) in metadata {
+                    turn_metadata.insert(key.clone(), value.clone());
+                }
+            }
+        }
         turn.state_version += 1;
 
         let session = self

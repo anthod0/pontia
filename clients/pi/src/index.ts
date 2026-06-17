@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { unlink } from "node:fs/promises";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
@@ -394,7 +395,10 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         output: "",
         ended: false,
       };
-      await reporter.report(activeTurn.context, buildTurnStartedEvent(activeTurn.context));
+      const startedReported = await reporter.report(activeTurn.context, buildTurnStartedEvent(activeTurn.context));
+      if (startedReported && loaded.ok) {
+        await unlink(loaded.contextFile).catch(() => undefined);
+      }
     } catch (error) {
       pendingPrompt = undefined;
       activeTurn = undefined;

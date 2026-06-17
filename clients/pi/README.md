@@ -43,18 +43,19 @@ Expected `current-turn.json` for backend-delivered input:
 {
   "session_id": "sess_xxx",
   "input": "user task",
+  "inbox_message_id": "msg_xxx",
   "client_type": "pi",
   "runtime_instance_id": "rtinst_xxx",
   "internal_event_url": "http://127.0.0.1:8080/internal/v1/events"
 }
 ```
 
-`session_id`, `runtime_instance_id`, and `client_type: "pi"` are required. `turn_id` is intentionally omitted for pi: the plugin generates the authoritative pontia turn id when pi reports a real `agent_start`. `PONTIA_INTERNAL_EVENT_URL` and `PONTIA_RUNTIME_INSTANCE_ID` override file values when present.
+`session_id`, `runtime_instance_id`, and `client_type: "pi"` are required. `inbox_message_id` is optional and is used to link backend-delivered input to the real turn after `agent_start`. `turn_id` is intentionally omitted for pi: the plugin generates the authoritative pontia turn id when pi reports a real `agent_start`. `PONTIA_INTERNAL_EVENT_URL` and `PONTIA_RUNTIME_INSTANCE_ID` override file values when present.
 
 ## What the extension reports
 
 - On `session_start` with reason `startup`, it posts a one-time `session.ready` signal from `agent_client` for the pre-bound session with the current `runtime_instance_id` plus the real pi session identity from `ctx.sessionManager.getSessionId()` as `client_session_key`.
-- On `agent_start`, it reads the pending input context, generates a fresh pontia `turn_id`, and posts `turn.started`.
+- On `agent_start`, it reads the pending input context, generates a fresh pontia `turn_id`, posts `turn.started` with any `inbox_message_id` metadata, then consumes the pending context file so later manual TUI input is not attached to stale Web input.
 - On assistant message updates/end events, it collects assistant-visible text from pi lifecycle event payloads.
 - When pi exposes context usage through hook events, message usage, or `ctx.getContextUsage()`, it posts `session.context_usage_updated`; it does not parse session files or fabricate usage when pi does not provide it.
 - On `agent_end`, it posts `turn.output` when text was collected, then posts `turn.completed` for the plugin-generated turn id.

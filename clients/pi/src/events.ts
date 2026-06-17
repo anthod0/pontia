@@ -288,12 +288,16 @@ export function contextUsageFromPiHook(event: unknown, ctx?: unknown): ContextUs
 }
 
 export function buildTurnStartedEvent(context: ActiveTurnContext): InternalEvent {
+  const payload: Record<string, unknown> = {
+    runtime_instance_id: context.runtimeInstanceId,
+    input: context.input ? { summary: context.input } : {},
+  };
+  if (context.inboxMessageId) {
+    payload.metadata = { inbox_message_id: context.inboxMessageId };
+  }
   return {
     ...baseAdapterTurnEvent(context, "turn.started"),
-    payload: {
-      runtime_instance_id: context.runtimeInstanceId,
-      input: context.input ? { summary: context.input } : {},
-    },
+    payload,
   };
 }
 

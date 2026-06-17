@@ -345,6 +345,9 @@ impl InboxCommandService {
         let input: String = row.try_get("input_summary")?;
         let metadata: String = row.try_get("metadata")?;
         let mut metadata: Value = serde_json::from_str(&metadata)?;
+        if !metadata.is_object() {
+            metadata = json!({});
+        }
         if let Value::Object(ref mut object) = metadata {
             object.insert(
                 "inbox_message_id".to_string(),

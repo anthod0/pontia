@@ -91,6 +91,7 @@ impl TurnCommandService {
                     &binding_metadata,
                     &agent_input,
                     &session.client_type,
+                    Some(&metadata),
                 )?;
             }
             self.runtime.dispatch_tui_turn(
@@ -145,6 +146,7 @@ impl TurnCommandService {
                     &binding_metadata,
                     &agent_input,
                     &session.client_type,
+                    Some(&metadata),
                 )?;
             }
             self.runtime.submit_input(agent_input.clone())?;
@@ -183,6 +185,7 @@ impl TurnCommandService {
                                     &binding_metadata,
                                     &agent_input,
                                     &session.client_type,
+                                    Some(&metadata),
                                 )?;
                             }
                             Ok(())
@@ -314,6 +317,7 @@ pub(crate) fn write_client_current_turn_context(
     metadata: &Value,
     input: &AgentInput,
     client_type: &str,
+    turn_metadata: Option<&Value>,
 ) -> Result<()> {
     let current_turn_file = metadata["current_turn_file"]
         .as_str()
@@ -350,6 +354,12 @@ pub(crate) fn write_client_current_turn_context(
     });
     if client_type != "pi" {
         context["turn_id"] = json!(input.turn_id);
+    }
+    if let Some(inbox_message_id) = turn_metadata
+        .and_then(|metadata| metadata.get("inbox_message_id"))
+        .and_then(Value::as_str)
+    {
+        context["inbox_message_id"] = json!(inbox_message_id);
     }
     std::fs::write(current_turn_file, serde_json::to_vec_pretty(&context)?)?;
     Ok(())
@@ -435,6 +445,7 @@ mod tests {
             }),
             &input,
             "pi",
+            None,
         )
         .expect("write context");
 

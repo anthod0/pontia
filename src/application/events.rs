@@ -140,6 +140,8 @@ impl EventIngestService {
 
         tx.commit().await?;
 
+        self.link_started_turn_to_inbox_message(&event).await?;
+
         DagRunResultService::new(self.pool.clone())
             .sync_from_turn_event(&event)
             .await?;
@@ -164,6 +166,36 @@ impl EventIngestService {
             turn_id: event.turn_id,
             state_version,
         })
+    }
+
+    async fn link_started_turn_to_inbox_message(&self, event: &DomainEvent) -> Result<()> {
+        if event.event_type != EventType::TurnStarted {
+            return Ok(());
+        }
+        let Some(turn_id) = event.turn_id.as_deref() else {
+            return Ok(());
+        };
+        let inbox_message_id = event
+            .payload
+            .pointer("/metadata/inbox_message_id")
+            .or_else(|| event.payload.pointer("/input/inbox_message_id"))
+            .and_then(Value::as_str);
+        let Some(inbox_message_id) = inbox_message_id else {
+            return Ok(());
+        };
+
+        sqlx::query(
+            r#"UPDATE inbox_messages
+               SET turn_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE session_id = ? AND message_id = ? AND turn_id IS NULL"#,
+        )
+        .bind(turn_id)
+        .bind(&event.session_id)
+        .bind(inbox_message_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     pub async fn get_session(&self, session_id: &str) -> Result<Option<SessionProjection>> {

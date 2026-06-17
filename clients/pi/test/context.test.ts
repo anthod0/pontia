@@ -131,6 +131,7 @@ describe("loadTurnContext", () => {
       JSON.stringify({
         session_id: "sess_3",
         input: "typed in web ui",
+        inbox_message_id: "msg_3",
         client_type: "pi",
         runtime_instance_id: "rtinst_file_3",
         internal_event_url: "http://from-file/internal/v1/events",
@@ -145,6 +146,7 @@ describe("loadTurnContext", () => {
       sessionId: "sess_3",
       turnId: undefined,
       input: "typed in web ui",
+      inboxMessageId: "msg_3",
       runtimeInstanceId: "rtinst_file_3",
     });
   });

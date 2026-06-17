@@ -8,6 +8,7 @@ export interface TurnContext {
   turnId?: string;
   runtimeInstanceId: string;
   input?: string;
+  inboxMessageId?: string;
   clientType: "pi";
   internalEventUrl: string;
 }
@@ -93,6 +94,7 @@ export async function loadTurnContext(env: EnvLike = process.env): Promise<LoadT
   const internalEventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL) ?? optionalString(record?.internal_event_url);
   const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? optionalString(record?.runtime_instance_id);
   const input = optionalString(record?.input);
+  const inboxMessageId = optionalString(record?.inbox_message_id);
 
   if (!sessionId) errors.push("session_id is required");
   if (clientType !== "pi") errors.push("client_type must be pi");
@@ -119,6 +121,7 @@ export async function loadTurnContext(env: EnvLike = process.env): Promise<LoadT
       turnId,
       runtimeInstanceId: runtimeInstanceId!,
       input,
+      inboxMessageId,
       clientType: "pi",
       internalEventUrl: internalEventUrl!,
     },

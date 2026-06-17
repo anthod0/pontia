@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
-import type { TurnContext } from "../src/context.js";
+import { loadTurnContext, type TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
 
 interface HandlerMap {
@@ -215,6 +215,33 @@ describe("pontia pi extension lifecycle", () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test("agent_start consumes backend-delivered current-turn context after reporting started", async () => {
+    const dir = await tempDir();
+    const contextFile = join(dir, "current-turn.json");
+    await writeFile(contextFile, JSON.stringify({
+      session_id: "sess_consumed",
+      input: "from web",
+      inbox_message_id: "msg_consumed",
+      client_type: "pi",
+      runtime_instance_id: "rtinst_consumed",
+      internal_event_url: "http://localhost/internal/v1/events",
+    }));
+
+    const { handlers, reported } = install({
+      env: { PONTIA_CURRENT_TURN_FILE: contextFile, PONTIA_PI_HOOK_LOG: join(dir, "hook.log") },
+      loadContext: loadTurnContext,
+    });
+
+    await handlers.agent_start({}, {});
+
+    expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_consumed",
+      payload: { metadata: { inbox_message_id: "msg_consumed" } },
+    });
+    await expect(access(contextFile)).rejects.toThrow();
   });
 
   test("manual tui agent_start uses the bound session when current-turn context is absent", async () => {

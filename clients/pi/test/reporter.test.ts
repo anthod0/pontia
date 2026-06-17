@@ -27,7 +27,7 @@ const context = {
 
 describe("event builders", () => {
   test("builds turn.started payload shape", () => {
-    const event = buildTurnStartedEvent(context);
+    const event = buildTurnStartedEvent({ ...context, input: "from web", inboxMessageId: "msg_1" });
 
     expect(event.event_id).toMatch(/^evt_/);
     expect(event).toMatchObject({
@@ -37,7 +37,11 @@ describe("event builders", () => {
       client_type: "pi",
       type: "turn.started",
       seq: null,
-      payload: { runtime_instance_id: "rtinst_1", input: {} },
+      payload: {
+        runtime_instance_id: "rtinst_1",
+        input: { summary: "from web" },
+        metadata: { inbox_message_id: "msg_1" },
+      },
     });
     expect(new Date(event.time).toISOString()).toBe(event.time);
   });

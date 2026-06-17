@@ -21,7 +21,7 @@ impl SessionCommandService {
         };
         let behavior = GenericTestAdapter::behavior();
         if behavior.write_current_turn_context {
-            write_client_current_turn_context(&runtime.metadata, &agent_input, client_type)?;
+            write_client_current_turn_context(&runtime.metadata, &agent_input, client_type, None)?;
         }
         self.runtime.submit_input(agent_input)?;
         if behavior.auto_start_turn {
@@ -73,6 +73,7 @@ impl SessionCommandService {
                         &runtime.metadata,
                         &agent_input,
                         client_type,
+                        None,
                     )?;
                 }
                 Ok(())
