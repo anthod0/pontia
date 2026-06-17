@@ -21,7 +21,7 @@
     { label: 'New Chat', path: '/chat', icon: SquarePen },
   ]
 
-  const recentSessionLimit = 8
+  const recentSessionLimit = 50
 
   const settingsSections = [
     { label: 'Common', path: '/settings/common' },
@@ -164,9 +164,9 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
 
-    <Sidebar.Group>
+    <Sidebar.Group class="min-h-0 flex-1">
       <Sidebar.GroupLabel>Recent Sessions</Sidebar.GroupLabel>
-      <Sidebar.GroupContent>
+      <Sidebar.GroupContent class="no-scrollbar min-h-0 overflow-y-auto pr-1">
         <Sidebar.Menu>
           {#if $sessionsLoading && !recentSessions.length}
             <Sidebar.MenuSkeleton />
@@ -174,13 +174,14 @@
           {:else if recentSessions.length}
             {#each recentSessions as session}
               <Sidebar.MenuItem>
-                <Sidebar.MenuButton isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
+                <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-14" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
                   <span class="line-clamp-1">{sessionChatTitle(session)}</span>
                   {#if isSessionVisibleState(session.state)}
-                    <span class={`ml-auto size-2 shrink-0 rounded-full ${sessionStateDotClass(session.state)} group-hover/menu-item:opacity-0 group-focus-within/menu-item:opacity-0 group-data-[collapsible=icon]:hidden`} aria-label={`${session.state} session`}></span>
+                    <span class={`absolute right-2 top-1/2 size-2 -translate-y-1/2 rounded-full ${sessionStateDotClass(session.state)} group-data-[collapsible=icon]:hidden`} aria-label={`${session.state} session`}></span>
                   {/if}
                 </Sidebar.MenuButton>
                 <Sidebar.MenuAction
+                  class="right-10"
                   showOnHover
                   aria-label={`Rename session ${sessionChatTitle(session)}`}
                   title="Rename session"

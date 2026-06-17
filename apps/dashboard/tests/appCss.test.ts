@@ -16,3 +16,11 @@ test('defines subtle themed global scrollbar styling', () => {
   expect(appCss).toContain('::-webkit-scrollbar-thumb:hover');
   expect(appCss).toContain('--scrollbar-thumb: color-mix(in oklch, var(--border) 75%, transparent)');
 });
+
+test('defines a reusable no-scrollbar utility for scrollable sidebar regions', () => {
+  expect(appCss).toContain('.no-scrollbar {');
+  expect(appCss).toContain('scrollbar-width: none');
+  expect(appCss).toContain('-ms-overflow-style: none');
+  expect(appCss).toContain('.no-scrollbar::-webkit-scrollbar');
+  expect(appCss).toContain('display: none');
+});

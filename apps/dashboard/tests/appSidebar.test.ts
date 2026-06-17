@@ -22,6 +22,21 @@ test('shows a semantic status dot for non-exited sidebar sessions instead of a s
   expect(appSidebarSource).toContain("return state !== 'exited'");
 });
 
+test('keeps the session status dot visible beside the hover rename action', () => {
+  expect(appSidebarSource).toContain('class="group-has-data-[sidebar=menu-action]/menu-item:pr-14"');
+  expect(appSidebarSource).toContain('absolute right-2 top-1/2 size-2 -translate-y-1/2');
+  expect(appSidebarSource).toContain('class="right-10"');
+  expect(appSidebarSource).not.toContain('group-hover/menu-item:opacity-0');
+  expect(appSidebarSource).not.toContain('group-focus-within/menu-item:opacity-0');
+});
+
+test('allows more recent sessions while keeping the recent sessions area scrollable', () => {
+  expect(appSidebarSource).toContain('const recentSessionLimit = 50');
+  expect(appSidebarSource).toContain("visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit)");
+  expect(appSidebarSource).toContain('<Sidebar.Group class="min-h-0 flex-1">');
+  expect(appSidebarSource).toContain('<Sidebar.GroupContent class="no-scrollbar min-h-0 overflow-y-auto pr-1">');
+});
+
 test('only marks New Chat active on the chat index route', () => {
   expect(appSidebarSource).toContain("if (path === '/chat') return currentPath === '/chat'");
   expect(appSidebarSource).not.toContain("if (path === '/chat') return currentPath === '/chat' || currentPath.startsWith('/chat/')");
