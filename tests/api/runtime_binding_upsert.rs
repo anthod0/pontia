@@ -146,6 +146,10 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     assert_eq!(body["runtime"]["capabilities"]["accept_task"], true);
     assert_eq!(body["runtime"]["capabilities"]["interrupt"], true);
     assert_eq!(body["runtime"]["capabilities"]["stream_output"], true);
+    assert_eq!(
+        body["runtime"]["capabilities"]["context_usage"],
+        "estimated"
+    );
     assert_eq!(body["runtime"]["capabilities"]["report_turn_started"], true);
     assert_eq!(
         body["runtime"]["capabilities"]["report_turn_finished"],
@@ -175,6 +179,7 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     assert_eq!(metadata["client_session_key"], "pi_session_123");
     assert_eq!(metadata["tmux"]["session_name"], "dev");
     assert_eq!(metadata["capabilities"]["accept_task"], true);
+    assert_eq!(metadata["capabilities"]["context_usage"], "estimated");
 
     let binding_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings WHERE session_id = ? AND client_type = 'pi' AND client_session_key = 'pi_session_123'")
         .bind(session_id)
@@ -246,6 +251,10 @@ async fn upsert_non_tmux_pi_session_is_observable_but_not_web_writable() {
     assert_eq!(body["runtime"]["capabilities"]["accept_task"], false);
     assert_eq!(body["runtime"]["capabilities"]["interrupt"], false);
     assert_eq!(body["runtime"]["capabilities"]["stream_output"], true);
+    assert_eq!(
+        body["runtime"]["capabilities"]["context_usage"],
+        "estimated"
+    );
     assert_eq!(body["runtime"]["capabilities"]["report_turn_started"], true);
     assert_eq!(
         body["runtime"]["capabilities"]["report_turn_finished"],
@@ -262,6 +271,7 @@ async fn upsert_non_tmux_pi_session_is_observable_but_not_web_writable() {
     assert!(row.get::<Option<String>, _>("tmux_pane_id").is_none());
     let metadata: Value = serde_json::from_str(&row.get::<String, _>("metadata")).unwrap();
     assert_eq!(metadata["capabilities"]["accept_task"], false);
+    assert_eq!(metadata["capabilities"]["context_usage"], "estimated");
 }
 
 #[tokio::test]

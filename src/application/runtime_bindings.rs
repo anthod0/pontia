@@ -244,16 +244,12 @@ fn capabilities_for_tmux(tmux: Option<&RuntimeBindingTmuxRequest>) -> SessionCap
         non_empty(tmux.socket_path.as_deref()).is_some()
             && non_empty(tmux.pane_id.as_deref()).is_some()
     });
-    SessionCapabilities {
-        accept_task: writable,
-        report_turn_started: true,
-        report_turn_finished: true,
-        interrupt: writable,
-        stream_output: true,
-        heartbeat: false,
-        artifact_sources: true,
-        context_usage: ContextUsageCapability::Exact,
-    }
+    let mut capabilities: SessionCapabilities = agent_clients::get_client_spec("pi")
+        .map(|spec| spec.capabilities.clone().into())
+        .unwrap_or_default();
+    capabilities.accept_task = writable;
+    capabilities.interrupt = writable;
+    capabilities
 }
 
 fn binding_metadata(
