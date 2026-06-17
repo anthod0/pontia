@@ -29,31 +29,19 @@ test('idle thought summary collapses to a step count', () => {
     },
   });
 
-  expect(screen.getByRole('button', { name: 'View thought details' })).toHaveTextContent('Thought for 3 steps');
+  const button = screen.getByRole('button', { name: 'View thought details' });
+  const stepCount = screen.getByText('Thought for 3 steps');
+  const brainIcon = button.querySelector('svg');
+
+  expect(button).toHaveTextContent('Thought for 3 steps');
+  expect(button).toHaveClass('py-2.5');
+  expect(stepCount).toHaveClass('text-xs', 'leading-4');
+  expect(brainIcon).toHaveClass('size-5');
   expect(screen.queryByText('bash')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
 });
 
-test('busy thought summary shows the latest step with a loading icon', () => {
-  render(ThoughtSummary, {
-    props: {
-      steps: [
-        step({ id: 'thought-1', kind: 'thinking', title: 'Thinking', content: 'Planning changes' }),
-        step({ id: 'thought-2', kind: 'tool_call', title: 'bash', content: 'rg ThoughtSummary' }),
-        step({ id: 'thought-3', kind: 'tool_call', title: 'read', content: 'ThoughtSummary.svelte' }),
-      ],
-      active: true,
-    },
-  });
-
-  expect(screen.queryByText('Thought for 3 steps')).not.toBeInTheDocument();
-  expect(screen.getByLabelText('Thinking in progress')).toBeInTheDocument();
-  expect(screen.queryByText('Planning changes')).not.toBeInTheDocument();
-  expect(screen.queryByText('bash')).not.toBeInTheDocument();
-  expect(screen.getByText('read')).toBeInTheDocument();
-});
-
-test('busy thought summary top-aligns the loading icon with the recent steps', () => {
+test('busy thought summary shows the step count above the latest step with a loading icon', () => {
   render(ThoughtSummary, {
     props: {
       steps: [
@@ -66,8 +54,33 @@ test('busy thought summary top-aligns the loading icon with the recent steps', (
   });
 
   const loadingIcon = screen.getByLabelText('Thinking in progress');
-  expect(loadingIcon.parentElement).toHaveClass('items-start');
-  expect(loadingIcon.parentElement).not.toHaveClass('items-center');
+  const stepCount = screen.getByText('Thought for 3 steps');
+  const latestStep = screen.getByText('read');
+
+  expect(loadingIcon).toBeInTheDocument();
+  expect(stepCount).toHaveClass('text-xs');
+  expect(stepCount.compareDocumentPosition(latestStep) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByText('Planning changes')).not.toBeInTheDocument();
+  expect(screen.queryByText('bash')).not.toBeInTheDocument();
+});
+
+test('busy thought summary aligns the loading icon with the step count header', () => {
+  render(ThoughtSummary, {
+    props: {
+      steps: [
+        step({ id: 'thought-1', kind: 'thinking', title: 'Thinking', content: 'Planning changes' }),
+        step({ id: 'thought-2', kind: 'tool_call', title: 'bash', content: 'rg ThoughtSummary' }),
+        step({ id: 'thought-3', kind: 'tool_call', title: 'read', content: 'ThoughtSummary.svelte' }),
+      ],
+      active: true,
+    },
+  });
+
+  const loadingIcon = screen.getByLabelText('Thinking in progress');
+  const header = loadingIcon.parentElement;
+
+  expect(header).toHaveClass('items-center');
+  expect(header).toHaveTextContent('Thought for 3 steps');
 });
 
 test('busy thought summary uses the blocks wave spinner for the main loading icon', () => {

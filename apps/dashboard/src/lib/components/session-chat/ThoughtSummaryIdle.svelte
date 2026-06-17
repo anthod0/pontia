@@ -15,12 +15,12 @@
 <button
   type="button"
   class={cn(
-    'not-prose inline-flex items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+    'not-prose inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
     className,
   )}
   aria-label="View thought details"
   onclick={onOpen}
 >
-  <Brain class="size-4 shrink-0" aria-hidden="true" />
-  <span>{label}</span>
+  <Brain class="size-5 shrink-0" aria-hidden="true" />
+  <span class="text-xs leading-4">{label}</span>
 </button>
