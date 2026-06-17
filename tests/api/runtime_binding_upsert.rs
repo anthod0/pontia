@@ -190,6 +190,46 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
 }
 
 #[tokio::test]
+async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+    let tmux_session = format!("pontia_manual_mark_{}", std::process::id());
+    let _guard = TmuxSessionGuard(tmux_session.clone());
+    let status = Command::new("tmux")
+        .args(["new-session", "-d", "-s", &tmux_session, "sh"])
+        .stderr(Stdio::null())
+        .status()
+        .expect("spawn tmux");
+    assert!(status.success(), "tmux session should start");
+    let socket_path = tmux_display(&tmux_session, "#{socket_path}");
+    let pane_id = tmux_display(&tmux_session, "#{pane_id}");
+
+    let (status, body) = post_upsert(
+        state.clone(),
+        upsert_body_with_tmux(
+            &workspace,
+            &socket_path,
+            Some(&pane_id),
+            Some(&tmux_session),
+        ),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let session_id = body["session"]["session_id"].as_str().expect("session_id");
+    assert_eq!(tmux_display(&pane_id, "#{@pontia_session_id}"), session_id);
+    assert_eq!(
+        tmux_display(&pane_id, "#{@pontia_runtime_instance_id}"),
+        "rtinst_first"
+    );
+}
+
+#[tokio::test]
 async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fields() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");

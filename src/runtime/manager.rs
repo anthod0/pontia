@@ -225,6 +225,16 @@ impl GenericRuntimeManager {
         tmux::send_keys(socket_path, pane_id, keys)
     }
 
+    pub fn mark_tmux_pane_for_session(
+        &self,
+        socket_path: &str,
+        pane_id: &str,
+        session_id: &str,
+        runtime_instance_id: &str,
+    ) -> Result<()> {
+        tmux::mark_pontia_pane(socket_path, pane_id, session_id, runtime_instance_id)
+    }
+
     pub fn kill_tmux_pane(&self, socket_path: &str, pane_id: &str) -> Result<()> {
         tmux::kill_pane(socket_path, pane_id)
     }

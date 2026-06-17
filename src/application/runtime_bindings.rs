@@ -1,5 +1,5 @@
 use super::*;
-use crate::runtime::configured_internal_event_url;
+use crate::runtime::{GenericRuntimeManager, configured_internal_event_url};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct RuntimeBindingUpsertRequest {
@@ -127,11 +127,22 @@ impl RuntimeBindingUpsertService {
         .bind(non_empty(request.start_command.as_deref()))
         .bind(&workspace.canonical_path)
         .bind(&last_seen_at)
-        .bind(tmux_socket_path)
-        .bind(tmux_pane_id)
+        .bind(tmux_socket_path.as_deref())
+        .bind(tmux_pane_id.as_deref())
         .bind(serde_json::to_string(&metadata)?)
         .execute(&self.pool)
         .await?;
+
+        if let (Some(socket_path), Some(pane_id)) =
+            (tmux_socket_path.as_deref(), tmux_pane_id.as_deref())
+        {
+            let _ = GenericRuntimeManager.mark_tmux_pane_for_session(
+                socket_path,
+                pane_id,
+                &session_id,
+                &request.runtime_instance_id,
+            );
+        }
 
         AgentBindingService::new(self.pool.clone())
             .upsert_binding(UpsertAgentBindingRequest {
