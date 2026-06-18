@@ -114,6 +114,15 @@ impl SqliteSessionRepository {
         .await?)
     }
 
+    pub async fn exists(&self, session_id: &str) -> Result<bool> {
+        let exists: i64 =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?)")
+                .bind(session_id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(exists != 0)
+    }
+
     pub async fn get_runtime_binding_metadata(
         &self,
         session_id: &str,

@@ -2,6 +2,7 @@ use super::*;
 use pontia_storage_sqlite::repositories::{
     events::{EventInsertRecord, SqliteEventRepository},
     inbox::SqliteInboxRepository,
+    runtime_bindings::SqliteRuntimeBindingRepository,
     sessions::{SessionProjectionUpsertRecord, SqliteSessionRepository},
     turns::{SqliteTurnRepository, TurnProjectionUpsertRecord},
 };
@@ -224,6 +225,67 @@ impl EventIngestService {
             .await
     }
 
+    pub async fn volatile_state_version(&self, session_id: &str) -> Result<i64> {
+        SqliteEventRepository::new(self.pool.clone())
+            .session_event_count(session_id)
+            .await
+    }
+
+    pub async fn ensure_confirmed_event_matches_session_boundary(
+        &self,
+        event: &DomainEvent,
+    ) -> Result<()> {
+        if !is_confirmed_runtime_source(event.source)
+            || event.event_type == EventType::SessionCreated
+        {
+            return Ok(());
+        }
+
+        let session_exists = SqliteSessionRepository::new(self.pool.clone())
+            .exists(&event.session_id)
+            .await?;
+        if !session_exists {
+            return Err(Error::Domain(format!(
+                "{} from {} references unknown session {}",
+                event.event_type, event.source, event.session_id
+            )));
+        }
+
+        let expected_runtime_instance_id = SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .runtime_instance_id(&event.session_id)
+            .await?;
+
+        let Some(expected_runtime_instance_id) = expected_runtime_instance_id else {
+            return Ok(());
+        };
+
+        let provided_runtime_instance_id = event
+            .payload
+            .get("runtime_instance_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+
+        if runtime_instance_id_required_for_event(event.event_type)
+            || event.payload.get("runtime_instance_id").is_some()
+        {
+            let Some(provided_runtime_instance_id) = provided_runtime_instance_id else {
+                return Err(Error::Domain(format!(
+                    "{} from {} requires payload.runtime_instance_id for runtime-bound session {}",
+                    event.event_type, event.source, event.session_id
+                )));
+            };
+            if provided_runtime_instance_id != expected_runtime_instance_id {
+                return Err(Error::Domain(format!(
+                    "payload.runtime_instance_id does not match session {} runtime binding",
+                    event.session_id
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
     async fn existing_event_state_version(
         &self,
         event_id: &str,
@@ -249,6 +311,17 @@ impl EventIngestService {
 
         rows.into_iter().map(row_to_turn).collect()
     }
+}
+
+fn is_confirmed_runtime_source(source: EventSource) -> bool {
+    matches!(source, EventSource::AgentAdapter | EventSource::AgentClient)
+}
+
+fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {
+    matches!(
+        event_type,
+        EventType::SessionReady | EventType::SessionExited | EventType::TurnStarted
+    )
 }
 
 pub(crate) fn nested_string(value: &Value, path: &[&str]) -> Option<String> {

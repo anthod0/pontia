@@ -90,6 +90,16 @@ impl SqliteRuntimeBindingRepository {
         )
     }
 
+    pub async fn runtime_instance_id(&self, session_id: &str) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar::<_, Option<String>>(
+            "SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten())
+    }
+
     pub async fn tmux_pane_binding(
         &self,
         session_id: &str,

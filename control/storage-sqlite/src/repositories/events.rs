@@ -85,6 +85,15 @@ impl SqliteEventRepository {
         )
     }
 
+    pub async fn session_event_count(&self, session_id: &str) -> Result<i64> {
+        Ok(
+            sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_one(&self.pool)
+                .await?,
+        )
+    }
+
     pub async fn list_domain_event_rows(&self, session_id: &str) -> Result<Vec<DomainEventRow>> {
         Ok(sqlx::query_as::<_, DomainEventRow>(
             r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload
@@ -271,5 +280,44 @@ impl SqliteEventRepository {
         .bind(client_type)
         .fetch_all(&self.pool)
         .await?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{connect_sqlite, run_migrations};
+
+    async fn pool() -> sqlx::SqlitePool {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db_path = dir.path().join("events.db");
+        let _kept_dir = dir.keep();
+        let database_url = format!("sqlite://{}", db_path.display());
+        let db = connect_sqlite(&database_url).await.expect("connect");
+        run_migrations(&db).await.expect("migrate");
+        db
+    }
+
+    #[tokio::test]
+    async fn counts_persisted_events_for_session_without_transaction() {
+        let pool = pool().await;
+        sqlx::query(
+            r#"INSERT INTO events
+               (event_id, session_id, source, client_type, event_type, occurred_at, payload)
+               VALUES
+               ('evt_1', 'sess_1', 'external_api', 'pi', 'session.created', '2026-01-01T00:00:00Z', '{}'),
+               ('evt_2', 'sess_1', 'external_api', 'pi', 'session.started', '2026-01-01T00:00:01Z', '{}'),
+               ('evt_3', 'sess_2', 'external_api', 'pi', 'session.created', '2026-01-01T00:00:02Z', '{}')"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let count = SqliteEventRepository::new(pool)
+            .session_event_count("sess_1")
+            .await
+            .unwrap();
+
+        assert_eq!(count, 2);
     }
 }

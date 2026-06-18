@@ -63,16 +63,14 @@ pub async fn post_event(
 ) -> Result<Json<InternalEventResponse>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let event = request.into_domain_event()?;
-    ensure_confirmed_event_matches_session_boundary(&state, &event).await?;
     let service = EventIngestService::new(state.db());
+    service
+        .ensure_confirmed_event_matches_session_boundary(&event)
+        .await
+        .map_err(domain_error_as_invalid_request)?;
 
     if event.event_type == EventType::SessionMessageUpdated {
-        let state_version: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id = ?")
-                .bind(&event.session_id)
-                .fetch_one(&state.db())
-                .await
-                .map_err(Error::from)?;
+        let state_version = service.volatile_state_version(&event.session_id).await?;
         state.volatile_events().publish(event.clone());
         return Ok(Json(InternalEventResponse {
             accepted: true,
@@ -108,74 +106,11 @@ pub async fn post_event(
     }))
 }
 
-async fn ensure_confirmed_event_matches_session_boundary(
-    state: &AppState,
-    event: &DomainEvent,
-) -> Result<(), ApiError> {
-    if !is_confirmed_runtime_source(event.source) || event.event_type == EventType::SessionCreated {
-        return Ok(());
+fn domain_error_as_invalid_request(error: Error) -> ApiError {
+    match error {
+        Error::Domain(message) => ApiError::invalid_request(message),
+        other => ApiError::from(other),
     }
-
-    let exists: i64 =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?)")
-            .bind(&event.session_id)
-            .fetch_one(&state.db())
-            .await
-            .map_err(Error::from)?;
-    if exists == 0 {
-        return Err(ApiError::invalid_request(format!(
-            "{} from {} references unknown session {}",
-            event.event_type, event.source, event.session_id
-        )));
-    }
-
-    let expected_runtime_instance_id: Option<String> =
-        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
-            .bind(&event.session_id)
-            .fetch_optional(&state.db())
-            .await
-            .map_err(Error::from)?;
-
-    let Some(expected_runtime_instance_id) = expected_runtime_instance_id else {
-        return Ok(());
-    };
-
-    let provided_runtime_instance_id = event
-        .payload
-        .get("runtime_instance_id")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-
-    if runtime_instance_id_required_for_event(event.event_type)
-        || event.payload.get("runtime_instance_id").is_some()
-    {
-        let Some(provided_runtime_instance_id) = provided_runtime_instance_id else {
-            return Err(ApiError::invalid_request(format!(
-                "{} from {} requires payload.runtime_instance_id for runtime-bound session {}",
-                event.event_type, event.source, event.session_id
-            )));
-        };
-        if provided_runtime_instance_id != expected_runtime_instance_id {
-            return Err(ApiError::invalid_request(format!(
-                "payload.runtime_instance_id does not match session {} runtime binding",
-                event.session_id
-            )));
-        }
-    }
-
-    Ok(())
-}
-
-fn is_confirmed_runtime_source(source: EventSource) -> bool {
-    matches!(source, EventSource::AgentAdapter | EventSource::AgentClient)
-}
-
-fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {
-    matches!(
-        event_type,
-        EventType::SessionReady | EventType::SessionExited | EventType::TurnStarted
-    )
 }
 
 fn client_session_identity_required_on_ready(client_type: &str) -> bool {
