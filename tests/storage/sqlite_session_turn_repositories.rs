@@ -52,6 +52,78 @@ async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_
 }
 
 #[tokio::test]
+async fn sqlite_session_repository_finds_active_session_handle_conflicts_only() {
+    let pool = test_pool().await;
+    sqlx::query(
+        r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
+           VALUES ('ws_1', '/one', '/one', 'one'), ('ws_2', '/two', '/two', 'two')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert workspaces");
+    sqlx::query(
+        r#"INSERT INTO sessions (session_id, client_type, handle, workspace_id, state, metadata)
+           VALUES
+           ('sess_active', 'pi', 'planner', 'ws_1', 'ready', '{}'),
+           ('sess_exited', 'pi', 'planner', 'ws_2', 'exited', '{}')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert sessions");
+
+    let repository = SqliteSessionRepository::new(pool);
+
+    assert_eq!(
+        repository
+            .active_session_id_for_handle("ws_1", "planner")
+            .await
+            .expect("find active handle"),
+        Some("sess_active".to_string())
+    );
+    assert_eq!(
+        repository
+            .active_session_id_for_handle("ws_2", "planner")
+            .await
+            .expect("ignore terminal handle"),
+        None
+    );
+}
+
+#[tokio::test]
+async fn sqlite_session_repository_updates_workspace_binding() {
+    let pool = test_pool().await;
+    sqlx::query(
+        r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
+           VALUES ('ws_old', '/old-canonical', '/old-canonical', 'old'),
+                  ('ws_new', '/new', '/new', 'new')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert workspaces");
+    sqlx::query(
+        r#"INSERT INTO sessions (session_id, client_type, workspace_ref, workspace_id, state, metadata)
+           VALUES ('sess_workspace', 'pi', '/old', 'ws_old', 'ready', '{}')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert session");
+
+    let repository = SqliteSessionRepository::new(pool);
+    repository
+        .update_session_workspace("sess_workspace", Some("/new"), Some("ws_new"))
+        .await
+        .expect("update workspace");
+
+    let row = repository
+        .get_session("sess_workspace")
+        .await
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(row.workspace_ref.as_deref(), Some("/new"));
+    assert_eq!(row.workspace_id.as_deref(), Some("ws_new"));
+}
+
+#[tokio::test]
 async fn sqlite_turn_repository_lists_turns_and_event_rows_with_existing_order() {
     let pool = test_pool().await;
     sqlx::query(

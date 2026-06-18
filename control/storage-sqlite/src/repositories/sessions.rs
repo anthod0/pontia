@@ -56,4 +56,33 @@ impl SqliteSessionRepository {
         .fetch_optional(&self.pool)
         .await?)
     }
+
+    pub async fn active_session_id_for_handle(
+        &self,
+        workspace_id: &str,
+        handle: &str,
+    ) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar(
+            "SELECT session_id FROM sessions WHERE workspace_id = ? AND handle = ? AND state NOT IN ('exited', 'error') LIMIT 1",
+        )
+        .bind(workspace_id)
+        .bind(handle)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn update_session_workspace(
+        &self,
+        session_id: &str,
+        workspace_ref: Option<&str>,
+        workspace_id: Option<&str>,
+    ) -> Result<()> {
+        sqlx::query("UPDATE sessions SET workspace_ref = ?, workspace_id = ? WHERE session_id = ?")
+            .bind(workspace_ref)
+            .bind(workspace_id)
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }

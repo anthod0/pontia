@@ -1,4 +1,7 @@
 use super::*;
+use pontia_storage_sqlite::repositories::{
+    idempotency::SqliteIdempotencyRepository, sessions::SqliteSessionRepository,
+};
 
 impl SessionCommandService {
     pub(super) async fn idempotency_response(
@@ -6,18 +9,9 @@ impl SessionCommandService {
         operation: &str,
         key: &str,
     ) -> Result<Option<Value>> {
-        let response: Option<String> = sqlx::query_scalar(
-            "SELECT response FROM idempotency_keys WHERE operation = ? AND key = ?",
-        )
-        .bind(operation)
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        response
-            .map(|value| serde_json::from_str(&value))
-            .transpose()
-            .map_err(Into::into)
+        SqliteIdempotencyRepository::new(self.pool.clone())
+            .get_response(operation, key)
+            .await
     }
 
     pub(super) async fn store_idempotency_response(
@@ -26,17 +20,9 @@ impl SessionCommandService {
         key: &str,
         response: &Value,
     ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO idempotency_keys (operation, key, response)
-               VALUES (?, ?, ?)
-               ON CONFLICT(operation, key) DO NOTHING"#,
-        )
-        .bind(operation)
-        .bind(key)
-        .bind(serde_json::to_string(response)?)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        SqliteIdempotencyRepository::new(self.pool.clone())
+            .store_response(operation, key, response)
+            .await
     }
 
     pub(super) async fn ensure_handle_available(
@@ -44,15 +30,11 @@ impl SessionCommandService {
         workspace_id: &str,
         handle: &str,
     ) -> Result<()> {
-        let existing: Option<String> = sqlx::query_scalar(
-            "SELECT session_id FROM sessions WHERE workspace_id = ? AND handle = ? AND state NOT IN ('exited', 'error') LIMIT 1",
-        )
-        .bind(workspace_id)
-        .bind(handle)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        if existing.is_some() {
+        if SqliteSessionRepository::new(self.pool.clone())
+            .active_session_id_for_handle(workspace_id, handle)
+            .await?
+            .is_some()
+        {
             return Err(Error::Conflict {
                 code: "session_handle_conflict",
                 message: format!(
@@ -112,12 +94,12 @@ impl SessionCommandService {
         session_id: &str,
         workspace: Option<&WorkspaceRecord>,
     ) -> Result<()> {
-        sqlx::query("UPDATE sessions SET workspace_ref = ?, workspace_id = ? WHERE session_id = ?")
-            .bind(workspace.map(|workspace| workspace.canonical_path.as_str()))
-            .bind(workspace.map(|workspace| workspace.workspace_id.as_str()))
-            .bind(session_id)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
+        SqliteSessionRepository::new(self.pool.clone())
+            .update_session_workspace(
+                session_id,
+                workspace.map(|workspace| workspace.canonical_path.as_str()),
+                workspace.map(|workspace| workspace.workspace_id.as_str()),
+            )
+            .await
     }
 }

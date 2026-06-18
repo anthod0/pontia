@@ -5,4 +5,5 @@ edition.workspace = true
 
 [dependencies]
 pontia-core = { path = "../core", default-features = false }
+serde_json.workspace = true
 sqlx.workspace = true

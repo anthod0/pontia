@@ -1,4 +1,5 @@
 use super::*;
+use pontia_storage_sqlite::repositories::idempotency::SqliteIdempotencyRepository;
 
 impl RuntimeControlService {
     pub(super) async fn idempotency_response(
@@ -6,18 +7,9 @@ impl RuntimeControlService {
         operation: &str,
         key: &str,
     ) -> Result<Option<Value>> {
-        let response: Option<String> = sqlx::query_scalar(
-            "SELECT response FROM idempotency_keys WHERE operation = ? AND key = ?",
-        )
-        .bind(operation)
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        response
-            .map(|value| serde_json::from_str(&value))
-            .transpose()
-            .map_err(Into::into)
+        SqliteIdempotencyRepository::new(self.pool.clone())
+            .get_response(operation, key)
+            .await
     }
 
     pub(super) async fn store_idempotency_response(
@@ -26,16 +18,8 @@ impl RuntimeControlService {
         key: &str,
         response: &Value,
     ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO idempotency_keys (operation, key, response)
-               VALUES (?, ?, ?)
-               ON CONFLICT(operation, key) DO NOTHING"#,
-        )
-        .bind(operation)
-        .bind(key)
-        .bind(serde_json::to_string(response)?)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        SqliteIdempotencyRepository::new(self.pool.clone())
+            .store_response(operation, key, response)
+            .await
     }
 }
