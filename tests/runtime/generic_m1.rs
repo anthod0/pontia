@@ -119,7 +119,7 @@ async fn generic_runtime_handle_includes_handle_role_and_short_session_id() {
     let id_body = session_id.rsplit('_').next().unwrap_or(&session_id);
     let short_id = id_body[id_body.len() - 8..].to_string();
 
-    assert_eq!(metadata["backend"], "in_process_test");
+    assert_eq!(metadata["backend"], "in_process");
     assert_eq!(metadata["handle"], "@planner");
     assert_eq!(metadata["role"], "execution reviewer");
     assert_eq!(

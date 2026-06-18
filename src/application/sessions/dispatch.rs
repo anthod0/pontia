@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    agent_clients::GenericTestClient,
+    agent_clients,
     agent_clients::{TurnContextBehavior, get_client_spec},
     application::turns::write_client_current_turn_context,
 };
@@ -19,11 +19,16 @@ impl SessionCommandService {
             turn_id: turn_id.to_string(),
             input: input.to_string(),
         };
-        let behavior = GenericTestClient::behavior();
+        let behavior = agent_clients::in_process_recorded_dispatch_behavior(client_type)
+            .ok_or_else(|| {
+                Error::Domain(format!(
+                    "{client_type} does not support in-process recorded dispatch"
+                ))
+            })?;
         if behavior.write_current_turn_context {
             write_client_current_turn_context(&runtime.metadata, &agent_input, client_type, None)?;
         }
-        self.runtime.submit_input(agent_input)?;
+        self.runtime.submit_input(client_type, agent_input)?;
         if behavior.auto_start_turn {
             EventIngestService::new(self.pool.clone())
                 .ingest_event(DomainEvent::new(

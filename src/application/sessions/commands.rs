@@ -170,7 +170,7 @@ impl SessionCommandService {
                     .await?;
             }
             match client_dispatch_mode(&request.client_type)? {
-                DispatchMode::GenericTestClient => {
+                DispatchMode::InProcessRecorded => {
                     self.dispatch_initial_generic_turn(
                         &session_id,
                         &turn_id,

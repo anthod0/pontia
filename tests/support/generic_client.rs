@@ -19,7 +19,7 @@ impl GenericClientTestScope {
     pub async fn new() -> Self {
         let guard = generic_test_lock().clone().lock_owned().await;
         GenericTestClient::clear_recorded_inputs();
-        GenericRuntimeManager::reset_in_process_test_registry();
+        GenericRuntimeManager::reset_in_process_registry();
         Self { _guard: guard }
     }
 
@@ -51,7 +51,7 @@ impl GenericClientTestScope {
     }
 
     pub fn reset_runtime_registry(&self) {
-        GenericRuntimeManager::reset_in_process_test_registry();
+        GenericRuntimeManager::reset_in_process_registry();
     }
 
     pub async fn runtime_handle(&self, state: &AppState, session_id: &str) -> String {
@@ -87,7 +87,7 @@ impl GenericClientTestScope {
 impl Drop for GenericClientTestScope {
     fn drop(&mut self) {
         GenericTestClient::clear_recorded_inputs();
-        GenericRuntimeManager::reset_in_process_test_registry();
+        GenericRuntimeManager::reset_in_process_registry();
     }
 }
 

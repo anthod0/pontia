@@ -2,10 +2,7 @@ use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
 use crate::{
-    agent_clients::{
-        self, AdapterEventBehavior, DispatchBehavior, GenericTestClient, InterruptBehavior,
-        RuntimeBehavior,
-    },
+    agent_clients::{self, AdapterEventBehavior, InterruptBehavior, RuntimeBehavior},
     error::{Error, Result},
     ids::new_runtime_instance_id,
     time::utc_now,
@@ -41,12 +38,13 @@ impl GenericRuntimeManager {
             agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", request.client_type))
             })?;
-        let capabilities = if client_spec.adapter.dispatch == DispatchBehavior::GenericTestClient {
-            GenericTestClient.capabilities()
+        let capabilities = if client_spec.adapter.runtime == RuntimeBehavior::InProcess {
+            agent_clients::in_process_capabilities(&request.client_type)
+                .unwrap_or_else(|| client_spec.capabilities.clone())
         } else {
             client_spec.capabilities.clone()
         };
-        if client_spec.adapter.runtime == RuntimeBehavior::InProcessTest {
+        if client_spec.adapter.runtime == RuntimeBehavior::InProcess {
             return in_process::start_session(request, capabilities, restart_count);
         }
 
@@ -188,8 +186,8 @@ impl GenericRuntimeManager {
         })
     }
 
-    pub fn submit_input(&self, input: AgentInput) -> Result<()> {
-        GenericTestClient.accept_input(input)
+    pub fn submit_input(&self, client_type: &str, input: AgentInput) -> Result<()> {
+        agent_clients::accept_in_process_input(client_type, input)
     }
 
     pub fn dispatch_tui_turn(
@@ -266,7 +264,7 @@ impl GenericRuntimeManager {
         tmux::is_alive(runtime_handle)
     }
 
-    pub fn reset_in_process_test_registry() {
+    pub fn reset_in_process_registry() {
         in_process::reset_registry();
     }
 }

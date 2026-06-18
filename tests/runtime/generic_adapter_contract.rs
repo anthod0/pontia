@@ -183,7 +183,7 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
             .await
             .expect("runtime metadata");
     let metadata: Value = serde_json::from_str(&metadata).expect("metadata json");
-    assert_eq!(metadata["backend"], "in_process_test");
+    assert_eq!(metadata["backend"], "in_process");
     assert!(metadata.get("tmux_session").is_none());
 }
 

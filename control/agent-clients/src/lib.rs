@@ -3,15 +3,19 @@ pub mod pi;
 pub mod raw_transcripts;
 mod types;
 
-pub use generic_test::GenericTestClient;
+pub use generic_test::{GenericTestClient, InProcessRecordedDispatchBehavior};
 pub use types::*;
 
 use raw_transcripts::{AgentBindingResolver, RawTranscriptParser};
 
 pub const AGENT_CLIENTS: &[AgentClientSpec] = &[generic_test::SPEC, pi::SPEC];
 
+pub fn default_real_client_spec() -> &'static AgentClientSpec {
+    &pi::SPEC
+}
+
 pub fn default_real_client_type() -> &'static str {
-    pi::SPEC.client_type
+    default_real_client_spec().client_type
 }
 
 pub fn client_session_identity_required_on_ready(client_type: &str) -> bool {
@@ -33,6 +37,31 @@ pub fn raw_transcript_backend_for(client_type: &str) -> Option<RawTranscriptBack
             resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
             parser: Box::new(pi::raw_transcripts::PiJsonlParser::new()),
         }),
+    }
+}
+
+pub fn in_process_capabilities(client_type: &str) -> Option<AgentClientCapabilities> {
+    match client_type {
+        "generic" => Some(GenericTestClient.capabilities()),
+        _ => None,
+    }
+}
+
+pub fn in_process_recorded_dispatch_behavior(
+    client_type: &str,
+) -> Option<InProcessRecordedDispatchBehavior> {
+    match client_type {
+        "generic" => Some(GenericTestClient::behavior()),
+        _ => None,
+    }
+}
+
+pub fn accept_in_process_input(client_type: &str, input: AgentInput) -> pontia_core::Result<()> {
+    match client_type {
+        "generic" => GenericTestClient.accept_input(input),
+        _ => Err(pontia_core::error::Error::Domain(format!(
+            "{client_type} does not support in-process input dispatch"
+        ))),
     }
 }
 

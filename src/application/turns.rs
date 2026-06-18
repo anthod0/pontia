@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    agent_clients::GenericTestClient,
+    agent_clients,
     agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec},
 };
 
@@ -72,7 +72,7 @@ impl TurnCommandService {
                 })?;
             let tmux_binding = tmux_binding
                 .as_ref()
-                .expect("tmux binding was validated before pi dispatch");
+                .expect("tmux binding was validated before client dispatch");
             let agent_input = AgentInput {
                 session_id: session_id.to_string(),
                 turn_id: new_turn_id().to_string(),
@@ -136,8 +136,15 @@ impl TurnCommandService {
             ))
             .await?;
 
-        if dispatch_mode == DispatchMode::GenericTestClient {
-            let behavior = GenericTestClient::behavior();
+        if dispatch_mode == DispatchMode::InProcessRecorded {
+            let behavior =
+                agent_clients::in_process_recorded_dispatch_behavior(&session.client_type)
+                    .ok_or_else(|| {
+                        Error::Domain(format!(
+                            "{} does not support in-process recorded dispatch",
+                            session.client_type
+                        ))
+                    })?;
             if behavior.write_current_turn_context
                 && let Some(binding_metadata) = self.runtime_binding_metadata(session_id).await?
             {
@@ -148,7 +155,8 @@ impl TurnCommandService {
                     Some(&metadata),
                 )?;
             }
-            self.runtime.submit_input(agent_input.clone())?;
+            self.runtime
+                .submit_input(&session.client_type, agent_input.clone())?;
             if behavior.auto_start_turn {
                 ingest
                     .ingest_event(DomainEvent::new(

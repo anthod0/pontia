@@ -8,15 +8,13 @@ use std::{
 use serde::Deserialize;
 
 use crate::{
+    agent_clients,
     application::{GraphRuntimeConfig, WorkspaceBrowserConfig, WorkspaceRootConfig},
     error::{Error, Result},
 };
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_DATABASE_URL: &str = "sqlite://~/.local/share/pontia/pontia.db";
-const DEFAULT_REAL_CLIENT_TYPE: &str = "pi";
-const PI_RUNTIME_CONFIG_KEY: &str = "pi";
-const PI_TUI_COMMAND_ENV: &str = "PONTIA_PI_TUI_COMMAND";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
@@ -50,9 +48,42 @@ pub struct RuntimeClientConfig {
 
 impl RuntimeConfig {
     pub fn tui_command_for_client_config_key(&self, runtime_config_key: &str) -> Option<String> {
-        match runtime_config_key {
-            PI_RUNTIME_CONFIG_KEY => self.pi.tui_command.clone(),
-            _ => None,
+        if Some(runtime_config_key) == default_real_runtime_config_key() {
+            self.pi.tui_command.clone()
+        } else {
+            None
+        }
+    }
+
+    fn set_tui_command_for_client_config_key(
+        &mut self,
+        runtime_config_key: &str,
+        command: Option<String>,
+    ) {
+        if Some(runtime_config_key) == default_real_runtime_config_key() {
+            self.pi.tui_command = command;
+        }
+    }
+}
+
+fn default_real_runtime_config_key() -> Option<&'static str> {
+    agent_clients::default_real_client_spec()
+        .tmux_runtime()?
+        .runtime_config_key
+}
+
+fn apply_runtime_env_overrides(vars: &HashMap<String, String>, runtime: &mut RuntimeConfig) {
+    for client in agent_clients::AGENT_CLIENTS {
+        let Some(tmux_runtime) = client.tmux_runtime() else {
+            continue;
+        };
+        let (Some(env_key), Some(runtime_config_key)) =
+            (tmux_runtime.command_env, tmux_runtime.runtime_config_key)
+        else {
+            continue;
+        };
+        if let Some(value) = get(vars, env_key) {
+            runtime.set_tui_command_for_client_config_key(runtime_config_key, non_empty(value));
         }
     }
 }
@@ -146,7 +177,7 @@ impl AppConfig {
 
         let default_client_type = get(vars, "PONTIA_DEFAULT_CLIENT_TYPE")
             .or_else(|| file.and_then(|config| config.default_client_type.as_deref()))
-            .unwrap_or(DEFAULT_REAL_CLIENT_TYPE)
+            .unwrap_or(agent_clients::default_real_client_type())
             .to_string();
         validate_real_default_client_type("PONTIA_DEFAULT_CLIENT_TYPE", &default_client_type)?;
 
@@ -184,9 +215,7 @@ impl AppConfig {
         let mut runtime = file
             .and_then(|config| config.runtime.clone())
             .unwrap_or_default();
-        if let Some(value) = get(vars, PI_TUI_COMMAND_ENV) {
-            runtime.pi.tui_command = non_empty(value);
-        }
+        apply_runtime_env_overrides(vars, &mut runtime);
 
         Ok(Self {
             bind_addr,
@@ -207,12 +236,13 @@ fn get<'a>(vars: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
 }
 
 fn validate_real_default_client_type(key: &'static str, client_type: &str) -> Result<()> {
-    if client_type == DEFAULT_REAL_CLIENT_TYPE {
+    let expected = agent_clients::default_real_client_type();
+    if client_type == expected {
         Ok(())
     } else {
         Err(Error::InvalidConfig {
             key,
-            message: format!("default client type must be pi, got {client_type}"),
+            message: format!("default client type must be {expected}, got {client_type}"),
         })
     }
 }

@@ -59,7 +59,7 @@ impl RuntimeObservationService {
                     return Ok(());
                 }
             }
-            RuntimeBehavior::InProcessTest => {
+            RuntimeBehavior::InProcess => {
                 let metadata: Option<String> = sqlx::query_scalar(
                     "SELECT metadata FROM runtime_bindings WHERE session_id = ?",
                 )

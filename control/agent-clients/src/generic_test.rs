@@ -26,8 +26,8 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "generic",
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
-        runtime: RuntimeBehavior::InProcessTest,
-        dispatch: DispatchBehavior::GenericTestClient,
+        runtime: RuntimeBehavior::InProcess,
+        dispatch: DispatchBehavior::InProcessRecorded,
         readiness: ReadinessBehavior::RuntimeManagerImmediate,
         client_session_identity: ClientSessionIdentityBehavior::Unsupported,
         interrupt: InterruptBehavior::Unsupported,
@@ -44,7 +44,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
 };
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct GenericTestClientBehavior {
+pub struct InProcessRecordedDispatchBehavior {
     pub auto_start_turn: bool,
     pub write_current_turn_context: bool,
 }
@@ -60,18 +60,19 @@ impl GenericTestClient {
             .clear();
         *test_capabilities().lock().expect("test capabilities lock") =
             AgentClientCapabilities::generic_default();
-        *test_behavior().lock().expect("test behavior lock") = GenericTestClientBehavior::default();
+        *test_behavior().lock().expect("test behavior lock") =
+            InProcessRecordedDispatchBehavior::default();
     }
 
     pub fn set_capabilities(capabilities: AgentClientCapabilities) {
         *test_capabilities().lock().expect("test capabilities lock") = capabilities;
     }
 
-    pub fn set_behavior(behavior: GenericTestClientBehavior) {
+    pub fn set_behavior(behavior: InProcessRecordedDispatchBehavior) {
         *test_behavior().lock().expect("test behavior lock") = behavior;
     }
 
-    pub fn behavior() -> GenericTestClientBehavior {
+    pub fn behavior() -> InProcessRecordedDispatchBehavior {
         test_behavior().lock().expect("test behavior lock").clone()
     }
 
@@ -110,7 +111,7 @@ fn test_capabilities() -> &'static Mutex<AgentClientCapabilities> {
     TEST_CAPABILITIES.get_or_init(|| Mutex::new(AgentClientCapabilities::generic_default()))
 }
 
-fn test_behavior() -> &'static Mutex<GenericTestClientBehavior> {
-    static TEST_BEHAVIOR: OnceLock<Mutex<GenericTestClientBehavior>> = OnceLock::new();
-    TEST_BEHAVIOR.get_or_init(|| Mutex::new(GenericTestClientBehavior::default()))
+fn test_behavior() -> &'static Mutex<InProcessRecordedDispatchBehavior> {
+    static TEST_BEHAVIOR: OnceLock<Mutex<InProcessRecordedDispatchBehavior>> = OnceLock::new();
+    TEST_BEHAVIOR.get_or_init(|| Mutex::new(InProcessRecordedDispatchBehavior::default()))
 }

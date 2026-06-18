@@ -61,7 +61,7 @@ impl AgentClientCapabilities {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispatchBehavior {
-    GenericTestClient,
+    InProcessRecorded,
     TmuxPaste,
     None,
 }
@@ -85,7 +85,7 @@ pub enum ClientSessionIdentityBehavior {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeBehavior {
-    InProcessTest,
+    InProcess,
     Tmux(TmuxRuntimeBehavior),
 }
 
@@ -235,7 +235,7 @@ impl AgentClientAdapter {
     pub fn tmux_runtime(&self) -> Option<TmuxRuntimeBehavior> {
         match self.runtime {
             RuntimeBehavior::Tmux(runtime) => Some(runtime),
-            RuntimeBehavior::InProcessTest => None,
+            RuntimeBehavior::InProcess => None,
         }
     }
 }

@@ -57,8 +57,8 @@ pub(super) fn write_runtime_script(
                 format!("exec sh -lc {}\n", shell_quote(&command)),
             )
         }
-        RuntimeBehavior::InProcessTest => match client_spec.adapter.dispatch {
-            DispatchBehavior::GenericTestClient | DispatchBehavior::None => (
+        RuntimeBehavior::InProcess => match client_spec.adapter.dispatch {
+            DispatchBehavior::InProcessRecorded | DispatchBehavior::None => (
                 "exec >> \"$PONTIA_RUNTIME_LOG\" 2>&1\necho \"pontia runtime started\"".to_string(),
                 "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
             ),

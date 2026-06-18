@@ -53,12 +53,12 @@ pub(super) fn start_session(
             InProcessRuntimeState { alive: true },
         );
     Ok(RuntimeStartResult {
-        runtime_kind: "in_process_test".to_string(),
+        runtime_kind: "in_process".to_string(),
         runtime_handle: runtime_handle.clone(),
         capabilities: capabilities.into(),
         metadata: json!({
-            "backend": "in_process_test",
-            "test_runtime": true,
+            "backend": "in_process",
+            "in_process_runtime": true,
             "in_process": {
                 "runtime_handle": runtime_handle,
             },
@@ -123,17 +123,19 @@ fn runtime_handle(request: &RuntimeStartRequest) -> String {
         .filter(|value| !value.is_empty())
         .map(sanitize_identifier);
     let Some(handle) = handle else {
-        return format!("generic:{}", request.session_id);
+        return format!("{}:{}", request.client_type, request.session_id);
     };
     let Some(role) = role else {
         return format!(
-            "generic:{}:{}",
+            "{}:{}:{}",
+            request.client_type,
             handle,
             short_session_id(&request.session_id)
         );
     };
     format!(
-        "generic:{}:{}:{}",
+        "{}:{}:{}:{}",
+        request.client_type,
         handle,
         role,
         short_session_id(&request.session_id)

@@ -48,10 +48,10 @@ mod tests {
             })
             .expect("generic runtime should start");
 
-        assert_eq!(runtime.runtime_kind, "in_process_test");
+        assert_eq!(runtime.runtime_kind, "in_process");
         assert_eq!(runtime.runtime_handle, format!("generic:{session_id}"));
-        assert_eq!(runtime.metadata["backend"], "in_process_test");
-        assert_eq!(runtime.metadata["test_runtime"], true);
+        assert_eq!(runtime.metadata["backend"], "in_process");
+        assert_eq!(runtime.metadata["in_process_runtime"], true);
         assert!(
             !runtime
                 .metadata
