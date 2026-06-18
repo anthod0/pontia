@@ -14,6 +14,7 @@ export interface SessionCapabilities {
   stream_output?: boolean;
   heartbeat?: boolean;
   artifact_sources?: boolean;
+  timeline?: boolean;
   context_usage?: ContextUsageCapability;
   [key: string]: unknown;
 }

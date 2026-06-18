@@ -65,7 +65,7 @@ fn pi_session_dir(agent_dir: &std::path::Path, cwd: &std::path::Path) -> std::pa
     agent_dir.join("sessions").join(safe)
 }
 
-async fn seed_session(state: &AppState, session_id: &str) {
+async fn seed_session_for_client(state: &AppState, session_id: &str, client_type: &str) {
     let service = EventIngestService::new(state.db());
     service
         .ingest_event(DomainEvent::new(
@@ -73,12 +73,16 @@ async fn seed_session(state: &AppState, session_id: &str) {
             session_id.to_string(),
             None,
             EventSource::AgentAdapter,
-            "pi".to_string(),
+            client_type.to_string(),
             EventType::SessionCreated,
             json!({}),
         ))
         .await
         .unwrap();
+}
+
+async fn seed_session(state: &AppState, session_id: &str) {
+    seed_session_for_client(state, session_id, "pi").await;
 }
 
 async fn seed_session_exited(state: &AppState, session_id: &str) {
@@ -473,6 +477,34 @@ async fn timeline_external_api_returns_not_ready_without_binding() {
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"]["code"], "not_ready");
+}
+
+#[tokio::test]
+async fn timeline_external_api_uses_client_definition_to_reject_unsupported_transcripts() {
+    let state = test_state().await;
+    let session_id = "sess_claude_no_timeline";
+    let cwd = tempdir().unwrap();
+    seed_session_for_client(&state, session_id, "claude_code").await;
+
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "claude_code".to_string(),
+            launch_cwd: cwd.path().to_string_lossy().to_string(),
+            client_session_key: "claude-session-key".to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/timeline"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "capability_unavailable");
 }
 
 fn urlencoding_for_test(value: &str) -> String {

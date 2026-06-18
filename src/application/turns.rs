@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     adapters::GenericTestAdapter,
-    agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec},
+    agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_definition},
 };
 
 #[derive(Clone)]
@@ -30,11 +30,11 @@ impl TurnCommandService {
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
-        let client_spec = get_client_spec(&session.client_type).ok_or_else(|| {
+        let client_definition = get_client_definition(&session.client_type).ok_or_else(|| {
             Error::Domain(format!("unsupported client_type: {}", session.client_type))
         })?;
-        let dispatch_mode = client_spec.dispatch;
-        let readiness_mode = client_spec.readiness;
+        let dispatch_mode = client_definition.backend.dispatch;
+        let readiness_mode = client_definition.backend.readiness;
         let can_accept_turn = matches!(session.state.as_str(), "idle" | "interrupted")
             || (session.state == "starting" && dispatch_mode == DispatchMode::TmuxPaste);
         if !can_accept_turn {
@@ -86,7 +86,7 @@ impl TurnCommandService {
                 &binding_metadata,
             )
             .await?;
-            if client_spec.turn_context == TurnContextBehavior::CurrentTurnFile {
+            if client_definition.backend.turn_context == TurnContextBehavior::CurrentTurnFile {
                 write_client_current_turn_context(
                     &binding_metadata,
                     &agent_input,
@@ -180,7 +180,9 @@ impl TurnCommandService {
                         )
                         .await
                         .and_then(|()| {
-                            if client_spec.turn_context == TurnContextBehavior::CurrentTurnFile {
+                            if client_definition.backend.turn_context
+                                == TurnContextBehavior::CurrentTurnFile
+                            {
                                 write_client_current_turn_context(
                                     &binding_metadata,
                                     &agent_input,

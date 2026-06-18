@@ -1,9 +1,10 @@
 use crate::{
     adapters::AdapterCapabilities,
     agent_clients::types::{
-        AdapterEventBehavior, AgentClientSpec, ClientSessionIdentityBehavior, DispatchBehavior,
-        InterruptBehavior, ReadinessBehavior, RuntimeBehavior, SystemPromptInjectionBehavior,
-        TerminateBehavior, TurnContextBehavior,
+        AdapterEventBehavior, AgentClientBackendSpec, AgentClientDefinition,
+        ClientSessionIdentityBehavior, DispatchBehavior, InterruptBehavior, ReadinessBehavior,
+        RuntimeBehavior, SystemPromptInjectionBehavior, TerminateBehavior, TranscriptBehavior,
+        TurnContextBehavior,
     },
     application::ContextUsageCapability,
 };
@@ -16,20 +17,24 @@ pub const CAPABILITIES: AdapterCapabilities = AdapterCapabilities {
     stream_output: false,
     heartbeat: false,
     artifact_sources: false,
+    timeline: false,
     context_usage: ContextUsageCapability::Unsupported,
 };
 
-pub const SPEC: AgentClientSpec = AgentClientSpec {
+pub const DEFINITION: AgentClientDefinition = AgentClientDefinition {
     client_type: "generic",
     capabilities: CAPABILITIES,
-    runtime: RuntimeBehavior::InProcessTest,
-    dispatch: DispatchBehavior::GenericTestAdapter,
-    readiness: ReadinessBehavior::RuntimeManagerImmediate,
-    client_session_identity: ClientSessionIdentityBehavior::Unsupported,
-    interrupt: InterruptBehavior::Unsupported,
-    terminate: TerminateBehavior::RuntimeManager,
-    turn_context: TurnContextBehavior::Disabled,
-    adapter_events: AdapterEventBehavior::Disabled,
-    system_prompt_injection: SystemPromptInjectionBehavior::Disabled,
-    startup_hooks: &[],
+    backend: AgentClientBackendSpec {
+        runtime: RuntimeBehavior::InProcessTest,
+        dispatch: DispatchBehavior::GenericTestAdapter,
+        readiness: ReadinessBehavior::RuntimeManagerImmediate,
+        client_session_identity: ClientSessionIdentityBehavior::Unsupported,
+        interrupt: InterruptBehavior::Unsupported,
+        terminate: TerminateBehavior::RuntimeManager,
+        turn_context: TurnContextBehavior::Disabled,
+        adapter_events: AdapterEventBehavior::Disabled,
+        system_prompt_injection: SystemPromptInjectionBehavior::Disabled,
+        startup_hooks: &[],
+        transcript: TranscriptBehavior::Unsupported,
+    },
 };

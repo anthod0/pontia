@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     adapters::GenericTestAdapter,
-    agent_clients::{TurnContextBehavior, get_client_spec},
+    agent_clients::{TurnContextBehavior, get_client_definition},
     application::turns::write_client_current_turn_context,
 };
 
@@ -60,8 +60,8 @@ impl SessionCommandService {
             turn_id: turn_id.to_string(),
             input: input.to_string(),
         };
-        let turn_context = get_client_spec(client_type)
-            .map(|spec| spec.turn_context)
+        let turn_context = get_client_definition(client_type)
+            .map(|spec| spec.backend.turn_context)
             .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))?;
         let ingest = EventIngestService::new(self.pool.clone());
         let dispatch_result = RuntimeReadinessService::new(self.pool.clone())

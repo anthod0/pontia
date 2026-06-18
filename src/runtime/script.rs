@@ -28,10 +28,11 @@ pub(super) fn write_runtime_script(
     request: &RuntimeStartRequest,
     runtime_instance_id: &str,
 ) -> Result<()> {
-    let client_spec = agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
-        Error::Domain(format!("unsupported client_type: {}", request.client_type))
-    })?;
-    let (log_setup, runtime_body) = match client_spec.runtime {
+    let client_definition =
+        agent_clients::get_client_definition(&request.client_type).ok_or_else(|| {
+            Error::Domain(format!("unsupported client_type: {}", request.client_type))
+        })?;
+    let (log_setup, runtime_body) = match client_definition.backend.runtime {
         RuntimeBehavior::Tmux(tmux_runtime) => {
             let mut command = request
                 .start_command
@@ -57,7 +58,7 @@ pub(super) fn write_runtime_script(
                 format!("exec sh -lc {}\n", shell_quote(&command)),
             )
         }
-        RuntimeBehavior::InProcessTest => match client_spec.dispatch {
+        RuntimeBehavior::InProcessTest => match client_definition.backend.dispatch {
             DispatchBehavior::GenericTestAdapter | DispatchBehavior::None => (
                 "exec >> \"$PONTIA_RUNTIME_LOG\" 2>&1\necho \"pontia runtime started\"".to_string(),
                 "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
@@ -75,7 +76,7 @@ pub(super) fn write_runtime_script(
         .as_ref()
         .map(|agent_kind| format!("export PONTIA_AGENT_KIND={}\n", shell_quote(agent_kind)))
         .unwrap_or_default();
-    let hook_log_export = client_spec
+    let hook_log_export = client_definition
         .tmux_runtime()
         .and_then(|runtime| runtime.hook_log)
         .map(|hook_log| {

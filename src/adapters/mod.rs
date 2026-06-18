@@ -20,6 +20,7 @@ pub struct AdapterCapabilities {
     pub stream_output: bool,
     pub heartbeat: bool,
     pub artifact_sources: bool,
+    pub timeline: bool,
     pub context_usage: ContextUsageCapability,
 }
 
@@ -33,6 +34,7 @@ impl AdapterCapabilities {
             stream_output: false,
             heartbeat: false,
             artifact_sources: false,
+            timeline: false,
             context_usage: ContextUsageCapability::Unsupported,
         }
     }
@@ -46,6 +48,7 @@ impl AdapterCapabilities {
             stream_output: true,
             heartbeat: false,
             artifact_sources: true,
+            timeline: true,
             context_usage: ContextUsageCapability::Estimated,
         }
     }
@@ -59,6 +62,7 @@ impl AdapterCapabilities {
             stream_output: false,
             heartbeat: false,
             artifact_sources: false,
+            timeline: false,
             context_usage: ContextUsageCapability::Unsupported,
         }
     }

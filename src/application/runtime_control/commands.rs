@@ -1,5 +1,5 @@
 use super::*;
-use crate::agent_clients::{ReadinessMode, TerminateBehavior, get_client_spec};
+use crate::agent_clients::{ReadinessMode, TerminateBehavior, get_client_definition};
 
 impl RuntimeControlService {
     pub async fn interrupt_current_turn(
@@ -90,8 +90,8 @@ impl RuntimeControlService {
                 "session {session_id} runtime does not support interrupt: missing tmux pane binding"
             ))
         })?;
-        let interrupt_behavior = get_client_spec(&session.client_type)
-            .map(|spec| spec.interrupt)
+        let interrupt_behavior = get_client_definition(&session.client_type)
+            .map(|spec| spec.backend.interrupt)
             .ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", session.client_type))
             })?;
@@ -167,8 +167,8 @@ impl RuntimeControlService {
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
         if !matches!(session.state.as_str(), "exited" | "error") {
-            let terminate_behavior = get_client_spec(&session.client_type)
-                .map(|spec| spec.terminate)
+            let terminate_behavior = get_client_definition(&session.client_type)
+                .map(|spec| spec.backend.terminate)
                 .ok_or_else(|| {
                     Error::Domain(format!("unsupported client_type: {}", session.client_type))
                 })?;
@@ -346,8 +346,8 @@ impl RuntimeControlService {
         }
 
         let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
-        let terminate_behavior = get_client_spec(&session.client_type)
-            .map(|spec| spec.terminate)
+        let terminate_behavior = get_client_definition(&session.client_type)
+            .map(|spec| spec.backend.terminate)
             .ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", session.client_type))
             })?;

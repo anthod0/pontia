@@ -32,10 +32,11 @@ impl RuntimeObservationService {
             return Ok(());
         }
 
-        let Some(client_spec) = agent_clients::get_client_spec(&session.client_type) else {
+        let Some(client_definition) = agent_clients::get_client_definition(&session.client_type)
+        else {
             return Ok(());
         };
-        match client_spec.runtime {
+        match client_definition.backend.runtime {
             RuntimeBehavior::Tmux(_) => {
                 let row = sqlx::query(
                     "SELECT tmux_socket_path, tmux_pane_id FROM runtime_bindings WHERE session_id = ?",
@@ -126,11 +127,12 @@ impl AdapterEventOutboxService {
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let Some(client_spec) = agent_clients::get_client_spec(&session.client_type) else {
+        let Some(client_definition) = agent_clients::get_client_definition(&session.client_type)
+        else {
             return Ok(());
         };
         if !matches!(
-            client_spec.adapter_events,
+            client_definition.backend.adapter_events,
             AdapterEventBehavior::JsonlOutbox { .. }
         ) {
             return Ok(());

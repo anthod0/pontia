@@ -255,7 +255,7 @@ fn capabilities_for_tmux(tmux: Option<&RuntimeBindingTmuxRequest>) -> SessionCap
         non_empty(tmux.socket_path.as_deref()).is_some()
             && non_empty(tmux.pane_id.as_deref()).is_some()
     });
-    let mut capabilities: SessionCapabilities = agent_clients::get_client_spec("pi")
+    let mut capabilities: SessionCapabilities = agent_clients::get_client_definition("pi")
         .map(|spec| spec.capabilities.clone().into())
         .unwrap_or_default();
     capabilities.accept_task = writable;

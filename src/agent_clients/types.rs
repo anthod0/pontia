@@ -81,10 +81,19 @@ pub enum StartupHook {
     ClaudeCodeTrustWorkspace,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TranscriptBehavior {
+    Unsupported,
+    PiJsonl,
+}
+
+/// Pontia backend behavior for one agent client.
+///
+/// These fields describe how the Rust backend starts, controls, observes, or
+/// reads client-specific resources. They intentionally do not describe how a
+/// client extension internally reports facts through the Internal Event API.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AgentClientSpec {
-    pub client_type: &'static str,
-    pub capabilities: AdapterCapabilities,
+pub struct AgentClientBackendSpec {
     pub runtime: RuntimeBehavior,
     pub dispatch: DispatchBehavior,
     pub readiness: ReadinessBehavior,
@@ -95,9 +104,29 @@ pub struct AgentClientSpec {
     pub adapter_events: AdapterEventBehavior,
     pub system_prompt_injection: SystemPromptInjectionBehavior,
     pub startup_hooks: &'static [StartupHook],
+    pub transcript: TranscriptBehavior,
 }
 
-impl AgentClientSpec {
+/// Complete static definition for an agent client.
+///
+/// `capabilities` answers "can this client/session support this feature?";
+/// `backend` answers "when pontia's Rust backend owns the implementation, how
+/// does it do it?" Extension-internal implementation details live in
+/// `clients/*`, not in this definition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentClientDefinition {
+    pub client_type: &'static str,
+    pub capabilities: AdapterCapabilities,
+    pub backend: AgentClientBackendSpec,
+}
+
+impl AgentClientDefinition {
+    pub fn tmux_runtime(&self) -> Option<TmuxRuntimeBehavior> {
+        self.backend.tmux_runtime()
+    }
+}
+
+impl AgentClientBackendSpec {
     pub fn tmux_runtime(&self) -> Option<TmuxRuntimeBehavior> {
         match self.runtime {
             RuntimeBehavior::Tmux(runtime) => Some(runtime),

@@ -26,6 +26,8 @@ pub struct SessionCapabilities {
     #[serde(default)]
     pub artifact_sources: bool,
     #[serde(default)]
+    pub timeline: bool,
+    #[serde(default)]
     pub context_usage: ContextUsageCapability,
 }
 
