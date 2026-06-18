@@ -10,6 +10,16 @@ use raw_transcripts::{AgentBindingResolver, RawTranscriptParser};
 
 pub const AGENT_CLIENTS: &[AgentClientSpec] = &[generic_test::SPEC, pi::SPEC];
 
+pub fn default_real_client_type() -> &'static str {
+    pi::SPEC.client_type
+}
+
+pub fn client_session_identity_required_on_ready(client_type: &str) -> bool {
+    get_client_spec(client_type).is_some_and(|spec| {
+        spec.adapter.client_session_identity == ClientSessionIdentityBehavior::RequiredOnReady
+    })
+}
+
 pub struct RawTranscriptBackend {
     pub resolver: Box<dyn AgentBindingResolver + Send + Sync>,
     pub parser: Box<dyn RawTranscriptParser + Send + Sync>,

@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    agent_clients::{self, TranscriptBehavior, get_client_spec},
+    agent_clients,
     application::{
         AgentBinding, AgentBindingResolveRequest, AgentBindingService, AppState,
         ExternalQueryService, ResolvedAgentBinding, TimelineItemDetailRequest, TimelinePageRequest,
@@ -53,10 +53,8 @@ pub async fn get_session_timeline(
             )
         })?;
 
-    let transcript = transcript_backend(&binding)?;
-    let source = resolve_binding_source(&binding, transcript, &session.state).await?;
-    let backend = agent_clients::raw_transcript_backend_for(&binding.client_type)
-        .ok_or_else(|| unsupported_transcript_error(&binding.client_type))?;
+    let backend = transcript_backend(&binding)?;
+    let source = resolve_binding_source(&binding, &backend, &session.state)?;
     let page = backend
         .parser
         .timeline_page(TimelinePageRequest {
@@ -106,10 +104,8 @@ pub async fn get_session_timeline_detail(
             )
         })?;
 
-    let transcript = transcript_backend(&binding)?;
-    let source = resolve_binding_source(&binding, transcript, &session.state).await?;
-    let backend = agent_clients::raw_transcript_backend_for(&binding.client_type)
-        .ok_or_else(|| unsupported_transcript_error(&binding.client_type))?;
+    let backend = transcript_backend(&binding)?;
+    let source = resolve_binding_source(&binding, &backend, &session.state)?;
     let detail = backend
         .parser
         .timeline_item_detail(TimelineItemDetailRequest {
@@ -131,52 +127,30 @@ pub async fn get_session_timeline_detail(
     })))
 }
 
-fn transcript_backend(binding: &AgentBinding) -> Result<TranscriptBehavior, ExternalApiError> {
-    let behavior = get_client_spec(&binding.client_type)
-        .map(|definition| definition.adapter.transcript)
-        .unwrap_or(TranscriptBehavior::Unsupported);
-    if behavior == TranscriptBehavior::Unsupported {
-        return Err(timeline_error(
-            "capability_unavailable",
-            format!(
-                "{} client does not support backend transcript timeline",
-                binding.client_type
-            ),
-        ));
-    }
-    Ok(behavior)
+fn transcript_backend(
+    binding: &AgentBinding,
+) -> Result<agent_clients::RawTranscriptBackend, ExternalApiError> {
+    agent_clients::raw_transcript_backend_for(&binding.client_type)
+        .ok_or_else(|| unsupported_transcript_error(&binding.client_type))
 }
 
-async fn resolve_binding_source(
+fn resolve_binding_source(
     binding: &AgentBinding,
-    transcript: TranscriptBehavior,
+    backend: &agent_clients::RawTranscriptBackend,
     session_state: &str,
 ) -> Result<ResolvedAgentBinding, ExternalApiError> {
-    match transcript {
-        TranscriptBehavior::PiJsonl => {
-            let backend = agent_clients::raw_transcript_backend_for(&binding.client_type)
-                .ok_or_else(|| unsupported_transcript_error(&binding.client_type))?;
-            backend
-                .resolver
-                .resolve(&AgentBindingResolveRequest {
-                    id: binding.id.clone(),
-                    session_id: binding.session_id.clone(),
-                    client_type: binding.client_type.clone(),
-                    launch_cwd: binding.launch_cwd.clone().into(),
-                    client_session_key: binding.client_session_key.clone(),
-                })
-                .map_err(|error| {
-                    timeline_error_from_binding_error(error, binding.discovered, session_state)
-                })
-        }
-        TranscriptBehavior::Unsupported => Err(timeline_error(
-            "capability_unavailable",
-            format!(
-                "{} client does not support backend transcript timeline",
-                binding.client_type
-            ),
-        )),
-    }
+    backend
+        .resolver
+        .resolve(&AgentBindingResolveRequest {
+            id: binding.id.clone(),
+            session_id: binding.session_id.clone(),
+            client_type: binding.client_type.clone(),
+            launch_cwd: binding.launch_cwd.clone().into(),
+            client_session_key: binding.client_session_key.clone(),
+        })
+        .map_err(|error| {
+            timeline_error_from_binding_error(error, binding.discovered, session_state)
+        })
 }
 
 fn timeline_error_from_binding_error(

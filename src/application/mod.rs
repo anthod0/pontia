@@ -118,7 +118,8 @@ use std::sync::{OnceLock, RwLock};
 
 fn default_client_type_store() -> &'static RwLock<String> {
     static DEFAULT_CLIENT_TYPE: OnceLock<RwLock<String>> = OnceLock::new();
-    DEFAULT_CLIENT_TYPE.get_or_init(|| RwLock::new("pi".to_string()))
+    DEFAULT_CLIENT_TYPE
+        .get_or_init(|| RwLock::new(agent_clients::default_real_client_type().to_string()))
 }
 
 pub(crate) fn set_default_client_type(client_type: String) {
