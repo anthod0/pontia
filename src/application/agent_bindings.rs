@@ -1,4 +1,5 @@
 use super::*;
+use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentBinding {
@@ -88,11 +89,14 @@ pub(crate) async fn register_agent_binding_for_ready_event_in_tx(
         return Ok(None);
     };
 
-    let runtime_metadata: String =
-        sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
-            .bind(&event.session_id)
-            .fetch_one(&mut **tx)
-            .await?;
+    let runtime_metadata = SqliteRuntimeBindingRepository::metadata_in_tx(tx, &event.session_id)
+        .await?
+        .ok_or_else(|| {
+            Error::Domain(format!(
+                "session {} runtime binding missing",
+                event.session_id
+            ))
+        })?;
     let runtime_metadata: Value = serde_json::from_str(&runtime_metadata)?;
     let launch_cwd = runtime_metadata
         .get("workspace")

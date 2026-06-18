@@ -1,6 +1,8 @@
 use super::*;
 use pontia_storage_sqlite::repositories::{
-    idempotency::SqliteIdempotencyRepository, sessions::SqliteSessionRepository,
+    idempotency::SqliteIdempotencyRepository,
+    runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
+    sessions::SqliteSessionRepository,
 };
 
 impl SessionCommandService {
@@ -51,42 +53,21 @@ impl SessionCommandService {
         session_id: &str,
         runtime: &RuntimeStartResult,
     ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO runtime_bindings (
-                   session_id,
-                   runtime_kind,
-                   runtime_instance_id,
-                   start_command,
-                   launch_cwd,
-                   last_seen_at,
-                   tmux_socket_path,
-                   tmux_pane_id,
-                   metadata
-               )
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(session_id) DO UPDATE SET
-                   runtime_kind = excluded.runtime_kind,
-                   runtime_instance_id = excluded.runtime_instance_id,
-                   start_command = excluded.start_command,
-                   launch_cwd = excluded.launch_cwd,
-                   last_seen_at = excluded.last_seen_at,
-                   tmux_socket_path = excluded.tmux_socket_path,
-                   tmux_pane_id = excluded.tmux_pane_id,
-                   metadata = excluded.metadata,
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"#,
-        )
-        .bind(session_id)
-        .bind(&runtime.runtime_kind)
-        .bind(runtime.runtime_instance_id())
-        .bind(runtime.metadata["start_command"].as_str())
-        .bind(runtime.launch_cwd())
-        .bind(runtime.last_seen_at())
-        .bind(runtime.tmux_socket_path())
-        .bind(runtime.tmux_pane_id())
-        .bind(serde_json::to_string(&runtime.binding_metadata())?)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .upsert_binding(RuntimeBindingUpsertRecord {
+                session_id: session_id.to_string(),
+                runtime_kind: runtime.runtime_kind.clone(),
+                runtime_instance_id: runtime.runtime_instance_id().map(ToString::to_string),
+                start_command: runtime.metadata["start_command"]
+                    .as_str()
+                    .map(ToString::to_string),
+                launch_cwd: runtime.launch_cwd().map(ToString::to_string),
+                last_seen_at: runtime.last_seen_at().map(ToString::to_string),
+                tmux_socket_path: runtime.tmux_socket_path().map(ToString::to_string),
+                tmux_pane_id: runtime.tmux_pane_id().map(ToString::to_string),
+                metadata: serde_json::to_string(&runtime.binding_metadata())?,
+            })
+            .await
     }
 
     pub(super) async fn update_session_workspace(

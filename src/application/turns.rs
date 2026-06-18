@@ -3,6 +3,7 @@ use crate::{
     agent_clients,
     agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec},
 };
+use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
 
 #[derive(Clone)]
 pub struct TurnCommandService {
@@ -280,28 +281,19 @@ impl TurnCommandService {
     }
 
     async fn runtime_binding_metadata(&self, session_id: &str) -> Result<Option<Value>> {
-        let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
-            .bind(session_id)
-            .fetch_optional(&self.pool)
-            .await?;
-        row.map(|row| {
-            let metadata: String = row.try_get("metadata")?;
-            serde_json::from_str(&metadata).map_err(Into::into)
-        })
-        .transpose()
+        SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .metadata(session_id)
+            .await?
+            .map(|metadata| serde_json::from_str(&metadata).map_err(Into::into))
+            .transpose()
     }
 
     async fn required_tmux_pane_binding(&self, session_id: &str) -> Result<TmuxPaneBinding> {
-        let row = sqlx::query(
-            "SELECT tmux_socket_path, tmux_pane_id FROM runtime_bindings WHERE session_id = ?",
-        )
-        .bind(session_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| Error::Domain(format!("session {session_id} has no runtime binding")))?;
-        let socket_path: Option<String> = row.try_get("tmux_socket_path")?;
-        let pane_id: Option<String> = row.try_get("tmux_pane_id")?;
-        match (socket_path, pane_id) {
+        let row = SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .tmux_pane_binding(session_id)
+            .await?
+            .ok_or_else(|| Error::Domain(format!("session {session_id} has no runtime binding")))?;
+        match (row.socket_path, row.pane_id) {
             (Some(socket_path), Some(pane_id))
                 if !socket_path.trim().is_empty() && !pane_id.trim().is_empty() =>
             {

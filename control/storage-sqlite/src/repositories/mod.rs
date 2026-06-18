@@ -2,6 +2,7 @@ pub mod artifacts;
 pub mod dag;
 pub mod events;
 pub mod idempotency;
+pub mod runtime_bindings;
 pub mod sessions;
 pub mod tasks;
 pub mod turns;

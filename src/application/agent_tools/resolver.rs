@@ -1,4 +1,5 @@
 use super::*;
+use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
 
 pub struct AgentToolContextResolver {
     pool: SqlitePool,
@@ -127,14 +128,12 @@ impl AgentToolContextResolver {
     }
 
     async fn runtime_instance_id(&self, session_id: &str) -> Result<String> {
-        let metadata: String =
-            sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
-                .bind(session_id)
-                .fetch_optional(&self.pool)
-                .await?
-                .ok_or_else(|| {
-                    Error::StateConflict(format!("session {session_id} has no runtime binding"))
-                })?;
+        let metadata = SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .metadata(session_id)
+            .await?
+            .ok_or_else(|| {
+                Error::StateConflict(format!("session {session_id} has no runtime binding"))
+            })?;
         let metadata: Value = serde_json::from_str(&metadata)?;
         metadata
             .get("runtime_instance_id")

@@ -1,5 +1,6 @@
 use super::*;
 use crate::agent_clients::{self, AdapterEventBehavior, RuntimeBehavior};
+use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
 
 fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
     metadata["in_process"]["runtime_handle"]
@@ -37,21 +38,18 @@ impl RuntimeObservationService {
         };
         match client_spec.adapter.runtime {
             RuntimeBehavior::Tmux(_) => {
-                let row = sqlx::query(
-                    "SELECT tmux_socket_path, tmux_pane_id FROM runtime_bindings WHERE session_id = ?",
-                )
-                .bind(session_id)
-                .fetch_optional(&self.pool)
-                .await?;
-                let Some(row) = row else {
+                let Some(row) = SqliteRuntimeBindingRepository::new(self.pool.clone())
+                    .tmux_pane_binding(session_id)
+                    .await?
+                else {
                     return Ok(());
                 };
-                let socket_path: Option<String> = row.try_get("tmux_socket_path")?;
-                let pane_id: Option<String> = row.try_get("tmux_pane_id")?;
                 let Some((socket_path, pane_id)) =
-                    socket_path.zip(pane_id).filter(|(socket_path, pane_id)| {
-                        !socket_path.trim().is_empty() && !pane_id.trim().is_empty()
-                    })
+                    row.socket_path
+                        .zip(row.pane_id)
+                        .filter(|(socket_path, pane_id)| {
+                            !socket_path.trim().is_empty() && !pane_id.trim().is_empty()
+                        })
                 else {
                     return Ok(());
                 };
@@ -60,12 +58,9 @@ impl RuntimeObservationService {
                 }
             }
             RuntimeBehavior::InProcess => {
-                let metadata: Option<String> = sqlx::query_scalar(
-                    "SELECT metadata FROM runtime_bindings WHERE session_id = ?",
-                )
-                .bind(session_id)
-                .fetch_optional(&self.pool)
-                .await?;
+                let metadata = SqliteRuntimeBindingRepository::new(self.pool.clone())
+                    .metadata(session_id)
+                    .await?;
                 let Some(runtime_target) = metadata
                     .map(|metadata| {
                         serde_json::from_str::<Value>(&metadata).map(runtime_target_from_metadata)
@@ -179,11 +174,9 @@ impl AdapterEventOutboxService {
     }
 
     async fn adapter_event_log(&self, session_id: &str) -> Result<Option<String>> {
-        let metadata: Option<String> =
-            sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
-                .bind(session_id)
-                .fetch_optional(&self.pool)
-                .await?;
+        let metadata = SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .metadata(session_id)
+            .await?;
         metadata
             .map(|metadata| {
                 serde_json::from_str::<Value>(&metadata)

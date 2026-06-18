@@ -1,5 +1,9 @@
 use super::*;
 use crate::runtime::{GenericRuntimeManager, configured_internal_event_url};
+use pontia_storage_sqlite::repositories::{
+    runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
+    sessions::SqliteSessionRepository,
+};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct RuntimeBindingUpsertRequest {
@@ -68,11 +72,12 @@ impl RuntimeBindingUpsertService {
             None => self.create_bound_session(&request, &workspace).await?,
         };
 
-        sqlx::query("UPDATE sessions SET workspace_ref = ?, workspace_id = ? WHERE session_id = ?")
-            .bind(&workspace.canonical_path)
-            .bind(&workspace.workspace_id)
-            .bind(&session_id)
-            .execute(&self.pool)
+        SqliteSessionRepository::new(self.pool.clone())
+            .update_session_workspace(
+                &session_id,
+                Some(&workspace.canonical_path),
+                Some(&workspace.workspace_id),
+            )
             .await?;
 
         let runtime_dir = pontia_runtime_dir(&session_id)?;
@@ -102,41 +107,19 @@ impl RuntimeBindingUpsertService {
             &capabilities,
         );
 
-        sqlx::query(
-            r#"INSERT INTO runtime_bindings (
-                   session_id,
-                   runtime_kind,
-                   runtime_instance_id,
-                   start_command,
-                   launch_cwd,
-                   last_seen_at,
-                   tmux_socket_path,
-                   tmux_pane_id,
-                   metadata
-               )
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(session_id) DO UPDATE SET
-                   runtime_kind = excluded.runtime_kind,
-                   runtime_instance_id = excluded.runtime_instance_id,
-                   start_command = excluded.start_command,
-                   launch_cwd = excluded.launch_cwd,
-                   last_seen_at = excluded.last_seen_at,
-                   tmux_socket_path = excluded.tmux_socket_path,
-                   tmux_pane_id = excluded.tmux_pane_id,
-                   metadata = excluded.metadata,
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"#,
-        )
-        .bind(&session_id)
-        .bind(runtime_kind)
-        .bind(&request.runtime_instance_id)
-        .bind(non_empty(request.start_command.as_deref()))
-        .bind(&workspace.canonical_path)
-        .bind(&last_seen_at)
-        .bind(tmux_socket_path.as_deref())
-        .bind(tmux_pane_id.as_deref())
-        .bind(serde_json::to_string(&metadata)?)
-        .execute(&self.pool)
-        .await?;
+        SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .upsert_binding(RuntimeBindingUpsertRecord {
+                session_id: session_id.clone(),
+                runtime_kind: runtime_kind.to_string(),
+                runtime_instance_id: Some(request.runtime_instance_id.clone()),
+                start_command: non_empty(request.start_command.as_deref()),
+                launch_cwd: Some(workspace.canonical_path.clone()),
+                last_seen_at: Some(last_seen_at.clone()),
+                tmux_socket_path: tmux_socket_path.clone(),
+                tmux_pane_id: tmux_pane_id.clone(),
+                metadata: serde_json::to_string(&metadata)?,
+            })
+            .await?;
 
         if let (Some(socket_path), Some(pane_id)) =
             (tmux_socket_path.as_deref(), tmux_pane_id.as_deref())
