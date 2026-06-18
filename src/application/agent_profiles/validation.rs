@@ -27,10 +27,10 @@ fn validate_non_empty(field: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn is_unique_constraint(error: &sqlx::Error) -> bool {
+pub(super) fn is_unique_constraint(error: &Error) -> bool {
     matches!(
         error,
-        sqlx::Error::Database(database_error)
+        Error::Database(sqlx::Error::Database(database_error))
             if database_error.code().as_deref() == Some("1555")
                 || database_error.message().contains("UNIQUE constraint failed")
     )

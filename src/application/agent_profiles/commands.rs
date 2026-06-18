@@ -1,5 +1,8 @@
 use super::validation::{ensure_not_builtin, is_unique_constraint, validate_request};
 use super::*;
+use pontia_storage_sqlite::repositories::agent_profiles::{
+    ExecutionProfileUpdateRecord, ExecutionProfileUpsertRecord, SqliteAgentProfileRepository,
+};
 
 impl AgentProfileService {
     pub async fn create_profile(
@@ -64,39 +67,9 @@ impl AgentProfileService {
             });
         }
 
-        let supported_client_types = serde_json::to_string(&request.supported_client_types)?;
-        let artifact_contract = serde_json::to_string(&request.artifact_contract)?;
-        let default_execution_policy = serde_json::to_string(&request.default_execution_policy)?;
-        let default_review_policy = serde_json::to_string(&request.default_review_policy)?;
-        let metadata = serde_json::to_string(&request.metadata)?;
-
-        let result = sqlx::query(
-            r#"INSERT INTO execution_profiles (
-                    profile_id, version, name, description, supported_client_types, agent_kind,
-                    system_prompt_template, turn_prompt_template, default_session_role,
-                    default_session_description, handle_prefix,
-                    expected_output_schema, artifact_contract, default_execution_policy,
-                    default_review_policy, metadata
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(&request.profile_id)
-        .bind(&request.version)
-        .bind(&request.name)
-        .bind(&request.description)
-        .bind(supported_client_types)
-        .bind(&request.agent_kind)
-        .bind(&request.system_prompt_template)
-        .bind(&request.turn_prompt_template)
-        .bind(&request.default_session_role)
-        .bind(&request.default_session_description)
-        .bind(&request.handle_prefix)
-        .bind(&request.expected_output_schema)
-        .bind(artifact_contract)
-        .bind(default_execution_policy)
-        .bind(default_review_policy)
-        .bind(metadata)
-        .execute(&self.pool)
-        .await;
+        let result = SqliteAgentProfileRepository::new(self.pool.clone())
+            .insert_version(execution_profile_upsert_record(&request)?)
+            .await;
 
         if let Err(error) = result {
             if is_unique_constraint(&error) {
@@ -105,7 +78,7 @@ impl AgentProfileService {
                     request.profile_id, request.version
                 )));
             }
-            return Err(error.into());
+            return Err(error);
         }
 
         let profile = self
@@ -153,39 +126,9 @@ impl AgentProfileService {
             })?;
         ensure_not_builtin(&current)?;
 
-        let supported_client_types = serde_json::to_string(&request.supported_client_types)?;
-        let artifact_contract = serde_json::to_string(&request.artifact_contract)?;
-        let default_execution_policy = serde_json::to_string(&request.default_execution_policy)?;
-        let default_review_policy = serde_json::to_string(&request.default_review_policy)?;
-        let metadata = serde_json::to_string(&request.metadata)?;
-
-        sqlx::query(
-            r#"UPDATE execution_profiles
-               SET name = ?, description = ?, supported_client_types = ?, agent_kind = ?,
-                   system_prompt_template = ?, turn_prompt_template = ?, default_session_role = ?,
-                   default_session_description = ?, handle_prefix = ?, expected_output_schema = ?,
-                   artifact_contract = ?, default_execution_policy = ?, default_review_policy = ?,
-                   metadata = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE profile_id = ? AND version = ?"#,
-        )
-        .bind(&request.name)
-        .bind(&request.description)
-        .bind(supported_client_types)
-        .bind(&request.agent_kind)
-        .bind(&request.system_prompt_template)
-        .bind(&request.turn_prompt_template)
-        .bind(&request.default_session_role)
-        .bind(&request.default_session_description)
-        .bind(&request.handle_prefix)
-        .bind(&request.expected_output_schema)
-        .bind(artifact_contract)
-        .bind(default_execution_policy)
-        .bind(default_review_policy)
-        .bind(metadata)
-        .bind(profile_id)
-        .bind(version)
-        .execute(&self.pool)
-        .await?;
+        SqliteAgentProfileRepository::new(self.pool.clone())
+            .update_version(execution_profile_update_record(&request)?)
+            .await?;
 
         let profile = self
             .get_version(profile_id, version)
@@ -225,18 +168,9 @@ impl AgentProfileService {
             })?;
         ensure_not_builtin(&current)?;
         if current.active {
-            sqlx::query(
-                r#"UPDATE execution_profiles
-                   SET active = 0,
-                       archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                       archived_reason = COALESCE(archived_reason, 'deleted via External API'),
-                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                   WHERE profile_id = ? AND version = ?"#,
-            )
-            .bind(profile_id)
-            .bind(version)
-            .execute(&self.pool)
-            .await?;
+            SqliteAgentProfileRepository::new(self.pool.clone())
+                .archive_version(profile_id, version)
+                .await?;
         }
         let profile = self
             .get_version(profile_id, version)
@@ -276,18 +210,10 @@ impl AgentProfileService {
         for version in &versions {
             ensure_not_builtin(version)?;
         }
-        let result = sqlx::query(
-            r#"UPDATE execution_profiles
-               SET active = 0,
-                   archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                   archived_reason = COALESCE(archived_reason, 'deleted via External API'),
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE profile_id = ? AND active = 1"#,
-        )
-        .bind(profile_id)
-        .execute(&self.pool)
-        .await?;
-        let data = json!({ "profile_id": profile_id, "archived_versions": result.rows_affected() });
+        let archived_versions = SqliteAgentProfileRepository::new(self.pool.clone())
+            .archive_active_versions(profile_id)
+            .await?;
+        let data = json!({ "profile_id": profile_id, "archived_versions": archived_versions });
         if let Some(key) = idempotency_key {
             self.store_idempotency_response(&operation, key, &data)
                 .await?;
@@ -297,4 +223,50 @@ impl AgentProfileService {
             duplicate: false,
         })
     }
+}
+
+fn execution_profile_upsert_record(
+    request: &UpsertExecutionProfileRequest,
+) -> Result<ExecutionProfileUpsertRecord> {
+    Ok(ExecutionProfileUpsertRecord {
+        profile_id: request.profile_id.clone(),
+        version: request.version.clone(),
+        name: request.name.clone(),
+        description: request.description.clone(),
+        supported_client_types: serde_json::to_string(&request.supported_client_types)?,
+        agent_kind: request.agent_kind.clone(),
+        system_prompt_template: request.system_prompt_template.clone(),
+        turn_prompt_template: request.turn_prompt_template.clone(),
+        default_session_role: request.default_session_role.clone(),
+        default_session_description: request.default_session_description.clone(),
+        handle_prefix: request.handle_prefix.clone(),
+        expected_output_schema: request.expected_output_schema.clone(),
+        artifact_contract: serde_json::to_string(&request.artifact_contract)?,
+        default_execution_policy: serde_json::to_string(&request.default_execution_policy)?,
+        default_review_policy: serde_json::to_string(&request.default_review_policy)?,
+        metadata: serde_json::to_string(&request.metadata)?,
+    })
+}
+
+fn execution_profile_update_record(
+    request: &UpsertExecutionProfileRequest,
+) -> Result<ExecutionProfileUpdateRecord> {
+    Ok(ExecutionProfileUpdateRecord {
+        profile_id: request.profile_id.clone(),
+        version: request.version.clone(),
+        name: request.name.clone(),
+        description: request.description.clone(),
+        supported_client_types: serde_json::to_string(&request.supported_client_types)?,
+        agent_kind: request.agent_kind.clone(),
+        system_prompt_template: request.system_prompt_template.clone(),
+        turn_prompt_template: request.turn_prompt_template.clone(),
+        default_session_role: request.default_session_role.clone(),
+        default_session_description: request.default_session_description.clone(),
+        handle_prefix: request.handle_prefix.clone(),
+        expected_output_schema: request.expected_output_schema.clone(),
+        artifact_contract: serde_json::to_string(&request.artifact_contract)?,
+        default_execution_policy: serde_json::to_string(&request.default_execution_policy)?,
+        default_review_policy: serde_json::to_string(&request.default_review_policy)?,
+        metadata: serde_json::to_string(&request.metadata)?,
+    })
 }

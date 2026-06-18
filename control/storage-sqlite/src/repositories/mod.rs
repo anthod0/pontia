@@ -1,4 +1,5 @@
 pub mod agent_bindings;
+pub mod agent_profiles;
 pub mod artifacts;
 pub mod dag;
 pub mod events;
