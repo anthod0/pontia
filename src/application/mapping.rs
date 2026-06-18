@@ -118,6 +118,14 @@ pub(crate) fn task_event_stream_row_to_view(row: TaskEventStreamRow) -> Result<T
     })
 }
 
+pub(crate) fn task_event_stream_row_to_item(
+    row: TaskEventStreamRow,
+) -> Result<TaskEventStreamItem> {
+    let rowid = row.rowid;
+    let event = task_event_stream_row_to_view(row)?;
+    Ok(TaskEventStreamItem { rowid, event })
+}
+
 pub(crate) fn dag_proposal_row_to_view(row: DagProposalRow) -> Result<DagProposalView> {
     Ok(DagProposalView {
         proposal_id: row.proposal_id,

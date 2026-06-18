@@ -10,13 +10,16 @@ use axum::{
 use tokio::sync::oneshot;
 use tracing::warn;
 
-use crate::{application::AppState, error::Result};
+use crate::error::Result;
+
+pub use state::HttpState;
 
 pub mod dashboard;
 pub mod external;
 pub mod health;
 pub mod internal;
 pub mod internal_agent_tools;
+pub mod state;
 
 pub async fn serve_with_shutdown_timeout<F>(
     listener: tokio::net::TcpListener,
@@ -55,7 +58,8 @@ where
     Ok(())
 }
 
-pub fn router(state: AppState) -> Router {
+pub fn router(state: impl Into<HttpState>) -> Router {
+    let state = state.into();
     Router::new()
         .route("/healthz", get(health::healthz))
         .route("/dashboard", get(dashboard::dashboard))

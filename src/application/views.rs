@@ -200,34 +200,10 @@ pub struct EventStreamItem {
     pub event: EventView,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(tag = "kind")]
-pub enum DashboardStreamEvent {
-    #[serde(rename = "session_event")]
-    SessionEvent {
-        id: String,
-        occurred_at: String,
-        event: EventView,
-    },
-    #[serde(rename = "task_event")]
-    TaskEvent {
-        id: String,
-        occurred_at: String,
-        event: TaskEventView,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DashboardStreamCursor {
-    pub session_rowid: i64,
-    pub task_rowid: i64,
-}
-
 #[derive(Debug, Clone, PartialEq)]
-pub struct DashboardStreamItem {
-    pub cursor: DashboardStreamCursor,
-    pub occurred_at: String,
-    pub event: DashboardStreamEvent,
+pub struct TaskEventStreamItem {
+    pub rowid: i64,
+    pub event: TaskEventView,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

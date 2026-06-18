@@ -14,17 +14,17 @@ use pontia::transport::http::{
 use pontia::{application::AppState, config::DashboardConfig};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
-async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> AppState {
+async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> http::HttpState {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("dashboard.db");
     let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    AppState::builder(db)
+    let app_state = AppState::builder(db)
         .external_api_token(Some("test-token".to_owned()))
-        .dashboard(dashboard)
-        .build()
+        .build();
+    http::HttpState::new(app_state, dashboard)
 }
 
 #[tokio::test]

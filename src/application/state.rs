@@ -5,7 +5,6 @@ use crate::{
     application::set_default_client_type,
     domain::DomainEvent,
     runtime::{set_runtime_bind_addr, set_runtime_config, set_runtime_external_api_token},
-    transport::http::dashboard::ResolvedDashboard,
 };
 
 #[derive(Clone)]
@@ -38,7 +37,6 @@ pub struct AppState {
 struct AppStateInner {
     persistence: PersistenceState,
     config: AppRuntimeState,
-    dashboard: DashboardState,
     events: EventState,
     lifecycle: LifecycleState,
     integrations: IntegrationState,
@@ -52,10 +50,6 @@ struct AppRuntimeState {
     external_api_token: Option<String>,
     graph: GraphRuntimeConfig,
     workspace_browser: WorkspaceBrowserConfig,
-}
-
-struct DashboardState {
-    resolved: ResolvedDashboard,
 }
 
 struct EventState {
@@ -75,7 +69,6 @@ pub struct AppStateBuilder {
     external_api_token: Option<String>,
     graph: GraphRuntimeConfig,
     workspace_browser: WorkspaceBrowserConfig,
-    dashboard: ResolvedDashboard,
     shutdown: ShutdownSignal,
     volatile_events: VolatileEventBroker,
     git_refresh: GitRefreshCoordinator,
@@ -88,7 +81,6 @@ impl AppState {
             external_api_token: None,
             graph: GraphRuntimeConfig::default(),
             workspace_browser: WorkspaceBrowserConfig::default(),
-            dashboard: ResolvedDashboard::local_default(),
             shutdown: ShutdownSignal::default(),
             volatile_events: VolatileEventBroker::default(),
             git_refresh: GitRefreshCoordinator::default(),
@@ -109,10 +101,6 @@ impl AppState {
 
     pub fn workspace_browser(&self) -> WorkspaceBrowserConfig {
         self.inner.config.workspace_browser.clone()
-    }
-
-    pub fn dashboard(&self) -> &ResolvedDashboard {
-        &self.inner.dashboard.resolved
     }
 
     pub fn shutdown(&self) -> ShutdownSignal {
@@ -142,7 +130,6 @@ impl AppState {
             .external_api_token(self.inner.config.external_api_token.clone())
             .graph(self.graph())
             .workspace_browser(self.workspace_browser())
-            .dashboard(self.dashboard().clone())
             .shutdown(self.shutdown())
             .volatile_events(self.volatile_events())
             .git_refresh(self.git_refresh())
@@ -162,11 +149,6 @@ impl AppStateBuilder {
 
     pub fn workspace_browser(mut self, workspace_browser: WorkspaceBrowserConfig) -> Self {
         self.workspace_browser = workspace_browser;
-        self
-    }
-
-    pub fn dashboard(mut self, dashboard: ResolvedDashboard) -> Self {
-        self.dashboard = dashboard;
         self
     }
 
@@ -193,9 +175,6 @@ impl AppStateBuilder {
                     external_api_token: self.external_api_token,
                     graph: self.graph,
                     workspace_browser: self.workspace_browser,
-                },
-                dashboard: DashboardState {
-                    resolved: self.dashboard,
                 },
                 events: EventState {
                     volatile_events: self.volatile_events,
@@ -244,12 +223,9 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     set_runtime_config(config.runtime.clone());
     set_runtime_external_api_token(config.external_api_token.clone());
     set_runtime_bind_addr(config.bind_addr);
-    let dashboard = crate::transport::http::dashboard::resolve_dashboard(&config.dashboard).await;
-
     Ok(AppState::builder(db)
         .external_api_token(config.external_api_token.clone())
         .graph(config.graph.clone())
         .workspace_browser(config.workspace_browser.clone())
-        .dashboard(dashboard)
         .build())
 }

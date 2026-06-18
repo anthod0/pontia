@@ -14,7 +14,7 @@ use axum::{
 use flate2::read::GzDecoder;
 use tracing::warn;
 
-use crate::{application::AppState, config::DashboardConfig};
+use crate::config::DashboardConfig;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedDashboard {
@@ -315,52 +315,47 @@ fn unique_suffix() -> String {
     format!("{}-{millis}", std::process::id())
 }
 
-pub async fn dashboard(State(state): State<AppState>) -> Response {
-    let Some(root) = state.dashboard().root() else {
-        return (
-            StatusCode::NOT_FOUND,
-            state.dashboard().unavailable_message(),
-        )
-            .into_response();
+pub async fn dashboard(State(dashboard): State<ResolvedDashboard>) -> Response {
+    let Some(root) = dashboard.root() else {
+        return (StatusCode::NOT_FOUND, dashboard.unavailable_message()).into_response();
     };
 
     match tokio::fs::read(root.join("index.html")).await {
         Ok(bytes) => ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], bytes).into_response(),
-        Err(_) => (
-            StatusCode::NOT_FOUND,
-            state.dashboard().unavailable_message(),
-        )
-            .into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, dashboard.unavailable_message()).into_response(),
     }
 }
 
-pub async fn dashboard_asset(State(state): State<AppState>, uri: Uri) -> Response {
+pub async fn dashboard_asset(State(dashboard): State<ResolvedDashboard>, uri: Uri) -> Response {
     let Some(relative_path) = uri.path().strip_prefix("/dashboard/") else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    dashboard_dist_file(state, relative_path).await
+    dashboard_dist_file(dashboard, relative_path).await
 }
 
-pub async fn dashboard_path(State(state): State<AppState>, uri: Uri) -> Response {
+pub async fn dashboard_path(State(dashboard): State<ResolvedDashboard>, uri: Uri) -> Response {
     let Some(relative_path) = uri.path().strip_prefix("/dashboard/") else {
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    match try_dashboard_dist_file(&state, relative_path).await {
+    match try_dashboard_dist_file(&dashboard, relative_path).await {
         Some(response) => response,
-        None => dashboard(State(state)).await,
+        None => self::dashboard(State(dashboard)).await,
     }
 }
 
-async fn dashboard_dist_file(state: AppState, relative_path: &str) -> Response {
-    match try_dashboard_dist_file(&state, relative_path).await {
+async fn dashboard_dist_file(dashboard: ResolvedDashboard, relative_path: &str) -> Response {
+    match try_dashboard_dist_file(&dashboard, relative_path).await {
         Some(response) => response,
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-async fn try_dashboard_dist_file(state: &AppState, relative_path: &str) -> Option<Response> {
-    let root = state.dashboard().root()?;
+async fn try_dashboard_dist_file(
+    dashboard: &ResolvedDashboard,
+    relative_path: &str,
+) -> Option<Response> {
+    let root = dashboard.root()?;
     let safe_path = safe_asset_path(relative_path)?;
     let path = root.join(&safe_path);
     let metadata = tokio::fs::metadata(&path).await.ok()?;

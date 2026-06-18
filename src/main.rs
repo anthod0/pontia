@@ -17,14 +17,16 @@ async fn main() -> pontia::error::Result<()> {
 
     let config_path = config_path_from_args(std::env::args())?;
     let config = AppConfig::from_env_with_config_path(config_path.as_deref())?;
-    let state = application::initialize(&config).await?;
+    let app_state = application::initialize(&config).await?;
+    let dashboard = http::dashboard::resolve_dashboard(&config.dashboard).await;
+    let state = http::HttpState::new(app_state, dashboard);
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
     info!(addr = %bound_addr, "starting pontia control plane");
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
-    let shutdown = state.shutdown();
+    let shutdown = state.app().shutdown();
     http::serve_with_shutdown_timeout(
         listener,
         http::router(state),
