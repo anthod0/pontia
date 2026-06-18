@@ -174,6 +174,23 @@ async fn post_internal_event(
     .await
 }
 
+async fn runtime_instance_id(state: &AppState, session_id: &str) -> String {
+    sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+        .bind(session_id)
+        .fetch_one(&state.db())
+        .await
+        .expect("runtime instance id")
+}
+
+fn runtime_payload(runtime_instance_id: &str, payload: Value) -> Value {
+    let mut payload = payload.as_object().expect("payload object").clone();
+    payload.insert(
+        "runtime_instance_id".to_string(),
+        json!(runtime_instance_id),
+    );
+    Value::Object(payload)
+}
+
 fn file_url(path: &Path) -> String {
     format!("file://{}", path.display())
 }
@@ -211,6 +228,7 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
             && input.turn_id == turn_id
             && input.input == "produce artifact"
     }));
+    let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
 
     let (interrupt_status, interrupt_body) = request_json(
         state.clone(),
@@ -246,7 +264,7 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
             &session_id,
             Some(&turn_id),
             seq,
-            payload,
+            runtime_payload(&runtime_instance_id, payload),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body:?}");
