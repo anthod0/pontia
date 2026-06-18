@@ -14,6 +14,9 @@ use crate::{
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_DATABASE_URL: &str = "sqlite://~/.local/share/pontia/pontia.db";
+const DEFAULT_REAL_CLIENT_TYPE: &str = "pi";
+const PI_RUNTIME_CONFIG_KEY: &str = "pi";
+const PI_TUI_COMMAND_ENV: &str = "PONTIA_PI_TUI_COMMAND";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
@@ -43,6 +46,15 @@ pub struct RuntimeConfig {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct RuntimeClientConfig {
     pub tui_command: Option<String>,
+}
+
+impl RuntimeConfig {
+    pub fn tui_command_for_client_config_key(&self, runtime_config_key: &str) -> Option<String> {
+        match runtime_config_key {
+            PI_RUNTIME_CONFIG_KEY => self.pi.tui_command.clone(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -134,7 +146,7 @@ impl AppConfig {
 
         let default_client_type = get(vars, "PONTIA_DEFAULT_CLIENT_TYPE")
             .or_else(|| file.and_then(|config| config.default_client_type.as_deref()))
-            .unwrap_or("pi")
+            .unwrap_or(DEFAULT_REAL_CLIENT_TYPE)
             .to_string();
         validate_real_default_client_type("PONTIA_DEFAULT_CLIENT_TYPE", &default_client_type)?;
 
@@ -172,7 +184,7 @@ impl AppConfig {
         let mut runtime = file
             .and_then(|config| config.runtime.clone())
             .unwrap_or_default();
-        if let Some(value) = get(vars, "PONTIA_PI_TUI_COMMAND") {
+        if let Some(value) = get(vars, PI_TUI_COMMAND_ENV) {
             runtime.pi.tui_command = non_empty(value);
         }
 
@@ -195,7 +207,7 @@ fn get<'a>(vars: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
 }
 
 fn validate_real_default_client_type(key: &'static str, client_type: &str) -> Result<()> {
-    if matches!(client_type, "pi") {
+    if client_type == DEFAULT_REAL_CLIENT_TYPE {
         Ok(())
     } else {
         Err(Error::InvalidConfig {

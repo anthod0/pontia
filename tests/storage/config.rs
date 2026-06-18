@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs};
 
-use pontia::config::{AppConfig, config_path_from_args};
+use pontia::config::{config_path_from_args, AppConfig, RuntimeClientConfig, RuntimeConfig};
 
 #[test]
 fn loads_config_from_key_value_source() {
@@ -188,6 +188,21 @@ tui_command = "pi from file"
         Some("/from/env/cache")
     );
     assert_eq!(config.default_client_type, "pi");
+}
+
+#[test]
+fn runtime_config_resolves_tui_commands_by_agent_client_config_key() {
+    let config = RuntimeConfig {
+        pi: RuntimeClientConfig {
+            tui_command: Some("pi from config".to_string()),
+        },
+    };
+
+    assert_eq!(
+        config.tui_command_for_client_config_key("pi").as_deref(),
+        Some("pi from config")
+    );
+    assert_eq!(config.tui_command_for_client_config_key("unknown"), None);
 }
 
 #[test]
