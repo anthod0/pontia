@@ -76,7 +76,7 @@ pub use dag_models::{
 pub use dag_planning::{DagPlanningOutcome, DagPlanningService, DagPlanningTurn};
 pub use dag_run_result::DagRunResultService;
 pub use dag_scheduler::{DagSchedulerDispatch, DagSchedulerOutcome, DagSchedulerService};
-pub use events::{EventIngestResult, EventIngestService};
+pub use events::{EventIngestResult, EventIngestService, InternalEventValidationService};
 pub(crate) use events::{nested_array_strings, nested_string, remove_internal_metadata_fields};
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 #[cfg(feature = "lbug")]
@@ -89,9 +89,10 @@ pub use graph::{
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
-    AgentBindingResolveRequest, AgentBindingResolver, RawTranscriptParser, ResolvedAgentBinding,
-    TimelineItem, TimelineItemDetailPage, TimelineItemDetailRequest, TimelinePage,
-    TimelinePageRequest, resolve_and_parse_timeline_page,
+    AgentBindingResolveRequest, AgentBindingResolver, RawTranscriptParser, RawTranscriptService,
+    RawTranscriptServiceError, RawTranscriptTimelineErrorCode, ResolvedAgentBinding, TimelineItem,
+    TimelineItemDetailPage, TimelineItemDetailRequest, TimelinePage, TimelinePageRequest,
+    resolve_and_parse_timeline_page,
 };
 pub use runtime_bindings::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};

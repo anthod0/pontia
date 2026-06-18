@@ -6,13 +6,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::{
-    agent_clients,
-    application::{
-        AgentBinding, AgentBindingResolveRequest, AgentBindingService, AppState,
-        ExternalQueryService, ResolvedAgentBinding, TimelineItemDetailRequest, TimelinePageRequest,
-    },
-};
+use crate::application::{AppState, RawTranscriptService, RawTranscriptServiceError};
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
 
@@ -36,38 +30,10 @@ pub async fn get_session_timeline(
     Query(query): Query<TimelineQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let query_service = ExternalQueryService::new(state.db());
-    let session = query_service
-        .get_session(&session_id)
-        .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
-
-    let binding_service = AgentBindingService::new(state.db());
-    let binding = binding_service
-        .primary_binding_for_session(&session_id)
-        .await?
-        .ok_or_else(|| {
-            timeline_error(
-                "not_ready",
-                format!("session {session_id} has no agent binding"),
-            )
-        })?;
-
-    let backend = transcript_backend(&binding)?;
-    let source = resolve_binding_source(&binding, &backend, &session.state)?;
-    let page = backend
-        .parser
-        .timeline_page(TimelinePageRequest {
-            session_id,
-            source,
-            before: query.before,
-            after: query.after,
-            limit: query.limit,
-        })
-        .map_err(|error| timeline_error_from_error(error, binding.discovered, &session.state))?;
-    if !binding.discovered {
-        binding_service.mark_discovered(&binding.id).await?;
-    }
+    let page = RawTranscriptService::new(state.db())
+        .timeline_page(session_id, query.before, query.after, query.limit)
+        .await
+        .map_err(timeline_service_error)?;
 
     Ok(ok(json!({
         "session_id": page.session_id,
@@ -87,36 +53,10 @@ pub async fn get_session_timeline_detail(
     Query(query): Query<TimelineDetailQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let query_service = ExternalQueryService::new(state.db());
-    let session = query_service
-        .get_session(&session_id)
-        .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
-
-    let binding_service = AgentBindingService::new(state.db());
-    let binding = binding_service
-        .primary_binding_for_session(&session_id)
-        .await?
-        .ok_or_else(|| {
-            timeline_error(
-                "not_ready",
-                format!("session {session_id} has no agent binding"),
-            )
-        })?;
-
-    let backend = transcript_backend(&binding)?;
-    let source = resolve_binding_source(&binding, &backend, &session.state)?;
-    let detail = backend
-        .parser
-        .timeline_item_detail(TimelineItemDetailRequest {
-            session_id,
-            source,
-            content_ref: query.content_ref,
-        })
-        .map_err(|error| timeline_error_from_error(error, binding.discovered, &session.state))?;
-    if !binding.discovered {
-        binding_service.mark_discovered(&binding.id).await?;
-    }
+    let detail = RawTranscriptService::new(state.db())
+        .timeline_item_detail(session_id, query.content_ref)
+        .await
+        .map_err(timeline_service_error)?;
 
     Ok(ok(json!({
         "binding_id": detail.binding_id,
@@ -127,75 +67,14 @@ pub async fn get_session_timeline_detail(
     })))
 }
 
-fn transcript_backend(
-    binding: &AgentBinding,
-) -> Result<agent_clients::RawTranscriptBackend, ExternalApiError> {
-    agent_clients::raw_transcript_backend_for(&binding.client_type)
-        .ok_or_else(|| unsupported_transcript_error(&binding.client_type))
-}
-
-fn resolve_binding_source(
-    binding: &AgentBinding,
-    backend: &agent_clients::RawTranscriptBackend,
-    session_state: &str,
-) -> Result<ResolvedAgentBinding, ExternalApiError> {
-    backend
-        .resolver
-        .resolve(&AgentBindingResolveRequest {
-            id: binding.id.clone(),
-            session_id: binding.session_id.clone(),
-            client_type: binding.client_type.clone(),
-            launch_cwd: binding.launch_cwd.clone().into(),
-            client_session_key: binding.client_session_key.clone(),
-        })
-        .map_err(|error| {
-            timeline_error_from_binding_error(error, binding.discovered, session_state)
-        })
-}
-
-fn timeline_error_from_binding_error(
-    error: crate::error::Error,
-    discovered: bool,
-    session_state: &str,
-) -> ExternalApiError {
-    let message = error.to_string();
-    if message.contains("source_unavailable:") {
-        return timeline_error(source_unavailable_code(discovered, session_state), message);
+fn timeline_service_error(error: RawTranscriptServiceError) -> ExternalApiError {
+    match error {
+        RawTranscriptServiceError::NotFound(message) => ExternalApiError::not_found(message),
+        RawTranscriptServiceError::Timeline { code, message } => {
+            timeline_error(code.as_str(), message)
+        }
+        RawTranscriptServiceError::Inner(error) => ExternalApiError::from(error),
     }
-    timeline_error_from_error(error, discovered, session_state)
-}
-
-fn timeline_error_from_error(
-    error: crate::error::Error,
-    discovered: bool,
-    session_state: &str,
-) -> ExternalApiError {
-    let message = error.to_string();
-    if message.contains("source_unavailable:") {
-        return timeline_error(source_unavailable_code(discovered, session_state), message);
-    }
-    if message.contains("cursor_invalid:") {
-        return timeline_error("cursor_invalid", message);
-    }
-    if message.contains("content_ref_invalid:") {
-        return timeline_error("content_ref_invalid", message);
-    }
-    ExternalApiError::from(error)
-}
-
-fn source_unavailable_code(discovered: bool, session_state: &str) -> &'static str {
-    if discovered && matches!(session_state, "exited" | "error") {
-        "source_unavailable"
-    } else {
-        "not_ready"
-    }
-}
-
-fn unsupported_transcript_error(client_type: &str) -> ExternalApiError {
-    timeline_error(
-        "capability_unavailable",
-        format!("{client_type} client does not support backend transcript timeline"),
-    )
 }
 
 fn timeline_error(code: &'static str, message: impl Into<String>) -> ExternalApiError {

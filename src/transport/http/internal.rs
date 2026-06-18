@@ -11,9 +11,9 @@ use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
-    agent_clients,
     application::{
-        AppState, EventIngestService, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
+        AppState, EventIngestService, InternalEventValidationService, RuntimeBindingUpsertRequest,
+        RuntimeBindingUpsertService,
     },
     domain::{DomainEvent, EventSource, EventType},
     error::Error,
@@ -63,6 +63,9 @@ pub async fn post_event(
 ) -> Result<Json<InternalEventResponse>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let event = request.into_domain_event()?;
+    InternalEventValidationService::new()
+        .validate(&event)
+        .map_err(domain_error_as_invalid_request)?;
     let service = EventIngestService::new(state.db());
     service
         .ensure_confirmed_event_matches_session_boundary(&event)
@@ -113,10 +116,6 @@ fn domain_error_as_invalid_request(error: Error) -> ApiError {
     }
 }
 
-fn client_session_identity_required_on_ready(client_type: &str) -> bool {
-    agent_clients::client_session_identity_required_on_ready(client_type)
-}
-
 impl InternalEventRequest {
     fn into_domain_event(self) -> Result<DomainEvent, ApiError> {
         let source = EventSource::from_str(&self.source)
@@ -136,32 +135,6 @@ impl InternalEventRequest {
 
         if event_type == EventType::SessionContextUsageUpdated {
             validate_context_usage_payload(&self.payload)?;
-        }
-
-        if event_type == EventType::SessionReady && source == EventSource::AgentClient {
-            let runtime_instance_id = self
-                .payload
-                .get("runtime_instance_id")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            if runtime_instance_id.trim().is_empty() {
-                return Err(ApiError::invalid_request(
-                    "session.ready from agent_client requires payload.runtime_instance_id",
-                ));
-            }
-            if client_session_identity_required_on_ready(&self.client_type) {
-                let client_session_key = self
-                    .payload
-                    .get("client_session_key")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                if client_session_key.trim().is_empty() {
-                    return Err(ApiError::invalid_request(format!(
-                        "{} session.ready from agent_client requires payload.client_session_key",
-                        self.client_type
-                    )));
-                }
-            }
         }
 
         let payload_size = serde_json::to_vec(&self.payload)

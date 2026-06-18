@@ -5,4 +5,7 @@ pub use pontia_agent_clients::raw_transcripts::{
     TimelineItem, TimelineItemDetailPage, TimelineItemDetailRequest, TimelinePage,
     TimelinePageRequest,
 };
-pub use service::resolve_and_parse_timeline_page;
+pub use service::{
+    RawTranscriptService, RawTranscriptServiceError, RawTranscriptTimelineErrorCode,
+    resolve_and_parse_timeline_page,
+};
