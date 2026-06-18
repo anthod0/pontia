@@ -1,8 +1,8 @@
 use sqlx::SqlitePool;
 
-use pontia_storage_sqlite::models::turns::{TurnEventEnrichmentRow, TurnRow};
+use crate::models::turns::{TurnEventEnrichmentRow, TurnRow};
 
-use crate::error::Result;
+use pontia_core::Result;
 
 #[derive(Debug, Clone)]
 pub struct SqliteTurnRepository {

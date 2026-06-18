@@ -1,7 +1,11 @@
-use pontia_storage_sqlite::models::{events::EventRow, sessions::SessionRow};
+use pontia_storage_sqlite::{
+    connect_sqlite,
+    models::{dag::DagProposalRow, events::EventRow, sessions::SessionRow},
+    repositories::dag::SqliteDagRepository,
+};
 
 #[test]
-fn storage_sqlite_crate_exposes_non_dag_row_models() {
+fn storage_sqlite_crate_exposes_row_models() {
     let session = SessionRow {
         session_id: "sess_test".to_string(),
         client_type: "pi".to_string(),
@@ -28,6 +32,28 @@ fn storage_sqlite_crate_exposes_non_dag_row_models() {
         occurred_at: session.created_at.clone(),
         payload: "{}".to_string(),
     };
+    let proposal = DagProposalRow {
+        proposal_id: "proposal_test".to_string(),
+        task_id: "task_test".to_string(),
+        mode: "initial".to_string(),
+        state: "pending".to_string(),
+        summary: "test".to_string(),
+        proposal_json: "{}".to_string(),
+        validation_json: "{}".to_string(),
+        created_by_session_id: None,
+        created_by_turn_id: "turn_test".to_string(),
+        revision: 1,
+        supersedes_proposal_id: None,
+        created_at: session.created_at.clone(),
+        updated_at: session.updated_at.clone(),
+    };
 
     assert_eq!(event.session_id, "sess_test");
+    assert_eq!(proposal.revision, 1);
+}
+
+#[test]
+fn storage_sqlite_crate_exposes_connection_and_repositories() {
+    let _connect = connect_sqlite;
+    let _repository_constructor = SqliteDagRepository::new;
 }

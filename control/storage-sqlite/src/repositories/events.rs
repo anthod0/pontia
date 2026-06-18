@@ -1,8 +1,8 @@
 use sqlx::SqlitePool;
 
-use pontia_storage_sqlite::models::events::{EventRow, EventStreamRow, TaskEventStreamRow};
+use crate::models::events::{EventRow, EventStreamRow, TaskEventStreamRow};
 
-use crate::error::Result;
+use pontia_core::Result;
 
 #[derive(Debug, Clone)]
 pub struct SqliteEventRepository {

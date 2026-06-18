@@ -4,4 +4,5 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+pontia-core = { path = "../core", default-features = false }
 sqlx.workspace = true

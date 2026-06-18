@@ -86,7 +86,7 @@ Install:
 
 ### SQLx compile-time checks
 
-Pontia uses SQLx compile-time query macros for SQLite repository SQL. The project does not commit `.sqlx/` offline cache files. Instead, backend commands generate a temporary SQLite check database from `migrations/*.sql` and set `DATABASE_URL` for compilation.
+Pontia uses SQLx compile-time query macros for SQLite repository SQL. The project does not commit `.sqlx/` offline cache files. Instead, backend commands generate a temporary SQLite check database from `control/storage-sqlite/migrations/*.sql` and set `DATABASE_URL` for compilation.
 
 Use the `just` targets for backend development:
 

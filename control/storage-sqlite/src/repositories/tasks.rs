@@ -1,8 +1,8 @@
 use sqlx::SqlitePool;
 
-use pontia_storage_sqlite::models::tasks::{TaskEventRow, TaskRow};
+use crate::models::tasks::{TaskEventRow, TaskRow};
 
-use crate::error::Result;
+use pontia_core::Result;
 
 #[derive(Debug, Clone)]
 pub struct CreateTaskRecord {

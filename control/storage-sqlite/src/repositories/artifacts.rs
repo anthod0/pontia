@@ -1,8 +1,8 @@
 use sqlx::SqlitePool;
 
-use pontia_storage_sqlite::models::artifacts::ArtifactRow;
+use crate::models::artifacts::ArtifactRow;
 
-use crate::error::Result;
+use pontia_core::Result;
 
 #[derive(Debug, Clone)]
 pub struct SqliteArtifactRepository {

@@ -33,7 +33,7 @@
 ## Database migration rules
 
 - Never modify an existing SQL migration file after it has been committed or may have been applied to any database.
-- SQLx migration checksums are authoritative: changing existing `migrations/*.sql` files causes `VersionMismatch` failures for users with existing databases.
+- SQLx migration checksums are authoritative: changing existing `control/storage-sqlite/migrations/*.sql` files causes `VersionMismatch` failures for users with existing databases.
 - Database schema/data fixes must be implemented by appending a new numbered SQL migration only.
 - If a historical migration appears wrong, preserve it and add a follow-up migration that transforms existing databases from the old state to the desired state.
 
@@ -76,6 +76,6 @@
 
 Notes:
 
-- SQLx compile-time query checks use a temporary SQLite database generated from `migrations/*.sql` by `scripts/sqlx-check-db.sh` / `just sqlx-db`.
+- SQLx compile-time query checks use a temporary SQLite database generated from `control/storage-sqlite/migrations/*.sql` by `scripts/sqlx-check-db.sh` / `just sqlx-db`.
 - Do not commit `.sqlx/`; run backend cargo commands through the `just` targets so `DATABASE_URL` points at the generated check database.
 - Client plugin packages currently have `test` and `typecheck` scripts, not `build` scripts.

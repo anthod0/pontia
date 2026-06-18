@@ -1,8 +1,8 @@
 use sqlx::SqlitePool;
 
-use pontia_storage_sqlite::models::sessions::{RuntimeBindingMetadataRow, SessionRow};
+use crate::models::sessions::{RuntimeBindingMetadataRow, SessionRow};
 
-use crate::error::Result;
+use pontia_core::Result;
 
 #[derive(Debug, Clone)]
 pub struct SqliteSessionRepository {

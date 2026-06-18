@@ -1,11 +1,10 @@
 use sqlx::SqlitePool;
 
-use crate::{
-    error::Result,
-    storage::sqlite::models::dag::{
-        DagProposalRow, DagSignalRow, WorkItemEdgeRow, WorkItemRow, WorkItemRunRow,
-        WorkItemRuntimeProjectionRow,
-    },
+use pontia_core::Result;
+
+use crate::models::dag::{
+    DagProposalRow, DagSignalRow, WorkItemEdgeRow, WorkItemRow, WorkItemRunRow,
+    WorkItemRuntimeProjectionRow,
 };
 
 #[derive(Debug, Clone)]
