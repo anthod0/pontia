@@ -7,13 +7,13 @@ use serde_json::Value;
 
 use pontia_core::{Error, Result};
 
-use crate::raw_transcripts::{
-    RawTranscriptParser, ResolvedAgentBinding, TimelineItem, TimelineItemDetailPage,
-    TimelineItemDetailRequest, TimelinePage, TimelinePageRequest,
-};
 use super::{
     mapping::pi_entry_to_items,
     refs::{CursorPosition, decode_pi_content_ref, decode_pi_cursor, encode_pi_cursor},
+};
+use crate::raw_transcripts::{
+    RawTranscriptParser, ResolvedAgentBinding, TimelineItem, TimelineItemDetailPage,
+    TimelineItemDetailRequest, TimelinePage, TimelinePageRequest,
 };
 
 #[derive(Debug, Clone, Default)]

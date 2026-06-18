@@ -1,7 +1,7 @@
 use serde_json::Value;
 
-use crate::raw_transcripts::{ManagedToolUse, TimelineItem, ToolUseParser};
 use super::{refs::encode_pi_content_ref, tool_use::PiToolUseParser};
+use crate::raw_transcripts::{ManagedToolUse, TimelineItem, ToolUseParser};
 
 pub(super) fn pi_entry_to_items(
     entry: &Value,
