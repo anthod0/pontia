@@ -1,8 +1,10 @@
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
-use crate::{
-    agent_clients::{self, AdapterEventBehavior, InterruptBehavior, RuntimeBehavior},
+use pontia_agent_clients::{
+    self as agent_clients, AdapterEventBehavior, InterruptBehavior, RuntimeBehavior,
+};
+use pontia_core::{
     error::{Error, Result},
     ids::new_runtime_instance_id,
     time::utc_now,
@@ -181,7 +183,7 @@ impl GenericRuntimeManager {
         Ok(RuntimeStartResult {
             runtime_kind: "tmux".to_string(),
             runtime_handle: tmux_session.clone(),
-            capabilities: capabilities.into(),
+            capabilities,
             metadata,
         })
     }

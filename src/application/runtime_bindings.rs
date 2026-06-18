@@ -263,7 +263,7 @@ fn capabilities_for_tmux(
         non_empty(tmux.socket_path.as_deref()).is_some()
             && non_empty(tmux.pane_id.as_deref()).is_some()
     });
-    let mut capabilities: SessionCapabilities = client_spec.capabilities.clone().into();
+    let mut capabilities: SessionCapabilities = client_spec.capabilities.clone();
     capabilities.accept_task = writable;
     capabilities.interrupt = writable;
     capabilities

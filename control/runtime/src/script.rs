@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use crate::{
-    agent_clients::{self, DispatchBehavior, HookLogBehavior, RuntimeBehavior},
-    error::{Error, Result},
+use pontia_agent_clients::{
+    self as agent_clients, DispatchBehavior, HookLogBehavior, RuntimeBehavior,
 };
+use pontia_core::error::{Error, Result};
 
 use super::{
     RuntimeStartRequest,
@@ -219,8 +219,8 @@ mod tests {
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
     }
 
-    #[tokio::test]
-    async fn runtime_script_uses_configured_external_api_token_when_env_is_unset() {
+    #[test]
+    fn runtime_script_uses_configured_external_api_token_when_env_is_unset() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let script_path = tempdir.path().join("runtime.sh");
         let log_path = tempdir.path().join("runtime.log");
@@ -243,21 +243,7 @@ mod tests {
         unsafe {
             std::env::remove_var("PONTIA_EXTERNAL_API_TOKEN");
         }
-        crate::runtime::set_runtime_external_api_token(None);
-        let config = crate::config::AppConfig {
-            bind_addr: "127.0.0.1:0".parse().expect("bind addr"),
-            database_url: format!("sqlite://{}", tempdir.path().join("pontia.db").display()),
-            external_api_token: Some("config-token".to_string()),
-            run_migrations: false,
-            default_client_type: "pi".to_string(),
-            graph: Default::default(),
-            workspace_browser: Default::default(),
-            runtime: Default::default(),
-            dashboard: crate::config::DashboardConfig::default(),
-        };
-        let _state = crate::application::initialize(&config)
-            .await
-            .expect("initialize app state");
+        crate::set_runtime_external_api_token(Some("config-token".to_string()));
         write_runtime_script(
             &script_path,
             tempdir.path(),
@@ -266,7 +252,7 @@ mod tests {
             "runtime_instance_1",
         )
         .expect("write script");
-        crate::runtime::set_runtime_external_api_token(None);
+        crate::set_runtime_external_api_token(None);
 
         let script = std::fs::read_to_string(script_path).expect("script");
         assert!(
@@ -311,42 +297,31 @@ mod tests {
     }
 
     #[test]
-    fn runtime_script_derives_api_urls_from_configured_bind_port() {
+    fn runtime_script_api_urls_use_test_defaults_and_configured_bind_port() {
         unsafe {
             std::env::remove_var("PONTIA_INTERNAL_EVENT_URL");
             std::env::remove_var("PONTIA_EXTERNAL_API_URL");
         }
-        crate::runtime::set_runtime_bind_addr("127.0.0.1:18080".parse().expect("bind addr"));
 
-        assert_eq!(
-            internal_event_url(),
-            "http://127.0.0.1:18080/internal/v1/events"
-        );
-        assert_eq!(external_api_url(), "http://127.0.0.1:18080/external/v1");
-    }
-
-    #[test]
-    fn runtime_script_uses_loopback_host_with_configured_bind_port() {
-        unsafe {
-            std::env::remove_var("PONTIA_INTERNAL_EVENT_URL");
-            std::env::remove_var("PONTIA_EXTERNAL_API_URL");
-        }
-        crate::runtime::set_runtime_bind_addr("0.0.0.0:18081".parse().expect("bind addr"));
-
-        assert_eq!(
-            internal_event_url(),
-            "http://127.0.0.1:18081/internal/v1/events"
-        );
-        assert_eq!(external_api_url(), "http://127.0.0.1:18081/external/v1");
-    }
-
-    #[test]
-    fn test_defaults_use_non_listening_ports() {
-        crate::runtime::reset_runtime_bind_addr_for_tests();
+        crate::reset_runtime_bind_addr_for_tests();
         assert_eq!(
             default_internal_event_url(),
             "http://127.0.0.1:9/internal/v1/events"
         );
         assert_eq!(default_external_api_url(), "http://127.0.0.1:9/external/v1");
+
+        crate::set_runtime_bind_addr("127.0.0.1:18080".parse().expect("bind addr"));
+        assert_eq!(
+            internal_event_url(),
+            "http://127.0.0.1:18080/internal/v1/events"
+        );
+        assert_eq!(external_api_url(), "http://127.0.0.1:18080/external/v1");
+
+        crate::set_runtime_bind_addr("0.0.0.0:18081".parse().expect("bind addr"));
+        assert_eq!(
+            internal_event_url(),
+            "http://127.0.0.1:18081/internal/v1/events"
+        );
+        assert_eq!(external_api_url(), "http://127.0.0.1:18081/external/v1");
     }
 }

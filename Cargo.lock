@@ -1299,6 +1299,7 @@ dependencies = [
  "pontia-agent-clients",
  "pontia-config",
  "pontia-core",
+ "pontia-runtime",
  "pontia-storage-sqlite",
  "reqwest",
  "serde",
@@ -1349,6 +1350,19 @@ dependencies = [
  "thiserror",
  "time",
  "uuid",
+]
+
+[[package]]
+name = "pontia-runtime"
+version = "0.1.0"
+dependencies = [
+ "pontia-agent-clients",
+ "pontia-config",
+ "pontia-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "time",
 ]
 
 [[package]]

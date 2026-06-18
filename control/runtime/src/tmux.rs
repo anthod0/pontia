@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use crate::error::{Error, Result};
+use pontia_core::error::{Error, Result};
 
 use super::{AgentInput, RuntimeStartRequest, utils::shell_quote};
 

@@ -1,7 +1,7 @@
 pub use pontia_agent_clients as agent_clients;
+pub use pontia_runtime as runtime;
 pub mod application;
 pub mod config;
-pub mod runtime;
 pub mod storage;
 pub mod transport;
 

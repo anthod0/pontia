@@ -3,7 +3,8 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 
-use crate::{agent_clients, config::RuntimeConfig};
+use pontia_agent_clients as agent_clients;
+use pontia_config::RuntimeConfig;
 
 fn runtime_config() -> &'static RwLock<RuntimeConfig> {
     static CONFIG: OnceLock<RwLock<RuntimeConfig>> = OnceLock::new();

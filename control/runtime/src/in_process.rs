@@ -6,8 +6,8 @@ use std::{
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
-use crate::{
-    agent_clients::AgentClientCapabilities,
+use pontia_agent_clients::AgentClientCapabilities;
+use pontia_core::{
     error::{Error, Result},
     ids::new_runtime_instance_id,
     time::utc_now,
@@ -55,7 +55,7 @@ pub(super) fn start_session(
     Ok(RuntimeStartResult {
         runtime_kind: "in_process".to_string(),
         runtime_handle: runtime_handle.clone(),
-        capabilities: capabilities.into(),
+        capabilities,
         metadata: json!({
             "backend": "in_process",
             "in_process_runtime": true,
