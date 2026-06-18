@@ -1,25 +1,43 @@
-[package]
-name = "pontia"
+[workspace]
+members = [".", "control/core"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+
+[workspace.dependencies]
+lbug = { version = "0.16.1", default-features = false }
+serde = "1"
+serde_json = "1"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "migrate", "macros"] }
+thiserror = "2"
+time = "0.3"
+uuid = "1"
+
+[package]
+name = "pontia"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
 axum = "0.8"
 dotenvy = "0.15"
-lbug = { version = "0.16.1", default-features = false, optional = true }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+lbug = { workspace = true, optional = true }
+pontia-core = { path = "control/core", default-features = false }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "migrate", "macros"] }
+sqlx.workspace = true
 tar = "0.4"
-thiserror = "2"
-time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+thiserror.workspace = true
+time = { workspace = true, features = ["formatting", "parsing", "serde"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "time"] }
 tokio-stream = "0.1"
 toml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-uuid = { version = "1", features = ["v7", "serde"] }
+uuid = { workspace = true, features = ["v7", "serde"] }
 flate2 = "1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
@@ -30,4 +48,4 @@ tower = { version = "0.5", features = ["util"] }
 
 [features]
 default = ["lbug"]
-lbug = ["dep:lbug"]
+lbug = ["dep:lbug", "pontia-core/lbug"]

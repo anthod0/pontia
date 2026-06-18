@@ -1296,6 +1296,7 @@ dependencies = [
  "flate2",
  "http-body-util",
  "lbug",
+ "pontia-core",
  "reqwest",
  "serde",
  "serde_json",
@@ -1312,6 +1313,19 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "pontia-core"
+version = "0.1.0"
+dependencies = [
+ "lbug",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "time",
+ "uuid",
 ]
 
 [[package]]
