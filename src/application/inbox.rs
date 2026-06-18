@@ -1,4 +1,5 @@
 use super::*;
+use pontia_storage_sqlite::repositories::idempotency::SqliteIdempotencyRepository;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct SubmitInboxMessageRequest {
@@ -438,20 +439,10 @@ impl InboxCommandService {
     }
 
     async fn idempotency_message_id(&self, operation: &str, key: &str) -> Result<Option<String>> {
-        let response: Option<String> = sqlx::query_scalar(
-            "SELECT response FROM idempotency_keys WHERE operation = ? AND key = ?",
-        )
-        .bind(operation)
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await?;
-        response
-            .map(|value| {
-                let value: Value = serde_json::from_str(&value)?;
-                Ok(value["message_id"].as_str().map(ToString::to_string))
-            })
-            .transpose()
-            .map(|value| value.flatten())
+        Ok(SqliteIdempotencyRepository::new(self.pool.clone())
+            .get_response(operation, key)
+            .await?
+            .and_then(|value| value["message_id"].as_str().map(ToString::to_string)))
     }
 
     async fn store_idempotency_message_id(
@@ -460,16 +451,8 @@ impl InboxCommandService {
         key: &str,
         message_id: &str,
     ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO idempotency_keys (operation, key, response)
-               VALUES (?, ?, ?)
-               ON CONFLICT(operation, key) DO NOTHING"#,
-        )
-        .bind(operation)
-        .bind(key)
-        .bind(json!({ "message_id": message_id }).to_string())
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        SqliteIdempotencyRepository::new(self.pool.clone())
+            .store_response(operation, key, &json!({ "message_id": message_id }))
+            .await
     }
 }
