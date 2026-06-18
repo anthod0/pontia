@@ -1,6 +1,7 @@
 use super::*;
-use pontia_storage_sqlite::repositories::runtime_bindings::{
-    RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository,
+use pontia_storage_sqlite::repositories::{
+    agent_bindings::SqliteAgentBindingRepository,
+    runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
 };
 
 fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
@@ -90,7 +91,7 @@ impl RuntimeControlService {
         session_id: &str,
         client_type: &str,
     ) -> Result<Option<String>> {
-        SqliteRuntimeBindingRepository::new(self.pool.clone())
+        SqliteAgentBindingRepository::new(self.pool.clone())
             .latest_client_session_key(session_id, client_type)
             .await
     }

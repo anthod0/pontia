@@ -6,6 +6,8 @@ mod foundations;
 mod mod_storage;
 #[path = "storage/raw_transcript_backend.rs"]
 mod raw_transcript_backend;
+#[path = "storage/sqlite_agent_binding_repository.rs"]
+mod sqlite_agent_binding_repository;
 #[path = "storage/sqlite_dag_repository.rs"]
 mod sqlite_dag_repository;
 #[path = "storage/sqlite_idempotency_repository.rs"]

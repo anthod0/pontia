@@ -105,33 +105,3 @@ async fn runtime_binding_metadata_can_be_read_inside_transaction() {
     );
     tx.rollback().await.expect("rollback tx");
 }
-
-#[tokio::test]
-async fn latest_client_session_key_uses_latest_agent_binding_for_client() {
-    let pool = test_pool().await;
-    sqlx::query("INSERT INTO sessions (session_id, client_type, state, metadata) VALUES ('sess_agent', 'pi', 'ready', '{}')")
-        .execute(&pool)
-        .await
-        .expect("insert session");
-    sqlx::query(
-        r#"INSERT INTO agent_bindings
-           (id, session_id, client_type, launch_cwd, client_session_key, metadata, updated_at)
-           VALUES
-           ('bind_old', 'sess_agent', 'pi', '/w', 'old-key', '{}', '2026-06-18T12:00:00Z'),
-           ('bind_new', 'sess_agent', 'pi', '/w', 'new-key', '{}', '2026-06-18T12:01:00Z'),
-           ('bind_other', 'sess_agent', 'other', '/w', 'other-key', '{}', '2026-06-18T12:02:00Z')"#,
-    )
-    .execute(&pool)
-    .await
-    .expect("insert bindings");
-
-    let repository = SqliteRuntimeBindingRepository::new(pool);
-
-    assert_eq!(
-        repository
-            .latest_client_session_key("sess_agent", "pi")
-            .await
-            .expect("latest key"),
-        Some("new-key".to_string())
-    );
-}

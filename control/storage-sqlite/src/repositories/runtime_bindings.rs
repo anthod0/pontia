@@ -111,22 +111,4 @@ impl SqliteRuntimeBindingRepository {
         .await?
         .flatten())
     }
-
-    pub async fn latest_client_session_key(
-        &self,
-        session_id: &str,
-        client_type: &str,
-    ) -> Result<Option<String>> {
-        Ok(sqlx::query_scalar(
-            r#"SELECT client_session_key
-               FROM agent_bindings
-               WHERE session_id = ? AND client_type = ?
-               ORDER BY updated_at DESC, id DESC
-               LIMIT 1"#,
-        )
-        .bind(session_id)
-        .bind(client_type)
-        .fetch_optional(&self.pool)
-        .await?)
-    }
 }

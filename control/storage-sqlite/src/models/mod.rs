@@ -1,3 +1,4 @@
+pub mod agent_bindings;
 pub mod artifacts;
 pub mod dag;
 pub mod events;

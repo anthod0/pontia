@@ -1,6 +1,7 @@
 use super::*;
 use crate::runtime::{GenericRuntimeManager, configured_internal_event_url};
 use pontia_storage_sqlite::repositories::{
+    agent_bindings::SqliteAgentBindingRepository,
     runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
     sessions::SqliteSessionRepository,
 };
@@ -160,18 +161,9 @@ impl RuntimeBindingUpsertService {
         client_type: &str,
         client_session_key: &str,
     ) -> Result<Option<String>> {
-        sqlx::query_scalar(
-            r#"SELECT session_id
-               FROM agent_bindings
-               WHERE client_type = ? AND client_session_key = ?
-               ORDER BY updated_at DESC, id DESC
-               LIMIT 1"#,
-        )
-        .bind(client_type)
-        .bind(client_session_key)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Into::into)
+        SqliteAgentBindingRepository::new(self.pool.clone())
+            .session_id_for_client_session(client_type, client_session_key)
+            .await
     }
 
     async fn create_bound_session(

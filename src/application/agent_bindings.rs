@@ -1,5 +1,11 @@
 use super::*;
-use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
+use pontia_storage_sqlite::{
+    models::agent_bindings::AgentBindingRow,
+    repositories::{
+        agent_bindings::{AgentBindingUpsertRecord, SqliteAgentBindingRepository},
+        runtime_bindings::SqliteRuntimeBindingRepository,
+    },
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentBinding {
@@ -32,41 +38,28 @@ impl AgentBindingService {
     }
 
     pub async fn upsert_binding(&self, request: UpsertAgentBindingRequest) -> Result<AgentBinding> {
-        let mut tx = self.pool.begin().await?;
-        let binding = upsert_agent_binding_in_tx(&mut tx, request).await?;
-        tx.commit().await?;
-        Ok(binding)
+        let record = agent_binding_upsert_record(request)?;
+        let row = SqliteAgentBindingRepository::new(self.pool.clone())
+            .upsert_binding(record)
+            .await?;
+        agent_binding_from_row(row)
     }
 
     pub async fn primary_binding_for_session(
         &self,
         session_id: &str,
     ) -> Result<Option<AgentBinding>> {
-        let row = sqlx::query(
-            r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered
-               FROM agent_bindings
-               WHERE session_id = ?
-               ORDER BY created_at, id
-               LIMIT 1"#,
-        )
-        .bind(session_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = SqliteAgentBindingRepository::new(self.pool.clone())
+            .primary_binding_for_session(session_id)
+            .await?;
 
-        row.map(row_to_agent_binding).transpose()
+        row.map(agent_binding_from_row).transpose()
     }
 
     pub async fn mark_discovered(&self, binding_id: &str) -> Result<()> {
-        sqlx::query(
-            r#"UPDATE agent_bindings
-               SET discovered = TRUE,
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE id = ? AND discovered = FALSE"#,
-        )
-        .bind(binding_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        SqliteAgentBindingRepository::new(self.pool.clone())
+            .mark_discovered(binding_id)
+            .await
     }
 }
 
@@ -131,39 +124,33 @@ async fn upsert_agent_binding_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     request: UpsertAgentBindingRequest,
 ) -> Result<AgentBinding> {
-    let id = crate::ids::new_agent_binding_id().to_string();
-    let metadata = serde_json::to_string(&request.metadata)?;
-    let row = sqlx::query(
-        r#"INSERT INTO agent_bindings
-           (id, session_id, client_type, launch_cwd, client_session_key, metadata)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(session_id, client_type, client_session_key) DO UPDATE SET
-               metadata = excluded.metadata,
-               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-           RETURNING id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered"#,
-    )
-    .bind(id)
-    .bind(request.session_id)
-    .bind(request.client_type)
-    .bind(request.launch_cwd)
-    .bind(request.client_session_key)
-    .bind(metadata)
-    .fetch_one(&mut **tx)
-    .await?;
-
-    row_to_agent_binding(row)
+    let record = agent_binding_upsert_record(request)?;
+    let row = SqliteAgentBindingRepository::upsert_binding_in_tx(tx, record).await?;
+    agent_binding_from_row(row)
 }
 
-fn row_to_agent_binding(row: sqlx::sqlite::SqliteRow) -> Result<AgentBinding> {
-    let metadata: String = row.try_get("metadata")?;
+fn agent_binding_upsert_record(
+    request: UpsertAgentBindingRequest,
+) -> Result<AgentBindingUpsertRecord> {
+    Ok(AgentBindingUpsertRecord {
+        id: crate::ids::new_agent_binding_id().to_string(),
+        session_id: request.session_id,
+        client_type: request.client_type,
+        launch_cwd: request.launch_cwd,
+        client_session_key: request.client_session_key,
+        metadata: serde_json::to_string(&request.metadata)?,
+    })
+}
+
+fn agent_binding_from_row(row: AgentBindingRow) -> Result<AgentBinding> {
     Ok(AgentBinding {
-        id: row.try_get("id")?,
-        session_id: row.try_get("session_id")?,
-        client_type: row.try_get("client_type")?,
-        launch_cwd: row.try_get("launch_cwd")?,
-        client_session_key: row.try_get("client_session_key")?,
-        metadata: serde_json::from_str(&metadata)?,
-        discovered: row.try_get("discovered")?,
+        id: row.id,
+        session_id: row.session_id,
+        client_type: row.client_type,
+        launch_cwd: row.launch_cwd,
+        client_session_key: row.client_session_key,
+        metadata: serde_json::from_str(&row.metadata)?,
+        discovered: row.discovered,
     })
 }
 
