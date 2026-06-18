@@ -1297,6 +1297,7 @@ dependencies = [
  "http-body-util",
  "lbug",
  "pontia-agent-clients",
+ "pontia-application",
  "pontia-config",
  "pontia-core",
  "pontia-runtime",
@@ -1326,6 +1327,27 @@ dependencies = [
  "pontia-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "pontia-application"
+version = "0.1.0"
+dependencies = [
+ "lbug",
+ "pontia-agent-clients",
+ "pontia-config",
+ "pontia-core",
+ "pontia-runtime",
+ "pontia-storage-sqlite",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

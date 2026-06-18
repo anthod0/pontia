@@ -1,0 +1,230 @@
+use std::sync::Arc;
+
+use super::*;
+use pontia_core::domain::DomainEvent;
+use pontia_runtime::{set_runtime_bind_addr, set_runtime_config, set_runtime_external_api_token};
+
+use crate::set_default_client_type;
+
+#[derive(Clone)]
+pub struct VolatileEventBroker {
+    sender: tokio::sync::broadcast::Sender<DomainEvent>,
+}
+
+impl VolatileEventBroker {
+    pub fn publish(&self, event: DomainEvent) {
+        let _ = self.sender.send(event);
+    }
+
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<DomainEvent> {
+        self.sender.subscribe()
+    }
+}
+
+impl Default for VolatileEventBroker {
+    fn default() -> Self {
+        let (sender, _) = tokio::sync::broadcast::channel(1024);
+        Self { sender }
+    }
+}
+
+#[derive(Clone)]
+pub struct AppState {
+    inner: Arc<AppStateInner>,
+}
+
+struct AppStateInner {
+    persistence: PersistenceState,
+    config: AppRuntimeState,
+    events: EventState,
+    lifecycle: LifecycleState,
+    integrations: IntegrationState,
+}
+
+struct PersistenceState {
+    db: sqlx::SqlitePool,
+}
+
+struct AppRuntimeState {
+    external_api_token: Option<String>,
+    graph: GraphRuntimeConfig,
+    workspace_browser: WorkspaceBrowserConfig,
+}
+
+struct EventState {
+    volatile_events: VolatileEventBroker,
+}
+
+struct LifecycleState {
+    shutdown: ShutdownSignal,
+}
+
+struct IntegrationState {
+    git_refresh: GitRefreshCoordinator,
+}
+
+pub struct AppStateBuilder {
+    db: sqlx::SqlitePool,
+    external_api_token: Option<String>,
+    graph: GraphRuntimeConfig,
+    workspace_browser: WorkspaceBrowserConfig,
+    shutdown: ShutdownSignal,
+    volatile_events: VolatileEventBroker,
+    git_refresh: GitRefreshCoordinator,
+}
+
+impl AppState {
+    pub fn builder(db: sqlx::SqlitePool) -> AppStateBuilder {
+        AppStateBuilder {
+            db,
+            external_api_token: None,
+            graph: GraphRuntimeConfig::default(),
+            workspace_browser: WorkspaceBrowserConfig::default(),
+            shutdown: ShutdownSignal::default(),
+            volatile_events: VolatileEventBroker::default(),
+            git_refresh: GitRefreshCoordinator::default(),
+        }
+    }
+
+    pub fn db(&self) -> sqlx::SqlitePool {
+        self.inner.persistence.db.clone()
+    }
+
+    pub fn external_api_token(&self) -> Option<&str> {
+        self.inner.config.external_api_token.as_deref()
+    }
+
+    pub fn graph(&self) -> GraphRuntimeConfig {
+        self.inner.config.graph.clone()
+    }
+
+    pub fn workspace_browser(&self) -> WorkspaceBrowserConfig {
+        self.inner.config.workspace_browser.clone()
+    }
+
+    pub fn shutdown(&self) -> ShutdownSignal {
+        self.inner.lifecycle.shutdown.clone()
+    }
+
+    pub fn volatile_events(&self) -> VolatileEventBroker {
+        self.inner.events.volatile_events.clone()
+    }
+
+    pub fn git_refresh(&self) -> GitRefreshCoordinator {
+        self.inner.integrations.git_refresh.clone()
+    }
+
+    pub fn with_graph(&self, graph: GraphRuntimeConfig) -> Self {
+        self.rebuild().graph(graph).build()
+    }
+
+    pub fn with_external_api_token(&self, external_api_token: Option<String>) -> Self {
+        self.rebuild()
+            .external_api_token(external_api_token)
+            .build()
+    }
+
+    fn rebuild(&self) -> AppStateBuilder {
+        AppState::builder(self.db())
+            .external_api_token(self.inner.config.external_api_token.clone())
+            .graph(self.graph())
+            .workspace_browser(self.workspace_browser())
+            .shutdown(self.shutdown())
+            .volatile_events(self.volatile_events())
+            .git_refresh(self.git_refresh())
+    }
+}
+
+impl AppStateBuilder {
+    pub fn external_api_token(mut self, external_api_token: Option<String>) -> Self {
+        self.external_api_token = external_api_token;
+        self
+    }
+
+    pub fn graph(mut self, graph: GraphRuntimeConfig) -> Self {
+        self.graph = graph;
+        self
+    }
+
+    pub fn workspace_browser(mut self, workspace_browser: WorkspaceBrowserConfig) -> Self {
+        self.workspace_browser = workspace_browser;
+        self
+    }
+
+    pub fn shutdown(mut self, shutdown: ShutdownSignal) -> Self {
+        self.shutdown = shutdown;
+        self
+    }
+
+    pub fn volatile_events(mut self, volatile_events: VolatileEventBroker) -> Self {
+        self.volatile_events = volatile_events;
+        self
+    }
+
+    pub fn git_refresh(mut self, git_refresh: GitRefreshCoordinator) -> Self {
+        self.git_refresh = git_refresh;
+        self
+    }
+
+    pub fn build(self) -> AppState {
+        AppState {
+            inner: Arc::new(AppStateInner {
+                persistence: PersistenceState { db: self.db },
+                config: AppRuntimeState {
+                    external_api_token: self.external_api_token,
+                    graph: self.graph,
+                    workspace_browser: self.workspace_browser,
+                },
+                events: EventState {
+                    volatile_events: self.volatile_events,
+                },
+                lifecycle: LifecycleState {
+                    shutdown: self.shutdown,
+                },
+                integrations: IntegrationState {
+                    git_refresh: self.git_refresh,
+                },
+            }),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct ShutdownSignal {
+    sender: tokio::sync::watch::Sender<bool>,
+}
+
+impl ShutdownSignal {
+    pub fn notify(&self) {
+        let _ = self.sender.send(true);
+    }
+
+    pub fn subscribe(&self) -> tokio::sync::watch::Receiver<bool> {
+        self.sender.subscribe()
+    }
+}
+
+impl Default for ShutdownSignal {
+    fn default() -> Self {
+        let (sender, _) = tokio::sync::watch::channel(false);
+        Self { sender }
+    }
+}
+
+pub async fn initialize(config: &AppConfig) -> Result<AppState> {
+    let db = connect_sqlite(&config.database_url).await?;
+
+    if config.run_migrations {
+        run_migrations(&db).await?;
+    }
+
+    set_default_client_type(config.default_client_type.clone());
+    set_runtime_config(config.runtime.clone());
+    set_runtime_external_api_token(config.external_api_token.clone());
+    set_runtime_bind_addr(config.bind_addr);
+    Ok(AppState::builder(db)
+        .external_api_token(config.external_api_token.clone())
+        .graph(config.graph.clone())
+        .workspace_browser(config.workspace_browser.clone())
+        .build())
+}
