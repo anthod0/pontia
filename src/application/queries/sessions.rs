@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::sessions::SqliteSessionRepository;
+use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
 
 impl ExternalQueryService {
     pub async fn list_sessions(&self) -> Result<Vec<SessionView>> {

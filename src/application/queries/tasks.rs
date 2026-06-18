@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::{dag::SqliteDagRepository, tasks::SqliteTaskRepository};
+use pontia_storage_sqlite::repositories::{dag::SqliteDagRepository, tasks::SqliteTaskRepository};
 
 impl ExternalQueryService {
     pub async fn list_tasks(&self) -> Result<Vec<TaskView>> {

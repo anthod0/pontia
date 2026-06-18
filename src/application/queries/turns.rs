@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::turns::SqliteTurnRepository;
+use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 
 impl ExternalQueryService {
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnView>> {

@@ -5,7 +5,7 @@ use pontia::application::{
     AddWorkItemEdgeRequest, GraphEdgeKind, GraphProjectionService, GraphRuntimeConfig,
     UpsertTaskRequest, UpsertWorkItemRequest,
 };
-use pontia::storage::sqlite::{connect_sqlite, run_migrations};
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 #[cfg(feature = "lbug")]
 use serde_json::json;
 use sqlx::SqlitePool;

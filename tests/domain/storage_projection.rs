@@ -1,8 +1,8 @@
 use pontia::{
     application::EventIngestService,
     domain::{DomainEvent, EventSource, EventType, SessionState, TurnState},
-    storage::sqlite::{connect_sqlite, run_migrations},
 };
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 
 async fn service() -> EventIngestService {

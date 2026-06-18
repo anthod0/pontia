@@ -1,5 +1,5 @@
 use pontia::application::AppState;
-use pontia::storage::sqlite::{connect_sqlite, run_migrations};
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 #[tokio::test]
 async fn app_state_is_constructed_through_builder() {

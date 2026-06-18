@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::{
+use pontia_storage_sqlite::repositories::{
     dag::SqliteDagRepository,
     tasks::{CreateTaskRecord, SqliteTaskRepository},
 };

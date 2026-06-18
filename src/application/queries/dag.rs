@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::dag::SqliteDagRepository;
+use pontia_storage_sqlite::repositories::dag::SqliteDagRepository;
 
 impl ExternalQueryService {
     pub async fn get_task_dag(&self, task_id: &str) -> Result<TaskDagView> {

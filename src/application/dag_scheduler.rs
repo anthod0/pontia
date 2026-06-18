@@ -580,7 +580,7 @@ fn new_scheduler_id(prefix: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::sqlite::{connect_sqlite, run_migrations};
+    use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
     async fn test_pool() -> SqlitePool {
         let db = connect_sqlite("sqlite://:memory:").await.expect("connect");

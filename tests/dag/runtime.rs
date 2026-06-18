@@ -6,8 +6,8 @@ use pontia::{
         WorkItemDraft, WorkItemEdgeDraft,
     },
     ids::new_task_id,
-    storage::sqlite::{connect_sqlite, run_migrations},
 };
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 use sqlx::SqlitePool;
 

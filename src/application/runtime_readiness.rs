@@ -95,8 +95,8 @@ mod tests {
         application::EventIngestService,
         domain::{DomainEvent, EventSource, EventType},
         ids::new_event_id,
-        storage::sqlite::{connect_sqlite, run_migrations},
     };
+    use pontia_storage_sqlite::{connect_sqlite, run_migrations};
     use serde_json::json;
 
     async fn pool() -> SqlitePool {

@@ -1,4 +1,4 @@
-use pontia::storage::sqlite::{
+use pontia_storage_sqlite::{
     connect_sqlite,
     repositories::tasks::{CreateTaskRecord, SqliteTaskRepository},
     run_migrations,

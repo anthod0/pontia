@@ -384,8 +384,8 @@ mod tests {
         application::EventIngestService,
         domain::{DomainEvent, EventSource, EventType},
         ids::{new_event_id, new_session_id},
-        storage::sqlite::{connect_sqlite, run_migrations},
     };
+    use pontia_storage_sqlite::{connect_sqlite, run_migrations};
     use std::{process::Command, time::Duration};
 
     struct TmuxSessionGuard {

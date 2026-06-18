@@ -7,8 +7,8 @@ use pontia::{
     },
     domain::{DomainEvent, EventSource, EventType},
     ids::{new_event_id, new_task_id},
-    storage::sqlite::{connect_sqlite, run_migrations},
 };
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 use sqlx::{Row, SqlitePool};
 use std::process::{Command, Stdio};

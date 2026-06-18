@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::workspaces::SqliteWorkspaceRepository;
+use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
 impl ExternalQueryService {
     pub async fn list_workspaces(&self) -> Result<Vec<WorkspaceView>> {

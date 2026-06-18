@@ -10,12 +10,12 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
+use pontia::transport::http;
 use pontia::{
     agent_clients::GenericTestClient,
     application::{AdapterEventOutboxService, AppState},
-    storage::sqlite::{connect_sqlite, run_migrations},
-    transport::http,
 };
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;

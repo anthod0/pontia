@@ -1,4 +1,4 @@
-use pontia::storage::sqlite::{
+use pontia_storage_sqlite::{
     connect_sqlite, repositories::dag::SqliteDagRepository, run_migrations,
 };
 use serde_json::json;

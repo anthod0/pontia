@@ -7,15 +7,12 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use pontia::{
-    application::AppState,
-    config::DashboardConfig,
-    storage::sqlite::{connect_sqlite, run_migrations},
-    transport::http::{
-        self,
-        dashboard::{ResolvedDashboard, resolve_dashboard},
-    },
+use pontia::transport::http::{
+    self,
+    dashboard::{ResolvedDashboard, resolve_dashboard},
 };
+use pontia::{application::AppState, config::DashboardConfig};
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");

@@ -1,7 +1,5 @@
-use pontia::{
-    application::AppState,
-    storage::sqlite::{connect_sqlite, run_migrations},
-};
+use pontia::application::AppState;
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 use super::http::TOKEN;
 

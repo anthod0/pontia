@@ -22,8 +22,8 @@ use crate::{
         new_event_id, new_message_id, new_session_id, new_task_id, new_turn_id, new_workspace_id,
     },
     runtime::{AgentInput, GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult},
-    storage::sqlite::{connect_sqlite, run_migrations},
 };
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 mod agent_bindings;
 mod agent_profiles;

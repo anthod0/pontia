@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::artifacts::SqliteArtifactRepository;
+use pontia_storage_sqlite::repositories::artifacts::SqliteArtifactRepository;
 
 impl ExternalQueryService {
     pub async fn list_artifacts(&self, session_id: &str) -> Result<Vec<ArtifactView>> {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::events::SqliteEventRepository;
+use pontia_storage_sqlite::repositories::events::SqliteEventRepository;
 
 impl ExternalQueryService {
     pub async fn list_session_events(&self, session_id: &str) -> Result<Vec<EventView>> {

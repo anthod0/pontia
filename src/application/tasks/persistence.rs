@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::sqlite::repositories::tasks::SqliteTaskRepository;
+use pontia_storage_sqlite::repositories::tasks::SqliteTaskRepository;
 
 impl TaskCommandService {
     pub(super) async fn idempotency_response(

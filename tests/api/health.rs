@@ -5,11 +5,9 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use pontia::{
-    application::AppState,
-    storage::sqlite::{connect_sqlite, run_migrations},
-    transport::http,
-};
+use pontia::application::AppState;
+use pontia::transport::http;
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 async fn test_state() -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");

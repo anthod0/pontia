@@ -1,4 +1,4 @@
-use pontia::storage::sqlite::{connect_sqlite, normalize_sqlite_database_url, run_migrations};
+use pontia_storage_sqlite::{connect_sqlite, normalize_sqlite_database_url, run_migrations};
 use sqlx::Row;
 
 #[test]
