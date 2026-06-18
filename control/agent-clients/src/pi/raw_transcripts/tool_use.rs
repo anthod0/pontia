@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::super::super::{ManagedToolUse, ManagedToolUseInput, ToolUseParser};
+use crate::raw_transcripts::{ManagedToolUse, ManagedToolUseInput, ToolUseParser};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(super) struct PiToolUseParser;

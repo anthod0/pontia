@@ -1,4 +1,4 @@
-pub mod agent_clients;
+pub use pontia_agent_clients as agent_clients;
 pub mod application;
 pub mod config;
 pub mod runtime;

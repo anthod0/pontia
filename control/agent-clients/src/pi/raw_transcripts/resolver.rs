@@ -1,8 +1,8 @@
 use std::{fs, path::PathBuf};
 
-use crate::error::{Error, Result};
+use pontia_core::{Error, Result};
 
-use super::super::super::{AgentBindingResolveRequest, AgentBindingResolver, ResolvedAgentBinding};
+use crate::raw_transcripts::{AgentBindingResolveRequest, AgentBindingResolver, ResolvedAgentBinding};
 
 #[derive(Debug, Clone)]
 pub struct PiAgentBindingResolver {

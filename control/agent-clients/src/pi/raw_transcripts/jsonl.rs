@@ -5,11 +5,11 @@ use std::{
 
 use serde_json::Value;
 
-use crate::error::{Error, Result};
+use pontia_core::{Error, Result};
 
-use super::super::super::{
-    RawTranscriptParser, ResolvedAgentBinding, TimelineItemDetailPage, TimelineItemDetailRequest,
-    TimelinePage, TimelinePageRequest,
+use crate::raw_transcripts::{
+    RawTranscriptParser, ResolvedAgentBinding, TimelineItem, TimelineItemDetailPage,
+    TimelineItemDetailRequest, TimelinePage, TimelinePageRequest,
 };
 use super::{
     mapping::pi_entry_to_items,
@@ -263,7 +263,7 @@ fn read_forward_items_from_source(
     source: &ResolvedAgentBinding,
     start: usize,
     end: usize,
-) -> Result<Vec<super::super::super::TimelineItem>> {
+) -> Result<Vec<TimelineItem>> {
     let mut file = File::open(&source.path).map_err(|err| {
         Error::CapabilityUnavailable(format!(
             "source_unavailable: raw source {} is unavailable: {err}",
@@ -419,7 +419,7 @@ fn parse_items_in_range(
     ranges: &[(usize, usize)],
     binding_id: &str,
     selected_start: usize,
-) -> Result<Vec<super::super::super::TimelineItem>> {
+) -> Result<Vec<TimelineItem>> {
     let mut items = Vec::new();
     for (line_start, line_end) in ranges.iter().copied() {
         if line_start < selected_start {

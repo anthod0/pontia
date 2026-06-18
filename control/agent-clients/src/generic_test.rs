@@ -1,15 +1,13 @@
 use std::sync::{Mutex, OnceLock};
 
 use crate::{
-    agent_clients::AgentClientCapabilities,
-    agent_clients::types::{
+    AgentClientCapabilities, AgentInput, ContextUsageCapability,
+    types::{
         AdapterEventBehavior, AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior,
         CurrentTurnIdBehavior, DispatchBehavior, InterruptBehavior, ReadinessBehavior,
         RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
         TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
     },
-    application::ContextUsageCapability,
-    runtime::AgentInput,
 };
 
 pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
@@ -86,7 +84,7 @@ impl GenericTestClient {
 }
 
 impl GenericTestClient {
-    pub fn accept_input(&self, input: AgentInput) -> crate::error::Result<()> {
+    pub fn accept_input(&self, input: AgentInput) -> pontia_core::Result<()> {
         recorded_inputs()
             .lock()
             .expect("recorded inputs lock")

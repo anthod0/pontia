@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+pub use pontia_agent_clients::AgentInput;
+
 use crate::{agent_clients::AgentClientCapabilities, application::SessionCapabilities};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,13 +24,6 @@ pub struct RuntimeStartResult {
     pub metadata: Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentInput {
-    pub session_id: String,
-    pub turn_id: String,
-    pub input: String,
-}
-
 impl From<AgentClientCapabilities> for SessionCapabilities {
     fn from(capabilities: AgentClientCapabilities) -> Self {
         Self {
@@ -40,7 +35,17 @@ impl From<AgentClientCapabilities> for SessionCapabilities {
             heartbeat: capabilities.heartbeat,
             artifact_sources: capabilities.artifact_sources,
             timeline: capabilities.timeline,
-            context_usage: capabilities.context_usage,
+            context_usage: match capabilities.context_usage {
+                pontia_agent_clients::ContextUsageCapability::Unsupported => {
+                    crate::application::ContextUsageCapability::Unsupported
+                }
+                pontia_agent_clients::ContextUsageCapability::Estimated => {
+                    crate::application::ContextUsageCapability::Estimated
+                }
+                pontia_agent_clients::ContextUsageCapability::Exact => {
+                    crate::application::ContextUsageCapability::Exact
+                }
+            },
         }
     }
 }

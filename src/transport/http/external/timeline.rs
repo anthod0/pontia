@@ -7,11 +7,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    agent_clients::{TranscriptBehavior, get_client_spec},
+    agent_clients::{self, TranscriptBehavior, get_client_spec},
     application::{
-        AgentBinding, AgentBindingResolveRequest, AgentBindingResolver, AgentBindingService,
-        AppState, ExternalQueryService, PiAgentBindingResolver, PiJsonlParser, RawTranscriptParser,
-        ResolvedAgentBinding, TimelineItemDetailRequest, TimelinePageRequest,
+        AgentBinding, AgentBindingResolveRequest, AgentBindingService, AppState,
+        ExternalQueryService, ResolvedAgentBinding, TimelineItemDetailRequest, TimelinePageRequest,
     },
 };
 
@@ -56,20 +55,18 @@ pub async fn get_session_timeline(
 
     let transcript = transcript_backend(&binding)?;
     let source = resolve_binding_source(&binding, transcript, &session.state).await?;
-    let page = match transcript {
-        TranscriptBehavior::PiJsonl => PiJsonlParser::new()
-            .timeline_page(TimelinePageRequest {
-                session_id,
-                source,
-                before: query.before,
-                after: query.after,
-                limit: query.limit,
-            })
-            .map_err(|error| {
-                timeline_error_from_error(error, binding.discovered, &session.state)
-            })?,
-        TranscriptBehavior::Unsupported => unreachable!("unsupported transcript checked above"),
-    };
+    let backend = agent_clients::raw_transcript_backend_for(&binding.client_type)
+        .ok_or_else(|| unsupported_transcript_error(&binding.client_type))?;
+    let page = backend
+        .parser
+        .timeline_page(TimelinePageRequest {
+            session_id,
+            source,
+            before: query.before,
+            after: query.after,
+            limit: query.limit,
+        })
+        .map_err(|error| timeline_error_from_error(error, binding.discovered, &session.state))?;
     if !binding.discovered {
         binding_service.mark_discovered(&binding.id).await?;
     }
@@ -111,18 +108,16 @@ pub async fn get_session_timeline_detail(
 
     let transcript = transcript_backend(&binding)?;
     let source = resolve_binding_source(&binding, transcript, &session.state).await?;
-    let detail = match transcript {
-        TranscriptBehavior::PiJsonl => PiJsonlParser::new()
-            .timeline_item_detail(TimelineItemDetailRequest {
-                session_id,
-                source,
-                content_ref: query.content_ref,
-            })
-            .map_err(|error| {
-                timeline_error_from_error(error, binding.discovered, &session.state)
-            })?,
-        TranscriptBehavior::Unsupported => unreachable!("unsupported transcript checked above"),
-    };
+    let backend = agent_clients::raw_transcript_backend_for(&binding.client_type)
+        .ok_or_else(|| unsupported_transcript_error(&binding.client_type))?;
+    let detail = backend
+        .parser
+        .timeline_item_detail(TimelineItemDetailRequest {
+            session_id,
+            source,
+            content_ref: query.content_ref,
+        })
+        .map_err(|error| timeline_error_from_error(error, binding.discovered, &session.state))?;
     if !binding.discovered {
         binding_service.mark_discovered(&binding.id).await?;
     }
@@ -158,17 +153,22 @@ async fn resolve_binding_source(
     session_state: &str,
 ) -> Result<ResolvedAgentBinding, ExternalApiError> {
     match transcript {
-        TranscriptBehavior::PiJsonl => PiAgentBindingResolver::new()
-            .resolve(&AgentBindingResolveRequest {
-                id: binding.id.clone(),
-                session_id: binding.session_id.clone(),
-                client_type: binding.client_type.clone(),
-                launch_cwd: binding.launch_cwd.clone().into(),
-                client_session_key: binding.client_session_key.clone(),
-            })
-            .map_err(|error| {
-                timeline_error_from_binding_error(error, binding.discovered, session_state)
-            }),
+        TranscriptBehavior::PiJsonl => {
+            let backend = agent_clients::raw_transcript_backend_for(&binding.client_type)
+                .ok_or_else(|| unsupported_transcript_error(&binding.client_type))?;
+            backend
+                .resolver
+                .resolve(&AgentBindingResolveRequest {
+                    id: binding.id.clone(),
+                    session_id: binding.session_id.clone(),
+                    client_type: binding.client_type.clone(),
+                    launch_cwd: binding.launch_cwd.clone().into(),
+                    client_session_key: binding.client_session_key.clone(),
+                })
+                .map_err(|error| {
+                    timeline_error_from_binding_error(error, binding.discovered, session_state)
+                })
+        }
         TranscriptBehavior::Unsupported => Err(timeline_error(
             "capability_unavailable",
             format!(
@@ -215,6 +215,13 @@ fn source_unavailable_code(discovered: bool, session_state: &str) -> &'static st
     } else {
         "not_ready"
     }
+}
+
+fn unsupported_transcript_error(client_type: &str) -> ExternalApiError {
+    timeline_error(
+        "capability_unavailable",
+        format!("{client_type} client does not support backend transcript timeline"),
+    )
 }
 
 fn timeline_error(code: &'static str, message: impl Into<String>) -> ExternalApiError {

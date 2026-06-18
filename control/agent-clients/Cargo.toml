@@ -1,0 +1,13 @@
+[package]
+name = "pontia-agent-clients"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+pontia-core = { path = "../core", default-features = false }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[features]
+default = ["lbug"]
+lbug = ["pontia-core/lbug"]

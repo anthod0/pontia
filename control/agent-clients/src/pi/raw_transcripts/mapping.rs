@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::super::super::{ManagedToolUse, TimelineItem, ToolUseParser};
+use crate::raw_transcripts::{ManagedToolUse, TimelineItem, ToolUseParser};
 use super::{refs::encode_pi_content_ref, tool_use::PiToolUseParser};
 
 pub(super) fn pi_entry_to_items(

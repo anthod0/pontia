@@ -1,6 +1,20 @@
 use serde::{Deserialize, Serialize};
 
-use crate::application::ContextUsageCapability;
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextUsageCapability {
+    #[default]
+    Unsupported,
+    Estimated,
+    Exact,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentInput {
+    pub session_id: String,
+    pub turn_id: String,
+    pub input: String,
+}
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentClientCapabilities {

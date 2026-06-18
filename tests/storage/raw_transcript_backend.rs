@@ -1,8 +1,11 @@
 use std::{fs, io::Write};
 
-use pontia::application::{
-    AgentBinding, AgentBindingResolveRequest, AgentBindingResolver, PiAgentBindingResolver,
-    PiJsonlParser, RawTranscriptParser, TimelinePageRequest,
+use pontia::application::AgentBinding;
+use pontia_agent_clients::{
+    pi::raw_transcripts::{PiAgentBindingResolver, PiJsonlParser},
+    raw_transcripts::{
+        AgentBindingResolveRequest, AgentBindingResolver, RawTranscriptParser, TimelinePageRequest,
+    },
 };
 use serde_json::json;
 use tempfile::tempdir;

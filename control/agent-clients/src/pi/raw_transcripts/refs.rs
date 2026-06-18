@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use pontia_core::{Error, Result};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct CursorPosition {

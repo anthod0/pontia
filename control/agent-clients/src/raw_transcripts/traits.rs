@@ -1,4 +1,4 @@
-use crate::error::Result;
+use pontia_core::Result;
 
 use serde_json::Value;
 

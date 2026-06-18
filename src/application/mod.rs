@@ -89,9 +89,9 @@ pub use graph::{
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
-    AgentBindingResolveRequest, AgentBindingResolver, PiAgentBindingResolver, PiJsonlParser,
-    RawTranscriptParser, ResolvedAgentBinding, TimelineItem, TimelineItemDetailPage,
-    TimelineItemDetailRequest, TimelinePage, TimelinePageRequest, resolve_and_parse_timeline_page,
+    AgentBindingResolveRequest, AgentBindingResolver, RawTranscriptParser, ResolvedAgentBinding,
+    TimelineItem, TimelineItemDetailPage, TimelineItemDetailRequest, TimelinePage,
+    TimelinePageRequest, resolve_and_parse_timeline_page,
 };
 pub use runtime_bindings::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};

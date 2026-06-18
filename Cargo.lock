@@ -1296,6 +1296,7 @@ dependencies = [
  "flate2",
  "http-body-util",
  "lbug",
+ "pontia-agent-clients",
  "pontia-core",
  "pontia-storage-sqlite",
  "reqwest",
@@ -1314,6 +1315,15 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "pontia-agent-clients"
+version = "0.1.0"
+dependencies = [
+ "pontia-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,13 +1,14 @@
+pub mod raw_transcripts;
+
 use crate::{
-    agent_clients::AgentClientCapabilities,
-    agent_clients::types::{
+    AgentClientCapabilities, ContextUsageCapability,
+    types::{
         AdapterEventBehavior, AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior,
         CurrentTurnIdBehavior, DispatchBehavior, HookLogBehavior, InterruptBehavior,
         ReadinessBehavior, RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior,
         TerminateBehavior, TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior,
         TurnLifecycleBehavior,
     },
-    application::ContextUsageCapability,
 };
 
 pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
