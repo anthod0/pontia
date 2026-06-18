@@ -18,3 +18,12 @@ pub struct TurnEventEnrichmentRow {
     pub occurred_at: String,
     pub payload: String,
 }
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct TurnProjectionRow {
+    pub turn_id: String,
+    pub session_id: String,
+    pub state: String,
+    pub state_version: i64,
+    pub metadata: String,
+}

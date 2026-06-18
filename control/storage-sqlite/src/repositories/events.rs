@@ -1,8 +1,21 @@
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, Transaction};
 
-use crate::models::events::{EventRow, EventStreamRow, TaskEventStreamRow};
+use crate::models::events::{DomainEventRow, EventRow, EventStreamRow, TaskEventStreamRow};
 
 use pontia_core::Result;
+
+#[derive(Debug, Clone)]
+pub struct EventInsertRecord {
+    pub event_id: String,
+    pub session_id: String,
+    pub turn_id: Option<String>,
+    pub source: String,
+    pub client_type: String,
+    pub event_type: String,
+    pub occurred_at: String,
+    pub seq: Option<i64>,
+    pub payload: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct SqliteEventRepository {
@@ -12,6 +25,103 @@ pub struct SqliteEventRepository {
 impl SqliteEventRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
+    }
+
+    pub async fn insert_event_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        event: EventInsertRecord,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"INSERT INTO events
+               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(event.event_id)
+        .bind(event.session_id)
+        .bind(event.turn_id)
+        .bind(event.source)
+        .bind(event.client_type)
+        .bind(event.event_type)
+        .bind(event.occurred_at)
+        .bind(event.seq)
+        .bind(event.payload)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn existing_event_state_version(
+        &self,
+        event_id: &str,
+        session_id: &str,
+    ) -> Result<Option<i64>> {
+        let exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM events WHERE event_id = ?")
+            .bind(event_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if exists.is_none() {
+            return Ok(None);
+        }
+
+        Ok(Some(
+            sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_one(&self.pool)
+                .await?,
+        ))
+    }
+
+    pub async fn session_event_count_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        session_id: &str,
+    ) -> Result<i64> {
+        Ok(
+            sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_one(&mut **tx)
+                .await?,
+        )
+    }
+
+    pub async fn list_domain_event_rows(&self, session_id: &str) -> Result<Vec<DomainEventRow>> {
+        Ok(sqlx::query_as::<_, DomainEventRow>(
+            r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload
+               FROM events WHERE session_id = ? ORDER BY rowid"#,
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn max_seq(&self, session_id: &str) -> Result<Option<i64>> {
+        Ok(sqlx::query_scalar(
+            "SELECT MAX(seq) FROM events WHERE session_id = ? AND seq IS NOT NULL",
+        )
+        .bind(session_id)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn record_warnings(
+        &self,
+        event_id: &str,
+        session_id: &str,
+        warnings: &[String],
+    ) -> Result<()> {
+        for warning in warnings {
+            sqlx::query(
+                "INSERT INTO ingest_warnings (event_id, session_id, warning) VALUES (?, ?, ?)",
+            )
+            .bind(event_id)
+            .bind(session_id)
+            .bind(warning)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
     }
 
     pub async fn list_session_events(&self, session_id: &str) -> Result<Vec<EventRow>> {

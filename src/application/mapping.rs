@@ -2,12 +2,12 @@ use super::*;
 use pontia_storage_sqlite::models::{
     artifacts::ArtifactRow,
     dag::{DagProposalRow, DagSignalRow, WorkItemRunRow, WorkItemRuntimeProjectionRow},
-    events::{EventRow, EventStreamRow, TaskEventStreamRow},
+    events::{DomainEventRow, EventRow, EventStreamRow, TaskEventStreamRow},
     git_status::WorkspaceGitStatusRow,
     inbox::InboxMessageRow,
-    sessions::SessionRow,
+    sessions::{SessionProjectionRow, SessionRow},
     tasks::{TaskEventRow, TaskRow},
-    turns::TurnRow,
+    turns::{TurnProjectionRow, TurnRow},
     workspaces::WorkspaceRow,
 };
 
@@ -359,58 +359,47 @@ pub(crate) fn artifact_row_to_view(row: ArtifactRow) -> Result<ArtifactView> {
     })
 }
 
-pub(crate) fn row_to_session(row: sqlx::sqlite::SqliteRow) -> Result<SessionProjection> {
-    let metadata: String = row.try_get("metadata")?;
-    let state: String = row.try_get("state")?;
-
+pub(crate) fn row_to_session(row: SessionProjectionRow) -> Result<SessionProjection> {
     Ok(SessionProjection {
-        session_id: row.try_get("session_id")?,
-        client_type: row.try_get("client_type")?,
-        title: row.try_get("title")?,
-        handle: row.try_get("handle")?,
-        role: row.try_get("role")?,
-        description: row.try_get("description")?,
-        execution_profile_id: row.try_get("execution_profile_id")?,
-        execution_profile_version: row.try_get("execution_profile_version")?,
-        state: SessionState::from_str(&state)?,
-        current_turn_id: row.try_get("current_turn_id")?,
-        state_version: row.try_get("state_version")?,
-        metadata: serde_json::from_str(&metadata)?,
+        session_id: row.session_id,
+        client_type: row.client_type,
+        title: row.title,
+        handle: row.handle,
+        role: row.role,
+        description: row.description,
+        execution_profile_id: row.execution_profile_id,
+        execution_profile_version: row.execution_profile_version,
+        state: SessionState::from_str(&row.state)?,
+        current_turn_id: row.current_turn_id,
+        state_version: row.state_version,
+        metadata: serde_json::from_str(&row.metadata)?,
     })
 }
 
-pub(crate) fn row_to_turn(row: sqlx::sqlite::SqliteRow) -> Result<TurnProjection> {
-    let metadata: String = row.try_get("metadata")?;
-    let state: String = row.try_get("state")?;
-
+pub(crate) fn row_to_turn(row: TurnProjectionRow) -> Result<TurnProjection> {
     Ok(TurnProjection {
-        turn_id: row.try_get("turn_id")?,
-        session_id: row.try_get("session_id")?,
-        state: TurnState::from_str(&state)?,
-        state_version: row.try_get("state_version")?,
-        metadata: serde_json::from_str(&metadata)?,
+        turn_id: row.turn_id,
+        session_id: row.session_id,
+        state: TurnState::from_str(&row.state)?,
+        state_version: row.state_version,
+        metadata: serde_json::from_str(&row.metadata)?,
     })
 }
 
-pub(crate) fn row_to_event(row: sqlx::sqlite::SqliteRow) -> Result<DomainEvent> {
-    let payload: String = row.try_get("payload")?;
-    let source: String = row.try_get("source")?;
-    let event_type: String = row.try_get("event_type")?;
-    let occurred_at: String = row.try_get("occurred_at")?;
-
+pub(crate) fn row_to_event(row: DomainEventRow) -> Result<DomainEvent> {
     Ok(DomainEvent {
-        event_id: row.try_get("event_id")?,
-        session_id: row.try_get("session_id")?,
-        turn_id: row.try_get("turn_id")?,
-        source: EventSource::from_str(&source)?,
-        client_type: row.try_get("client_type")?,
-        event_type: EventType::from_str(&event_type)?,
+        event_id: row.event_id,
+        session_id: row.session_id,
+        turn_id: row.turn_id,
+        source: EventSource::from_str(&row.source)?,
+        client_type: row.client_type,
+        event_type: EventType::from_str(&row.event_type)?,
         occurred_at: time::OffsetDateTime::parse(
-            &occurred_at,
+            &row.occurred_at,
             &time::format_description::well_known::Rfc3339,
         )
         .map_err(|err| crate::error::Error::Domain(format!("invalid event timestamp: {err}")))?,
-        seq: row.try_get("seq")?,
-        payload: serde_json::from_str(&payload)?,
+        seq: row.seq,
+        payload: serde_json::from_str(&row.payload)?,
     })
 }

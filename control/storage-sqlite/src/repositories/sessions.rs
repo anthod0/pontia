@@ -1,8 +1,24 @@
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, Transaction};
 
-use crate::models::sessions::{RuntimeBindingMetadataRow, SessionRow};
+use crate::models::sessions::{RuntimeBindingMetadataRow, SessionProjectionRow, SessionRow};
 
 use pontia_core::Result;
+
+#[derive(Debug, Clone)]
+pub struct SessionProjectionUpsertRecord {
+    pub session_id: String,
+    pub client_type: String,
+    pub title: Option<String>,
+    pub handle: Option<String>,
+    pub role: Option<String>,
+    pub description: Option<String>,
+    pub execution_profile_id: Option<String>,
+    pub execution_profile_version: Option<String>,
+    pub state: String,
+    pub current_turn_id: Option<String>,
+    pub state_version: i64,
+    pub metadata: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct SqliteSessionRepository {
@@ -12,6 +28,59 @@ pub struct SqliteSessionRepository {
 impl SqliteSessionRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
+    }
+
+    pub async fn load_projection_rows(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<SessionProjectionRow>> {
+        Ok(sqlx::query_as::<_, SessionProjectionRow>(
+            "SELECT session_id, client_type, title, handle, role, description, execution_profile_id, execution_profile_version, state, current_turn_id, state_version, metadata FROM sessions WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn upsert_projection_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        session: SessionProjectionUpsertRecord,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"INSERT INTO sessions
+               (session_id, client_type, title, handle, role, description, execution_profile_id,
+                execution_profile_version, state, current_turn_id, state_version, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(session_id) DO UPDATE SET
+                   client_type = excluded.client_type,
+                   title = excluded.title,
+                   handle = excluded.handle,
+                   role = excluded.role,
+                   description = excluded.description,
+                   execution_profile_id = excluded.execution_profile_id,
+                   execution_profile_version = excluded.execution_profile_version,
+                   state = excluded.state,
+                   current_turn_id = excluded.current_turn_id,
+                   state_version = excluded.state_version,
+                   metadata = excluded.metadata,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"#,
+        )
+        .bind(session.session_id)
+        .bind(session.client_type)
+        .bind(session.title)
+        .bind(session.handle)
+        .bind(session.role)
+        .bind(session.description)
+        .bind(session.execution_profile_id)
+        .bind(session.execution_profile_version)
+        .bind(session.state)
+        .bind(session.current_turn_id)
+        .bind(session.state_version)
+        .bind(session.metadata)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
     }
 
     pub async fn list_sessions(&self) -> Result<Vec<SessionRow>> {

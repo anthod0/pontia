@@ -12,6 +12,8 @@ mod sqlite_agent_binding_repository;
 mod sqlite_agent_profile_repository;
 #[path = "storage/sqlite_dag_repository.rs"]
 mod sqlite_dag_repository;
+#[path = "storage/sqlite_event_ingest_repositories.rs"]
+mod sqlite_event_ingest_repositories;
 #[path = "storage/sqlite_idempotency_repository.rs"]
 mod sqlite_idempotency_repository;
 #[path = "storage/sqlite_runtime_binding_repository.rs"]
