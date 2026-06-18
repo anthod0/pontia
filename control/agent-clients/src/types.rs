@@ -17,6 +17,7 @@ pub struct AgentInput {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AgentClientCapabilities {
     pub accept_task: bool,
     pub report_turn_started: bool,

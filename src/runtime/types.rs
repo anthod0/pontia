@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-pub use pontia_agent_clients::AgentInput;
-
-use crate::{agent_clients::AgentClientCapabilities, application::SessionCapabilities};
+pub use pontia_agent_clients::{AgentClientCapabilities, AgentInput};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeStartRequest {
@@ -20,34 +18,8 @@ pub struct RuntimeStartRequest {
 pub struct RuntimeStartResult {
     pub runtime_kind: String,
     pub runtime_handle: String,
-    pub capabilities: SessionCapabilities,
+    pub capabilities: AgentClientCapabilities,
     pub metadata: Value,
-}
-
-impl From<AgentClientCapabilities> for SessionCapabilities {
-    fn from(capabilities: AgentClientCapabilities) -> Self {
-        Self {
-            accept_task: capabilities.accept_task,
-            report_turn_started: capabilities.report_turn_started,
-            report_turn_finished: capabilities.report_turn_finished,
-            interrupt: capabilities.interrupt,
-            stream_output: capabilities.stream_output,
-            heartbeat: capabilities.heartbeat,
-            artifact_sources: capabilities.artifact_sources,
-            timeline: capabilities.timeline,
-            context_usage: match capabilities.context_usage {
-                pontia_agent_clients::ContextUsageCapability::Unsupported => {
-                    crate::application::ContextUsageCapability::Unsupported
-                }
-                pontia_agent_clients::ContextUsageCapability::Estimated => {
-                    crate::application::ContextUsageCapability::Estimated
-                }
-                pontia_agent_clients::ContextUsageCapability::Exact => {
-                    crate::application::ContextUsageCapability::Exact
-                }
-            },
-        }
-    }
 }
 
 impl RuntimeStartResult {

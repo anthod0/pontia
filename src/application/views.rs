@@ -1,35 +1,7 @@
 use super::*;
 
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ContextUsageCapability {
-    #[default]
-    Unsupported,
-    Estimated,
-    Exact,
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SessionCapabilities {
-    #[serde(default)]
-    pub accept_task: bool,
-    #[serde(default)]
-    pub report_turn_started: bool,
-    #[serde(default)]
-    pub report_turn_finished: bool,
-    #[serde(default)]
-    pub interrupt: bool,
-    #[serde(default)]
-    pub stream_output: bool,
-    #[serde(default)]
-    pub heartbeat: bool,
-    #[serde(default)]
-    pub artifact_sources: bool,
-    #[serde(default)]
-    pub timeline: bool,
-    #[serde(default)]
-    pub context_usage: ContextUsageCapability,
-}
+pub use pontia_agent_clients::ContextUsageCapability;
+pub type SessionCapabilities = pontia_agent_clients::AgentClientCapabilities;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ContextUsageView {
