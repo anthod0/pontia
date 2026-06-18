@@ -77,7 +77,7 @@ impl RuntimeControlService {
         let Some(command) = self.start_command(session_id).await? else {
             return Ok(None);
         };
-        let Some(session_identity_arg) = crate::agent_clients::get_client_definition(client_type)
+        let Some(session_identity_arg) = crate::agent_clients::get_client_spec(client_type)
             .and_then(|spec| spec.tmux_runtime())
             .and_then(|runtime| runtime.session_identity_arg)
         else {

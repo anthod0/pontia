@@ -38,8 +38,6 @@ pub struct DashboardConfig {
 pub struct RuntimeConfig {
     #[serde(default)]
     pub pi: RuntimeClientConfig,
-    #[serde(default)]
-    pub claude_code: RuntimeClientConfig,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -177,9 +175,6 @@ impl AppConfig {
         if let Some(value) = get(vars, "PONTIA_PI_TUI_COMMAND") {
             runtime.pi.tui_command = non_empty(value);
         }
-        if let Some(value) = get(vars, "PONTIA_CLAUDE_TUI_COMMAND") {
-            runtime.claude_code.tui_command = non_empty(value);
-        }
 
         Ok(Self {
             bind_addr,
@@ -200,12 +195,12 @@ fn get<'a>(vars: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
 }
 
 fn validate_real_default_client_type(key: &'static str, client_type: &str) -> Result<()> {
-    if matches!(client_type, "pi" | "claude_code") {
+    if matches!(client_type, "pi") {
         Ok(())
     } else {
         Err(Error::InvalidConfig {
             key,
-            message: format!("default client type must be pi or claude_code, got {client_type}"),
+            message: format!("default client type must be pi, got {client_type}"),
         })
     }
 }

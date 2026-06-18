@@ -480,18 +480,18 @@ async fn timeline_external_api_returns_not_ready_without_binding() {
 }
 
 #[tokio::test]
-async fn timeline_external_api_uses_client_definition_to_reject_unsupported_transcripts() {
+async fn timeline_external_api_uses_client_spec_to_reject_unsupported_transcripts() {
     let state = test_state().await;
-    let session_id = "sess_claude_no_timeline";
+    let session_id = "sess_generic_no_timeline";
     let cwd = tempdir().unwrap();
-    seed_session_for_client(&state, session_id, "claude_code").await;
+    seed_session_for_client(&state, session_id, "generic").await;
 
     AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
-            client_type: "claude_code".to_string(),
+            client_type: "generic".to_string(),
             launch_cwd: cwd.path().to_string_lossy().to_string(),
-            client_session_key: "claude-session-key".to_string(),
+            client_session_key: "generic-session-key".to_string(),
             metadata: json!({}),
         })
         .await

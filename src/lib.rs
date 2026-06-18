@@ -1,4 +1,3 @@
-pub mod adapters;
 pub mod agent_clients;
 pub mod application;
 pub mod config;

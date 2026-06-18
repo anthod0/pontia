@@ -1,12 +1,12 @@
 use std::path::Path;
 
 use crate::{
-    agent_clients::{self, DispatchBehavior, HookLogBehavior, RuntimeBehavior, StartupHook},
+    agent_clients::{self, DispatchBehavior, HookLogBehavior, RuntimeBehavior},
     error::{Error, Result},
 };
 
 use super::{
-    RuntimeStartRequest, claude_code,
+    RuntimeStartRequest,
     config::{
         configured_external_api_token, configured_external_api_url, configured_internal_event_url,
         configured_tui_command,
@@ -28,11 +28,10 @@ pub(super) fn write_runtime_script(
     request: &RuntimeStartRequest,
     runtime_instance_id: &str,
 ) -> Result<()> {
-    let client_definition =
-        agent_clients::get_client_definition(&request.client_type).ok_or_else(|| {
-            Error::Domain(format!("unsupported client_type: {}", request.client_type))
-        })?;
-    let (log_setup, runtime_body) = match client_definition.backend.runtime {
+    let client_spec = agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
+        Error::Domain(format!("unsupported client_type: {}", request.client_type))
+    })?;
+    let (log_setup, runtime_body) = match client_spec.adapter.runtime {
         RuntimeBehavior::Tmux(tmux_runtime) => {
             let mut command = request
                 .start_command
@@ -58,8 +57,8 @@ pub(super) fn write_runtime_script(
                 format!("exec sh -lc {}\n", shell_quote(&command)),
             )
         }
-        RuntimeBehavior::InProcessTest => match client_definition.backend.dispatch {
-            DispatchBehavior::GenericTestAdapter | DispatchBehavior::None => (
+        RuntimeBehavior::InProcessTest => match client_spec.adapter.dispatch {
+            DispatchBehavior::GenericTestClient | DispatchBehavior::None => (
                 "exec >> \"$PONTIA_RUNTIME_LOG\" 2>&1\necho \"pontia runtime started\"".to_string(),
                 "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
             ),
@@ -76,7 +75,7 @@ pub(super) fn write_runtime_script(
         .as_ref()
         .map(|agent_kind| format!("export PONTIA_AGENT_KIND={}\n", shell_quote(agent_kind)))
         .unwrap_or_default();
-    let hook_log_export = client_definition
+    let hook_log_export = client_spec
         .tmux_runtime()
         .and_then(|runtime| runtime.hook_log)
         .map(|hook_log| {
@@ -171,15 +170,11 @@ fn external_api_token() -> String {
         .unwrap_or_default()
 }
 
-pub(super) fn run_startup_hooks(hooks: &[StartupHook], workspace: &Path) -> Result<()> {
-    for hook in hooks {
-        match hook {
-            StartupHook::ClaudeCodeTrustWorkspace => {
-                claude_code::ensure_workspace_trusted(workspace)?
-            }
-        }
-    }
-    Ok(())
+pub(super) fn run_startup_hooks(
+    hooks: &[agent_clients::StartupHook],
+    workspace: &Path,
+) -> Result<()> {
+    agent_clients::run_startup_hooks(hooks, workspace)
 }
 
 #[cfg(test)]
@@ -279,47 +274,6 @@ mod tests {
             "script was:\n{script}"
         );
         assert!(script.contains("export PONTIA_AGENT_KIND='planner'"));
-    }
-
-    #[test]
-    fn runtime_script_exports_only_current_client_hook_log_env() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let script_path = tempdir.path().join("runtime.sh");
-        let log_path = tempdir.path().join("runtime.log");
-        let paths = RuntimePaths {
-            runtime_dir: tempdir.path(),
-            log_path: &log_path,
-            adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
-            current_turn_file: &tempdir.path().join("current-turn.json"),
-        };
-        let request = RuntimeStartRequest {
-            session_id: "sess_claude_1".to_string(),
-            client_type: "claude_code".to_string(),
-            workspace: Some(tempdir.path().display().to_string()),
-            handle: None,
-            role: None,
-            agent_kind: None,
-            start_command: None,
-        };
-
-        write_runtime_script(
-            &script_path,
-            tempdir.path(),
-            &paths,
-            &request,
-            "runtime_instance_1",
-        )
-        .expect("write script");
-
-        let script = std::fs::read_to_string(script_path).expect("script");
-        assert!(
-            script.contains("export PONTIA_CLAUDE_HOOK_LOG="),
-            "script was:\n{script}"
-        );
-        assert!(
-            !script.contains("export PONTIA_PI_HOOK_LOG="),
-            "script was:\n{script}"
-        );
     }
 
     #[test]

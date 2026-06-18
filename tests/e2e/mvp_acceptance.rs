@@ -6,8 +6,8 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia::{
-    adapters::{ArtifactRegistration, GenericTestAdapter},
-    application::{AppState, ArtifactRegistrationService},
+    agent_clients::GenericTestClient,
+    application::{AppState, ArtifactRegistration, ArtifactRegistrationService},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
 };
@@ -205,7 +205,7 @@ async fn orchestrator_can_complete_backend_only_http_polling_flow() {
     assert!(turn_id.starts_with("turn_"));
     assert_eq!(turn_body["data"]["turn"]["state"], "queued");
 
-    let accepted_inputs = GenericTestAdapter::recorded_inputs();
+    let accepted_inputs = GenericTestClient::recorded_inputs();
     assert!(accepted_inputs.iter().any(|input| {
         input.session_id == session_id
             && input.turn_id == turn_id

@@ -55,7 +55,6 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         pi: RuntimeClientConfig {
             tui_command: Some("pi --approve -e /configured/clients/pi".to_string()),
         },
-        claude_code: RuntimeClientConfig::default(),
     });
 
     let result = GenericRuntimeManager
@@ -103,7 +102,6 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
         pi: RuntimeClientConfig {
             tui_command: Some("pi from config".to_string()),
         },
-        claude_code: RuntimeClientConfig::default(),
     });
 
     let result = GenericRuntimeManager

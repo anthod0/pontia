@@ -167,7 +167,7 @@ async fn scheduler_uses_dag_task_planner_client_for_work_item_agents() {
     sqlx::query(
         "UPDATE execution_profiles SET supported_client_types = ? WHERE profile_id = 'implementer'",
     )
-    .bind(json!(["pi", "claude_code", "generic"]).to_string())
+    .bind(json!(["pi", "generic"]).to_string())
     .execute(&pool)
     .await
     .expect("enable generic implementer profile");

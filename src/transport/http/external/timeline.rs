@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    agent_clients::{TranscriptBehavior, get_client_definition},
+    agent_clients::{TranscriptBehavior, get_client_spec},
     application::{
         AgentBinding, AgentBindingResolveRequest, AgentBindingResolver, AgentBindingService,
         AppState, ExternalQueryService, PiAgentBindingResolver, PiJsonlParser, RawTranscriptParser,
@@ -137,8 +137,8 @@ pub async fn get_session_timeline_detail(
 }
 
 fn transcript_backend(binding: &AgentBinding) -> Result<TranscriptBehavior, ExternalApiError> {
-    let behavior = get_client_definition(&binding.client_type)
-        .map(|definition| definition.backend.transcript)
+    let behavior = get_client_spec(&binding.client_type)
+        .map(|definition| definition.adapter.transcript)
         .unwrap_or(TranscriptBehavior::Unsupported);
     if behavior == TranscriptBehavior::Unsupported {
         return Err(timeline_error(

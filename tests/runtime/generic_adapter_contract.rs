@@ -6,8 +6,9 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia::{
-    adapters::{AdapterCapabilities, ArtifactRegistration, GenericTestAdapter},
-    application::{AppState, ArtifactRegistrationService},
+    agent_clients::AgentClientCapabilities,
+    agent_clients::GenericTestClient,
+    application::{AppState, ArtifactRegistration, ArtifactRegistrationService},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
 };
@@ -155,10 +156,10 @@ fn file_url(path: &Path) -> String {
 }
 
 #[tokio::test]
-async fn generic_test_adapter_can_expose_pi_like_capabilities_without_pi_runtime() {
+async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime() {
     let _scope = GenericClientTestScope::new()
         .await
-        .with_capabilities(AdapterCapabilities::pi_m0_default());
+        .with_capabilities(AgentClientCapabilities::pi_m0_default());
     let state = test_state("m8_pi_like_capabilities").await;
     let session_id = create_session(state.clone()).await;
 
@@ -204,7 +205,7 @@ async fn capability_model_declares_all_mvp_adapter_capabilities() {
     assert_eq!(capabilities["heartbeat"], false);
     assert_eq!(capabilities["artifact_sources"], false);
 
-    assert!(AdapterCapabilities::generic_default().accept_task);
+    assert!(AgentClientCapabilities::generic_default().accept_task);
 }
 
 #[tokio::test]
@@ -224,7 +225,7 @@ async fn generic_initial_task_dispatches_in_process() {
     let turn_id = turn["turn_id"].as_str().unwrap();
     assert_eq!(body["data"]["session"]["state"], "busy");
     assert_eq!(turn["state"], "running");
-    assert!(GenericTestAdapter::recorded_inputs().iter().any(|input| {
+    assert!(GenericTestClient::recorded_inputs().iter().any(|input| {
         input.session_id == session_id && input.turn_id == turn_id && input.input == "boot generic"
     }));
 }
@@ -270,7 +271,7 @@ async fn turn_input_handoff_uses_control_plane_assigned_identity() {
     assert!(turn_id.starts_with("turn_"));
     assert_eq!(body["data"]["turn"]["session_id"], session_id);
 
-    let inputs = GenericTestAdapter::recorded_inputs();
+    let inputs = GenericTestClient::recorded_inputs();
     assert!(inputs.iter().any(|input| {
         input.session_id == session_id
             && input.turn_id == turn_id

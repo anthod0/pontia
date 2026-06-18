@@ -487,37 +487,37 @@ async fn internal_event_api_registers_agent_binding_for_any_ready_event_with_cli
         .canonicalize()
         .expect("canonical workspace");
     let mut created = event_body(
-        "evt_m2_claude_ready_created",
+        "evt_m2_generic_ready_created",
         "session.created",
-        "sess_m2_claude_ready",
+        "sess_m2_generic_ready",
         None,
         1,
     );
     created["source"] = json!("external_api");
-    created["client_type"] = json!("claude_code");
+    created["client_type"] = json!("generic");
     post_event(state.clone(), created).await;
     sqlx::query(
-        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'tmux', 'rtinst_claude', ?, ?)",
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'tmux', 'rtinst_generic', ?, ?)",
     )
-    .bind("sess_m2_claude_ready")
+    .bind("sess_m2_generic_ready")
     .bind(launch_cwd.display().to_string())
-    .bind(json!({"runtime_instance_id":"rtinst_claude", "workspace": launch_cwd.display().to_string()}).to_string())
+    .bind(json!({"runtime_instance_id":"rtinst_generic", "workspace": launch_cwd.display().to_string()}).to_string())
     .execute(&state.db())
     .await
     .expect("runtime binding");
 
     let mut event = event_body(
-        "evt_m2_claude_ready",
+        "evt_m2_generic_ready",
         "session.ready",
-        "sess_m2_claude_ready",
+        "sess_m2_generic_ready",
         None,
         2,
     );
     event["source"] = json!("agent_client");
-    event["client_type"] = json!("claude_code");
+    event["client_type"] = json!("generic");
     event["payload"] = json!({
-        "runtime_instance_id":"rtinst_claude",
-        "client_session_key":"claude_session_123"
+        "runtime_instance_id":"rtinst_generic",
+        "client_session_key":"generic_session_123"
     });
 
     let (status, body) = post_event(state.clone(), event).await;
@@ -526,12 +526,12 @@ async fn internal_event_api_registers_agent_binding_for_any_ready_event_with_cli
     let client_session_key: String = sqlx::query_scalar(
         "SELECT client_session_key FROM agent_bindings WHERE session_id = ? AND client_type = ?",
     )
-    .bind("sess_m2_claude_ready")
-    .bind("claude_code")
+    .bind("sess_m2_generic_ready")
+    .bind("generic")
     .fetch_one(&state.db())
     .await
     .expect("agent binding row");
-    assert_eq!(client_session_key, "claude_session_123");
+    assert_eq!(client_session_key, "generic_session_123");
 }
 
 #[tokio::test]

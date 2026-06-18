@@ -1,15 +1,15 @@
 use super::*;
-use crate::agent_clients::{DispatchMode, ReadinessMode, get_client_definition};
+use crate::agent_clients::{DispatchMode, ReadinessMode, get_client_spec};
 
 pub(super) fn client_dispatch_mode(client_type: &str) -> Result<DispatchMode> {
-    get_client_definition(client_type)
-        .map(|spec| spec.backend.dispatch)
+    get_client_spec(client_type)
+        .map(|spec| spec.adapter.dispatch)
         .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))
 }
 
 pub(super) fn client_readiness_mode(client_type: &str) -> Result<ReadinessMode> {
-    get_client_definition(client_type)
-        .map(|spec| spec.backend.readiness)
+    get_client_spec(client_type)
+        .map(|spec| spec.adapter.readiness)
         .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))
 }
 

@@ -40,12 +40,16 @@ impl RuntimeBindingUpsertService {
         validate_required("client_type", &request.client_type)?;
         validate_required("client_session_key", &request.client_session_key)?;
         validate_required("runtime_instance_id", &request.runtime_instance_id)?;
-        if request.client_type != "pi" {
-            return Err(Error::Domain(format!(
+        let client_spec =
+            agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
+                Error::Domain(format!("unsupported client_type: {}", request.client_type))
+            })?;
+        let runtime_kind = client_spec.runtime_binding_kind().ok_or_else(|| {
+            Error::Domain(format!(
                 "runtime binding upsert does not support client_type {}",
                 request.client_type
-            )));
-        }
+            ))
+        })?;
 
         let launch_cwd = request
             .launch_cwd
@@ -76,7 +80,7 @@ impl RuntimeBindingUpsertService {
         let current_turn_file = runtime_dir.join("current-turn.json").display().to_string();
         let internal_event_url = configured_internal_event_url()
             .unwrap_or_else(|| "http://127.0.0.1:8080/internal/v1/events".to_string());
-        let capabilities = capabilities_for_tmux(request.tmux.as_ref());
+        let capabilities = capabilities_for_tmux(client_spec, request.tmux.as_ref());
         let last_seen_at = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("failed to format timestamp: {err}")))?;
@@ -110,7 +114,7 @@ impl RuntimeBindingUpsertService {
                    tmux_pane_id,
                    metadata
                )
-               VALUES (?, 'pi_tui', ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(session_id) DO UPDATE SET
                    runtime_kind = excluded.runtime_kind,
                    runtime_instance_id = excluded.runtime_instance_id,
@@ -123,6 +127,7 @@ impl RuntimeBindingUpsertService {
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"#,
         )
         .bind(&session_id)
+        .bind(runtime_kind)
         .bind(&request.runtime_instance_id)
         .bind(non_empty(request.start_command.as_deref()))
         .bind(&workspace.canonical_path)
@@ -250,14 +255,15 @@ fn non_empty(value: Option<&str>) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn capabilities_for_tmux(tmux: Option<&RuntimeBindingTmuxRequest>) -> SessionCapabilities {
+fn capabilities_for_tmux(
+    client_spec: &agent_clients::AgentClientSpec,
+    tmux: Option<&RuntimeBindingTmuxRequest>,
+) -> SessionCapabilities {
     let writable = tmux.is_some_and(|tmux| {
         non_empty(tmux.socket_path.as_deref()).is_some()
             && non_empty(tmux.pane_id.as_deref()).is_some()
     });
-    let mut capabilities: SessionCapabilities = agent_clients::get_client_definition("pi")
-        .map(|spec| spec.capabilities.clone().into())
-        .unwrap_or_default();
+    let mut capabilities: SessionCapabilities = client_spec.capabilities.clone().into();
     capabilities.accept_task = writable;
     capabilities.interrupt = writable;
     capabilities

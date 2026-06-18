@@ -7,7 +7,7 @@ use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
 use crate::{
-    adapters::AdapterCapabilities,
+    agent_clients::AgentClientCapabilities,
     error::{Error, Result},
     ids::new_runtime_instance_id,
     time::utc_now,
@@ -25,7 +25,7 @@ struct InProcessRuntimeState {
 
 pub(super) fn start_session(
     request: RuntimeStartRequest,
-    capabilities: AdapterCapabilities,
+    capabilities: AgentClientCapabilities,
     restart_count: i64,
 ) -> Result<RuntimeStartResult> {
     let runtime_instance_id = new_runtime_instance_id().to_string();

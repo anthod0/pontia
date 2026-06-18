@@ -11,7 +11,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia::{
-    adapters::GenericTestAdapter,
+    agent_clients::GenericTestClient,
     application::AppState,
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
@@ -42,7 +42,7 @@ fn configure_test_runtime_env() {
 
 async fn test_state(name: &str) -> AppState {
     configure_test_runtime_env();
-    GenericTestAdapter::clear_recorded_inputs();
+    GenericTestClient::clear_recorded_inputs();
     unsafe {
         std::env::set_var(
             "PONTIA_PI_TUI_COMMAND",
@@ -348,7 +348,7 @@ async fn pi_turn_submit_dispatches_to_tui_and_starts_without_completion() {
 
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
     assert!(body["data"]["inbox_message"]["turn_id"].is_null());
-    assert!(GenericTestAdapter::recorded_inputs().is_empty());
+    assert!(GenericTestClient::recorded_inputs().is_empty());
     let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
         .bind(&session_id)
         .fetch_one(&state.db())

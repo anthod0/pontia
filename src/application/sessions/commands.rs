@@ -1,6 +1,6 @@
 use super::validation::{client_dispatch_mode, client_readiness_mode, validate_handle};
 use super::*;
-use crate::agent_clients::{DispatchMode, ReadinessMode};
+use crate::agent_clients::{DispatchMode, ReadinessMode, get_client_spec};
 
 impl SessionCommandService {
     pub async fn create_session(
@@ -138,8 +138,10 @@ impl SessionCommandService {
 
         let initial_turn_id = if let Some(initial_task) = request.initial_task {
             let turn_id = new_turn_id().to_string();
-            let plugin_owns_turn = request.client_type == "pi"
-                && client_dispatch_mode(&request.client_type)? == DispatchMode::TmuxPaste;
+            let client_spec = get_client_spec(&request.client_type).ok_or_else(|| {
+                Error::Domain(format!("unsupported client_type: {}", request.client_type))
+            })?;
+            let plugin_owns_turn = client_spec.owns_initial_tmux_turn();
             if !plugin_owns_turn {
                 ingest
                     .ingest_event(DomainEvent::new(
@@ -168,7 +170,7 @@ impl SessionCommandService {
                     .await?;
             }
             match client_dispatch_mode(&request.client_type)? {
-                DispatchMode::GenericTestAdapter => {
+                DispatchMode::GenericTestClient => {
                     self.dispatch_initial_generic_turn(
                         &session_id,
                         &turn_id,

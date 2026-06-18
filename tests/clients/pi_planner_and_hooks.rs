@@ -11,7 +11,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia::{
-    adapters::GenericTestAdapter,
+    agent_clients::GenericTestClient,
     application::{AdapterEventOutboxService, AppState},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
@@ -25,7 +25,7 @@ const TOKEN: &str = "test-token";
 async fn test_state(name: &str) -> AppState {
     assert_tmux_available();
     configure_test_runtime_env();
-    GenericTestAdapter::clear_recorded_inputs();
+    GenericTestClient::clear_recorded_inputs();
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join(format!("{name}.db"));
     let _kept_dir = dir.keep();
@@ -535,7 +535,7 @@ async fn pi_turn_dispatches_to_long_running_tmux_tui_and_marks_started_only() {
     )
     .await;
     assert!(inbox["turn_id"].is_null());
-    assert!(GenericTestAdapter::recorded_inputs().is_empty());
+    assert!(GenericTestClient::recorded_inputs().is_empty());
 
     wait_for_file_contains(
         &workspace.path().join("pi-tui-input.log"),

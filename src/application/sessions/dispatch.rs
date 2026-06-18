@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    adapters::GenericTestAdapter,
-    agent_clients::{TurnContextBehavior, get_client_definition},
+    agent_clients::GenericTestClient,
+    agent_clients::{TurnContextBehavior, get_client_spec},
     application::turns::write_client_current_turn_context,
 };
 
@@ -19,7 +19,7 @@ impl SessionCommandService {
             turn_id: turn_id.to_string(),
             input: input.to_string(),
         };
-        let behavior = GenericTestAdapter::behavior();
+        let behavior = GenericTestClient::behavior();
         if behavior.write_current_turn_context {
             write_client_current_turn_context(&runtime.metadata, &agent_input, client_type, None)?;
         }
@@ -60,8 +60,8 @@ impl SessionCommandService {
             turn_id: turn_id.to_string(),
             input: input.to_string(),
         };
-        let turn_context = get_client_definition(client_type)
-            .map(|spec| spec.backend.turn_context)
+        let turn_context = get_client_spec(client_type)
+            .map(|spec| spec.adapter.turn_context)
             .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))?;
         let ingest = EventIngestService::new(self.pool.clone());
         let dispatch_result = RuntimeReadinessService::new(self.pool.clone())
@@ -93,9 +93,11 @@ impl SessionCommandService {
                     .dispatch_tui_turn(socket_path, pane_id, client_type, &agent_input)
             });
 
+        let client_spec = get_client_spec(client_type)
+            .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))?;
         match dispatch_result {
             Ok(()) => {
-                if client_type != "pi" {
+                if !client_spec.owns_initial_tmux_turn() {
                     ingest
                         .ingest_event(DomainEvent::new(
                             new_event_id().to_string(),

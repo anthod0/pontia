@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{adapters::AdapterCapabilities, application::SessionCapabilities};
+use crate::{agent_clients::AgentClientCapabilities, application::SessionCapabilities};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeStartRequest {
@@ -29,8 +29,8 @@ pub struct AgentInput {
     pub input: String,
 }
 
-impl From<AdapterCapabilities> for SessionCapabilities {
-    fn from(capabilities: AdapterCapabilities) -> Self {
+impl From<AgentClientCapabilities> for SessionCapabilities {
+    fn from(capabilities: AgentClientCapabilities) -> Self {
         Self {
             accept_task: capabilities.accept_task,
             report_turn_started: capabilities.report_turn_started,

@@ -11,7 +11,6 @@ use sqlx::{Row, SqlitePool};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
-    adapters::ArtifactRegistration,
     agent_clients,
     config::AppConfig,
     domain::{
@@ -65,7 +64,8 @@ pub use agent_tools::{
     AgentToolResponse, AgentToolService,
 };
 pub use artifacts::{
-    ArtifactContentService, ArtifactDiscoveryService, ArtifactRegistrationService,
+    ArtifactContentService, ArtifactDiscoveryService, ArtifactRegistration,
+    ArtifactRegistrationService,
 };
 pub use dag::DagService;
 pub use dag_models::{

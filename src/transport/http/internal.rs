@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
-    agent_clients::{ClientSessionIdentityBehavior, get_client_definition},
+    agent_clients::{ClientSessionIdentityBehavior, get_client_spec},
     application::{
         AppState, EventIngestService, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
     },
@@ -179,8 +179,8 @@ fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {
 }
 
 fn client_session_identity_required_on_ready(client_type: &str) -> bool {
-    get_client_definition(client_type).is_some_and(|spec| {
-        spec.backend.client_session_identity == ClientSessionIdentityBehavior::RequiredOnReady
+    get_client_spec(client_type).is_some_and(|spec| {
+        spec.adapter.client_session_identity == ClientSessionIdentityBehavior::RequiredOnReady
     })
 }
 

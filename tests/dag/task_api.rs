@@ -15,7 +15,7 @@ async fn enable_generic_planner_profile(state: &pontia::application::AppState) {
     sqlx::query(
         "UPDATE execution_profiles SET supported_client_types = ? WHERE profile_id = 'planner'",
     )
-    .bind(json!(["pi", "claude_code", "generic"]).to_string())
+    .bind(json!(["pi", "generic"]).to_string())
     .execute(&state.db())
     .await
     .expect("enable generic planner profile");

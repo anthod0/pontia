@@ -1,8 +1,53 @@
-use crate::adapters::AdapterCapabilities;
+use serde::{Deserialize, Serialize};
+
+use crate::application::ContextUsageCapability;
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentClientCapabilities {
+    pub accept_task: bool,
+    pub report_turn_started: bool,
+    pub report_turn_finished: bool,
+    pub interrupt: bool,
+    pub stream_output: bool,
+    pub heartbeat: bool,
+    pub artifact_sources: bool,
+    pub timeline: bool,
+    pub context_usage: ContextUsageCapability,
+}
+
+impl AgentClientCapabilities {
+    pub fn generic_default() -> Self {
+        Self {
+            accept_task: true,
+            report_turn_started: true,
+            report_turn_finished: true,
+            interrupt: false,
+            stream_output: false,
+            heartbeat: false,
+            artifact_sources: false,
+            timeline: false,
+            context_usage: ContextUsageCapability::Unsupported,
+        }
+    }
+
+    pub fn pi_m0_default() -> Self {
+        Self {
+            accept_task: true,
+            report_turn_started: true,
+            report_turn_finished: true,
+            interrupt: true,
+            stream_output: true,
+            heartbeat: false,
+            artifact_sources: true,
+            timeline: true,
+            context_usage: ContextUsageCapability::Estimated,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispatchBehavior {
-    GenericTestAdapter,
+    GenericTestClient,
     TmuxPaste,
     None,
 }
@@ -65,6 +110,24 @@ pub enum TurnContextBehavior {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CurrentTurnIdBehavior {
+    Include,
+    Omit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TurnLifecycleBehavior {
+    BackendManaged,
+    ClientManagedForInteractiveTmux,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeBindingBehavior {
+    Unsupported,
+    Tmux { runtime_kind: &'static str },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdapterEventBehavior {
     Disabled,
     JsonlOutbox { file_name: &'static str },
@@ -77,9 +140,7 @@ pub enum SystemPromptInjectionBehavior {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StartupHook {
-    ClaudeCodeTrustWorkspace,
-}
+pub enum StartupHook {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TranscriptBehavior {
@@ -87,13 +148,14 @@ pub enum TranscriptBehavior {
     PiJsonl,
 }
 
-/// Pontia backend behavior for one agent client.
+/// Rust-side adapter strategy for one agent client.
 ///
 /// These fields describe how the Rust backend starts, controls, observes, or
-/// reads client-specific resources. They intentionally do not describe how a
-/// client extension internally reports facts through the Internal Event API.
+/// reads client-specific resources for the client. They intentionally do not
+/// describe how a client extension internally reports facts through the
+/// Internal Event API.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AgentClientBackendSpec {
+pub struct AgentClientAdapter {
     pub runtime: RuntimeBehavior,
     pub dispatch: DispatchBehavior,
     pub readiness: ReadinessBehavior,
@@ -101,32 +163,61 @@ pub struct AgentClientBackendSpec {
     pub interrupt: InterruptBehavior,
     pub terminate: TerminateBehavior,
     pub turn_context: TurnContextBehavior,
+    pub current_turn_id: CurrentTurnIdBehavior,
+    pub turn_lifecycle: TurnLifecycleBehavior,
+    pub runtime_binding: RuntimeBindingBehavior,
     pub adapter_events: AdapterEventBehavior,
     pub system_prompt_injection: SystemPromptInjectionBehavior,
     pub startup_hooks: &'static [StartupHook],
     pub transcript: TranscriptBehavior,
 }
 
-/// Complete static definition for an agent client.
+/// Complete static spec for an agent client.
 ///
 /// `capabilities` answers "can this client/session support this feature?";
-/// `backend` answers "when pontia's Rust backend owns the implementation, how
+/// `adapter` answers "when pontia's Rust backend owns the implementation, how
 /// does it do it?" Extension-internal implementation details live in
-/// `clients/*`, not in this definition.
+/// `clients/*`, not in this spec.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AgentClientDefinition {
+pub struct AgentClientSpec {
     pub client_type: &'static str,
-    pub capabilities: AdapterCapabilities,
-    pub backend: AgentClientBackendSpec,
+    pub capabilities: AgentClientCapabilities,
+    pub adapter: AgentClientAdapter,
 }
 
-impl AgentClientDefinition {
+impl AgentClientSpec {
     pub fn tmux_runtime(&self) -> Option<TmuxRuntimeBehavior> {
-        self.backend.tmux_runtime()
+        self.adapter.tmux_runtime()
+    }
+
+    pub fn owns_interactive_tmux_turn(&self, metadata: &serde_json::Value) -> bool {
+        self.adapter.dispatch == DispatchBehavior::TmuxPaste
+            && self.adapter.turn_lifecycle == TurnLifecycleBehavior::ClientManagedForInteractiveTmux
+            && metadata
+                .get("dag_managed")
+                .and_then(serde_json::Value::as_bool)
+                != Some(true)
+            && metadata.get("dag_planning_role").is_none()
+    }
+
+    pub fn owns_initial_tmux_turn(&self) -> bool {
+        self.adapter.dispatch == DispatchBehavior::TmuxPaste
+            && self.adapter.turn_lifecycle == TurnLifecycleBehavior::ClientManagedForInteractiveTmux
+    }
+
+    pub fn current_turn_context_includes_turn_id(&self) -> bool {
+        self.adapter.current_turn_id == CurrentTurnIdBehavior::Include
+    }
+
+    pub fn runtime_binding_kind(&self) -> Option<&'static str> {
+        match self.adapter.runtime_binding {
+            RuntimeBindingBehavior::Unsupported => None,
+            RuntimeBindingBehavior::Tmux { runtime_kind } => Some(runtime_kind),
+        }
     }
 }
 
-impl AgentClientBackendSpec {
+impl AgentClientAdapter {
     pub fn tmux_runtime(&self) -> Option<TmuxRuntimeBehavior> {
         match self.runtime {
             RuntimeBehavior::Tmux(runtime) => Some(runtime),

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    adapters::GenericTestAdapter,
-    agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_definition},
+    agent_clients::GenericTestClient,
+    agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec},
 };
 
 #[derive(Clone)]
@@ -30,11 +30,11 @@ impl TurnCommandService {
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
-        let client_definition = get_client_definition(&session.client_type).ok_or_else(|| {
+        let client_spec = get_client_spec(&session.client_type).ok_or_else(|| {
             Error::Domain(format!("unsupported client_type: {}", session.client_type))
         })?;
-        let dispatch_mode = client_definition.backend.dispatch;
-        let readiness_mode = client_definition.backend.readiness;
+        let dispatch_mode = client_spec.adapter.dispatch;
+        let readiness_mode = client_spec.adapter.readiness;
         let can_accept_turn = matches!(session.state.as_str(), "idle" | "interrupted")
             || (session.state == "starting" && dispatch_mode == DispatchMode::TmuxPaste);
         if !can_accept_turn {
@@ -61,16 +61,15 @@ impl TurnCommandService {
             None
         };
 
-        let plugin_owns_turn = dispatch_mode == DispatchMode::TmuxPaste
-            && session.client_type == "pi"
-            && metadata.get("dag_managed").and_then(Value::as_bool) != Some(true)
-            && metadata.get("dag_planning_role").is_none();
+        let plugin_owns_turn = client_spec.owns_interactive_tmux_turn(&metadata);
 
         if plugin_owns_turn {
             let binding_metadata = self
                 .runtime_binding_metadata(session_id)
                 .await?
-                .ok_or_else(|| Error::Domain("pi runtime binding not found".to_string()))?;
+                .ok_or_else(|| {
+                    Error::Domain(format!("{} runtime binding not found", session.client_type))
+                })?;
             let tmux_binding = tmux_binding
                 .as_ref()
                 .expect("tmux binding was validated before pi dispatch");
@@ -86,7 +85,7 @@ impl TurnCommandService {
                 &binding_metadata,
             )
             .await?;
-            if client_definition.backend.turn_context == TurnContextBehavior::CurrentTurnFile {
+            if client_spec.adapter.turn_context == TurnContextBehavior::CurrentTurnFile {
                 write_client_current_turn_context(
                     &binding_metadata,
                     &agent_input,
@@ -137,8 +136,8 @@ impl TurnCommandService {
             ))
             .await?;
 
-        if dispatch_mode == DispatchMode::GenericTestAdapter {
-            let behavior = GenericTestAdapter::behavior();
+        if dispatch_mode == DispatchMode::GenericTestClient {
+            let behavior = GenericTestClient::behavior();
             if behavior.write_current_turn_context
                 && let Some(binding_metadata) = self.runtime_binding_metadata(session_id).await?
             {
@@ -180,7 +179,7 @@ impl TurnCommandService {
                         )
                         .await
                         .and_then(|()| {
-                            if client_definition.backend.turn_context
+                            if client_spec.adapter.turn_context
                                 == TurnContextBehavior::CurrentTurnFile
                             {
                                 write_client_current_turn_context(
@@ -354,7 +353,10 @@ pub(crate) fn write_client_current_turn_context(
         "runtime_instance_id": runtime_instance_id,
         "internal_event_url": internal_event_url,
     });
-    if client_type != "pi" {
+    let include_turn_id = get_client_spec(client_type)
+        .map(|spec| spec.current_turn_context_includes_turn_id())
+        .unwrap_or(true);
+    if include_turn_id {
         context["turn_id"] = json!(input.turn_id);
     }
     if let Some(inbox_message_id) = turn_metadata

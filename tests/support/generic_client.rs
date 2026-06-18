@@ -1,7 +1,8 @@
 use std::sync::{Arc, OnceLock};
 
 use pontia::{
-    adapters::{AdapterCapabilities, GenericTestAdapter},
+    agent_clients::AgentClientCapabilities,
+    agent_clients::GenericTestClient,
     application::AppState,
     runtime::{AgentInput, GenericRuntimeManager},
 };
@@ -17,32 +18,32 @@ pub struct GenericClientTestScope {
 impl GenericClientTestScope {
     pub async fn new() -> Self {
         let guard = generic_test_lock().clone().lock_owned().await;
-        GenericTestAdapter::clear_recorded_inputs();
+        GenericTestClient::clear_recorded_inputs();
         GenericRuntimeManager::reset_in_process_test_registry();
         Self { _guard: guard }
     }
 
-    pub fn with_capabilities(self, capabilities: AdapterCapabilities) -> Self {
-        GenericTestAdapter::set_capabilities(capabilities);
+    pub fn with_capabilities(self, capabilities: AgentClientCapabilities) -> Self {
+        GenericTestClient::set_capabilities(capabilities);
         self
     }
 
     pub fn auto_start_turn(self) -> Self {
-        let mut behavior = GenericTestAdapter::behavior();
+        let mut behavior = GenericTestClient::behavior();
         behavior.auto_start_turn = true;
-        GenericTestAdapter::set_behavior(behavior);
+        GenericTestClient::set_behavior(behavior);
         self
     }
 
     pub fn write_current_turn_context(self) -> Self {
-        let mut behavior = GenericTestAdapter::behavior();
+        let mut behavior = GenericTestClient::behavior();
         behavior.write_current_turn_context = true;
-        GenericTestAdapter::set_behavior(behavior);
+        GenericTestClient::set_behavior(behavior);
         self
     }
 
     pub fn recorded_inputs(&self) -> Vec<AgentInput> {
-        GenericTestAdapter::recorded_inputs()
+        GenericTestClient::recorded_inputs()
     }
 
     pub fn is_runtime_alive(&self, runtime_handle: &str) -> bool {
@@ -85,7 +86,7 @@ impl GenericClientTestScope {
 
 impl Drop for GenericClientTestScope {
     fn drop(&mut self) {
-        GenericTestAdapter::clear_recorded_inputs();
+        GenericTestClient::clear_recorded_inputs();
         GenericRuntimeManager::reset_in_process_test_registry();
     }
 }

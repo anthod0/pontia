@@ -2,9 +2,9 @@ use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
 use crate::{
-    adapters::{AgentEventSource, AgentInputSink, GenericTestAdapter},
     agent_clients::{
-        self, AdapterEventBehavior, DispatchBehavior, InterruptBehavior, RuntimeBehavior,
+        self, AdapterEventBehavior, DispatchBehavior, GenericTestClient, InterruptBehavior,
+        RuntimeBehavior,
     },
     error::{Error, Result},
     ids::new_runtime_instance_id,
@@ -37,22 +37,21 @@ impl GenericRuntimeManager {
         restart_count: i64,
         reuse_target: Option<(&str, &str)>,
     ) -> Result<RuntimeStartResult> {
-        let client_definition = agent_clients::get_client_definition(&request.client_type)
-            .ok_or_else(|| {
+        let client_spec =
+            agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", request.client_type))
             })?;
-        let capabilities =
-            if client_definition.backend.dispatch == DispatchBehavior::GenericTestAdapter {
-                GenericTestAdapter.capabilities()
-            } else {
-                client_definition.capabilities.clone()
-            };
-        if client_definition.backend.runtime == RuntimeBehavior::InProcessTest {
+        let capabilities = if client_spec.adapter.dispatch == DispatchBehavior::GenericTestClient {
+            GenericTestClient.capabilities()
+        } else {
+            client_spec.capabilities.clone()
+        };
+        if client_spec.adapter.runtime == RuntimeBehavior::InProcessTest {
             return in_process::start_session(request, capabilities, restart_count);
         }
 
         let start_command = request.start_command.clone().or_else(|| {
-            client_definition.tmux_runtime().map(|runtime| {
+            client_spec.tmux_runtime().map(|runtime| {
                 runtime
                     .command_env
                     .and_then(|env| std::env::var(env).ok())
@@ -81,11 +80,11 @@ impl GenericRuntimeManager {
             base_tmux_session
         };
         let workspace = paths::workspace_path(&request)?;
-        script::run_startup_hooks(client_definition.backend.startup_hooks, &workspace)?;
+        script::run_startup_hooks(client_spec.adapter.startup_hooks, &workspace)?;
         let runtime_dir = paths::runtime_dir(&request.session_id)?;
         std::fs::create_dir_all(&runtime_dir)?;
         let log_path = runtime_dir.join("runtime.log");
-        let adapter_event_log = match client_definition.backend.adapter_events {
+        let adapter_event_log = match client_spec.adapter.adapter_events {
             AdapterEventBehavior::JsonlOutbox { file_name } => runtime_dir.join(file_name),
             AdapterEventBehavior::Disabled => runtime_dir.join("adapter-events.jsonl"),
         };
@@ -135,7 +134,7 @@ impl GenericRuntimeManager {
         let started_at = utc_now()
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
-        let hook_log_metadata = client_definition
+        let hook_log_metadata = client_spec
             .tmux_runtime()
             .and_then(|runtime| runtime.hook_log)
             .map(|hook_log| {
@@ -190,7 +189,7 @@ impl GenericRuntimeManager {
     }
 
     pub fn submit_input(&self, input: AgentInput) -> Result<()> {
-        GenericTestAdapter.accept_input(input)
+        GenericTestClient.accept_input(input)
     }
 
     pub fn dispatch_tui_turn(

@@ -4,7 +4,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia::{
-    adapters::AdapterCapabilities,
+    agent_clients::AgentClientCapabilities,
     application::{AppState, RuntimeObservationService},
     storage::sqlite::{connect_sqlite, run_migrations},
     transport::http,
@@ -200,7 +200,7 @@ async fn observe_missing_generic_runtime_projects_session_error() {
 async fn observe_missing_generic_runtime_fails_active_turn() {
     let scope = GenericClientTestScope::new()
         .await
-        .with_capabilities(AdapterCapabilities::pi_m0_default())
+        .with_capabilities(AgentClientCapabilities::pi_m0_default())
         .auto_start_turn()
         .write_current_turn_context();
     let state = test_state("generic_observe_turn_failed").await;

@@ -75,12 +75,11 @@ pub(super) fn configured_tui_command(client_type: &str) -> Option<String> {
     let guard = runtime_config()
         .read()
         .expect("runtime config lock poisoned");
-    let runtime_config_key = agent_clients::get_client_definition(client_type)?
+    let runtime_config_key = agent_clients::get_client_spec(client_type)?
         .tmux_runtime()?
         .runtime_config_key?;
     match runtime_config_key {
         "pi" => guard.pi.tui_command.clone(),
-        "claude_code" => guard.claude_code.tui_command.clone(),
         _ => None,
     }
 }

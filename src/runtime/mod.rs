@@ -3,7 +3,6 @@
 //! The MVP generic runtime records a binding and immediately reports ready. This
 //! module stays independent from HTTP transport details.
 
-mod claude_code;
 mod config;
 mod in_process;
 mod manager;

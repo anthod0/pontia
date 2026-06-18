@@ -3,6 +3,18 @@ use super::*;
 const ARTIFACT_PREVIEW_BYTES: usize = 1024;
 const MAX_ARTIFACT_CONTENT_BYTES: i64 = 1024 * 1024;
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ArtifactRegistration {
+    pub artifact_id: String,
+    pub session_id: String,
+    pub turn_id: Option<String>,
+    pub kind: String,
+    pub name: String,
+    pub source_ref: String,
+    pub size_bytes: Option<i64>,
+    pub metadata: Value,
+}
+
 #[derive(Clone)]
 pub struct ArtifactDiscoveryService {
     pool: SqlitePool,

@@ -119,7 +119,7 @@ fn custom_profile_body(profile_id: &str, version: &str) -> Value {
         "version": version,
         "name": "API Reviewer",
         "description": "Reviews backend API changes.",
-        "supported_client_types": ["pi", "claude_code"],
+        "supported_client_types": ["pi"],
         "agent_kind": "executor",
         "system_prompt_template": "You review API changes.",
         "turn_prompt_template": "Review {{work_item_id}}: {{title}}",
@@ -218,10 +218,7 @@ async fn create_agent_profile_persists_and_is_idempotent() {
     let profile = &created["data"]["agent_profile"];
     assert_eq!(profile["profile_id"], "api-reviewer");
     assert_eq!(profile["agent_kind"], "executor");
-    assert_eq!(
-        profile["supported_client_types"],
-        json!(["pi", "claude_code"])
-    );
+    assert_eq!(profile["supported_client_types"], json!(["pi"]));
     assert_eq!(profile["metadata"], json!({ "team": "platform" }));
 
     let (status, replay) = post_json(

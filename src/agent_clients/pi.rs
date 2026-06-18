@@ -1,15 +1,16 @@
 use crate::{
-    adapters::AdapterCapabilities,
+    agent_clients::AgentClientCapabilities,
     agent_clients::types::{
-        AdapterEventBehavior, AgentClientBackendSpec, AgentClientDefinition,
-        ClientSessionIdentityBehavior, DispatchBehavior, HookLogBehavior, InterruptBehavior,
-        ReadinessBehavior, RuntimeBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
-        TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior,
+        AdapterEventBehavior, AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior,
+        CurrentTurnIdBehavior, DispatchBehavior, HookLogBehavior, InterruptBehavior,
+        ReadinessBehavior, RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior,
+        TerminateBehavior, TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior,
+        TurnLifecycleBehavior,
     },
     application::ContextUsageCapability,
 };
 
-pub const CAPABILITIES: AdapterCapabilities = AdapterCapabilities {
+pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     accept_task: true,
     report_turn_started: true,
     report_turn_finished: true,
@@ -21,10 +22,10 @@ pub const CAPABILITIES: AdapterCapabilities = AdapterCapabilities {
     context_usage: ContextUsageCapability::Estimated,
 };
 
-pub const DEFINITION: AgentClientDefinition = AgentClientDefinition {
+pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "pi",
     capabilities: CAPABILITIES,
-    backend: AgentClientBackendSpec {
+    adapter: AgentClientAdapter {
         runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
             command_env: Some("PONTIA_PI_TUI_COMMAND"),
             default_command: "pi --approve",
@@ -42,6 +43,11 @@ pub const DEFINITION: AgentClientDefinition = AgentClientDefinition {
         interrupt: InterruptBehavior::TmuxInterrupt,
         terminate: TerminateBehavior::TmuxSendKeys(&["C-c", "C-c"]),
         turn_context: TurnContextBehavior::CurrentTurnFile,
+        current_turn_id: CurrentTurnIdBehavior::Omit,
+        turn_lifecycle: TurnLifecycleBehavior::ClientManagedForInteractiveTmux,
+        runtime_binding: RuntimeBindingBehavior::Tmux {
+            runtime_kind: "pi_tui",
+        },
         adapter_events: AdapterEventBehavior::JsonlOutbox {
             file_name: "adapter-events.jsonl",
         },

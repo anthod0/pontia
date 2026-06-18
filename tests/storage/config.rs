@@ -23,10 +23,7 @@ fn loads_config_from_key_value_source() {
             "dev-token".to_string(),
         ),
         ("PONTIA_RUN_MIGRATIONS".to_string(), "false".to_string()),
-        (
-            "PONTIA_DEFAULT_CLIENT_TYPE".to_string(),
-            "claude_code".to_string(),
-        ),
+        ("PONTIA_DEFAULT_CLIENT_TYPE".to_string(), "pi".to_string()),
         ("PONTIA_GRAPH_ENABLED".to_string(), "true".to_string()),
         (
             "PONTIA_GRAPH_DB_DIR".to_string(),
@@ -52,7 +49,7 @@ fn loads_config_from_key_value_source() {
         Some("/tmp/pontia-dashboard-cache")
     );
     assert!(!config.run_migrations);
-    assert_eq!(config.default_client_type, "claude_code");
+    assert_eq!(config.default_client_type, "pi");
     assert!(config.graph.enabled);
     assert_eq!(config.graph.db_dir.as_deref(), Some("/tmp/pontia-graph"));
     assert_eq!(config.workspace_browser.roots.len(), 2);
@@ -91,7 +88,7 @@ bind_addr = "127.0.0.1:4040"
 database_url = "sqlite:///tmp/from-file.db"
 external_api_token = "file-token"
 run_migrations = false
-default_client_type = "claude_code"
+default_client_type = "pi"
 
 [dashboard]
 source = "/opt/pontia/dashboard"
@@ -99,9 +96,6 @@ cache_dir = "/var/cache/pontia/dashboard"
 
 [runtime.pi]
 tui_command = "pi --approve -e /tmp/pontia/clients/pi"
-
-[runtime.claude_code]
-tui_command = "claude --dangerously-skip-permissions"
 
 [workspace_browser]
 roots = [
@@ -126,14 +120,10 @@ roots = [
         Some("/var/cache/pontia/dashboard")
     );
     assert!(!config.run_migrations);
-    assert_eq!(config.default_client_type, "claude_code");
+    assert_eq!(config.default_client_type, "pi");
     assert_eq!(
         config.runtime.pi.tui_command.as_deref(),
         Some("pi --approve -e /tmp/pontia/clients/pi")
-    );
-    assert_eq!(
-        config.runtime.claude_code.tui_command.as_deref(),
-        Some("claude --dangerously-skip-permissions")
     );
     assert_eq!(config.workspace_browser.roots.len(), 1);
     assert_eq!(config.workspace_browser.roots[0].root_id, "projects");
@@ -148,7 +138,7 @@ fn env_vars_override_config_file_values() {
         r#"
 bind_addr = "127.0.0.1:4040"
 external_api_token = "file-token"
-default_client_type = "claude_code"
+default_client_type = "pi"
 
 [dashboard]
 source = "/from/file/dashboard"
@@ -209,11 +199,7 @@ fn rejects_generic_as_default_client_type() {
 
     let error = AppConfig::from_vars(&vars).expect_err("generic default should fail");
 
-    assert!(
-        error
-            .to_string()
-            .contains("default client type must be pi or claude_code")
-    );
+    assert!(error.to_string().contains("default client type must be pi"));
 }
 
 #[test]
