@@ -1,6 +1,8 @@
 use sqlx::SqlitePool;
 
-use crate::{error::Result, storage::sqlite::models::workspaces::WorkspaceRow};
+use pontia_storage_sqlite::models::workspaces::WorkspaceRow;
+
+use crate::error::Result;
 
 #[derive(Debug, Clone)]
 pub struct SqliteWorkspaceRepository {

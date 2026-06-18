@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "control/core"]
+members = [".", "control/core", "control/storage-sqlite"]
 resolver = "2"
 
 [workspace.package]
@@ -25,6 +25,7 @@ axum = "0.8"
 dotenvy = "0.15"
 lbug = { workspace = true, optional = true }
 pontia-core = { path = "control/core", default-features = false }
+pontia-storage-sqlite = { path = "control/storage-sqlite" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

@@ -1,7 +1,9 @@
 use super::*;
-use crate::storage::sqlite::models::{
+use crate::storage::sqlite::models::dag::{
+    DagProposalRow, DagSignalRow, WorkItemRunRow, WorkItemRuntimeProjectionRow,
+};
+use pontia_storage_sqlite::models::{
     artifacts::ArtifactRow,
-    dag::{DagProposalRow, DagSignalRow, WorkItemRunRow, WorkItemRuntimeProjectionRow},
     events::{EventRow, EventStreamRow, TaskEventStreamRow},
     sessions::SessionRow,
     tasks::{TaskEventRow, TaskRow},
