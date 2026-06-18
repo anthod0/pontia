@@ -5,7 +5,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use crate::application::{AppState, ExternalQueryService, WorkspaceGitStatusService};
+use pontia_application::{AppState, ExternalQueryService, WorkspaceGitStatusService};
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
 

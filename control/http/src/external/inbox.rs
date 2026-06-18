@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use crate::application::{AppState, InboxCommandService, SubmitInboxMessageRequest};
+use pontia_application::{AppState, InboxCommandService, SubmitInboxMessageRequest};
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key, ok};
 

@@ -1,7 +1,7 @@
 use axum::{Json, extract::State, http::HeaderMap};
 use serde_json::json;
 
-use crate::application::AppState;
+use pontia_application::AppState;
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
 

@@ -7,10 +7,8 @@ use axum::{
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::{
-    application::{AgentToolRequest, AgentToolService, AppState},
-    error::Error,
-};
+use pontia_application::{AgentToolRequest, AgentToolService, AppState};
+use pontia_core::error::Error;
 
 #[derive(Debug, Serialize)]
 pub struct InternalAgentToolResponse {

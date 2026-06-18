@@ -10,7 +10,7 @@ use axum::{
 use tokio::sync::oneshot;
 use tracing::warn;
 
-use crate::error::Result;
+use pontia_core::error::Result;
 
 pub use state::HttpState;
 

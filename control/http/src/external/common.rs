@@ -6,10 +6,8 @@ use axum::{
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::{
-    application::{AppState, ExternalQueryService},
-    error::Error,
-};
+use pontia_application::{AppState, ExternalQueryService};
+use pontia_core::error::Error;
 
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T: Serialize> {

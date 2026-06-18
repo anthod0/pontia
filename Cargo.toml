@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "control/core", "control/storage-sqlite", "control/agent-clients", "control/config", "control/runtime", "control/application"]
+members = [".", "control/core", "control/storage-sqlite", "control/agent-clients", "control/config", "control/runtime", "control/application", "control/http"]
 resolver = "2"
 
 [workspace.package]
@@ -20,6 +20,13 @@ name = "pontia"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+path = "control/pontia/src/lib.rs"
+
+[[bin]]
+name = "pontia"
+path = "control/pontia/src/main.rs"
+
 [dependencies]
 axum = "0.8"
 dotenvy = "0.15"
@@ -28,22 +35,19 @@ pontia-agent-clients = { path = "control/agent-clients" }
 pontia-application = { path = "control/application" }
 pontia-config = { path = "control/config" }
 pontia-core = { path = "control/core", default-features = false }
+pontia-http = { path = "control/http" }
 pontia-runtime = { path = "control/runtime", default-features = false }
 pontia-storage-sqlite = { path = "control/storage-sqlite" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 sqlx.workspace = true
-tar = "0.4"
 thiserror.workspace = true
 time = { workspace = true, features = ["formatting", "parsing", "serde"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "time"] }
-tokio-stream = "0.1"
 toml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v7", "serde"] }
-flate2 = "1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]

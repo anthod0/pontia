@@ -1,6 +1,6 @@
 use axum::extract::FromRef;
 
-use crate::application::AppState;
+use pontia_application::AppState;
 
 use super::dashboard::ResolvedDashboard;
 

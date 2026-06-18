@@ -1,8 +1,8 @@
 use pontia::{
     application,
     config::{AppConfig, config_path_from_args},
-    transport::http,
 };
+use pontia_http as http;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     time::Duration,

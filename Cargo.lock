@@ -1293,25 +1293,22 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "dotenvy",
- "flate2",
  "http-body-util",
  "lbug",
  "pontia-agent-clients",
  "pontia-application",
  "pontia-config",
  "pontia-core",
+ "pontia-http",
  "pontia-runtime",
  "pontia-storage-sqlite",
- "reqwest",
  "serde",
  "serde_json",
  "sqlx",
- "tar",
  "tempfile",
  "thiserror",
  "time",
  "tokio",
- "tokio-stream",
  "toml",
  "tower",
  "tracing",
@@ -1372,6 +1369,26 @@ dependencies = [
  "thiserror",
  "time",
  "uuid",
+]
+
+[[package]]
+name = "pontia-http"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "flate2",
+ "pontia-application",
+ "pontia-config",
+ "pontia-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tar",
+ "time",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "zip",
 ]
 
 [[package]]

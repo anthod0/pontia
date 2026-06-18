@@ -6,7 +6,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::application::{AppState, RawTranscriptService, RawTranscriptServiceError};
+use pontia_application::{AppState, RawTranscriptService, RawTranscriptServiceError};
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
 

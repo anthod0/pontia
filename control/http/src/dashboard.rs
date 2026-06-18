@@ -14,7 +14,7 @@ use axum::{
 use flate2::read::GzDecoder;
 use tracing::warn;
 
-use crate::config::DashboardConfig;
+use pontia_config::DashboardConfig;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedDashboard {

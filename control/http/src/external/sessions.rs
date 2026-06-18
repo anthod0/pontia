@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use crate::application::{
+use pontia_application::{
     AppState, CreateSessionRequest, ExternalQueryService, RuntimeControlService,
     SessionCommandService, UpdateSessionRequest,
 };

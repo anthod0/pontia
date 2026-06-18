@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use crate::application::{AppState, DagSchedulerService, ExternalQueryService};
+use pontia_application::{AppState, DagSchedulerService, ExternalQueryService};
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
 

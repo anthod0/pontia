@@ -7,7 +7,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::application::{
+use pontia_application::{
     AppState, ExternalQueryService, RegisterWorkspaceRequest, RenameWorkspaceRequest,
     WorkspaceBrowserService,
 };

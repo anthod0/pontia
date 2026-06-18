@@ -9,10 +9,8 @@ pub(super) use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 
-use crate::{
-    application::{AppState, EventStreamScope, EventView, ExternalQueryService},
-    domain::{DomainEvent, EventType},
-};
+use pontia_application::{AppState, EventStreamScope, EventView, ExternalQueryService};
+use pontia_core::domain::{DomainEvent, EventType};
 
 use super::common::{ExternalApiError, authenticate, ensure_session_exists};
 

@@ -10,11 +10,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-use crate::{
-    application::{
-        AppState, EventIngestService, InternalEventValidationService, RuntimeBindingUpsertRequest,
-        RuntimeBindingUpsertService,
-    },
+use pontia_application::{
+    AppState, EventIngestService, InternalEventValidationService, RuntimeBindingUpsertRequest,
+    RuntimeBindingUpsertService,
+};
+use pontia_core::{
     domain::{DomainEvent, EventSource, EventType},
     error::Error,
 };

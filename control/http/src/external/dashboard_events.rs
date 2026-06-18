@@ -9,8 +9,8 @@ use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 
-use crate::{
-    application::{AppState, EventView, ExternalQueryService, TaskEventView},
+use pontia_application::{AppState, EventView, ExternalQueryService, TaskEventView};
+use pontia_core::{
     domain::EventType,
     error::{Error, Result as AppResult},
 };
