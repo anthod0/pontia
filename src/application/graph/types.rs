@@ -1,11 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct GraphRuntimeConfig {
-    pub enabled: bool,
-    pub db_dir: Option<String>,
-}
+pub use crate::config::GraphRuntimeConfig;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ProvenanceNode {

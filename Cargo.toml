@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "control/core", "control/storage-sqlite", "control/agent-clients"]
+members = [".", "control/core", "control/storage-sqlite", "control/agent-clients", "control/config"]
 resolver = "2"
 
 [workspace.package]
@@ -25,6 +25,7 @@ axum = "0.8"
 dotenvy = "0.15"
 lbug = { workspace = true, optional = true }
 pontia-agent-clients = { path = "control/agent-clients" }
+pontia-config = { path = "control/config" }
 pontia-core = { path = "control/core", default-features = false }
 pontia-storage-sqlite = { path = "control/storage-sqlite" }
 serde = { workspace = true, features = ["derive"] }
@@ -50,4 +51,4 @@ tower = { version = "0.5", features = ["util"] }
 
 [features]
 default = ["lbug"]
-lbug = ["dep:lbug", "pontia-core/lbug", "pontia-agent-clients/lbug"]
+lbug = ["dep:lbug", "pontia-core/lbug", "pontia-agent-clients/lbug", "pontia-config/lbug"]

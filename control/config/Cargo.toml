@@ -1,0 +1,15 @@
+[package]
+name = "pontia-config"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+pontia-agent-clients = { path = "../agent-clients" }
+pontia-core = { path = "../core", default-features = false }
+dotenvy = "0.15"
+serde = { workspace = true, features = ["derive"] }
+toml = "0.9"
+
+[features]
+default = ["lbug"]
+lbug = ["pontia-core/lbug", "pontia-agent-clients/lbug"]

@@ -1,16 +1,6 @@
 use super::*;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
-pub struct WorkspaceBrowserConfig {
-    pub roots: Vec<WorkspaceRootConfig>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct WorkspaceRootConfig {
-    pub root_id: String,
-    pub label: String,
-    pub path: String,
-}
+pub use crate::config::{WorkspaceBrowserConfig, WorkspaceRootConfig};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkspaceRootView {

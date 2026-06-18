@@ -1297,6 +1297,7 @@ dependencies = [
  "http-body-util",
  "lbug",
  "pontia-agent-clients",
+ "pontia-config",
  "pontia-core",
  "pontia-storage-sqlite",
  "reqwest",
@@ -1324,6 +1325,17 @@ dependencies = [
  "pontia-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "pontia-config"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "pontia-agent-clients",
+ "pontia-core",
+ "serde",
+ "toml",
 ]
 
 [[package]]

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     os::unix::fs::PermissionsExt,
     path::Path,
     sync::{Mutex, OnceLock},
@@ -52,9 +53,12 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         std::env::remove_var("PONTIA_PI_TUI_COMMAND");
     }
     set_runtime_config(RuntimeConfig {
-        pi: RuntimeClientConfig {
-            tui_command: Some("pi --approve -e /configured/clients/pi".to_string()),
-        },
+        clients: HashMap::from([(
+            "pi".to_string(),
+            RuntimeClientConfig {
+                tui_command: Some("pi --approve -e /configured/clients/pi".to_string()),
+            },
+        )]),
     });
 
     let result = GenericRuntimeManager
@@ -99,9 +103,12 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
         std::env::set_var("PONTIA_PI_TUI_COMMAND", "pi from env");
     }
     set_runtime_config(RuntimeConfig {
-        pi: RuntimeClientConfig {
-            tui_command: Some("pi from config".to_string()),
-        },
+        clients: HashMap::from([(
+            "pi".to_string(),
+            RuntimeClientConfig {
+                tui_command: Some("pi from config".to_string()),
+            },
+        )]),
     });
 
     let result = GenericRuntimeManager

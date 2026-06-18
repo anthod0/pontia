@@ -97,6 +97,9 @@ cache_dir = "/var/cache/pontia/dashboard"
 [runtime.pi]
 tui_command = "pi --approve -e /tmp/pontia/clients/pi"
 
+[runtime."claude-code"]
+tui_command = "claude from file"
+
 [workspace_browser]
 roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }
@@ -122,8 +125,18 @@ roots = [
     assert!(!config.run_migrations);
     assert_eq!(config.default_client_type, "pi");
     assert_eq!(
-        config.runtime.pi.tui_command.as_deref(),
+        config
+            .runtime
+            .tui_command_for_client_config_key("pi")
+            .as_deref(),
         Some("pi --approve -e /tmp/pontia/clients/pi")
+    );
+    assert_eq!(
+        config
+            .runtime
+            .tui_command_for_client_config_key("claude-code")
+            .as_deref(),
+        Some("claude from file")
     );
     assert_eq!(config.workspace_browser.roots.len(), 1);
     assert_eq!(config.workspace_browser.roots[0].root_id, "projects");
@@ -176,7 +189,10 @@ tui_command = "pi from file"
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:5050");
     assert_eq!(config.external_api_token.as_deref(), Some("env-token"));
     assert_eq!(
-        config.runtime.pi.tui_command.as_deref(),
+        config
+            .runtime
+            .tui_command_for_client_config_key("pi")
+            .as_deref(),
         Some("pi from env")
     );
     assert_eq!(
@@ -193,9 +209,12 @@ tui_command = "pi from file"
 #[test]
 fn runtime_config_resolves_tui_commands_by_agent_client_config_key() {
     let config = RuntimeConfig {
-        pi: RuntimeClientConfig {
-            tui_command: Some("pi from config".to_string()),
-        },
+        clients: HashMap::from([(
+            "pi".to_string(),
+            RuntimeClientConfig {
+                tui_command: Some("pi from config".to_string()),
+            },
+        )]),
     };
 
     assert_eq!(
