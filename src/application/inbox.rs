@@ -1,5 +1,7 @@
 use super::*;
-use pontia_storage_sqlite::repositories::idempotency::SqliteIdempotencyRepository;
+use pontia_storage_sqlite::repositories::{
+    idempotency::SqliteIdempotencyRepository, inbox::SqliteInboxRepository,
+};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct SubmitInboxMessageRequest {
@@ -101,45 +103,21 @@ impl InboxCommandService {
         let message_id = new_message_id().to_string();
         let metadata = serde_json::to_string(&request.metadata)?;
 
+        let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
         if request.delivery_policy == "interrupt_now" {
-            let mut tx = self.pool.begin().await?;
-            sqlx::query(
-                r#"UPDATE inbox_messages
-                   SET state = 'superseded', superseded_by_message_id = ?,
-                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                   WHERE session_id = ? AND delivery_policy = 'interrupt_now' AND state = 'pending'"#,
-            )
-            .bind(&message_id)
-            .bind(session_id)
-            .execute(&mut *tx)
-            .await?;
-            sqlx::query(
-                r#"INSERT INTO inbox_messages
-                   (message_id, session_id, state, delivery_policy, input_summary, metadata)
-                   VALUES (?, ?, 'pending', ?, ?, ?)"#,
-            )
-            .bind(&message_id)
-            .bind(session_id)
-            .bind(&request.delivery_policy)
-            .bind(&request.input)
-            .bind(&metadata)
-            .execute(&mut *tx)
-            .await?;
-            tx.commit().await?;
-        } else {
-            sqlx::query(
-                r#"INSERT INTO inbox_messages
-                   (message_id, session_id, state, delivery_policy, input_summary, metadata)
-                   VALUES (?, ?, 'pending', ?, ?, ?)"#,
-            )
-            .bind(&message_id)
-            .bind(session_id)
-            .bind(&request.delivery_policy)
-            .bind(&request.input)
-            .bind(&metadata)
-            .execute(&self.pool)
-            .await?;
+            inbox_repository
+                .supersede_pending_interrupts(session_id, &message_id)
+                .await?;
         }
+        inbox_repository
+            .insert_message(
+                &message_id,
+                session_id,
+                &request.delivery_policy,
+                &request.input,
+                &metadata,
+            )
+            .await?;
 
         self.audit(
             session_id,
@@ -190,15 +168,9 @@ impl InboxCommandService {
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let rows = sqlx::query(
-            r#"SELECT message_id, session_id, state, delivery_policy, input_summary, metadata,
-                      turn_id, superseded_by_message_id, failure_message, created_at, updated_at,
-                      dispatched_at, cancelled_at
-               FROM inbox_messages WHERE session_id = ? ORDER BY created_at, message_id"#,
-        )
-        .bind(session_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = SqliteInboxRepository::new(self.pool.clone())
+            .list_messages(session_id)
+            .await?;
         rows.into_iter().map(row_to_inbox_message_view).collect()
     }
 
@@ -207,16 +179,9 @@ impl InboxCommandService {
         session_id: &str,
         message_id: &str,
     ) -> Result<Option<InboxMessageView>> {
-        let row = sqlx::query(
-            r#"SELECT message_id, session_id, state, delivery_policy, input_summary, metadata,
-                      turn_id, superseded_by_message_id, failure_message, created_at, updated_at,
-                      dispatched_at, cancelled_at
-               FROM inbox_messages WHERE session_id = ? AND message_id = ?"#,
-        )
-        .bind(session_id)
-        .bind(message_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = SqliteInboxRepository::new(self.pool.clone())
+            .get_message(session_id, message_id)
+            .await?;
         row.map(row_to_inbox_message_view).transpose()
     }
 
@@ -231,27 +196,20 @@ impl InboxCommandService {
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
-        let result = sqlx::query(
-            r#"UPDATE inbox_messages
-               SET state = 'cancelled', cancelled_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE session_id = ? AND message_id = ? AND state = 'pending'"#,
-        )
-        .bind(session_id)
-        .bind(message_id)
-        .execute(&self.pool)
-        .await?;
+        let rows_affected = SqliteInboxRepository::new(self.pool.clone())
+            .cancel_pending_message(session_id, message_id)
+            .await?;
 
         let message = self
             .get_message(session_id, message_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("inbox message {message_id} not found")))?;
-        if result.rows_affected() == 0 && message.state != "cancelled" {
+        if rows_affected == 0 && message.state != "cancelled" {
             return Err(Error::StateConflict(format!(
                 "inbox message {message_id} is not pending"
             )));
         }
-        if result.rows_affected() > 0 {
+        if rows_affected > 0 {
             self.audit(
                 session_id,
                 &session.client_type,
@@ -278,26 +236,20 @@ impl InboxCommandService {
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
-        let result = sqlx::query(
-            r#"UPDATE inbox_messages
-               SET state = 'dismissed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE session_id = ? AND message_id = ? AND state = 'failed'"#,
-        )
-        .bind(session_id)
-        .bind(message_id)
-        .execute(&self.pool)
-        .await?;
+        let rows_affected = SqliteInboxRepository::new(self.pool.clone())
+            .dismiss_failed_message(session_id, message_id)
+            .await?;
 
         let message = self
             .get_message(session_id, message_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("inbox message {message_id} not found")))?;
-        if result.rows_affected() == 0 && message.state != "dismissed" {
+        if rows_affected == 0 && message.state != "dismissed" {
             return Err(Error::StateConflict(format!(
                 "inbox message {message_id} is not failed"
             )));
         }
-        if result.rows_affected() > 0 {
+        if rows_affected > 0 {
             self.audit(
                 session_id,
                 &session.client_type,
@@ -325,26 +277,13 @@ impl InboxCommandService {
             return Ok(());
         }
 
-        let row = sqlx::query(
-            r#"SELECT message_id, input_summary, metadata
-               FROM inbox_messages
-               WHERE session_id = ? AND state = 'pending'
-               ORDER BY CASE WHEN delivery_policy = 'interrupt_now' THEN 0 ELSE 1 END,
-                        CASE WHEN delivery_policy = 'interrupt_now' THEN created_at END DESC,
-                        CASE WHEN delivery_policy = 'interrupt_now' THEN message_id END DESC,
-                        created_at ASC,
-                        message_id ASC
-               LIMIT 1"#,
-        )
-        .bind(session_id)
-        .fetch_optional(&self.pool)
-        .await?;
-        let Some(row) = row else {
+        let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
+        let Some(row) = inbox_repository.next_pending_message(session_id).await? else {
             return Ok(());
         };
-        let message_id: String = row.try_get("message_id")?;
-        let input: String = row.try_get("input_summary")?;
-        let metadata: String = row.try_get("metadata")?;
+        let message_id = row.message_id;
+        let input = row.input_summary;
+        let metadata = row.metadata;
         let mut metadata: Value = serde_json::from_str(&metadata)?;
         if !metadata.is_object() {
             metadata = json!({});
@@ -357,15 +296,8 @@ impl InboxCommandService {
         }
         inherit_dag_planning_context(&mut metadata, &session.metadata);
 
-        let result = sqlx::query(
-            r#"UPDATE inbox_messages
-               SET state = 'dispatching', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE message_id = ? AND state = 'pending'"#,
-        )
-        .bind(&message_id)
-        .execute(&self.pool)
-        .await?;
-        if result.rows_affected() == 0 {
+        let rows_affected = inbox_repository.mark_dispatching(&message_id).await?;
+        if rows_affected == 0 {
             return Ok(());
         }
 
@@ -375,16 +307,9 @@ impl InboxCommandService {
         {
             Ok(turn) => {
                 let turn_id = turn.as_ref().map(|turn| turn.turn_id.as_str());
-                sqlx::query(
-                    r#"UPDATE inbox_messages
-                       SET state = 'dispatched', turn_id = ?, dispatched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                       WHERE message_id = ?"#,
-                )
-                .bind(turn_id)
-                .bind(&message_id)
-                .execute(&self.pool)
-                .await?;
+                inbox_repository
+                    .mark_dispatched(&message_id, turn_id)
+                    .await?;
                 let mut payload = json!({ "message_id": message_id });
                 if let Some(turn) = turn {
                     payload["turn_id"] = json!(turn.turn_id);
@@ -405,16 +330,9 @@ impl InboxCommandService {
     }
 
     async fn mark_failed(&self, message_id: &str, failure_message: String) -> Result<()> {
-        sqlx::query(
-            r#"UPDATE inbox_messages
-               SET state = 'failed', failure_message = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE message_id = ? AND state IN ('pending', 'dispatching')"#,
-        )
-        .bind(failure_message)
-        .bind(message_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        SqliteInboxRepository::new(self.pool.clone())
+            .mark_failed(message_id, &failure_message)
+            .await
     }
 
     async fn audit(

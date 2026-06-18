@@ -1372,6 +1372,8 @@ dependencies = [
  "pontia-core",
  "serde_json",
  "sqlx",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

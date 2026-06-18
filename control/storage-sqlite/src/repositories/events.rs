@@ -148,4 +148,18 @@ impl SqliteEventRepository {
         .fetch_all(&self.pool)
         .await?)
     }
+
+    pub async fn ready_payloads(&self, session_id: &str, client_type: &str) -> Result<Vec<String>> {
+        Ok(sqlx::query_scalar(
+            r#"SELECT payload FROM events
+               WHERE session_id = ?
+                 AND event_type = 'session.ready'
+                 AND source = 'agent_client'
+                 AND client_type = ?"#,
+        )
+        .bind(session_id)
+        .bind(client_type)
+        .fetch_all(&self.pool)
+        .await?)
+    }
 }

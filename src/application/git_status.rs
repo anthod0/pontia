@@ -1,4 +1,7 @@
 use super::*;
+use pontia_storage_sqlite::repositories::git_status::{
+    GitStatusUpsertRecord, SqliteGitStatusRepository,
+};
 use std::{
     collections::HashMap,
     future::Future,
@@ -142,7 +145,8 @@ async fn refresh_workspace_git_status_now(
         .await?
         .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))?;
 
-    let observed_at = current_timestamp(&pool).await?;
+    let repository = SqliteGitStatusRepository::new(pool.clone());
+    let observed_at = repository.current_timestamp().await?;
     let outcome = observe_git_status(&workspace.canonical_path).await;
     match outcome {
         Ok(parsed) => {
@@ -151,7 +155,7 @@ async fn refresh_workspace_git_status_now(
                 && parsed.untracked_count == 0
                 && parsed.conflicted_count == 0;
             upsert_git_status(
-                &pool,
+                &repository,
                 workspace_id,
                 &parsed,
                 clean,
@@ -164,7 +168,7 @@ async fn refresh_workspace_git_status_now(
         Err(error) => {
             let parsed = ParsedGitStatus::default();
             upsert_git_status(
-                &pool,
+                &repository,
                 workspace_id,
                 &parsed,
                 true,
@@ -281,7 +285,7 @@ fn parse_porcelain_v2_status(output: &str) -> Result<ParsedGitStatus> {
 }
 
 async fn upsert_git_status(
-    pool: &SqlitePool,
+    repository: &SqliteGitStatusRepository,
     workspace_id: &str,
     parsed: &ParsedGitStatus,
     clean: bool,
@@ -289,52 +293,24 @@ async fn upsert_git_status(
     failure: Option<String>,
     observed_at: &str,
 ) -> Result<()> {
-    sqlx::query(
-        r#"INSERT INTO workspace_git_status
-           (workspace_id, repo_root, branch, upstream, ahead, behind, staged_count, unstaged_count,
-            untracked_count, conflicted_count, clean, state, failure, observed_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-           ON CONFLICT(workspace_id) DO UPDATE SET
-             repo_root = excluded.repo_root,
-             branch = excluded.branch,
-             upstream = excluded.upstream,
-             ahead = excluded.ahead,
-             behind = excluded.behind,
-             staged_count = excluded.staged_count,
-             unstaged_count = excluded.unstaged_count,
-             untracked_count = excluded.untracked_count,
-             conflicted_count = excluded.conflicted_count,
-             clean = excluded.clean,
-             state = excluded.state,
-             failure = excluded.failure,
-             observed_at = excluded.observed_at,
-             updated_at = excluded.updated_at"#,
-    )
-    .bind(workspace_id)
-    .bind(&parsed.repo_root)
-    .bind(&parsed.branch)
-    .bind(&parsed.upstream)
-    .bind(parsed.ahead)
-    .bind(parsed.behind)
-    .bind(parsed.staged_count)
-    .bind(parsed.unstaged_count)
-    .bind(parsed.untracked_count)
-    .bind(parsed.conflicted_count)
-    .bind(clean)
-    .bind(state)
-    .bind(failure)
-    .bind(observed_at)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-async fn current_timestamp(pool: &SqlitePool) -> Result<String> {
-    Ok(
-        sqlx::query_scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
-            .fetch_one(pool)
-            .await?,
-    )
+    repository
+        .upsert_status(GitStatusUpsertRecord {
+            workspace_id: workspace_id.to_string(),
+            repo_root: parsed.repo_root.clone(),
+            branch: parsed.branch.clone(),
+            upstream: parsed.upstream.clone(),
+            ahead: parsed.ahead,
+            behind: parsed.behind,
+            staged_count: parsed.staged_count,
+            unstaged_count: parsed.unstaged_count,
+            untracked_count: parsed.untracked_count,
+            conflicted_count: parsed.conflicted_count,
+            clean,
+            state: state.to_string(),
+            failure,
+            observed_at: observed_at.to_string(),
+        })
+        .await
 }
 
 #[cfg(test)]

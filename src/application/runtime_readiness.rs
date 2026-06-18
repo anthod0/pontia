@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use pontia_storage_sqlite::repositories::events::SqliteEventRepository;
 use serde_json::Value;
 use sqlx::SqlitePool;
 use tokio::time::{Instant, sleep};
@@ -39,17 +40,9 @@ impl RuntimeReadinessService {
         client_type: &str,
         runtime_instance_id: &str,
     ) -> Result<bool> {
-        let payloads: Vec<String> = sqlx::query_scalar(
-            r#"SELECT payload FROM events
-               WHERE session_id = ?
-                 AND event_type = 'session.ready'
-                 AND source = 'agent_client'
-                 AND client_type = ?"#,
-        )
-        .bind(session_id)
-        .bind(client_type)
-        .fetch_all(&self.pool)
-        .await?;
+        let payloads = SqliteEventRepository::new(self.pool.clone())
+            .ready_payloads(session_id, client_type)
+            .await?;
 
         for payload in payloads {
             let value: Value = serde_json::from_str(&payload)?;

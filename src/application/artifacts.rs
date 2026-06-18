@@ -1,4 +1,7 @@
 use super::*;
+use pontia_storage_sqlite::repositories::artifacts::{
+    ArtifactUpsertRecord, SqliteArtifactRepository,
+};
 
 const ARTIFACT_PREVIEW_BYTES: usize = 1024;
 const MAX_ARTIFACT_CONTENT_BYTES: i64 = 1024 * 1024;
@@ -79,30 +82,18 @@ impl ArtifactDiscoveryService {
                 "source_ref": source_ref,
             });
 
-            sqlx::query(
-                r#"INSERT INTO artifacts
-                   (artifact_id, session_id, turn_id, kind, name, source_ref, size_bytes, metadata)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(artifact_id) DO UPDATE SET
-                       session_id = excluded.session_id,
-                       turn_id = excluded.turn_id,
-                       kind = excluded.kind,
-                       name = excluded.name,
-                       source_ref = excluded.source_ref,
-                       size_bytes = excluded.size_bytes,
-                       metadata = excluded.metadata,
-                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"#,
-            )
-            .bind(&artifact_id)
-            .bind(session_id)
-            .bind(Option::<String>::None)
-            .bind(kind)
-            .bind(&relative_path)
-            .bind(&source_ref)
-            .bind(size_bytes)
-            .bind(serde_json::to_string(&metadata)?)
-            .execute(&self.pool)
-            .await?;
+            SqliteArtifactRepository::new(self.pool.clone())
+                .upsert_artifact(ArtifactUpsertRecord {
+                    artifact_id,
+                    session_id: session_id.to_string(),
+                    turn_id: None,
+                    kind: kind.to_string(),
+                    name: relative_path,
+                    source_ref,
+                    size_bytes: Some(size_bytes),
+                    metadata: serde_json::to_string(&metadata)?,
+                })
+                .await?;
         }
 
         let artifacts = query.list_artifacts(session_id).await?;
@@ -121,31 +112,18 @@ impl ArtifactRegistrationService {
     }
 
     pub async fn register(&self, artifact: ArtifactRegistration) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO artifacts
-               (artifact_id, session_id, turn_id, kind, name, source_ref, size_bytes, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(artifact_id) DO UPDATE SET
-                   session_id = excluded.session_id,
-                   turn_id = excluded.turn_id,
-                   kind = excluded.kind,
-                   name = excluded.name,
-                   source_ref = excluded.source_ref,
-                   size_bytes = excluded.size_bytes,
-                   metadata = excluded.metadata,
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"#,
-        )
-        .bind(&artifact.artifact_id)
-        .bind(&artifact.session_id)
-        .bind(&artifact.turn_id)
-        .bind(&artifact.kind)
-        .bind(&artifact.name)
-        .bind(&artifact.source_ref)
-        .bind(artifact.size_bytes)
-        .bind(serde_json::to_string(&artifact.metadata)?)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        SqliteArtifactRepository::new(self.pool.clone())
+            .upsert_artifact(ArtifactUpsertRecord {
+                artifact_id: artifact.artifact_id,
+                session_id: artifact.session_id,
+                turn_id: artifact.turn_id,
+                kind: artifact.kind,
+                name: artifact.name,
+                source_ref: artifact.source_ref,
+                size_bytes: artifact.size_bytes,
+                metadata: serde_json::to_string(&artifact.metadata)?,
+            })
+            .await
     }
 }
 
@@ -160,14 +138,13 @@ impl ArtifactContentService {
     }
 
     pub async fn read_content(&self, artifact_id: &str) -> Result<ArtifactContent> {
-        let row = sqlx::query("SELECT source_ref, size_bytes FROM artifacts WHERE artifact_id = ?")
-            .bind(artifact_id)
-            .fetch_optional(&self.pool)
+        let row = SqliteArtifactRepository::new(self.pool.clone())
+            .artifact_source(artifact_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("artifact {artifact_id} not found")))?;
 
-        let source_ref: String = row.try_get("source_ref")?;
-        let expected_size: Option<i64> = row.try_get("size_bytes")?;
+        let source_ref = row.source_ref;
+        let expected_size = row.size_bytes;
         if let Some(expected_size) = expected_size
             && expected_size > MAX_ARTIFACT_CONTENT_BYTES
         {

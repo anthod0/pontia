@@ -3,6 +3,8 @@ use pontia_storage_sqlite::models::{
     artifacts::ArtifactRow,
     dag::{DagProposalRow, DagSignalRow, WorkItemRunRow, WorkItemRuntimeProjectionRow},
     events::{EventRow, EventStreamRow, TaskEventStreamRow},
+    git_status::WorkspaceGitStatusRow,
+    inbox::InboxMessageRow,
     sessions::SessionRow,
     tasks::{TaskEventRow, TaskRow},
     turns::TurnRow,
@@ -58,24 +60,24 @@ pub(crate) fn workspace_row_to_view(row: WorkspaceRow) -> Result<WorkspaceView> 
 }
 
 pub(crate) fn row_to_workspace_git_status_view(
-    row: sqlx::sqlite::SqliteRow,
+    row: WorkspaceGitStatusRow,
 ) -> Result<WorkspaceGitStatusView> {
     Ok(WorkspaceGitStatusView {
-        workspace_id: row.try_get("workspace_id")?,
-        repo_root: row.try_get("repo_root")?,
-        branch: row.try_get("branch")?,
-        upstream: row.try_get("upstream")?,
-        ahead: row.try_get("ahead")?,
-        behind: row.try_get("behind")?,
-        staged_count: row.try_get("staged_count")?,
-        unstaged_count: row.try_get("unstaged_count")?,
-        untracked_count: row.try_get("untracked_count")?,
-        conflicted_count: row.try_get("conflicted_count")?,
-        clean: row.try_get("clean")?,
-        state: row.try_get("state")?,
-        failure: row.try_get("failure")?,
-        observed_at: row.try_get("observed_at")?,
-        updated_at: row.try_get("updated_at")?,
+        workspace_id: row.workspace_id,
+        repo_root: row.repo_root,
+        branch: row.branch,
+        upstream: row.upstream,
+        ahead: row.ahead,
+        behind: row.behind,
+        staged_count: row.staged_count,
+        unstaged_count: row.unstaged_count,
+        untracked_count: row.untracked_count,
+        conflicted_count: row.conflicted_count,
+        clean: row.clean,
+        state: row.state,
+        failure: row.failure,
+        observed_at: row.observed_at,
+        updated_at: row.updated_at,
     })
 }
 
@@ -287,25 +289,23 @@ pub(crate) fn turn_row_to_view(row: TurnRow) -> Result<TurnView> {
     })
 }
 
-pub(crate) fn row_to_inbox_message_view(row: sqlx::sqlite::SqliteRow) -> Result<InboxMessageView> {
-    let metadata: String = row.try_get("metadata")?;
-
+pub(crate) fn row_to_inbox_message_view(row: InboxMessageRow) -> Result<InboxMessageView> {
     Ok(InboxMessageView {
-        message_id: row.try_get("message_id")?,
-        session_id: row.try_get("session_id")?,
-        state: row.try_get("state")?,
-        delivery_policy: row.try_get("delivery_policy")?,
+        message_id: row.message_id,
+        session_id: row.session_id,
+        state: row.state,
+        delivery_policy: row.delivery_policy,
         input: InboxInputView {
-            summary: row.try_get("input_summary")?,
+            summary: row.input_summary,
         },
-        metadata: serde_json::from_str(&metadata)?,
-        turn_id: row.try_get("turn_id")?,
-        superseded_by_message_id: row.try_get("superseded_by_message_id")?,
-        failure_message: row.try_get("failure_message")?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
-        dispatched_at: row.try_get("dispatched_at")?,
-        cancelled_at: row.try_get("cancelled_at")?,
+        metadata: serde_json::from_str(&row.metadata)?,
+        turn_id: row.turn_id,
+        superseded_by_message_id: row.superseded_by_message_id,
+        failure_message: row.failure_message,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        dispatched_at: row.dispatched_at,
+        cancelled_at: row.cancelled_at,
     })
 }
 

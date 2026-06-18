@@ -1,4 +1,5 @@
 use super::*;
+use pontia_storage_sqlite::repositories::inbox::SqliteInboxRepository;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventIngestResult {
@@ -184,18 +185,9 @@ impl EventIngestService {
             return Ok(());
         };
 
-        sqlx::query(
-            r#"UPDATE inbox_messages
-               SET turn_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE session_id = ? AND message_id = ? AND turn_id IS NULL"#,
-        )
-        .bind(turn_id)
-        .bind(&event.session_id)
-        .bind(inbox_message_id)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
+        SqliteInboxRepository::new(self.pool.clone())
+            .link_started_turn(&event.session_id, inbox_message_id, turn_id)
+            .await
     }
 
     pub async fn get_session(&self, session_id: &str) -> Result<Option<SessionProjection>> {

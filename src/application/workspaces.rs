@@ -1,4 +1,5 @@
 use super::*;
+use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
 pub use crate::config::{WorkspaceBrowserConfig, WorkspaceRootConfig};
 
@@ -73,43 +74,29 @@ pub(crate) async fn upsert_canonical_workspace(
                 .map(ToString::to_string)
         });
 
-    if let Some(row) =
-        sqlx::query("SELECT workspace_id, canonical_path FROM workspaces WHERE canonical_path = ?")
-            .bind(canonical_path)
-            .fetch_optional(pool)
-            .await?
+    let repository = SqliteWorkspaceRepository::new(pool.clone());
+    if let Some(row) = repository
+        .get_workspace_record_by_canonical_path(canonical_path)
+        .await?
     {
-        let workspace_id: String = row.try_get("workspace_id")?;
-        sqlx::query(
-            r#"UPDATE workspaces
-               SET display_path = ?, name = COALESCE(?, name), state = 'active',
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                   last_used_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE workspace_id = ?"#,
-        )
-        .bind(&display_path)
-        .bind(&name)
-        .bind(&workspace_id)
-        .execute(pool)
-        .await?;
+        repository
+            .reactivate_workspace(&row.workspace_id, &display_path, name.as_deref())
+            .await?;
         return Ok(WorkspaceRecord {
-            workspace_id,
+            workspace_id: row.workspace_id,
             canonical_path: canonical_path.to_string(),
         });
     }
 
     let workspace_id = new_workspace_id().to_string();
-    sqlx::query(
-        r#"INSERT INTO workspaces
-           (workspace_id, canonical_path, display_path, name, last_used_at)
-           VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#,
-    )
-    .bind(&workspace_id)
-    .bind(canonical_path)
-    .bind(&display_path)
-    .bind(&name)
-    .execute(pool)
-    .await?;
+    repository
+        .insert_workspace(
+            &workspace_id,
+            canonical_path,
+            &display_path,
+            name.as_deref(),
+        )
+        .await?;
 
     Ok(WorkspaceRecord {
         workspace_id,
@@ -121,14 +108,13 @@ pub(crate) async fn get_workspace_record(
     pool: &SqlitePool,
     workspace_id: &str,
 ) -> Result<Option<WorkspaceRecord>> {
-    sqlx::query("SELECT workspace_id, canonical_path FROM workspaces WHERE workspace_id = ?")
-        .bind(workspace_id)
-        .fetch_optional(pool)
+    SqliteWorkspaceRepository::new(pool.clone())
+        .get_workspace_record(workspace_id)
         .await?
         .map(|row| {
             Ok(WorkspaceRecord {
-                workspace_id: row.try_get("workspace_id")?,
-                canonical_path: row.try_get("canonical_path")?,
+                workspace_id: row.workspace_id,
+                canonical_path: row.canonical_path,
             })
         })
         .transpose()
@@ -221,13 +207,9 @@ impl WorkspaceBrowserService {
                 .strip_prefix(&root_path)
                 .map_err(|_| Error::Domain("directory escaped workspace root".to_string()))?;
             let path = path_to_api_relative(entry_relative);
-            let is_workspace = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM workspaces WHERE canonical_path = ? AND state != 'deleted'",
-            )
-            .bind(canonical.display().to_string())
-            .fetch_one(&self.pool)
-            .await?
-                > 0;
+            let is_workspace = SqliteWorkspaceRepository::new(self.pool.clone())
+                .active_workspace_exists_at_path(&canonical.display().to_string())
+                .await?;
             entries.push(WorkspaceDirectoryEntryView {
                 name,
                 path,
@@ -301,16 +283,10 @@ impl WorkspaceBrowserService {
             .as_deref()
             .map(str::trim)
             .filter(|name| !name.is_empty());
-        let result = sqlx::query(
-            r#"UPDATE workspaces
-               SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE workspace_id = ?"#,
-        )
-        .bind(name)
-        .bind(workspace_id)
-        .execute(&self.pool)
-        .await?;
-        if result.rows_affected() == 0 {
+        let rows_affected = SqliteWorkspaceRepository::new(self.pool.clone())
+            .rename_workspace(workspace_id, name)
+            .await?;
+        if rows_affected == 0 {
             return Err(Error::NotFound(format!(
                 "workspace {workspace_id} not found"
             )));
@@ -322,15 +298,10 @@ impl WorkspaceBrowserService {
     }
 
     pub async fn delete_workspace(&self, workspace_id: &str) -> Result<WorkspaceView> {
-        let result = sqlx::query(
-            r#"UPDATE workspaces
-               SET state = 'deleted', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE workspace_id = ?"#,
-        )
-        .bind(workspace_id)
-        .execute(&self.pool)
-        .await?;
-        if result.rows_affected() == 0 {
+        let rows_affected = SqliteWorkspaceRepository::new(self.pool.clone())
+            .mark_deleted(workspace_id)
+            .await?;
+        if rows_affected == 0 {
             return Err(Error::NotFound(format!(
                 "workspace {workspace_id} not found"
             )));
