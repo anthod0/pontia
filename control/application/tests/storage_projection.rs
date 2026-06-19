@@ -1,7 +1,5 @@
-use pontia::{
-    application::EventIngestService,
-    domain::{DomainEvent, EventSource, EventType, SessionState, TurnState},
-};
+use pontia_application::EventIngestService;
+use pontia_core::domain::{DomainEvent, EventSource, EventType, SessionState, TurnState};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 

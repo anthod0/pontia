@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs};
 
-use pontia::config::{AppConfig, RuntimeClientConfig, RuntimeConfig, config_path_from_args};
+use pontia_config::{AppConfig, RuntimeClientConfig, RuntimeConfig, config_path_from_args};
 
 #[test]
 fn loads_config_from_key_value_source() {

@@ -1,4 +1,4 @@
-use pontia::application::AppState;
+use pontia_application::AppState;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 #[tokio::test]

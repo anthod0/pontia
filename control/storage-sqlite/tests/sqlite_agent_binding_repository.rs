@@ -71,7 +71,7 @@ async fn primary_binding_for_session_returns_earliest_binding() {
 
     repository
         .upsert_binding(AgentBindingUpsertRecord {
-            id: "bind_old".to_string(),
+            id: "bind_1".to_string(),
             session_id: "sess_primary".to_string(),
             client_type: "pi".to_string(),
             launch_cwd: "/workspace".to_string(),
@@ -82,7 +82,7 @@ async fn primary_binding_for_session_returns_earliest_binding() {
         .expect("insert old binding");
     repository
         .upsert_binding(AgentBindingUpsertRecord {
-            id: "bind_new".to_string(),
+            id: "bind_2".to_string(),
             session_id: "sess_primary".to_string(),
             client_type: "pi".to_string(),
             launch_cwd: "/workspace".to_string(),
@@ -98,7 +98,7 @@ async fn primary_binding_for_session_returns_earliest_binding() {
         .expect("primary binding")
         .expect("binding exists");
 
-    assert_eq!(primary.id, "bind_old");
+    assert_eq!(primary.id, "bind_1");
     assert_eq!(primary.client_session_key, "old-key");
 }
 
@@ -110,7 +110,7 @@ async fn looks_up_session_and_latest_key_from_agent_bindings() {
 
     repository
         .upsert_binding(AgentBindingUpsertRecord {
-            id: "bind_lookup_old".to_string(),
+            id: "bind_lookup_1".to_string(),
             session_id: "sess_lookup".to_string(),
             client_type: "pi".to_string(),
             launch_cwd: "/workspace".to_string(),
@@ -121,7 +121,7 @@ async fn looks_up_session_and_latest_key_from_agent_bindings() {
         .expect("insert old binding");
     repository
         .upsert_binding(AgentBindingUpsertRecord {
-            id: "bind_lookup_new".to_string(),
+            id: "bind_lookup_2".to_string(),
             session_id: "sess_lookup".to_string(),
             client_type: "pi".to_string(),
             launch_cwd: "/workspace".to_string(),

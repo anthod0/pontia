@@ -5,11 +5,9 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use pontia::{
-    agent_clients::InterruptBehavior,
-    config::{RuntimeClientConfig, RuntimeConfig},
-    runtime::{GenericRuntimeManager, RuntimeStartRequest, set_runtime_config},
-};
+use pontia_agent_clients::InterruptBehavior;
+use pontia_config::{RuntimeClientConfig, RuntimeConfig};
+use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, set_runtime_config};
 
 fn path_env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();

@@ -1,4 +1,4 @@
-use pontia::domain::{
+use pontia_core::domain::{
     DomainEvent, EventSource, EventType, ProjectionState, SessionState, TurnState,
 };
 use serde_json::json;

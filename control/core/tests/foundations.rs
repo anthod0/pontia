@@ -1,4 +1,4 @@
-use pontia::{ids, time};
+use pontia_core::{ids, time};
 
 #[test]
 fn generated_ids_have_external_prefixes_and_are_unique() {

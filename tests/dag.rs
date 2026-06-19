@@ -1,5 +1,3 @@
-#[path = "dag/completion_aggregate.rs"]
-mod completion_aggregate;
 #[path = "dag/external_api.rs"]
 mod external_api;
 #[path = "dag/human_control_api.rs"]
