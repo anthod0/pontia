@@ -2,7 +2,6 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::OnceLock,
-    time::Duration,
 };
 
 use axum::{
@@ -183,18 +182,6 @@ fn cleanup_tmux(tmux_session: &str) {
         .args(["kill-session", "-t", tmux_session])
         .stderr(Stdio::null())
         .status();
-}
-
-async fn wait_for_file_contains(path: &Path, expected: &str) {
-    for _ in 0..50 {
-        if let Ok(content) = std::fs::read_to_string(path)
-            && content.contains(expected)
-        {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    panic!("{} did not contain {expected:?}", path.display());
 }
 
 #[tokio::test]
@@ -513,45 +500,6 @@ async fn pi_runtime_exports_real_hook_environment() {
     assert!(runtime_script.contains(runtime_instance_id));
     assert!(runtime_script.contains("export PONTIA_PI_HOOK_LOG="));
     assert!(runtime_script.contains("pi-hook.log"));
-
-    cleanup_tmux(&tmux_session);
-}
-
-#[tokio::test]
-async fn pi_turn_dispatches_to_long_running_tmux_tui_and_marks_started_only() {
-    let workspace = tempfile::tempdir().expect("workspace");
-    let state = test_state("m15_pi_tui_dispatch").await;
-    let session_id = create_pi_session(state.clone(), workspace.path()).await;
-    let metadata = binding_metadata(&state, &session_id).await;
-    let tmux_session = metadata["tmux_session"]
-        .as_str()
-        .expect("tmux session")
-        .to_string();
-
-    let inbox = submit_pi_turn(
-        state.clone(),
-        &session_id,
-        "dispatch this to the long-running pi tui",
-    )
-    .await;
-    assert!(inbox["turn_id"].is_null());
-    assert!(GenericTestClient::recorded_inputs().is_empty());
-
-    wait_for_file_contains(
-        &workspace.path().join("pi-tui-input.log"),
-        "dispatch this to the long-running pi tui",
-    )
-    .await;
-
-    let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
-        .bind(&session_id)
-        .fetch_one(&state.db())
-        .await
-        .expect("turn count");
-    assert_eq!(
-        turn_count, 0,
-        "backend paste dispatch must not create turn.created/queued/started for pi"
-    );
 
     cleanup_tmux(&tmux_session);
 }

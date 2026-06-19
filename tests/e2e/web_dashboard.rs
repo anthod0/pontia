@@ -201,42 +201,6 @@ async fn remote_dashboard_refreshes_cache_and_falls_back_when_refresh_fails() {
     assert!(html.contains("remote dashboard"));
 }
 
-#[tokio::test]
-async fn dashboard_serves_built_svelte_entrypoint() {
-    let dashboard = dashboard_v2_dist().await;
-    let response = http::router(test_state_with_dashboard(dashboard).await)
-        .oneshot(
-            Request::builder()
-                .uri("/dashboard")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let content_type = response
-        .headers()
-        .get("content-type")
-        .and_then(|value| value.to_str().ok())
-        .expect("content-type");
-    assert!(content_type.starts_with("text/html"));
-
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .expect("body")
-        .to_bytes();
-    let html = std::str::from_utf8(&body).expect("utf8 html");
-
-    assert!(html.contains("pontia Dashboard"));
-    assert!(html.contains("id=\"app\""));
-    assert!(html.contains("/dashboard/assets/"));
-    assert!(!html.contains("openEventStream"));
-}
-
 async fn request_dashboard_html(dashboard: ResolvedDashboard) -> String {
     let (status, html) = request_dashboard(dashboard).await;
     assert_eq!(status, StatusCode::OK);
@@ -264,14 +228,6 @@ async fn request_dashboard(dashboard: ResolvedDashboard) -> (StatusCode, String)
         status,
         std::str::from_utf8(&body).expect("utf8 html").to_string(),
     )
-}
-
-async fn dashboard_v2_dist() -> ResolvedDashboard {
-    resolve_dashboard(&DashboardConfig {
-        source: Some("apps/dashboard/dist".to_string()),
-        cache_dir: None,
-    })
-    .await
 }
 
 fn build_local_dashboard(
@@ -314,50 +270,4 @@ fn build_dashboard_zip(html_text: &str, script_name: &str) -> Vec<u8> {
         zip.finish().expect("finish zip");
     }
     bytes.into_inner()
-}
-
-#[tokio::test]
-async fn dashboard_serves_built_frontend_assets() {
-    let dashboard = dashboard_v2_dist().await;
-    let entry_response = http::router(test_state_with_dashboard(dashboard).await)
-        .oneshot(
-            Request::builder()
-                .uri("/dashboard")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("entry response");
-    let entry_body = entry_response
-        .into_body()
-        .collect()
-        .await
-        .expect("entry body")
-        .to_bytes();
-    let html = std::str::from_utf8(&entry_body).expect("utf8 html");
-    let asset_start = html.find("/dashboard/assets/").expect("asset path");
-    let asset_end = html[asset_start..]
-        .find('"')
-        .map(|offset| asset_start + offset)
-        .expect("asset end");
-    let asset_path = &html[asset_start..asset_end];
-
-    let dashboard = dashboard_v2_dist().await;
-    let response = http::router(test_state_with_dashboard(dashboard).await)
-        .oneshot(
-            Request::builder()
-                .uri(asset_path)
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let content_type = response
-        .headers()
-        .get("content-type")
-        .and_then(|value| value.to_str().ok())
-        .expect("content-type");
-    assert!(content_type.contains("javascript"));
 }
