@@ -19,5 +19,15 @@ tokio-stream = "0.1"
 tracing = "0.1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+[dev-dependencies]
+http-body-util = "0.1"
+pontia-agent-clients = { path = "../agent-clients" }
+pontia-application = { path = "../application" }
+pontia-runtime = { path = "../runtime" }
+pontia-storage-sqlite = { path = "../storage-sqlite" }
+sqlx.workspace = true
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+
 [features]
 default = []
