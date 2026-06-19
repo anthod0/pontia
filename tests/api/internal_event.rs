@@ -14,7 +14,7 @@ use tower::ServiceExt;
 
 async fn test_state() -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("m2.db");
+    let db_path = dir.path().join("internal_event.db");
     let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
@@ -72,7 +72,13 @@ async fn internal_event_api_accepts_session_event_and_updates_projection() {
 
     let (status, body) = post_event(
         state.clone(),
-        event_body("evt_m2_1", "session.created", "sess_m2_1", None, 1),
+        event_body(
+            "evt_internal_event_1",
+            "session.created",
+            "sess_internal_event_1",
+            None,
+            1,
+        ),
     )
     .await;
 
@@ -84,7 +90,7 @@ async fn internal_event_api_accepts_session_event_and_updates_projection() {
 
     let service = EventIngestService::new(state.db());
     let session = service
-        .get_session("sess_m2_1")
+        .get_session("sess_internal_event_1")
         .await
         .expect("session query")
         .expect("session projection");
@@ -95,31 +101,51 @@ async fn internal_event_api_accepts_session_event_and_updates_projection() {
 async fn internal_event_api_accepts_turn_events_and_updates_projection() {
     let state = test_state().await;
 
-    let created = event_body("evt_m2_2_created", "session.created", "sess_m2_2", None, 1);
+    let created = event_body(
+        "evt_internal_event_2_created",
+        "session.created",
+        "sess_internal_event_2",
+        None,
+        1,
+    );
     post_event(state.clone(), created).await;
-    let mut ready = event_body("evt_m2_2", "session.ready", "sess_m2_2", None, 2);
+    let mut ready = event_body(
+        "evt_internal_event_2",
+        "session.ready",
+        "sess_internal_event_2",
+        None,
+        2,
+    );
     ready["source"] = json!("agent_client");
-    ready["payload"] = json!({"runtime_instance_id":"rtinst_m2_2"});
+    ready["payload"] = json!({"runtime_instance_id":"rtinst_internal_event_2"});
     post_event(state.clone(), ready).await;
     let (status, body) = post_event(
         state.clone(),
         event_body(
-            "evt_m2_3",
+            "evt_internal_event_3",
             "turn.started",
-            "sess_m2_2",
-            Some("turn_m2_1"),
+            "sess_internal_event_2",
+            Some("turn_internal_event_1"),
             3,
         ),
     )
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["turn_id"], "turn_m2_1");
+    assert_eq!(body["turn_id"], "turn_internal_event_1");
     assert_eq!(body["state_version"], 3);
 
     let service = EventIngestService::new(state.db());
-    let session = service.get_session("sess_m2_2").await.unwrap().unwrap();
-    let turn = service.get_turn("turn_m2_1").await.unwrap().unwrap();
+    let session = service
+        .get_session("sess_internal_event_2")
+        .await
+        .unwrap()
+        .unwrap();
+    let turn = service
+        .get_turn("turn_internal_event_1")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(session.state, SessionState::Busy);
     assert_eq!(turn.state, TurnState::Running);
 }
@@ -128,9 +154,9 @@ async fn internal_event_api_accepts_turn_events_and_updates_projection() {
 async fn internal_event_api_rejects_missing_required_schema_fields() {
     let state = test_state().await;
     let mut event = event_body(
-        "evt_m2_missing",
+        "evt_internal_event_missing",
         "session.created",
-        "sess_m2_missing",
+        "sess_internal_event_missing",
         None,
         1,
     );
@@ -147,7 +173,13 @@ async fn internal_event_api_rejects_unknown_event_type() {
     let state = test_state().await;
     let (status, body) = post_event(
         state,
-        event_body("evt_m2_4", "approval.requested", "sess_m2_3", None, 1),
+        event_body(
+            "evt_internal_event_4",
+            "approval.requested",
+            "sess_internal_event_3",
+            None,
+            1,
+        ),
     )
     .await;
 
@@ -160,7 +192,13 @@ async fn internal_event_api_rejects_turn_event_without_turn_id() {
     let state = test_state().await;
     let (status, body) = post_event(
         state,
-        event_body("evt_m2_5", "turn.completed", "sess_m2_4", None, 1),
+        event_body(
+            "evt_internal_event_5",
+            "turn.completed",
+            "sess_internal_event_4",
+            None,
+            1,
+        ),
     )
     .await;
 
@@ -172,9 +210,9 @@ async fn internal_event_api_rejects_turn_event_without_turn_id() {
 async fn internal_event_api_accepts_context_usage_and_updates_session_metadata_only() {
     let state = test_state().await;
     let mut created = event_body(
-        "evt_m2_context_created",
+        "evt_internal_event_context_created",
         "session.created",
-        "sess_m2_context",
+        "sess_internal_event_context",
         None,
         1,
     );
@@ -184,9 +222,9 @@ async fn internal_event_api_accepts_context_usage_and_updates_session_metadata_o
         post_event(
             state.clone(),
             event_body(
-                "evt_m2_context_ready",
+                "evt_internal_event_context_ready",
                 "session.ready",
-                "sess_m2_context",
+                "sess_internal_event_context",
                 None,
                 2
             ),
@@ -197,10 +235,10 @@ async fn internal_event_api_accepts_context_usage_and_updates_session_metadata_o
     );
 
     let mut event = event_body(
-        "evt_m2_context_usage",
+        "evt_internal_event_context_usage",
         "session.context_usage_updated",
-        "sess_m2_context",
-        Some("turn_m2_context"),
+        "sess_internal_event_context",
+        Some("turn_internal_event_context"),
         3,
     );
     event["source"] = json!("agent_client");
@@ -222,11 +260,11 @@ async fn internal_event_api_accepts_context_usage_and_updates_session_metadata_o
     let (status, body) = post_event(state.clone(), event).await;
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(body["turn_id"], "turn_m2_context");
+    assert_eq!(body["turn_id"], "turn_internal_event_context");
 
     let service = EventIngestService::new(state.db());
     let session = service
-        .get_session("sess_m2_context")
+        .get_session("sess_internal_event_context")
         .await
         .expect("session query")
         .expect("session projection");
@@ -248,9 +286,9 @@ async fn internal_event_api_accepts_context_usage_and_updates_session_metadata_o
 async fn internal_event_api_merges_partial_context_usage_without_clearing_existing_values() {
     let state = test_state().await;
     let mut created = event_body(
-        "evt_m2_context_merge_created",
+        "evt_internal_event_context_merge_created",
         "session.created",
-        "sess_m2_context_merge",
+        "sess_internal_event_context_merge",
         None,
         1,
     );
@@ -258,10 +296,10 @@ async fn internal_event_api_merges_partial_context_usage_without_clearing_existi
     assert_eq!(post_event(state.clone(), created).await.0, StatusCode::OK);
 
     let mut full = event_body(
-        "evt_m2_context_merge_full",
+        "evt_internal_event_context_merge_full",
         "session.context_usage_updated",
-        "sess_m2_context_merge",
-        Some("turn_m2_context_merge"),
+        "sess_internal_event_context_merge",
+        Some("turn_internal_event_context_merge"),
         2,
     );
     full["payload"] = json!({
@@ -277,10 +315,10 @@ async fn internal_event_api_merges_partial_context_usage_without_clearing_existi
     assert_eq!(post_event(state.clone(), full).await.0, StatusCode::OK);
 
     let mut partial = event_body(
-        "evt_m2_context_merge_partial",
+        "evt_internal_event_context_merge_partial",
         "session.context_usage_updated",
-        "sess_m2_context_merge",
-        Some("turn_m2_context_merge"),
+        "sess_internal_event_context_merge",
+        Some("turn_internal_event_context_merge"),
         3,
     );
     partial["payload"] = json!({
@@ -299,7 +337,7 @@ async fn internal_event_api_merges_partial_context_usage_without_clearing_existi
 
     let service = EventIngestService::new(state.db());
     let session = service
-        .get_session("sess_m2_context_merge")
+        .get_session("sess_internal_event_context_merge")
         .await
         .expect("session query")
         .expect("session projection");
@@ -321,27 +359,27 @@ async fn internal_event_api_rejects_invalid_context_usage_values() {
     let state = test_state().await;
     let invalid_cases = [
         (
-            "evt_m2_context_negative",
+            "evt_internal_event_context_negative",
             json!({"context_usage":{"used_tokens":-1,"confidence":"exact"}}),
         ),
         (
-            "evt_m2_context_ratio",
+            "evt_internal_event_context_ratio",
             json!({"context_usage":{"usage_ratio":1.5,"confidence":"exact"}}),
         ),
         (
-            "evt_m2_context_confidence",
+            "evt_internal_event_context_confidence",
             json!({"context_usage":{"used_tokens":1,"confidence":"approximate"}}),
         ),
         (
-            "evt_m2_context_missing_object",
+            "evt_internal_event_context_missing_object",
             json!({"context_usage":null}),
         ),
         (
-            "evt_m2_context_model_nested",
+            "evt_internal_event_context_model_nested",
             json!({"context_usage":{"used_tokens":1,"model":"nested"}}),
         ),
         (
-            "evt_m2_context_model_type",
+            "evt_internal_event_context_model_type",
             json!({"context_usage":{"used_tokens":1},"model":42}),
         ),
     ];
@@ -350,7 +388,7 @@ async fn internal_event_api_rejects_invalid_context_usage_values() {
         let mut event = event_body(
             event_id,
             "session.context_usage_updated",
-            "sess_m2_context_invalid",
+            "sess_internal_event_context_invalid",
             None,
             1,
         );
@@ -370,9 +408,9 @@ async fn internal_event_api_accepts_session_message_updated_without_changing_pro
     let (created_status, _) = post_event(
         state.clone(),
         event_body(
-            "evt_m2_message_updated_created",
+            "evt_internal_event_message_updated_created",
             "session.created",
-            "sess_m2_message_updated",
+            "sess_internal_event_message_updated",
             None,
             1,
         ),
@@ -381,9 +419,9 @@ async fn internal_event_api_accepts_session_message_updated_without_changing_pro
     assert_eq!(created_status, StatusCode::OK);
 
     let mut event = event_body(
-        "evt_m2_message_updated",
+        "evt_internal_event_message_updated",
         "session.message_updated",
-        "sess_m2_message_updated",
+        "sess_internal_event_message_updated",
         None,
         2,
     );
@@ -397,7 +435,7 @@ async fn internal_event_api_accepts_session_message_updated_without_changing_pro
     assert_eq!(body["turn_id"], Value::Null);
 
     let event_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id = ?")
-        .bind("sess_m2_message_updated")
+        .bind("sess_internal_event_message_updated")
         .fetch_one(&state.db())
         .await
         .expect("event count");
@@ -405,7 +443,7 @@ async fn internal_event_api_accepts_session_message_updated_without_changing_pro
 
     let service = EventIngestService::new(state.db());
     let session = service
-        .get_session("sess_m2_message_updated")
+        .get_session("sess_internal_event_message_updated")
         .await
         .expect("session query")
         .expect("session projection");
@@ -423,9 +461,9 @@ async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id_
         .canonicalize()
         .expect("canonical workspace");
     let mut created = event_body(
-        "evt_m2_ready_created",
+        "evt_internal_event_ready_created",
         "session.created",
-        "sess_m2_ready",
+        "sess_internal_event_ready",
         None,
         1,
     );
@@ -435,14 +473,20 @@ async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id_
     sqlx::query(
         "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'tmux', 'rtinst_test', ?, ?)",
     )
-    .bind("sess_m2_ready")
+    .bind("sess_internal_event_ready")
     .bind(launch_cwd.display().to_string())
     .bind(json!({"runtime_instance_id":"rtinst_test", "workspace": launch_cwd.display().to_string()}).to_string())
     .execute(&state.db())
     .await
     .expect("runtime binding");
 
-    let mut event = event_body("evt_m2_ready", "session.ready", "sess_m2_ready", None, 2);
+    let mut event = event_body(
+        "evt_internal_event_ready",
+        "session.ready",
+        "sess_internal_event_ready",
+        None,
+        2,
+    );
     event["source"] = json!("agent_client");
     event["client_type"] = json!("pi");
     event["payload"] = json!({
@@ -460,7 +504,7 @@ async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id_
     let row = sqlx::query(
         "SELECT session_id, client_type, launch_cwd, client_session_key, metadata FROM agent_bindings WHERE session_id = ?",
     )
-    .bind("sess_m2_ready")
+    .bind("sess_internal_event_ready")
     .fetch_one(&state.db())
     .await
     .expect("agent binding row");
@@ -470,7 +514,7 @@ async fn internal_event_api_accepts_agent_client_ready_with_runtime_instance_id_
     let client_session_key: String = sqlx::Row::try_get(&row, "client_session_key").unwrap();
     let metadata: String = sqlx::Row::try_get(&row, "metadata").unwrap();
     let metadata: Value = serde_json::from_str(&metadata).unwrap();
-    assert_eq!(session_id, "sess_m2_ready");
+    assert_eq!(session_id, "sess_internal_event_ready");
     assert_eq!(client_type, "pi");
     assert_eq!(stored_launch_cwd, launch_cwd.display().to_string());
     assert_eq!(client_session_key, "pi_session_123");
@@ -487,9 +531,9 @@ async fn internal_event_api_registers_agent_binding_for_any_ready_event_with_cli
         .canonicalize()
         .expect("canonical workspace");
     let mut created = event_body(
-        "evt_m2_generic_ready_created",
+        "evt_internal_event_generic_ready_created",
         "session.created",
-        "sess_m2_generic_ready",
+        "sess_internal_event_generic_ready",
         None,
         1,
     );
@@ -499,7 +543,7 @@ async fn internal_event_api_registers_agent_binding_for_any_ready_event_with_cli
     sqlx::query(
         "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'tmux', 'rtinst_generic', ?, ?)",
     )
-    .bind("sess_m2_generic_ready")
+    .bind("sess_internal_event_generic_ready")
     .bind(launch_cwd.display().to_string())
     .bind(json!({"runtime_instance_id":"rtinst_generic", "workspace": launch_cwd.display().to_string()}).to_string())
     .execute(&state.db())
@@ -507,9 +551,9 @@ async fn internal_event_api_registers_agent_binding_for_any_ready_event_with_cli
     .expect("runtime binding");
 
     let mut event = event_body(
-        "evt_m2_generic_ready",
+        "evt_internal_event_generic_ready",
         "session.ready",
-        "sess_m2_generic_ready",
+        "sess_internal_event_generic_ready",
         None,
         2,
     );
@@ -526,7 +570,7 @@ async fn internal_event_api_registers_agent_binding_for_any_ready_event_with_cli
     let client_session_key: String = sqlx::query_scalar(
         "SELECT client_session_key FROM agent_bindings WHERE session_id = ? AND client_type = ?",
     )
-    .bind("sess_m2_generic_ready")
+    .bind("sess_internal_event_generic_ready")
     .bind("generic")
     .fetch_one(&state.db())
     .await
@@ -543,9 +587,9 @@ async fn internal_event_api_rejects_bound_confirmed_runtime_event_without_runtim
         .canonicalize()
         .expect("canonical workspace");
     let mut created = event_body(
-        "evt_m2_bound_missing_rt_created",
+        "evt_internal_event_bound_missing_rt_created",
         "session.created",
-        "sess_m2_bound_missing_rt",
+        "sess_internal_event_bound_missing_rt",
         None,
         1,
     );
@@ -555,7 +599,7 @@ async fn internal_event_api_rejects_bound_confirmed_runtime_event_without_runtim
     sqlx::query(
         "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'generic', 'rtinst_expected', ?, ?)",
     )
-    .bind("sess_m2_bound_missing_rt")
+    .bind("sess_internal_event_bound_missing_rt")
     .bind(launch_cwd.display().to_string())
     .bind(json!({"runtime_instance_id":"rtinst_expected", "workspace": launch_cwd.display().to_string()}).to_string())
     .execute(&state.db())
@@ -563,10 +607,10 @@ async fn internal_event_api_rejects_bound_confirmed_runtime_event_without_runtim
     .expect("runtime binding");
 
     let mut event = event_body(
-        "evt_m2_bound_missing_rt_started",
+        "evt_internal_event_bound_missing_rt_started",
         "turn.started",
-        "sess_m2_bound_missing_rt",
-        Some("turn_m2_bound_missing_rt"),
+        "sess_internal_event_bound_missing_rt",
+        Some("turn_internal_event_bound_missing_rt"),
         2,
     );
     event["source"] = json!("agent_client");
@@ -593,9 +637,9 @@ async fn internal_event_api_rejects_confirmed_runtime_event_with_mismatched_runt
         .canonicalize()
         .expect("canonical workspace");
     let mut created = event_body(
-        "evt_m2_bound_wrong_rt_created",
+        "evt_internal_event_bound_wrong_rt_created",
         "session.created",
-        "sess_m2_bound_wrong_rt",
+        "sess_internal_event_bound_wrong_rt",
         None,
         1,
     );
@@ -605,7 +649,7 @@ async fn internal_event_api_rejects_confirmed_runtime_event_with_mismatched_runt
     sqlx::query(
         "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'generic', 'rtinst_expected', ?, ?)",
     )
-    .bind("sess_m2_bound_wrong_rt")
+    .bind("sess_internal_event_bound_wrong_rt")
     .bind(launch_cwd.display().to_string())
     .bind(json!({"runtime_instance_id":"rtinst_expected", "workspace": launch_cwd.display().to_string()}).to_string())
     .execute(&state.db())
@@ -613,10 +657,10 @@ async fn internal_event_api_rejects_confirmed_runtime_event_with_mismatched_runt
     .expect("runtime binding");
 
     let mut event = event_body(
-        "evt_m2_bound_wrong_rt_started",
+        "evt_internal_event_bound_wrong_rt_started",
         "turn.started",
-        "sess_m2_bound_wrong_rt",
-        Some("turn_m2_bound_wrong_rt"),
+        "sess_internal_event_bound_wrong_rt",
+        Some("turn_internal_event_bound_wrong_rt"),
         2,
     );
     event["source"] = json!("agent_client");
@@ -644,9 +688,9 @@ async fn internal_event_api_ready_agent_binding_is_idempotent_for_retries() {
         .canonicalize()
         .expect("canonical workspace");
     let mut created = event_body(
-        "evt_m2_ready_retry_created",
+        "evt_internal_event_ready_retry_created",
         "session.created",
-        "sess_m2_ready_retry",
+        "sess_internal_event_ready_retry",
         None,
         1,
     );
@@ -656,15 +700,24 @@ async fn internal_event_api_ready_agent_binding_is_idempotent_for_retries() {
     sqlx::query(
         "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'tmux', 'rtinst_retry', ?, ?)",
     )
-    .bind("sess_m2_ready_retry")
+    .bind("sess_internal_event_ready_retry")
     .bind(launch_cwd.display().to_string())
     .bind(json!({"runtime_instance_id":"rtinst_retry", "workspace": launch_cwd.display().to_string()}).to_string())
     .execute(&state.db())
     .await
     .expect("runtime binding");
 
-    for event_id in ["evt_m2_ready_retry_1", "evt_m2_ready_retry_2"] {
-        let mut event = event_body(event_id, "session.ready", "sess_m2_ready_retry", None, 2);
+    for event_id in [
+        "evt_internal_event_ready_retry_1",
+        "evt_internal_event_ready_retry_2",
+    ] {
+        let mut event = event_body(
+            event_id,
+            "session.ready",
+            "sess_internal_event_ready_retry",
+            None,
+            2,
+        );
         event["source"] = json!("agent_client");
         event["client_type"] = json!("pi");
         event["payload"] =
@@ -674,7 +727,7 @@ async fn internal_event_api_ready_agent_binding_is_idempotent_for_retries() {
     }
 
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings WHERE session_id = ?")
-        .bind("sess_m2_ready_retry")
+        .bind("sess_internal_event_ready_retry")
         .fetch_one(&state.db())
         .await
         .expect("agent binding count");
@@ -685,10 +738,10 @@ async fn internal_event_api_ready_agent_binding_is_idempotent_for_retries() {
 async fn internal_event_api_rejects_confirmed_turn_event_for_unknown_session() {
     let state = test_state().await;
     let mut event = event_body(
-        "evt_m2_unknown_turn_started",
+        "evt_internal_event_unknown_turn_started",
         "turn.started",
-        "sess_m2_unknown_turn",
-        Some("turn_m2_unknown"),
+        "sess_internal_event_unknown_turn",
+        Some("turn_internal_event_unknown"),
         1,
     );
     event["source"] = json!("agent_adapter");
@@ -707,7 +760,7 @@ async fn internal_event_api_rejects_confirmed_turn_event_for_unknown_session() {
     let service = EventIngestService::new(state.db());
     assert!(
         service
-            .get_session("sess_m2_unknown_turn")
+            .get_session("sess_internal_event_unknown_turn")
             .await
             .unwrap()
             .is_none()
@@ -718,9 +771,9 @@ async fn internal_event_api_rejects_confirmed_turn_event_for_unknown_session() {
 async fn internal_event_api_rejects_agent_client_ready_for_unknown_session() {
     let state = test_state().await;
     let mut event = event_body(
-        "evt_m2_unknown_ready",
+        "evt_internal_event_unknown_ready",
         "session.ready",
-        "sess_m2_unknown_ready",
+        "sess_internal_event_unknown_ready",
         None,
         1,
     );
@@ -742,7 +795,7 @@ async fn internal_event_api_rejects_agent_client_ready_for_unknown_session() {
     let service = EventIngestService::new(state.db());
     assert!(
         service
-            .get_session("sess_m2_unknown_ready")
+            .get_session("sess_internal_event_unknown_ready")
             .await
             .unwrap()
             .is_none()
@@ -752,7 +805,13 @@ async fn internal_event_api_rejects_agent_client_ready_for_unknown_session() {
 #[tokio::test]
 async fn internal_event_api_rejects_agent_client_ready_without_runtime_instance_id() {
     let state = test_state().await;
-    let mut event = event_body("evt_m2_bad_ready", "session.ready", "sess_m2_bad", None, 1);
+    let mut event = event_body(
+        "evt_internal_event_bad_ready",
+        "session.ready",
+        "sess_internal_event_bad",
+        None,
+        1,
+    );
     event["source"] = json!("agent_client");
     event["client_type"] = json!("pi");
 
@@ -772,9 +831,9 @@ async fn internal_event_api_rejects_agent_client_ready_without_runtime_instance_
 async fn internal_event_api_rejects_pi_agent_client_ready_without_client_session_key() {
     let state = test_state().await;
     let mut created = event_body(
-        "evt_m2_bad_ready_key_created",
+        "evt_internal_event_bad_ready_key_created",
         "session.created",
-        "sess_m2_bad_key",
+        "sess_internal_event_bad_key",
         None,
         1,
     );
@@ -783,9 +842,9 @@ async fn internal_event_api_rejects_pi_agent_client_ready_without_client_session
     post_event(state.clone(), created).await;
 
     let mut event = event_body(
-        "evt_m2_bad_ready_key",
+        "evt_internal_event_bad_ready_key",
         "session.ready",
-        "sess_m2_bad_key",
+        "sess_internal_event_bad_key",
         None,
         2,
     );
@@ -808,7 +867,13 @@ async fn internal_event_api_rejects_pi_agent_client_ready_without_client_session
 #[tokio::test]
 async fn internal_event_api_is_idempotent_for_duplicate_event_id() {
     let state = test_state().await;
-    let event = event_body("evt_m2_same", "session.created", "sess_m2_5", None, 1);
+    let event = event_body(
+        "evt_internal_event_same",
+        "session.created",
+        "sess_internal_event_5",
+        None,
+        1,
+    );
 
     let first = post_event(state.clone(), event.clone()).await;
     let second = post_event(state.clone(), event).await;
@@ -820,7 +885,14 @@ async fn internal_event_api_is_idempotent_for_duplicate_event_id() {
     assert_eq!(second.1["state_version"], 1);
 
     let service = EventIngestService::new(state.db());
-    assert_eq!(service.list_events("sess_m2_5").await.unwrap().len(), 1);
+    assert_eq!(
+        service
+            .list_events("sess_internal_event_5")
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -829,16 +901,22 @@ async fn internal_event_api_maps_domain_conflicts_to_conflict() {
 
     post_event(
         state.clone(),
-        event_body("evt_m2_6", "session.created", "sess_m2_6", None, 1),
+        event_body(
+            "evt_internal_event_6",
+            "session.created",
+            "sess_internal_event_6",
+            None,
+            1,
+        ),
     )
     .await;
     post_event(
         state.clone(),
         event_body(
-            "evt_m2_7",
+            "evt_internal_event_7",
             "turn.started",
-            "sess_m2_6",
-            Some("turn_m2_2"),
+            "sess_internal_event_6",
+            Some("turn_internal_event_2"),
             2,
         ),
     )
@@ -846,10 +924,10 @@ async fn internal_event_api_maps_domain_conflicts_to_conflict() {
     let (status, body) = post_event(
         state,
         event_body(
-            "evt_m2_8",
+            "evt_internal_event_8",
             "turn.started",
-            "sess_m2_6",
-            Some("turn_m2_3"),
+            "sess_internal_event_6",
+            Some("turn_internal_event_3"),
             3,
         ),
     )
@@ -862,7 +940,13 @@ async fn internal_event_api_maps_domain_conflicts_to_conflict() {
 #[tokio::test]
 async fn internal_event_api_rejects_large_payloads() {
     let state = test_state().await;
-    let mut event = event_body("evt_m2_9", "turn.output", "sess_m2_7", Some("turn_m2_4"), 1);
+    let mut event = event_body(
+        "evt_internal_event_9",
+        "turn.output",
+        "sess_internal_event_7",
+        Some("turn_internal_event_4"),
+        1,
+    );
     event["payload"] = json!({ "content": "x".repeat(70_000) });
 
     let (status, body) = post_event(state, event).await;
@@ -877,12 +961,24 @@ async fn internal_event_api_accepts_sequence_gaps_with_warnings() {
 
     post_event(
         state.clone(),
-        event_body("evt_m2_10", "session.created", "sess_m2_8", None, 1),
+        event_body(
+            "evt_internal_event_10",
+            "session.created",
+            "sess_internal_event_8",
+            None,
+            1,
+        ),
     )
     .await;
     let (status, body) = post_event(
         state,
-        event_body("evt_m2_11", "session.ready", "sess_m2_8", None, 3),
+        event_body(
+            "evt_internal_event_11",
+            "session.ready",
+            "sess_internal_event_8",
+            None,
+            3,
+        ),
     )
     .await;
 

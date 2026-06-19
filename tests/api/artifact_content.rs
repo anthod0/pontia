@@ -50,9 +50,9 @@ async fn seed_idle_session(state: &AppState) {
     let service = EventIngestService::new(state.db());
     service
         .ingest_event(event(
-            "evt_m7_session_created",
+            "evt_artifact_content_session_created",
             EventType::SessionCreated,
-            "sess_m7_1",
+            "sess_artifact_content_1",
             None,
             json!({}),
         ))
@@ -60,9 +60,9 @@ async fn seed_idle_session(state: &AppState) {
         .unwrap();
     service
         .ingest_event(event(
-            "evt_m7_session_ready",
+            "evt_artifact_content_session_ready",
             EventType::SessionReady,
-            "sess_m7_1",
+            "sess_artifact_content_1",
             None,
             json!({}),
         ))
@@ -77,7 +77,7 @@ async fn insert_artifact(state: &AppState, artifact_id: &str, source_ref: &str, 
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(artifact_id)
-    .bind("sess_m7_1")
+    .bind("sess_artifact_content_1")
     .bind(Option::<String>::None)
     .bind("log")
     .bind("agent.log")
@@ -123,16 +123,22 @@ fn file_url(path: &Path) -> String {
 
 #[tokio::test]
 async fn external_api_reads_registered_artifact_content() {
-    let state = test_state("m7_content").await;
+    let state = test_state("artifact_content_content").await;
     seed_idle_session(&state).await;
     let dir = tempfile::tempdir().expect("artifact dir");
     let artifact_path = dir.path().join("agent.log");
     fs::write(&artifact_path, "hello artifact\n").expect("write artifact");
-    insert_artifact(&state, "art_m7_1", &file_url(&artifact_path), 15).await;
+    insert_artifact(
+        &state,
+        "art_artifact_content_1",
+        &file_url(&artifact_path),
+        15,
+    )
+    .await;
 
     let (status, body, content_type) = request(
         state,
-        "/external/v1/artifacts/art_m7_1/content",
+        "/external/v1/artifacts/art_artifact_content_1/content",
         Some(TOKEN),
     )
     .await;
@@ -144,7 +150,7 @@ async fn external_api_reads_registered_artifact_content() {
 
 #[tokio::test]
 async fn artifact_content_requires_existing_artifact_index_entry() {
-    let state = test_state("m7_missing").await;
+    let state = test_state("artifact_content_missing").await;
 
     let (status, body, _content_type) = request(
         state,
@@ -160,13 +166,13 @@ async fn artifact_content_requires_existing_artifact_index_entry() {
 
 #[tokio::test]
 async fn artifact_content_rejects_unregistered_source_schemes() {
-    let state = test_state("m7_reject_scheme").await;
+    let state = test_state("artifact_content_reject_scheme").await;
     seed_idle_session(&state).await;
-    insert_artifact(&state, "art_m7_bad", "/etc/passwd", 100).await;
+    insert_artifact(&state, "art_artifact_content_bad", "/etc/passwd", 100).await;
 
     let (status, body, _content_type) = request(
         state,
-        "/external/v1/artifacts/art_m7_bad/content",
+        "/external/v1/artifacts/art_artifact_content_bad/content",
         Some(TOKEN),
     )
     .await;
@@ -178,16 +184,22 @@ async fn artifact_content_rejects_unregistered_source_schemes() {
 
 #[tokio::test]
 async fn artifact_metadata_and_content_size_are_consistent() {
-    let state = test_state("m7_size").await;
+    let state = test_state("artifact_content_size").await;
     seed_idle_session(&state).await;
     let dir = tempfile::tempdir().expect("artifact dir");
     let artifact_path = dir.path().join("agent.log");
     fs::write(&artifact_path, "actual content").expect("write artifact");
-    insert_artifact(&state, "art_m7_size", &file_url(&artifact_path), 999).await;
+    insert_artifact(
+        &state,
+        "art_artifact_content_size",
+        &file_url(&artifact_path),
+        999,
+    )
+    .await;
 
     let (status, body, _content_type) = request(
         state,
-        "/external/v1/artifacts/art_m7_size/content",
+        "/external/v1/artifacts/art_artifact_content_size/content",
         Some(TOKEN),
     )
     .await;
@@ -199,7 +211,7 @@ async fn artifact_metadata_and_content_size_are_consistent() {
 
 #[tokio::test]
 async fn large_artifact_content_returns_explicit_error_instead_of_loading_bytes() {
-    let state = test_state("m2_large_content").await;
+    let state = test_state("large_artifact_content").await;
     seed_idle_session(&state).await;
     let dir = tempfile::tempdir().expect("artifact dir");
     let artifact_path = dir.path().join("large.log");
@@ -207,7 +219,7 @@ async fn large_artifact_content_returns_explicit_error_instead_of_loading_bytes(
     fs::write(&artifact_path, &large_content).expect("write artifact");
     insert_artifact(
         &state,
-        "art_m2_large",
+        "art_large_artifact",
         &file_url(&artifact_path),
         large_content.len() as i64,
     )
@@ -215,7 +227,7 @@ async fn large_artifact_content_returns_explicit_error_instead_of_loading_bytes(
 
     let (status, body, _content_type) = request(
         state,
-        "/external/v1/artifacts/art_m2_large/content",
+        "/external/v1/artifacts/art_large_artifact/content",
         Some(TOKEN),
     )
     .await;
@@ -233,12 +245,12 @@ async fn large_artifact_content_returns_explicit_error_instead_of_loading_bytes(
 
 #[tokio::test]
 async fn empty_artifact_source_list_does_not_break_session_turn_flow() {
-    let state = test_state("m7_empty_list").await;
+    let state = test_state("artifact_content_empty_list").await;
     seed_idle_session(&state).await;
 
     let (status, body, _content_type) = request(
         state,
-        "/external/v1/sessions/sess_m7_1/artifacts",
+        "/external/v1/sessions/sess_artifact_content_1/artifacts",
         Some(TOKEN),
     )
     .await;

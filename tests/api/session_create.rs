@@ -17,7 +17,7 @@ const TOKEN: &str = "test-token";
 
 async fn test_state() -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("m4.db");
+    let db_path = dir.path().join("session_create.db");
     let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
@@ -130,6 +130,24 @@ async fn create_session_rejects_unauthenticated_requests() {
 }
 
 #[tokio::test]
+async fn create_session_rejects_unsupported_client_type() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+
+    let (status, body) = post_json(
+        state,
+        "/external/v1/sessions",
+        Some(TOKEN),
+        None,
+        json!({"client_type":"unsupported"}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "invalid_request");
+}
+
+#[tokio::test]
 async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_capabilities() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
@@ -144,7 +162,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
             "workspace":"/tmp/workspace",
             "execution_profile_id":"implementer",
             "execution_profile_version":"1",
-            "metadata":{"purpose":"m4"}
+            "metadata":{"purpose":"session_create"}
         }),
     )
     .await;
@@ -160,7 +178,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
     assert_eq!(session["workspace"], "/tmp/workspace");
     assert_eq!(session["execution_profile_id"], "implementer");
     assert_eq!(session["execution_profile_version"], "1");
-    assert_eq!(session["metadata"], json!({"purpose":"m4"}));
+    assert_eq!(session["metadata"], json!({"purpose":"session_create"}));
     assert!(session["metadata"].get("profile_id").is_none());
     assert!(session["metadata"].get("profile_version").is_none());
     assert_eq!(session["capabilities"]["accept_task"], true);

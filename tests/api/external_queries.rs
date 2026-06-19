@@ -16,7 +16,7 @@ const TOKEN: &str = "test-token";
 
 async fn test_state() -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("m3.db");
+    let db_path = dir.path().join("external_queries.db");
     let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
@@ -48,9 +48,9 @@ async fn seed_session_turn(state: &AppState) {
     let service = EventIngestService::new(state.db());
     service
         .ingest_event(event(
-            "evt_m3_1",
+            "evt_external_queries_1",
             EventType::SessionCreated,
-            "sess_m3_1",
+            "sess_external_queries_1",
             None,
             json!({"metadata":{"purpose":"test"}}),
         ))
@@ -58,9 +58,9 @@ async fn seed_session_turn(state: &AppState) {
         .unwrap();
     service
         .ingest_event(event(
-            "evt_m3_2",
+            "evt_external_queries_2",
             EventType::SessionReady,
-            "sess_m3_1",
+            "sess_external_queries_1",
             None,
             json!({}),
         ))
@@ -68,46 +68,46 @@ async fn seed_session_turn(state: &AppState) {
         .unwrap();
     service
         .ingest_event(event(
-            "evt_m3_3",
+            "evt_external_queries_3",
             EventType::TurnStarted,
-            "sess_m3_1",
-            Some("turn_m3_1"),
+            "sess_external_queries_1",
+            Some("turn_external_queries_1"),
             json!({"input":{"summary":"do work"}}),
         ))
         .await
         .unwrap();
     service
         .ingest_event(event(
-            "evt_m3_4",
+            "evt_external_queries_4",
             EventType::TurnCompleted,
-            "sess_m3_1",
-            Some("turn_m3_1"),
+            "sess_external_queries_1",
+            Some("turn_external_queries_1"),
             json!({"output":{"summary":"done"}}),
         ))
         .await
         .unwrap();
     service
         .ingest_event(event(
-            "evt_m3_5",
+            "evt_external_queries_5",
             EventType::TurnFailed,
-            "sess_m3_1",
-            Some("turn_m3_1"),
+            "sess_external_queries_1",
+            Some("turn_external_queries_1"),
             json!({"failure":{"message":"ignored after completion"}}),
         ))
         .await
         .unwrap();
     service
         .ingest_event(event(
-            "evt_m3_0",
+            "evt_external_queries_0",
             EventType::TurnCompleted,
-            "sess_m3_1",
-            Some("turn_m3_1"),
+            "sess_external_queries_1",
+            Some("turn_external_queries_1"),
             json!({"output":{"summary":"ignored late completion"}}),
         ))
         .await
         .unwrap();
     sqlx::query(
-        "UPDATE events SET created_at = '2026-04-24T12:00:00.000Z' WHERE event_id IN ('evt_m3_4', 'evt_m3_0')",
+        "UPDATE events SET created_at = '2026-04-24T12:00:00.000Z' WHERE event_id IN ('evt_external_queries_4', 'evt_external_queries_0')",
     )
     .execute(&state.db())
     .await
@@ -118,9 +118,9 @@ async fn seed_session_turn(state: &AppState) {
            (artifact_id, session_id, turn_id, kind, name, source_ref, size_bytes, metadata)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
-    .bind("art_m3_1")
-    .bind("sess_m3_1")
-    .bind("turn_m3_1")
+    .bind("art_external_queries_1")
+    .bind("sess_external_queries_1")
+    .bind("turn_external_queries_1")
     .bind("log")
     .bind("agent.log")
     .bind("registered://agent.log")
@@ -195,12 +195,20 @@ async fn external_api_lists_and_gets_session_views() {
     seed_session_turn(&state).await;
 
     let (list_status, list_body) = get(state.clone(), "/external/v1/sessions", Some(TOKEN)).await;
-    let (get_status, get_body) = get(state, "/external/v1/sessions/sess_m3_1", Some(TOKEN)).await;
+    let (get_status, get_body) = get(
+        state,
+        "/external/v1/sessions/sess_external_queries_1",
+        Some(TOKEN),
+    )
+    .await;
 
     assert_eq!(list_status, StatusCode::OK);
     assert_eq!(list_body["error"], Value::Null);
     assert_eq!(list_body["data"]["sessions"].as_array().unwrap().len(), 1);
-    assert_eq!(list_body["data"]["sessions"][0]["session_id"], "sess_m3_1");
+    assert_eq!(
+        list_body["data"]["sessions"][0]["session_id"],
+        "sess_external_queries_1"
+    );
     assert_eq!(list_body["data"]["sessions"][0]["state"], "idle");
     assert_eq!(list_body["data"]["sessions"][0]["client_type"], "generic");
     assert!(list_body["data"]["sessions"][0]["capabilities"].is_object());
@@ -214,7 +222,10 @@ async fn external_api_lists_and_gets_session_views() {
     );
 
     assert_eq!(get_status, StatusCode::OK);
-    assert_eq!(get_body["data"]["session"]["session_id"], "sess_m3_1");
+    assert_eq!(
+        get_body["data"]["session"]["session_id"],
+        "sess_external_queries_1"
+    );
     assert_eq!(get_body["data"]["session"]["current_turn_id"], Value::Null);
     assert_eq!(get_body["data"]["session"]["context_usage"], Value::Null);
 }
@@ -225,9 +236,9 @@ async fn external_api_exposes_projected_session_context_usage() {
     let service = EventIngestService::new(state.db());
     service
         .ingest_event(event(
-            "evt_m3_context_created",
+            "evt_external_queries_context_created",
             EventType::SessionCreated,
-            "sess_m3_context",
+            "sess_external_queries_context",
             None,
             json!({"metadata":{"kept":"yes"}}),
         ))
@@ -235,9 +246,9 @@ async fn external_api_exposes_projected_session_context_usage() {
         .unwrap();
     service
         .ingest_event(event(
-            "evt_m3_context_usage",
+            "evt_external_queries_context_usage",
             EventType::SessionContextUsageUpdated,
-            "sess_m3_context",
+            "sess_external_queries_context",
             None,
             json!({
                 "context_usage": {
@@ -253,8 +264,12 @@ async fn external_api_exposes_projected_session_context_usage() {
         .unwrap();
 
     let (list_status, list_body) = get(state.clone(), "/external/v1/sessions", Some(TOKEN)).await;
-    let (get_status, get_body) =
-        get(state, "/external/v1/sessions/sess_m3_context", Some(TOKEN)).await;
+    let (get_status, get_body) = get(
+        state,
+        "/external/v1/sessions/sess_external_queries_context",
+        Some(TOKEN),
+    )
+    .await;
 
     assert_eq!(list_status, StatusCode::OK);
     assert_eq!(get_status, StatusCode::OK);
@@ -291,25 +306,34 @@ async fn external_api_lists_and_gets_turn_views() {
 
     let (list_status, list_body) = get(
         state.clone(),
-        "/external/v1/sessions/sess_m3_1/turns",
+        "/external/v1/sessions/sess_external_queries_1/turns",
         Some(TOKEN),
     )
     .await;
     let (get_status, get_body) = get(
         state,
-        "/external/v1/sessions/sess_m3_1/turns/turn_m3_1",
+        "/external/v1/sessions/sess_external_queries_1/turns/turn_external_queries_1",
         Some(TOKEN),
     )
     .await;
 
     assert_eq!(list_status, StatusCode::OK);
     assert_eq!(list_body["data"]["turns"].as_array().unwrap().len(), 1);
-    assert_eq!(list_body["data"]["turns"][0]["turn_id"], "turn_m3_1");
+    assert_eq!(
+        list_body["data"]["turns"][0]["turn_id"],
+        "turn_external_queries_1"
+    );
     assert_eq!(list_body["data"]["turns"][0]["state"], "completed");
 
     assert_eq!(get_status, StatusCode::OK);
-    assert_eq!(get_body["data"]["turn"]["turn_id"], "turn_m3_1");
-    assert_eq!(get_body["data"]["turn"]["session_id"], "sess_m3_1");
+    assert_eq!(
+        get_body["data"]["turn"]["turn_id"],
+        "turn_external_queries_1"
+    );
+    assert_eq!(
+        get_body["data"]["turn"]["session_id"],
+        "sess_external_queries_1"
+    );
     assert_eq!(get_body["data"]["turn"]["input"]["summary"], "do work");
     assert_eq!(get_body["data"]["turn"]["output"]["summary"], "done");
     assert_eq!(get_body["data"]["turn"]["failure"], Value::Null);
@@ -324,13 +348,13 @@ async fn external_api_lists_session_and_turn_events() {
 
     let (session_status, session_body) = get(
         state.clone(),
-        "/external/v1/sessions/sess_m3_1/events",
+        "/external/v1/sessions/sess_external_queries_1/events",
         Some(TOKEN),
     )
     .await;
     let (turn_status, turn_body) = get(
         state,
-        "/external/v1/sessions/sess_m3_1/turns/turn_m3_1/events",
+        "/external/v1/sessions/sess_external_queries_1/turns/turn_external_queries_1/events",
         Some(TOKEN),
     )
     .await;
@@ -342,7 +366,10 @@ async fn external_api_lists_session_and_turn_events() {
 
     assert_eq!(turn_status, StatusCode::OK);
     assert_eq!(turn_body["data"]["events"].as_array().unwrap().len(), 4);
-    assert_eq!(turn_body["data"]["events"][0]["turn_id"], "turn_m3_1");
+    assert_eq!(
+        turn_body["data"]["events"][0]["turn_id"],
+        "turn_external_queries_1"
+    );
 }
 
 #[tokio::test]
@@ -352,15 +379,23 @@ async fn external_api_lists_and_gets_artifact_metadata_without_source_ref() {
 
     let (list_status, list_body) = get(
         state.clone(),
-        "/external/v1/sessions/sess_m3_1/artifacts",
+        "/external/v1/sessions/sess_external_queries_1/artifacts",
         Some(TOKEN),
     )
     .await;
-    let (get_status, get_body) = get(state, "/external/v1/artifacts/art_m3_1", Some(TOKEN)).await;
+    let (get_status, get_body) = get(
+        state,
+        "/external/v1/artifacts/art_external_queries_1",
+        Some(TOKEN),
+    )
+    .await;
 
     assert_eq!(list_status, StatusCode::OK);
     assert_eq!(list_body["data"]["artifacts"].as_array().unwrap().len(), 1);
-    assert_eq!(list_body["data"]["artifacts"][0]["artifact_id"], "art_m3_1");
+    assert_eq!(
+        list_body["data"]["artifacts"][0]["artifact_id"],
+        "art_external_queries_1"
+    );
     assert_eq!(list_body["data"]["artifacts"][0]["preview"], "hello world");
     assert!(
         list_body["data"]["artifacts"][0]
@@ -369,7 +404,10 @@ async fn external_api_lists_and_gets_artifact_metadata_without_source_ref() {
     );
 
     assert_eq!(get_status, StatusCode::OK);
-    assert_eq!(get_body["data"]["artifact"]["artifact_id"], "art_m3_1");
+    assert_eq!(
+        get_body["data"]["artifact"]["artifact_id"],
+        "art_external_queries_1"
+    );
     assert!(get_body["data"]["artifact"].get("source_ref").is_none());
     assert!(
         get_body["data"]["artifact"]["metadata"]

@@ -15,7 +15,7 @@ const TOKEN: &str = "test-token";
 
 async fn test_state() -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("m5.db");
+    let db_path = dir.path().join("turn_submit.db");
     let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
@@ -203,7 +203,12 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
             .fetch_one(&state.db())
             .await
             .expect("runtime instance id");
-    let mut started_event = event_body("evt_m5_started", "turn.started", &session_id, &turn_id);
+    let mut started_event = event_body(
+        "evt_turn_submit_started",
+        "turn.started",
+        &session_id,
+        &turn_id,
+    );
     started_event["payload"] = json!({"runtime_instance_id": runtime_instance_id});
     let (started_status, _) = post_internal_event(state.clone(), started_event).await;
     assert_eq!(started_status, StatusCode::OK);
@@ -219,7 +224,12 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
 
     let (completed_status, _) = post_internal_event(
         state.clone(),
-        event_body("evt_m5_completed", "turn.completed", &session_id, &turn_id),
+        event_body(
+            "evt_turn_submit_completed",
+            "turn.completed",
+            &session_id,
+            &turn_id,
+        ),
     )
     .await;
     assert_eq!(completed_status, StatusCode::OK);

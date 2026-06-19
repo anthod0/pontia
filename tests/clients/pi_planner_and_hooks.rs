@@ -43,7 +43,7 @@ fn assert_tmux_available() {
         .expect("run tmux -V");
     assert!(
         output.status.success(),
-        "M1.5 pi dispatch tests require a working real tmux binary"
+        "pi dispatch tests require a working real tmux binary"
     );
 }
 
@@ -187,7 +187,7 @@ fn cleanup_tmux(tmux_session: &str) {
 #[tokio::test]
 async fn pi_runtime_binding_exposes_adapter_event_log() {
     let workspace = tempfile::tempdir().expect("workspace");
-    let state = test_state("m15_pi_adapter_event_log").await;
+    let state = test_state("pi_adapter_event_log").await;
     let session_id = create_pi_session(state.clone(), workspace.path()).await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"]
@@ -213,7 +213,7 @@ async fn pi_runtime_binding_exposes_adapter_event_log() {
 #[tokio::test]
 async fn pi_turn_dispatch_failure_projects_failed_without_started() {
     let workspace = tempfile::tempdir().expect("workspace");
-    let state = test_state("m15_pi_dispatch_failure").await;
+    let state = test_state("pi_dispatch_failure").await;
     let session_id = create_pi_session(state.clone(), workspace.path()).await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"]
@@ -245,7 +245,7 @@ async fn pi_turn_dispatch_failure_projects_failed_without_started() {
 #[tokio::test]
 async fn pi_adapter_event_outbox_projects_output_and_completed() {
     let workspace = tempfile::tempdir().expect("workspace");
-    let state = test_state("m15_pi_outbox_completed").await;
+    let state = test_state("pi_outbox_completed").await;
     let session_id = create_pi_session(state.clone(), workspace.path()).await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"]
@@ -362,7 +362,7 @@ async fn pi_adapter_event_outbox_projects_output_and_completed() {
 #[tokio::test]
 async fn pi_adapter_event_outbox_reports_malformed_records_without_forging_turn_failure() {
     let workspace = tempfile::tempdir().expect("workspace");
-    let state = test_state("m15_pi_outbox_malformed").await;
+    let state = test_state("pi_outbox_malformed").await;
     let session_id = create_pi_session(state.clone(), workspace.path()).await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"]
@@ -424,7 +424,7 @@ async fn pi_adapter_event_outbox_reports_malformed_records_without_forging_turn_
 #[tokio::test]
 async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
     let workspace = tempfile::tempdir().expect("workspace");
-    let state = test_state("m45_pi_current_turn_context").await;
+    let state = test_state("pi_current_turn_context").await;
     let session_id = create_pi_session(state.clone(), workspace.path()).await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"]
@@ -469,7 +469,7 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
 #[tokio::test]
 async fn pi_runtime_exports_real_hook_environment() {
     let workspace = tempfile::tempdir().expect("workspace");
-    let state = test_state("m45_pi_hook_environment").await;
+    let state = test_state("pi_hook_environment").await;
     let session_id = create_pi_session(state.clone(), workspace.path()).await;
     let metadata = binding_metadata(&state, &session_id).await;
     let tmux_session = metadata["tmux_session"]

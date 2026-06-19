@@ -177,7 +177,7 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
     let _scope = GenericClientTestScope::new()
         .await
         .with_capabilities(AgentClientCapabilities::pi_m0_default());
-    let state = test_state("m8_pi_like_capabilities").await;
+    let state = test_state("generic_contract_pi_like_capabilities").await;
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = get_json(
@@ -205,9 +205,9 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
 }
 
 #[tokio::test]
-async fn capability_model_declares_all_mvp_adapter_capabilities() {
+async fn capability_model_declares_default_generic_adapter_capabilities() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("m8_capabilities").await;
+    let state = test_state("generic_contract_capabilities").await;
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = get_json(state, &format!("/external/v1/sessions/{session_id}")).await;
@@ -228,7 +228,7 @@ async fn capability_model_declares_all_mvp_adapter_capabilities() {
 #[tokio::test]
 async fn generic_initial_task_dispatches_in_process() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("m8_in_process_initial_task").await;
+    let state = test_state("generic_contract_in_process_initial_task").await;
     let _scope = _scope.auto_start_turn().write_current_turn_context();
 
     let body = create_session_with_body(
@@ -250,7 +250,7 @@ async fn generic_initial_task_dispatches_in_process() {
 #[tokio::test]
 async fn generic_dispatch_starts_turn_and_writes_current_turn_context_in_process() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("m8_in_process_dispatch").await;
+    let state = test_state("generic_contract_in_process_dispatch").await;
     let _scope = _scope.auto_start_turn().write_current_turn_context();
     let session_id = create_session(state.clone()).await;
 
@@ -279,7 +279,7 @@ async fn generic_dispatch_starts_turn_and_writes_current_turn_context_in_process
 #[tokio::test]
 async fn turn_input_handoff_uses_control_plane_assigned_identity() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("m8_turn_input").await;
+    let state = test_state("generic_contract_turn_input").await;
     let session_id = create_session(state.clone()).await;
 
     let (turn_id, body) = submit_turn(state, &session_id, "adapter contract task").await;
@@ -299,7 +299,7 @@ async fn turn_input_handoff_uses_control_plane_assigned_identity() {
 #[tokio::test]
 async fn event_source_returns_turn_facts_through_internal_event_api() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("m8_event_source").await;
+    let state = test_state("generic_contract_event_source").await;
     let session_id = create_session(state.clone()).await;
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "run to completion").await;
     let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
@@ -314,7 +314,7 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
             "/internal/v1/events",
             None,
             json!({
-                "event_id": format!("evt_m8_return_{idx}"),
+                "event_id": format!("evt_generic_contract_return_{idx}"),
                 "session_id": session_id,
                 "turn_id": turn_id,
                 "source": "agent_adapter",
@@ -365,7 +365,7 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
 #[tokio::test]
 async fn artifact_source_provider_registers_readable_artifacts_without_exposing_source_ref() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("m8_artifact_source").await;
+    let state = test_state("generic_contract_artifact_source").await;
     let session_id = create_session(state.clone()).await;
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "produce artifact").await;
     let dir = tempfile::tempdir().expect("artifact dir");
@@ -373,7 +373,7 @@ async fn artifact_source_provider_registers_readable_artifacts_without_exposing_
     fs::write(&artifact_path, "artifact from adapter").expect("write artifact");
 
     let registration = ArtifactRegistration {
-        artifact_id: "art_m8_registered".to_string(),
+        artifact_id: "art_generic_contract_registered".to_string(),
         session_id: session_id.clone(),
         turn_id: Some(turn_id.clone()),
         kind: "file".to_string(),
@@ -387,8 +387,11 @@ async fn artifact_source_provider_registers_readable_artifacts_without_exposing_
         .await
         .expect("register artifact");
 
-    let (metadata_status, metadata_body) =
-        get_json(state.clone(), "/external/v1/artifacts/art_m8_registered").await;
+    let (metadata_status, metadata_body) = get_json(
+        state.clone(),
+        "/external/v1/artifacts/art_generic_contract_registered",
+    )
+    .await;
     assert_eq!(metadata_status, StatusCode::OK);
     assert_eq!(metadata_body["data"]["artifact"]["session_id"], session_id);
     assert_eq!(metadata_body["data"]["artifact"]["turn_id"], turn_id);
@@ -402,8 +405,11 @@ async fn artifact_source_provider_registers_readable_artifacts_without_exposing_
             .is_none()
     );
 
-    let (content_status, content) =
-        get_bytes(state, "/external/v1/artifacts/art_m8_registered/content").await;
+    let (content_status, content) = get_bytes(
+        state,
+        "/external/v1/artifacts/art_generic_contract_registered/content",
+    )
+    .await;
     assert_eq!(content_status, StatusCode::OK);
     assert_eq!(content, b"artifact from adapter");
 }
@@ -411,7 +417,7 @@ async fn artifact_source_provider_registers_readable_artifacts_without_exposing_
 #[tokio::test]
 async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("m8_degradation").await;
+    let state = test_state("generic_contract_degradation").await;
     let session_id = create_session(state.clone()).await;
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "cannot interrupt").await;
     let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
@@ -421,7 +427,7 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
         "/internal/v1/events",
         None,
         json!({
-            "event_id":"evt_m8_started_for_interrupt",
+            "event_id":"evt_generic_contract_started_for_interrupt",
             "session_id":session_id,
             "turn_id":turn_id,
             "source":"agent_adapter",

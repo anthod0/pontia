@@ -15,7 +15,7 @@ const TOKEN: &str = "test-token";
 
 async fn test_state() -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("m6.db");
+    let db_path = dir.path().join("runtime_lifecycle.db");
     let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");

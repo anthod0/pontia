@@ -50,9 +50,9 @@ async fn seed_idle_session(state: &AppState, workspace: &Path) {
     let service = EventIngestService::new(state.db());
     service
         .ingest_event(event(
-            "evt_m2_session_created",
+            "evt_artifact_discovery_session_created",
             EventType::SessionCreated,
-            "sess_m2_1",
+            "sess_artifact_discovery_1",
             None,
             json!({}),
         ))
@@ -60,9 +60,9 @@ async fn seed_idle_session(state: &AppState, workspace: &Path) {
         .unwrap();
     service
         .ingest_event(event(
-            "evt_m2_session_ready",
+            "evt_artifact_discovery_session_ready",
             EventType::SessionReady,
-            "sess_m2_1",
+            "sess_artifact_discovery_1",
             None,
             json!({}),
         ))
@@ -70,7 +70,7 @@ async fn seed_idle_session(state: &AppState, workspace: &Path) {
         .unwrap();
     sqlx::query("UPDATE sessions SET workspace_ref = ? WHERE session_id = ?")
         .bind(workspace.display().to_string())
-        .bind("sess_m2_1")
+        .bind("sess_artifact_discovery_1")
         .execute(&state.db())
         .await
         .unwrap();
@@ -105,7 +105,7 @@ async fn request(
 
 #[tokio::test]
 async fn discovers_workspace_files_and_exposes_metadata_preview_and_content() {
-    let state = test_state("m2_discover").await;
+    let state = test_state("artifact_discovery_discover").await;
     let workspace = tempfile::tempdir().expect("workspace");
     fs::create_dir_all(workspace.path().join("reports")).expect("mkdir");
     fs::write(
@@ -118,7 +118,7 @@ async fn discovers_workspace_files_and_exposes_metadata_preview_and_content() {
     let (status, body) = request(
         state.clone(),
         Method::POST,
-        "/external/v1/sessions/sess_m2_1/artifacts/discover",
+        "/external/v1/sessions/sess_artifact_discovery_1/artifacts/discover",
         Some(TOKEN),
     )
     .await;
@@ -127,7 +127,7 @@ async fn discovers_workspace_files_and_exposes_metadata_preview_and_content() {
     let artifacts = body["data"]["artifacts"].as_array().expect("artifacts");
     assert_eq!(artifacts.len(), 1);
     let artifact = &artifacts[0];
-    assert_eq!(artifact["session_id"], "sess_m2_1");
+    assert_eq!(artifact["session_id"], "sess_artifact_discovery_1");
     assert_eq!(artifact["turn_id"], Value::Null);
     assert_eq!(artifact["kind"], "markdown");
     assert_eq!(artifact["name"], "reports/summary.md");
@@ -155,7 +155,7 @@ async fn discovers_workspace_files_and_exposes_metadata_preview_and_content() {
 
 #[tokio::test]
 async fn discovery_stays_inside_workspace_and_does_not_follow_escape_symlinks() {
-    let state = test_state("m2_sandbox").await;
+    let state = test_state("artifact_discovery_sandbox").await;
     let workspace = tempfile::tempdir().expect("workspace");
     let outside = tempfile::tempdir().expect("outside");
     fs::write(workspace.path().join("safe.log"), "safe\n").expect("write safe");
@@ -171,7 +171,7 @@ async fn discovery_stays_inside_workspace_and_does_not_follow_escape_symlinks() 
     let (status, body) = request(
         state,
         Method::POST,
-        "/external/v1/sessions/sess_m2_1/artifacts/discover",
+        "/external/v1/sessions/sess_artifact_discovery_1/artifacts/discover",
         Some(TOKEN),
     )
     .await;
@@ -184,7 +184,7 @@ async fn discovery_stays_inside_workspace_and_does_not_follow_escape_symlinks() 
 
 #[tokio::test]
 async fn discovery_does_not_change_session_state_or_events() {
-    let state = test_state("m2_no_domain_transition").await;
+    let state = test_state("artifact_discovery_no_domain_transition").await;
     let workspace = tempfile::tempdir().expect("workspace");
     fs::write(workspace.path().join("result.txt"), "result\n").expect("write");
     seed_idle_session(&state, workspace.path()).await;
@@ -192,14 +192,14 @@ async fn discovery_does_not_change_session_state_or_events() {
     let (_, before) = request(
         state.clone(),
         Method::GET,
-        "/external/v1/sessions/sess_m2_1",
+        "/external/v1/sessions/sess_artifact_discovery_1",
         Some(TOKEN),
     )
     .await;
     let (_, events_before) = request(
         state.clone(),
         Method::GET,
-        "/external/v1/sessions/sess_m2_1/events",
+        "/external/v1/sessions/sess_artifact_discovery_1/events",
         Some(TOKEN),
     )
     .await;
@@ -207,7 +207,7 @@ async fn discovery_does_not_change_session_state_or_events() {
     let (status, _) = request(
         state.clone(),
         Method::POST,
-        "/external/v1/sessions/sess_m2_1/artifacts/discover",
+        "/external/v1/sessions/sess_artifact_discovery_1/artifacts/discover",
         Some(TOKEN),
     )
     .await;
@@ -216,14 +216,14 @@ async fn discovery_does_not_change_session_state_or_events() {
     let (_, after) = request(
         state.clone(),
         Method::GET,
-        "/external/v1/sessions/sess_m2_1",
+        "/external/v1/sessions/sess_artifact_discovery_1",
         Some(TOKEN),
     )
     .await;
     let (_, events_after) = request(
         state,
         Method::GET,
-        "/external/v1/sessions/sess_m2_1/events",
+        "/external/v1/sessions/sess_artifact_discovery_1/events",
         Some(TOKEN),
     )
     .await;
