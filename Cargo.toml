@@ -1,5 +1,15 @@
 [workspace]
-members = [".", "control/core", "control/storage-sqlite", "control/agent-clients", "control/config", "control/runtime", "control/application", "control/http"]
+members = [
+    "control/pontia",
+    "control/core",
+    "control/storage-sqlite",
+    "control/agent-clients",
+    "control/config",
+    "control/runtime",
+    "control/application",
+    "control/http",
+]
+default-members = ["control/pontia"]
 resolver = "2"
 
 [workspace.package]
@@ -14,47 +24,3 @@ sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "migrate
 thiserror = "2"
 time = "0.3"
 uuid = "1"
-
-[package]
-name = "pontia"
-version.workspace = true
-edition.workspace = true
-
-[lib]
-path = "control/pontia/src/lib.rs"
-
-[[bin]]
-name = "pontia"
-path = "control/pontia/src/main.rs"
-
-[dependencies]
-axum = "0.8"
-dotenvy = "0.15"
-lbug = { workspace = true, optional = true }
-pontia-agent-clients = { path = "control/agent-clients" }
-pontia-application = { path = "control/application" }
-pontia-config = { path = "control/config" }
-pontia-core = { path = "control/core", default-features = false }
-pontia-http = { path = "control/http" }
-pontia-runtime = { path = "control/runtime", default-features = false }
-pontia-storage-sqlite = { path = "control/storage-sqlite" }
-serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true
-sqlx.workspace = true
-thiserror.workspace = true
-time = { workspace = true, features = ["formatting", "parsing", "serde"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "time"] }
-toml = "0.9"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-uuid = { workspace = true, features = ["v7", "serde"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
-
-[dev-dependencies]
-http-body-util = "0.1"
-tempfile = "3"
-tower = { version = "0.5", features = ["util"] }
-
-[features]
-default = ["lbug"]
-lbug = ["dep:lbug", "pontia-core/lbug", "pontia-agent-clients/lbug", "pontia-config/lbug", "pontia-runtime/lbug"]

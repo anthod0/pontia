@@ -1,0 +1,42 @@
+[package]
+name = "pontia"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+axum = "0.8"
+dotenvy = "0.15"
+lbug = { workspace = true, optional = true }
+pontia-agent-clients = { path = "../agent-clients" }
+pontia-application = { path = "../application" }
+pontia-config = { path = "../config" }
+pontia-core = { path = "../core", default-features = false }
+pontia-http = { path = "../http" }
+pontia-runtime = { path = "../runtime", default-features = false }
+pontia-storage-sqlite = { path = "../storage-sqlite" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = ["formatting", "parsing", "serde"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "time"] }
+toml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+uuid = { workspace = true, features = ["v7", "serde"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+
+[features]
+default = ["lbug"]
+lbug = [
+    "dep:lbug",
+    "pontia-core/lbug",
+    "pontia-agent-clients/lbug",
+    "pontia-config/lbug",
+    "pontia-runtime/lbug",
+]

@@ -1,7 +1,6 @@
-use pontia::{
-    application,
-    config::{AppConfig, config_path_from_args},
-};
+use pontia_application as application;
+use pontia_config::{AppConfig, config_path_from_args};
+use pontia_core::error::Result;
 use pontia_http as http;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -12,7 +11,7 @@ use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
-async fn main() -> pontia::error::Result<()> {
+async fn main() -> Result<()> {
     init_tracing();
 
     let config_path = config_path_from_args(std::env::args())?;
