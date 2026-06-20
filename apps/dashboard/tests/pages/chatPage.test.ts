@@ -885,9 +885,7 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(composerDock?.firstElementChild).toHaveClass('mx-auto');
   expect(composerDock?.firstElementChild).toHaveClass('max-w-7xl');
 
-  const stateBadge = screen.getByLabelText('Session state: idle');
-  expect(stateBadge.querySelector('[data-chat-session-state-label]')).toBeNull();
-  expect(stateBadge).not.toHaveTextContent('idle');
+  expect(screen.queryByLabelText('Session state: idle')).not.toBeInTheDocument();
 
   const sessionDetailsButton = screen.getByRole('button', { name: 'Session details: pontia · pi · main' });
   expect(sessionDetailsButton).toHaveTextContent('pontia');
@@ -1308,7 +1306,7 @@ test('opens an empty inbox sheet when the selected chat has no inbox messages', 
   expect(screen.getByText('Follow-up messages submitted from this chat will appear here.')).toBeInTheDocument();
 });
 
-test('loads and renders an existing chat session with metadata, state, and workspace name above the prompt input without a page header', async () => {
+test('loads and renders an existing chat session with metadata and workspace name above the prompt input without a page header', async () => {
   const selected = session({
     session_id: 'session-2',
     client_type: 'claude-code',
@@ -1347,17 +1345,13 @@ test('loads and renders an existing chat session with metadata, state, and works
   expect(screen.queryByText('Profile: coder@1')).not.toBeInTheDocument();
   expect(screen.queryByText('Handle: second')).not.toBeInTheDocument();
   expect(screen.queryByText('Workspace: workspace-1')).not.toBeInTheDocument();
-  const stateBadge = screen.getByLabelText('Session state: busy');
+  expect(screen.queryByLabelText('Session state: busy')).not.toBeInTheDocument();
   const workspaceBadge = screen.getAllByLabelText('Workspace: /repo/pontia')[0];
   const workspaceName = within(workspaceBadge).getByText('pontia');
   const clientDetail = screen.getAllByLabelText('Client: claude-code')[0];
   const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
   expect(screen.queryByText('State: busy')).not.toBeInTheDocument();
-  expect(stateBadge).not.toHaveTextContent('busy');
-  expect(stateBadge).toHaveClass('h-7');
-  expect(stateBadge.querySelector('svg')).toHaveClass('lucide-loader');
   expect(workspaceBadge).toContainElement(workspaceName);
-  expect(stateBadge?.compareDocumentPosition(workspaceBadge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(workspaceBadge.compareDocumentPosition(clientDetail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(clientDetail.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.queryByRole('button', { name: /new chat/i })).not.toBeInTheDocument();
