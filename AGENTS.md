@@ -9,14 +9,14 @@
 - `pontia` is a Rust console/control plane for coding agents with a web dashboard and client integrations.
 - Backend: Rust 2024, Axum, Tokio, SQLx/SQLite.
 - Frontend/dashboard and client plugins use pnpm.
-- Key paths: `src/`, `tests/`, `apps/dashboard/`, `clients/pi/`, `clients/claude-code/`, `spec/`, `MILESTONE.md`, `README.md`.
+- Key paths: `control/`, `control/*/tests/`, `apps/dashboard/`, `apps/dashboard/tests/`, `clients/pi/`, `clients/claude-code/`, `specs/`, `TODO.md`, `README.md`.
 
 ## Architecture rules
 
 - External API state must come from the event store/projections. Do not treat tmux state, runtime logs, pi/Claude internals, or workspace files as authoritative.
 - Dashboard/orchestrators should use `/external/v1/*` only; Web UI must not read SQLite, runtime dirs, workspace files, or `/internal/v1/*` directly. SSE is only a realtime observation optimization, not a replacement for External API snapshots.
 - `/internal/v1/events` is for runtime / adapter / agent-client confirmed facts only.
-- Keep client-specific behavior inside adapter/runtime/client-plugin boundaries (`src/adapters/`, `src/runtime/`, `clients/*/`). Do not leak pi/Claude-specific fields into generic domain events or External API view models.
+- Keep client-specific behavior inside adapter/runtime/client-plugin boundaries (`control/runtime/`, `control/agent-clients/`, `control/application/`, `control/http/`, `clients/*/`). Do not leak pi/Claude-specific fields into generic domain events or External API view models.
 - pi and Claude Code turn output/completion/failure must be reported by hooks through the Internal Event API. Do not parse TUI screen contents, runtime logs, or tmux process exit as turn completion facts.
 - Strong bidirectional binding principle: Web UI and TUI differ only in startup and input delivery. Web UI control agent client through the backend API. TUI control agent client manually by the user. After the agent client starts, pontia behavior such as lifecycle tracking, turn facts, event reporting, projections, capabilities, and diagnostics must be identical for WebUI-launched and TUI-launched sessions.
 - Preserve idempotency behavior for mutating External API routes that accept `Idempotency-Key`.
@@ -59,7 +59,7 @@
   - `just test`
   - `just clippy`
   - `just sqlx-check`
-- Full project check:
+- Backend + dashboard check:
   - `just check`
 - Dashboard:
   - `pnpm --dir=apps/dashboard run check`
