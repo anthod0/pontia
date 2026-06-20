@@ -172,14 +172,13 @@
           {:else if recentSessions.length}
             {#each recentSessions as session}
               <Sidebar.MenuItem>
-                <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-14" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
-                  <span class="line-clamp-1">{sessionChatTitle(session)}</span>
+                <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
                   {#if isSessionVisibleState(session.state)}
-                    <span class={`absolute right-2 top-1/2 size-2 -translate-y-1/2 rounded-full ${sessionStateDotClass(session.state)} group-data-[collapsible=icon]:hidden`} aria-label={`${session.state} session`}></span>
+                    <span class={`size-2 shrink-0 rounded-full ${sessionStateDotClass(session.state)} group-data-[collapsible=icon]:hidden`} aria-label={`${session.state} session`}></span>
                   {/if}
+                  <span class="line-clamp-1">{sessionChatTitle(session)}</span>
                 </Sidebar.MenuButton>
                 <Sidebar.MenuAction
-                  class="right-10"
                   showOnHover
                   aria-label={`Rename session ${sessionChatTitle(session)}`}
                   title="Rename session"
