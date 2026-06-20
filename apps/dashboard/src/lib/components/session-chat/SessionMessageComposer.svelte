@@ -71,14 +71,14 @@
     </div>
   </PromptInput.Body>
   <PromptInput.Toolbar class="justify-between">
-    <p class="px-2 text-xs text-muted-foreground">Shift+Enter / Ctrl+Enter to send · Enter for newline</p>
+    <p class="px-2 text-xs text-muted-foreground">Shift+Enter / Ctrl+Enter to send</p>
     <PromptInput.Submit disabled={disabled || submitDisabled || busy} />
   </PromptInput.Toolbar>
 </PromptInput.Root>
 
 <Dialog.Root bind:open={fullscreenOpen}>
-  <Dialog.Content class="inset-0 left-0 top-0 h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 rounded-none p-4 sm:hidden" showCloseButton={false}>
-    <Dialog.Header>
+  <Dialog.Content class="inset-0 left-0 top-0 flex h-svh max-h-svh w-screen max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:hidden" showCloseButton={false}>
+    <Dialog.Header class="shrink-0">
       <div class="flex items-center justify-between gap-2">
         <Dialog.Title>Expanded message composer</Dialog.Title>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Close expanded message composer" onclick={() => (fullscreenOpen = false)}>
@@ -88,12 +88,12 @@
       <Dialog.Description>Write a longer follow-up message.</Dialog.Description>
     </Dialog.Header>
 
-    <PromptInput.Root class="mt-2 w-full shadow-none" onSubmit={submitAndCloseFullscreen}>
-      <PromptInput.Body>
-        <PromptInput.Textarea bind:value {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class="min-h-[calc(100vh-12rem)] pr-2" />
+    <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
+      <PromptInput.Body class="min-h-0 flex-1">
+        <PromptInput.Textarea bind:value {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
       </PromptInput.Body>
-      <PromptInput.Toolbar class="justify-between">
-        <p class="px-2 text-xs text-muted-foreground">Shift+Enter / Ctrl+Enter to send · Enter for newline</p>
+      <PromptInput.Toolbar class="shrink-0 justify-between">
+        <p class="px-2 text-xs text-muted-foreground">Shift+Enter / Ctrl+Enter to send</p>
         <PromptInput.Submit disabled={disabled || submitDisabled || busy} />
       </PromptInput.Toolbar>
     </PromptInput.Root>

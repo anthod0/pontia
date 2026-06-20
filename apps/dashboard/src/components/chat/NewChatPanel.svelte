@@ -92,7 +92,7 @@
         </PromptInput.Body>
 
         <PromptInput.Toolbar class="justify-between gap-2 pt-1">
-          <p class="px-2 text-xs text-muted-foreground">Shift+Enter / Ctrl+Enter to send · Enter for newline</p>
+          <p class="px-2 text-xs text-muted-foreground">Shift+Enter / Ctrl+Enter to send</p>
           <PromptInput.Submit disabled={!canCreate || creating} aria-label={creating ? (taskMode ? 'Creating task' : 'Starting chat') : (taskMode ? 'Create task' : 'Start chat')} />
         </PromptInput.Toolbar>
       </PromptInput.Root>
