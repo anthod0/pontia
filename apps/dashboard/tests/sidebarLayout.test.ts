@@ -48,7 +48,7 @@ vi.mock('../src/stores/sessions', () => ({
 }));
 
 beforeEach(() => {
-  window.history.pushState({}, '', '/dashboard/overview');
+  window.history.pushState({}, '', '/dashboard/chat');
   mocks.sessions.set([]);
   mocks.sessionsLoading.set(false);
   vi.clearAllMocks();
@@ -67,16 +67,16 @@ beforeEach(() => {
   });
 });
 
-test('sidebar shows session control items and hides DAG task navigation', () => {
+test('sidebar shows session control items and hides overview and DAG task navigation', () => {
   render(AppSidebarHost);
 
   expect(screen.queryByText('Workflow')).not.toBeInTheDocument();
   expect(screen.queryByText('External API only')).not.toBeInTheDocument();
+  expect(screen.queryByText('Overview')).not.toBeInTheDocument();
 
-  const workflow = screen.getByText('Overview').closest('[data-slot="sidebar-group"]');
+  const workflow = screen.getByText('New Chat').closest('[data-slot="sidebar-group"]');
   expect(workflow).not.toBeNull();
   const workflowQueries = within(workflow as HTMLElement);
-  expect(workflowQueries.getByText('Overview')).toBeInTheDocument();
   expect(workflowQueries.queryByText('Tasks')).not.toBeInTheDocument();
   const newChat = workflowQueries.getByText('New Chat').closest('button');
   expect(newChat).not.toBeNull();
@@ -180,20 +180,18 @@ test('sidebar renames a recent session from the hover edit action without openin
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
-test('sidebar only marks the current route as active', () => {
+test('sidebar only marks new chat active on the default route', () => {
   window.history.pushState({}, '', '/dashboard/chat');
 
   render(AppSidebarHost);
 
-  const overview = screen.getByText('Overview').closest('button');
   const chat = screen.getByText('New Chat').closest('button');
 
-  expect(overview).not.toBeNull();
+  expect(screen.queryByText('Overview')).not.toBeInTheDocument();
   expect(screen.queryByText('Tasks')).not.toBeInTheDocument();
   expect(chat).not.toBeNull();
 
   expect(chat).toHaveAttribute('data-active', 'true');
-  expect(overview).not.toHaveAttribute('data-active');
 });
 
 test('sidebar New Chat notifies mounted route components about the route change', async () => {
@@ -378,11 +376,15 @@ test('settings shell section switcher uses router navigation instead of a docume
   expect(mocks.navigate).toHaveBeenCalledWith('/settings/agent-profiles');
 });
 
-test('settings routes redirect hub and include section paths', () => {
+test('dashboard routes use chat as the default and remove top-level overview', () => {
   const paths = routerConf.routes.map((route) => route.path);
 
+  const rootRoute = routerConf.routes.find((route) => route.path === '/');
   const settingsRoute = routerConf.routes.find((route) => route.path === '/settings');
 
+  expect(rootRoute).toBeDefined();
+  expect(String(rootRoute?.render)).toContain('ChatPage');
+  expect(paths).not.toContain('/overview');
   expect(settingsRoute).toBeDefined();
   expect(String(settingsRoute?.render)).toContain('SettingsRedirectPage');
   expect(paths).toContain('/chat/{sessionId}');

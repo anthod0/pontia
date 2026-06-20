@@ -3,8 +3,7 @@ import type { RouterConf } from 'svelte-mini-router'
 export const routerConf: RouterConf = {
   baseUrl: '/dashboard',
   routes: [
-    { path: '/', render: () => import('./pages/OverviewPage.svelte') },
-    { path: '/overview', render: () => import('./pages/OverviewPage.svelte') },
+    { path: '/', render: () => import('./pages/ChatPage.svelte') },
     { path: '/tasks', render: () => import('./pages/TasksPage.svelte') },
     { path: '/tasks/{taskId}/overview', render: () => import('./pages/task/TaskOverviewPage.svelte') },
     { path: '/tasks/{taskId}/dag', render: () => import('./pages/task/TaskDagPage.svelte') },

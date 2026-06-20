@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Home, Pencil, Settings, SquarePen } from '@lucide/svelte'
+  import { Pencil, Settings, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -13,11 +13,10 @@
   type Item = {
     label: string
     path: string
-    icon: typeof Home
+    icon: typeof SquarePen
   }
 
   const primaryItems: Item[] = [
-    { label: 'Overview', path: '/overview', icon: Home },
     { label: 'New Chat', path: '/chat', icon: SquarePen },
   ]
 
@@ -138,8 +137,8 @@
     <button
       type="button"
       class="flex items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-semibold hover:bg-sidebar-accent group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0"
-      onclick={() => go('/overview')}
-      aria-label="Open dashboard overview"
+      onclick={() => go('/chat')}
+      aria-label="Open new chat"
     >
       <span class="flex size-8 shrink-0 items-center justify-center rounded-lg">
         <img src="/dashboard/logo.svg" alt="" class="size-6 shrink-0 object-contain" />
