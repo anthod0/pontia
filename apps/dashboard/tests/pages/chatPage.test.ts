@@ -890,7 +890,7 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(sessionDetailsButton.querySelector('[data-chat-session-details-summary]')).toHaveClass('flex-1');
 });
 
-test('hides idle thought summary trigger above the final assistant response', async () => {
+test('shows idle thought summary trigger above the final assistant response', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -967,7 +967,7 @@ test('hides idle thought summary trigger above the final assistant response', as
   render(ChatPage);
 
   expect(await screen.findByText('Final answer')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /view thought details/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /view thought details/i })).toHaveTextContent('Worked for 2 steps');
   expect(screen.queryByText('Thought for 2 steps')).not.toBeInTheDocument();
   expect(screen.queryByText('I should inspect the code.')).not.toBeInTheDocument();
   expect(screen.queryByText('read {"path":"src/app.ts"}')).not.toBeInTheDocument();

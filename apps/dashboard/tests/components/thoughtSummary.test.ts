@@ -17,7 +17,7 @@ function step(overrides: Partial<SessionChatThoughtStep> = {}): SessionChatThoug
   };
 }
 
-test('idle thought summary renders no collapsed step count trigger', () => {
+test('idle thought summary renders a worked steps trigger', () => {
   render(ThoughtSummary, {
     props: {
       steps: [
@@ -29,7 +29,9 @@ test('idle thought summary renders no collapsed step count trigger', () => {
     },
   });
 
-  expect(screen.queryByRole('button', { name: 'View thought details' })).not.toBeInTheDocument();
+  const trigger = screen.getByRole('button', { name: 'View thought details' });
+
+  expect(trigger).toHaveTextContent('Worked for 3 steps');
   expect(screen.queryByText('Thought for 3 steps')).not.toBeInTheDocument();
   expect(screen.queryByText('bash')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
