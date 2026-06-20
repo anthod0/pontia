@@ -16,15 +16,6 @@
     error: 'SSE error',
   }
 
-  const compactStatusLabel: Record<string, string> = {
-    idle: 'Idle',
-    connecting: 'Connecting',
-    open: 'Live',
-    reconnecting: 'Reconnecting',
-    closed: 'Closed',
-    error: 'Error',
-  }
-
   function openNewChat(event: MouseEvent): void {
     event.preventDefault()
     navigate('/chat')
@@ -45,13 +36,13 @@
       Set API token
     </Button>
   {:else}
-    <Badge variant={$sseStatus === 'open' ? 'default' : 'secondary'} class="inline-flex gap-1 md:hidden" title={$lastConnectionError ?? undefined}>
+    <Badge
+      variant={$sseStatus === 'open' ? 'default' : 'secondary'}
+      class="inline-flex gap-1"
+      title={$lastConnectionError ?? statusLabel[$sseStatus] ?? $sseStatus}
+    >
       {#if $sseStatus === 'open'}<Wifi class="size-3" />{:else}<WifiOff class="size-3" />{/if}
-      {compactStatusLabel[$sseStatus] ?? $sseStatus}
-    </Badge>
-    <Badge variant={$sseStatus === 'open' ? 'default' : 'secondary'} class="hidden gap-1 md:inline-flex" title={$lastConnectionError ?? undefined}>
-      {#if $sseStatus === 'open'}<Wifi class="size-3" />{:else}<WifiOff class="size-3" />{/if}
-      {statusLabel[$sseStatus] ?? $sseStatus}
+      <span class="sr-only">{statusLabel[$sseStatus] ?? $sseStatus}</span>
     </Badge>
   {/if}
 

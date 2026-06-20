@@ -6,6 +6,7 @@ import { expect, test } from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const indexHtml = readFileSync(resolve(__dirname, '../index.html'), 'utf8');
 const appSidebarSource = readFileSync(resolve(__dirname, '../src/components/layout/AppSidebar.svelte'), 'utf8');
+const topBarSource = readFileSync(resolve(__dirname, '../src/components/layout/TopBar.svelte'), 'utf8');
 
 test('dashboard head advertises packaged logo icons', () => {
   expect(indexHtml).toContain('<link rel="icon" type="image/svg+xml" href="/dashboard/logo.svg" />');
@@ -28,4 +29,11 @@ test('dashboard sidebar keeps the logo visible when collapsed', () => {
   expect(appSidebarSource).toContain('group-data-[collapsible=icon]:p-0');
   expect(appSidebarSource).toContain('shrink-0');
   expect(appSidebarSource).toContain('group-data-[collapsible=icon]:hidden">PONTIA</span>');
+});
+
+test('top bar SSE status is icon-only with screen-reader text', () => {
+  expect(topBarSource).not.toContain('compactStatusLabel');
+  expect(topBarSource).toContain('<span class="sr-only">{statusLabel[$sseStatus] ?? $sseStatus}</span>');
+  expect(topBarSource).not.toContain('md:hidden');
+  expect(topBarSource).not.toContain('md:inline-flex');
 });
