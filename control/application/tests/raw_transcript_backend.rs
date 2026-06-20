@@ -3,7 +3,8 @@ use std::{fs, io::Write};
 use pontia_agent_clients::{
     pi::raw_transcripts::{PiAgentBindingResolver, PiJsonlParser},
     raw_transcripts::{
-        AgentBindingResolveRequest, AgentBindingResolver, RawTranscriptParser, TimelinePageRequest,
+        AgentBindingResolveRequest, AgentBindingResolver, LinearJsonlTimelineParser,
+        RawTranscriptParser, TimelinePageRequest,
     },
 };
 use pontia_application::AgentBinding;
@@ -16,6 +17,14 @@ fn pi_session_dir(agent_dir: &std::path::Path, cwd: &str) -> std::path::PathBuf 
         cwd.trim_start_matches('/').replace(['/', '\\', ':'], "-")
     );
     agent_dir.join("sessions").join(safe)
+}
+
+#[test]
+fn linear_jsonl_timeline_parser_name_documents_append_order_model() {
+    assert_eq!(
+        LinearJsonlTimelineParser::component_name(),
+        "linear-jsonl-timeline"
+    );
 }
 
 #[test]
