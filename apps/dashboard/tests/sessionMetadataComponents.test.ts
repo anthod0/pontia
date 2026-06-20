@@ -38,6 +38,14 @@ describe('session metadata component boundaries', () => {
     expect(source).not.toContain('SessionMetadataBadges');
   });
 
+  test('composer dock does not render a session state icon before metadata', () => {
+    const source = readFileSync(componentPath('SessionComposerDock.svelte'), 'utf8');
+
+    expect(source).not.toContain('sessionStateIcon');
+    expect(source).not.toContain('SessionStateIcon');
+    expect(source).not.toContain('Session state:');
+  });
+
   test('composer dock uses the component-library dropdown menu instead of a hand-rolled floating menu', () => {
     const source = readFileSync(componentPath('SessionComposerDock.svelte'), 'utf8');
 
