@@ -392,7 +392,8 @@
   }
 
   function handleNewChatKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    const shouldSubmit = event.key === 'Enter' && (event.shiftKey || event.ctrlKey || event.metaKey)
+    if (shouldSubmit) {
       event.preventDefault()
       void startChat()
     }

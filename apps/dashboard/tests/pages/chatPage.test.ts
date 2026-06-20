@@ -499,22 +499,37 @@ test('hides task mode toggle from the chat composer metadata controls', async ()
   expect(workspaceSelector.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test('shows new chat keyboard hint and submits with Enter while preserving Shift Enter for newlines', async () => {
+test('shows new chat keyboard hint and submits with Shift Enter while preserving Enter for newlines', async () => {
   const user = userEvent.setup();
   const created = session({ session_id: 'session-enter' });
   mocks.createSession.mockResolvedValue({ session: created, initial_turn: turn({ session_id: 'session-enter' }) } satisfies CreateSessionResult);
   render(ChatPage);
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  expect(screen.getByText('Enter to send · Shift+Enter for newline')).toBeInTheDocument();
+  expect(screen.getByText('Shift+Enter / Ctrl+Enter to send · Enter for newline')).toBeInTheDocument();
 
   await user.type(promptInput, 'Line one');
-  await fireEvent.keyDown(promptInput, { key: 'Enter', shiftKey: true });
+  expect(await fireEvent.keyDown(promptInput, { key: 'Enter' })).toBe(true);
   expect(mocks.createSession).not.toHaveBeenCalled();
 
-  await fireEvent.keyDown(promptInput, { key: 'Enter' });
+  expect(await fireEvent.keyDown(promptInput, { key: 'Enter', shiftKey: true })).toBe(false);
   await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({
     initial_task: { input: 'Line one', metadata: { source: 'dashboard_chat' } },
+  })));
+});
+
+test('new chat submits with Ctrl Enter', async () => {
+  const user = userEvent.setup();
+  const created = session({ session_id: 'session-enter' });
+  mocks.createSession.mockResolvedValue({ session: created, initial_turn: turn({ session_id: 'session-enter' }) } satisfies CreateSessionResult);
+  render(ChatPage);
+
+  const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  await user.type(promptInput, 'Line two');
+
+  expect(await fireEvent.keyDown(promptInput, { key: 'Enter', ctrlKey: true })).toBe(false);
+  await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({
+    initial_task: { input: 'Line two', metadata: { source: 'dashboard_chat' } },
   })));
 });
 
@@ -888,6 +903,73 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(sessionDetailsButton.className).not.toContain('border-border');
   expect(sessionDetailsButton.className).not.toContain('dark:border-input');
   expect(sessionDetailsButton.querySelector('[data-chat-session-details-summary]')).toHaveClass('flex-1');
+});
+
+test('desktop composer resize button expands follow-up input height in place', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  const composerInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  expect(composerInput).toHaveClass('md:min-h-20');
+  expect(composerInput).not.toHaveClass('md:min-h-56');
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Expand message composer' }));
+
+  expect(composerInput).toHaveClass('md:min-h-56');
+  expect(screen.queryByRole('dialog', { name: 'Expanded message composer' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Collapse message composer' })).toBeInTheDocument();
+});
+
+test('mobile composer resize button opens a fullscreen follow-up composer sharing the current input', async () => {
+  const originalMatchMedia = window.matchMedia;
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query.includes('max-width'),
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+  const user = userEvent.setup();
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.submitInboxMessage.mockResolvedValue(undefined);
+
+  try {
+    render(ChatPage);
+
+    const composerInput = await screen.findByPlaceholderText('Send a follow-up message…');
+    await user.type(composerInput, 'mobile draft');
+    await fireEvent.click(screen.getByRole('button', { name: 'Expand message composer' }));
+
+    const fullscreenComposer = screen.getByRole('dialog', { name: 'Expanded message composer' });
+    const fullscreenInput = within(fullscreenComposer).getByPlaceholderText('Send a follow-up message…');
+    expect(fullscreenInput).toHaveValue('mobile draft');
+    expect(fullscreenInput).toHaveClass('min-h-[calc(100vh-12rem)]');
+
+    await user.type(fullscreenInput, ' plus more');
+    await fireEvent.click(within(fullscreenComposer).getByRole('button', { name: /send/i }));
+
+    await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
+      input: 'mobile draft plus more',
+      delivery_policy: 'after_idle',
+      metadata: { source: 'dashboard_chat' },
+    }));
+  } finally {
+    window.matchMedia = originalMatchMedia;
+  }
 });
 
 test('shows idle thought summary trigger above the final assistant response', async () => {
@@ -1405,6 +1487,56 @@ test('queues follow-up messages without rendering inline success chrome', async 
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
   expect(screen.queryByText('Chat updated')).not.toBeInTheDocument();
   expect(screen.queryByText('Message queued for the selected session.')).not.toBeInTheDocument();
+});
+
+test('follow-up composer submits with Shift Enter while preserving Enter for newlines', async () => {
+  const user = userEvent.setup();
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.submitInboxMessage.mockResolvedValue(undefined);
+
+  render(ChatPage);
+
+  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  expect(screen.getByText('Shift+Enter / Ctrl+Enter to send · Enter for newline')).toBeInTheDocument();
+
+  await user.type(followUpInput, 'continue this session');
+  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter' })).toBe(true);
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+
+  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', shiftKey: true })).toBe(false);
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
+    input: 'continue this session',
+    delivery_policy: 'after_idle',
+    metadata: { source: 'dashboard_chat' },
+  }));
+});
+
+test('follow-up composer submits with Ctrl Enter', async () => {
+  const user = userEvent.setup();
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.submitInboxMessage.mockResolvedValue(undefined);
+
+  render(ChatPage);
+
+  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  await user.type(followUpInput, 'another message');
+
+  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', ctrlKey: true })).toBe(false);
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
+    input: 'another message',
+    delivery_policy: 'after_idle',
+    metadata: { source: 'dashboard_chat' },
+  }));
 });
 
 test('does not render inline chat error alerts', async () => {
