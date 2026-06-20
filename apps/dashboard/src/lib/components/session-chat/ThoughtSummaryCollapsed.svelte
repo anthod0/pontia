@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { cn } from '$lib/utils.js'
-  import BlocksWaveSpinner from './BlocksWaveSpinner.svelte'
   import { CheckCircle2, CircleDot, LoaderCircle, XCircle } from '@lucide/svelte'
   import type { SessionChatThoughtStep } from '../../session-chat/sessionChat'
 
@@ -22,7 +21,6 @@
   const latestVisibleSteps = $derived(steps.slice(-1))
   const latestStepId = $derived(latestVisibleSteps.at(-1)?.id ?? null)
   const rows = $derived(displayedSteps.length ? displayedSteps : [null])
-  const label = $derived(`Thought for ${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`)
 
   function labelForStep(thoughtStep: SessionChatThoughtStep | null): string {
     if (!thoughtStep) return 'Working'
@@ -93,14 +91,6 @@
   onclick={onOpen}
 >
   <div class="flex min-w-0 flex-col gap-1.5">
-    <div class="flex min-w-0 items-center gap-2 text-muted-foreground">
-      {#if active}
-        <span class="inline-flex size-5 shrink-0 items-center justify-center text-muted-foreground" aria-label="Thinking in progress" title="Thinking in progress">
-          <BlocksWaveSpinner class="size-5" />
-        </span>
-      {/if}
-      <span class="truncate text-xs leading-4">{label}</span>
-    </div>
     <div class="thought-summary-viewport min-w-0 overflow-hidden">
       <div
         data-testid="thought-summary-rolling-stack"

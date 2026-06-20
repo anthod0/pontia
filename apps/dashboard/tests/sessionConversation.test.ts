@@ -27,6 +27,42 @@ test('conversation renders messages without role headers', () => {
   expect(screen.queryByText('AI')).not.toBeInTheDocument();
 });
 
+test('conversation shows the current agent status above only the latest assistant reply', () => {
+  render(SessionConversation, {
+    props: {
+      sessionState: 'busy',
+      messages: [
+        ...messages,
+        {
+          id: 'message-3',
+          role: 'user',
+          content: 'Check one more file.',
+          status: 'sent',
+        },
+        {
+          id: 'message-4',
+          role: 'assistant',
+          content: 'I checked it.',
+          status: 'sent',
+        },
+      ],
+    },
+  });
+
+  expect(screen.getAllByText('Agent working')).toHaveLength(1);
+  const latestAssistantMessage = screen.getByText('I checked it.').closest('[data-chat-message-id]');
+  expect(latestAssistantMessage).toContainElement(screen.getByText('Agent working'));
+  expect(screen.queryByText('Agent working')?.compareDocumentPosition(screen.getByText('I checked it.')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
+});
+
+test('conversation hides the agent status component while the session is idle', () => {
+  render(SessionConversation, { props: { sessionState: 'idle', messages } });
+
+  expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
+  expect(screen.queryByText('Agent idle')).not.toBeInTheDocument();
+});
+
 test('conversation copies assistant reply content with the http-compatible fallback', async () => {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
   document.execCommand = vi.fn().mockReturnValue(true);
@@ -150,7 +186,7 @@ test('conversation does not scroll the document to the bottom when refreshing wh
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test('conversation uses session busy state to keep thought summary active without showing the agent working placeholder', () => {
+test('conversation shows agent status for a busy pending assistant message with thought steps', () => {
   render(SessionConversation, {
     props: {
       sessionState: 'busy',
@@ -172,15 +208,15 @@ test('conversation uses session busy state to keep thought summary active withou
     },
   });
 
-  expect(screen.getByLabelText('Thinking in progress')).toBeInTheDocument();
+  expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
   expect(screen.queryByText('bash')).not.toBeInTheDocument();
   expect(screen.getByText('read')).toBeInTheDocument();
-  expect(screen.queryByText('Agent working')).not.toBeInTheDocument();
   expect(screen.queryByText('Waiting for the agent to report its next output.')).not.toBeInTheDocument();
   expect(screen.queryByText('Working…')).not.toBeInTheDocument();
 });
 
-test('conversation shows agent working only on the latest pending assistant placeholder after an interrupt', () => {
+test('conversation shows agent working only once after an interrupted pending thought summary', () => {
   render(SessionConversation, {
     props: {
       sessionState: 'busy',
@@ -211,8 +247,8 @@ test('conversation shows agent working only on the latest pending assistant plac
   });
 
   expect(screen.getAllByText('Agent working')).toHaveLength(1);
-  expect(screen.getAllByRole('button', { name: /interrupt agent/i })).toHaveLength(1);
-  expect(screen.getByText('Thought for 1 step')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
+  expect(screen.queryByText('Thought for 1 step')).not.toBeInTheDocument();
   expect(screen.queryByText('Interrupted work')).not.toBeInTheDocument();
 });
 
@@ -247,14 +283,14 @@ test('conversation keeps non-trailing empty pending thought summaries idle while
     },
   });
 
-  expect(screen.queryByText('Agent working')).not.toBeInTheDocument();
+  expect(screen.getByText('Agent working')).toBeInTheDocument();
   expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
-  expect(screen.getByText('Thought for 2 steps')).toBeInTheDocument();
+  expect(screen.queryByText('Thought for 2 steps')).not.toBeInTheDocument();
   expect(screen.queryByText('Reading old file')).not.toBeInTheDocument();
   expect(screen.queryByText('Running old command')).not.toBeInTheDocument();
 });
 
-test('conversation renders an interrupt button on the agent working placeholder when enabled', async () => {
+test('conversation renders agent status without an assistant loading placeholder after the latest user message', async () => {
   const onInterrupt = vi.fn();
 
   render(SessionConversation, {
@@ -274,16 +310,12 @@ test('conversation renders an interrupt button on the agent working placeholder 
     },
   });
 
-  const interruptButton = screen.getByRole('button', { name: /interrupt agent/i });
-  expect(interruptButton).toBeInTheDocument();
-  expect(interruptButton).toHaveAttribute('title', 'Interrupt agent');
-  expect(interruptButton.textContent?.trim()).toBe('');
-  expect(interruptButton.querySelector('svg.lucide-square')).toBeInTheDocument();
-  expect(interruptButton).not.toHaveClass('border-border');
+  expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
+  expect(document.querySelector('[data-chat-message-id="busy:assistant-loading-placeholder"]')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-chat-agent-status]')).toHaveClass('is-assistant', 'items-start');
+  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
 
-  await fireEvent.click(interruptButton);
-
-  expect(onInterrupt).toHaveBeenCalledTimes(1);
+  expect(onInterrupt).not.toHaveBeenCalled();
 });
 
 test('conversation renders assistant loading placeholder when session is starting and the latest user message has no assistant output', () => {
@@ -303,8 +335,9 @@ test('conversation renders assistant loading placeholder when session is startin
   });
 
   expect(screen.getByText('Session starting')).toBeInTheDocument();
-  expect(screen.getByText('Waiting for the agent session to become ready.')).toBeInTheDocument();
-  expect(screen.queryByTestId('blocks-wave-spinner')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Agent status: Session starting')).toBeInTheDocument();
+  expect(screen.queryByText('Waiting for the agent session to become ready.')).not.toBeInTheDocument();
+  expect(screen.getByTestId('blocks-wave-spinner')).toBeInTheDocument();
   expect(screen.queryByText('Working')).not.toBeInTheDocument();
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });

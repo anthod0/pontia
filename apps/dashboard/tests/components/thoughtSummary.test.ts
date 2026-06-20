@@ -17,7 +17,7 @@ function step(overrides: Partial<SessionChatThoughtStep> = {}): SessionChatThoug
   };
 }
 
-test('idle thought summary collapses to a step count', () => {
+test('idle thought summary renders no collapsed step count trigger', () => {
   render(ThoughtSummary, {
     props: {
       steps: [
@@ -29,19 +29,13 @@ test('idle thought summary collapses to a step count', () => {
     },
   });
 
-  const button = screen.getByRole('button', { name: 'View thought details' });
-  const stepCount = screen.getByText('Thought for 3 steps');
-  const brainIcon = button.querySelector('svg');
-
-  expect(button).toHaveTextContent('Thought for 3 steps');
-  expect(button).toHaveClass('py-2.5');
-  expect(stepCount).toHaveClass('text-xs', 'leading-4');
-  expect(brainIcon).toHaveClass('size-5');
+  expect(screen.queryByRole('button', { name: 'View thought details' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Thought for 3 steps')).not.toBeInTheDocument();
   expect(screen.queryByText('bash')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
 });
 
-test('busy thought summary shows the step count above the latest step with a loading icon', () => {
+test('busy thought summary shows the latest step without the step count trigger', () => {
   render(ThoughtSummary, {
     props: {
       steps: [
@@ -53,18 +47,16 @@ test('busy thought summary shows the step count above the latest step with a loa
     },
   });
 
-  const loadingIcon = screen.getByLabelText('Thinking in progress');
-  const stepCount = screen.getByText('Thought for 3 steps');
   const latestStep = screen.getByText('read');
 
-  expect(loadingIcon).toBeInTheDocument();
-  expect(stepCount).toHaveClass('text-xs');
-  expect(stepCount.compareDocumentPosition(latestStep) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
+  expect(screen.queryByText('Thought for 3 steps')).not.toBeInTheDocument();
+  expect(latestStep).toBeInTheDocument();
   expect(screen.queryByText('Planning changes')).not.toBeInTheDocument();
   expect(screen.queryByText('bash')).not.toBeInTheDocument();
 });
 
-test('busy thought summary aligns the loading icon with the step count header', () => {
+test('busy thought summary removes the step count header icon and text', () => {
   render(ThoughtSummary, {
     props: {
       steps: [
@@ -76,14 +68,11 @@ test('busy thought summary aligns the loading icon with the step count header', 
     },
   });
 
-  const loadingIcon = screen.getByLabelText('Thinking in progress');
-  const header = loadingIcon.parentElement;
-
-  expect(header).toHaveClass('items-center');
-  expect(header).toHaveTextContent('Thought for 3 steps');
+  expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
+  expect(screen.queryByText('Thought for 3 steps')).not.toBeInTheDocument();
 });
 
-test('busy thought summary uses the blocks wave spinner for the main loading icon', () => {
+test('busy thought summary removes the blocks wave header spinner', () => {
   render(ThoughtSummary, {
     props: {
       steps: [step({ id: 'thought-1', kind: 'thinking', title: 'Thinking', content: 'Planning changes' })],
@@ -91,10 +80,8 @@ test('busy thought summary uses the blocks wave spinner for the main loading ico
     },
   });
 
-  const loadingIcon = screen.getByLabelText('Thinking in progress');
-  expect(loadingIcon).toContainElement(screen.getByTestId('blocks-wave-spinner'));
-  expect(loadingIcon).toHaveClass('text-muted-foreground');
-  expect(loadingIcon).not.toHaveClass('text-primary');
+  expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('blocks-wave-spinner')).not.toBeInTheDocument();
 });
 
 test('blocks wave spinner preserves the original per-block wave position animations', () => {

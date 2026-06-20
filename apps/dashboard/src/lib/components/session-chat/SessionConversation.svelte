@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
-  import { Bot, Check, Copy, GitBranch, Square } from '@lucide/svelte'
+  import { Bot, Check, Copy, GitBranch } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -10,6 +10,7 @@
   import { copyText } from '$lib/copyText'
   import { chatAutoScrollKey, scrollDocumentToBottom } from '../../session-chat/autoScroll'
   import DraftDagFlow from '../../../components/dag/DraftDagFlow.svelte'
+  import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
   import type { DagProposalView, JsonObject } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
@@ -37,20 +38,20 @@
     plannerTaskId = null,
     draftPlannerProposal = null,
     draftPlannerProposalLoading = false,
-    interruptEnabled = false,
-    interruptBusy = false,
+    interruptEnabled: _interruptEnabled = false,
+    interruptBusy: _interruptBusy = false,
     hasMoreHistory = false,
     historyLoading = false,
     autoScrollKey = null,
-    onInterrupt,
+    onInterrupt: _onInterrupt,
     onLoadMoreHistory,
   }: Props = $props()
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let draftDagSheetOpen = $state(false)
   let copiedMessageId = $state<string | null>(null)
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
-  const loadingPlaceholder = $derived(assistantLoadingPlaceholder(sessionState))
-  const displayMessages = $derived(messagesForDisplay(messages, loadingPlaceholder))
+  const displayMessages = $derived(messages)
+  const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
   const scrollKey = $derived(autoScrollKey ?? chatAutoScrollKey(displayMessages))
   const plannerDraftAnchorId = $derived(lastAssistantMessageId(displayMessages))
   const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
@@ -88,28 +89,6 @@
   function isDocumentNearBottom(): boolean {
     const distanceFromBottom = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight)
     return distanceFromBottom <= BOTTOM_AUTO_SCROLL_THRESHOLD_PX
-  }
-
-  function assistantLoadingPlaceholder(state: string | null): { title: string; description: string } | null {
-    if (state === 'created') return { title: 'Session created', description: 'Waiting for the agent session to start.' }
-    if (state === 'starting') return { title: 'Session starting', description: 'Waiting for the agent session to become ready.' }
-    if (state === 'busy') return { title: 'Agent working', description: 'Waiting for the agent to report its next output.' }
-    return null
-  }
-
-  function messagesForDisplay(chatMessages: SessionChatMessage[], placeholder: { title: string; description: string } | null): SessionChatMessage[] {
-    if (!placeholder || chatMessages.at(-1)?.role === 'assistant') return chatMessages
-    return [
-      ...chatMessages,
-      {
-        id: `${sessionState ?? 'session'}:assistant-loading-placeholder`,
-        turnId: `${sessionState ?? 'session'}:assistant-loading-placeholder`,
-        role: 'assistant',
-        content: '',
-        status: 'pending',
-        createdAt: '',
-      },
-    ]
   }
 
   function lastAssistantMessageId(chatMessages: SessionChatMessage[]): string | null {
@@ -171,6 +150,23 @@
     void loadMoreHistoryFromTop()
   }
 
+  type ConversationDisplayItem =
+    | { kind: 'message'; id: string; message: SessionChatMessage; showAgentStatus: boolean }
+    | { kind: 'agent_status'; id: string }
+
+  function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null): ConversationDisplayItem[] {
+    const showStatus = Boolean(state && state !== 'idle')
+    const latestAssistantId = chatMessages.at(-1)?.role === 'assistant' ? chatMessages.at(-1)?.id : null
+    const items: ConversationDisplayItem[] = chatMessages.map((message) => ({
+      kind: 'message',
+      id: message.id,
+      message,
+      showAgentStatus: showStatus && message.id === latestAssistantId,
+    }))
+    if (!showStatus || latestAssistantId) return items
+    return [...items, { kind: 'agent_status', id: `agent-status:${state}` }]
+  }
+
   interface ScrollAnchor {
     messageId: string
     top: number
@@ -229,50 +225,49 @@
       {#if hasMoreHistory && historyLoading}
         <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading earlier messages…</div>
       {/if}
-      {#each displayMessages as chatMessage (chatMessage.id)}
-        <Message.Root from={chatMessage.role} data-chat-message-id={chatMessage.id}>
-          <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
-            {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
-              <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
-            {/if}
-            {#if chatMessage.role === 'assistant' && loadingPlaceholder && chatMessage.id === activeLoadingMessageId && !chatMessage.thoughtSteps?.length}
-              <div class="max-w-md space-y-2 text-muted-foreground" aria-live="polite">
-                <div class="space-y-1">
-                  <p class="text-sm font-medium text-foreground">{loadingPlaceholder.title}</p>
-                  <p class="text-xs leading-5">{loadingPlaceholder.description}</p>
-                </div>
-                {#if loadingPlaceholder.title === 'Agent working' && interruptEnabled}
-                  <Button type="button" variant="ghost" size="icon-sm" disabled={interruptBusy} aria-label="Interrupt agent" title={interruptBusy ? 'Interrupting…' : 'Interrupt agent'} onclick={onInterrupt}>
-                    <Square class="size-4" />
-                  </Button>
-                {/if}
-              </div>
-            {:else if chatMessage.content.trim()}
-              <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
-              {#if chatMessage.role === 'assistant'}
-                {@const isCopied = copiedMessageId === chatMessage.id}
-                <div class="mt-2 flex justify-start">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={isCopied ? 'Assistant reply copied' : 'Copy assistant reply'}
-                    title={isCopied ? 'Copied' : 'Copy assistant reply'}
-                    onclick={() => copyAssistantReply(chatMessage)}
-                  >
-                    {#if isCopied}
-                      <Check class="size-3.5" /> Copied
-                    {:else}
-                      <Copy class="size-3.5" /> Copy
-                    {/if}
-                  </Button>
-                </div>
+      {#each displayItems as displayItem (displayItem.id)}
+        {#if displayItem.kind === 'agent_status'}
+          <Message.Root from="assistant" data-chat-agent-status>
+            <Message.Content>
+              <AgentStatus state={sessionState} />
+            </Message.Content>
+          </Message.Root>
+        {:else}
+          {@const chatMessage = displayItem.message}
+          <Message.Root from={chatMessage.role} data-chat-message-id={chatMessage.id}>
+            <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
+              {#if displayItem.showAgentStatus}
+                <AgentStatus state={sessionState} />
               {/if}
-            {/if}
-          </Message.Content>
-        </Message.Root>
+              {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
+                <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
+              {/if}
+              {#if chatMessage.content.trim()}
+                <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
+                {#if chatMessage.role === 'assistant'}
+                  {@const isCopied = copiedMessageId === chatMessage.id}
+                  <div class="mt-2 flex justify-start">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={isCopied ? 'Assistant reply copied' : 'Copy assistant reply'}
+                      title={isCopied ? 'Copied' : 'Copy assistant reply'}
+                      onclick={() => copyAssistantReply(chatMessage)}
+                    >
+                      {#if isCopied}
+                        <Check class="size-3.5" /> Copied
+                      {:else}
+                        <Copy class="size-3.5" /> Copy
+                      {/if}
+                    </Button>
+                  </div>
+                {/if}
+              {/if}
+            </Message.Content>
+          </Message.Root>
 
-        {#if plannerTaskId && chatMessage.id === plannerDraftAnchorId}
+          {#if plannerTaskId && chatMessage.id === plannerDraftAnchorId}
           <section class="mx-auto w-full max-w-4xl px-4 pb-5" aria-label="Planner draft DAG action">
             <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3">
               <div class="min-w-0">
@@ -298,6 +293,7 @@
               {/if}
             </div>
           </section>
+          {/if}
         {/if}
       {/each}
     </Conversation.Content>

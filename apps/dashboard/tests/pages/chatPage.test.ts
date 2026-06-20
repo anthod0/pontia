@@ -541,7 +541,7 @@ test('creates a session with initial prompt, workspace, and client then opens it
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new');
 });
 
-test('interrupts a busy interrupt-capable session from the agent working placeholder', async () => {
+test('shows busy agent status without the removed interrupt placeholder control', async () => {
   const busySession = session({ state: 'busy', current_turn_id: 'turn-1', capabilities: { interrupt: true } });
   mocks.loadedSessions = [busySession];
   mocks.sessions.set([busySession]);
@@ -551,9 +551,9 @@ test('interrupts a busy interrupt-capable session from the agent working placeho
 
   render(ChatPage);
 
-  await fireEvent.click(await screen.findByRole('button', { name: /interrupt agent/i }));
-
-  expect(mocks.interruptSession).toHaveBeenCalledWith('session-1');
+  expect(await screen.findByLabelText('Agent status: Agent working')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
+  expect(mocks.interruptSession).not.toHaveBeenCalled();
 });
 
 test('renames the selected chat session from advanced controls', async () => {
@@ -890,7 +890,7 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(sessionDetailsButton.querySelector('[data-chat-session-details-summary]')).toHaveClass('flex-1');
 });
 
-test('renders idle thought summary above the final assistant response and expands all steps', async () => {
+test('hides idle thought summary trigger above the final assistant response', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -966,20 +966,13 @@ test('renders idle thought summary above the final assistant response and expand
 
   render(ChatPage);
 
-  const thoughtSummary = await screen.findByText('Thought for 2 steps');
-  const finalAnswer = screen.getByText('Final answer');
-  expect(thoughtSummary.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(await screen.findByText('Final answer')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /view thought details/i })).not.toBeInTheDocument();
+  expect(screen.queryByText('Thought for 2 steps')).not.toBeInTheDocument();
   expect(screen.queryByText('I should inspect the code.')).not.toBeInTheDocument();
   expect(screen.queryByText('read {"path":"src/app.ts"}')).not.toBeInTheDocument();
   expect(screen.queryByText('started')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('started')).not.toBeInTheDocument();
-
-  await userEvent.click(screen.getByRole('button', { name: /view thought details/i }));
-  expect(await screen.findByRole('dialog')).toBeInTheDocument();
-  expect(await screen.findAllByText('I should inspect the code.')).toHaveLength(1);
-  expect(screen.getByText('read {"path":"src/app.ts"}')).toBeInTheDocument();
-  expect(screen.getByText('started')).toBeInTheDocument();
-  expect(screen.getByText('Thought details')).toBeInTheDocument();
 });
 
 test('keeps whitespace preservation on message text instead of the bubble wrapper', async () => {
