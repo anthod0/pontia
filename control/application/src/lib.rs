@@ -12,6 +12,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use pontia_agent_clients as agent_clients;
 use pontia_config::AppConfig;
+pub use pontia_config::FilePickerConfig;
 use pontia_core::{
     domain::{
         DomainEvent, EventSource, EventType, ProjectionState, SessionProjection, SessionState,
@@ -107,9 +108,9 @@ pub use tasks::{CreateDagTaskRequest, CreateTaskOutcome, HumanSignalRequest, Tas
 pub use turns::TurnCommandService;
 pub use views::*;
 pub use workspaces::{
-    RegisterWorkspaceRequest, RenameWorkspaceRequest, WorkspaceBrowserConfig,
-    WorkspaceBrowserService, WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView,
-    WorkspaceRootConfig, WorkspaceRootView,
+    FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,
+    WorkspaceBrowserConfig, WorkspaceBrowserService, WorkspaceDirectoryEntryView,
+    WorkspaceDirectoryListingView, WorkspaceRootConfig, WorkspaceRootView,
 };
 
 pub(crate) use mapping::*;

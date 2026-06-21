@@ -137,6 +137,27 @@ tui_command = "claude"
 roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }
 ]
+
+[file_picker]
+enabled = true
+min_query_chars = 0
+max_results = 100
+max_candidates = 100000
+timeout_ms = 1500
+respect_gitignore = true
+respect_ignore_files = true
+respect_git_exclude = true
+include_hidden = false
+follow_symlinks = false
+ignore_globs = [
+  ".git/**",
+  "node_modules/**",
+  "target/**",
+  "dist/**",
+  "build/**",
+  ".svelte-kit/**",
+  ".next/**"
+]
 ```
 
 Environment variables and `.env` are also supported. See [`.env.example`](.env.example) if present in your checkout.

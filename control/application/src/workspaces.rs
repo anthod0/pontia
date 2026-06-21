@@ -1,7 +1,11 @@
 use super::*;
+use nucleo_matcher::{
+    Config, Matcher,
+    pattern::{AtomKind, CaseMatching, Normalization, Pattern},
+};
 use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
-pub use pontia_config::{WorkspaceBrowserConfig, WorkspaceRootConfig};
+pub use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig, WorkspaceRootConfig};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkspaceRootView {
@@ -26,6 +30,19 @@ pub struct WorkspaceDirectoryListingView {
     pub canonical_path: String,
     pub parent_path: Option<String>,
     pub entries: Vec<WorkspaceDirectoryEntryView>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct FilePickerFileView {
+    pub path: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct FilePickerResultView {
+    pub files: Vec<FilePickerFileView>,
+    pub truncated: bool,
     pub warnings: Vec<String>,
 }
 
@@ -124,11 +141,28 @@ pub(crate) async fn get_workspace_record(
 pub struct WorkspaceBrowserService {
     pool: SqlitePool,
     config: WorkspaceBrowserConfig,
+    file_picker: FilePickerConfig,
 }
 
 impl WorkspaceBrowserService {
     pub fn new(pool: SqlitePool, config: WorkspaceBrowserConfig) -> Self {
-        Self { pool, config }
+        Self {
+            pool,
+            config,
+            file_picker: FilePickerConfig::default(),
+        }
+    }
+
+    pub fn with_file_picker(
+        pool: SqlitePool,
+        config: WorkspaceBrowserConfig,
+        file_picker: FilePickerConfig,
+    ) -> Self {
+        Self {
+            pool,
+            config,
+            file_picker,
+        }
     }
 
     pub async fn list_roots(&self) -> Vec<WorkspaceRootView> {
@@ -240,6 +274,130 @@ impl WorkspaceBrowserService {
             entries,
             warnings,
         })
+    }
+
+    pub async fn pick_files(
+        &self,
+        workspace_id: &str,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<FilePickerResultView> {
+        let config = self.config_file_picker();
+        if !config.enabled || query.chars().count() < config.min_query_chars {
+            return Ok(FilePickerResultView {
+                files: Vec::new(),
+                truncated: false,
+                warnings: Vec::new(),
+            });
+        }
+        let workspace = get_workspace_record(&self.pool, workspace_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))?;
+        let workspace_path = PathBuf::from(&workspace.canonical_path);
+        let root_path = std::fs::canonicalize(&workspace_path)?;
+        if !root_path.is_dir() {
+            return Err(Error::NotFound(format!(
+                "workspace {workspace_id} directory is not available"
+            )));
+        }
+
+        let mut override_builder = ignore::overrides::OverrideBuilder::new(&root_path);
+        for glob in &config.ignore_globs {
+            override_builder.add(&format!("!{glob}")).map_err(|err| {
+                Error::Domain(format!("invalid file_picker ignore_glob {glob:?}: {err}"))
+            })?;
+        }
+        let overrides = override_builder
+            .build()
+            .map_err(|err| Error::Domain(format!("invalid file_picker ignore_globs: {err}")))?;
+
+        let mut walker = ignore::WalkBuilder::new(&root_path);
+        walker
+            .hidden(!config.include_hidden)
+            .git_ignore(config.respect_gitignore)
+            .ignore(config.respect_ignore_files)
+            .git_exclude(config.respect_git_exclude)
+            .follow_links(config.follow_symlinks)
+            .overrides(overrides);
+
+        let candidate_limit = config.max_candidates.max(1);
+        let result_limit = limit
+            .unwrap_or(config.max_results)
+            .min(config.max_results)
+            .max(1);
+        let started = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(config.timeout_ms);
+        let normalized_query = query.trim().trim_start_matches('@');
+        let mut warnings = Vec::new();
+        let mut candidates = Vec::<String>::new();
+        let mut truncated = false;
+
+        for entry in walker.build() {
+            if started.elapsed() > timeout {
+                truncated = true;
+                warnings.push(
+                    "file picker search timed out before scanning the whole workspace".to_string(),
+                );
+                break;
+            }
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    warnings.push(err.to_string());
+                    continue;
+                }
+            };
+            if !entry
+                .file_type()
+                .is_some_and(|file_type| file_type.is_file())
+            {
+                continue;
+            }
+            let path = entry.path();
+            let relative = match path.strip_prefix(&root_path) {
+                Ok(relative) => path_to_api_relative(relative),
+                Err(_) => continue,
+            };
+            if relative.is_empty() {
+                continue;
+            }
+            candidates.push(relative);
+            if candidates.len() >= candidate_limit {
+                truncated = true;
+                break;
+            }
+        }
+
+        let pattern = Pattern::new(
+            normalized_query,
+            CaseMatching::Smart,
+            Normalization::Smart,
+            AtomKind::Fuzzy,
+        );
+        let mut matcher = Matcher::new(Config::DEFAULT.match_paths());
+        let files = pattern
+            .match_list(candidates, &mut matcher)
+            .into_iter()
+            .take(result_limit)
+            .map(|(path, _)| FilePickerFileView {
+                name: Path::new(&path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or(&path)
+                    .to_string(),
+                path,
+            })
+            .collect();
+
+        Ok(FilePickerResultView {
+            files,
+            truncated,
+            warnings,
+        })
+    }
+
+    fn config_file_picker(&self) -> FilePickerConfig {
+        self.file_picker.clone()
     }
 
     pub async fn register_workspace(

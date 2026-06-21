@@ -28,6 +28,7 @@ import type {
   TurnView,
   UpdateSessionInput,
   WorkspaceDirectoryListingView,
+  FilePickerResultView,
   WorkspaceGitStatusView,
   WorkspaceRootView,
   WorkspaceView,
@@ -171,6 +172,18 @@ export async function listWorkspaceRoots(options: ReadRequestOptions = {}): Prom
 export async function listWorkspaceRootEntries(rootId: string, path = '', options: ReadRequestOptions = {}): Promise<WorkspaceDirectoryListingView> {
   const query = path ? `?path=${encodeURIComponent(path)}` : '';
   return request<WorkspaceDirectoryListingView>(`/workspace-roots/${encodeURIComponent(rootId)}/entries${query}`, options);
+}
+
+export async function listWorkspaceFilePickerEntries(
+  workspaceId: string,
+  query = '',
+  options: ReadRequestOptions & { limit?: number } = {},
+): Promise<FilePickerResultView> {
+  const params = new URLSearchParams();
+  if (query) params.set('query', query);
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  const path = `/workspaces/${encodeURIComponent(workspaceId)}/file-picker${params.toString() ? `?${params.toString()}` : ''}`;
+  return request<FilePickerResultView>(path, { signal: options.signal });
 }
 
 export async function listTasks(): Promise<TaskView[]> {

@@ -2,6 +2,7 @@
   import { Folder, GitBranch, Terminal } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
+  import FileMentionTextarea from '$lib/components/file-picker/FileMentionTextarea.svelte'
   import * as Select from '$lib/components/ui/select/index.js'
   import type { WorkspaceView } from '../../api/types'
   import { clientTitle, workspaceTitle } from './sessionMetadata'
@@ -88,7 +89,7 @@
 
       <PromptInput.Root class="w-full" onSubmit={onStartChat}>
         <PromptInput.Body>
-          <PromptInput.Textarea id="chat-prompt" bind:value={prompt} placeholder="Ask the agent to implement, inspect, or explain something…" onkeydown={onPromptKeydown} />
+          <FileMentionTextarea id="chat-prompt" bind:value={prompt} workspaceId={workspaceId} placeholder="Ask the agent to implement, inspect, or explain something…" onkeydown={onPromptKeydown} />
         </PromptInput.Body>
 
         <PromptInput.Toolbar class="justify-between gap-2 pt-1">

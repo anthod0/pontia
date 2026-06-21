@@ -150,6 +150,17 @@ export interface WorkspaceDirectoryListingView {
   warnings: string[];
 }
 
+export interface FilePickerFileView {
+  path: string;
+  name: string;
+}
+
+export interface FilePickerResultView {
+  files: FilePickerFileView[];
+  truncated: boolean;
+  warnings: string[];
+}
+
 export interface RegisterWorkspaceInput {
   root_id: string;
   path: string;

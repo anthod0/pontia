@@ -22,6 +22,7 @@ pub struct AppConfig {
     pub default_client_type: String,
     pub graph: GraphRuntimeConfig,
     pub workspace_browser: WorkspaceBrowserConfig,
+    pub file_picker: FilePickerConfig,
     pub runtime: RuntimeConfig,
     pub dashboard: DashboardConfig,
 }
@@ -71,6 +72,81 @@ impl RuntimeConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct FilePickerConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub min_query_chars: usize,
+    #[serde(default = "default_file_picker_max_results")]
+    pub max_results: usize,
+    #[serde(default = "default_file_picker_max_candidates")]
+    pub max_candidates: usize,
+    #[serde(default = "default_file_picker_timeout_ms")]
+    pub timeout_ms: u64,
+    #[serde(default = "default_true")]
+    pub respect_gitignore: bool,
+    #[serde(default = "default_true")]
+    pub respect_ignore_files: bool,
+    #[serde(default = "default_true")]
+    pub respect_git_exclude: bool,
+    #[serde(default)]
+    pub include_hidden: bool,
+    #[serde(default)]
+    pub follow_symlinks: bool,
+    #[serde(default = "default_file_picker_ignore_globs")]
+    pub ignore_globs: Vec<String>,
+}
+
+impl Default for FilePickerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min_query_chars: 0,
+            max_results: default_file_picker_max_results(),
+            max_candidates: default_file_picker_max_candidates(),
+            timeout_ms: default_file_picker_timeout_ms(),
+            respect_gitignore: true,
+            respect_ignore_files: true,
+            respect_git_exclude: true,
+            include_hidden: false,
+            follow_symlinks: false,
+            ignore_globs: default_file_picker_ignore_globs(),
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_file_picker_max_results() -> usize {
+    100
+}
+
+fn default_file_picker_max_candidates() -> usize {
+    100_000
+}
+
+fn default_file_picker_timeout_ms() -> u64 {
+    1_500
+}
+
+fn default_file_picker_ignore_globs() -> Vec<String> {
+    [
+        ".git/**",
+        "node_modules/**",
+        "target/**",
+        "dist/**",
+        "build/**",
+        ".svelte-kit/**",
+        ".next/**",
+    ]
+    .into_iter()
+    .map(ToString::to_string)
+    .collect()
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct WorkspaceBrowserConfig {
     pub roots: Vec<WorkspaceRootConfig>,
@@ -114,6 +190,7 @@ struct FileConfig {
     default_client_type: Option<String>,
     runtime: Option<RuntimeConfig>,
     workspace_browser: Option<WorkspaceBrowserConfig>,
+    file_picker: Option<FilePickerConfig>,
     dashboard: Option<DashboardConfig>,
 }
 
@@ -219,6 +296,10 @@ impl AppConfig {
                 .unwrap_or_default(),
         };
 
+        let file_picker = file
+            .and_then(|config| config.file_picker.clone())
+            .unwrap_or_default();
+
         let mut dashboard = file
             .and_then(|config| config.dashboard.clone())
             .unwrap_or_default();
@@ -242,6 +323,7 @@ impl AppConfig {
             default_client_type,
             graph,
             workspace_browser,
+            file_picker,
             runtime,
             dashboard,
         })

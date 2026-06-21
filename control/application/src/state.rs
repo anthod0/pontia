@@ -49,6 +49,7 @@ struct AppRuntimeState {
     external_api_token: Option<String>,
     graph: GraphRuntimeConfig,
     workspace_browser: WorkspaceBrowserConfig,
+    file_picker: FilePickerConfig,
 }
 
 struct EventState {
@@ -68,6 +69,7 @@ pub struct AppStateBuilder {
     external_api_token: Option<String>,
     graph: GraphRuntimeConfig,
     workspace_browser: WorkspaceBrowserConfig,
+    file_picker: FilePickerConfig,
     shutdown: ShutdownSignal,
     volatile_events: VolatileEventBroker,
     git_refresh: GitRefreshCoordinator,
@@ -80,6 +82,7 @@ impl AppState {
             external_api_token: None,
             graph: GraphRuntimeConfig::default(),
             workspace_browser: WorkspaceBrowserConfig::default(),
+            file_picker: FilePickerConfig::default(),
             shutdown: ShutdownSignal::default(),
             volatile_events: VolatileEventBroker::default(),
             git_refresh: GitRefreshCoordinator::default(),
@@ -100,6 +103,10 @@ impl AppState {
 
     pub fn workspace_browser(&self) -> WorkspaceBrowserConfig {
         self.inner.config.workspace_browser.clone()
+    }
+
+    pub fn file_picker(&self) -> FilePickerConfig {
+        self.inner.config.file_picker.clone()
     }
 
     pub fn shutdown(&self) -> ShutdownSignal {
@@ -129,6 +136,7 @@ impl AppState {
             .external_api_token(self.inner.config.external_api_token.clone())
             .graph(self.graph())
             .workspace_browser(self.workspace_browser())
+            .file_picker(self.file_picker())
             .shutdown(self.shutdown())
             .volatile_events(self.volatile_events())
             .git_refresh(self.git_refresh())
@@ -148,6 +156,11 @@ impl AppStateBuilder {
 
     pub fn workspace_browser(mut self, workspace_browser: WorkspaceBrowserConfig) -> Self {
         self.workspace_browser = workspace_browser;
+        self
+    }
+
+    pub fn file_picker(mut self, file_picker: FilePickerConfig) -> Self {
+        self.file_picker = file_picker;
         self
     }
 
@@ -174,6 +187,7 @@ impl AppStateBuilder {
                     external_api_token: self.external_api_token,
                     graph: self.graph,
                     workspace_browser: self.workspace_browser,
+                    file_picker: self.file_picker,
                 },
                 events: EventState {
                     volatile_events: self.volatile_events,
@@ -226,5 +240,6 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
         .external_api_token(config.external_api_token.clone())
         .graph(config.graph.clone())
         .workspace_browser(config.workspace_browser.clone())
+        .file_picker(config.file_picker.clone())
         .build())
 }

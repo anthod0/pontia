@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Maximize2, Minimize2 } from '@lucide/svelte'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
+  import FileMentionTextarea from '$lib/components/file-picker/FileMentionTextarea.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
 
@@ -10,6 +11,7 @@
     submitDisabled?: boolean
     placeholder?: string
     busy?: boolean
+    workspaceId?: string | null
     onValueChange: (value: string) => void
     onSubmit: () => void
     onFocus?: () => void
@@ -21,6 +23,7 @@
     submitDisabled = false,
     placeholder = 'Send a follow-up message…',
     busy = false,
+    workspaceId = null,
     onValueChange,
     onSubmit,
     onFocus,
@@ -64,7 +67,7 @@
 <PromptInput.Root class="w-full" {onSubmit}>
   <PromptInput.Body>
     <div class="relative">
-      <PromptInput.Textarea bind:value {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class={`h-10 min-h-10 pr-10 md:h-auto ${expanded ? 'md:min-h-56' : 'md:min-h-20'}`} />
+      <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class={`h-10 min-h-10 pr-10 md:h-auto ${expanded ? 'md:min-h-56' : 'md:min-h-20'}`} />
       <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1" aria-label={expanded ? 'Collapse message composer' : 'Expand message composer'} onclick={toggleComposerSize}>
         {#if expanded}<Minimize2 class="size-4" />{:else}<Maximize2 class="size-4" />{/if}
       </Button>
@@ -90,7 +93,7 @@
 
     <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
       <PromptInput.Body class="min-h-0 flex-1">
-        <PromptInput.Textarea bind:value {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
+        <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
       </PromptInput.Body>
       <PromptInput.Toolbar class="shrink-0 justify-between">
         <p class="px-2 text-xs text-muted-foreground">Shift+Enter / Ctrl+Enter to send</p>

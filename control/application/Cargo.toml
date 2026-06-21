@@ -10,6 +10,8 @@ pontia-config = { path = "../config", default-features = false }
 pontia-core = { path = "../core", default-features = false }
 pontia-runtime = { path = "../runtime", default-features = false }
 pontia-storage-sqlite = { path = "../storage-sqlite" }
+ignore = "0.4"
+nucleo-matcher = "0.3"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sqlx.workspace = true

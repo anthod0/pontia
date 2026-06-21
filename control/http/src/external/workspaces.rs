@@ -20,6 +20,13 @@ pub struct WorkspaceEntriesQuery {
     path: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct FilePickerQuery {
+    #[serde(default, alias = "q")]
+    query: String,
+    limit: Option<usize>,
+}
+
 pub async fn list_workspaces(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -92,6 +99,28 @@ pub async fn list_workspace_root_entries(
         "parent_path": listing.parent_path,
         "entries": listing.entries,
         "warnings": listing.warnings,
+    })))
+}
+
+pub async fn pick_workspace_files(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<String>,
+    Query(query): Query<FilePickerQuery>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = WorkspaceBrowserService::with_file_picker(
+        state.db(),
+        state.workspace_browser(),
+        state.file_picker(),
+    );
+    let result = service
+        .pick_files(&workspace_id, &query.query, query.limit)
+        .await?;
+    Ok(ok(json!({
+        "files": result.files,
+        "truncated": result.truncated,
+        "warnings": result.warnings,
     })))
 }
 

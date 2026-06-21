@@ -99,7 +99,7 @@
         </DropdownMenu.Root>
       </div>
     </div>
-    <SessionMessageComposer bind:value={input} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} onValueChange={(value) => (input = value)} onSubmit={onSend} onFocus={onFocus} />
+    <SessionMessageComposer bind:value={input} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} onValueChange={(value) => (input = value)} onSubmit={onSend} onFocus={onFocus} />
     {#if !canAcceptWebInput}
       <p class="mt-2 text-xs text-muted-foreground">此 session 当前不可从 Web 写入</p>
     {:else if session.state === 'exited'}

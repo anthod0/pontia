@@ -1,6 +1,8 @@
 use std::{collections::HashMap, fs};
 
-use pontia_config::{AppConfig, RuntimeClientConfig, RuntimeConfig, config_path_from_args};
+use pontia_config::{
+    AppConfig, FilePickerConfig, RuntimeClientConfig, RuntimeConfig, config_path_from_args,
+};
 
 #[test]
 fn loads_config_from_key_value_source() {
@@ -56,6 +58,54 @@ fn loads_config_from_key_value_source() {
     assert_eq!(config.workspace_browser.roots[0].root_id, "projects");
     assert_eq!(config.workspace_browser.roots[0].label, "Projects");
     assert_eq!(config.workspace_browser.roots[0].path, "/home/me/projects");
+    assert_eq!(config.file_picker, FilePickerConfig::default());
+}
+
+#[test]
+fn file_picker_uses_built_in_defaults_when_not_configured() {
+    let config = AppConfig::from_vars(&HashMap::new()).expect("config should load");
+
+    assert!(config.file_picker.enabled);
+    assert_eq!(config.file_picker.min_query_chars, 0);
+    assert_eq!(config.file_picker.max_results, 100);
+    assert_eq!(config.file_picker.max_candidates, 100_000);
+    assert_eq!(config.file_picker.timeout_ms, 1_500);
+    assert!(config.file_picker.respect_gitignore);
+    assert!(config.file_picker.respect_ignore_files);
+    assert!(config.file_picker.respect_git_exclude);
+    assert!(!config.file_picker.include_hidden);
+    assert!(!config.file_picker.follow_symlinks);
+    assert!(
+        config
+            .file_picker
+            .ignore_globs
+            .contains(&"node_modules/**".to_string())
+    );
+}
+
+#[test]
+fn file_picker_config_file_overrides_only_specified_fields() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let config_path = dir.path().join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+[file_picker]
+include_hidden = true
+respect_gitignore = false
+ignore_globs = []
+"#,
+    )
+    .expect("write config");
+
+    let config = AppConfig::from_vars_and_file(&HashMap::new(), Some(&config_path))
+        .expect("config should load");
+
+    assert!(config.file_picker.include_hidden);
+    assert!(!config.file_picker.respect_gitignore);
+    assert!(config.file_picker.respect_ignore_files);
+    assert_eq!(config.file_picker.max_results, 100);
+    assert!(config.file_picker.ignore_globs.is_empty());
 }
 
 #[test]

@@ -45,5 +45,5 @@ pub use timeline::{get_session_timeline, get_session_timeline_detail};
 pub use turns::{get_turn, interrupt_turn, list_session_events, list_turn_events, list_turns};
 pub use workspaces::{
     delete_workspace, get_workspace, list_workspace_root_entries, list_workspace_roots,
-    list_workspaces, register_workspace, rename_workspace,
+    list_workspaces, pick_workspace_files, register_workspace, rename_workspace,
 };

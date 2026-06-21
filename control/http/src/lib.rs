@@ -107,6 +107,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             get(external::get_workspace_git_status),
         )
         .route(
+            "/external/v1/workspaces/{workspace_id}/file-picker",
+            get(external::pick_workspace_files),
+        )
+        .route(
             "/external/v1/workspaces/{workspace_id}/git-status/refresh",
             post(external::refresh_workspace_git_status),
         )

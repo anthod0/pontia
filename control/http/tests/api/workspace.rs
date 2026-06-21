@@ -4,7 +4,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_application::{
-    AppState, GraphRuntimeConfig, WorkspaceBrowserConfig, WorkspaceRootConfig,
+    AppState, FilePickerConfig, GraphRuntimeConfig, WorkspaceBrowserConfig, WorkspaceRootConfig,
 };
 use pontia_http as http;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
@@ -16,6 +16,13 @@ use crate::generic_client::GenericClientTestScope;
 const TOKEN: &str = "test-token";
 
 async fn test_state(roots: Vec<WorkspaceRootConfig>) -> AppState {
+    test_state_with_file_picker(roots, FilePickerConfig::default()).await
+}
+
+async fn test_state_with_file_picker(
+    roots: Vec<WorkspaceRootConfig>,
+    file_picker: FilePickerConfig,
+) -> AppState {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("workspace_api.db");
     let _kept_dir = dir.keep();
@@ -26,6 +33,7 @@ async fn test_state(roots: Vec<WorkspaceRootConfig>) -> AppState {
         .external_api_token(Some(TOKEN.to_string()))
         .graph(GraphRuntimeConfig::default())
         .workspace_browser(WorkspaceBrowserConfig { roots })
+        .file_picker(file_picker)
         .build()
 }
 
@@ -223,6 +231,101 @@ async fn refreshing_git_status_updates_sqlite_projection_read_by_get() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["git_status"], *refreshed);
+}
+
+#[tokio::test]
+async fn file_picker_returns_fuzzy_workspace_relative_files_and_respects_ignore_config() {
+    let root = tempfile::tempdir().expect("root");
+    let app = root.path().join("app");
+    std::fs::create_dir_all(app.join("src")).expect("src");
+    std::fs::create_dir_all(app.join("node_modules/pkg")).expect("node_modules");
+    std::fs::write(app.join("src/main.rs"), "fn main() {}\n").expect("main");
+    std::fs::write(app.join("README.md"), "hello\n").expect("readme");
+    std::fs::write(
+        app.join("node_modules/pkg/index.js"),
+        "module.exports = {}\n",
+    )
+    .expect("dep");
+    let state = test_state(vec![WorkspaceRootConfig {
+        root_id: "projects".to_string(),
+        label: "Projects".to_string(),
+        path: root.path().display().to_string(),
+    }])
+    .await;
+    let (_, body) = post_json(
+        state.clone(),
+        "/external/v1/workspaces",
+        json!({"root_id":"projects", "path":"app"}),
+    )
+    .await;
+    let workspace_id = body["data"]["workspace"]["workspace_id"].as_str().unwrap();
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/workspaces/{workspace_id}/file-picker?query=main"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let files = body["data"]["files"].as_array().expect("files");
+    assert_eq!(files[0]["path"], "src/main.rs");
+    assert_eq!(files[0]["name"], "main.rs");
+    assert!(
+        files
+            .iter()
+            .all(|file| file["path"] != "node_modules/pkg/index.js")
+    );
+}
+
+#[tokio::test]
+async fn file_picker_can_include_hidden_and_normally_ignored_files_from_config() {
+    let root = tempfile::tempdir().expect("root");
+    let app = root.path().join("app");
+    std::fs::create_dir_all(app.join(".git/refs")).expect("git");
+    std::fs::create_dir_all(app.join("node_modules/pkg")).expect("node_modules");
+    std::fs::write(app.join(".git/HEAD"), "ref: refs/heads/main\n").expect("head");
+    std::fs::write(
+        app.join("node_modules/pkg/index.js"),
+        "module.exports = {}\n",
+    )
+    .expect("dep");
+    let mut file_picker = FilePickerConfig::default();
+    file_picker.include_hidden = true;
+    file_picker.respect_gitignore = false;
+    file_picker.respect_ignore_files = false;
+    file_picker.respect_git_exclude = false;
+    file_picker.ignore_globs = vec![];
+    let state = test_state_with_file_picker(
+        vec![WorkspaceRootConfig {
+            root_id: "projects".to_string(),
+            label: "Projects".to_string(),
+            path: root.path().display().to_string(),
+        }],
+        file_picker,
+    )
+    .await;
+    let (_, body) = post_json(
+        state.clone(),
+        "/external/v1/workspaces",
+        json!({"root_id":"projects", "path":"app"}),
+    )
+    .await;
+    let workspace_id = body["data"]["workspace"]["workspace_id"].as_str().unwrap();
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/workspaces/{workspace_id}/file-picker?query=head"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let paths: Vec<_> = body["data"]["files"]
+        .as_array()
+        .expect("files")
+        .iter()
+        .map(|file| file["path"].as_str().unwrap().to_string())
+        .collect();
+    assert!(paths.contains(&".git/HEAD".to_string()), "paths: {paths:?}");
 }
 
 #[tokio::test]
