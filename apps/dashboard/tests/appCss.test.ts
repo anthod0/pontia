@@ -17,6 +17,11 @@ test('defines subtle themed global scrollbar styling', () => {
   expect(appCss).toContain('--scrollbar-thumb: color-mix(in oklch, var(--border) 75%, transparent)');
 });
 
+test('uses small viewport height for app roots to avoid mobile browser chrome overflow', () => {
+  expect(appCss).toContain('min-height: 100svh');
+  expect(appCss).not.toContain('min-height: 100vh');
+});
+
 test('defines a reusable no-scrollbar utility for scrollable sidebar regions', () => {
   expect(appCss).toContain('.no-scrollbar {');
   expect(appCss).toContain('scrollbar-width: none');

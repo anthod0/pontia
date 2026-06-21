@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
 import AppSidebarHost from './components/layout/AppSidebarHost.svelte';
@@ -6,6 +8,8 @@ import TopBarHost from './components/layout/TopBarHost.svelte';
 import SettingsShellHost from './components/settings/SettingsShellHost.svelte';
 import SettingsCommonPage from '../src/pages/SettingsCommonPage.svelte';
 import { routerConf } from '../src/routes';
+
+const chatPageSource = readFileSync(resolve(__dirname, '../src/pages/ChatPage.svelte'), 'utf8');
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -311,6 +315,12 @@ test('settings common page contains controls without owning the section switcher
   expect(screen.getByRole('button', { name: /save token/i })).toBeInTheDocument();
   expect(screen.getByText(/live stream/i)).toBeInTheDocument();
   expect(screen.queryByRole('navigation', { name: /settings sections/i })).not.toBeInTheDocument();
+});
+
+test('new chat route uses small viewport units to avoid mobile browser chrome overflow', () => {
+  expect(chatPageSource).toContain('min-h-[calc(100svh-5.5rem)]');
+  expect(chatPageSource).toContain('md:min-h-[calc(100svh-6.5rem)]');
+  expect(chatPageSource).not.toContain('min-h-[calc(100vh-');
 });
 
 test('chat app shell reserves composer space only for session chat routes', () => {

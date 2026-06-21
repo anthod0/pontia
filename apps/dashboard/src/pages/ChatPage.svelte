@@ -552,7 +552,7 @@
   }
 </script><svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
-<section class={selectedSessionId ? 'flex flex-col gap-4 pb-40' : 'flex min-h-[calc(100vh-9.5rem)] flex-col'}>
+<section class={selectedSessionId ? 'flex flex-col gap-4 pb-40' : 'flex min-h-[calc(100svh-5.5rem)] flex-col md:min-h-[calc(100svh-6.5rem)]'}>
   {#if !selectedSessionId}
     <NewChatPanel
       bind:prompt
