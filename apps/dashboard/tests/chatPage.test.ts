@@ -136,7 +136,7 @@ test('chat composer metadata uses the compact summary for all viewports', async 
   const toolbar = await screen.findByLabelText('Session status and controls');
   const metadata = within(toolbar).getByTestId('session-status-mobile-metadata');
 
-  expect(within(toolbar).getByLabelText('Session state: idle')).toBeInTheDocument();
+  expect(within(toolbar).queryByLabelText('Session state: idle')).not.toBeInTheDocument();
   expect(within(toolbar).queryByText('idle')).not.toBeInTheDocument();
   expect(within(toolbar).queryByTestId('session-status-desktop-metadata')).not.toBeInTheDocument();
   const detailsButton = within(metadata).getByRole('button', { name: 'Session details: project · pi' });
@@ -254,16 +254,15 @@ test('chat refreshes workspace git status when the selected session becomes idle
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
 });
 
-test('chat composer session status pill uses semantic color classes', async () => {
+test('chat composer omits the separate session status pill', async () => {
   mocks.sessions.update((sessions) => sessions.map((session) => ({ ...session, state: 'busy' })));
   mocks.sessionDetail.update((detail) => detail ? { ...detail, session: { ...detail.session, state: 'busy' } } : detail);
 
   render(ChatPage);
 
   const toolbar = await screen.findByLabelText('Session status and controls');
-  const statusBadge = within(toolbar).getByLabelText('Session state: busy');
-  expect(statusBadge).toHaveClass('border-amber-500/30', 'bg-amber-500/10', 'text-amber-700');
-  expect(within(statusBadge).queryByText('busy')).not.toBeInTheDocument();
+  expect(within(toolbar).queryByLabelText('Session state: busy')).not.toBeInTheDocument();
+  expect(within(toolbar).queryByText('busy')).not.toBeInTheDocument();
 });
 
 test('advanced controls menu opens above when there is not enough space below', async () => {

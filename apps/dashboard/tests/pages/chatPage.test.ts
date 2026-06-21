@@ -506,7 +506,7 @@ test('shows new chat keyboard hint and submits with Shift Enter while preserving
   render(ChatPage);
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  expect(screen.getByText('Shift+Enter / Ctrl+Enter to send · Enter for newline')).toBeInTheDocument();
+  expect(screen.getByText('Shift+Enter / Ctrl+Enter to send')).toBeInTheDocument();
 
   await user.type(promptInput, 'Line one');
   expect(await fireEvent.keyDown(promptInput, { key: 'Enter' })).toBe(true);
@@ -955,7 +955,8 @@ test('mobile composer resize button opens a fullscreen follow-up composer sharin
     const fullscreenComposer = screen.getByRole('dialog', { name: 'Expanded message composer' });
     const fullscreenInput = within(fullscreenComposer).getByPlaceholderText('Send a follow-up message…');
     expect(fullscreenInput).toHaveValue('mobile draft');
-    expect(fullscreenInput).toHaveClass('min-h-[calc(100vh-12rem)]');
+    expect(fullscreenInput).toHaveClass('h-full');
+    expect(fullscreenInput).toHaveClass('min-h-0');
 
     await user.type(fullscreenInput, ' plus more');
     await fireEvent.click(within(fullscreenComposer).getByRole('button', { name: /send/i }));
@@ -1496,7 +1497,7 @@ test('follow-up composer submits with Shift Enter while preserving Enter for new
   render(ChatPage);
 
   const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
-  expect(screen.getByText('Shift+Enter / Ctrl+Enter to send · Enter for newline')).toBeInTheDocument();
+  expect(screen.getByText('Shift+Enter / Ctrl+Enter to send')).toBeInTheDocument();
 
   await user.type(followUpInput, 'continue this session');
   expect(await fireEvent.keyDown(followUpInput, { key: 'Enter' })).toBe(true);
