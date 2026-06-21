@@ -24,9 +24,14 @@
     return path === '/dashboard/chat' || path.startsWith('/dashboard/chat/')
   }
 
+  function isChatSessionPath(path: string): boolean {
+    return path.startsWith('/dashboard/chat/')
+  }
+
   const settingsPath = $derived(isSettingsPath(currentPath))
   const chatPath = $derived(isChatPath(currentPath))
-  const mainClass = $derived(settingsPath ? 'flex-1 bg-muted/20' : chatPath ? 'flex-1 bg-muted/20 p-4 pb-40 md:p-6 md:pb-44' : 'flex-1 bg-muted/20 p-4 md:p-6')
+  const chatSessionPath = $derived(isChatSessionPath(currentPath))
+  const mainClass = $derived(settingsPath ? 'flex-1 bg-muted/20' : chatSessionPath ? 'flex-1 bg-muted/20 p-4 pb-40 md:p-6 md:pb-44' : chatPath ? 'flex-1 bg-muted/20 p-4 md:p-6' : 'flex-1 bg-muted/20 p-4 md:p-6')
   const contentClass = $derived(settingsPath ? 'w-full' : 'mx-auto w-full max-w-7xl')
 </script>
 

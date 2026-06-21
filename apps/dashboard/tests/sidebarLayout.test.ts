@@ -313,18 +313,28 @@ test('settings common page contains controls without owning the section switcher
   expect(screen.queryByRole('navigation', { name: /settings sections/i })).not.toBeInTheDocument();
 });
 
-test('chat app shell allows document scrolling for chat routes', () => {
+test('chat app shell reserves composer space only for session chat routes', () => {
   window.history.pushState({}, '', '/dashboard/chat/session-2');
 
+  const { unmount } = render(AppShellHost);
+
+  const sessionMain = screen.getByText('App shell page content').closest('main');
+  expect(sessionMain).not.toBeNull();
+  expect(sessionMain).not.toHaveClass('min-h-0');
+  expect(sessionMain).not.toHaveClass('overflow-hidden');
+  expect(sessionMain).toHaveClass('pb-40');
+  expect(sessionMain?.firstElementChild).not.toHaveClass('h-full');
+  expect(sessionMain?.firstElementChild).not.toHaveClass('min-h-0');
+
+  unmount();
+  window.history.pushState({}, '', '/dashboard/chat');
   render(AppShellHost);
 
-  const contentMain = screen.getByText('App shell page content').closest('main');
-  expect(contentMain).not.toBeNull();
-  expect(contentMain).not.toHaveClass('min-h-0');
-  expect(contentMain).not.toHaveClass('overflow-hidden');
-  expect(contentMain).toHaveClass('pb-40');
-  expect(contentMain?.firstElementChild).not.toHaveClass('h-full');
-  expect(contentMain?.firstElementChild).not.toHaveClass('min-h-0');
+  const newChatMain = screen.getByText('App shell page content').closest('main');
+  expect(newChatMain).not.toBeNull();
+  expect(newChatMain).toHaveClass('p-4');
+  expect(newChatMain).not.toHaveClass('pb-40');
+  expect(newChatMain).not.toHaveClass('md:pb-44');
 });
 
 test('settings app shell removes centered main chrome so the settings nav can align left', () => {
