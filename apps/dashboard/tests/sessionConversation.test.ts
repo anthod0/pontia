@@ -63,6 +63,18 @@ test('conversation hides the agent status component while the session is idle', 
   expect(screen.queryByText('Agent idle')).not.toBeInTheDocument();
 });
 
+test('conversation renders exited status as a terminal divider after the conversation', () => {
+  render(SessionConversation, { props: { sessionState: 'exited', messages } });
+
+  expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
+  expect(screen.queryByText('Session exited')).not.toBeInTheDocument();
+
+  const terminalStatus = screen.getByText('session exited');
+  expect(terminalStatus).toBeInTheDocument();
+  expect(terminalStatus.closest('[data-chat-session-terminal-status]')).toBeInTheDocument();
+  expect(screen.getByText('I will inspect it now.').compareDocumentPosition(terminalStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 test('conversation copies assistant reply content with the http-compatible fallback', async () => {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
   document.execCommand = vi.fn().mockReturnValue(true);
