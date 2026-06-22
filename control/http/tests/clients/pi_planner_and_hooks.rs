@@ -465,6 +465,61 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
 }
 
 #[tokio::test]
+async fn pi_current_turn_claim_returns_pending_turn_once() {
+    let workspace = tempfile::tempdir().expect("workspace");
+    let state = test_state("pi_current_turn_claim").await;
+    let session_id = create_pi_session(state.clone(), workspace.path()).await;
+    let metadata = binding_metadata(&state, &session_id).await;
+    let tmux_session = metadata["tmux_session"]
+        .as_str()
+        .expect("tmux session")
+        .to_string();
+
+    let inbox = submit_pi_turn(state.clone(), &session_id, "claim context for hook").await;
+    let (status, body) = request_json(
+        state.clone(),
+        "POST",
+        &format!("/internal/v1/sessions/{session_id}/current-turn/claim"),
+        Some(json!({
+            "client_type": "pi",
+            "runtime_instance_id": metadata["runtime_instance_id"]
+        })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let current_turn = &body["data"]["current_turn"];
+    assert_eq!(current_turn["session_id"], session_id);
+    assert!(current_turn.get("turn_id").is_none());
+    assert_eq!(current_turn["input"], "claim context for hook");
+    assert_eq!(current_turn["inbox_message_id"], inbox["message_id"]);
+    assert_eq!(current_turn["client_type"], "pi");
+    assert_eq!(
+        current_turn["runtime_instance_id"],
+        metadata["runtime_instance_id"]
+    );
+    assert_eq!(
+        current_turn["internal_event_url"],
+        "http://127.0.0.1:9/internal/v1/events"
+    );
+
+    let (second_status, second_body) = request_json(
+        state,
+        "POST",
+        &format!("/internal/v1/sessions/{session_id}/current-turn/claim"),
+        Some(json!({
+            "client_type": "pi",
+            "runtime_instance_id": metadata["runtime_instance_id"]
+        })),
+    )
+    .await;
+    assert_eq!(second_status, StatusCode::OK, "{second_body:?}");
+    assert!(second_body["data"]["current_turn"].is_null());
+
+    cleanup_tmux(&tmux_session);
+}
+
+#[tokio::test]
 async fn pi_runtime_exports_real_hook_environment() {
     let workspace = tempfile::tempdir().expect("workspace");
     let state = test_state("pi_hook_environment").await;

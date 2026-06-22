@@ -90,6 +90,17 @@ impl SqliteRuntimeBindingRepository {
         )
     }
 
+    pub async fn update_metadata(&self, session_id: &str, metadata: &str) -> Result<bool> {
+        let result = sqlx::query(
+            "UPDATE runtime_bindings SET metadata = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
+        )
+        .bind(metadata)
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
     pub async fn runtime_instance_id(&self, session_id: &str) -> Result<Option<String>> {
         Ok(sqlx::query_scalar::<_, Option<String>>(
             "SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?",

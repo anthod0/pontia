@@ -3,6 +3,58 @@ use pontia_agent_clients as agent_clients;
 use pontia_agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec};
 use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct CurrentTurnClaimRequest {
+    pub runtime_instance_id: String,
+    pub client_type: String,
+}
+
+#[derive(Clone)]
+pub struct CurrentTurnClaimService {
+    pool: SqlitePool,
+}
+
+impl CurrentTurnClaimService {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn claim(
+        &self,
+        session_id: &str,
+        request: CurrentTurnClaimRequest,
+    ) -> Result<Option<Value>> {
+        let repo = SqliteRuntimeBindingRepository::new(self.pool.clone());
+        let Some(metadata_json) = repo.metadata(session_id).await? else {
+            return Err(Error::NotFound(format!(
+                "runtime binding for session {session_id} not found"
+            )));
+        };
+        let mut metadata: Value = serde_json::from_str(&metadata_json)?;
+        if metadata["runtime_instance_id"].as_str() != Some(request.runtime_instance_id.as_str()) {
+            return Err(Error::StateConflict(
+                "runtime_instance_id does not match active runtime binding".to_string(),
+            ));
+        }
+        let pending = metadata
+            .get("pending_current_turn")
+            .cloned()
+            .filter(|value| {
+                value.is_object()
+                    && value["client_type"].as_str() == Some(request.client_type.as_str())
+            });
+        if pending.is_none() {
+            return Ok(None);
+        }
+        if let Some(object) = metadata.as_object_mut() {
+            object.remove("pending_current_turn");
+        }
+        repo.update_metadata(session_id, &serde_json::to_string(&metadata)?)
+            .await?;
+        Ok(pending)
+    }
+}
+
 #[derive(Clone)]
 pub struct TurnCommandService {
     pool: SqlitePool,
@@ -85,6 +137,15 @@ impl TurnCommandService {
             )
             .await?;
             if client_spec.adapter.turn_context == TurnContextBehavior::CurrentTurnFile {
+                store_client_current_turn_context(
+                    self.pool.clone(),
+                    session_id,
+                    &binding_metadata,
+                    &agent_input,
+                    &session.client_type,
+                    Some(&metadata),
+                )
+                .await?;
                 write_client_current_turn_context(
                     &binding_metadata,
                     &agent_input,
@@ -312,6 +373,23 @@ struct TmuxPaneBinding {
     pane_id: String,
 }
 
+async fn store_client_current_turn_context(
+    pool: SqlitePool,
+    session_id: &str,
+    metadata: &Value,
+    input: &AgentInput,
+    client_type: &str,
+    turn_metadata: Option<&Value>,
+) -> Result<()> {
+    let mut metadata = metadata.clone();
+    let context = client_current_turn_context(&metadata, input, client_type, turn_metadata)?;
+    metadata["pending_current_turn"] = context;
+    SqliteRuntimeBindingRepository::new(pool)
+        .update_metadata(session_id, &serde_json::to_string(&metadata)?)
+        .await?;
+    Ok(())
+}
+
 pub(crate) fn write_client_current_turn_context(
     metadata: &Value,
     input: &AgentInput,
@@ -334,6 +412,17 @@ pub(crate) fn write_client_current_turn_context(
     if let Some(parent) = current_turn_file.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    let context = client_current_turn_context(metadata, input, client_type, turn_metadata)?;
+    std::fs::write(current_turn_file, serde_json::to_vec_pretty(&context)?)?;
+    Ok(())
+}
+
+fn client_current_turn_context(
+    metadata: &Value,
+    input: &AgentInput,
+    client_type: &str,
+    turn_metadata: Option<&Value>,
+) -> Result<Value> {
     let internal_event_url = metadata["internal_event_url"]
         .as_str()
         .map(ToString::to_string)
@@ -363,8 +452,7 @@ pub(crate) fn write_client_current_turn_context(
     {
         context["inbox_message_id"] = json!(inbox_message_id);
     }
-    std::fs::write(current_turn_file, serde_json::to_vec_pretty(&context)?)?;
-    Ok(())
+    Ok(context)
 }
 
 #[cfg(test)]

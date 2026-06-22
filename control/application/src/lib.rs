@@ -105,7 +105,7 @@ pub use sessions::{
 };
 pub use state::{AppState, initialize};
 pub use tasks::{CreateDagTaskRequest, CreateTaskOutcome, HumanSignalRequest, TaskCommandService};
-pub use turns::TurnCommandService;
+pub use turns::{CurrentTurnClaimRequest, CurrentTurnClaimService, TurnCommandService};
 pub use views::*;
 pub use workspaces::{
     FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,

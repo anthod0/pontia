@@ -35,6 +35,54 @@ describe("loadTurnContext", () => {
     expect(defaultHookLogFile({ PONTIA_WORKSPACE: "/project" })).toBe(join(fallbackDir, "pi-hook.log"));
   });
 
+  test("claims current turn from internal API when session context is available", async () => {
+    const workspace = await tempWorkspace();
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          data: {
+            current_turn: {
+              session_id: "sess_api",
+              input: "from web ui",
+              inbox_message_id: "msg_api",
+              client_type: "pi",
+              runtime_instance_id: "rtinst_api",
+              internal_event_url: "http://from-api/internal/v1/events",
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const result = await loadTurnContext(
+      {
+        PONTIA_WORKSPACE: workspace,
+        PONTIA_SESSION_ID: "sess_api",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_api",
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+      },
+      { fetch: fetchImpl },
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("http://localhost/internal/v1/sessions/sess_api/current-turn/claim");
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected context");
+    expect(result.context).toMatchObject({
+      sessionId: "sess_api",
+      turnId: undefined,
+      clientType: "pi",
+      internalEventUrl: "http://localhost/internal/v1/events",
+      runtimeInstanceId: "rtinst_api",
+      input: "from web ui",
+      inboxMessageId: "msg_api",
+    });
+  });
+
   test("loads required turn ids and lets environment event URL override file URL", async () => {
     const workspace = await tempWorkspace();
     const contextFile = join(workspace, "turn.json");

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use axum::{
     Json,
-    extract::{State, rejection::JsonRejection},
+    extract::{Path, State, rejection::JsonRejection},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -11,8 +11,8 @@ use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use pontia_application::{
-    AppState, EventIngestService, InternalEventValidationService, RuntimeBindingUpsertRequest,
-    RuntimeBindingUpsertService,
+    AppState, CurrentTurnClaimRequest, CurrentTurnClaimService, EventIngestService,
+    InternalEventValidationService, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
 };
 use pontia_core::{
     domain::{DomainEvent, EventSource, EventType},
@@ -55,6 +55,18 @@ pub async fn upsert_runtime_binding(
         .upsert(request)
         .await?;
     Ok(Json(response))
+}
+
+pub async fn claim_current_turn(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    request: Result<Json<CurrentTurnClaimRequest>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
+    let current_turn = CurrentTurnClaimService::new(state.db())
+        .claim(&session_id, request)
+        .await?;
+    Ok(Json(json!({ "data": { "current_turn": current_turn } })))
 }
 
 pub async fn post_event(

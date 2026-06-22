@@ -72,6 +72,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             post(internal::upsert_runtime_binding),
         )
         .route(
+            "/internal/v1/sessions/{session_id}/current-turn/claim",
+            post(internal::claim_current_turn),
+        )
+        .route(
             "/internal/v1/agent-tools/{tool_name}",
             post(internal_agent_tools::post_agent_tool),
         )
