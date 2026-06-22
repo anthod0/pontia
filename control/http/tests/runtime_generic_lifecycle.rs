@@ -199,8 +199,7 @@ async fn observe_missing_generic_runtime_fails_active_turn() {
     let scope = GenericClientTestScope::new()
         .await
         .with_capabilities(AgentClientCapabilities::pi_m0_default())
-        .auto_start_turn()
-        .write_current_turn_context();
+        .auto_start_turn();
     let state = test_state("generic_observe_turn_failed").await;
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;

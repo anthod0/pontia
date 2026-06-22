@@ -195,7 +195,6 @@ mod tests {
             runtime_dir,
             log_path: &runtime_dir.join("runtime.log"),
             adapter_event_log: &runtime_dir.join("adapter-events.jsonl"),
-            current_turn_file: Some(&runtime_dir.join("current-turn.json")),
         };
 
         script::write_launch_script(

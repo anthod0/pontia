@@ -46,7 +46,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct InProcessRecordedDispatchBehavior {
     pub auto_start_turn: bool,
-    pub write_current_turn_context: bool,
 }
 
 #[derive(Debug, Default, Clone)]

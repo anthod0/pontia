@@ -148,23 +148,6 @@ impl TurnCommandService {
                     )
                     .await?;
                 }
-                TurnContextBehavior::CurrentTurnFile => {
-                    store_client_current_turn_context(
-                        self.pool.clone(),
-                        session_id,
-                        &binding_metadata,
-                        &agent_input,
-                        &session.client_type,
-                        Some(&metadata),
-                    )
-                    .await?;
-                    write_client_current_turn_context(
-                        &binding_metadata,
-                        &agent_input,
-                        &session.client_type,
-                        Some(&metadata),
-                    )?;
-                }
                 TurnContextBehavior::Disabled => {}
             }
             self.runtime.dispatch_tui_turn(
@@ -219,16 +202,6 @@ impl TurnCommandService {
                             session.client_type
                         ))
                     })?;
-            if behavior.write_current_turn_context
-                && let Some(binding_metadata) = self.runtime_binding_metadata(session_id).await?
-            {
-                write_client_current_turn_context(
-                    &binding_metadata,
-                    &agent_input,
-                    &session.client_type,
-                    Some(&metadata),
-                )?;
-            }
             self.runtime
                 .submit_input(&session.client_type, agent_input.clone())?;
             if behavior.auto_start_turn {
@@ -275,14 +248,6 @@ impl TurnCommandService {
                             match client_spec.adapter.turn_context {
                                 TurnContextBehavior::InternalApiClaim => {
                                     // Pending context for claim-based clients is stored before dispatch.
-                                }
-                                TurnContextBehavior::CurrentTurnFile => {
-                                    write_client_current_turn_context(
-                                        &binding_metadata,
-                                        &agent_input,
-                                        &session.client_type,
-                                        Some(&metadata),
-                                    )?;
                                 }
                                 TurnContextBehavior::Disabled => {}
                             }
@@ -419,33 +384,6 @@ pub(crate) async fn store_client_current_turn_context(
     Ok(())
 }
 
-pub(crate) fn write_client_current_turn_context(
-    metadata: &Value,
-    input: &AgentInput,
-    client_type: &str,
-    turn_metadata: Option<&Value>,
-) -> Result<()> {
-    let current_turn_file = metadata["current_turn_file"]
-        .as_str()
-        .map(PathBuf::from)
-        .or_else(|| {
-            metadata["runtime_dir"]
-                .as_str()
-                .map(|runtime_dir| Path::new(runtime_dir).join("current-turn.json"))
-        })
-        .ok_or_else(|| {
-            Error::Domain(format!(
-                "{client_type} runtime metadata missing current_turn_file"
-            ))
-        })?;
-    if let Some(parent) = current_turn_file.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let context = client_current_turn_context(metadata, input, client_type, turn_metadata)?;
-    std::fs::write(current_turn_file, serde_json::to_vec_pretty(&context)?)?;
-    Ok(())
-}
-
 fn client_current_turn_context(
     metadata: &Value,
     input: &AgentInput,
@@ -547,39 +485,6 @@ mod tests {
             .expect("ingest event");
     }
 
-    #[test]
-    fn pi_current_turn_context_omits_backend_turn_id() {
-        let runtime_dir = tempfile::tempdir().expect("runtime dir");
-        let current_turn_file = runtime_dir.path().join("current-turn.json");
-        let input = AgentInput {
-            session_id: "sess_plugin_owned".to_string(),
-            turn_id: "turn_backend_should_not_escape".to_string(),
-            input: "hello".to_string(),
-        };
-
-        write_client_current_turn_context(
-            &json!({
-                "current_turn_file": current_turn_file.display().to_string(),
-                "runtime_instance_id": "rtinst_plugin_owned",
-                "internal_event_url": "http://127.0.0.1:8080/internal/v1/events",
-            }),
-            &input,
-            "pi",
-            None,
-        )
-        .expect("write context");
-
-        let context: Value =
-            serde_json::from_slice(&std::fs::read(&current_turn_file).expect("read context"))
-                .expect("json context");
-        assert_eq!(context["session_id"], "sess_plugin_owned");
-        assert_eq!(context["input"], "hello");
-        assert!(
-            context.get("turn_id").is_none(),
-            "pi plugin must generate the authoritative turn id"
-        );
-    }
-
     #[tokio::test]
     async fn pi_tmux_turn_dispatch_requires_bound_tmux_pane_before_creating_turn() {
         let pool = test_pool().await;
@@ -619,7 +524,6 @@ mod tests {
         .bind(runtime_instance_id)
         .bind(json!({
             "runtime_instance_id": runtime_instance_id,
-            "current_turn_file": "/tmp/unused-current-turn.json",
             "capabilities": {
                 "accept_task": true,
                 "report_turn_started": true,
@@ -658,8 +562,6 @@ mod tests {
         let _guard = TmuxSessionGuard {
             tmux_session: tmux_session_name.clone(),
         };
-        let runtime_dir = tempfile::tempdir().expect("runtime dir");
-        let current_turn_file = runtime_dir.path().join("current-turn.json");
         let runtime_instance_id = "rtinst_wait_for_ready";
 
         let status = Command::new("tmux")
@@ -737,7 +639,6 @@ mod tests {
         .bind(json!({
             "runtime_instance_id": runtime_instance_id,
             "tmux": { "session_name": tmux_session_name },
-            "current_turn_file": current_turn_file.display().to_string(),
             "capabilities": {
                 "accept_task": true,
                 "report_turn_started": true,

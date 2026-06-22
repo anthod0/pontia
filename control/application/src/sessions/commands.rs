@@ -176,7 +176,6 @@ impl SessionCommandService {
                         &turn_id,
                         &request.client_type,
                         &initial_task.input,
-                        &runtime,
                     )
                     .await?;
                 }

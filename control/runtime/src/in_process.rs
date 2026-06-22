@@ -38,12 +38,10 @@ pub(super) fn start_session(
     std::fs::create_dir_all(&runtime_dir)?;
     let log_path = runtime_dir.join("runtime.log");
     let adapter_event_log = runtime_dir.join("adapter-events.jsonl");
-    let current_turn_file = runtime_dir.join("current-turn.json");
     std::fs::File::create(&log_path)?;
     let runtime_dir = runtime_dir.display().to_string();
     let log_path = log_path.display().to_string();
     let adapter_event_log = adapter_event_log.display().to_string();
-    let current_turn_file = current_turn_file.display().to_string();
     let runtime_handle = runtime_handle(&request);
     registry()
         .lock()
@@ -66,7 +64,6 @@ pub(super) fn start_session(
             "runtime_log": log_path,
             "log_path": log_path,
             "adapter_event_log": adapter_event_log,
-            "current_turn_file": current_turn_file,
             "launch_cwd": request.workspace,
             "internal_event_url": "in-process://internal-events",
             "handle": request.handle,

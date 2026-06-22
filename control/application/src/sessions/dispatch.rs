@@ -2,7 +2,7 @@ use super::*;
 use pontia_agent_clients as agent_clients;
 use pontia_agent_clients::{TurnContextBehavior, get_client_spec};
 
-use crate::turns::{store_client_current_turn_context, write_client_current_turn_context};
+use crate::turns::store_client_current_turn_context;
 
 impl SessionCommandService {
     pub(super) async fn dispatch_initial_generic_turn(
@@ -11,7 +11,6 @@ impl SessionCommandService {
         turn_id: &str,
         client_type: &str,
         input: &str,
-        runtime: &RuntimeStartResult,
     ) -> Result<()> {
         let agent_input = AgentInput {
             session_id: session_id.to_string(),
@@ -24,9 +23,6 @@ impl SessionCommandService {
                     "{client_type} does not support in-process recorded dispatch"
                 ))
             })?;
-        if behavior.write_current_turn_context {
-            write_client_current_turn_context(&runtime.metadata, &agent_input, client_type, None)?;
-        }
         self.runtime.submit_input(client_type, agent_input)?;
         if behavior.auto_start_turn {
             EventIngestService::new(self.pool.clone())
@@ -85,17 +81,6 @@ impl SessionCommandService {
             }
             other => other,
         }
-        .and_then(|()| {
-            if turn_context == TurnContextBehavior::CurrentTurnFile {
-                write_client_current_turn_context(
-                    &runtime.metadata,
-                    &agent_input,
-                    client_type,
-                    None,
-                )?;
-            }
-            Ok(())
-        })
         .and_then(|()| {
             let socket_path = runtime.tmux_socket_path().ok_or_else(|| {
                 Error::Domain(format!(

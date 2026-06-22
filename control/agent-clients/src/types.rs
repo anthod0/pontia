@@ -121,7 +121,6 @@ pub enum TerminateBehavior {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TurnContextBehavior {
     Disabled,
-    CurrentTurnFile,
     InternalApiClaim,
 }
 

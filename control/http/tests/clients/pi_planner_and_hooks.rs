@@ -434,7 +434,6 @@ async fn pi_dispatch_stores_pending_current_turn_without_writing_context_file() 
     assert!(inbox["turn_id"].is_null());
 
     assert!(!workspace.path().join(".pontia").exists());
-    assert!(metadata.get("current_turn_file").is_none());
     let updated_metadata = binding_metadata(&state, &session_id).await;
     let context = &updated_metadata["pending_current_turn"];
     assert_eq!(context["session_id"], session_id);
@@ -530,7 +529,6 @@ async fn pi_runtime_exports_real_hook_environment() {
         !PathBuf::from(runtime_dir).join("runtime.sh").exists(),
         "runtime.sh must not be a stable runtime artifact"
     );
-    assert!(metadata.get("current_turn_file").is_none());
     assert!(
         !metadata["internal_event_url"]
             .as_str()

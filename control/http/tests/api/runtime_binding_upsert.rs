@@ -135,7 +135,6 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
             .unwrap()
             .ends_with("/internal/v1/events")
     );
-    assert!(body["runtime"].get("current_turn_file").is_none());
     assert_eq!(body["runtime"]["capabilities"]["accept_task"], true);
     assert_eq!(body["runtime"]["capabilities"]["interrupt"], true);
     assert_eq!(body["runtime"]["capabilities"]["stream_output"], true);

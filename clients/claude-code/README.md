@@ -1,6 +1,6 @@
 # pontia Claude Code plugin
 
-Reports Claude Code startup readiness and confirmed turn facts to pontia through `/internal/v1/events`.
+Reports Claude Code startup readiness to pontia through `/internal/v1/events`.
 
 ## Installation
 
@@ -33,6 +33,6 @@ pnpm test
 pnpm typecheck
 ```
 
-On `SessionStart` startup, the hook reads `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_INTERNAL_EVENT_URL` to post a one-time `session.ready` signal from `agent_client`.
+On `SessionStart` startup, the hook reads `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_CLAUDE_HOOK_LOG` to post a one-time `session.ready` signal from `agent_client`.
 
-For turn completion hooks, it reads `PONTIA_CURRENT_TURN_FILE`, posts to `PONTIA_INTERNAL_EVENT_URL` or the context file URL, and writes JSONL diagnostics to `PONTIA_CLAUDE_HOOK_LOG`.
+Claude Code turn hooks are currently disabled. The plugin does not use runtime directory defaults or file-based turn handoff.

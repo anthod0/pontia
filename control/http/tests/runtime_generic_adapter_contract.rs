@@ -226,7 +226,7 @@ async fn capability_model_declares_default_generic_adapter_capabilities() {
 async fn generic_initial_task_dispatches_in_process() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state("generic_contract_in_process_initial_task").await;
-    let _scope = _scope.auto_start_turn().write_current_turn_context();
+    let _scope = _scope.auto_start_turn();
 
     let body = create_session_with_body(
         state.clone(),
@@ -242,35 +242,6 @@ async fn generic_initial_task_dispatches_in_process() {
     assert!(GenericTestClient::recorded_inputs().iter().any(|input| {
         input.session_id == session_id && input.turn_id == turn_id && input.input == "boot generic"
     }));
-}
-
-#[tokio::test]
-async fn generic_dispatch_starts_turn_and_writes_current_turn_context_in_process() {
-    let _scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_contract_in_process_dispatch").await;
-    let _scope = _scope.auto_start_turn().write_current_turn_context();
-    let session_id = create_session(state.clone()).await;
-
-    let (turn_id, body) = submit_turn(state.clone(), &session_id, "in process task").await;
-
-    assert_eq!(body["data"]["turn"]["state"], "running");
-    let metadata: String =
-        sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
-            .bind(&session_id)
-            .fetch_one(&state.db())
-            .await
-            .expect("runtime metadata");
-    let metadata: Value = serde_json::from_str(&metadata).expect("metadata json");
-    let context_path = metadata["current_turn_file"]
-        .as_str()
-        .expect("context path");
-    let context: Value =
-        serde_json::from_str(&fs::read_to_string(context_path).expect("current turn context"))
-            .expect("context json");
-    assert_eq!(context["session_id"], session_id);
-    assert_eq!(context["turn_id"], turn_id);
-    assert_eq!(context["input"], "in process task");
-    assert_eq!(context["client_type"], "generic");
 }
 
 #[tokio::test]

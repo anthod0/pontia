@@ -32,13 +32,6 @@ impl GenericClientTestScope {
         self
     }
 
-    pub fn write_current_turn_context(self) -> Self {
-        let mut behavior = GenericTestClient::behavior();
-        behavior.write_current_turn_context = true;
-        GenericTestClient::set_behavior(behavior);
-        self
-    }
-
     pub fn recorded_inputs(&self) -> Vec<AgentInput> {
         GenericTestClient::recorded_inputs()
     }
