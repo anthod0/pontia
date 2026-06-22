@@ -36,9 +36,33 @@ impl ExternalQueryService {
             let metadata: Value = serde_json::from_str(&row.metadata)?;
             if let Some(capabilities) = metadata.get("capabilities") {
                 session.capabilities = serde_json::from_value(capabilities.clone())?;
+            } else if let Some(capabilities) =
+                legacy_binding_capabilities(&session.client_type, &metadata)
+            {
+                session.capabilities = capabilities;
             }
         }
 
         Ok(())
     }
+}
+
+fn legacy_binding_capabilities(client_type: &str, metadata: &Value) -> Option<SessionCapabilities> {
+    let client_spec = agent_clients::get_client_spec(client_type)?;
+    let mut capabilities = client_spec.capabilities.clone();
+    if client_spec.tmux_runtime().is_some() {
+        let writable = non_empty_json_string(metadata, "tmux_socket_path").is_some()
+            && non_empty_json_string(metadata, "tmux_pane_id").is_some();
+        capabilities.accept_task = writable;
+        capabilities.interrupt = writable;
+    }
+    Some(capabilities)
+}
+
+fn non_empty_json_string<'a>(metadata: &'a Value, key: &str) -> Option<&'a str> {
+    metadata
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }

@@ -229,6 +229,66 @@ async fn external_api_lists_and_gets_session_views() {
 }
 
 #[tokio::test]
+async fn external_api_falls_back_to_tmux_binding_capabilities_when_metadata_is_legacy() {
+    let state = test_state().await;
+    let service = EventIngestService::new(state.db());
+    service
+        .ingest_event(DomainEvent::new(
+            "evt_external_queries_legacy_cap_created".to_string(),
+            "sess_external_queries_legacy_cap".to_string(),
+            None,
+            EventSource::AgentAdapter,
+            "pi".to_string(),
+            EventType::SessionCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    service
+        .ingest_event(DomainEvent::new(
+            "evt_external_queries_legacy_cap_ready".to_string(),
+            "sess_external_queries_legacy_cap".to_string(),
+            None,
+            EventSource::AgentAdapter,
+            "pi".to_string(),
+            EventType::SessionReady,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO runtime_bindings
+           (session_id, runtime_kind, runtime_instance_id, start_command, launch_cwd, last_seen_at,
+            tmux_socket_path, tmux_pane_id, metadata)
+           VALUES (?, 'tmux', 'rtinst_legacy_cap', 'pi --approve', '/tmp', '2026-06-22T00:00:00Z',
+                   '/tmp/tmux-1000/default', '%150', ?)"#,
+    )
+    .bind("sess_external_queries_legacy_cap")
+    .bind(
+        json!({
+            "backend": "tmux",
+            "tmux_socket_path": "/tmp/tmux-1000/default",
+            "tmux_pane_id": "%150"
+        })
+        .to_string(),
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let (status, body) = get(
+        state,
+        "/external/v1/sessions/sess_external_queries_legacy_cap",
+        Some(TOKEN),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["session"]["capabilities"]["accept_task"], true);
+    assert_eq!(body["data"]["session"]["capabilities"]["interrupt"], true);
+}
+
+#[tokio::test]
 async fn external_api_exposes_projected_session_context_usage() {
     let state = test_state().await;
     let service = EventIngestService::new(state.db());
