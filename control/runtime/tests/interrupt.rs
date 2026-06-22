@@ -80,11 +80,24 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     let runtime_dir = result.metadata["runtime_dir"]
         .as_str()
         .expect("runtime dir");
-    let script =
-        std::fs::read_to_string(Path::new(runtime_dir).join("runtime.sh")).expect("runtime script");
     assert!(
-        script.contains("pi --approve -e /configured/clients/pi"),
-        "{script}"
+        !Path::new(runtime_dir).join("runtime.sh").exists(),
+        "runtime.sh must not be a stable runtime artifact"
+    );
+    let log = std::fs::read_to_string(tmux_log).expect("tmux log");
+    assert!(
+        log.contains("/tmp/pontia-launch/"),
+        "tmux should execute an ephemeral launch script from /tmp, got:\n{log}"
+    );
+    assert!(
+        log.contains("; rm -f "),
+        "tmux command should include outer cleanup fallback, got:\n{log}"
+    );
+    let launch_script = std::fs::read_to_string(launch_script_path_from_tmux_log(&log))
+        .expect("ephemeral launch script");
+    assert!(
+        launch_script.contains("pi --approve -e /configured/clients/pi"),
+        "{launch_script}"
     );
 }
 
@@ -131,10 +144,15 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
     let runtime_dir = result.metadata["runtime_dir"]
         .as_str()
         .expect("runtime dir");
-    let script =
-        std::fs::read_to_string(Path::new(runtime_dir).join("runtime.sh")).expect("runtime script");
-    assert!(script.contains("pi from env"), "{script}");
-    assert!(!script.contains("pi from config"), "{script}");
+    assert!(
+        !Path::new(runtime_dir).join("runtime.sh").exists(),
+        "runtime.sh must not be a stable runtime artifact"
+    );
+    let log = std::fs::read_to_string(tmux_log).expect("tmux log");
+    let launch_script = std::fs::read_to_string(launch_script_path_from_tmux_log(&log))
+        .expect("ephemeral launch script");
+    assert!(launch_script.contains("pi from env"), "{launch_script}");
+    assert!(!launch_script.contains("pi from config"), "{launch_script}");
 }
 
 #[test]
@@ -245,6 +263,14 @@ fn restore_fake_tmux(original_path: String) {
         std::env::remove_var("TMUX_LOG");
         std::env::remove_var("TMUX_STATE");
     }
+}
+
+fn launch_script_path_from_tmux_log(log: &str) -> String {
+    log.split_whitespace()
+        .map(|part| part.trim_matches(|ch| ch == '\'' || ch == ';'))
+        .find(|part| part.starts_with("/tmp/pontia-launch/") && part.ends_with(".sh"))
+        .expect("launch script path in tmux log")
+        .to_string()
 }
 
 fn write_fake_tmux(path: &Path) {

@@ -8,7 +8,7 @@ use std::{
 
 use pontia_core::error::{Error, Result};
 
-use super::{AgentInput, RuntimeStartRequest, utils::shell_quote};
+use super::{AgentInput, RuntimeStartRequest};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct TmuxPaneBinding {
@@ -23,7 +23,7 @@ const REUSABLE_SHELL_COMMANDS: &[&str] = &["sh", "bash", "zsh", "fish"];
 pub(super) fn spawn_tmux_session(
     tmux_session: &str,
     workspace: &Path,
-    script_path: &Path,
+    launch_command: &str,
 ) -> std::io::Result<ExitStatus> {
     let command = || {
         Command::new("tmux")
@@ -34,7 +34,7 @@ pub(super) fn spawn_tmux_session(
                 tmux_session,
                 "-c",
                 &workspace.display().to_string(),
-                &format!("sh {}", shell_quote(&script_path.display().to_string())),
+                launch_command,
             ])
             .status()
     };
@@ -48,17 +48,16 @@ pub(super) fn spawn_tmux_session(
     command()
 }
 
-pub(super) fn run_script_in_pane(
+pub(super) fn run_launch_command_in_pane(
     socket_path: &str,
     pane_id: &str,
-    script_path: &Path,
+    launch_command: &str,
 ) -> Result<()> {
     if !is_pane_alive(socket_path, pane_id) {
         return Err(Error::Domain(format!(
             "tmux runtime pane {pane_id} is not alive"
         )));
     }
-    let command = format!("sh {}", shell_quote(&script_path.display().to_string()));
     let status = Command::new("tmux")
         .args([
             "-S",
@@ -66,7 +65,7 @@ pub(super) fn run_script_in_pane(
             "send-keys",
             "-t",
             pane_id,
-            &command,
+            launch_command,
             "Enter",
         ])
         .stderr(Stdio::null())
@@ -494,7 +493,7 @@ mod tests {
         )
         .expect("mark pontia pane");
 
-        assert!(is_reusable_pontia_shell_pane(
+        assert!(wait_for_reusable_pontia_shell_pane(
             &binding.socket_path,
             &binding.pane_id,
             "session_reuse",
@@ -509,6 +508,20 @@ mod tests {
             .args(["kill-session", "-t", &session])
             .stderr(Stdio::null())
             .status();
+    }
+
+    fn wait_for_reusable_pontia_shell_pane(
+        socket_path: &str,
+        pane_id: &str,
+        session_id: &str,
+    ) -> bool {
+        for _ in 0..50 {
+            if is_reusable_pontia_shell_pane(socket_path, pane_id, session_id) {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        false
     }
 
     #[test]

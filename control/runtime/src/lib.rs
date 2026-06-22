@@ -139,6 +139,21 @@ mod tests {
             "rtinst_previous",
         )
         .expect("mark pane");
+        for _ in 0..50 {
+            if tmux::is_reusable_pontia_shell_pane(
+                &binding.socket_path,
+                &binding.pane_id,
+                &session_id,
+            ) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(tmux::is_reusable_pontia_shell_pane(
+            &binding.socket_path,
+            &binding.pane_id,
+            &session_id,
+        ));
 
         let manager = GenericRuntimeManager;
         let runtime = manager
@@ -183,7 +198,7 @@ mod tests {
             current_turn_file: &runtime_dir.join("current-turn.json"),
         };
 
-        script::write_runtime_script(
+        script::write_launch_script(
             &script_path,
             runtime_dir,
             &paths,

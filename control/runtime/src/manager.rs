@@ -92,29 +92,36 @@ impl GenericRuntimeManager {
         let internal_event_url = script::internal_event_url();
         let runtime_instance_id = new_runtime_instance_id().to_string();
         std::fs::File::create(&log_path)?;
-        let script_path = runtime_dir.join("runtime.sh");
+        let stale_runtime_script = runtime_dir.join("runtime.sh");
+        match std::fs::remove_file(&stale_runtime_script) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
         let runtime_paths = script::RuntimePaths {
             runtime_dir: &runtime_dir,
             log_path: &log_path,
             adapter_event_log: &adapter_event_log,
             current_turn_file: &current_turn_file,
         };
-        script::write_runtime_script(
-            &script_path,
+        let launch_script_path = script::write_ephemeral_launch_script(
             &workspace,
             &runtime_paths,
             &request,
             &runtime_instance_id,
         )?;
+        let quoted_launch_script_path = script::shell_quote_path(&launch_script_path);
+        let launch_command =
+            format!("sh {quoted_launch_script_path}; rm -f {quoted_launch_script_path}");
 
         let pane_binding = if let Some((socket_path, pane_id)) = reuse_target {
-            tmux::run_script_in_pane(socket_path, pane_id, &script_path)?;
+            tmux::run_launch_command_in_pane(socket_path, pane_id, &launch_command)?;
             Some(tmux::TmuxPaneBinding {
                 socket_path: socket_path.to_string(),
                 pane_id: pane_id.to_string(),
             })
         } else {
-            let status = tmux::spawn_tmux_session(&tmux_session, &workspace, &script_path)
+            let status = tmux::spawn_tmux_session(&tmux_session, &workspace, &launch_command)
                 .map_err(|err| Error::Domain(format!("tmux runtime spawn failed: {err}")))?;
             if !status.success() {
                 return Err(Error::Domain(format!(

@@ -1,4 +1,9 @@
-use std::path::Path;
+use std::{
+    fs::OpenOptions,
+    io::Write,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    path::{Path, PathBuf},
+};
 
 use pontia_agent_clients::{
     self as agent_clients, DispatchBehavior, HookLogBehavior, RuntimeBehavior,
@@ -21,7 +26,29 @@ pub(super) struct RuntimePaths<'a> {
     pub(super) current_turn_file: &'a Path,
 }
 
-pub(super) fn write_runtime_script(
+pub(super) fn write_ephemeral_launch_script(
+    workspace: &Path,
+    runtime_paths: &RuntimePaths<'_>,
+    request: &RuntimeStartRequest,
+    runtime_instance_id: &str,
+) -> Result<PathBuf> {
+    let launch_dir = std::env::temp_dir().join("pontia-launch");
+    std::fs::create_dir_all(&launch_dir)?;
+    let path = launch_dir.join(format!("{runtime_instance_id}.sh"));
+    write_launch_script(
+        &path,
+        workspace,
+        runtime_paths,
+        request,
+        runtime_instance_id,
+    )?;
+    let mut permissions = std::fs::metadata(&path)?.permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&path, permissions)?;
+    Ok(path)
+}
+
+pub(super) fn write_launch_script(
     path: &Path,
     workspace: &Path,
     runtime_paths: &RuntimePaths<'_>,
@@ -100,7 +127,15 @@ export PONTIA_INTERNAL_EVENT_URL={}
 export PONTIA_EXTERNAL_API_URL={}
 export PONTIA_EXTERNAL_API_TOKEN={}
 export PONTIA_RUNTIME_INSTANCE_ID={}
+PONTIA_LAUNCH_SCRIPT=${{0:-}}
+cleanup_pontia_launch_script() {{
+  if [ -n "$PONTIA_LAUNCH_SCRIPT" ]; then
+    rm -f "$PONTIA_LAUNCH_SCRIPT"
+  fi
+}}
+trap cleanup_pontia_launch_script EXIT HUP INT TERM
 {}{}{}
+cleanup_pontia_launch_script
 {}
 "#,
         shell_quote(&request.session_id),
@@ -119,8 +154,18 @@ export PONTIA_RUNTIME_INSTANCE_ID={}
         log_setup,
         runtime_body,
     );
-    std::fs::write(path, content)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o700)
+        .open(path)?;
+    file.write_all(content.as_bytes())?;
     Ok(())
+}
+
+pub(super) fn shell_quote_path(path: &Path) -> String {
+    shell_quote(&path.display().to_string())
 }
 
 fn hook_log_path(
@@ -202,7 +247,7 @@ mod tests {
             start_command: None,
         };
 
-        write_runtime_script(
+        write_launch_script(
             &script_path,
             tempdir.path(),
             &paths,
@@ -244,7 +289,7 @@ mod tests {
             std::env::remove_var("PONTIA_EXTERNAL_API_TOKEN");
         }
         crate::set_runtime_external_api_token(Some("config-token".to_string()));
-        write_runtime_script(
+        write_launch_script(
             &script_path,
             tempdir.path(),
             &paths,
@@ -282,7 +327,7 @@ mod tests {
         };
         let script_path = tempdir.path().join("runtime.sh");
 
-        write_runtime_script(
+        write_launch_script(
             &script_path,
             tempdir.path(),
             &paths,

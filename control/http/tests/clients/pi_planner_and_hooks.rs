@@ -533,26 +533,36 @@ async fn pi_runtime_exports_real_hook_environment() {
     assert!(!workspace.path().join(".pontia").exists());
     let runtime_dir = metadata["runtime_dir"].as_str().expect("runtime_dir");
     assert!(!runtime_dir.contains(".local/share/pontia/runtimes"));
-    let runtime_script = std::fs::read_to_string(PathBuf::from(runtime_dir).join("runtime.sh"))
-        .expect("runtime script");
-    assert!(runtime_script.contains("export PONTIA_CURRENT_TURN_FILE="));
-    assert!(runtime_script.contains("/runtimes/"));
-    assert!(runtime_script.contains("current-turn.json"));
-    assert!(runtime_script.contains("export PONTIA_RUNTIME_DIR="));
-    assert!(!runtime_script.contains("127.0.0.1:8080"));
-    assert!(runtime_script.contains("export PONTIA_INTERNAL_EVENT_URL="));
-    assert!(runtime_script.contains("http://127.0.0.1:9/internal/v1/events"));
-    assert!(runtime_script.contains("export PONTIA_EXTERNAL_API_URL="));
-    assert!(runtime_script.contains("http://127.0.0.1:9/external/v1"));
-    assert!(runtime_script.contains("export PONTIA_EXTERNAL_API_TOKEN="));
+    assert!(
+        !PathBuf::from(runtime_dir).join("runtime.sh").exists(),
+        "runtime.sh must not be a stable runtime artifact"
+    );
+    let current_turn_file = metadata["current_turn_file"]
+        .as_str()
+        .expect("current_turn_file");
+    assert!(current_turn_file.contains("/runtimes/"));
+    assert!(current_turn_file.ends_with("current-turn.json"));
+    assert!(
+        !metadata["internal_event_url"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("127.0.0.1:8080")
+    );
+    assert_eq!(
+        metadata["internal_event_url"],
+        "http://127.0.0.1:9/internal/v1/events"
+    );
     let runtime_instance_id = metadata["runtime_instance_id"]
         .as_str()
         .expect("runtime_instance_id");
     assert!(runtime_instance_id.starts_with("rtinst_"));
-    assert!(runtime_script.contains("export PONTIA_RUNTIME_INSTANCE_ID="));
-    assert!(runtime_script.contains(runtime_instance_id));
-    assert!(runtime_script.contains("export PONTIA_PI_HOOK_LOG="));
-    assert!(runtime_script.contains("pi-hook.log"));
+    assert_eq!(metadata["runtime_instance_id"], runtime_instance_id);
+    assert!(
+        metadata["pi_hook_log"]
+            .as_str()
+            .expect("pi_hook_log")
+            .ends_with("pi-hook.log")
+    );
 
     cleanup_tmux(&tmux_session);
 }
