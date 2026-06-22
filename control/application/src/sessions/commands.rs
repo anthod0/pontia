@@ -136,7 +136,7 @@ impl SessionCommandService {
                 .await?;
         }
 
-        let initial_turn_id = if let Some(initial_task) = request.initial_task {
+        let initial_dispatch = if let Some(initial_task) = request.initial_task {
             let turn_id = new_turn_id().to_string();
             let client_spec = get_client_spec(&request.client_type).ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", request.client_type))
@@ -169,36 +169,22 @@ impl SessionCommandService {
                     ))
                     .await?;
             }
-            match client_dispatch_mode(&request.client_type)? {
-                DispatchMode::InProcessRecorded => {
-                    self.dispatch_initial_generic_turn(
-                        &session_id,
-                        &turn_id,
-                        &request.client_type,
-                        &initial_task.input,
-                    )
-                    .await?;
-                }
-                DispatchMode::TmuxPaste => {
-                    self.wait_and_dispatch_initial_tui_turn(
-                        &session_id,
-                        &turn_id,
-                        &request.client_type,
-                        &initial_task.input,
-                        &runtime,
-                    )
-                    .await?;
-                }
-                DispatchMode::None => {}
-            }
-            if plugin_owns_turn {
-                None
-            } else {
-                Some(turn_id)
-            }
+            Some((
+                turn_id.clone(),
+                initial_task.input,
+                client_dispatch_mode(&request.client_type)?,
+                if plugin_owns_turn {
+                    None
+                } else {
+                    Some(turn_id)
+                },
+            ))
         } else {
             None
         };
+        let initial_turn_id = initial_dispatch
+            .as_ref()
+            .and_then(|(_, _, _, initial_turn_id)| initial_turn_id.clone());
 
         let query = ExternalQueryService::new(self.pool.clone());
         let session = query.get_session(&session_id).await?.ok_or_else(|| {
@@ -214,6 +200,66 @@ impl SessionCommandService {
         if let Some(key) = idempotency_key {
             self.store_idempotency_response("create_session", key, &data)
                 .await?;
+        }
+
+        if let Some((turn_id, input, dispatch_mode, _)) = initial_dispatch {
+            let service = self.clone();
+            let dispatch_session_id = session_id.clone();
+            let dispatch_client_type = request.client_type.clone();
+            let dispatch_runtime = runtime.clone();
+            std::thread::spawn(move || {
+                let runtime = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(runtime) => runtime,
+                    Err(error) => {
+                        tracing::warn!(
+                            session_id = %dispatch_session_id,
+                            turn_id = %turn_id,
+                            client_type = %dispatch_client_type,
+                            error = %error,
+                            "initial turn dispatch runtime creation failed"
+                        );
+                        return;
+                    }
+                };
+                runtime.block_on(async move {
+                    let result = match dispatch_mode {
+                        DispatchMode::InProcessRecorded => {
+                            service
+                                .dispatch_initial_generic_turn(
+                                    &dispatch_session_id,
+                                    &turn_id,
+                                    &dispatch_client_type,
+                                    &input,
+                                )
+                                .await
+                        }
+                        DispatchMode::TmuxPaste => {
+                            service
+                                .wait_and_dispatch_initial_tui_turn(
+                                    &dispatch_session_id,
+                                    &turn_id,
+                                    &dispatch_client_type,
+                                    &input,
+                                    &dispatch_runtime,
+                                )
+                                .await
+                        }
+                        DispatchMode::None => Ok(()),
+                    };
+                    if let Err(error) = result {
+                        tracing::warn!(
+                            session_id = %dispatch_session_id,
+                            turn_id = %turn_id,
+                            client_type = %dispatch_client_type,
+                            error = %error,
+                            "initial turn dispatch failed"
+                        );
+                    }
+                });
+            });
         }
 
         Ok(CreateSessionOutcome {

@@ -237,11 +237,20 @@ async fn generic_initial_task_dispatches_in_process() {
     let session_id = body["data"]["session"]["session_id"].as_str().unwrap();
     let turn = &body["data"]["initial_turn"];
     let turn_id = turn["turn_id"].as_str().unwrap();
-    assert_eq!(body["data"]["session"]["state"], "busy");
-    assert_eq!(turn["state"], "running");
-    assert!(GenericTestClient::recorded_inputs().iter().any(|input| {
-        input.session_id == session_id && input.turn_id == turn_id && input.input == "boot generic"
-    }));
+    assert_eq!(body["data"]["session"]["state"], "idle");
+    assert_eq!(turn["state"], "queued");
+
+    for _ in 0..20 {
+        if GenericTestClient::recorded_inputs().iter().any(|input| {
+            input.session_id == session_id
+                && input.turn_id == turn_id
+                && input.input == "boot generic"
+        }) {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("initial generic turn was not dispatched asynchronously");
 }
 
 #[tokio::test]

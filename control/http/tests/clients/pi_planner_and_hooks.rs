@@ -109,6 +109,39 @@ fn configure_test_runtime_env() {
     }
 }
 
+#[tokio::test]
+async fn pi_initial_task_create_session_returns_before_ready_dispatch() {
+    let state = test_state("pi_initial_task_fast_response").await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let _guard = pi_env_lock().lock().await;
+    unsafe {
+        std::env::set_var(
+            "PONTIA_PI_TUI_COMMAND",
+            "cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"",
+        );
+    }
+
+    let response = tokio::time::timeout(
+        std::time::Duration::from_millis(750),
+        request_json(
+            state,
+            "POST",
+            "/external/v1/sessions",
+            Some(json!({
+                "client_type": "pi",
+                "workspace": workspace.path().display().to_string(),
+                "initial_task": { "input": "hello before ready" }
+            })),
+        ),
+    )
+    .await
+    .expect("session creation should return before waiting for session.ready");
+
+    let (status, body) = response;
+    assert_eq!(status, StatusCode::CREATED, "{body:?}");
+    assert!(body["data"]["session"]["session_id"].as_str().is_some());
+}
+
 async fn create_pi_session(state: AppState, workspace: &Path) -> String {
     let _guard = pi_env_lock().lock().await;
     unsafe {

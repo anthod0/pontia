@@ -122,8 +122,17 @@ export async function loadSessionDetail(sessionId: string, options: LoadOptions 
 
 export async function createSession(input: CreateSessionInput): Promise<CreateSessionResult> {
   const result = await apiCreateSession(input);
-  await loadSessions();
-  await loadSessionDetail(result.session.session_id);
+  sessions.update((items) => {
+    const withoutCreated = items.filter((item) => item.session_id !== result.session.session_id);
+    return [result.session, ...withoutCreated];
+  });
+  sessionDetail.set({
+    session: result.session,
+    turns: result.initial_turn ? [result.initial_turn] : [],
+    inboxMessages: [],
+    events: [],
+    artifacts: [],
+  });
   return result;
 }
 
