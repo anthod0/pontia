@@ -3,11 +3,10 @@ pub mod raw_transcripts;
 use crate::{
     AgentClientCapabilities, ContextUsageCapability,
     types::{
-        AdapterEventBehavior, AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior,
-        CurrentTurnIdBehavior, DispatchBehavior, HookLogBehavior, InterruptBehavior,
-        ReadinessBehavior, RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior,
-        TerminateBehavior, TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior,
-        TurnLifecycleBehavior,
+        AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
+        DispatchBehavior, HookLogBehavior, InterruptBehavior, ReadinessBehavior, RuntimeBehavior,
+        RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
+        TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
     },
 };
 
@@ -48,9 +47,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         turn_lifecycle: TurnLifecycleBehavior::ClientManagedForInteractiveTmux,
         runtime_binding: RuntimeBindingBehavior::Tmux {
             runtime_kind: "pi_tui",
-        },
-        adapter_events: AdapterEventBehavior::JsonlOutbox {
-            file_name: "adapter-events.jsonl",
         },
         system_prompt_injection: SystemPromptInjectionBehavior::AppendFromExternalApi,
         startup_hooks: &[],

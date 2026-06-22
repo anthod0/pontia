@@ -194,7 +194,6 @@ mod tests {
         let paths = script::RuntimePaths {
             runtime_dir,
             log_path: &runtime_dir.join("runtime.log"),
-            adapter_event_log: &runtime_dir.join("adapter-events.jsonl"),
         };
 
         script::write_launch_script(

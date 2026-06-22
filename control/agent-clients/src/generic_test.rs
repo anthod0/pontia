@@ -3,9 +3,9 @@ use std::sync::{Mutex, OnceLock};
 use crate::{
     AgentClientCapabilities, AgentInput, ContextUsageCapability,
     types::{
-        AdapterEventBehavior, AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior,
-        CurrentTurnIdBehavior, DispatchBehavior, InterruptBehavior, ReadinessBehavior,
-        RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
+        AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
+        DispatchBehavior, InterruptBehavior, ReadinessBehavior, RuntimeBehavior,
+        RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
         TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
     },
 };
@@ -36,7 +36,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         current_turn_id: CurrentTurnIdBehavior::Include,
         turn_lifecycle: TurnLifecycleBehavior::BackendManaged,
         runtime_binding: RuntimeBindingBehavior::Unsupported,
-        adapter_events: AdapterEventBehavior::Disabled,
         system_prompt_injection: SystemPromptInjectionBehavior::Disabled,
         startup_hooks: &[],
         transcript: TranscriptBehavior::Unsupported,

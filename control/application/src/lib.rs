@@ -97,7 +97,7 @@ pub use raw_transcripts::{
 };
 pub use runtime_bindings::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};
-pub use runtime_observation::{AdapterEventOutboxService, RuntimeObservationService};
+pub use runtime_observation::RuntimeObservationService;
 pub use runtime_readiness::RuntimeReadinessService;
 pub use sessions::{
     CreateSessionOutcome, CreateSessionRequest, InitialTaskRequest, SessionCommandService,

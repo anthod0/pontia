@@ -1,9 +1,7 @@
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
-use pontia_agent_clients::{
-    self as agent_clients, AdapterEventBehavior, InterruptBehavior, RuntimeBehavior,
-};
+use pontia_agent_clients::{self as agent_clients, InterruptBehavior, RuntimeBehavior};
 use pontia_core::{
     error::{Error, Result},
     ids::new_runtime_instance_id,
@@ -84,17 +82,12 @@ impl GenericRuntimeManager {
         let runtime_dir = paths::runtime_dir(&request.session_id)?;
         std::fs::create_dir_all(&runtime_dir)?;
         let log_path = runtime_dir.join("runtime.log");
-        let adapter_event_log = match client_spec.adapter.adapter_events {
-            AdapterEventBehavior::JsonlOutbox { file_name } => runtime_dir.join(file_name),
-            AdapterEventBehavior::Disabled => runtime_dir.join("adapter-events.jsonl"),
-        };
         let internal_event_url = script::internal_event_url();
         let runtime_instance_id = new_runtime_instance_id().to_string();
         std::fs::File::create(&log_path)?;
         let runtime_paths = script::RuntimePaths {
             runtime_dir: &runtime_dir,
             log_path: &log_path,
-            adapter_event_log: &adapter_event_log,
         };
         let launch_script_path = script::write_ephemeral_launch_script(
             &workspace,
@@ -145,7 +138,6 @@ impl GenericRuntimeManager {
         let workspace = workspace.display().to_string();
         let runtime_dir = runtime_dir.display().to_string();
         let log_path = log_path.display().to_string();
-        let adapter_event_log = adapter_event_log.display().to_string();
         let mut metadata = json!({
             "backend": "tmux",
             "tmux_session": tmux_session,
@@ -157,7 +149,6 @@ impl GenericRuntimeManager {
             "runtime_dir": runtime_dir,
             "runtime_log": log_path,
             "log_path": log_path,
-            "adapter_event_log": adapter_event_log,
             "internal_event_url": internal_event_url,
             "handle": request.handle,
             "role": request.role,

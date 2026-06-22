@@ -9,8 +9,8 @@
 当前系统使用：
 
 - SQLite 作为 domain event / session / turn / task / artifact 等结构化状态存储。
-- 文件系统存储 runtime 目录、adapter event outbox、current turn context、artifact 原始内容等。
-- 多个 agent session 会并行运行，并持续产生 session / turn / adapter 事件。
+- 文件系统存储 runtime 目录、日志、artifact 原始内容等。
+- 多个 agent session 会并行运行，并持续产生 session / turn 事件。
 
 agent 数量超过 20 个时，主要持久层风险来自并发写入和写入放大，而不是 SQLite 单机容量本身。
 
@@ -55,13 +55,7 @@ commit
 - 高频事件下写入队列积压。
 - 单个活跃 session 影响其他 session 的写入延迟。
 
-### 4. adapter-events.jsonl 全量重放
-
-当前 pi adapter event outbox 观察逻辑会读取整个 `adapter-events.jsonl`，并从头解析每一行。
-
-随着日志文件增长，每次 observe 成本都会上升，并且会产生大量重复 ingest / duplicate check。
-
-### 5. artifact discovery 全量扫描
+### 4. artifact discovery 全量扫描
 
 artifact discovery 会递归扫描 workspace，并对文件做 metadata / preview / upsert。
 
@@ -71,7 +65,7 @@ artifact discovery 会递归扫描 workspace，并对文件做 metadata / previe
 - 大量 SQLite 小写入。
 - API 请求阻塞时间变长。
 
-### 6. 查询侧 N+1 与轮询压力
+### 5. 查询侧 N+1 与轮询压力
 
 部分查询会先查列表，再逐条 enrich。SSE event stream 当前也会周期性查询 SQLite。
 
@@ -117,7 +111,6 @@ max_connections = 4
 SessionCommandService
 TurnCommandService
 RuntimeObservationService
-PiAdapterEventOutboxService
         ↓
 EventStore
         ↓
@@ -196,26 +189,7 @@ SQLite transaction
 
 目标是让单条 event 写入成本接近 O(1)，避免随着 event 数据增长而变慢。
 
-### 优先级 6：adapter outbox 增量消费
-
-为 `adapter-events.jsonl` 增加消费 cursor，例如记录：
-
-```text
-session_id
-adapter_event_log_path
-byte_offset
-last_processed_at
-```
-
-每次 observe 时只读取新增内容，而不是全量读取和全量重放。
-
-预期收益：
-
-- 避免 outbox 文件越大 observe 越慢。
-- 减少重复 JSON parse。
-- 减少 duplicate ingest 查询。
-
-### 优先级 7：artifact discovery 限流和批量写
+### 优先级 6：artifact discovery 限流和批量写
 
 artifact discovery 后续可以优化为：
 
@@ -225,7 +199,7 @@ artifact discovery 后续可以优化为：
 - 跳过明显无关目录，例如 `.git`、`node_modules`、构建输出目录等。
 - 根据 mtime / size / fingerprint 做增量发现。
 
-### 优先级 8：查询侧优化
+### 优先级 7：查询侧优化
 
 后续可以优化：
 
@@ -241,7 +215,6 @@ artifact discovery 后续可以优化为：
 - 20+ agent 并行时出现 `database is locked`。
 - event ingest p95 / p99 延迟明显升高。
 - API 请求经常卡在写入或事件查询。
-- `adapter-events.jsonl` 文件增长后 observe 明显变慢。
 - `.db-wal` 文件持续增长且无法回收。
 - artifact discovery 影响正常 session / turn 操作。
 - 单个长 session 事件量增长后变慢。
@@ -254,10 +227,9 @@ artifact discovery 后续可以优化为：
 2. 抽象 `EventStore`，把 event ingest 作为明确持久层边界。
 3. 在 `EventStore` 内实现单写队列。
 4. 在 writer task 内实现 batch event transaction。
-5. 为 adapter event outbox 增加 byte offset cursor。
-6. 优化 event ingest 的 projection reload 和 state version 计算。
-7. 优化 artifact discovery 的扫描、preview 和批量 upsert。
-8. 优化 event stream 和列表查询索引/分页。
+5. 优化 event ingest 的 projection reload 和 state version 计算。
+6. 优化 artifact discovery 的扫描、preview 和批量 upsert。
+7. 优化 event stream 和列表查询索引/分页。
 
 ## 当前决策
 

@@ -50,7 +50,7 @@
 
 ## Runtime diagnostics
 
-- Per-session diagnostics live under `runtimes/<session_id>/` and include runtime logs, adapter event logs, current-turn context, and hook logs.
+- Per-session diagnostics live under `runtimes/<session_id>/` and include runtime logs and hook logs.
 
 ## Common commands
 

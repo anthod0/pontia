@@ -22,7 +22,6 @@ use super::{
 pub(super) struct RuntimePaths<'a> {
     pub(super) runtime_dir: &'a Path,
     pub(super) log_path: &'a Path,
-    pub(super) adapter_event_log: &'a Path,
 }
 
 pub(super) fn write_ephemeral_launch_script(
@@ -120,7 +119,6 @@ export PONTIA_CLIENT_TYPE={}
 export PONTIA_WORKSPACE={}
 export PONTIA_RUNTIME_DIR={}
 export PONTIA_RUNTIME_LOG={}
-export PONTIA_ADAPTER_EVENT_LOG={}
 export PONTIA_INTERNAL_EVENT_URL={}
 export PONTIA_EXTERNAL_API_URL={}
 export PONTIA_EXTERNAL_API_TOKEN={}
@@ -141,7 +139,6 @@ cleanup_pontia_launch_script
         shell_quote(&workspace.display().to_string()),
         shell_quote(&runtime_paths.runtime_dir.display().to_string()),
         shell_quote(&runtime_paths.log_path.display().to_string()),
-        shell_quote(&runtime_paths.adapter_event_log.display().to_string()),
         shell_quote(&internal_event_url()),
         shell_quote(&external_api_url()),
         shell_quote(&external_api_token()),
@@ -231,7 +228,6 @@ mod tests {
         let paths = RuntimePaths {
             runtime_dir: tempdir.path(),
             log_path: &log_path,
-            adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
         };
         let request = RuntimeStartRequest {
             session_id: "sess_resume_1".to_string(),
@@ -268,7 +264,6 @@ mod tests {
         let paths = RuntimePaths {
             runtime_dir: tempdir.path(),
             log_path: &log_path,
-            adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
         };
         let request = RuntimeStartRequest {
             session_id: "sess_token_from_config".to_string(),
@@ -308,7 +303,6 @@ mod tests {
         let paths = RuntimePaths {
             runtime_dir: tempdir.path(),
             log_path: &tempdir.path().join("runtime.log"),
-            adapter_event_log: &tempdir.path().join("adapter-events.jsonl"),
         };
         let request = RuntimeStartRequest {
             session_id: "sess_explicit_start".to_string(),

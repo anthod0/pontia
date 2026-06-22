@@ -143,12 +143,6 @@ pub enum RuntimeBindingBehavior {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AdapterEventBehavior {
-    Disabled,
-    JsonlOutbox { file_name: &'static str },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemPromptInjectionBehavior {
     Disabled,
     AppendFromExternalApi,
@@ -181,7 +175,6 @@ pub struct AgentClientAdapter {
     pub current_turn_id: CurrentTurnIdBehavior,
     pub turn_lifecycle: TurnLifecycleBehavior,
     pub runtime_binding: RuntimeBindingBehavior,
-    pub adapter_events: AdapterEventBehavior,
     pub system_prompt_injection: SystemPromptInjectionBehavior,
     pub startup_hooks: &'static [StartupHook],
     pub transcript: TranscriptBehavior,
