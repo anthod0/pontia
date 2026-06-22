@@ -69,7 +69,7 @@ test('conversation renders exited status as a terminal divider after the convers
   expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
   expect(screen.queryByText('Session exited')).not.toBeInTheDocument();
 
-  const terminalStatus = screen.getByText('session exited');
+  const terminalStatus = screen.getByText('session exited · send a message to resume');
   expect(terminalStatus).toBeInTheDocument();
   expect(terminalStatus.closest('[data-chat-session-terminal-status]')).toBeInTheDocument();
   expect(screen.getByText('I will inspect it now.').compareDocumentPosition(terminalStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
