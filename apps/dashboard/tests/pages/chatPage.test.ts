@@ -499,37 +499,23 @@ test('hides task mode toggle from the chat composer metadata controls', async ()
   expect(workspaceSelector.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test('shows new chat keyboard hint and submits with Shift Enter while preserving Enter for newlines', async () => {
+test('shows new chat keyboard hint and submits with Enter while preserving modified Enter for newlines', async () => {
   const user = userEvent.setup();
   const created = session({ session_id: 'session-enter' });
   mocks.createSession.mockResolvedValue({ session: created, initial_turn: turn({ session_id: 'session-enter' }) } satisfies CreateSessionResult);
   render(ChatPage);
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  expect(screen.getByText('Shift+Enter / Ctrl+Enter to send')).toBeInTheDocument();
+  expect(screen.getByText('Enter to send · Shift+Enter / Ctrl+Enter for newline')).toBeInTheDocument();
 
   await user.type(promptInput, 'Line one');
-  expect(await fireEvent.keyDown(promptInput, { key: 'Enter' })).toBe(true);
+  expect(await fireEvent.keyDown(promptInput, { key: 'Enter', shiftKey: true })).toBe(true);
+  expect(await fireEvent.keyDown(promptInput, { key: 'Enter', ctrlKey: true })).toBe(true);
   expect(mocks.createSession).not.toHaveBeenCalled();
 
-  expect(await fireEvent.keyDown(promptInput, { key: 'Enter', shiftKey: true })).toBe(false);
+  expect(await fireEvent.keyDown(promptInput, { key: 'Enter' })).toBe(false);
   await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({
     initial_task: { input: 'Line one', metadata: { source: 'dashboard_chat' } },
-  })));
-});
-
-test('new chat submits with Ctrl Enter', async () => {
-  const user = userEvent.setup();
-  const created = session({ session_id: 'session-enter' });
-  mocks.createSession.mockResolvedValue({ session: created, initial_turn: turn({ session_id: 'session-enter' }) } satisfies CreateSessionResult);
-  render(ChatPage);
-
-  const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  await user.type(promptInput, 'Line two');
-
-  expect(await fireEvent.keyDown(promptInput, { key: 'Enter', ctrlKey: true })).toBe(false);
-  await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({
-    initial_task: { input: 'Line two', metadata: { source: 'dashboard_chat' } },
   })));
 });
 
@@ -1484,7 +1470,7 @@ test('queues follow-up messages without rendering inline success chrome', async 
   expect(screen.queryByText('Message queued for the selected session.')).not.toBeInTheDocument();
 });
 
-test('follow-up composer submits with Shift Enter while preserving Enter for newlines', async () => {
+test('follow-up composer submits with Enter while preserving modified Enter for newlines', async () => {
   const user = userEvent.setup();
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
@@ -1497,38 +1483,16 @@ test('follow-up composer submits with Shift Enter while preserving Enter for new
   render(ChatPage);
 
   const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
-  expect(screen.getByText('Shift+Enter / Ctrl+Enter to send')).toBeInTheDocument();
+  expect(screen.getByText('Enter to send · Shift+Enter / Ctrl+Enter for newline')).toBeInTheDocument();
 
   await user.type(followUpInput, 'continue this session');
-  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter' })).toBe(true);
+  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', shiftKey: true })).toBe(true);
+  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', ctrlKey: true })).toBe(true);
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
-  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', shiftKey: true })).toBe(false);
+  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter' })).toBe(false);
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
     input: 'continue this session',
-    delivery_policy: 'after_idle',
-    metadata: { source: 'dashboard_chat' },
-  }));
-});
-
-test('follow-up composer submits with Ctrl Enter', async () => {
-  const user = userEvent.setup();
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
-
-  render(ChatPage);
-
-  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
-  await user.type(followUpInput, 'another message');
-
-  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', ctrlKey: true })).toBe(false);
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
-    input: 'another message',
     delivery_policy: 'after_idle',
     metadata: { source: 'dashboard_chat' },
   }));

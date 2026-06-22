@@ -56,7 +56,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    const shouldSubmit = event.key === 'Enter' && (event.shiftKey || event.ctrlKey || event.metaKey)
+    const shouldSubmit = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey
     if (shouldSubmit) {
       event.preventDefault()
       if (!disabled && !submitDisabled && !busy) onSubmit()
@@ -74,7 +74,7 @@
     </div>
   </PromptInput.Body>
   <PromptInput.Toolbar class="justify-between">
-    <p class="px-2 text-xs text-muted-foreground">Shift+Enter / Ctrl+Enter to send</p>
+    <p class="px-2 text-xs text-muted-foreground">Enter to send · Shift+Enter / Ctrl+Enter for newline</p>
     <PromptInput.Submit disabled={disabled || submitDisabled || busy} />
   </PromptInput.Toolbar>
 </PromptInput.Root>
@@ -96,7 +96,7 @@
         <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
       </PromptInput.Body>
       <PromptInput.Toolbar class="shrink-0 justify-between">
-        <p class="px-2 text-xs text-muted-foreground">Shift+Enter / Ctrl+Enter to send</p>
+        <p class="px-2 text-xs text-muted-foreground">Enter to send · Shift+Enter / Ctrl+Enter for newline</p>
         <PromptInput.Submit disabled={disabled || submitDisabled || busy} />
       </PromptInput.Toolbar>
     </PromptInput.Root>
