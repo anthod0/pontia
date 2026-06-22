@@ -39,6 +39,7 @@ pub(crate) fn session_row_to_view(row: SessionRow) -> Result<SessionView> {
         capabilities: SessionCapabilities::default(),
         model,
         context_usage,
+        lineage: None,
         created_at: row.created_at,
         updated_at: row.updated_at,
         metadata,

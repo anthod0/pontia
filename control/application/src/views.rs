@@ -17,6 +17,17 @@ pub struct ContextUsageView {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SessionLineageView {
+    pub relation_type: String,
+    pub parent_session_id: String,
+    pub forked_from_turn_id: Option<String>,
+    pub forked_from_client_node_id: Option<String>,
+    pub parent_client_session_key: Option<String>,
+    pub child_client_session_key: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct SessionView {
     pub session_id: String,
     pub client_type: String,
@@ -33,6 +44,7 @@ pub struct SessionView {
     pub capabilities: SessionCapabilities,
     pub model: Option<String>,
     pub context_usage: Option<ContextUsageView>,
+    pub lineage: Option<SessionLineageView>,
     pub created_at: String,
     pub updated_at: String,
     pub metadata: Value,

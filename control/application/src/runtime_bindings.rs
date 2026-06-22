@@ -16,6 +16,13 @@ pub struct RuntimeBindingUpsertRequest {
     pub launch_cwd: Option<String>,
     pub runtime_instance_id: String,
     pub start_command: Option<String>,
+    pub start_kind: Option<String>,
+    pub parent_session_id: Option<String>,
+    pub parent_client_session_key: Option<String>,
+    pub forked_from_turn_id: Option<String>,
+    pub forked_from_client_node_id: Option<String>,
+    #[serde(default)]
+    pub lineage_metadata: Value,
     pub tmux: Option<RuntimeBindingTmuxRequest>,
 }
 
@@ -65,13 +72,17 @@ impl RuntimeBindingUpsertService {
             .ok_or_else(|| Error::Domain("launch_cwd or client_cwd is required".to_string()))?;
         let workspace = upsert_workspace(&self.pool, launch_cwd).await?;
 
-        let session_id = match self
+        let existing_session_id = self
             .session_id_for_client_session(&request.client_type, &request.client_session_key)
-            .await?
-        {
+            .await?;
+        let session_id = match existing_session_id {
             Some(session_id) => session_id,
             None => self.create_bound_session(&request, &workspace).await?,
         };
+
+        if is_fork_start(&request) {
+            self.upsert_fork_lineage(&session_id, &request).await?;
+        }
 
         SqliteSessionRepository::new(self.pool.clone())
             .update_session_workspace(
@@ -151,10 +162,15 @@ impl RuntimeBindingUpsertService {
             })
             .await?;
 
+        let session = ExternalQueryService::new(self.pool.clone())
+            .get_session(&session_id)
+            .await?
+            .ok_or_else(|| {
+                Error::Domain(format!("session {session_id} missing after binding upsert"))
+            })?;
+
         Ok(json!({
-            "session": {
-                "session_id": session_id,
-            },
+            "session": session,
             "runtime": {
                 "runtime_instance_id": request.runtime_instance_id,
                 "internal_event_url": internal_event_url,
@@ -171,6 +187,88 @@ impl RuntimeBindingUpsertService {
         SqliteAgentBindingRepository::new(self.pool.clone())
             .session_id_for_client_session(client_type, client_session_key)
             .await
+    }
+
+    async fn upsert_fork_lineage(
+        &self,
+        child_session_id: &str,
+        request: &RuntimeBindingUpsertRequest,
+    ) -> Result<()> {
+        let parent_session_id = self.resolve_parent_session_id(request).await?.ok_or_else(|| {
+            Error::Domain(
+                "fork runtime binding upsert requires parent_session_id or parent_client_session_key"
+                    .to_string(),
+            )
+        })?;
+        if parent_session_id == child_session_id {
+            return Err(Error::Domain(
+                "fork child session cannot be the same as parent session".to_string(),
+            ));
+        }
+        if !SqliteSessionRepository::new(self.pool.clone())
+            .exists(&parent_session_id)
+            .await?
+        {
+            return Err(Error::NotFound(format!(
+                "parent session {parent_session_id} not found"
+            )));
+        }
+        let parent_client_session_key =
+            match non_empty(request.parent_client_session_key.as_deref()) {
+                Some(key) => Some(key),
+                None => {
+                    SqliteAgentBindingRepository::new(self.pool.clone())
+                        .latest_client_session_key(&parent_session_id, &request.client_type)
+                        .await?
+                }
+            };
+        let metadata = if request.lineage_metadata.is_null() {
+            json!({})
+        } else {
+            request.lineage_metadata.clone()
+        };
+        sqlx::query(
+            r#"INSERT INTO session_lineage
+               (child_session_id, parent_session_id, relation_type, forked_from_turn_id,
+                forked_from_client_node_id, parent_client_session_key, child_client_session_key,
+                metadata)
+               VALUES (?, ?, 'fork', ?, ?, ?, ?, ?)
+               ON CONFLICT(child_session_id) DO UPDATE SET
+                   parent_session_id = excluded.parent_session_id,
+                   relation_type = excluded.relation_type,
+                   forked_from_turn_id = excluded.forked_from_turn_id,
+                   forked_from_client_node_id = excluded.forked_from_client_node_id,
+                   parent_client_session_key = excluded.parent_client_session_key,
+                   child_client_session_key = excluded.child_client_session_key,
+                   metadata = excluded.metadata"#,
+        )
+        .bind(child_session_id)
+        .bind(parent_session_id)
+        .bind(non_empty(request.forked_from_turn_id.as_deref()))
+        .bind(non_empty(request.forked_from_client_node_id.as_deref()))
+        .bind(parent_client_session_key)
+        .bind(non_empty(Some(&request.client_session_key)))
+        .bind(serde_json::to_string(&metadata)?)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn resolve_parent_session_id(
+        &self,
+        request: &RuntimeBindingUpsertRequest,
+    ) -> Result<Option<String>> {
+        if let Some(parent_session_id) = non_empty(request.parent_session_id.as_deref()) {
+            return Ok(Some(parent_session_id));
+        }
+        if let Some(parent_client_session_key) =
+            non_empty(request.parent_client_session_key.as_deref())
+        {
+            return self
+                .session_id_for_client_session(&request.client_type, &parent_client_session_key)
+                .await;
+        }
+        Ok(None)
     }
 
     async fn create_bound_session(
@@ -230,6 +328,10 @@ fn validate_required(field: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
+fn is_fork_start(request: &RuntimeBindingUpsertRequest) -> bool {
+    matches!(request.start_kind.as_deref().map(str::trim), Some("fork"))
+}
+
 fn non_empty(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -283,6 +385,27 @@ fn binding_metadata(
         json!(request.runtime_instance_id),
     );
     insert_optional(&mut metadata, "start_command", &request.start_command);
+    insert_optional(&mut metadata, "start_kind", &request.start_kind);
+    insert_optional(
+        &mut metadata,
+        "parent_session_id",
+        &request.parent_session_id,
+    );
+    insert_optional(
+        &mut metadata,
+        "parent_client_session_key",
+        &request.parent_client_session_key,
+    );
+    insert_optional(
+        &mut metadata,
+        "forked_from_turn_id",
+        &request.forked_from_turn_id,
+    );
+    insert_optional(
+        &mut metadata,
+        "forked_from_client_node_id",
+        &request.forked_from_client_node_id,
+    );
     metadata.insert("log_dir".to_string(), json!(log_dir));
     metadata.insert("runtime_log".to_string(), json!(runtime_log));
     metadata.insert("pi_hook_log".to_string(), json!(pi_hook_log));

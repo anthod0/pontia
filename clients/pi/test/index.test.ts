@@ -383,6 +383,62 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
+  test("session_start fork binds a new pontia session with parent lineage", async () => {
+    const workspace = await realpath(await tempDir());
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "http://localhost/external/v1/workspaces") {
+        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      }
+      expect(url).toBe("http://localhost/internal/v1/runtime-bindings/upsert");
+      const body = JSON.parse(String(init?.body));
+      expect(body).toMatchObject({
+        client_type: "pi",
+        client_session_key: "pi_child",
+        start_kind: "fork",
+        parent_session_id: "sess_parent",
+      });
+      expect(body.runtime_instance_id).toMatch(/^rtinst_/);
+      expect(body.runtime_instance_id).not.toBe("rtinst_parent");
+      return new Response(JSON.stringify({
+        session: { session_id: "sess_child" },
+        runtime: {
+          runtime_instance_id: "rtinst_child",
+          internal_event_url: "http://localhost/internal/v1/events",
+        },
+      }), { status: 200 });
+    });
+    const { handlers, reported } = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_parent",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_parent",
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+        PONTIA_INTERNAL_BINDING_UPSERT_URL: "http://localhost/internal/v1/runtime-bindings/upsert",
+        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
+        PONTIA_EXTERNAL_API_TOKEN: "token",
+      },
+      fetch: fetchImpl as any,
+      loadContext: vi.fn(async () => ({
+        ok: false as const,
+        reason: "current turn claim unavailable",
+        logFile: "fallback/pi-hook.log",
+        silent: true,
+      })),
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: { getSessionId: () => "pi_parent", getCwd: () => workspace },
+    });
+    await handlers.session_start({ reason: "fork" }, {
+      sessionManager: { getSessionId: () => "pi_child", getCwd: () => workspace },
+    });
+    await handlers.before_agent_start({ prompt: "fork prompt", systemPrompt: "Base prompt" }, {});
+    await handlers.agent_start({}, {});
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready", "session.ready", "turn.started"]);
+    expect(reported[1]).toMatchObject({ session_id: "sess_child", payload: { runtime_instance_id: "rtinst_child" } });
+    expect(reported[2]).toMatchObject({ session_id: "sess_child", payload: { input: { summary: "fork prompt" } } });
+  });
+
   test("session_start with partial managed runtime env does not attach or report ready", async () => {
     const home = await tempDir();
     const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 500 }));

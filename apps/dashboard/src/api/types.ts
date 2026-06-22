@@ -76,6 +76,16 @@ export interface UpsertAgentProfileInput {
   metadata?: JsonObject;
 }
 
+export interface SessionLineageView {
+  relation_type: 'fork' | string;
+  parent_session_id: string;
+  forked_from_turn_id: string | null;
+  forked_from_client_node_id: string | null;
+  parent_client_session_key: string | null;
+  child_client_session_key: string | null;
+  created_at: string;
+}
+
 export interface SessionView {
   session_id: string;
   client_type: string;
@@ -92,6 +102,7 @@ export interface SessionView {
   capabilities: SessionCapabilities;
   model: string | null;
   context_usage: ContextUsageView | null;
+  lineage: SessionLineageView | null;
   created_at: string;
   updated_at: string;
   metadata: JsonObject;

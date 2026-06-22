@@ -1,5 +1,6 @@
 use super::*;
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
+use sqlx::Row;
 
 impl ExternalQueryService {
     pub async fn list_sessions(&self) -> Result<Vec<SessionView>> {
@@ -43,7 +44,35 @@ impl ExternalQueryService {
             }
         }
 
+        session.lineage = self.session_lineage(&session.session_id).await?;
+
         Ok(())
+    }
+
+    async fn session_lineage(&self, session_id: &str) -> Result<Option<SessionLineageView>> {
+        let row = sqlx::query(
+            r#"SELECT relation_type, parent_session_id, forked_from_turn_id,
+                      forked_from_client_node_id, parent_client_session_key,
+                      child_client_session_key, created_at
+               FROM session_lineage
+               WHERE child_session_id = ?"#,
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| {
+            Ok(SessionLineageView {
+                relation_type: row.try_get("relation_type")?,
+                parent_session_id: row.try_get("parent_session_id")?,
+                forked_from_turn_id: row.try_get("forked_from_turn_id")?,
+                forked_from_client_node_id: row.try_get("forked_from_client_node_id")?,
+                parent_client_session_key: row.try_get("parent_client_session_key")?,
+                child_client_session_key: row.try_get("child_client_session_key")?,
+                created_at: row.try_get("created_at")?,
+            })
+        })
+        .transpose()
     }
 }
 

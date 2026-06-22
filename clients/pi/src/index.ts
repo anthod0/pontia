@@ -175,14 +175,21 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-async function bindManualSession(env: EnvLike, fetchImpl: typeof fetch, sessionDetails: Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">): Promise<SessionContext | undefined> {
-  if (hasPreboundSessionIntent(env)) return undefined;
+async function bindManualSession(
+  env: EnvLike,
+  fetchImpl: typeof fetch,
+  sessionDetails: Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">,
+  options: { startKind?: "fork"; parentSessionId?: string } = {},
+): Promise<SessionContext | undefined> {
+  if (hasPreboundSessionIntent(env) && options.startKind !== "fork") return undefined;
   if (!sessionDetails.clientSessionKey) return undefined;
   const discovered = bindingUpsertUrl(env) ? undefined : await resolvePontiaConnection({ env, fetch: fetchImpl });
   const url = bindingUpsertUrl(env) ?? discovered?.bindingUpsertUrl;
   if (!url) return undefined;
 
-  const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? newRuntimeInstanceId();
+  const runtimeInstanceId = options.startKind === "fork"
+    ? newRuntimeInstanceId()
+    : optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? newRuntimeInstanceId();
   const tmux = tmuxBindingFromEnv(env);
   const response = await fetchImpl(url, {
     method: "POST",
@@ -196,6 +203,8 @@ async function bindManualSession(env: EnvLike, fetchImpl: typeof fetch, sessionD
       launch_cwd: sessionDetails.clientCwd,
       runtime_instance_id: runtimeInstanceId,
       start_command: "pi",
+      ...(options.startKind ? { start_kind: options.startKind } : {}),
+      ...(options.parentSessionId ? { parent_session_id: options.parentSessionId } : {}),
       ...(tmux ? { tmux } : {}),
     }),
   });
@@ -341,9 +350,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("session_start", async (event, ctx) => {
-    if (readyReported) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
-    if (reason !== "startup" && reason !== "new") return;
+    if (readyReported && reason !== "fork") return;
+    if (reason !== "startup" && reason !== "new" && reason !== "fork") return;
 
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
@@ -366,7 +375,20 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         return;
       }
 
-      if (loaded.ok) {
+      if (reason === "fork") {
+        const parentSessionId = boundSessionContext?.sessionId ?? (loaded.ok ? loaded.context.sessionId : undefined);
+        if (!parentSessionId) {
+          await logDiagnostic(logFile, {
+            level: "error",
+            code: "missing_fork_parent_session",
+            message: "pi fork session_start requires an existing pontia parent session",
+          });
+          return;
+        }
+        context = await bindManualSession(env, fetchImpl, sessionDetails, { startKind: "fork", parentSessionId });
+        if (!context) return;
+        readyReported = false;
+      } else if (loaded.ok) {
         if (!sessionDetails.clientSessionKey) {
           await logDiagnostic(logFile, {
             level: "error",

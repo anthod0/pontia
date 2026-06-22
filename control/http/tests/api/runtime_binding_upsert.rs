@@ -114,6 +114,94 @@ fn upsert_body_with_tmux(
 }
 
 #[tokio::test]
+async fn fork_upsert_creates_independent_child_session_with_lineage() {
+    let log_dir = tempfile::tempdir().expect("log dir");
+    unsafe {
+        std::env::set_var("PONTIA_LOG_DIR", log_dir.path());
+    }
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let (parent_status, parent_body) =
+        post_upsert(state.clone(), upsert_body(&workspace, Some("%41"))).await;
+    assert_eq!(parent_status, StatusCode::OK, "{parent_body:?}");
+    let parent_session_id = parent_body["session"]["session_id"]
+        .as_str()
+        .expect("parent session_id");
+
+    let mut fork_body = upsert_body(&workspace, Some("%42"));
+    fork_body["client_session_key"] = json!("pi_session_fork");
+    fork_body["runtime_instance_id"] = json!("rtinst_fork");
+    fork_body["start_kind"] = json!("fork");
+    fork_body["parent_session_id"] = json!(parent_session_id);
+    fork_body["forked_from_turn_id"] = json!("turn_parent_1");
+
+    let (fork_status, fork_response) = post_upsert(state.clone(), fork_body).await;
+
+    assert_eq!(fork_status, StatusCode::OK, "{fork_response:?}");
+    let child_session_id = fork_response["session"]["session_id"]
+        .as_str()
+        .expect("child session_id");
+    assert_ne!(child_session_id, parent_session_id);
+    assert_eq!(fork_response["session"]["lineage"]["relation_type"], "fork");
+    assert_eq!(
+        fork_response["session"]["lineage"]["parent_session_id"],
+        parent_session_id
+    );
+    assert_eq!(
+        fork_response["session"]["lineage"]["forked_from_turn_id"],
+        "turn_parent_1"
+    );
+
+    let row = sqlx::query(
+        "SELECT relation_type, parent_session_id, forked_from_turn_id, parent_client_session_key, child_client_session_key FROM session_lineage WHERE child_session_id = ?",
+    )
+    .bind(child_session_id)
+    .fetch_one(&state.db())
+    .await
+    .expect("lineage row");
+    assert_eq!(row.get::<String, _>("relation_type"), "fork");
+    assert_eq!(row.get::<String, _>("parent_session_id"), parent_session_id);
+    assert_eq!(
+        row.get::<Option<String>, _>("forked_from_turn_id")
+            .as_deref(),
+        Some("turn_parent_1")
+    );
+    assert_eq!(
+        row.get::<Option<String>, _>("parent_client_session_key")
+            .as_deref(),
+        Some("pi_session_123")
+    );
+    assert_eq!(
+        row.get::<Option<String>, _>("child_client_session_key")
+            .as_deref(),
+        Some("pi_session_fork")
+    );
+
+    let (get_status, get_body) = request_json(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{child_session_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(get_status, StatusCode::OK, "{get_body:?}");
+    assert_eq!(
+        get_body["data"]["session"]["lineage"]["relation_type"],
+        "fork"
+    );
+    assert_eq!(
+        get_body["data"]["session"]["lineage"]["parent_session_id"],
+        parent_session_id
+    );
+}
+
+#[tokio::test]
 async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() {
     let log_dir = tempfile::tempdir().expect("log dir");
     unsafe {
