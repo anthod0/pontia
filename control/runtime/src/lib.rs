@@ -206,21 +206,21 @@ mod tests {
     #[test]
     fn runtime_script_exports_pontia_agent_kind_when_present() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let runtime_dir = dir.path();
-        let script_path = runtime_dir.join("launch.sh");
+        let temp_path = dir.path();
+        let script_path = temp_path.join("launch.sh");
         let paths = script::RuntimePaths {
-            log_dir: runtime_dir,
-            log_path: &runtime_dir.join("runtime.log"),
+            log_dir: temp_path,
+            log_path: &temp_path.join("runtime.log"),
         };
 
         script::write_launch_script(
             &script_path,
-            runtime_dir,
+            temp_path,
             &paths,
             &RuntimeStartRequest {
                 session_id: "sess_planner".to_string(),
                 client_type: "pi".to_string(),
-                workspace: Some(runtime_dir.display().to_string()),
+                workspace: Some(temp_path.display().to_string()),
                 handle: None,
                 role: None,
                 agent_kind: Some("planner".to_string()),

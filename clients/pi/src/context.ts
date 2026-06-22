@@ -26,7 +26,7 @@ function fallbackLogDir(env: EnvLike = process.env): string {
 }
 
 export function defaultHookLogFile(env: EnvLike = process.env): string {
-  const logDir = env.PONTIA_LOG_DIR ?? env.PONTIA_RUNTIME_DIR ?? fallbackLogDir(env);
+  const logDir = env.PONTIA_LOG_DIR ?? fallbackLogDir(env);
   return join(logDir, "pi-hook.log");
 }
 

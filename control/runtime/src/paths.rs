@@ -53,7 +53,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn log_paths_are_global_under_pontia_log_dir_not_session_runtime_dir() {
+    fn log_paths_are_global_under_pontia_log_dir() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         unsafe {
             std::env::set_var("PONTIA_LOG_DIR", tempdir.path());

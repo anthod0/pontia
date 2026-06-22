@@ -130,7 +130,6 @@ export PONTIA_SESSION_ID={}
 export PONTIA_CLIENT_TYPE={}
 export PONTIA_WORKSPACE={}
 export PONTIA_LOG_DIR={}
-export PONTIA_RUNTIME_DIR={}
 export PONTIA_RUNTIME_LOG={}
 export PONTIA_INTERNAL_EVENT_URL={}
 export PONTIA_EXTERNAL_API_URL={}
@@ -150,7 +149,6 @@ cleanup_pontia_launch_script
         shell_quote(&request.session_id),
         shell_quote(&request.client_type),
         shell_quote(&workspace.display().to_string()),
-        shell_quote(&runtime_paths.log_dir.display().to_string()),
         shell_quote(&runtime_paths.log_dir.display().to_string()),
         shell_quote(&runtime_paths.log_path.display().to_string()),
         shell_quote(&internal_event_url()),

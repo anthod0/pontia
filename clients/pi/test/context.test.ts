@@ -18,18 +18,10 @@ async function tempWorkspace() {
 }
 
 describe("loadTurnContext", () => {
-  test("derives default log path from PONTIA_LOG_DIR before PONTIA_RUNTIME_DIR", async () => {
+  test("derives default log path from PONTIA_LOG_DIR", async () => {
     const logDir = await tempWorkspace();
-    const runtimeDir = await tempWorkspace();
-    expect(
-      defaultHookLogFile({ PONTIA_LOG_DIR: logDir, PONTIA_RUNTIME_DIR: runtimeDir, PONTIA_WORKSPACE: "/project" }),
-    ).toBe(join(logDir, "pi-hook.log"));
-  });
-
-  test("derives default log path from PONTIA_RUNTIME_DIR", async () => {
-    const runtimeDir = await tempWorkspace();
-    expect(defaultHookLogFile({ PONTIA_RUNTIME_DIR: runtimeDir, PONTIA_WORKSPACE: "/project" })).toBe(
-      join(runtimeDir, "pi-hook.log"),
+    expect(defaultHookLogFile({ PONTIA_LOG_DIR: logDir, PONTIA_WORKSPACE: "/project" })).toBe(
+      join(logDir, "pi-hook.log"),
     );
   });
 

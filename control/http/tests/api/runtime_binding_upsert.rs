@@ -179,7 +179,6 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     unsafe {
         std::env::remove_var("PONTIA_LOG_DIR");
     }
-    assert!(metadata.get("runtime_dir").is_none());
     assert_eq!(metadata["log_dir"], log_dir.path().display().to_string());
     assert_eq!(
         metadata["runtime_log"],

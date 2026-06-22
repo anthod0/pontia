@@ -344,9 +344,6 @@ async fn pi_runtime_exports_real_hook_environment() {
         .to_string();
 
     assert!(!workspace.path().join(".pontia").exists());
-    let log_dir = metadata["log_dir"].as_str().expect("log_dir");
-    assert!(!log_dir.contains(".local/share/pontia/runtimes"));
-    assert!(metadata.get("runtime_dir").is_none());
     assert!(
         !metadata["internal_event_url"]
             .as_str()

@@ -32,7 +32,6 @@ The extension reads configuration from environment variables:
 | --- | --- | --- |
 | `PONTIA_WORKSPACE` | recommended | pi process cwd |
 | `PONTIA_LOG_DIR` | optional | `${XDG_STATE_HOME:-$HOME/.local/state}/pontia` |
-| `PONTIA_RUNTIME_DIR` | compatibility only | `$PONTIA_LOG_DIR` when launched by pontia |
 | `PONTIA_SESSION_ID` | required for reporting | none |
 | `PONTIA_RUNTIME_INSTANCE_ID` | required for reporting | none |
 | `PONTIA_INTERNAL_EVENT_URL` | required for pre-bound reporting; optional for deriving binding upsert URL | none |
@@ -59,7 +58,7 @@ DAG task development is currently frozen while pontia focuses on session-first W
 
 ## Manual validation
 
-When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_LOG_DIR`, `PONTIA_RUNTIME_DIR` (compatibility alias), `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_PI_HOOK_LOG` for the hook. Backend-delivered input is made available through the Internal current-turn claim API, not through a runtime file. A manually opened pi TUI can instead bind on startup through `PONTIA_INTERNAL_BINDING_UPSERT_URL` or `PONTIA_INTERNAL_EVENT_URL`. The steps below are useful for standalone plugin validation.
+When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_LOG_DIR`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_PI_HOOK_LOG` for the hook. Backend-delivered input is made available through the Internal current-turn claim API. A manually opened pi TUI can instead bind on startup through `PONTIA_INTERNAL_BINDING_UPSERT_URL` or `PONTIA_INTERNAL_EVENT_URL`. The steps below are useful for standalone plugin validation.
 
 1. Start pontia so `/internal/v1/events` and the current-turn claim API are reachable.
 2. Export environment for the pi process:

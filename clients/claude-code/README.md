@@ -35,4 +35,4 @@ pnpm typecheck
 
 On `SessionStart` startup, the hook reads `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_CLAUDE_HOOK_LOG` to post a one-time `session.ready` signal from `agent_client`.
 
-Claude Code turn hooks are currently disabled. The plugin does not use runtime directory defaults or file-based turn handoff.
+Claude Code turn hooks are currently disabled.
