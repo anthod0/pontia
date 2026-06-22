@@ -1,4 +1,4 @@
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 export interface TurnContext {
@@ -21,13 +21,13 @@ export interface LoadTurnContextOptions {
   fetch?: typeof fetch;
 }
 
-function fallbackRuntimeDir(): string {
-  return join(tmpdir(), "pontia", "pi-runtime-fallback");
+function fallbackLogDir(env: EnvLike = process.env): string {
+  return env.XDG_STATE_HOME ? join(env.XDG_STATE_HOME, "pontia") : join(homedir(), ".local", "state", "pontia");
 }
 
 export function defaultHookLogFile(env: EnvLike = process.env): string {
-  const runtimeDir = env.PONTIA_RUNTIME_DIR ?? fallbackRuntimeDir();
-  return join(runtimeDir, "pi-hook.log");
+  const logDir = env.PONTIA_LOG_DIR ?? env.PONTIA_RUNTIME_DIR ?? fallbackLogDir(env);
+  return join(logDir, "pi-hook.log");
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

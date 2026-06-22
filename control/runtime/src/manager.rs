@@ -79,14 +79,17 @@ impl GenericRuntimeManager {
         };
         let workspace = paths::workspace_path(&request)?;
         script::run_startup_hooks(client_spec.adapter.startup_hooks, &workspace)?;
-        let runtime_dir = paths::runtime_dir(&request.session_id)?;
-        std::fs::create_dir_all(&runtime_dir)?;
-        let log_path = runtime_dir.join("runtime.log");
+        let log_paths = paths::log_paths(&request.session_id)?;
+        std::fs::create_dir_all(&log_paths.log_dir)?;
+        let log_path = log_paths.runtime_log.clone();
         let internal_event_url = script::internal_event_url();
         let runtime_instance_id = new_runtime_instance_id().to_string();
-        std::fs::File::create(&log_path)?;
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)?;
         let runtime_paths = script::RuntimePaths {
-            runtime_dir: &runtime_dir,
+            log_dir: &log_paths.log_dir,
             log_path: &log_path,
         };
         let launch_script_path = script::write_ephemeral_launch_script(
@@ -132,11 +135,11 @@ impl GenericRuntimeManager {
             .map(|hook_log| {
                 (
                     hook_log.metadata_key,
-                    runtime_dir.join(hook_log.file_name).display().to_string(),
+                    log_paths.pi_hook_log.display().to_string(),
                 )
             });
         let workspace = workspace.display().to_string();
-        let runtime_dir = runtime_dir.display().to_string();
+        let log_dir = log_paths.log_dir.display().to_string();
         let log_path = log_path.display().to_string();
         let mut metadata = json!({
             "backend": "tmux",
@@ -146,7 +149,7 @@ impl GenericRuntimeManager {
             },
             "workspace": workspace,
             "launch_cwd": workspace,
-            "runtime_dir": runtime_dir,
+            "log_dir": log_dir,
             "runtime_log": log_path,
             "log_path": log_path,
             "internal_event_url": internal_event_url,

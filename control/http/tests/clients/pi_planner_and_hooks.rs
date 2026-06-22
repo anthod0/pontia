@@ -84,14 +84,22 @@ fn pi_env_lock() -> &'static tokio::sync::Mutex<()> {
 
 fn configure_test_runtime_env() {
     static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+    static LOG_DIR: OnceLock<PathBuf> = OnceLock::new();
     let data_dir = DATA_DIR.get_or_init(|| {
         let dir = tempfile::tempdir().expect("runtime data tempdir");
         let path = dir.path().join("data");
         let _kept_dir = dir.keep();
         path
     });
+    let log_dir = LOG_DIR.get_or_init(|| {
+        let dir = tempfile::tempdir().expect("runtime log tempdir");
+        let path = dir.path().join("logs");
+        let _kept_dir = dir.keep();
+        path
+    });
     unsafe {
         std::env::set_var("PONTIA_DATA_DIR", data_dir);
+        std::env::set_var("PONTIA_LOG_DIR", log_dir);
         std::env::set_var(
             "PONTIA_INTERNAL_EVENT_URL",
             "http://127.0.0.1:9/internal/v1/events",
@@ -143,8 +151,8 @@ async fn report_ready(state: AppState, session_id: &str) {
             "payload": {
                 "runtime_instance_id": metadata["runtime_instance_id"],
                 "client_session_key": session_id,
-                "client_session_file": metadata["runtime_dir"].as_str().map(|dir| format!("{dir}/pi-session.jsonl")),
-                "client_session_dir": metadata["runtime_dir"],
+                "client_session_file": metadata["log_dir"].as_str().map(|dir| format!("{dir}/pi-session.jsonl")),
+                "client_session_dir": metadata["log_dir"],
                 "client_cwd": metadata["workspace"]
             }
         })),
@@ -336,8 +344,9 @@ async fn pi_runtime_exports_real_hook_environment() {
         .to_string();
 
     assert!(!workspace.path().join(".pontia").exists());
-    let runtime_dir = metadata["runtime_dir"].as_str().expect("runtime_dir");
-    assert!(!runtime_dir.contains(".local/share/pontia/runtimes"));
+    let log_dir = metadata["log_dir"].as_str().expect("log_dir");
+    assert!(!log_dir.contains(".local/share/pontia/runtimes"));
+    assert!(metadata.get("runtime_dir").is_none());
     assert!(
         !metadata["internal_event_url"]
             .as_str()

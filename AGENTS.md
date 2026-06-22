@@ -50,7 +50,7 @@
 
 ## Runtime diagnostics
 
-- Per-session diagnostics live under `runtimes/<session_id>/` and include runtime logs and hook logs.
+- Runtime diagnostics are global log files under the pontia log/state directory (default `${XDG_STATE_HOME:-$HOME/.local/state}/pontia/`), including `runtime.log` and client hook logs such as `pi-hook.log`.
 
 ## Common commands
 

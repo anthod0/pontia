@@ -14,7 +14,7 @@ use pontia_core::{
 };
 
 use super::{
-    RuntimeStartRequest, RuntimeStartResult,
+    RuntimeStartRequest, RuntimeStartResult, paths,
     utils::{sanitize_identifier, short_session_id},
 };
 
@@ -32,14 +32,14 @@ pub(super) fn start_session(
     let started_at = utc_now()
         .format(&Rfc3339)
         .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
-    let runtime_dir = std::env::temp_dir()
-        .join("pontia-test-runtimes")
-        .join(&request.session_id);
-    std::fs::create_dir_all(&runtime_dir)?;
-    let log_path = runtime_dir.join("runtime.log");
-    std::fs::File::create(&log_path)?;
-    let runtime_dir = runtime_dir.display().to_string();
-    let log_path = log_path.display().to_string();
+    let log_paths = paths::log_paths(&request.session_id)?;
+    std::fs::create_dir_all(&log_paths.log_dir)?;
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_paths.runtime_log)?;
+    let log_dir = log_paths.log_dir.display().to_string();
+    let log_path = log_paths.runtime_log.display().to_string();
     let runtime_handle = runtime_handle(&request);
     registry()
         .lock()
@@ -58,7 +58,7 @@ pub(super) fn start_session(
             "in_process": {
                 "runtime_handle": runtime_handle,
             },
-            "runtime_dir": runtime_dir,
+            "log_dir": log_dir,
             "runtime_log": log_path,
             "log_path": log_path,
             "launch_cwd": request.workspace,

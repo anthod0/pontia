@@ -18,6 +18,14 @@ async function tempWorkspace() {
 }
 
 describe("loadTurnContext", () => {
+  test("derives default log path from PONTIA_LOG_DIR before PONTIA_RUNTIME_DIR", async () => {
+    const logDir = await tempWorkspace();
+    const runtimeDir = await tempWorkspace();
+    expect(
+      defaultHookLogFile({ PONTIA_LOG_DIR: logDir, PONTIA_RUNTIME_DIR: runtimeDir, PONTIA_WORKSPACE: "/project" }),
+    ).toBe(join(logDir, "pi-hook.log"));
+  });
+
   test("derives default log path from PONTIA_RUNTIME_DIR", async () => {
     const runtimeDir = await tempWorkspace();
     expect(defaultHookLogFile({ PONTIA_RUNTIME_DIR: runtimeDir, PONTIA_WORKSPACE: "/project" })).toBe(
@@ -25,9 +33,11 @@ describe("loadTurnContext", () => {
     );
   });
 
-  test("falls back to system temp directory for hook log when runtime directory is missing", () => {
-    const fallbackDir = join(tmpdir(), "pontia", "pi-runtime-fallback");
-    expect(defaultHookLogFile({ PONTIA_WORKSPACE: "/project" })).toBe(join(fallbackDir, "pi-hook.log"));
+  test("falls back to XDG state pontia directory for hook log when explicit log directory is missing", async () => {
+    const stateHome = await tempWorkspace();
+    expect(defaultHookLogFile({ XDG_STATE_HOME: stateHome, PONTIA_WORKSPACE: "/project" })).toBe(
+      join(stateHome, "pontia", "pi-hook.log"),
+    );
   });
 
   test("claims current turn from internal API when session context is available", async () => {

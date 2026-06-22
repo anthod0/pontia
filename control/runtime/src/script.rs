@@ -20,7 +20,7 @@ use super::{
 };
 
 pub(super) struct RuntimePaths<'a> {
-    pub(super) runtime_dir: &'a Path,
+    pub(super) log_dir: &'a Path,
     pub(super) log_path: &'a Path,
 }
 
@@ -78,13 +78,25 @@ pub(super) fn write_launch_script(
                 command.push_str(&shell_quote(&request.session_id));
             }
             (
-                "echo \"pontia runtime started\" >> \"$PONTIA_RUNTIME_LOG\"".to_string(),
+                format!(
+                    "echo {} >> \"$PONTIA_RUNTIME_LOG\"",
+                    shell_quote(&format!(
+                        "session={} runtime_instance={} pontia runtime started",
+                        request.session_id, runtime_instance_id
+                    ))
+                ),
                 format!("exec sh -lc {}\n", shell_quote(&command)),
             )
         }
         RuntimeBehavior::InProcess => match client_spec.adapter.dispatch {
             DispatchBehavior::InProcessRecorded | DispatchBehavior::None => (
-                "exec >> \"$PONTIA_RUNTIME_LOG\" 2>&1\necho \"pontia runtime started\"".to_string(),
+                format!(
+                    "exec >> \"$PONTIA_RUNTIME_LOG\" 2>&1\necho {}",
+                    shell_quote(&format!(
+                        "session={} runtime_instance={} pontia runtime started",
+                        request.session_id, runtime_instance_id
+                    ))
+                ),
                 "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
             ),
             DispatchBehavior::TmuxPaste => {
@@ -117,6 +129,7 @@ pub(super) fn write_launch_script(
 export PONTIA_SESSION_ID={}
 export PONTIA_CLIENT_TYPE={}
 export PONTIA_WORKSPACE={}
+export PONTIA_LOG_DIR={}
 export PONTIA_RUNTIME_DIR={}
 export PONTIA_RUNTIME_LOG={}
 export PONTIA_INTERNAL_EVENT_URL={}
@@ -137,7 +150,8 @@ cleanup_pontia_launch_script
         shell_quote(&request.session_id),
         shell_quote(&request.client_type),
         shell_quote(&workspace.display().to_string()),
-        shell_quote(&runtime_paths.runtime_dir.display().to_string()),
+        shell_quote(&runtime_paths.log_dir.display().to_string()),
+        shell_quote(&runtime_paths.log_dir.display().to_string()),
         shell_quote(&runtime_paths.log_path.display().to_string()),
         shell_quote(&internal_event_url()),
         shell_quote(&external_api_url()),
@@ -166,7 +180,7 @@ fn hook_log_path(
     runtime_paths: &RuntimePaths<'_>,
     hook_log: HookLogBehavior,
 ) -> std::path::PathBuf {
-    runtime_paths.runtime_dir.join(hook_log.file_name)
+    runtime_paths.log_dir.join(hook_log.file_name)
 }
 
 pub(super) fn internal_event_url() -> String {
@@ -226,7 +240,7 @@ mod tests {
         let script_path = tempdir.path().join("launch.sh");
         let log_path = tempdir.path().join("runtime.log");
         let paths = RuntimePaths {
-            runtime_dir: tempdir.path(),
+            log_dir: tempdir.path(),
             log_path: &log_path,
         };
         let request = RuntimeStartRequest {
@@ -254,6 +268,10 @@ mod tests {
             "script was:\n{script}"
         );
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
+        assert!(
+            script.contains("session=sess_resume_1 runtime_instance=runtime_instance_1"),
+            "script was:\n{script}"
+        );
     }
 
     #[test]
@@ -262,7 +280,7 @@ mod tests {
         let script_path = tempdir.path().join("launch.sh");
         let log_path = tempdir.path().join("runtime.log");
         let paths = RuntimePaths {
-            runtime_dir: tempdir.path(),
+            log_dir: tempdir.path(),
             log_path: &log_path,
         };
         let request = RuntimeStartRequest {
@@ -301,7 +319,7 @@ mod tests {
     fn runtime_script_prefers_explicit_start_command() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let paths = RuntimePaths {
-            runtime_dir: tempdir.path(),
+            log_dir: tempdir.path(),
             log_path: &tempdir.path().join("runtime.log"),
         };
         let request = RuntimeStartRequest {

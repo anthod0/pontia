@@ -19,7 +19,24 @@ pub use config::{
     set_runtime_external_api_token,
 };
 pub use manager::GenericRuntimeManager;
+use std::path::PathBuf;
 pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PontiaLogPaths {
+    pub log_dir: PathBuf,
+    pub runtime_log: PathBuf,
+    pub pi_hook_log: PathBuf,
+}
+
+pub fn pontia_log_paths() -> pontia_core::error::Result<PontiaLogPaths> {
+    let paths = paths::log_paths("")?;
+    Ok(PontiaLogPaths {
+        log_dir: paths.log_dir,
+        runtime_log: paths.runtime_log,
+        pi_hook_log: paths.pi_hook_log,
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -192,7 +209,7 @@ mod tests {
         let runtime_dir = dir.path();
         let script_path = runtime_dir.join("launch.sh");
         let paths = script::RuntimePaths {
-            runtime_dir,
+            log_dir: runtime_dir,
             log_path: &runtime_dir.join("runtime.log"),
         };
 

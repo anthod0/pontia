@@ -1,5 +1,5 @@
 use super::*;
-use pontia_runtime::{GenericRuntimeManager, configured_internal_event_url};
+use pontia_runtime::{GenericRuntimeManager, configured_internal_event_url, pontia_log_paths};
 use pontia_storage_sqlite::repositories::{
     agent_bindings::SqliteAgentBindingRepository,
     runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
@@ -81,8 +81,16 @@ impl RuntimeBindingUpsertService {
             )
             .await?;
 
-        let runtime_dir = pontia_runtime_dir(&session_id)?;
-        std::fs::create_dir_all(&runtime_dir)?;
+        let log_paths = pontia_log_paths()?;
+        std::fs::create_dir_all(&log_paths.log_dir)?;
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_paths.runtime_log)?;
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_paths.pi_hook_log)?;
         let internal_event_url = configured_internal_event_url()
             .unwrap_or_else(|| "http://127.0.0.1:8080/internal/v1/events".to_string());
         let capabilities = capabilities_for_tmux(client_spec, request.tmux.as_ref());
@@ -102,7 +110,9 @@ impl RuntimeBindingUpsertService {
             &request,
             &workspace.canonical_path,
             &internal_event_url,
-            &runtime_dir.display().to_string(),
+            &log_paths.log_dir.display().to_string(),
+            &log_paths.runtime_log.display().to_string(),
+            &log_paths.pi_hook_log.display().to_string(),
             &capabilities,
         );
 
@@ -245,7 +255,9 @@ fn binding_metadata(
     request: &RuntimeBindingUpsertRequest,
     launch_cwd: &str,
     internal_event_url: &str,
-    runtime_dir: &str,
+    log_dir: &str,
+    runtime_log: &str,
+    pi_hook_log: &str,
     capabilities: &SessionCapabilities,
 ) -> Value {
     let mut metadata = serde_json::Map::new();
@@ -271,7 +283,9 @@ fn binding_metadata(
         json!(request.runtime_instance_id),
     );
     insert_optional(&mut metadata, "start_command", &request.start_command);
-    metadata.insert("runtime_dir".to_string(), json!(runtime_dir));
+    metadata.insert("log_dir".to_string(), json!(log_dir));
+    metadata.insert("runtime_log".to_string(), json!(runtime_log));
+    metadata.insert("pi_hook_log".to_string(), json!(pi_hook_log));
     metadata.insert("internal_event_url".to_string(), json!(internal_event_url));
     metadata.insert("capabilities".to_string(), json!(capabilities));
 
@@ -328,18 +342,4 @@ fn insert_optional(
     if let Some(value) = non_empty(value.as_deref()) {
         metadata.insert(key.to_string(), json!(value));
     }
-}
-
-fn pontia_runtime_dir(session_id: &str) -> Result<PathBuf> {
-    if let Ok(path) = std::env::var("PONTIA_DATA_DIR") {
-        return Ok(PathBuf::from(path).join("runtimes").join(session_id));
-    }
-    let home = std::env::var("HOME").map_err(|_| Error::InvalidConfig {
-        key: "HOME",
-        message: "required to derive pontia data directory".to_string(),
-    })?;
-    Ok(PathBuf::from(home)
-        .join(".local/share/pontia")
-        .join("runtimes")
-        .join(session_id))
 }

@@ -115,6 +115,10 @@ fn upsert_body_with_tmux(
 
 #[tokio::test]
 async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() {
+    let log_dir = tempfile::tempdir().expect("log dir");
+    unsafe {
+        std::env::set_var("PONTIA_LOG_DIR", log_dir.path());
+    }
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -172,6 +176,19 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     assert_eq!(metadata["tmux"]["session_name"], "dev");
     assert_eq!(metadata["capabilities"]["accept_task"], true);
     assert_eq!(metadata["capabilities"]["context_usage"], "estimated");
+    unsafe {
+        std::env::remove_var("PONTIA_LOG_DIR");
+    }
+    assert!(metadata.get("runtime_dir").is_none());
+    assert_eq!(metadata["log_dir"], log_dir.path().display().to_string());
+    assert_eq!(
+        metadata["runtime_log"],
+        log_dir.path().join("runtime.log").display().to_string()
+    );
+    assert_eq!(
+        metadata["pi_hook_log"],
+        log_dir.path().join("pi-hook.log").display().to_string()
+    );
 
     let binding_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings WHERE session_id = ? AND client_type = 'pi' AND client_session_key = 'pi_session_123'")
         .bind(session_id)
