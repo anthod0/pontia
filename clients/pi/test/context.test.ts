@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test } from "vitest";
-import { defaultCurrentTurnFile, defaultHookLogFile, loadTurnContext } from "../src/context.js";
+import { defaultHookLogFile, loadTurnContext } from "../src/context.js";
 
 const tmpDirs: string[] = [];
 
@@ -18,20 +18,15 @@ async function tempWorkspace() {
 }
 
 describe("loadTurnContext", () => {
-  test("derives default context and log paths from PONTIA_RUNTIME_DIR", async () => {
+  test("derives default log path from PONTIA_RUNTIME_DIR", async () => {
     const runtimeDir = await tempWorkspace();
-    expect(defaultCurrentTurnFile({ PONTIA_RUNTIME_DIR: runtimeDir, PONTIA_WORKSPACE: "/project" })).toBe(
-      join(runtimeDir, "current-turn.json"),
-    );
     expect(defaultHookLogFile({ PONTIA_RUNTIME_DIR: runtimeDir, PONTIA_WORKSPACE: "/project" })).toBe(
       join(runtimeDir, "pi-hook.log"),
     );
   });
 
-  test("falls back to system temp directory when runtime directory is missing", () => {
+  test("falls back to system temp directory for hook log when runtime directory is missing", () => {
     const fallbackDir = join(tmpdir(), "pontia", "pi-runtime-fallback");
-
-    expect(defaultCurrentTurnFile({ PONTIA_WORKSPACE: "/project" })).toBe(join(fallbackDir, "current-turn.json"));
     expect(defaultHookLogFile({ PONTIA_WORKSPACE: "/project" })).toBe(join(fallbackDir, "pi-hook.log"));
   });
 
@@ -83,15 +78,15 @@ describe("loadTurnContext", () => {
     });
   });
 
-  test("loads required turn ids and lets environment event URL override file URL", async () => {
+  test("does not read current-turn files when API claim is unavailable", async () => {
     const workspace = await tempWorkspace();
     const contextFile = join(workspace, "turn.json");
+    const logFile = join(workspace, "hook.log");
     await writeFile(
       contextFile,
       JSON.stringify({
-        session_id: "sess_1",
-        turn_id: "turn_1",
-        input: "build it",
+        session_id: "sess_file",
+        input: "stale file input",
         client_type: "pi",
         runtime_instance_id: "rtinst_file",
         internal_event_url: "http://from-file/internal/v1/events",
@@ -100,46 +95,17 @@ describe("loadTurnContext", () => {
 
     const result = await loadTurnContext({
       PONTIA_WORKSPACE: workspace,
-      PONTIA_CURRENT_TURN_FILE: contextFile,
-      PONTIA_INTERNAL_EVENT_URL: "http://from-env/internal/v1/events",
-      PONTIA_RUNTIME_INSTANCE_ID: "rtinst_env",
+      PONTIA_PI_HOOK_LOG: logFile,
     });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error("expected context");
-    expect(result.context).toMatchObject({
-      sessionId: "sess_1",
-      turnId: "turn_1",
-      clientType: "pi",
-      internalEventUrl: "http://from-env/internal/v1/events",
-      runtimeInstanceId: "rtinst_env",
-      input: "build it",
-    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected missing context");
+    expect(result.reason).toBe("current turn claim unavailable");
+    expect(result.silent).toBe(true);
+    await expect(readFile(logFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  test("uses file event URL when environment URL is missing", async () => {
-    const workspace = await tempWorkspace();
-    const contextFile = join(workspace, "turn.json");
-    await writeFile(
-      contextFile,
-      JSON.stringify({
-        session_id: "sess_2",
-        turn_id: "turn_2",
-        client_type: "pi",
-        runtime_instance_id: "rtinst_file_2",
-        internal_event_url: "http://from-file/internal/v1/events",
-      }),
-    );
-
-    const result = await loadTurnContext({ PONTIA_WORKSPACE: workspace, PONTIA_CURRENT_TURN_FILE: contextFile });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error("expected context");
-    expect(result.context.internalEventUrl).toBe("http://from-file/internal/v1/events");
-    expect(result.context.runtimeInstanceId).toBe("rtinst_file_2");
-  });
-
-  test("silently skips missing fallback current-turn file when pontia env is absent", async () => {
+  test("silently skips when pontia API claim env is absent", async () => {
     const workspace = await tempWorkspace();
     const logFile = join(workspace, "hook.log");
 
@@ -151,42 +117,32 @@ describe("loadTurnContext", () => {
     await expect(readFile(logFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  test("logs missing current-turn file and does not return fake context", async () => {
-    const workspace = await tempWorkspace();
-    const missingFile = join(workspace, "missing.json");
-    const logFile = join(workspace, "hook.log");
-
-    const result = await loadTurnContext({
-      PONTIA_WORKSPACE: workspace,
-      PONTIA_CURRENT_TURN_FILE: missingFile,
-      PONTIA_PI_HOOK_LOG: logFile,
-      PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-      PONTIA_RUNTIME_INSTANCE_ID: "rtinst_missing_file",
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected missing context");
-    expect(result.reason).toContain("current-turn file");
-    const log = await readFile(logFile, "utf8");
-    expect(log).toContain("missing_current_turn_file");
-  });
-
   test("accepts pending input context without turn_id because pi plugin owns turn identity", async () => {
-    const workspace = await tempWorkspace();
-    const contextFile = join(workspace, "turn.json");
-    await writeFile(
-      contextFile,
-      JSON.stringify({
-        session_id: "sess_3",
-        input: "typed in web ui",
-        inbox_message_id: "msg_3",
-        client_type: "pi",
-        runtime_instance_id: "rtinst_file_3",
-        internal_event_url: "http://from-file/internal/v1/events",
-      }),
-    );
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            current_turn: {
+              session_id: "sess_3",
+              input: "typed in web ui",
+              inbox_message_id: "msg_3",
+              client_type: "pi",
+              runtime_instance_id: "rtinst_file_3",
+              internal_event_url: "http://from-api/internal/v1/events",
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as typeof fetch;
 
-    const result = await loadTurnContext({ PONTIA_WORKSPACE: workspace, PONTIA_CURRENT_TURN_FILE: contextFile });
+    const result = await loadTurnContext(
+      {
+        PONTIA_SESSION_ID: "sess_3",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_file_3",
+        PONTIA_INTERNAL_EVENT_URL: "http://from-env/internal/v1/events",
+      },
+      { fetch: fetchImpl },
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected context");
@@ -196,27 +152,29 @@ describe("loadTurnContext", () => {
       input: "typed in web ui",
       inboxMessageId: "msg_3",
       runtimeInstanceId: "rtinst_file_3",
+      internalEventUrl: "http://from-env/internal/v1/events",
     });
   });
 
-  test("rejects missing session/runtime ids and non-pi client type", async () => {
-    const workspace = await tempWorkspace();
-    const contextFile = join(workspace, "turn.json");
-    const logFile = join(workspace, "hook.log");
-    await writeFile(contextFile, JSON.stringify({ session_id: "sess_4", client_type: "generic" }));
+  test("rejects missing session/runtime ids and non-pi client type from API claim", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ data: { current_turn: { session_id: "sess_4", client_type: "generic" } } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as typeof fetch;
 
-    const result = await loadTurnContext({
-      PONTIA_WORKSPACE: workspace,
-      PONTIA_CURRENT_TURN_FILE: contextFile,
-      PONTIA_PI_HOOK_LOG: logFile,
-      PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-    });
+    const result = await loadTurnContext(
+      {
+        PONTIA_SESSION_ID: "sess_4",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_4",
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+      },
+      { fetch: fetchImpl },
+    );
 
     expect(result.ok).toBe(false);
-    const log = await readFile(logFile, "utf8");
-    expect(log).toContain("invalid_current_turn_context");
-    expect(log).toContain("client_type must be pi");
-    expect(log).toContain("runtime_instance_id or PONTIA_RUNTIME_INSTANCE_ID is required");
-    expect(log).not.toContain("turn_id is required");
+    if (result.ok) throw new Error("expected invalid context");
+    expect(result.reason).toContain("client_type must be pi");
+    expect(result.reason).not.toContain("turn_id is required");
   });
 });

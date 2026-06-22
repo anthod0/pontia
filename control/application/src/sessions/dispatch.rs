@@ -2,7 +2,7 @@ use super::*;
 use pontia_agent_clients as agent_clients;
 use pontia_agent_clients::{TurnContextBehavior, get_client_spec};
 
-use crate::turns::write_client_current_turn_context;
+use crate::turns::{store_client_current_turn_context, write_client_current_turn_context};
 
 impl SessionCommandService {
     pub(super) async fn dispatch_initial_generic_turn(
@@ -70,32 +70,46 @@ impl SessionCommandService {
         let ingest = EventIngestService::new(self.pool.clone());
         let dispatch_result = RuntimeReadinessService::new(self.pool.clone())
             .wait_until_ready(session_id, client_type, runtime_instance_id)
-            .await
-            .and_then(|()| {
-                if turn_context == TurnContextBehavior::CurrentTurnFile {
-                    write_client_current_turn_context(
-                        &runtime.metadata,
-                        &agent_input,
-                        client_type,
-                        None,
-                    )?;
-                }
-                Ok(())
-            })
-            .and_then(|()| {
-                let socket_path = runtime.tmux_socket_path().ok_or_else(|| {
-                    Error::Domain(format!(
-                        "session {session_id} runtime cannot accept tasks: missing tmux socket path"
-                    ))
-                })?;
-                let pane_id = runtime.tmux_pane_id().ok_or_else(|| {
-                    Error::Domain(format!(
-                        "session {session_id} runtime cannot accept tasks: missing tmux pane id"
-                    ))
-                })?;
-                self.runtime
-                    .dispatch_tui_turn(socket_path, pane_id, client_type, &agent_input)
-            });
+            .await;
+        let dispatch_result = match dispatch_result {
+            Ok(()) if turn_context == TurnContextBehavior::InternalApiClaim => {
+                store_client_current_turn_context(
+                    self.pool.clone(),
+                    session_id,
+                    &runtime.metadata,
+                    &agent_input,
+                    client_type,
+                    None,
+                )
+                .await
+            }
+            other => other,
+        }
+        .and_then(|()| {
+            if turn_context == TurnContextBehavior::CurrentTurnFile {
+                write_client_current_turn_context(
+                    &runtime.metadata,
+                    &agent_input,
+                    client_type,
+                    None,
+                )?;
+            }
+            Ok(())
+        })
+        .and_then(|()| {
+            let socket_path = runtime.tmux_socket_path().ok_or_else(|| {
+                Error::Domain(format!(
+                    "session {session_id} runtime cannot accept tasks: missing tmux socket path"
+                ))
+            })?;
+            let pane_id = runtime.tmux_pane_id().ok_or_else(|| {
+                Error::Domain(format!(
+                    "session {session_id} runtime cannot accept tasks: missing tmux pane id"
+                ))
+            })?;
+            self.runtime
+                .dispatch_tui_turn(socket_path, pane_id, client_type, &agent_input)
+        });
 
         let client_spec = get_client_spec(client_type)
             .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))?;

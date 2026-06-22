@@ -3,6 +3,7 @@ use time::format_description::well_known::Rfc3339;
 
 use pontia_agent_clients::{
     self as agent_clients, AdapterEventBehavior, InterruptBehavior, RuntimeBehavior,
+    TurnContextBehavior,
 };
 use pontia_core::{
     error::{Error, Result},
@@ -88,7 +89,9 @@ impl GenericRuntimeManager {
             AdapterEventBehavior::JsonlOutbox { file_name } => runtime_dir.join(file_name),
             AdapterEventBehavior::Disabled => runtime_dir.join("adapter-events.jsonl"),
         };
-        let current_turn_file = runtime_dir.join("current-turn.json");
+        let current_turn_file = (client_spec.adapter.turn_context
+            == TurnContextBehavior::CurrentTurnFile)
+            .then(|| runtime_dir.join("current-turn.json"));
         let internal_event_url = script::internal_event_url();
         let runtime_instance_id = new_runtime_instance_id().to_string();
         std::fs::File::create(&log_path)?;
@@ -102,7 +105,7 @@ impl GenericRuntimeManager {
             runtime_dir: &runtime_dir,
             log_path: &log_path,
             adapter_event_log: &adapter_event_log,
-            current_turn_file: &current_turn_file,
+            current_turn_file: current_turn_file.as_deref(),
         };
         let launch_script_path = script::write_ephemeral_launch_script(
             &workspace,
@@ -154,7 +157,9 @@ impl GenericRuntimeManager {
         let runtime_dir = runtime_dir.display().to_string();
         let log_path = log_path.display().to_string();
         let adapter_event_log = adapter_event_log.display().to_string();
-        let current_turn_file = current_turn_file.display().to_string();
+        let current_turn_file = current_turn_file
+            .as_ref()
+            .map(|path| path.display().to_string());
         let mut metadata = json!({
             "backend": "tmux",
             "tmux_session": tmux_session,
@@ -167,7 +172,6 @@ impl GenericRuntimeManager {
             "runtime_log": log_path,
             "log_path": log_path,
             "adapter_event_log": adapter_event_log,
-            "current_turn_file": current_turn_file,
             "internal_event_url": internal_event_url,
             "handle": request.handle,
             "role": request.role,
@@ -176,6 +180,11 @@ impl GenericRuntimeManager {
             "runtime_instance_id": runtime_instance_id,
             "start_command": start_command,
         });
+        if let Some(current_turn_file) = current_turn_file
+            && let Some(object) = metadata.as_object_mut()
+        {
+            object.insert("current_turn_file".to_string(), json!(current_turn_file));
+        }
         if let Some(binding) = pane_binding
             && let Some(object) = metadata.as_object_mut()
         {

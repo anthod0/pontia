@@ -420,7 +420,7 @@ async fn pi_adapter_event_outbox_reports_malformed_records_without_forging_turn_
 }
 
 #[tokio::test]
-async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
+async fn pi_dispatch_stores_pending_current_turn_without_writing_context_file() {
     let workspace = tempfile::tempdir().expect("workspace");
     let state = test_state("pi_current_turn_context").await;
     let session_id = create_pi_session(state.clone(), workspace.path()).await;
@@ -430,20 +430,13 @@ async fn pi_dispatch_writes_current_turn_context_for_real_hook() {
         .expect("tmux session")
         .to_string();
 
-    let inbox = submit_pi_turn(state, &session_id, "write context for hook").await;
+    let inbox = submit_pi_turn(state.clone(), &session_id, "write context for hook").await;
     assert!(inbox["turn_id"].is_null());
 
     assert!(!workspace.path().join(".pontia").exists());
-    let context_path = PathBuf::from(
-        metadata["current_turn_file"]
-            .as_str()
-            .expect("current_turn_file metadata"),
-    );
-    assert!(context_path.starts_with(metadata["runtime_dir"].as_str().expect("runtime_dir")));
-    let context: Value = serde_json::from_str(
-        &std::fs::read_to_string(&context_path).expect("current-turn context file"),
-    )
-    .expect("context json");
+    assert!(metadata.get("current_turn_file").is_none());
+    let updated_metadata = binding_metadata(&state, &session_id).await;
+    let context = &updated_metadata["pending_current_turn"];
     assert_eq!(context["session_id"], session_id);
     assert!(
         context.get("turn_id").is_none(),
@@ -537,11 +530,7 @@ async fn pi_runtime_exports_real_hook_environment() {
         !PathBuf::from(runtime_dir).join("runtime.sh").exists(),
         "runtime.sh must not be a stable runtime artifact"
     );
-    let current_turn_file = metadata["current_turn_file"]
-        .as_str()
-        .expect("current_turn_file");
-    assert!(current_turn_file.contains("/runtimes/"));
-    assert!(current_turn_file.ends_with("current-turn.json"));
+    assert!(metadata.get("current_turn_file").is_none());
     assert!(
         !metadata["internal_event_url"]
             .as_str()

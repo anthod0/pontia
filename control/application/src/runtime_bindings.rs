@@ -83,7 +83,6 @@ impl RuntimeBindingUpsertService {
 
         let runtime_dir = pontia_runtime_dir(&session_id)?;
         std::fs::create_dir_all(&runtime_dir)?;
-        let current_turn_file = runtime_dir.join("current-turn.json").display().to_string();
         let internal_event_url = configured_internal_event_url()
             .unwrap_or_else(|| "http://127.0.0.1:8080/internal/v1/events".to_string());
         let capabilities = capabilities_for_tmux(client_spec, request.tmux.as_ref());
@@ -103,7 +102,6 @@ impl RuntimeBindingUpsertService {
             &request,
             &workspace.canonical_path,
             &internal_event_url,
-            &current_turn_file,
             &runtime_dir.display().to_string(),
             &capabilities,
         );
@@ -150,7 +148,6 @@ impl RuntimeBindingUpsertService {
             "runtime": {
                 "runtime_instance_id": request.runtime_instance_id,
                 "internal_event_url": internal_event_url,
-                "current_turn_file": current_turn_file,
                 "capabilities": capabilities,
             }
         }))
@@ -248,7 +245,6 @@ fn binding_metadata(
     request: &RuntimeBindingUpsertRequest,
     launch_cwd: &str,
     internal_event_url: &str,
-    current_turn_file: &str,
     runtime_dir: &str,
     capabilities: &SessionCapabilities,
 ) -> Value {
@@ -276,7 +272,6 @@ fn binding_metadata(
     );
     insert_optional(&mut metadata, "start_command", &request.start_command);
     metadata.insert("runtime_dir".to_string(), json!(runtime_dir));
-    metadata.insert("current_turn_file".to_string(), json!(current_turn_file));
     metadata.insert("internal_event_url".to_string(), json!(internal_event_url));
     metadata.insert("capabilities".to_string(), json!(capabilities));
 

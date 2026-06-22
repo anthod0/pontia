@@ -38,8 +38,7 @@ describe("pontia pi extension startup boundary", () => {
     const makeReporter = vi.fn(() => ({ report: vi.fn(async () => true) }));
     const loadContext = vi.fn(async (): Promise<LoadTurnContextResult> => ({
       ok: false,
-      reason: "current-turn file is missing",
-      contextFile: "current-turn.json",
+      reason: "current turn claim unavailable",
       logFile: "pi-hook.log",
       silent: true,
     }));

@@ -34,30 +34,16 @@ The extension reads configuration from environment variables:
 | `PONTIA_RUNTIME_DIR` | recommended | pi process cwd |
 | `PONTIA_SESSION_ID` | required for reporting | none |
 | `PONTIA_RUNTIME_INSTANCE_ID` | required for reporting | none |
-| `PONTIA_CURRENT_TURN_FILE` | recommended | `$PONTIA_RUNTIME_DIR/current-turn.json` |
 | `PONTIA_INTERNAL_EVENT_URL` | required for pre-bound reporting; optional for deriving binding upsert URL | none |
 | `PONTIA_INTERNAL_BINDING_UPSERT_URL` | optional for manual TUI binding | derived from `PONTIA_INTERNAL_EVENT_URL` |
 | `PONTIA_PI_HOOK_LOG` | recommended | `$PONTIA_RUNTIME_DIR/pi-hook.log` |
 
-Expected `current-turn.json` for backend-delivered input:
-
-```json
-{
-  "session_id": "sess_xxx",
-  "input": "user task",
-  "inbox_message_id": "msg_xxx",
-  "client_type": "pi",
-  "runtime_instance_id": "rtinst_xxx",
-  "internal_event_url": "http://127.0.0.1:8080/internal/v1/events"
-}
-```
-
-`session_id`, `runtime_instance_id`, and `client_type: "pi"` are required. `inbox_message_id` is optional and is used to link backend-delivered input to the real turn after `agent_start`. `turn_id` is intentionally omitted for pi: the plugin generates the authoritative pontia turn id when pi reports a real `agent_start`. `PONTIA_INTERNAL_EVENT_URL` and `PONTIA_RUNTIME_INSTANCE_ID` override file values when present.
+Backend-delivered input is claimed through the Internal API endpoint derived from `PONTIA_INTERNAL_EVENT_URL`: `/internal/v1/sessions/{session_id}/current-turn/claim`. `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_INTERNAL_EVENT_URL` are required for this pre-bound claim path. `inbox_message_id`, when present in the claim response, is used to link backend-delivered input to the real turn after `agent_start`. `turn_id` is intentionally omitted for pi: the plugin generates the authoritative pontia turn id when pi reports a real `agent_start`.
 
 ## What the extension reports
 
 - On `session_start` with reason `startup`, it posts a one-time `session.ready` signal from `agent_client` for pre-bound managed sessions with the current `runtime_instance_id` plus the real pi session identity from `ctx.sessionManager.getSessionId()` as `client_session_key`. Manual pi TUI sessions defer binding and `session.ready` until the first `agent_start`.
-- On `agent_start`, it reads the pending input context, generates a fresh pontia `turn_id`, posts `turn.started` with any `inbox_message_id` metadata, then consumes the pending context file so later manual TUI input is not attached to stale Web input.
+- On `agent_start`, it claims pending input context from the Internal API, generates a fresh pontia `turn_id`, and posts `turn.started` with any `inbox_message_id` metadata.
 - On assistant message updates/end events, it collects assistant-visible text from pi lifecycle event payloads.
 - When pi exposes context usage through hook events, message usage, or `ctx.getContextUsage()`, it posts `session.context_usage_updated`; it does not parse session files or fabricate usage when pi does not provide it.
 - On `agent_end`, it posts `turn.output` when text was collected, then posts `turn.completed` for the plugin-generated turn id.
@@ -72,45 +58,30 @@ DAG task development is currently frozen while pontia focuses on session-first W
 
 ## Manual validation
 
-When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane writes `current-turn.json` under the global runtime directory and exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_RUNTIME_DIR`, `PONTIA_CURRENT_TURN_FILE`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_PI_HOOK_LOG` for the hook. A manually opened pi TUI can instead bind on startup through `PONTIA_INTERNAL_BINDING_UPSERT_URL` or `PONTIA_INTERNAL_EVENT_URL`. The steps below are useful for standalone plugin validation.
+When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_RUNTIME_DIR`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_PI_HOOK_LOG` for the hook. Backend-delivered input is made available through the Internal current-turn claim API, not through a runtime file. A manually opened pi TUI can instead bind on startup through `PONTIA_INTERNAL_BINDING_UPSERT_URL` or `PONTIA_INTERNAL_EVENT_URL`. The steps below are useful for standalone plugin validation.
 
-1. Start pontia so `/internal/v1/events` is reachable.
-2. Create the current turn file in a runtime directory:
+1. Start pontia so `/internal/v1/events` and the current-turn claim API are reachable.
+2. Export environment for the pi process:
 
    ```bash
    export PONTIA_RUNTIME_DIR="$HOME/.local/share/pontia/runtimes/manual-pi"
    mkdir -p "$PONTIA_RUNTIME_DIR"
-   cat > "$PONTIA_RUNTIME_DIR/current-turn.json" <<'JSON'
-   {
-     "session_id": "sess_xxx",
-     "input": "hello",
-     "client_type": "pi",
-     "runtime_instance_id": "rtinst_xxx",
-     "internal_event_url": "http://127.0.0.1:8080/internal/v1/events"
-   }
-   JSON
-   ```
-
-3. Export environment for the pi process:
-
-   ```bash
    export PONTIA_WORKSPACE="$PWD"
    export PONTIA_SESSION_ID="sess_xxx"
    export PONTIA_RUNTIME_INSTANCE_ID="rtinst_xxx"
-   export PONTIA_CURRENT_TURN_FILE="$PONTIA_RUNTIME_DIR/current-turn.json"
    export PONTIA_INTERNAL_EVENT_URL="http://127.0.0.1:8080/internal/v1/events"
    export PONTIA_PI_HOOK_LOG="$PONTIA_RUNTIME_DIR/pi-hook.log"
    ```
 
-4. Run a real pi session:
+3. Run a real pi session:
 
    ```bash
    pi --approve -e ./clients/pi
    ```
 
-5. Submit a prompt and verify pontia received `turn.output` and `turn.completed` through its event list/API or database inspection.
+4. Submit a prompt and verify pontia received `turn.output` and `turn.completed` through its event list/API or database inspection.
 
-6. If reporting fails, inspect diagnostics:
+5. If reporting fails, inspect diagnostics:
 
    ```bash
    tail -f "$PONTIA_RUNTIME_DIR/pi-hook.log"

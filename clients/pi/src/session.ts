@@ -34,7 +34,6 @@ function optionalString(value: unknown): string | undefined {
 function hasPontiaRuntimeIntent(env: EnvLike): boolean {
   return Boolean(
     optionalString(env.PONTIA_RUNTIME_DIR) ||
-      optionalString(env.PONTIA_CURRENT_TURN_FILE) ||
       optionalString(env.PONTIA_SESSION_ID) ||
       optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ||
       optionalString(env.PONTIA_INTERNAL_EVENT_URL),

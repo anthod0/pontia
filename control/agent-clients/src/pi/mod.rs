@@ -43,7 +43,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
         interrupt: InterruptBehavior::TmuxInterrupt,
         terminate: TerminateBehavior::TmuxSendKeys(&["C-c", "C-c"]),
-        turn_context: TurnContextBehavior::CurrentTurnFile,
+        turn_context: TurnContextBehavior::InternalApiClaim,
         current_turn_id: CurrentTurnIdBehavior::Omit,
         turn_lifecycle: TurnLifecycleBehavior::ClientManagedForInteractiveTmux,
         runtime_binding: RuntimeBindingBehavior::Tmux {

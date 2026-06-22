@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -50,7 +50,7 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
   const reported: InternalEvent[] = [];
   createPontiaPiExtension(pi as any, {
     env: {},
-    loadContext: vi.fn(async () => ({ ok: true as const, context, contextFile: "turn.json", logFile: "hook.log" })),
+    loadContext: vi.fn(async () => ({ ok: true as const, context, logFile: "hook.log" })),
     makeReporter: vi.fn(() => ({ report: vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
       reported.push(event);
       return true;
@@ -283,8 +283,7 @@ describe("pontia pi extension lifecycle", () => {
       fetch: fetchImpl as any,
       loadContext: vi.fn(async () => ({
         ok: false as const,
-        reason: "current-turn file is missing or unreadable: fallback/current-turn.json",
-        contextFile: "fallback/current-turn.json",
+        reason: "current turn claim unavailable",
         logFile: "fallback/pi-hook.log",
         silent: true,
       })),
@@ -303,19 +302,33 @@ describe("pontia pi extension lifecycle", () => {
 
   test("agent_start consumes backend-delivered current-turn context after reporting started", async () => {
     const dir = await tempDir();
-    const contextFile = join(dir, "current-turn.json");
-    await writeFile(contextFile, JSON.stringify({
-      session_id: "sess_consumed",
-      input: "from web",
-      inbox_message_id: "msg_consumed",
-      client_type: "pi",
-      runtime_instance_id: "rtinst_consumed",
-      internal_event_url: "http://localhost/internal/v1/events",
-    }));
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            current_turn: {
+              session_id: "sess_consumed",
+              input: "from web",
+              inbox_message_id: "msg_consumed",
+              client_type: "pi",
+              runtime_instance_id: "rtinst_consumed",
+              internal_event_url: "http://localhost/internal/v1/events",
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
 
     const { handlers, reported } = install({
-      env: { PONTIA_CURRENT_TURN_FILE: contextFile, PONTIA_PI_HOOK_LOG: join(dir, "hook.log") },
-      loadContext: loadTurnContext,
+      env: {
+        PONTIA_SESSION_ID: "sess_consumed",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_consumed",
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+        PONTIA_PI_HOOK_LOG: join(dir, "hook.log"),
+      },
+      fetch: fetchImpl as any,
+      loadContext: (env) => loadTurnContext(env, { fetch: fetchImpl as any }),
     });
 
     await handlers.agent_start({}, {});
@@ -325,7 +338,6 @@ describe("pontia pi extension lifecycle", () => {
       session_id: "sess_consumed",
       payload: { metadata: { inbox_message_id: "msg_consumed" } },
     });
-    await expect(access(contextFile)).rejects.toThrow();
   });
 
   test("manual tui agent_start uses the bound session when current-turn context is absent", async () => {
@@ -339,7 +351,6 @@ describe("pontia pi extension lifecycle", () => {
         runtime: {
           runtime_instance_id: "rtinst_bound",
           internal_event_url: "http://localhost/internal/v1/events",
-          current_turn_file: "/tmp/pontia/current-turn.json",
         },
       }), { status: 200 });
     });
@@ -352,8 +363,7 @@ describe("pontia pi extension lifecycle", () => {
       fetch: fetchImpl as any,
       loadContext: vi.fn(async () => ({
         ok: false as const,
-        reason: "current-turn file is missing or unreadable: fallback/current-turn.json",
-        contextFile: "fallback/current-turn.json",
+        reason: "current turn claim unavailable",
         logFile: "fallback/pi-hook.log",
         silent: true,
       })),
@@ -662,7 +672,6 @@ describe("pontia pi extension lifecycle", () => {
       loadContext: vi.fn(async () => ({
         ok: true as const,
         context: { ...context, turnId: undefined },
-        contextFile: "turn.json",
         logFile: "hook.log",
       })),
     });
@@ -689,7 +698,7 @@ describe("pontia pi extension lifecycle", () => {
 
   test("does not report completion when context is missing", async () => {
     const { handlers, reported } = install({
-      loadContext: vi.fn(async () => ({ ok: false as const, reason: "missing", contextFile: "missing.json", logFile: "hook.log" })),
+      loadContext: vi.fn(async () => ({ ok: false as const, reason: "missing", logFile: "hook.log" })),
     });
 
     await handlers.agent_start({}, {});
@@ -704,8 +713,7 @@ describe("pontia pi extension lifecycle", () => {
     const { handlers, reported } = install({
       loadContext: vi.fn(async () => ({
         ok: false as const,
-        reason: "current-turn file is missing or unreadable: fallback/current-turn.json",
-        contextFile: "fallback/current-turn.json",
+        reason: "current turn claim unavailable",
         logFile: "fallback/pi-hook.log",
         silent: true,
       })),

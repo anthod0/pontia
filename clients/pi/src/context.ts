@@ -1,7 +1,5 @@
-import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appendDiagnostic } from "./diagnostics.js";
 
 export interface TurnContext {
   sessionId: string;
@@ -14,8 +12,8 @@ export interface TurnContext {
 }
 
 export type LoadTurnContextResult =
-  | { ok: true; context: TurnContext; contextFile: string; logFile: string }
-  | { ok: false; reason: string; contextFile: string; logFile: string; silent?: boolean };
+  | { ok: true; context: TurnContext; logFile: string }
+  | { ok: false; reason: string; logFile: string; silent?: boolean };
 
 export type EnvLike = Record<string, string | undefined>;
 
@@ -25,11 +23,6 @@ export interface LoadTurnContextOptions {
 
 function fallbackRuntimeDir(): string {
   return join(tmpdir(), "pontia", "pi-runtime-fallback");
-}
-
-export function defaultCurrentTurnFile(env: EnvLike = process.env): string {
-  const runtimeDir = env.PONTIA_RUNTIME_DIR ?? fallbackRuntimeDir();
-  return join(runtimeDir, "current-turn.json");
 }
 
 export function defaultHookLogFile(env: EnvLike = process.env): string {
@@ -45,16 +38,6 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function hasPontiaRuntimeIntent(env: EnvLike): boolean {
-  return Boolean(
-    optionalString(env.PONTIA_RUNTIME_DIR) ||
-      optionalString(env.PONTIA_CURRENT_TURN_FILE) ||
-      optionalString(env.PONTIA_SESSION_ID) ||
-      optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ||
-      optionalString(env.PONTIA_INTERNAL_EVENT_URL),
-  );
-}
-
 function claimUrl(internalEventUrl: string, sessionId: string): string | undefined {
   try {
     const url = new URL(internalEventUrl);
@@ -65,7 +48,7 @@ function claimUrl(internalEventUrl: string, sessionId: string): string | undefin
   }
 }
 
-function contextFromRecord(record: Record<string, unknown>, env: EnvLike, contextFile: string, logFile: string): LoadTurnContextResult {
+function contextFromRecord(record: Record<string, unknown>, env: EnvLike, logFile: string): LoadTurnContextResult {
   const errors: string[] = [];
   const sessionId = optionalString(record.session_id);
   const turnId = optionalString(record.turn_id);
@@ -81,12 +64,11 @@ function contextFromRecord(record: Record<string, unknown>, env: EnvLike, contex
   if (!runtimeInstanceId) errors.push("runtime_instance_id or PONTIA_RUNTIME_INSTANCE_ID is required");
 
   if (errors.length > 0) {
-    return { ok: false, reason: errors.join("; "), contextFile, logFile };
+    return { ok: false, reason: errors.join("; "), logFile };
   }
 
   return {
     ok: true,
-    contextFile,
     logFile,
     context: {
       sessionId: sessionId!,
@@ -100,7 +82,7 @@ function contextFromRecord(record: Record<string, unknown>, env: EnvLike, contex
   };
 }
 
-async function claimTurnContext(env: EnvLike, contextFile: string, logFile: string, fetchImpl: typeof fetch): Promise<LoadTurnContextResult | undefined> {
+async function claimTurnContext(env: EnvLike, logFile: string, fetchImpl: typeof fetch): Promise<LoadTurnContextResult | undefined> {
   const sessionId = optionalString(env.PONTIA_SESSION_ID);
   const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID);
   const internalEventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL);
@@ -118,68 +100,16 @@ async function claimTurnContext(env: EnvLike, contextFile: string, logFile: stri
     const body = (await response.json()) as unknown;
     const data = asRecord(body)?.data;
     const currentTurn = asRecord(asRecord(data)?.current_turn);
-    if (!currentTurn) return { ok: false, reason: "no pending current turn", contextFile, logFile, silent: true };
-    return contextFromRecord(currentTurn, env, contextFile, logFile);
+    if (!currentTurn) return { ok: false, reason: "no pending current turn", logFile, silent: true };
+    return contextFromRecord(currentTurn, env, logFile);
   } catch {
     return undefined;
   }
 }
 
 export async function loadTurnContext(env: EnvLike = process.env, options: LoadTurnContextOptions = {}): Promise<LoadTurnContextResult> {
-  const contextFile = env.PONTIA_CURRENT_TURN_FILE ?? defaultCurrentTurnFile(env);
   const logFile = env.PONTIA_PI_HOOK_LOG ?? defaultHookLogFile(env);
-  const claimed = await claimTurnContext(env, contextFile, logFile, options.fetch ?? fetch);
+  const claimed = await claimTurnContext(env, logFile, options.fetch ?? fetch);
   if (claimed) return claimed;
-
-  let raw: string;
-  try {
-    raw = await readFile(contextFile, "utf8");
-  } catch (error) {
-    const reason = `current-turn file is missing or unreadable: ${contextFile}`;
-    if (!hasPontiaRuntimeIntent(env)) return { ok: false, reason, contextFile, logFile, silent: true };
-    await appendDiagnostic(logFile, {
-      level: "warn",
-      code: "missing_current_turn_file",
-      message: reason,
-      details: error instanceof Error ? error.message : String(error),
-    });
-    return { ok: false, reason, contextFile, logFile };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    const reason = "current-turn file is not valid JSON";
-    await appendDiagnostic(logFile, {
-      level: "error",
-      code: "invalid_current_turn_context",
-      message: reason,
-      details: error instanceof Error ? error.message : String(error),
-    });
-    return { ok: false, reason, contextFile, logFile };
-  }
-
-  const record = asRecord(parsed);
-  const errors: string[] = [];
-  if (!record) errors.push("context must be a JSON object");
-
-  if (record) {
-    const result = contextFromRecord(record, env, contextFile, logFile);
-    if (result.ok) return result;
-    errors.push(result.reason);
-  }
-
-  if (errors.length > 0) {
-    const reason = errors.join("; ");
-    await appendDiagnostic(logFile, {
-      level: "error",
-      code: "invalid_current_turn_context",
-      message: reason,
-      details: { contextFile },
-    });
-    return { ok: false, reason, contextFile, logFile };
-  }
-
-  throw new Error("unreachable");
+  return { ok: false, reason: "current turn claim unavailable", logFile, silent: true };
 }

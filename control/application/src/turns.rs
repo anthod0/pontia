@@ -136,22 +136,36 @@ impl TurnCommandService {
                 &binding_metadata,
             )
             .await?;
-            if client_spec.adapter.turn_context == TurnContextBehavior::CurrentTurnFile {
-                store_client_current_turn_context(
-                    self.pool.clone(),
-                    session_id,
-                    &binding_metadata,
-                    &agent_input,
-                    &session.client_type,
-                    Some(&metadata),
-                )
-                .await?;
-                write_client_current_turn_context(
-                    &binding_metadata,
-                    &agent_input,
-                    &session.client_type,
-                    Some(&metadata),
-                )?;
+            match client_spec.adapter.turn_context {
+                TurnContextBehavior::InternalApiClaim => {
+                    store_client_current_turn_context(
+                        self.pool.clone(),
+                        session_id,
+                        &binding_metadata,
+                        &agent_input,
+                        &session.client_type,
+                        Some(&metadata),
+                    )
+                    .await?;
+                }
+                TurnContextBehavior::CurrentTurnFile => {
+                    store_client_current_turn_context(
+                        self.pool.clone(),
+                        session_id,
+                        &binding_metadata,
+                        &agent_input,
+                        &session.client_type,
+                        Some(&metadata),
+                    )
+                    .await?;
+                    write_client_current_turn_context(
+                        &binding_metadata,
+                        &agent_input,
+                        &session.client_type,
+                        Some(&metadata),
+                    )?;
+                }
+                TurnContextBehavior::Disabled => {}
             }
             self.runtime.dispatch_tui_turn(
                 &tmux_binding.socket_path,
@@ -235,6 +249,17 @@ impl TurnCommandService {
         if dispatch_mode == DispatchMode::TmuxPaste {
             match self.runtime_binding_metadata(session_id).await? {
                 Some(binding_metadata) => {
+                    if client_spec.adapter.turn_context == TurnContextBehavior::InternalApiClaim {
+                        store_client_current_turn_context(
+                            self.pool.clone(),
+                            session_id,
+                            &binding_metadata,
+                            &agent_input,
+                            &session.client_type,
+                            Some(&metadata),
+                        )
+                        .await?;
+                    }
                     let tmux_binding = tmux_binding
                         .as_ref()
                         .expect("tmux binding was validated before turn creation");
@@ -247,15 +272,19 @@ impl TurnCommandService {
                         )
                         .await
                         .and_then(|()| {
-                            if client_spec.adapter.turn_context
-                                == TurnContextBehavior::CurrentTurnFile
-                            {
-                                write_client_current_turn_context(
-                                    &binding_metadata,
-                                    &agent_input,
-                                    &session.client_type,
-                                    Some(&metadata),
-                                )?;
+                            match client_spec.adapter.turn_context {
+                                TurnContextBehavior::InternalApiClaim => {
+                                    // Pending context for claim-based clients is stored before dispatch.
+                                }
+                                TurnContextBehavior::CurrentTurnFile => {
+                                    write_client_current_turn_context(
+                                        &binding_metadata,
+                                        &agent_input,
+                                        &session.client_type,
+                                        Some(&metadata),
+                                    )?;
+                                }
+                                TurnContextBehavior::Disabled => {}
                             }
                             Ok(())
                         })
@@ -373,7 +402,7 @@ struct TmuxPaneBinding {
     pane_id: String,
 }
 
-async fn store_client_current_turn_context(
+pub(crate) async fn store_client_current_turn_context(
     pool: SqlitePool,
     session_id: &str,
     metadata: &Value,
