@@ -59,7 +59,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         )]),
     });
 
-    let result = GenericRuntimeManager
+    GenericRuntimeManager
         .start_session(RuntimeStartRequest {
             session_id: "sess_configured".to_string(),
             client_type: "pi".to_string(),
@@ -77,13 +77,6 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     }
     set_runtime_config(RuntimeConfig::default());
 
-    let runtime_dir = result.metadata["runtime_dir"]
-        .as_str()
-        .expect("runtime dir");
-    assert!(
-        !Path::new(runtime_dir).join("runtime.sh").exists(),
-        "runtime.sh must not be a stable runtime artifact"
-    );
     let log = std::fs::read_to_string(tmux_log).expect("tmux log");
     assert!(
         log.contains("/tmp/pontia-launch/"),
@@ -122,7 +115,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
         )]),
     });
 
-    let result = GenericRuntimeManager
+    GenericRuntimeManager
         .start_session(RuntimeStartRequest {
             session_id: "sess_env_override".to_string(),
             client_type: "pi".to_string(),
@@ -141,13 +134,6 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
     }
     set_runtime_config(RuntimeConfig::default());
 
-    let runtime_dir = result.metadata["runtime_dir"]
-        .as_str()
-        .expect("runtime dir");
-    assert!(
-        !Path::new(runtime_dir).join("runtime.sh").exists(),
-        "runtime.sh must not be a stable runtime artifact"
-    );
     let log = std::fs::read_to_string(tmux_log).expect("tmux log");
     let launch_script = std::fs::read_to_string(launch_script_path_from_tmux_log(&log))
         .expect("ephemeral launch script");

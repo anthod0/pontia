@@ -91,12 +91,6 @@ impl GenericRuntimeManager {
         let internal_event_url = script::internal_event_url();
         let runtime_instance_id = new_runtime_instance_id().to_string();
         std::fs::File::create(&log_path)?;
-        let stale_runtime_script = runtime_dir.join("runtime.sh");
-        match std::fs::remove_file(&stale_runtime_script) {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(err.into()),
-        }
         let runtime_paths = script::RuntimePaths {
             runtime_dir: &runtime_dir,
             log_path: &log_path,

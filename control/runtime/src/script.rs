@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn pi_runtime_script_uses_exact_project_session_id() {
         let tempdir = tempfile::tempdir().expect("tempdir");
-        let script_path = tempdir.path().join("runtime.sh");
+        let script_path = tempdir.path().join("launch.sh");
         let log_path = tempdir.path().join("runtime.log");
         let paths = RuntimePaths {
             runtime_dir: tempdir.path(),
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn runtime_script_uses_configured_external_api_token_when_env_is_unset() {
         let tempdir = tempfile::tempdir().expect("tempdir");
-        let script_path = tempdir.path().join("runtime.sh");
+        let script_path = tempdir.path().join("launch.sh");
         let log_path = tempdir.path().join("runtime.log");
         let paths = RuntimePaths {
             runtime_dir: tempdir.path(),
@@ -319,7 +319,7 @@ mod tests {
             agent_kind: None,
             start_command: Some("pi --resume-user-command".to_string()),
         };
-        let script_path = tempdir.path().join("runtime.sh");
+        let script_path = tempdir.path().join("launch.sh");
 
         write_launch_script(
             &script_path,
@@ -328,9 +328,9 @@ mod tests {
             &request,
             "rtinst_explicit",
         )
-        .expect("write runtime script");
+        .expect("write launch script");
 
-        let content = std::fs::read_to_string(script_path).expect("runtime script");
+        let content = std::fs::read_to_string(script_path).expect("launch script");
         assert!(content.contains("pi --resume-user-command"));
         assert!(!content.contains("--session-id sess_explicit_start"));
     }

@@ -526,10 +526,6 @@ async fn pi_runtime_exports_real_hook_environment() {
     let runtime_dir = metadata["runtime_dir"].as_str().expect("runtime_dir");
     assert!(!runtime_dir.contains(".local/share/pontia/runtimes"));
     assert!(
-        !PathBuf::from(runtime_dir).join("runtime.sh").exists(),
-        "runtime.sh must not be a stable runtime artifact"
-    );
-    assert!(
         !metadata["internal_event_url"]
             .as_str()
             .unwrap_or_default()

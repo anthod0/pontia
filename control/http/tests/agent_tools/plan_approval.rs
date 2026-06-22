@@ -189,15 +189,6 @@ async fn apply_plan_applies_proposed_plan_and_starts_scheduler() {
             .expect("executor runtime metadata");
     let runtime_metadata: Value =
         serde_json::from_str(&runtime_metadata).expect("runtime metadata json");
-    let runtime_dir = runtime_metadata["runtime_dir"]
-        .as_str()
-        .expect("runtime dir");
-    assert!(
-        !std::path::Path::new(runtime_dir)
-            .join("runtime.sh")
-            .exists(),
-        "runtime.sh must not be a stable runtime artifact"
-    );
     let start_command = runtime_metadata["start_command"]
         .as_str()
         .expect("start command");

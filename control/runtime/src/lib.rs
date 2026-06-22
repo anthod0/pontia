@@ -190,7 +190,7 @@ mod tests {
     fn runtime_script_exports_pontia_agent_kind_when_present() {
         let dir = tempfile::tempdir().expect("tempdir");
         let runtime_dir = dir.path();
-        let script_path = runtime_dir.join("runtime.sh");
+        let script_path = runtime_dir.join("launch.sh");
         let paths = script::RuntimePaths {
             runtime_dir,
             log_path: &runtime_dir.join("runtime.log"),
@@ -212,9 +212,9 @@ mod tests {
             },
             "rtinst_1",
         )
-        .expect("write runtime script");
+        .expect("write launch script");
 
-        let content = std::fs::read_to_string(script_path).expect("runtime script");
+        let content = std::fs::read_to_string(script_path).expect("launch script");
         assert!(content.contains("export PONTIA_AGENT_KIND='planner'"));
     }
 }
