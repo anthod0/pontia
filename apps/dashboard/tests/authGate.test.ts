@@ -109,16 +109,17 @@ test('saves the entered token and opens the requested dashboard route after vali
   expect(mocks.startEventStream).toHaveBeenCalled();
 });
 
-test('clears an invalid saved token before opening dashboard routes', async () => {
-  localStorage.setItem('pontia.externalApiToken', 'stale-token');
-  token.set('stale-token');
-  mockValidateToken(401);
+test('opens dashboard immediately when a saved token exists without startup validation', async () => {
+  localStorage.setItem('pontia.externalApiToken', 'saved-token');
+  token.set('saved-token');
+  const fetchMock = mockValidateToken(401);
 
   render(App);
 
-  await waitFor(() => expect(localStorage.getItem('pontia.externalApiToken')).toBe(''));
-  expect(screen.getByRole('heading', { name: /enter external api token/i })).toBeInTheDocument();
-  expect(screen.queryByText('PONTIA')).not.toBeInTheDocument();
-  expect(mocks.loadTasks).not.toHaveBeenCalled();
-  expect(mocks.startEventStream).not.toHaveBeenCalled();
+  expect(screen.queryByRole('heading', { name: /enter external api token/i })).not.toBeInTheDocument();
+  expect(screen.getByText('PONTIA')).toBeInTheDocument();
+  expect(localStorage.getItem('pontia.externalApiToken')).toBe('saved-token');
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(mocks.loadTasks).toHaveBeenCalled();
+  expect(mocks.startEventStream).toHaveBeenCalled();
 });

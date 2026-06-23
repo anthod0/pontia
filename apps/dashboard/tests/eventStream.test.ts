@@ -10,6 +10,15 @@ afterEach(() => {
   token.set('');
 });
 
+test('clears the saved token when the SSE endpoint is unauthorized', async () => {
+  token.set('stale-token');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('unauthorized', { status: 401, statusText: 'Unauthorized' })));
+
+  startEventStream();
+
+  await waitFor(() => expect(localStorage.getItem('pontia.externalApiToken')).toBe(''));
+});
+
 test('notifies dashboard event subscribers when an SSE task event arrives', async () => {
   const event: DashboardStreamEvent = {
     kind: 'task_event',

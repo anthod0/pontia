@@ -40,6 +40,10 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let generation = 0;
 let started = false;
 
+function isAuthenticationFailure(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
 function clearReconnectTimer(): void {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
@@ -90,6 +94,11 @@ async function connect(streamGeneration: number): Promise<void> {
     });
 
     if (!response.ok || !response.body) {
+      if (isAuthenticationFailure(response.status)) {
+        token.set('');
+        stopEventStream();
+        return;
+      }
       throw new Error(`Dashboard event stream failed: ${response.status} ${response.statusText}`);
     }
 

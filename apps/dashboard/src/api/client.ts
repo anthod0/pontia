@@ -54,6 +54,10 @@ function isTransientFetchError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'NetworkError';
 }
 
+function isAuthenticationFailure(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
 function delay(ms: number, signal?: AbortSignal | null): Promise<void> {
   if (signal?.aborted) return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
   return new Promise((resolve, reject) => {
@@ -124,6 +128,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw new ApiError(text || response.statusText, 'invalid_json', response.status);
   }
   if (!response.ok || envelope?.error) {
+    if (isAuthenticationFailure(response.status)) token.set('');
     throw new ApiError(
       envelope?.error?.message ?? response.statusText,
       envelope?.error?.code ?? 'request_failed',

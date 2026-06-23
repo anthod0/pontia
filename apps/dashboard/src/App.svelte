@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
+  import { get } from 'svelte/store'
   import { Router } from 'svelte-mini-router'
   import AuthGate from './components/auth/AuthGate.svelte'
   import AppShell from './components/layout/AppShell.svelte'
   import { Toaster } from './lib/components/ui/sonner/index.js'
-  import { validateExternalApiToken } from './api/client'
   import { startEventStream, stopEventStream } from './services/eventStream'
   import { loadAgentProfiles } from './stores/agentProfiles'
   import { token } from './stores/auth'
@@ -15,8 +15,7 @@
 
   let unsubscribeToken: (() => void) | null = null
   let dashboardStarted = false
-  let authenticatedToken = ''
-  let validationRun = 0
+  let authenticatedToken = get(token).trim()
 
   function startDashboard(): void {
     void Promise.all([loadTasks(), loadWorkspaces(), loadAgentProfiles(), loadSessions()])
@@ -27,9 +26,9 @@
   onMount(() => {
     unsubscribeToken = token.subscribe((value) => {
       const trimmed = value.trim()
-      const run = ++validationRun
+      const previousToken = authenticatedToken
+      authenticatedToken = trimmed
       if (!trimmed) {
-        authenticatedToken = ''
         if (dashboardStarted) {
           stopEventStream()
           dashboardStarted = false
@@ -37,21 +36,15 @@
         return
       }
 
-      validateExternalApiToken(trimmed).then(() => {
-        if (run !== validationRun) return
-        authenticatedToken = trimmed
-        if (!dashboardStarted) {
-          startDashboard()
-          return
-        }
+      if (!dashboardStarted) {
+        startDashboard()
+        return
+      }
 
+      if (trimmed !== previousToken) {
         stopEventStream()
         startEventStream()
-      }).catch(() => {
-        if (run !== validationRun) return
-        authenticatedToken = ''
-        token.set('')
-      })
+      }
     })
   })
 

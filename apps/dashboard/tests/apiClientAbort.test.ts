@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
+import { token } from '../src/stores/auth';
 
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
   localStorage.clear();
+  token.set('');
 });
 
 afterEach(() => {
@@ -99,4 +101,16 @@ test('does not retry aborted requests', async () => {
   await expect(listWorkspaces({ signal: controller.signal })).rejects.toBe(abortError);
 
   expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test('clears the saved token when an API request is unauthorized', async () => {
+  token.set('stale-token');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(
+    JSON.stringify({ data: null, error: { code: 'authentication_failed', message: 'missing or invalid bearer token' } }),
+    { status: 401 },
+  )));
+
+  await expect(listWorkspaces()).rejects.toMatchObject({ code: 'authentication_failed', status: 401 });
+
+  expect(localStorage.getItem('pontia.externalApiToken')).toBe('');
 });
