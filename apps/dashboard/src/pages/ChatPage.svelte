@@ -12,6 +12,7 @@
     canSendSessionMessage,
     timelineItemsToChatMessages,
     titleFromInitialPrompt,
+    turnsToChatMessages,
   } from '$lib/session-chat/sessionChat'
   import {
     chatMessagesWithOptimistic,
@@ -106,7 +107,9 @@
   $: selectedSessionGitStatus = selectedSession ? $workspaceGitStatuses[selectedSession.workspace_id ?? ''] : undefined
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, $workspaces, selectedSessionGitStatus, $workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
-  $: messages = chatMessagesWithOptimistic(selectedSessionId, $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : [], $optimisticInitialMessages)
+  $: timelineMessages = $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : []
+  $: projectedTurnMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? turnsToChatMessages($sessionDetail.turns) : []
+  $: messages = chatMessagesWithOptimistic(selectedSessionId, timelineMessages.length ? timelineMessages : projectedTurnMessages, $optimisticInitialMessages)
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
   $: inboxActionableCount = visibleInboxMessages.filter((message) => message.state === 'pending' || message.state === 'failed').length

@@ -635,6 +635,44 @@ test('shows the initial prompt immediately after starting a chat while timeline 
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });
 
+test('falls back to projected turns when a TUI-launched session timeline is not ready yet', async () => {
+  const selected = session({ session_id: 'session-tui', state: 'busy', current_turn_id: 'turn-tui' });
+  const activeTurn = turn({
+    turn_id: 'turn-tui',
+    session_id: 'session-tui',
+    state: 'running',
+    input: { summary: 'typed in tui' },
+    output: null,
+    completed_at: null,
+  });
+  window.history.pushState({}, '', '/dashboard/chat/session-tui');
+  mocks.pathParams = { sessionId: 'session-tui' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [activeTurn], inboxMessages: [], events: [], artifacts: [] });
+  mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
+    mocks.timelineState.set({
+      sessionId,
+      bindingId: null,
+      items: [],
+      headCursor: null,
+      tailCursor: null,
+      sourceId: null,
+      hasMore: false,
+      loading: true,
+      refreshing: false,
+      error: null,
+    });
+    return null;
+  });
+
+  render(ChatPage);
+
+  expect(await screen.findByText('typed in tui')).toBeInTheDocument();
+  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
+  expect(screen.queryByText('Loading conversation…')).not.toBeInTheDocument();
+});
+
 test('shows workspace name in the selected chat composer pill while retaining full path metadata', async () => {
   const user = userEvent.setup();
   const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1', workspace: '/repo/pontia' });
