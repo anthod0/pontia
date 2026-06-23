@@ -27,8 +27,6 @@
     { label: 'New Chat', path: '/chat', icon: SquarePen },
   ]
 
-  const recentSessionLimit = 50
-
   const settingsSections = [
     { label: 'Common', path: '/settings/common' },
     { label: 'Workspaces', path: '/settings/workspaces' },
@@ -41,9 +39,10 @@
   let renameDialogOpen = $state(false)
   let renameError = $state<string | null>(null)
   let sessionManagementBusyId = $state<string | null>(null)
+  let sessionActionMenuOpenId = $state<string | null>(null)
   let recentSessionsOpen = $state(true)
   let expandedWorkspaceIds = $state<Record<string, boolean>>({})
-  let recentSessions = $derived(visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit))
+  let recentSessions = $derived(visibleChatSessions($sessions, 'all'))
   let activeWorkspaces = $derived($workspaces.filter((workspace) => workspace.state === 'active'))
   let recentWorkspaceGroups = $derived(groupRecentSessionsByWorkspace(activeWorkspaces, recentSessions))
 
@@ -139,6 +138,10 @@
     notifyRouteChanged()
   }
 
+  function setSessionActionMenuOpen(sessionId: string, open: boolean): void {
+    sessionActionMenuOpenId = open ? sessionId : null
+  }
+
   function startRenamingSession(session: SessionView) {
     renamingSession = session
     renameError = null
@@ -162,6 +165,16 @@
     } finally {
       sessionManagementBusyId = null
     }
+  }
+
+  async function togglePinSessionFromMenu(session: SessionView): Promise<void> {
+    sessionActionMenuOpenId = null
+    await togglePinSession(session)
+  }
+
+  async function archiveSessionFromMenu(session: SessionView): Promise<void> {
+    sessionActionMenuOpenId = null
+    await archiveSessionFromSidebar(session)
   }
 
   async function confirmRenameSession(title: string | null): Promise<void> {
@@ -288,12 +301,20 @@
               {#each recentSessions as session}
                 <Sidebar.MenuItem>
                   <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
-                    {#if isSessionVisibleState(session.state)}
-                      <span class={`size-2 shrink-0 rounded-full ${sessionStateDotClass(session.state)} group-data-[collapsible=icon]:hidden`} aria-label={`${session.state} session`}></span>
+                    {#if session.pinned_at}
+                      <Pin class="size-3.5 shrink-0 text-sidebar-foreground/60" aria-label="Pinned session" />
                     {/if}
                     <span class="line-clamp-1">{sessionChatTitle(session)}</span>
                   </Sidebar.MenuButton>
-                  <DropdownMenu.Root>
+                  {#if isSessionVisibleState(session.state)}
+                    <span
+                      class={cn('pointer-events-none absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center transition-opacity group-focus-within/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenId === session.session_id ? 'opacity-0' : 'opacity-100')}
+                      aria-label={`${session.state} session`}
+                    >
+                      <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
+                    </span>
+                  {/if}
+                  <DropdownMenu.Root bind:open={() => sessionActionMenuOpenId === session.session_id, (open) => setSessionActionMenuOpen(session.session_id, open)}>
                     <Sidebar.MenuAction
                       showOnHover
                       aria-label={`Open session actions for ${sessionChatTitle(session)}`}
@@ -311,14 +332,14 @@
                       <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
                         <Pencil class="size-4" /> Rename
                       </DropdownMenu.Item>
-                      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void togglePinSession(session)}>
+                      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
                         {#if session.pinned_at}
                           <PinOff class="size-4" /> Unpin
                         {:else}
                           <Pin class="size-4" /> Pin
                         {/if}
                       </DropdownMenu.Item>
-                      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromSidebar(session)}>
+                      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
                         <Archive class="size-4" /> Archive
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>

@@ -58,6 +58,8 @@ export const sessionDetail = writable<SessionConsoleDetail | null>(null);
 export const sessionDetailLoading = writable(false);
 export const sessionDetailError = writable<string | null>(null);
 
+const defaultSessionListLimit = 50;
+
 function taskSessionRefs(task: TaskView | null, dag: TaskDagView | null): Map<string, Set<string>> {
   const refs = new Map<string, Set<string>>();
   const add = (sessionId: string | null | undefined, ref: string) => {
@@ -76,6 +78,8 @@ function taskSessionRefs(task: TaskView | null, dag: TaskDagView | null): Map<st
 
 type LoadOptions = {
   showLoading?: boolean;
+  limit?: number;
+  includePinned?: boolean;
 };
 
 export async function loadSessions(options: LoadOptions = {}): Promise<SessionView[]> {
@@ -83,7 +87,10 @@ export async function loadSessions(options: LoadOptions = {}): Promise<SessionVi
   if (showLoading) sessionsLoading.set(true);
   sessionsError.set(null);
   try {
-    const loaded = await listSessions();
+    const loaded = await listSessions({
+      limit: options.limit ?? defaultSessionListLimit,
+      includePinned: options.includePinned ?? true,
+    });
     sessions.set(loaded);
     return loaded;
   } catch (error) {

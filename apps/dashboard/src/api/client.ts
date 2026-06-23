@@ -174,9 +174,19 @@ export async function deleteAgentProfileVersion(profileId: string, version: stri
   return (await request<{ agent_profile: AgentProfileView }>(`/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(version)}`, { method: 'DELETE', mutating: true })).agent_profile;
 }
 
-export async function listSessions(includeArchived = false): Promise<SessionView[]> {
-  const query = includeArchived ? '?include_archived=true' : '';
-  return (await request<{ sessions: SessionView[] }>(`/sessions${query}`)).sessions;
+export type ListSessionsOptions = {
+  includeArchived?: boolean;
+  limit?: number;
+  includePinned?: boolean;
+};
+
+export async function listSessions(options: ListSessionsOptions = {}): Promise<SessionView[]> {
+  const query = new URLSearchParams();
+  if (options.includeArchived) query.set('include_archived', 'true');
+  if (options.limit !== undefined) query.set('limit', String(options.limit));
+  if (options.includePinned) query.set('include_pinned', 'true');
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+  return (await request<{ sessions: SessionView[] }>(`/sessions${queryString}`)).sessions;
 }
 
 export async function listWorkspaces(options: ReadRequestOptions = {}): Promise<WorkspaceView[]> {

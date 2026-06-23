@@ -1,11 +1,22 @@
 use super::*;
-use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
+use pontia_storage_sqlite::repositories::sessions::{SessionListOptions, SqliteSessionRepository};
 use sqlx::Row;
 
 impl ExternalQueryService {
-    pub async fn list_sessions(&self, include_archived: bool) -> Result<Vec<SessionView>> {
+    pub async fn list_sessions(
+        &self,
+        include_archived: bool,
+        limit: Option<u32>,
+        include_pinned: bool,
+    ) -> Result<Vec<SessionView>> {
         let repository = SqliteSessionRepository::new(self.pool.clone());
-        let rows = repository.list_sessions(include_archived).await?;
+        let rows = repository
+            .list_sessions_with_options(SessionListOptions {
+                include_archived,
+                limit,
+                include_pinned,
+            })
+            .await?;
 
         let mut sessions = rows
             .into_iter()

@@ -6,6 +6,9 @@ import { expect, test } from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appSidebarSource = readFileSync(resolve(__dirname, '../src/components/layout/AppSidebar.svelte'), 'utf8');
 const sidebarMenuActionSource = readFileSync(resolve(__dirname, '../src/lib/components/ui/sidebar/sidebar-menu-action.svelte'), 'utf8');
+const recentSessionsStart = appSidebarSource.indexOf('{:else if recentSessions.length}');
+const recentSessionItemEnd = appSidebarSource.indexOf('                </Sidebar.MenuItem>\n              {/each}', recentSessionsStart);
+const recentSessionItemSource = appSidebarSource.slice(recentSessionsStart, recentSessionItemEnd);
 
 test('clamps recent session titles in the dashboard sidebar to one line', () => {
   expect(appSidebarSource).toContain('<span class="line-clamp-1">{sessionChatTitle(session)}</span>');
@@ -24,25 +27,49 @@ test('shows a semantic status dot for non-exited sidebar sessions instead of a s
   expect(appSidebarSource).toContain("return state !== 'exited'");
 });
 
-test('places recent session status dots before titles and the hover actions menu at the far right', () => {
-  expect(appSidebarSource).toContain('class="group-has-data-[sidebar=menu-action]/menu-item:pr-8"');
-  expect(appSidebarSource).toContain('class={`size-2 shrink-0 rounded-full ${sessionStateDotClass(session.state)} group-data-[collapsible=icon]:hidden`}');
-  expect(appSidebarSource).toContain('<MoreHorizontal />');
-  expect(appSidebarSource).toContain('<DropdownMenu.Item onclick={() => startRenamingSession(session)}>');
-  expect(appSidebarSource).toContain('{#if session.pinned_at}');
-  expect(appSidebarSource).toContain('<PinOff class="size-4" /> Unpin');
-  expect(appSidebarSource).toContain('<Pin class="size-4" /> Pin');
-  expect(appSidebarSource).toContain('onclick={() => void togglePinSession(session)}');
-  expect(appSidebarSource).toContain('onclick={() => void archiveSessionFromSidebar(session)}');
-  expect(appSidebarSource).not.toContain('absolute right-2 top-1/2 size-2 -translate-y-1/2');
-  expect(appSidebarSource).not.toContain('class="right-10"');
-  expect(appSidebarSource).not.toContain('group-hover/menu-item:opacity-0');
-  expect(appSidebarSource).not.toContain('group-focus-within/menu-item:opacity-0');
+test('places recent session status dots at the far right and swaps them for the hover actions menu', () => {
+  expect(recentSessionItemSource).toContain('class="group-has-data-[sidebar=menu-action]/menu-item:pr-8"');
+  expect(recentSessionItemSource).toContain('onclick={() => openSession(session.session_id)}>');
+  expect(recentSessionItemSource).toContain('<span class="line-clamp-1">{sessionChatTitle(session)}</span>');
+  expect(recentSessionItemSource).toContain("class={cn('pointer-events-none absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center transition-opacity group-focus-within/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden'");
+  expect(recentSessionItemSource).toContain("sessionActionMenuOpenId === session.session_id ? 'opacity-0' : 'opacity-100'");
+  expect(recentSessionItemSource).toContain('class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}');
+  expect(recentSessionItemSource).toContain('<MoreHorizontal />');
+  expect(recentSessionItemSource).toContain('<DropdownMenu.Item onclick={() => startRenamingSession(session)}>');
+  expect(recentSessionItemSource).toContain('{#if session.pinned_at}');
+  expect(recentSessionItemSource).toContain('<PinOff class="size-4" /> Unpin');
+  expect(recentSessionItemSource).toContain('<Pin class="size-4" /> Pin');
+  expect(recentSessionItemSource).toContain('onclick={() => void togglePinSessionFromMenu(session)}');
+  expect(recentSessionItemSource).toContain('onclick={() => void archiveSessionFromMenu(session)}');
+  expect(recentSessionItemSource).not.toContain('absolute right-2 top-1/2 size-2 -translate-y-1/2');
+  expect(recentSessionItemSource).not.toContain('class="right-10"');
 });
 
-test('allows more recent sessions while scrolling recent workspace and session groups together', () => {
-  expect(appSidebarSource).toContain('const recentSessionLimit = 50');
-  expect(appSidebarSource).toContain("visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit)");
+
+test('shows a pin icon before pinned recent session titles', () => {
+  const pinIconIndex = recentSessionItemSource.indexOf('<Pin class="size-3.5 shrink-0 text-sidebar-foreground/60" aria-label="Pinned session" />');
+  const titleIndex = recentSessionItemSource.indexOf('<span class="line-clamp-1">{sessionChatTitle(session)}</span>');
+
+  expect(recentSessionItemSource).toContain('{#if session.pinned_at}');
+  expect(pinIconIndex).toBeGreaterThan(-1);
+  expect(titleIndex).toBeGreaterThan(-1);
+  expect(pinIconIndex).toBeLessThan(titleIndex);
+});
+
+test('closes the recent session actions menu immediately after pin or archive is selected', () => {
+  expect(appSidebarSource).toContain('let sessionActionMenuOpenId = $state<string | null>(null)');
+  expect(appSidebarSource).toContain('function setSessionActionMenuOpen(sessionId: string, open: boolean): void');
+  expect(appSidebarSource).toContain('sessionActionMenuOpenId = open ? sessionId : null');
+  expect(appSidebarSource).toContain('async function togglePinSessionFromMenu(session: SessionView): Promise<void>');
+  expect(appSidebarSource).toContain('sessionActionMenuOpenId = null');
+  expect(appSidebarSource).toContain('async function archiveSessionFromMenu(session: SessionView): Promise<void>');
+  expect(appSidebarSource).toContain('bind:open={() => sessionActionMenuOpenId === session.session_id, (open) => setSessionActionMenuOpen(session.session_id, open)}');
+});
+
+test('allows backend-limited recent sessions while scrolling recent workspace and session groups together', () => {
+  expect(appSidebarSource).not.toContain('const recentSessionLimit = 50');
+  expect(appSidebarSource).toContain("visibleChatSessions($sessions, 'all')");
+  expect(appSidebarSource).not.toContain("visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit)");
   expect(appSidebarSource).toContain('<Sidebar.Content class="overflow-hidden">');
   expect(appSidebarSource).toContain('<div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden">');
   expect(appSidebarSource).toContain('<Sidebar.GroupContent class="pr-1">');

@@ -1,6 +1,9 @@
 use pontia_storage_sqlite::{
     connect_sqlite,
-    repositories::{sessions::SqliteSessionRepository, turns::SqliteTurnRepository},
+    repositories::{
+        sessions::{SessionListOptions, SqliteSessionRepository},
+        turns::SqliteTurnRepository,
+    },
     run_migrations,
 };
 use serde_json::json;
@@ -49,6 +52,35 @@ async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_
     assert_eq!(ids, vec!["sess_a", "sess_b"]);
     assert_eq!(rows[0].workspace_ref.as_deref(), Some("/canonical"));
     assert_eq!(rows[1].workspace_ref.as_deref(), Some("/legacy-b"));
+}
+
+#[tokio::test]
+async fn sqlite_session_repository_includes_pinned_sessions_outside_limit_when_requested() {
+    let pool = test_pool().await;
+    sqlx::query(
+        r#"INSERT INTO sessions
+           (session_id, client_type, title, handle, role, state, pinned_at, archived_at, metadata, created_at, updated_at)
+           VALUES
+           ('recent', 'pi', 'Recent', 'recent', 'worker', 'ready', NULL, NULL, '{}', '2026-06-15T12:00:03Z', '2026-06-15T12:00:03Z'),
+           ('old_pinned', 'pi', 'Old pinned', 'old-pinned', 'worker', 'ready', '2026-06-15T12:00:00Z', NULL, '{}', '2026-06-15T12:00:00Z', '2026-06-15T12:00:00Z'),
+           ('archived_pinned', 'pi', 'Archived pinned', 'archived-pinned', 'worker', 'ready', '2026-06-15T12:00:01Z', '2026-06-15T12:00:02Z', '{}', '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert sessions");
+
+    let repository = SqliteSessionRepository::new(pool);
+    let rows = repository
+        .list_sessions_with_options(SessionListOptions {
+            include_archived: false,
+            limit: Some(1),
+            include_pinned: true,
+        })
+        .await
+        .expect("list sessions");
+
+    let ids: Vec<_> = rows.iter().map(|row| row.session_id.as_str()).collect();
+    assert_eq!(ids, vec!["old_pinned", "recent"]);
 }
 
 #[tokio::test]

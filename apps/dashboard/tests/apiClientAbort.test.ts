@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { listAgentProfiles, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
+import { listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -44,6 +44,15 @@ test('passes AbortSignal through settings-related read requests', async () => {
   for (const [, init] of fetchMock.mock.calls) {
     expect((init as RequestInit).signal).toBe(controller.signal);
   }
+});
+
+test('serializes session list limit and pinned inclusion query options', async () => {
+  const fetchMock = vi.fn(async () => jsonResponse({ sessions: [] }));
+  vi.stubGlobal('fetch', fetchMock);
+
+  await listSessions({ limit: 50, includePinned: true });
+
+  expect(fetchMock).toHaveBeenCalledWith('/external/v1/sessions?limit=50&include_pinned=true', expect.any(Object));
 });
 
 test('retries transient fetch failures before surfacing chat data errors', async () => {

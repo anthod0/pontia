@@ -20,6 +20,13 @@ pub struct SessionProjectionUpsertRecord {
     pub metadata: String,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SessionListOptions {
+    pub include_archived: bool,
+    pub limit: Option<u32>,
+    pub include_pinned: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct SqliteSessionRepository {
     pool: SqlitePool,
@@ -83,20 +90,52 @@ impl SqliteSessionRepository {
         Ok(())
     }
 
-    pub async fn list_sessions(&self, include_archived: bool) -> Result<Vec<SessionRow>> {
+    pub async fn list_sessions(&self) -> Result<Vec<SessionRow>> {
+        self.list_sessions_with_options(SessionListOptions::default())
+            .await
+    }
+
+    pub async fn list_sessions_with_options(
+        &self,
+        options: SessionListOptions,
+    ) -> Result<Vec<SessionRow>> {
+        let limit = options.limit.map(i64::from);
         Ok(sqlx::query_as::<_, SessionRow>(
-            r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
-                      s.execution_profile_id, s.execution_profile_version,
-                      s.state, s.current_turn_id, s.workspace_id,
-                      COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
-                      s.pinned_at, s.archived_at,
-                      s.metadata, s.created_at, s.updated_at
-               FROM sessions s
-               LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
-               WHERE (? OR s.archived_at IS NULL)
-               ORDER BY s.pinned_at IS NULL, s.pinned_at DESC, s.updated_at DESC, s.session_id"#,
+            r#"WITH ordered_sessions AS (
+                   SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
+                          s.execution_profile_id, s.execution_profile_version,
+                          s.state, s.current_turn_id, s.workspace_id,
+                          COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                          s.pinned_at, s.archived_at,
+                          s.metadata, s.created_at, s.updated_at,
+                          ROW_NUMBER() OVER (
+                              ORDER BY s.pinned_at IS NULL, s.pinned_at DESC, s.updated_at DESC, s.session_id
+                          ) AS row_num,
+                          ROW_NUMBER() OVER (
+                              PARTITION BY s.pinned_at IS NOT NULL
+                              ORDER BY s.updated_at DESC, s.session_id
+                          ) AS unpinned_row_num
+                   FROM sessions s
+                   LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+                   WHERE (? OR s.archived_at IS NULL)
+               )
+               SELECT session_id, client_type, title, handle, role, description,
+                      execution_profile_id, execution_profile_version,
+                      state, current_turn_id, workspace_id, workspace_ref,
+                      pinned_at, archived_at,
+                      metadata, created_at, updated_at
+               FROM ordered_sessions
+               WHERE (? IS NULL
+                      OR (? AND (pinned_at IS NOT NULL OR (pinned_at IS NULL AND unpinned_row_num <= ?)))
+                      OR (NOT ? AND row_num <= ?))
+               ORDER BY pinned_at IS NULL, pinned_at DESC, updated_at DESC, session_id"#,
         )
-        .bind(include_archived)
+        .bind(options.include_archived)
+        .bind(limit)
+        .bind(options.include_pinned)
+        .bind(limit)
+        .bind(options.include_pinned)
+        .bind(limit)
         .fetch_all(&self.pool)
         .await?)
     }

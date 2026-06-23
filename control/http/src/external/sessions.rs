@@ -35,6 +35,9 @@ pub async fn create_session(
 pub struct ListSessionsQuery {
     #[serde(default)]
     include_archived: bool,
+    limit: Option<u32>,
+    #[serde(default)]
+    include_pinned: bool,
 }
 
 pub async fn list_sessions(
@@ -44,7 +47,9 @@ pub async fn list_sessions(
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
-    let sessions = service.list_sessions(query.include_archived).await?;
+    let sessions = service
+        .list_sessions(query.include_archived, query.limit, query.include_pinned)
+        .await?;
     Ok(ok(json!({ "sessions": sessions })))
 }
 
