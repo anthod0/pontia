@@ -39,14 +39,55 @@ const API_BASE = '/external/v1';
 type RequestOptions = Omit<RequestInit, 'body'> & { body?: unknown; mutating?: boolean };
 export type ReadRequestOptions = Pick<RequestOptions, 'signal'>;
 
+const TRANSIENT_NETWORK_RETRY_DELAYS_MS = [250, 750, 1500];
+
 function idempotencyKey(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function isTransientFetchError(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  return error instanceof DOMException && error.name === 'NetworkError';
+}
+
+function delay(ms: number, signal?: AbortSignal | null): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal?.removeEventListener('abort', abort);
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const abort = () => {
+      window.clearTimeout(timeout);
+      cleanup();
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
+async function fetchWithTransientNetworkRetry(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      if (isAbortError(error) || !isTransientFetchError(error) || attempt >= TRANSIENT_NETWORK_RETRY_DELAYS_MS.length) throw error;
+      await delay(TRANSIENT_NETWORK_RETRY_DELAYS_MS[attempt], init.signal);
+      attempt += 1;
+    }
+  }
 }
 
 export async function validateExternalApiToken(candidateToken: string): Promise<void> {
   const headers = new Headers();
   headers.set('Authorization', `Bearer ${candidateToken}`);
-  const response = await fetch(`${API_BASE}/auth/validate`, { headers });
+  const response = await fetchWithTransientNetworkRetry(`${API_BASE}/auth/validate`, { headers });
   const text = await response.text();
   let envelope: ApiEnvelope<unknown> | null = null;
   try {
@@ -70,7 +111,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
   if (options.mutating || options.method && options.method !== 'GET') headers.set('Idempotency-Key', idempotencyKey());
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetchWithTransientNetworkRetry(`${API_BASE}${path}`, {
     ...options,
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -303,7 +344,7 @@ export async function getArtifactContent(artifactId: string): Promise<ArtifactCo
   const headers = new Headers();
   const bearer = get(token).trim();
   if (bearer) headers.set('Authorization', `Bearer ${bearer}`);
-  const response = await fetch(`${API_BASE}/artifacts/${artifactId}/content`, { headers });
+  const response = await fetchWithTransientNetworkRetry(`${API_BASE}/artifacts/${artifactId}/content`, { headers });
   const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
   const bytes = await response.arrayBuffer();
   if (!response.ok) {
