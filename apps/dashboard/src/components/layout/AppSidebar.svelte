@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { ChevronDown, Folder, Pencil, Settings, SquarePen } from '@lucide/svelte'
+  import { Archive, ChevronDown, Folder, MoreHorizontal, Pencil, Pin, PinOff, Settings, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import { sidebarMenuButtonVariants } from '$lib/components/ui/sidebar/sidebar-menu-button.svelte'
   import { cn } from '$lib/utils.js'
-  import { sessions, sessionsLoading, updateSessionTitle } from '../../stores/sessions'
+  import { archiveSession, pinSession, sessions, sessionsLoading, unpinSession, updateSessionTitle } from '../../stores/sessions'
   import { workspaces, workspacesLoading } from '../../stores/workspaces'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
   import { workspaceTitle } from '../chat/sessionMetadata'
@@ -40,6 +40,7 @@
   let renamingSession = $state<SessionView | null>(null)
   let renameDialogOpen = $state(false)
   let renameError = $state<string | null>(null)
+  let sessionManagementBusyId = $state<string | null>(null)
   let recentSessionsOpen = $state(true)
   let expandedWorkspaceIds = $state<Record<string, boolean>>({})
   let recentSessions = $derived(visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit))
@@ -138,11 +139,29 @@
     notifyRouteChanged()
   }
 
-  function startRenamingSession(event: MouseEvent, session: SessionView) {
-    event.stopPropagation()
+  function startRenamingSession(session: SessionView) {
     renamingSession = session
     renameError = null
     renameDialogOpen = true
+  }
+
+  async function togglePinSession(session: SessionView): Promise<void> {
+    sessionManagementBusyId = session.session_id
+    try {
+      if (session.pinned_at) await unpinSession(session.session_id)
+      else await pinSession(session.session_id)
+    } finally {
+      sessionManagementBusyId = null
+    }
+  }
+
+  async function archiveSessionFromSidebar(session: SessionView): Promise<void> {
+    sessionManagementBusyId = session.session_id
+    try {
+      await archiveSession(session.session_id)
+    } finally {
+      sessionManagementBusyId = null
+    }
   }
 
   async function confirmRenameSession(title: string | null): Promise<void> {
@@ -274,15 +293,36 @@
                     {/if}
                     <span class="line-clamp-1">{sessionChatTitle(session)}</span>
                   </Sidebar.MenuButton>
-                  <Sidebar.MenuAction
-                    showOnHover
-                    aria-label={`Rename session ${sessionChatTitle(session)}`}
-                    title="Rename session"
-                    disabled={renamingSessionId === session.session_id}
-                    onclick={(event) => startRenamingSession(event, session)}
-                  >
-                    <Pencil />
-                  </Sidebar.MenuAction>
+                  <DropdownMenu.Root>
+                    <Sidebar.MenuAction
+                      showOnHover
+                      aria-label={`Open session actions for ${sessionChatTitle(session)}`}
+                      title="Session actions"
+                      disabled={renamingSessionId === session.session_id || sessionManagementBusyId === session.session_id}
+                      onclick={(event) => event.stopPropagation()}
+                    >
+                      {#snippet child({ props })}
+                        <DropdownMenu.Trigger {...props}>
+                          <MoreHorizontal />
+                        </DropdownMenu.Trigger>
+                      {/snippet}
+                    </Sidebar.MenuAction>
+                    <DropdownMenu.Content side="right" align="start" class="w-44">
+                      <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
+                        <Pencil class="size-4" /> Rename
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void togglePinSession(session)}>
+                        {#if session.pinned_at}
+                          <PinOff class="size-4" /> Unpin
+                        {:else}
+                          <Pin class="size-4" /> Pin
+                        {/if}
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromSidebar(session)}>
+                        <Archive class="size-4" /> Archive
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                 </Sidebar.MenuItem>
               {/each}
             {:else}

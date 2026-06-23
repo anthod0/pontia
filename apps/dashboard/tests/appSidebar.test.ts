@@ -24,9 +24,16 @@ test('shows a semantic status dot for non-exited sidebar sessions instead of a s
   expect(appSidebarSource).toContain("return state !== 'exited'");
 });
 
-test('places recent session status dots before titles and the hover rename action at the far right', () => {
+test('places recent session status dots before titles and the hover actions menu at the far right', () => {
   expect(appSidebarSource).toContain('class="group-has-data-[sidebar=menu-action]/menu-item:pr-8"');
   expect(appSidebarSource).toContain('class={`size-2 shrink-0 rounded-full ${sessionStateDotClass(session.state)} group-data-[collapsible=icon]:hidden`}');
+  expect(appSidebarSource).toContain('<MoreHorizontal />');
+  expect(appSidebarSource).toContain('<DropdownMenu.Item onclick={() => startRenamingSession(session)}>');
+  expect(appSidebarSource).toContain('{#if session.pinned_at}');
+  expect(appSidebarSource).toContain('<PinOff class="size-4" /> Unpin');
+  expect(appSidebarSource).toContain('<Pin class="size-4" /> Pin');
+  expect(appSidebarSource).toContain('onclick={() => void togglePinSession(session)}');
+  expect(appSidebarSource).toContain('onclick={() => void archiveSessionFromSidebar(session)}');
   expect(appSidebarSource).not.toContain('absolute right-2 top-1/2 size-2 -translate-y-1/2');
   expect(appSidebarSource).not.toContain('class="right-10"');
   expect(appSidebarSource).not.toContain('group-hover/menu-item:opacity-0');

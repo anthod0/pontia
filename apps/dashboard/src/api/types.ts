@@ -99,6 +99,8 @@ export interface SessionView {
   current_turn_id: string | null;
   workspace_id: string | null;
   workspace: string | null;
+  pinned_at: string | null;
+  archived_at: string | null;
   capabilities: SessionCapabilities;
   model: string | null;
   context_usage: ContextUsageView | null;

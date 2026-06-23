@@ -1,5 +1,6 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import {
+  archiveSession as apiArchiveSession,
   cancelInboxMessage as apiCancelInboxMessage,
   createSession as apiCreateSession,
   dismissInboxMessage as apiDismissInboxMessage,
@@ -10,10 +11,12 @@ import {
   listInboxMessages,
   listSessions,
   listTurns,
+  pinSession as apiPinSession,
   restartSession as apiRestartSession,
   resumeSession as apiResumeSession,
   submitInboxMessage as apiSubmitInboxMessage,
   terminateSession as apiTerminateSession,
+  unpinSession as apiUnpinSession,
   updateSession as apiUpdateSession,
 } from '../api/client';
 import type {
@@ -141,6 +144,26 @@ export async function updateSessionTitle(sessionId: string, title: string | null
   await loadSessions();
   await loadSessionDetail(sessionId);
   return session;
+}
+
+async function refreshAfterSessionManagement(session: SessionView): Promise<SessionView> {
+  await loadSessions({ showLoading: false });
+  if (get(sessionDetail)?.session.session_id === session.session_id) {
+    sessionDetail.update((detail) => detail ? { ...detail, session } : detail);
+  }
+  return session;
+}
+
+export async function pinSession(sessionId: string): Promise<SessionView> {
+  return refreshAfterSessionManagement(await apiPinSession(sessionId));
+}
+
+export async function unpinSession(sessionId: string): Promise<SessionView> {
+  return refreshAfterSessionManagement(await apiUnpinSession(sessionId));
+}
+
+export async function archiveSession(sessionId: string): Promise<SessionView> {
+  return refreshAfterSessionManagement(await apiArchiveSession(sessionId));
 }
 
 export async function submitInboxMessage(sessionId: string, input: SubmitInboxMessageInput): Promise<InboxMessageView> {

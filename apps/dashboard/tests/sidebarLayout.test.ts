@@ -36,6 +36,9 @@ const mocks = vi.hoisted(() => {
     sessionsLoading: writableStore(false),
     loadSessions: vi.fn(async () => []),
     updateSessionTitle: vi.fn(async () => undefined),
+    pinSession: vi.fn(async () => undefined),
+    unpinSession: vi.fn(async () => undefined),
+    archiveSession: vi.fn(async () => undefined),
     workspaces: writableStore([]),
     workspacesLoading: writableStore(false),
   };
@@ -51,6 +54,9 @@ vi.mock('../src/stores/sessions', () => ({
   sessionsLoading: mocks.sessionsLoading,
   loadSessions: mocks.loadSessions,
   updateSessionTitle: mocks.updateSessionTitle,
+  pinSession: mocks.pinSession,
+  unpinSession: mocks.unpinSession,
+  archiveSession: mocks.archiveSession,
 }));
 vi.mock('../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
@@ -282,7 +288,8 @@ test('sidebar renames a recent session from the hover edit action without openin
   ]);
   render(AppSidebarHost);
 
-  await fireEvent.click(screen.getByRole('button', { name: /rename session original title/i }));
+  await fireEvent.click(screen.getByRole('button', { name: /open session actions for original title/i }));
+  await fireEvent.click(screen.getByRole('menuitem', { name: /rename/i }));
 
   const dialog = screen.getByRole('dialog', { name: 'Rename session' });
   const titleInput = within(dialog).getByLabelText('Session title');
@@ -290,6 +297,99 @@ test('sidebar renames a recent session from the hover edit action without openin
   await fireEvent.click(within(dialog).getByRole('button', { name: 'Rename session' }));
 
   expect(mocks.updateSessionTitle).toHaveBeenCalledWith('session-active', 'Renamed session');
+  expect(mocks.navigate).not.toHaveBeenCalled();
+});
+
+test('sidebar session actions menu pins unpinned sessions without opening them', async () => {
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      title: 'Original title',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-1',
+      workspace: null,
+      pinned_at: null,
+      archived_at: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+  ]);
+  render(AppSidebarHost);
+
+  await fireEvent.click(screen.getByRole('button', { name: /open session actions for original title/i }));
+  await fireEvent.click(screen.getByRole('menuitem', { name: /pin/i }));
+  expect(mocks.pinSession).toHaveBeenCalledWith('session-active');
+  expect(mocks.navigate).not.toHaveBeenCalled();
+});
+
+test('sidebar session actions menu archives sessions without opening them', async () => {
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      title: 'Original title',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-1',
+      workspace: null,
+      pinned_at: null,
+      archived_at: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+  ]);
+  render(AppSidebarHost);
+
+  await fireEvent.click(screen.getByRole('button', { name: /open session actions for original title/i }));
+  await fireEvent.click(screen.getByRole('menuitem', { name: /archive/i }));
+  expect(mocks.archiveSession).toHaveBeenCalledWith('session-active');
+  expect(mocks.navigate).not.toHaveBeenCalled();
+});
+
+test('sidebar session actions menu unpins pinned sessions', async () => {
+  mocks.sessions.set([
+    {
+      session_id: 'session-pinned',
+      client_type: 'pi',
+      title: 'Pinned title',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-1',
+      workspace: null,
+      pinned_at: '2026-05-14T01:00:00Z',
+      archived_at: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+  ]);
+  render(AppSidebarHost);
+
+  await fireEvent.click(screen.getByRole('button', { name: /open session actions for pinned title/i }));
+  await fireEvent.click(screen.getByRole('menuitem', { name: /unpin/i }));
+  expect(mocks.unpinSession).toHaveBeenCalledWith('session-pinned');
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 

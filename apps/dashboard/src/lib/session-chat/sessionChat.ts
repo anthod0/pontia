@@ -58,7 +58,7 @@ export function titleFromInitialPrompt(prompt: string, maxLength = 60): string |
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1).trimEnd()}…` : normalized;
 }
 
-export function visibleChatSessions<T extends Pick<SessionView, 'state' | 'updated_at'>>(
+export function visibleChatSessions<T extends Pick<SessionView, 'state' | 'updated_at' | 'pinned_at'>>(
   sessions: T[],
   filter: ChatSessionFilter,
 ): T[] {
@@ -69,6 +69,10 @@ export function visibleChatSessions<T extends Pick<SessionView, 'state' | 'updat
       const aTerminal = terminalStates.has(a.state);
       const bTerminal = terminalStates.has(b.state);
       if (aTerminal !== bTerminal) return aTerminal ? 1 : -1;
+      const aPinned = a.pinned_at !== null;
+      const bPinned = b.pinned_at !== null;
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+      if (a.pinned_at && b.pinned_at) return b.pinned_at.localeCompare(a.pinned_at);
       return b.updated_at.localeCompare(a.updated_at);
     });
 }

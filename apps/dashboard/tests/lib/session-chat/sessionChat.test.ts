@@ -85,6 +85,16 @@ test('filters chat sessions to active sessions by default and sorts newest first
   expect(visible.map((item) => item.session_id)).toEqual(['new-active', 'old-active']);
 });
 
+test('sorts pinned chat sessions before unpinned sessions', () => {
+  const visible = visibleChatSessions([
+    session({ session_id: 'new-unpinned', state: 'idle', pinned_at: null, updated_at: '2026-01-01T00:30:00Z' }),
+    session({ session_id: 'old-pinned', state: 'idle', pinned_at: '2026-01-01T00:10:00Z', updated_at: '2026-01-01T00:00:00Z' }),
+    session({ session_id: 'new-pinned', state: 'idle', pinned_at: '2026-01-01T00:20:00Z', updated_at: '2026-01-01T00:05:00Z' }),
+  ], 'all');
+
+  expect(visible.map((item) => item.session_id)).toEqual(['new-pinned', 'old-pinned', 'new-unpinned']);
+});
+
 test('maps each turn into user and assistant chat messages in chronological order', () => {
   const messages = turnsToChatMessages([
     turn({ turn_id: 'turn-2', input: { summary: 'second input' }, output: { summary: 'second output' }, created_at: '2026-01-01T00:10:00Z' }),

@@ -174,8 +174,9 @@ export async function deleteAgentProfileVersion(profileId: string, version: stri
   return (await request<{ agent_profile: AgentProfileView }>(`/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(version)}`, { method: 'DELETE', mutating: true })).agent_profile;
 }
 
-export async function listSessions(): Promise<SessionView[]> {
-  return (await request<{ sessions: SessionView[] }>('/sessions')).sessions;
+export async function listSessions(includeArchived = false): Promise<SessionView[]> {
+  const query = includeArchived ? '?include_archived=true' : '';
+  return (await request<{ sessions: SessionView[] }>(`/sessions${query}`)).sessions;
 }
 
 export async function listWorkspaces(options: ReadRequestOptions = {}): Promise<WorkspaceView[]> {
@@ -277,6 +278,18 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
 
 export async function updateSession(sessionId: string, input: UpdateSessionInput): Promise<SessionView> {
   return (await request<{ session: SessionView }>(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'PATCH', body: input, mutating: true })).session;
+}
+
+export async function pinSession(sessionId: string): Promise<SessionView> {
+  return (await request<{ session: SessionView }>(`/sessions/${encodeURIComponent(sessionId)}/pin`, { method: 'POST', mutating: true })).session;
+}
+
+export async function unpinSession(sessionId: string): Promise<SessionView> {
+  return (await request<{ session: SessionView }>(`/sessions/${encodeURIComponent(sessionId)}/unpin`, { method: 'POST', mutating: true })).session;
+}
+
+export async function archiveSession(sessionId: string): Promise<SessionView> {
+  return (await request<{ session: SessionView }>(`/sessions/${encodeURIComponent(sessionId)}/archive`, { method: 'POST', mutating: true })).session;
 }
 
 export async function getSession(sessionId: string): Promise<SessionView> {
