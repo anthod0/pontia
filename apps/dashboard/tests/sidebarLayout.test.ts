@@ -222,6 +222,25 @@ test('sidebar groups recent sessions under non-empty recent workspaces without c
   ]);
   mocks.sessions.set([
     {
+      session_id: 'session-newer-unpinned',
+      client_type: 'pi',
+      title: 'Newer unpinned',
+      handle: 'newer',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-active',
+      pinned_at: null,
+      workspace: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T03:00:00Z',
+      metadata: {},
+    },
+    {
       session_id: 'session-active',
       client_type: 'pi',
       handle: 'main',
@@ -232,6 +251,7 @@ test('sidebar groups recent sessions under non-empty recent workspaces without c
       state: 'idle',
       current_turn_id: null,
       workspace_id: 'workspace-active',
+      pinned_at: '2026-05-14T01:30:00Z',
       workspace: null,
       capabilities: {},
       created_at: '2026-05-14T00:00:00Z',
@@ -250,19 +270,81 @@ test('sidebar groups recent sessions under non-empty recent workspaces without c
   expect(screen.queryByText('Old workspace')).not.toBeInTheDocument();
   expect(screen.getByText('Recent Sessions')).toBeInTheDocument();
   expect(screen.getByText('main · coder')).toBeInTheDocument();
+  expect(screen.getByText('Newer unpinned')).toBeInTheDocument();
 
   await fireEvent.click(workspaceButton);
 
-  const workspaceGroup = workspaceButton.closest('[data-slot="sidebar-menu-item"]');
+  const workspaceGroup = workspaceButton.closest('[data-slot="sidebar-workspace-group"]');
   expect(workspaceButton).toHaveAttribute('aria-expanded', 'true');
-  const groupedSessionButton = within(workspaceGroup as HTMLElement).getByRole('button', { name: /main · coder/i });
+  const workspaceQueries = within(workspaceGroup as HTMLElement);
+  const groupedSessionButton = workspaceQueries.getAllByRole('button', { name: /main · coder/i })
+    .find((button) => button.getAttribute('data-sidebar') === 'menu-button');
   expect(groupedSessionButton).toBeInTheDocument();
   expect(groupedSessionButton).toHaveClass('h-8');
   expect(groupedSessionButton).toHaveClass('text-sm');
+  expect(groupedSessionButton).toHaveClass('group-has-data-[sidebar=menu-action]/menu-item:pr-8');
   expect(groupedSessionButton).not.toHaveClass('h-7');
   expect(groupedSessionButton).not.toHaveClass('text-xs');
   expect(groupedSessionButton.closest('[data-slot="sidebar-menu"]')).toHaveClass('pl-2');
   expect(groupedSessionButton.closest('[data-slot="sidebar-menu"]')).not.toHaveClass('pl-6');
+  expect(workspaceQueries.getByLabelText('Pinned session')).toBeInTheDocument();
+  expect(workspaceQueries.getAllByLabelText('idle session')).toHaveLength(2);
+  expect(workspaceQueries.getByRole('button', { name: /open session actions for main · coder/i })).toBeInTheDocument();
+  const workspaceSessionTitles = workspaceQueries
+    .getAllByRole('button')
+    .filter((button) => button.getAttribute('data-sidebar') === 'menu-button')
+    .map((button) => button.textContent?.trim());
+  expect(workspaceSessionTitles).toEqual(['main · coder', 'Newer unpinned']);
+});
+
+test('sidebar workspace session actions open only for the clicked workspace item', async () => {
+  mocks.workspaces.set([
+    {
+      workspace_id: 'workspace-active',
+      canonical_path: '/home/cheny/projects/pontia',
+      display_path: '~/projects/pontia',
+      name: 'Pontia',
+      state: 'active',
+      metadata: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      last_used_at: '2026-05-14T01:00:00Z',
+    },
+  ]);
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      title: 'Shared session',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-active',
+      workspace: null,
+      pinned_at: null,
+      archived_at: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+  ]);
+  render(AppSidebarHost);
+
+  const workspaceButton = screen.getByRole('button', { name: /pontia/i });
+  await fireEvent.click(workspaceButton);
+  const workspaceGroup = workspaceButton.closest('[data-slot="sidebar-workspace-group"]');
+  const workspaceAction = within(workspaceGroup as HTMLElement).getByRole('button', { name: /open session actions for shared session/i });
+
+  await fireEvent.click(workspaceAction);
+
+  const actionButtons = screen.getAllByRole('button', { name: /open session actions for shared session/i });
+  expect(actionButtons.filter((button) => button.getAttribute('data-state') === 'open')).toEqual([workspaceAction]);
+  expect(screen.getByRole('menuitem', { name: /rename/i })).toBeInTheDocument();
 });
 
 test('sidebar renames a recent session from the hover edit action without opening it', async () => {

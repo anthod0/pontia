@@ -6,9 +6,9 @@ import { expect, test } from 'vitest';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appSidebarSource = readFileSync(resolve(__dirname, '../src/components/layout/AppSidebar.svelte'), 'utf8');
 const sidebarMenuActionSource = readFileSync(resolve(__dirname, '../src/lib/components/ui/sidebar/sidebar-menu-action.svelte'), 'utf8');
-const recentSessionsStart = appSidebarSource.indexOf('{:else if recentSessions.length}');
-const recentSessionItemEnd = appSidebarSource.indexOf('                </Sidebar.MenuItem>\n              {/each}', recentSessionsStart);
-const recentSessionItemSource = appSidebarSource.slice(recentSessionsStart, recentSessionItemEnd);
+const sessionMenuItemStart = appSidebarSource.indexOf('{#snippet sessionMenuItem(session: SessionView, actionKey: string)}');
+const sessionMenuItemEnd = appSidebarSource.indexOf('<Sidebar.Root collapsible="icon">', sessionMenuItemStart);
+const recentSessionItemSource = appSidebarSource.slice(sessionMenuItemStart, sessionMenuItemEnd);
 
 test('clamps recent session titles in the dashboard sidebar to one line', () => {
   expect(appSidebarSource).toContain('<span class="line-clamp-1">{sessionChatTitle(session)}</span>');
@@ -32,7 +32,7 @@ test('places recent session status dots at the far right and swaps them for the 
   expect(recentSessionItemSource).toContain('onclick={() => openSession(session.session_id)}>');
   expect(recentSessionItemSource).toContain('<span class="line-clamp-1">{sessionChatTitle(session)}</span>');
   expect(recentSessionItemSource).toContain("class={cn('pointer-events-none absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center transition-opacity group-focus-within/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden'");
-  expect(recentSessionItemSource).toContain("sessionActionMenuOpenId === session.session_id ? 'opacity-0' : 'opacity-100'");
+  expect(recentSessionItemSource).toContain("sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100'");
   expect(recentSessionItemSource).toContain('class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}');
   expect(recentSessionItemSource).toContain('<MoreHorizontal />');
   expect(recentSessionItemSource).toContain('<DropdownMenu.Item onclick={() => startRenamingSession(session)}>');
@@ -57,13 +57,13 @@ test('shows a pin icon before pinned recent session titles', () => {
 });
 
 test('closes the recent session actions menu immediately after pin or archive is selected', () => {
-  expect(appSidebarSource).toContain('let sessionActionMenuOpenId = $state<string | null>(null)');
-  expect(appSidebarSource).toContain('function setSessionActionMenuOpen(sessionId: string, open: boolean): void');
-  expect(appSidebarSource).toContain('sessionActionMenuOpenId = open ? sessionId : null');
+  expect(appSidebarSource).toContain('let sessionActionMenuOpenKey = $state<string | null>(null)');
+  expect(appSidebarSource).toContain('function setSessionActionMenuOpen(actionKey: string, open: boolean): void');
+  expect(appSidebarSource).toContain('sessionActionMenuOpenKey = open ? actionKey : null');
   expect(appSidebarSource).toContain('async function togglePinSessionFromMenu(session: SessionView): Promise<void>');
-  expect(appSidebarSource).toContain('sessionActionMenuOpenId = null');
+  expect(appSidebarSource).toContain('sessionActionMenuOpenKey = null');
   expect(appSidebarSource).toContain('async function archiveSessionFromMenu(session: SessionView): Promise<void>');
-  expect(appSidebarSource).toContain('bind:open={() => sessionActionMenuOpenId === session.session_id, (open) => setSessionActionMenuOpen(session.session_id, open)}');
+  expect(appSidebarSource).toContain('bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)}');
 });
 
 test('allows backend-limited recent sessions while scrolling recent workspace and session groups together', () => {
