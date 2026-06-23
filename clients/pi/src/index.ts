@@ -423,7 +423,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   pi.on("session_shutdown", async (event) => {
     if (pontiaDisabled) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
-    if (reason !== "quit" && reason !== "new" && reason !== "resume") return;
+    if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
 
     try {
       const loaded = await loadSessionContext(env);

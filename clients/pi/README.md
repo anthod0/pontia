@@ -48,7 +48,7 @@ Backend-delivered input is claimed through the Internal API endpoint derived fro
 - When pi exposes context usage through hook events, message usage, or `ctx.getContextUsage()`, it posts `session.context_usage_updated`; it does not parse session files or fabricate usage when pi does not provide it.
 - On `agent_end`, it posts `turn.output` when text was collected, then posts `turn.completed` for the plugin-generated turn id.
 - If pi exposes an explicit agent-end error, it posts `turn.failed`.
-- On `session_shutdown` with reason `quit`, `new`, or `resume`, it posts `session.exited` from the pi lifecycle hook.
+- On `session_shutdown` with reason `quit`, `new`, `resume`, or `fork`, it posts `session.exited` from the pi lifecycle hook. `reload` is ignored because it does not represent the pi session being detached from the active runtime.
 
 The extension does not parse TUI screen contents and does not infer turn completion from tmux, process state, or runtime exit.
 

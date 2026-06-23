@@ -517,7 +517,7 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test.each(["new", "resume"])("session_shutdown %s reports session exited for managed runtime", async (shutdownReason) => {
+  test.each(["new", "resume", "fork"])("session_shutdown %s reports session exited for managed runtime", async (shutdownReason) => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 }));
     const { handlers, reported } = install({
