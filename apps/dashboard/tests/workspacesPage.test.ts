@@ -123,8 +123,8 @@ test('renders a single root browser with active workspace controls in the direct
   const pontiaRow = within(table).getByRole('row', { name: /pontia/i });
   const deactivateButton = within(pontiaRow).getByRole('button', { name: 'Deactivate pontia' });
   expect(deactivateButton).toBeInTheDocument();
-  expect(deactivateButton.textContent?.trim()).toBe('');
-  expect(deactivateButton.querySelector('svg')).toBeInTheDocument();
+  expect(deactivateButton).toHaveTextContent('Deactivate');
+  expect(deactivateButton.querySelector('svg')).not.toBeInTheDocument();
   expect(within(pontiaRow).getByRole('button', { name: 'Rename pontia' })).toBeInTheDocument();
   expect(within(pontiaRow).queryByRole('button', { name: 'Delete pontia' })).not.toBeInTheDocument();
   expect(container.querySelector('.workspace-folder-preview')).not.toBeInTheDocument();
@@ -152,7 +152,7 @@ test('toggles workspace active state directly and keeps rename dialog for editin
   render(WorkspacesPage);
 
   const activateButton = await screen.findByRole('button', { name: 'Activate sandbox' });
-  expect(activateButton.textContent?.trim()).toBe('');
+  expect(activateButton).toHaveTextContent('Activate');
   await user.click(activateButton);
 
   expect(mocks.registerWorkspace).toHaveBeenCalledWith({ root_id: 'root-1', path: 'sandbox', name: 'sandbox' });

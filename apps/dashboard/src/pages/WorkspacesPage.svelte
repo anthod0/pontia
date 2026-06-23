@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CheckCircle2, Circle, CircleAlert, CornerUpLeft, FolderOpen, Pencil, RefreshCw } from '@lucide/svelte'
+  import { CircleAlert, CornerUpLeft, Folder, FolderBookmark, FolderOpen, Pencil, RefreshCw } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
@@ -228,7 +228,11 @@
                         title="Open directory"
                         onclick={() => void openPath(entry.path)}
                       >
-                        <FolderOpen class={entry.is_workspace ? 'size-4 shrink-0 text-primary' : 'size-4 shrink-0 text-muted-foreground'} aria-hidden="true" />
+                        {#if entry.is_workspace}
+                          <FolderBookmark class="size-4 shrink-0 text-foreground/80" aria-hidden="true" />
+                        {:else}
+                          <Folder class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        {/if}
                         <span class="truncate">{entry.name}/</span>
                       </button>
                     </Table.Cell>
@@ -246,18 +250,14 @@
                           </Button>
                         {/if}
                         <Button
-                          size="icon-sm"
+                          size="sm"
                           variant={entry.is_workspace ? 'secondary' : 'outline'}
                           aria-label={entry.is_workspace ? `Deactivate ${entry.name}` : `Activate ${entry.name}`}
                           title={entry.is_workspace ? 'Remove workspace registration' : 'Register as workspace'}
                           onclick={() => void activateEntry(entry)}
                           disabled={registering || (!!entryWorkspace && deletingWorkspaceId === entryWorkspace.workspace_id)}
                         >
-                          {#if entry.is_workspace}
-                            <CheckCircle2 class="size-4 text-primary" />
-                          {:else}
-                            <Circle class="size-4 text-muted-foreground" />
-                          {/if}
+                          {entry.is_workspace ? 'Deactivate' : 'Activate'}
                         </Button>
                       </div>
                     </Table.Cell>
