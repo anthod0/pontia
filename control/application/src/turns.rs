@@ -244,14 +244,13 @@ impl TurnCommandService {
                             &binding_metadata,
                         )
                         .await
-                        .and_then(|()| {
+                        .map(|()| {
                             match client_spec.adapter.turn_context {
                                 TurnContextBehavior::InternalApiClaim => {
                                     // Pending context for claim-based clients is stored before dispatch.
                                 }
                                 TurnContextBehavior::Disabled => {}
                             }
-                            Ok(())
                         })
                         .and_then(|()| {
                             self.runtime.dispatch_tui_turn(
