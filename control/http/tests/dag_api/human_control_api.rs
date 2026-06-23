@@ -10,8 +10,8 @@ mod task_state;
 use axum::http::StatusCode;
 use generic_client::GenericClientTestScope;
 use http::{get_json, post_json};
-use pontia_application::{DagSchedulerService, DagService, SubmitPlanPayload, WorkItemDraft};
 use pontia_core::ids::new_task_id;
+use pontia_dag::{DagSchedulerService, DagService, SubmitPlanPayload, WorkItemDraft};
 use serde_json::json;
 use task_state::test_state;
 

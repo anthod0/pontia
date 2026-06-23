@@ -161,10 +161,6 @@ impl EventIngestService {
 
         self.link_started_turn_to_inbox_message(&event).await?;
 
-        DagRunResultService::new(self.pool.clone())
-            .sync_from_turn_event(&event)
-            .await?;
-
         if matches!(
             event.event_type,
             EventType::SessionReady

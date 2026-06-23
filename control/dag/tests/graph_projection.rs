@@ -1,7 +1,7 @@
 #[cfg(feature = "lbug")]
-use pontia_application::LbugDagGraphStore;
+use pontia_dag::LbugDagGraphStore;
 #[cfg(feature = "lbug")]
-use pontia_application::{
+use pontia_dag::{
     AddWorkItemEdgeRequest, GraphEdgeKind, GraphProjectionService, GraphRuntimeConfig,
     UpsertTaskRequest, UpsertWorkItemRequest,
 };

@@ -2,7 +2,7 @@
 
 use crate::agent_tools_support::*;
 use axum::http::StatusCode;
-use pontia_application::SqliteDagGraphStore;
+use pontia_dag::GraphProjectionService;
 use serde_json::json;
 
 #[tokio::test]
@@ -316,7 +316,7 @@ async fn submit_plan_rejects_invalid_dag_without_partial_apply() {
     .await
     .expect("rejected proposal");
     assert_eq!(proposal_state, "rejected");
-    let graph = SqliteDagGraphStore::new(state.db())
+    let graph = GraphProjectionService::new(state.db(), state.graph())
         .task_graph("task_invalid_plan")
         .await
         .expect("task graph");
@@ -373,7 +373,7 @@ async fn submit_plan_rejects_invalid_patch_without_partial_apply() {
     .await
     .expect("rejected patch proposal");
     assert_eq!(proposal_state, "rejected");
-    let graph = SqliteDagGraphStore::new(state.db())
+    let graph = GraphProjectionService::new(state.db(), state.graph())
         .task_graph("task_invalid_patch")
         .await
         .expect("task graph");

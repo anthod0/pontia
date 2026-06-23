@@ -19,6 +19,7 @@ use pontia_core::{
     domain::{DomainEvent, EventSource, EventType},
     error::Error,
 };
+use pontia_dag::DagRunResultService;
 
 const MAX_EVENT_PAYLOAD_BYTES: usize = 64 * 1024;
 
@@ -121,6 +122,11 @@ pub async fn post_event(
 
     let warnings = service.sequence_warnings(&event).await?;
     let result = service.ingest_event(event.clone()).await?;
+    if !result.duplicate {
+        DagRunResultService::with_graph(state.db(), state.graph())
+            .sync_from_turn_event(&event)
+            .await?;
+    }
     let warnings = if result.duplicate {
         Vec::new()
     } else {

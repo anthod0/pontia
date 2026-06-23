@@ -1,7 +1,34 @@
 use super::*;
 use pontia_storage_sqlite::repositories::dag::SqliteDagRepository;
 
-impl ExternalQueryService {
+#[derive(Clone)]
+pub struct DagQueryService {
+    pool: SqlitePool,
+    graph: GraphRuntimeConfig,
+}
+
+impl DagQueryService {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self::with_graph(pool, GraphRuntimeConfig::default())
+    }
+
+    pub fn with_graph(pool: SqlitePool, graph: GraphRuntimeConfig) -> Self {
+        Self { pool, graph }
+    }
+
+    pub async fn get_task(&self, task_id: &str) -> Result<Option<TaskView>> {
+        ExternalQueryService::new(self.pool.clone())
+            .get_task(task_id)
+            .await
+    }
+
+    pub async fn list_relevant_dag_proposals(&self, task_id: &str) -> Result<Vec<DagProposal>> {
+        let rows = SqliteDagRepository::new(self.pool.clone())
+            .list_relevant_dag_proposals(task_id)
+            .await?;
+        rows.into_iter().map(dag_proposal_row_to_record).collect()
+    }
+
     pub async fn get_task_dag(&self, task_id: &str) -> Result<TaskDagView> {
         let summary = self.get_task_dag_summary(task_id).await?;
         let work_items = self.list_work_items(task_id).await?;

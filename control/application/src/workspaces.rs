@@ -60,15 +60,12 @@ pub struct RenameWorkspaceRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkspaceRecord {
-    pub(crate) workspace_id: String,
-    pub(crate) canonical_path: String,
+pub struct WorkspaceRecord {
+    pub workspace_id: String,
+    pub canonical_path: String,
 }
 
-pub(crate) async fn upsert_workspace(
-    pool: &SqlitePool,
-    workspace: &str,
-) -> Result<WorkspaceRecord> {
+pub async fn upsert_workspace(pool: &SqlitePool, workspace: &str) -> Result<WorkspaceRecord> {
     let input_path = PathBuf::from(workspace);
     std::fs::create_dir_all(&input_path)?;
     let canonical_path = std::fs::canonicalize(&input_path)?.display().to_string();
@@ -121,7 +118,7 @@ pub(crate) async fn upsert_canonical_workspace(
     })
 }
 
-pub(crate) async fn get_workspace_record(
+pub async fn get_workspace_record(
     pool: &SqlitePool,
     workspace_id: &str,
 ) -> Result<Option<WorkspaceRecord>> {

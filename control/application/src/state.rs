@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
+use pontia_config::GraphRuntimeConfig;
 use pontia_core::domain::DomainEvent;
 use pontia_runtime::{set_runtime_bind_addr, set_runtime_config, set_runtime_external_api_token};
 

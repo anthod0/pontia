@@ -21,7 +21,7 @@ pub struct AgentToolService {
     pool: SqlitePool,
     graph: GraphRuntimeConfig,
     resolver: AgentToolContextResolver,
-    queries: ExternalQueryService,
+    queries: DagQueryService,
     profiles: AgentProfileService,
 }
 
@@ -35,7 +35,7 @@ impl AgentToolService {
             pool: pool.clone(),
             graph: graph.clone(),
             resolver: AgentToolContextResolver::new(pool.clone()),
-            queries: ExternalQueryService::with_graph(pool.clone(), graph),
+            queries: DagQueryService::with_graph(pool.clone(), graph),
             profiles: AgentProfileService::new(pool),
         }
     }

@@ -6,8 +6,9 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use pontia_application::{
-    AppState, ExternalQueryService, GraphProjectionService, HumanSignalRequest, TaskCommandService,
+use pontia_application::{AppState, ExternalQueryService, TaskCommandService};
+use pontia_dag::{
+    DagQueryService, DagTaskCommandService, GraphProjectionService, HumanSignalRequest,
 };
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key, ok};
@@ -39,7 +40,7 @@ pub async fn pause_task(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::new(state.db());
+    let service = DagTaskCommandService::with_graph(state.db(), state.graph());
     let outcome = service.pause_task(&task_id, idempotency_key).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
@@ -51,7 +52,7 @@ pub async fn resume_task(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::new(state.db());
+    let service = DagTaskCommandService::with_graph(state.db(), state.graph());
     let outcome = service.resume_task(&task_id, idempotency_key).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
@@ -64,7 +65,7 @@ pub async fn create_human_signal(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let idempotency_key = idempotency_key(&headers);
-    let service = TaskCommandService::new(state.db());
+    let service = DagTaskCommandService::with_graph(state.db(), state.graph());
     let outcome = service
         .create_human_signal(&task_id, request, idempotency_key)
         .await?;
@@ -150,7 +151,9 @@ pub async fn list_task_proposals(
         .get_task(&task_id)
         .await?
         .ok_or_else(|| ExternalApiError::not_found(format!("task {task_id} not found")))?;
-    let proposals = service.list_task_dag_proposals(&task_id).await?;
+    let proposals = DagQueryService::with_graph(state.db(), state.graph())
+        .list_relevant_dag_proposals(&task_id)
+        .await?;
     Ok(ok(json!({ "proposals": proposals })))
 }
 

@@ -6,7 +6,8 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use pontia_application::{AppState, DagSchedulerService, ExternalQueryService};
+use pontia_application::{AppState, ExternalQueryService};
+use pontia_dag::{DagQueryService, DagSchedulerService};
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
 
@@ -16,9 +17,11 @@ pub async fn get_task_dag(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::with_graph(state.db(), state.graph());
+    let service = ExternalQueryService::new(state.db());
     ensure_task_exists(&service, &task_id).await?;
-    let dag = service.get_task_dag(&task_id).await?;
+    let dag = DagQueryService::with_graph(state.db(), state.graph())
+        .get_task_dag(&task_id)
+        .await?;
     Ok(ok(json!({ "dag": dag })))
 }
 
@@ -28,9 +31,11 @@ pub async fn list_task_work_items(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::with_graph(state.db(), state.graph());
+    let service = ExternalQueryService::new(state.db());
     ensure_task_exists(&service, &task_id).await?;
-    let work_items = service.list_work_items(&task_id).await?;
+    let work_items = DagQueryService::with_graph(state.db(), state.graph())
+        .list_work_items(&task_id)
+        .await?;
     Ok(ok(json!({ "work_items": work_items })))
 }
 
@@ -40,9 +45,11 @@ pub async fn list_task_work_item_runs(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::with_graph(state.db(), state.graph());
+    let service = ExternalQueryService::new(state.db());
     ensure_task_exists(&service, &task_id).await?;
-    let runs = service.list_work_item_runs(&task_id).await?;
+    let runs = DagQueryService::with_graph(state.db(), state.graph())
+        .list_work_item_runs(&task_id)
+        .await?;
     Ok(ok(json!({ "runs": runs })))
 }
 
@@ -52,9 +59,11 @@ pub async fn list_task_signals(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::with_graph(state.db(), state.graph());
+    let service = ExternalQueryService::new(state.db());
     ensure_task_exists(&service, &task_id).await?;
-    let signals = service.list_dag_signals(&task_id).await?;
+    let signals = DagQueryService::with_graph(state.db(), state.graph())
+        .list_dag_signals(&task_id)
+        .await?;
     Ok(ok(json!({ "signals": signals })))
 }
 
@@ -67,7 +76,7 @@ pub async fn scheduler_tick(
     // for existing callers/tests and future revival, but avoid extending this path
     // while focusing on session-first Web UI and bidirectional session control.
     authenticate(&state, &headers)?;
-    let query = ExternalQueryService::with_graph(state.db(), state.graph());
+    let query = ExternalQueryService::new(state.db());
     ensure_task_exists(&query, &task_id).await?;
     let scheduler = DagSchedulerService::with_graph(state.db(), state.graph())
         .schedule_task(&task_id)

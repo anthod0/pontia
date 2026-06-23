@@ -1,0 +1,87 @@
+use std::sync::{Arc, OnceLock};
+
+use pontia_agent_clients::{AgentClientCapabilities, GenericTestClient};
+use pontia_application::AppState;
+use pontia_runtime::{AgentInput, GenericRuntimeManager};
+use serde_json::Value;
+use sqlx::Row;
+use tokio::sync::{Mutex, OwnedMutexGuard};
+
+pub struct GenericClientTestScope {
+    _guard: OwnedMutexGuard<()>,
+}
+
+#[allow(dead_code)]
+impl GenericClientTestScope {
+    pub async fn new() -> Self {
+        let guard = generic_test_lock().clone().lock_owned().await;
+        GenericTestClient::clear_recorded_inputs();
+        GenericRuntimeManager::reset_in_process_registry();
+        Self { _guard: guard }
+    }
+
+    pub fn with_capabilities(self, capabilities: AgentClientCapabilities) -> Self {
+        GenericTestClient::set_capabilities(capabilities);
+        self
+    }
+
+    pub fn auto_start_turn(self) -> Self {
+        let mut behavior = GenericTestClient::behavior();
+        behavior.auto_start_turn = true;
+        GenericTestClient::set_behavior(behavior);
+        self
+    }
+
+    pub fn recorded_inputs(&self) -> Vec<AgentInput> {
+        GenericTestClient::recorded_inputs()
+    }
+
+    pub fn is_runtime_alive(&self, runtime_handle: &str) -> bool {
+        GenericRuntimeManager.is_alive(runtime_handle)
+    }
+
+    pub fn reset_runtime_registry(&self) {
+        GenericRuntimeManager::reset_in_process_registry();
+    }
+
+    pub async fn runtime_handle(&self, state: &AppState, session_id: &str) -> String {
+        self.runtime_metadata(state, session_id).await["in_process"]["runtime_handle"]
+            .as_str()
+            .expect("runtime handle")
+            .to_string()
+    }
+
+    #[allow(dead_code)]
+    pub async fn enable_builtin_profiles(&self, state: &AppState) {
+        sqlx::query(
+            r#"UPDATE execution_profiles
+               SET supported_client_types = '["generic"]'
+               WHERE profile_id IN ('default', 'planner', 'replanner', 'implementer', 'reviewer', 'tester', 'debugger')"#,
+        )
+        .execute(&state.db())
+        .await
+        .expect("enable generic builtin profiles");
+    }
+
+    pub async fn runtime_metadata(&self, state: &AppState, session_id: &str) -> Value {
+        let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("runtime binding");
+        let metadata: String = row.try_get("metadata").expect("metadata");
+        serde_json::from_str(&metadata).expect("metadata json")
+    }
+}
+
+impl Drop for GenericClientTestScope {
+    fn drop(&mut self) {
+        GenericTestClient::clear_recorded_inputs();
+        GenericRuntimeManager::reset_in_process_registry();
+    }
+}
+
+fn generic_test_lock() -> &'static Arc<Mutex<()>> {
+    static LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
+    LOCK.get_or_init(|| Arc::new(Mutex::new(())))
+}

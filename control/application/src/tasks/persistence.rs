@@ -36,13 +36,6 @@ impl TaskCommandService {
         SqliteTaskRepository::new(self.pool.clone())
             .record_task_event(&event_id, task_id, event_type, &payload)
             .await?;
-        if self.graph.enabled
-            && let Err(error) = GraphProjectionService::new(self.pool.clone(), self.graph.clone())
-                .project_task(task_id)
-                .await
-        {
-            tracing::warn!(task_id, event_type, error = %error, "graph projection failed");
-        }
         Ok(())
     }
 }

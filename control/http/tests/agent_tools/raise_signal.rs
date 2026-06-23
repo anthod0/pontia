@@ -2,7 +2,7 @@
 
 use crate::agent_tools_support::*;
 use axum::http::StatusCode;
-use pontia_application::SqliteDagGraphStore;
+use pontia_dag::GraphProjectionService;
 use serde_json::{Value, json};
 use sqlx::Row;
 
@@ -76,7 +76,7 @@ async fn raise_signal_records_agent_signal_and_replan_policy_starts_replanner() 
     .await
     .expect("signal event count");
     assert_eq!(signal_event_count, 1);
-    let graph = SqliteDagGraphStore::new(state.db())
+    let graph = GraphProjectionService::new(state.db(), state.graph())
         .task_graph("task_signal")
         .await
         .expect("task graph");

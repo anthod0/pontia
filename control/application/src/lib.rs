@@ -7,7 +7,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sqlx::{Row, SqlitePool};
+use sqlx::SqlitePool;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use pontia_agent_clients as agent_clients;
@@ -19,29 +19,17 @@ use pontia_core::{
         TurnProjection, TurnState,
     },
     error::{Error, Result},
-    ids::{
-        new_event_id, new_message_id, new_session_id, new_task_id, new_turn_id, new_workspace_id,
-    },
+    ids::{new_event_id, new_message_id, new_session_id, new_turn_id, new_workspace_id},
 };
 use pontia_runtime::{AgentInput, GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 mod agent_bindings;
-mod agent_profiles;
-mod agent_tools;
 mod artifacts;
-mod dag;
-mod dag_models;
-mod dag_planning;
-mod dag_run_result;
-mod dag_scheduler;
-mod dag_validator;
 mod events;
 mod git_status;
-mod graph;
 mod inbox;
 mod mapping;
-mod prompt_rendering;
 mod queries;
 mod raw_transcripts;
 mod runtime_bindings;
@@ -56,37 +44,13 @@ mod views;
 mod workspaces;
 
 pub use agent_bindings::{AgentBinding, AgentBindingService, UpsertAgentBindingRequest};
-pub use agent_profiles::{
-    AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView,
-    UpsertExecutionProfileRequest,
-};
-pub use agent_tools::{
-    AgentPlanningRole, AgentToolContext, AgentToolContextResolver, AgentToolMode, AgentToolRequest,
-    AgentToolResponse, AgentToolService,
-};
 pub use artifacts::{
     ArtifactContentService, ArtifactDiscoveryService, ArtifactRegistration,
     ArtifactRegistrationService,
 };
-pub use dag::DagService;
-pub use dag_models::{
-    DagPatch, DagPatchApplySummary, DagProposal, DagSignalRecord, PatchOperation,
-    RaiseSignalPayload, SubmitPlanPayload, SubmitResultPayload, WorkItemDraft, WorkItemEdgeDraft,
-    WorkItemRecord, WorkItemRunRecord,
-};
-pub use dag_planning::{DagPlanningOutcome, DagPlanningService, DagPlanningTurn};
-pub use dag_run_result::DagRunResultService;
-pub use dag_scheduler::{DagSchedulerDispatch, DagSchedulerOutcome, DagSchedulerService};
 pub use events::{EventIngestResult, EventIngestService, InternalEventValidationService};
 pub(crate) use events::{nested_array_strings, nested_string, remove_internal_metadata_fields};
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
-#[cfg(feature = "lbug")]
-pub use graph::LbugDagGraphStore;
-pub use graph::{
-    AddWorkItemEdgeRequest, GraphEdgeKind, GraphProjectionService, GraphRuntimeConfig, SignalNode,
-    TaskGraphSnapshot, TaskNode, TaskProvenance, UpsertSignalRequest, UpsertTaskRequest,
-    UpsertWorkItemRequest, WorkItemEdgeRecord, WorkItemNode,
-};
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
@@ -104,7 +68,7 @@ pub use sessions::{
     UpdateSessionRequest,
 };
 pub use state::{AppState, initialize};
-pub use tasks::{CreateDagTaskRequest, CreateTaskOutcome, HumanSignalRequest, TaskCommandService};
+pub use tasks::{CreateTaskOutcome, TaskCommandService};
 pub use turns::{CurrentTurnClaimRequest, CurrentTurnClaimService, TurnCommandService};
 pub use views::*;
 pub use workspaces::{
@@ -114,7 +78,7 @@ pub use workspaces::{
 };
 
 pub(crate) use mapping::*;
-pub(crate) use workspaces::{WorkspaceRecord, get_workspace_record, upsert_workspace};
+pub use workspaces::{WorkspaceRecord, get_workspace_record, upsert_workspace};
 
 use std::sync::{OnceLock, RwLock};
 

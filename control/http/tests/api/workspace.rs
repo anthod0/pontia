@@ -3,9 +3,8 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_application::{
-    AppState, FilePickerConfig, GraphRuntimeConfig, WorkspaceBrowserConfig, WorkspaceRootConfig,
-};
+use pontia_application::{AppState, FilePickerConfig, WorkspaceBrowserConfig, WorkspaceRootConfig};
+use pontia_config::GraphRuntimeConfig;
 use pontia_http as http;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};

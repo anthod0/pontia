@@ -69,7 +69,7 @@ impl TurnCommandService {
         }
     }
 
-    pub(crate) async fn create_and_dispatch_turn(
+    pub async fn create_and_dispatch_turn(
         &self,
         session_id: &str,
         input: String,

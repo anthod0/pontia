@@ -1399,7 +1399,6 @@ name = "pontia-application"
 version = "0.1.0"
 dependencies = [
  "ignore",
- "lbug",
  "nucleo-matcher",
  "pontia-agent-clients",
  "pontia-config",
@@ -1443,6 +1442,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "pontia-dag"
+version = "0.1.0"
+dependencies = [
+ "lbug",
+ "pontia-agent-clients",
+ "pontia-application",
+ "pontia-config",
+ "pontia-core",
+ "pontia-runtime",
+ "pontia-storage-sqlite",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "pontia-http"
 version = "0.1.0"
 dependencies = [
@@ -1453,6 +1474,7 @@ dependencies = [
  "pontia-application",
  "pontia-config",
  "pontia-core",
+ "pontia-dag",
  "pontia-runtime",
  "pontia-storage-sqlite",
  "reqwest",
