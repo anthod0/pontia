@@ -19,15 +19,6 @@
     rememberOptimisticInitialMessage,
   } from '../stores/optimisticChat'
   import {
-    clientTypeOptionsForProfile,
-    defaultHandleForProfile,
-    loadAgentProfiles,
-    sessionProfileFields,
-    agentProfiles,
-    agentProfilesError,
-    agentProfilesLoading,
-  } from '../stores/agentProfiles'
-  import {
     loadWorkspaces,
     refreshWorkspaceGitStatus,
     workspaceGitStatuses,
@@ -55,13 +46,6 @@
     updateSessionTitle,
   } from '../stores/sessions'
   import {
-    createDagTask,
-    loadTaskProposals,
-    taskProposals,
-    taskProposalsError,
-    taskProposalsLoading,
-  } from '../stores/tasks'
-  import {
     handleTimelineMessageUpdated,
     loadSessionTimeline,
     resetTimelineState,
@@ -77,9 +61,7 @@
   let selectedSessionId = ''
   let prompt = ''
   let createWorkspaceId = ''
-  let createProfileId = ''
   let createClientType = 'pi'
-  let taskMode = false
   let creating = false
 
   let input = ''
@@ -90,20 +72,18 @@
   let lastToastedError: string | null = null
   let inboxSheetOpen = false
   let renameSessionDialogOpen = false
-  let loadedProposalTaskId = ''
-  let appliedRedirectTaskId = ''
   let unsubscribeDashboardEvents: (() => void) | null = null
   let foregroundRefreshInFlight: Promise<void> | null = null
 
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
-  const DAG_TASK_ENTRIES_ENABLED = false
+  const CLIENT_TYPE_OPTIONS = ['pi']
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
   const newChatSelectorTriggerClass = 'h-7 rounded-full px-3 text-sm font-normal text-muted-foreground'
 
   onMount(async () => {
     selectedSessionId = requestedSessionIdFromLocation()
-    await Promise.all([loadSessions(), loadWorkspaces(), loadAgentProfiles()])
+    await Promise.all([loadSessions(), loadWorkspaces()])
     ensureCreateWorkspaceSelection()
     if (selectedSessionId) {
       await loadSelectedSession(selectedSessionId)
@@ -133,22 +113,13 @@
   $: if ($workspaces.length && (!createWorkspaceId || !$workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId))) {
     createWorkspaceId = preferredCreateWorkspaceId()
   }
-  $: selectedProfile = $agentProfiles.find((profile) => profile.profile_id === createProfileId) ?? null
   $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
-  $: clientTypeOptions = clientTypeOptionsForProfile(selectedProfile)
+  $: clientTypeOptions = CLIENT_TYPE_OPTIONS
   $: if (!clientTypeOptions.includes(createClientType)) createClientType = clientTypeOptions[0] ?? createClientType
   $: if (createWorkspaceId && $workspaces.length) rememberCreateWorkspaceSelection(createWorkspaceId)
   $: canCreate = Boolean(prompt.trim() && createWorkspaceId && createClientType.trim() && !creating)
   $: canSend = canSendSessionMessage(selectedSession, input) && !submitting
-  $: plannerTaskId = plannerTaskIdForSession(selectedSession)
-  $: plannerTaskProposals = plannerTaskId ? $taskProposals.filter((proposal) => proposal.task_id === plannerTaskId) : []
-  $: draftPlannerProposal = plannerTaskProposals.find((proposal) => proposal.mode === 'initial_dag' && proposal.state === 'proposed') ?? null
-  $: if (DAG_TASK_ENTRIES_ENABLED && plannerTaskId && plannerTaskId !== loadedProposalTaskId) {
-    loadedProposalTaskId = plannerTaskId
-    void loadTaskProposals(plannerTaskId)
-  }
-  $: if (DAG_TASK_ENTRIES_ENABLED && plannerTaskId && plannerTaskProposals.some((proposal) => proposal.state === 'applied')) navigateToTaskDag(plannerTaskId)
-  $: passiveErrorMessage = $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError ?? $agentProfilesError ?? $taskProposalsError
+  $: passiveErrorMessage = $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError
   $: errorMessage = actionError ?? passiveErrorMessage
   $: shouldToastError = Boolean(errorMessage)
   $: {
@@ -264,20 +235,6 @@
     }
   }
 
-  function plannerTaskIdForSession(session: SessionView | null): string | null {
-    if (!session?.metadata) return null
-    const metadata = session.metadata
-    const taskId = typeof metadata.task_id === 'string' ? metadata.task_id : null
-    const role = typeof metadata.dag_planning_role === 'string' ? metadata.dag_planning_role : null
-    return metadata.dag_managed === true && role === 'planner' && taskId ? taskId : null
-  }
-
-  function navigateToTaskDag(taskId: string): void {
-    if (appliedRedirectTaskId === taskId) return
-    appliedRedirectTaskId = taskId
-    navigate(`/tasks/${taskId}/dag`)
-  }
-
   function handleForegroundResume(): void {
     if (document.visibilityState === 'hidden') return
     const sessionId = selectedSessionId
@@ -324,11 +281,6 @@
       void handleTimelineMessageUpdated(selectedSessionId, bindingId)
       return
     }
-
-    if (!DAG_TASK_ENTRIES_ENABLED || !plannerTaskId || streamEvent.kind !== 'task_event') return
-    if (streamEvent.event.task_id === plannerTaskId && streamEvent.event.event_type === 'dag.approved') {
-      navigateToTaskDag(plannerTaskId)
-    }
   }
 
   function openRenameSelectedSessionDialog(): void {
@@ -360,11 +312,6 @@
     actionError = null
     resetTimelineState()
     navigate('/chat')
-  }
-
-  function applyProfileDefaults(): void {
-    if (!selectedProfile) return
-    createClientType = clientTypeOptionsForProfile(selectedProfile)[0] ?? createClientType
   }
 
   async function selectSessionFromLocation(): Promise<void> {
@@ -404,36 +351,11 @@
     creating = true
     actionError = null
     try {
-      if (DAG_TASK_ENTRIES_ENABLED && taskMode) {
-        const initialPrompt = prompt.trim()
-        const result = await createDagTask({
-          input: initialPrompt,
-          workspace: selectedWorkspace?.canonical_path ?? selectedWorkspace?.display_path ?? createWorkspaceId,
-          client_type: createClientType.trim() || 'pi',
-          metadata: { source: 'dashboard_chat', action: 'manual_task' },
-        })
-        selectedSessionId = result.planning_turn.session_id
-        rememberOptimisticInitialMessage(result.planning_turn.session_id, initialPrompt, {
-          turn_id: result.planning_turn.turn_id,
-          created_at: new Date().toISOString(),
-        })
-        prompt = ''
-        resetTimelineState(result.planning_turn.session_id)
-        navigate(`/chat/${result.planning_turn.session_id}`)
-        await Promise.all([loadSessionDetail(result.planning_turn.session_id), loadSessionTimeline(result.planning_turn.session_id, { mode: 'rebuild' })])
-        await refreshSessionGitStatus(currentSelectedSession())
-        return
-      }
-
       const initialPrompt = prompt.trim()
       const result = await createSession({
         client_type: createClientType.trim(),
         workspace_id: createWorkspaceId,
-        handle: defaultHandleForProfile(selectedProfile) || null,
-        role: selectedProfile?.default_session_role ?? null,
         title: titleFromInitialPrompt(initialPrompt),
-        description: selectedProfile?.default_session_description ?? null,
-        ...sessionProfileFields(selectedProfile),
         initial_task: { input: initialPrompt, metadata: { source: 'dashboard_chat' } },
         metadata: { source: 'dashboard_chat' },
       })
@@ -558,8 +480,6 @@
       bind:prompt
       bind:workspaceId={createWorkspaceId}
       bind:clientType={createClientType}
-      bind:taskMode
-      taskEntriesEnabled={DAG_TASK_ENTRIES_ENABLED}
       {creating}
       {canCreate}
       workspaces={$workspaces}
@@ -588,9 +508,6 @@
             {messages}
             sessionState={selectedSession.state}
             loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
-            plannerTaskId={DAG_TASK_ENTRIES_ENABLED ? plannerTaskId : null}
-            draftPlannerProposal={DAG_TASK_ENTRIES_ENABLED ? draftPlannerProposal : null}
-            draftPlannerProposalLoading={DAG_TASK_ENTRIES_ENABLED && $taskProposalsLoading}
             interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
             interruptBusy={actionBusy}
             hasMoreHistory={$timelineState.hasMore}

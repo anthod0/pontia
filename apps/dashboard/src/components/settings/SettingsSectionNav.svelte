@@ -11,7 +11,6 @@
   const sections: Section[] = [
     { label: 'Common', href: '/dashboard/settings/common', path: '/settings/common', match: ['/dashboard/settings/common'] },
     { label: 'Workspaces', href: '/dashboard/settings/workspaces', path: '/settings/workspaces', match: ['/dashboard/settings/workspaces', '/dashboard/workspaces'] },
-    { label: 'Agent Profiles', href: '/dashboard/settings/agent-profiles', path: '/settings/agent-profiles', match: ['/dashboard/settings/agent-profiles', '/dashboard/agent-profiles'] },
   ]
 
   let currentPath = $state(window.location.pathname)

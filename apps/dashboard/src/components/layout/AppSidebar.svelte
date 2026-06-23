@@ -30,7 +30,6 @@
   const settingsSections = [
     { label: 'Common', path: '/settings/common' },
     { label: 'Workspaces', path: '/settings/workspaces' },
-    { label: 'Agent Profiles', path: '/settings/agent-profiles' },
   ]
 
   let currentPath = $state(normalizePath(window.location.pathname))

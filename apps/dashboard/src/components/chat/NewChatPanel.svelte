@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { Folder, GitBranch, Terminal } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button/index.js'
+  import { Folder, Terminal } from '@lucide/svelte'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import FileMentionTextarea from '$lib/components/file-picker/FileMentionTextarea.svelte'
   import * as Select from '$lib/components/ui/select/index.js'
@@ -11,8 +10,6 @@
     prompt: string
     workspaceId: string
     clientType: string
-    taskMode?: boolean
-    taskEntriesEnabled?: boolean
     creating?: boolean
     canCreate?: boolean
     workspaces: WorkspaceView[]
@@ -28,8 +25,6 @@
     prompt = $bindable(''),
     workspaceId = $bindable(''),
     clientType = $bindable('pi'),
-    taskMode = $bindable(false),
-    taskEntriesEnabled = false,
     creating = false,
     canCreate = false,
     workspaces,
@@ -46,17 +41,11 @@
   <div class="mx-auto w-full max-w-4xl space-y-6">
     <div class="space-y-2">
       <h2 class="text-3xl font-semibold tracking-tight">New Chat</h2>
-      <p class="max-w-3xl text-muted-foreground">Start a new agent session from a prompt, workspace, client, and profile.</p>
+      <p class="max-w-3xl text-muted-foreground">Start a new agent session from a prompt, workspace, and client.</p>
     </div>
 
     <div class="space-y-3">
       <div class="flex min-w-0 flex-wrap items-center gap-2 px-1">
-        {#if taskEntriesEnabled}
-          <Button type="button" size="sm" variant={taskMode ? 'default' : 'outline'} class="h-7 rounded-full px-3 text-sm font-normal" aria-pressed={taskMode} aria-label={taskMode ? 'Task mode on' : 'Task mode off'} onclick={() => (taskMode = !taskMode)}>
-            <GitBranch class="size-4" /> Task
-          </Button>
-        {/if}
-
         <Select.Root type="single" bind:value={workspaceId} disabled={workspacesLoading}>
           <Select.Trigger class={`${selectorTriggerClass} max-w-56`} aria-label="Workspace" title={selectedWorkspace?.canonical_path ?? undefined}>
             <Folder class="size-4" aria-hidden="true" />
@@ -94,7 +83,7 @@
 
         <PromptInput.Toolbar class="justify-between gap-2 pt-1">
           <p class="px-2 text-xs text-muted-foreground">Enter to send · Shift+Enter / Ctrl+Enter for newline</p>
-          <PromptInput.Submit disabled={!canCreate || creating} aria-label={creating ? (taskMode ? 'Creating task' : 'Starting chat') : (taskMode ? 'Create task' : 'Start chat')} />
+          <PromptInput.Submit disabled={!canCreate || creating} aria-label={creating ? 'Starting chat' : 'Start chat'} />
         </PromptInput.Toolbar>
       </PromptInput.Root>
     </div>

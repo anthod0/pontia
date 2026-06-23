@@ -482,23 +482,23 @@ test('top bar omits static dashboard title, description copy, and settings contr
   expect(screen.queryByRole('button', { name: /settings/i })).not.toBeInTheDocument();
 });
 
-test('sidebar footer exposes settings as a section menu', async () => {
+test('sidebar footer exposes settings as a section menu without agent profiles', async () => {
   render(AppSidebarHost);
 
   await fireEvent.click(screen.getByRole('button', { name: /settings/i }));
 
   expect(await screen.findByRole('menuitem', { name: /^common$/i })).toBeInTheDocument();
   expect(screen.getByRole('menuitem', { name: /^workspaces$/i })).toBeInTheDocument();
-  expect(screen.getByRole('menuitem', { name: /^agent profiles$/i })).toBeInTheDocument();
+  expect(screen.queryByRole('menuitem', { name: /^agent profiles$/i })).not.toBeInTheDocument();
 });
 
 test('sidebar settings menu navigates to settings sections without document reload', async () => {
   render(AppSidebarHost);
 
   await fireEvent.click(screen.getByRole('button', { name: /settings/i }));
-  await fireEvent.click(await screen.findByRole('menuitem', { name: /^agent profiles$/i }));
+  await fireEvent.click(await screen.findByRole('menuitem', { name: /^workspaces$/i }));
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/settings/agent-profiles');
+  expect(mocks.navigate).toHaveBeenCalledWith('/settings/workspaces');
 });
 
 test('top bar New Chat uses SPA navigation and notifies mounted route components', async () => {
@@ -524,6 +524,12 @@ test('settings common page contains controls without owning the section switcher
   expect(screen.getByRole('button', { name: /save token/i })).toBeInTheDocument();
   expect(screen.getByText(/live stream/i)).toBeInTheDocument();
   expect(screen.queryByRole('navigation', { name: /settings sections/i })).not.toBeInTheDocument();
+});
+
+test('chat page removes frozen DAG task entry switch and creation path', () => {
+  expect(chatPageSource).not.toContain('DAG_TASK_ENTRIES_ENABLED');
+  expect(chatPageSource).not.toContain('createDagTask');
+  expect(chatPageSource).not.toContain('taskEntriesEnabled');
 });
 
 test('new chat route uses small viewport units to avoid mobile browser chrome overflow', () => {
@@ -589,7 +595,7 @@ test('settings shell renders a persistent vertical side switcher around page con
   expect(activeLink).toHaveAttribute('aria-current', 'page');
   expect(activeLink).toHaveClass('aria-[current=page]:bg-muted');
   expect(activeLink).not.toHaveClass('aria-[current=page]:bg-primary');
-  expect(within(nav).getByRole('link', { name: /^agent profiles$/i })).toHaveAttribute('href', '/dashboard/settings/agent-profiles');
+  expect(within(nav).queryByRole('link', { name: /^agent profiles$/i })).not.toBeInTheDocument();
 
   const content = screen.getByText('Current settings page content');
   expect(content).toBeInTheDocument();
@@ -600,9 +606,9 @@ test('settings shell section switcher uses router navigation instead of a docume
   window.history.pushState({}, '', '/dashboard/settings/common');
   render(SettingsShellHost);
 
-  await fireEvent.click(screen.getByRole('link', { name: /^agent profiles$/i }));
+  await fireEvent.click(screen.getByRole('link', { name: /^workspaces$/i }));
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/settings/agent-profiles');
+  expect(mocks.navigate).toHaveBeenCalledWith('/settings/workspaces');
 });
 
 test('dashboard routes use chat as the default and remove top-level overview', () => {
@@ -614,6 +620,8 @@ test('dashboard routes use chat as the default and remove top-level overview', (
   expect(rootRoute).toBeDefined();
   expect(String(rootRoute?.render)).toContain('ChatPage');
   expect(paths).not.toContain('/overview');
+  expect(paths).not.toContain('/tasks');
+  expect(paths.some((path) => path.startsWith('/tasks/'))).toBe(false);
   expect(settingsRoute).toBeDefined();
   expect(String(settingsRoute?.render)).toContain('SettingsRedirectPage');
   expect(paths).toContain('/chat/{sessionId}');

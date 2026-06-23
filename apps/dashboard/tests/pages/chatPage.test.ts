@@ -447,7 +447,7 @@ test('renders a clean centered prompt input on the bare chat route instead of se
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
   expect(promptInput).toHaveValue('');
   expect(screen.getByRole('heading', { name: /new chat/i })).toBeInTheDocument();
-  expect(screen.getByText('Start a new agent session from a prompt, workspace, client, and profile.')).toBeInTheDocument();
+  expect(screen.getByText('Start a new agent session from a prompt, workspace, and client.')).toBeInTheDocument();
   const centeredPanel = screen.getByTestId('new-chat-centered-panel');
   expect(centeredPanel).toHaveClass('justify-center');
   expect(centeredPanel).toContainElement(screen.getByRole('heading', { name: /new chat/i }));
@@ -520,6 +520,13 @@ test('shows new chat keyboard hint and submits with Enter while preserving modif
 });
 
 
+test('does not load agent profiles for ordinary chat creation', async () => {
+  render(ChatPage);
+
+  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  expect(mocks.loadAgentProfiles).not.toHaveBeenCalled();
+});
+
 test('creates a session with initial prompt, workspace, and client then opens its chat', async () => {
   const user = userEvent.setup();
   const created = session({ session_id: 'session-new' });
@@ -532,10 +539,7 @@ test('creates a session with initial prompt, workspace, and client then opens it
   await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith({
     client_type: 'pi',
     workspace_id: 'workspace-1',
-    handle: null,
-    role: null,
     title: 'Implement the dashboard chat flow',
-    description: null,
     initial_task: { input: 'Implement the dashboard chat flow', metadata: { source: 'dashboard_chat' } },
     metadata: { source: 'dashboard_chat' },
   }));
