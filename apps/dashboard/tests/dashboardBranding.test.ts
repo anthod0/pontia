@@ -1,12 +1,54 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, test } from 'vitest';
+import { render, screen } from '@testing-library/svelte';
+import { expect, test, vi } from 'vitest';
+import AppSidebarHost from './components/layout/AppSidebarHost.svelte';
+import TopBarHost from './components/layout/TopBarHost.svelte';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const indexHtml = readFileSync(resolve(__dirname, '../index.html'), 'utf8');
-const appSidebarSource = readFileSync(resolve(__dirname, '../src/components/layout/AppSidebar.svelte'), 'utf8');
-const topBarSource = readFileSync(resolve(__dirname, '../src/components/layout/TopBar.svelte'), 'utf8');
+
+const mocks = vi.hoisted(() => {
+  function readableStore<T>(value: T) {
+    return {
+      subscribe(run: (value: T) => void) {
+        run(value);
+        return () => {};
+      },
+    };
+  }
+
+  return {
+    navigate: vi.fn(),
+    sessions: readableStore([]),
+    sessionsLoading: readableStore(false),
+    workspaces: readableStore([]),
+    workspacesLoading: readableStore(false),
+    token: readableStore('test-token'),
+    sseStatus: readableStore('open'),
+    lastConnectionError: readableStore(null),
+  };
+});
+
+vi.mock('svelte-mini-router', () => ({ navigate: mocks.navigate }));
+vi.mock('../src/stores/sessions', () => ({
+  sessions: mocks.sessions,
+  sessionsLoading: mocks.sessionsLoading,
+  updateSessionTitle: vi.fn(async () => undefined),
+  pinSession: vi.fn(async () => undefined),
+  unpinSession: vi.fn(async () => undefined),
+  archiveSession: vi.fn(async () => undefined),
+}));
+vi.mock('../src/stores/workspaces', () => ({
+  workspaces: mocks.workspaces,
+  workspacesLoading: mocks.workspacesLoading,
+}));
+vi.mock('../src/stores/auth', () => ({ token: mocks.token }));
+vi.mock('../src/stores/connection', () => ({
+  sseStatus: mocks.sseStatus,
+  lastConnectionError: mocks.lastConnectionError,
+}));
 
 test('dashboard head advertises packaged logo icons', () => {
   expect(indexHtml).toContain('<link rel="icon" type="image/svg+xml" href="/dashboard/logo.svg" />');
@@ -16,24 +58,24 @@ test('dashboard head advertises packaged logo icons', () => {
   expect(indexHtml).toContain('<link rel="apple-touch-icon" sizes="180x180" href="/dashboard/logo-180.png" />');
 });
 
-test('dashboard sidebar uses the SVG logo asset', () => {
-  expect(appSidebarSource).toContain('src="/dashboard/logo.svg"');
-  expect(appSidebarSource).toContain('class="size-6 shrink-0 object-contain"');
-  expect(appSidebarSource).toContain('alt=""');
-  expect(appSidebarSource).not.toContain('bg-sidebar-primary');
-  expect(appSidebarSource).not.toContain('>ll</span>');
-});
+test('dashboard sidebar renders the SVG logo asset and brand text', () => {
+  render(AppSidebarHost);
 
-test('dashboard sidebar keeps the logo visible when collapsed', () => {
-  expect(appSidebarSource).toContain('group-data-[collapsible=icon]:size-8');
-  expect(appSidebarSource).toContain('group-data-[collapsible=icon]:p-0');
-  expect(appSidebarSource).toContain('shrink-0');
-  expect(appSidebarSource).toContain('group-data-[collapsible=icon]:hidden">PONTIA</span>');
+  const logo = screen.getByRole('button', { name: 'Open new chat' }).querySelector('img');
+  expect(logo).toHaveAttribute('src', '/dashboard/logo.svg');
+  expect(logo).toHaveAttribute('alt', '');
+  expect(logo).toHaveClass('size-6');
+  expect(logo).toHaveClass('object-contain');
+  expect(screen.getByText('PONTIA')).toHaveClass('group-data-[collapsible=icon]:hidden');
 });
 
 test('top bar SSE status is icon-only with screen-reader text', () => {
-  expect(topBarSource).not.toContain('compactStatusLabel');
-  expect(topBarSource).toContain('<span class="sr-only">{statusLabel[$sseStatus] ?? $sseStatus}</span>');
-  expect(topBarSource).not.toContain('md:hidden');
-  expect(topBarSource).not.toContain('md:inline-flex');
+  render(TopBarHost);
+
+  const status = screen.getByTitle('SSE live');
+  expect(status).toHaveTextContent('SSE live');
+  expect(status.querySelector('.lucide-wifi')).toBeInTheDocument();
+  expect(status.querySelector('span')).toHaveClass('sr-only');
+  expect(status.querySelector('span')).not.toHaveClass('md:hidden');
+  expect(status.querySelector('span')).not.toHaveClass('md:inline-flex');
 });

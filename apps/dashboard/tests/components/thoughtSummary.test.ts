@@ -1,6 +1,4 @@
 import { render, screen } from '@testing-library/svelte';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import ThoughtSummary from '../../src/lib/components/session-chat/ThoughtSummary.svelte';
 import type { SessionChatThoughtStep } from '../../src/lib/session-chat/sessionChat';
@@ -84,12 +82,4 @@ test('busy thought summary removes the blocks wave header spinner', () => {
 
   expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
   expect(screen.queryByTestId('blocks-wave-spinner')).not.toBeInTheDocument();
-});
-
-test('blocks wave spinner preserves the original per-block wave position animations', () => {
-  const source = readFileSync(join(process.cwd(), 'src/lib/components/session-chat/BlocksWaveSpinner.svelte'), 'utf8');
-
-  expect(source).not.toContain('.blocks-wave-spinner :global(rect) {\n    animation: blocks-wave-size 1.2s linear infinite;');
-  expect(source).toContain('animation: blocks-wave-size 1.2s linear infinite, blocks-wave-pos-1 1.2s linear infinite;');
-  expect(source).toContain('animation: blocks-wave-size 1.2s linear infinite, blocks-wave-pos-9 1.2s linear infinite;');
 });

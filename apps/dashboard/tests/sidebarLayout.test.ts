@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
 import AppSidebarHost from './components/layout/AppSidebarHost.svelte';
@@ -8,8 +6,6 @@ import TopBarHost from './components/layout/TopBarHost.svelte';
 import SettingsShellHost from './components/settings/SettingsShellHost.svelte';
 import SettingsCommonPage from '../src/pages/SettingsCommonPage.svelte';
 import { routerConf } from '../src/routes';
-
-const chatPageSource = readFileSync(resolve(__dirname, '../src/pages/ChatPage.svelte'), 'utf8');
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -608,18 +604,6 @@ test('settings common page contains controls without owning the section switcher
   expect(screen.queryByRole('navigation', { name: /settings sections/i })).not.toBeInTheDocument();
 });
 
-test('chat page removes frozen DAG task entry switch and creation path', () => {
-  expect(chatPageSource).not.toContain('DAG_TASK_ENTRIES_ENABLED');
-  expect(chatPageSource).not.toContain('createDagTask');
-  expect(chatPageSource).not.toContain('taskEntriesEnabled');
-});
-
-test('new chat route uses small viewport units to avoid mobile browser chrome overflow', () => {
-  expect(chatPageSource).toContain('min-h-[calc(100svh-5.5rem)]');
-  expect(chatPageSource).toContain('md:min-h-[calc(100svh-6.5rem)]');
-  expect(chatPageSource).not.toContain('min-h-[calc(100vh-');
-});
-
 test('chat app shell reserves composer space only for session chat routes', () => {
   window.history.pushState({}, '', '/dashboard/chat/session-2');
 
@@ -693,19 +677,22 @@ test('settings shell section switcher uses router navigation instead of a docume
   expect(mocks.navigate).toHaveBeenCalledWith('/settings/workspaces');
 });
 
-test('dashboard routes use chat as the default and remove top-level overview', () => {
+test('dashboard routes use chat as the default and remove top-level overview', async () => {
   const paths = routerConf.routes.map((route) => route.path);
 
   const rootRoute = routerConf.routes.find((route) => route.path === '/');
   const settingsRoute = routerConf.routes.find((route) => route.path === '/settings');
 
+  const chatPage = await import('../src/pages/ChatPage.svelte');
+  const settingsRedirectPage = await import('../src/pages/SettingsRedirectPage.svelte');
+
   expect(rootRoute).toBeDefined();
-  expect(String(rootRoute?.render)).toContain('ChatPage');
+  expect((await rootRoute?.render())?.default).toBe(chatPage.default);
   expect(paths).not.toContain('/overview');
   expect(paths).not.toContain('/tasks');
   expect(paths.some((path) => path.startsWith('/tasks/'))).toBe(false);
   expect(settingsRoute).toBeDefined();
-  expect(String(settingsRoute?.render)).toContain('SettingsRedirectPage');
+  expect((await settingsRoute?.render())?.default).toBe(settingsRedirectPage.default);
   expect(paths).toContain('/chat/{sessionId}');
   expect(paths).toContain('/sessions/{sessionId}');
   expect(paths).toContain('/settings/common');

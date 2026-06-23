@@ -1,10 +1,106 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { Check, Loader, LogOut, Pause, TriangleAlert } from '@lucide/svelte';
-import { describe, expect, test } from 'vitest';
-import { sessionStateBadgeClass, sessionStateIcon, sessionStateIconClass } from '../src/components/chat/sessionMetadata';
+import { describe, expect, test, vi } from 'vitest';
+import SessionComposerDock from '../src/components/chat/SessionComposerDock.svelte';
+import GitStatusInline from '../src/components/chat/GitStatusInline.svelte';
+import SessionMetadataMobile from '../src/components/chat/SessionMetadataMobile.svelte';
+import {
+  sessionMetadataItems,
+  sessionMetadataSummary,
+  sessionStateBadgeClass,
+  sessionStateIcon,
+  sessionStateIconClass,
+} from '../src/components/chat/sessionMetadata';
+import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../src/api/types';
 
-const componentPath = (...parts: string[]) => resolve(__dirname, '../src/components/chat', ...parts);
+function session(overrides: Partial<SessionView> = {}): SessionView {
+  return {
+    session_id: 'session-1',
+    client_type: 'pi',
+    title: null,
+    handle: 'main',
+    role: 'coder',
+    description: null,
+    execution_profile_id: 'coder',
+    execution_profile_version: '1',
+    state: 'idle',
+    current_turn_id: null,
+    workspace_id: 'workspace-1',
+    workspace: '/home/cheny/projects/pontia',
+    pinned_at: null,
+    archived_at: null,
+    capabilities: { accept_task: true, context_usage: 'exact' },
+    model: null,
+    context_usage: {
+      used_tokens: 42000,
+      max_tokens: 128000,
+      remaining_tokens: 86000,
+      usage_ratio: 0.328125,
+      input_tokens: null,
+      output_tokens: null,
+      cache_tokens: null,
+      confidence: 'exact',
+      observed_at: '2026-06-11T00:00:00Z',
+    },
+    lineage: null,
+    created_at: '2026-06-11T00:00:00Z',
+    updated_at: '2026-06-11T00:00:00Z',
+    metadata: {},
+    ...overrides,
+  };
+}
+
+function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
+  return {
+    workspace_id: 'workspace-1',
+    canonical_path: '/home/cheny/projects/pontia',
+    display_path: '~/projects/pontia',
+    name: 'pontia',
+    state: 'active',
+    metadata: {},
+    created_at: '2026-06-11T00:00:00Z',
+    updated_at: '2026-06-11T00:00:00Z',
+    last_used_at: '2026-06-11T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function gitStatus(overrides: Partial<WorkspaceGitStatusView> = {}): WorkspaceGitStatusView {
+  return {
+    workspace_id: 'workspace-1',
+    repo_root: '/home/cheny/projects/pontia',
+    branch: 'main',
+    upstream: 'origin/main',
+    ahead: 0,
+    behind: 0,
+    staged_count: 0,
+    unstaged_count: 0,
+    untracked_count: 0,
+    conflicted_count: 0,
+    clean: true,
+    state: 'observed',
+    failure: null,
+    observed_at: '2026-06-11T00:00:00Z',
+    updated_at: '2026-06-11T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function metadataProps() {
+  const currentSession = session();
+  const workspaces = [workspace()];
+  const currentGitStatus = gitStatus({ unstaged_count: 1, clean: false });
+  const metadataItems = sessionMetadataItems(currentSession, workspaces, currentGitStatus, {});
+
+  return {
+    session: currentSession,
+    gitStatus: currentGitStatus,
+    gitStatusErrors: {},
+    workspaces,
+    metadataItems,
+    metadataSummary: sessionMetadataSummary(metadataItems),
+  };
+}
 
 describe('session metadata component boundaries', () => {
   test('session status badge maps active and interrupted states to requested colors', () => {
@@ -28,59 +124,67 @@ describe('session metadata component boundaries', () => {
     expect(sessionStateIconClass('idle')).not.toContain('animate-spin');
   });
 
-  test('composer dock uses the compact session metadata component for all viewports', () => {
-    const source = readFileSync(componentPath('SessionComposerDock.svelte'), 'utf8');
+  test('composer dock renders compact metadata and opens advanced controls from the component menu', async () => {
+    render(SessionComposerDock, {
+      props: {
+        ...metadataProps(),
+        inboxActionableCount: 2,
+        input: '',
+        onOpenInbox: vi.fn(),
+        onExit: vi.fn(),
+        onOpenConsole: vi.fn(),
+        onRename: vi.fn(),
+        onRestart: vi.fn(),
+        onSend: vi.fn(),
+        onFocus: vi.fn(),
+      },
+    });
 
-    expect(source).not.toContain("import SessionMetadataDesktop from './SessionMetadataDesktop.svelte'");
-    expect(source).toContain("import SessionMetadataMobile from './SessionMetadataMobile.svelte'");
-    expect(source).not.toContain('data-testid="session-status-desktop-metadata"');
-    expect(source).not.toContain('data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1 sm:hidden"');
-    expect(source).not.toContain('SessionMetadataBadges');
+    expect(screen.getByRole('group', { name: 'Session status and controls' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/session state:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Session state:')).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: /advanced session controls/i }));
+
+    expect(await screen.findByRole('menuitem', { name: /session console/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /rename session/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /restart session/i })).toBeInTheDocument();
   });
 
-  test('composer dock does not render a separate icon-only session state badge before metadata', () => {
-    const source = readFileSync(componentPath('SessionComposerDock.svelte'), 'utf8');
+  test('mobile metadata details render as an accessible popover dialog', async () => {
+    render(SessionMetadataMobile, { props: metadataProps() });
 
-    expect(source).not.toContain('sessionStateIcon');
-    expect(source).not.toContain('SessionStateIcon');
-    expect(source).not.toContain('Session state:');
-    expect(source).not.toContain('data-chat-session-state-label');
+    await fireEvent.click(screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Session details' });
+    expect(within(dialog).getByLabelText('Workspace: /home/cheny/projects/pontia')).toHaveTextContent('pontia');
+    expect(within(dialog).getByLabelText('Git: Git status: main, dirty')).toHaveTextContent('main');
+    expect(within(dialog).getByLabelText(/Usage: Context usage: 33%/)).toHaveTextContent('33%');
+    expect(within(dialog).getByLabelText('Client: pi')).toHaveTextContent('pi');
+    expect(within(dialog).getByLabelText('Profile: coder@1')).toHaveTextContent('coder@1');
+    expect(within(dialog).getByLabelText('Handle: main')).toHaveTextContent('main');
   });
 
-  test('composer dock uses the component-library dropdown menu instead of a hand-rolled floating menu', () => {
-    const source = readFileSync(componentPath('SessionComposerDock.svelte'), 'utf8');
+  test('git inline status leaves the branch label untoned while coloring only counters', () => {
+    render(GitStatusInline, { props: { gitStatus: gitStatus({ ahead: 2, unstaged_count: 1, clean: false }) } });
 
-    expect(source).toContain("import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'");
-    expect(source).not.toContain("import { tick } from 'svelte'");
-    expect(source).not.toContain('getBoundingClientRect');
-    expect(source).not.toContain('advancedControlsMenuEl');
-    expect(source).not.toContain('data-placement={advancedControlsPlacement}');
+    const branch = screen.getByText('main');
+    expect(branch).not.toHaveClass('text-amber-600');
+    expect(branch).not.toHaveClass('text-emerald-600');
+    expect(screen.getByText('↑2')).toHaveClass('text-blue-600');
+    expect(screen.getByText('~1')).toHaveClass('text-amber-600');
   });
 
-  test('mobile metadata details use the component-library popover', () => {
-    const source = readFileSync(componentPath('SessionMetadataMobile.svelte'), 'utf8');
+  test('session metadata trigger shows desktop-only icons inline with summary fields', () => {
+    render(SessionMetadataMobile, { props: metadataProps() });
 
-    expect(source).toContain("import * as Popover from '$lib/components/ui/popover/index.js'");
-    expect(source).not.toContain('absolute bottom-full');
-    expect(source).not.toContain('{#if sessionDetailsOpen}');
-  });
-
-  test('git inline status does not color the branch name', () => {
-    const source = readFileSync(componentPath('GitStatusInline.svelte'), 'utf8');
-
-    expect(source).not.toContain('gitStatusToneClass');
-    expect(source).toContain('<span>{gitBranchLabel(gitStatus)}</span>');
-  });
-
-  test('session metadata trigger inlines desktop-only icons', () => {
-    const source = readFileSync(componentPath('SessionMetadataMobile.svelte'), 'utf8');
-    const triggerSource = source.slice(source.indexOf('<Popover.Trigger'), source.indexOf('</Popover.Trigger>'));
-
-    expect(triggerSource).toContain('<Folder class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
-    expect(triggerSource).toContain('<GitBranch class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
-    expect(triggerSource).toContain('<Gauge class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
-    expect(triggerSource).toContain('<Terminal class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
-    expect(triggerSource).toContain('<Bot class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
-    expect(triggerSource).toContain('<AtSign class="hidden size-4 shrink-0 sm:inline" aria-hidden="true" />');
+    const trigger = screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ });
+    for (const iconClass of ['lucide-folder', 'lucide-git-branch', 'lucide-gauge', 'lucide-terminal', 'lucide-bot', 'lucide-at-sign']) {
+      const icon = trigger.querySelector(`.${iconClass}`);
+      expect(icon).toBeInTheDocument();
+      expect(icon).toHaveClass('hidden');
+      expect(icon).toHaveClass('sm:inline');
+    }
   });
 });
