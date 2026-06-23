@@ -649,6 +649,79 @@ test('shows workspace name in the selected chat composer pill while retaining fu
   expect(workspacePill).toHaveTextContent('Pontia Workspace');
 });
 
+test('shows workspace git status in the selected chat composer summary', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1', workspace: '/repo/pontia', handle: null });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.workspaces.set([workspace({ workspace_id: 'workspace-1', name: 'project', canonical_path: '/repo/pontia', display_path: '~/repo/pontia' })]);
+  mocks.workspaceGitStatuses.set({
+    'workspace-1': {
+      workspace_id: 'workspace-1',
+      repo_root: '/repo/pontia',
+      branch: 'main',
+      upstream: 'origin/main',
+      ahead: 1,
+      behind: 2,
+      staged_count: 3,
+      unstaged_count: 4,
+      untracked_count: 5,
+      conflicted_count: 6,
+      clean: false,
+      state: 'observed',
+      failure: null,
+      observed_at: '2026-05-14T01:30:00Z',
+      updated_at: '2026-05-14T01:30:00Z',
+    },
+  });
+
+  render(ChatPage);
+
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
+  const sessionDetailsButton = await screen.findByRole('button', { name: 'Session details: project · pi · main · dirty' });
+  expect(sessionDetailsButton).toHaveTextContent('project · main ↑1 ↓2 +3 ~4 ?5 !6 · pi');
+  expect(within(sessionDetailsButton).getByText('↑1')).toHaveClass('text-blue-600');
+});
+
+test('refreshes workspace git status when the selected chat composer receives focus', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
+  mocks.refreshWorkspaceGitStatus.mockClear();
+
+  await fireEvent.focus(await screen.findByPlaceholderText('Send a follow-up message…'));
+
+  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
+});
+
+test('refreshes workspace git status when the selected chat page becomes visible', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
+  mocks.refreshWorkspaceGitStatus.mockClear();
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+
+  document.dispatchEvent(new Event('visibilitychange'));
+
+  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
+});
+
 test('loads earlier chat history when the chat scroll reaches the top', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
