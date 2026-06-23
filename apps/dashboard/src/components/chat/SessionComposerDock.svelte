@@ -57,9 +57,9 @@
   let composerDisabled = $derived(!canAcceptWebInput || session.state === 'error' || submitting)
 </script>
 
-<div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:left-[var(--sidebar-width)] md:p-6">
+<div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-muted/20 px-4 pb-2 pt-1 backdrop-blur md:left-[var(--sidebar-width)] md:px-6 md:pb-3 md:pt-2">
   <div class="mx-auto w-full max-w-7xl">
-    <div role="group" aria-label="Session status and controls" class="mb-2 flex min-w-0 items-center justify-between gap-2 px-2">
+    <div role="group" aria-label="Session status and controls" class="mb-1 flex min-w-0 items-center justify-between gap-2 px-2">
       <div class="flex min-w-0 flex-1 items-center gap-2">
         <div data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1">
           <SessionMetadataMobile {session} {gitStatus} {gitStatusErrors} {workspaces} {metadataItems} {metadataSummary} />
@@ -77,7 +77,7 @@
         {/if}
         <DropdownMenu.Root bind:open={advancedControlsOpen}>
           <div class="relative">
-            <DropdownMenu.Trigger class={buttonVariants({ variant: 'outline', size: 'sm' })} disabled={actionBusy} aria-label={inboxActionableCount > 0 ? `Advanced session controls, ${inboxActionableCount} inbox message${inboxActionableCount === 1 ? '' : 's'}` : 'Advanced session controls'}>
+            <DropdownMenu.Trigger class={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} disabled={actionBusy} aria-label={inboxActionableCount > 0 ? `Advanced session controls, ${inboxActionableCount} inbox message${inboxActionableCount === 1 ? '' : 's'}` : 'Advanced session controls'}>
               <EllipsisVertical class="size-4" />
             </DropdownMenu.Trigger>
             {#if inboxActionableCount > 0}<Badge data-chat-mobile-inbox-count variant="secondary" class="absolute -right-2 -top-2 h-5 min-w-5 rounded-full px-1.5 text-xs shadow-sm sm:hidden">{inboxActionableCount}</Badge>{/if}
