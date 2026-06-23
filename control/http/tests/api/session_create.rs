@@ -301,6 +301,99 @@ async fn create_session_accepts_title_and_exposes_it_on_session_views() {
 }
 
 #[tokio::test]
+async fn session_management_pin_archive_and_unarchive_update_session_views_and_list_filters() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+
+    let (create_status, create_body) = post_json(
+        state.clone(),
+        "/external/v1/sessions",
+        Some(TOKEN),
+        None,
+        json!({"client_type":"generic", "title":"managed session"}),
+    )
+    .await;
+    assert_eq!(create_status, StatusCode::CREATED);
+    let session_id = create_body["data"]["session"]["session_id"]
+        .as_str()
+        .expect("session id");
+    assert_eq!(create_body["data"]["session"]["pinned_at"], Value::Null);
+    assert_eq!(create_body["data"]["session"]["archived_at"], Value::Null);
+
+    let (pin_status, pin_body) = post_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/pin"),
+        Some(TOKEN),
+        None,
+        json!({}),
+    )
+    .await;
+    assert_eq!(pin_status, StatusCode::OK);
+    assert!(pin_body["data"]["session"]["pinned_at"].is_string());
+    assert_eq!(pin_body["data"]["session"]["archived_at"], Value::Null);
+
+    let (archive_status, archive_body) = post_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/archive"),
+        Some(TOKEN),
+        None,
+        json!({}),
+    )
+    .await;
+    assert_eq!(archive_status, StatusCode::OK);
+    assert_eq!(archive_body["data"]["session"]["pinned_at"], Value::Null);
+    assert!(archive_body["data"]["session"]["archived_at"].is_string());
+
+    let (list_status, list_body) = get(state.clone(), "/external/v1/sessions").await;
+    assert_eq!(list_status, StatusCode::OK);
+    assert!(list_body["data"]["sessions"].as_array().unwrap().is_empty());
+
+    let (include_status, include_body) =
+        get(state.clone(), "/external/v1/sessions?include_archived=true").await;
+    assert_eq!(include_status, StatusCode::OK);
+    let included_sessions = include_body["data"]["sessions"].as_array().unwrap();
+    assert_eq!(included_sessions.len(), 1);
+    assert_eq!(included_sessions[0]["session_id"], session_id);
+    assert!(included_sessions[0]["archived_at"].is_string());
+
+    let (unarchive_status, unarchive_body) = post_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/unarchive"),
+        Some(TOKEN),
+        None,
+        json!({}),
+    )
+    .await;
+    assert_eq!(unarchive_status, StatusCode::OK);
+    assert_eq!(
+        unarchive_body["data"]["session"]["archived_at"],
+        Value::Null
+    );
+
+    let (repin_status, repin_body) = post_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/pin"),
+        Some(TOKEN),
+        None,
+        json!({}),
+    )
+    .await;
+    assert_eq!(repin_status, StatusCode::OK);
+    assert!(repin_body["data"]["session"]["pinned_at"].is_string());
+
+    let (unpin_status, unpin_body) = post_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/unpin"),
+        Some(TOKEN),
+        None,
+        json!({}),
+    )
+    .await;
+    assert_eq!(unpin_status, StatusCode::OK);
+    assert_eq!(unpin_body["data"]["session"]["pinned_at"], Value::Null);
+}
+
+#[tokio::test]
 async fn patch_session_updates_title_through_session_events() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;

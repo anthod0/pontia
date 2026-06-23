@@ -1,9 +1,10 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use pontia_application::{
@@ -30,13 +31,20 @@ pub async fn create_session(
     Ok((status, ok(outcome.data)).into_response())
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ListSessionsQuery {
+    #[serde(default)]
+    include_archived: bool,
+}
+
 pub async fn list_sessions(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<ListSessionsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
-    let sessions = service.list_sessions().await?;
+    let sessions = service.list_sessions(query.include_archived).await?;
     Ok(ok(json!({ "sessions": sessions })))
 }
 
@@ -49,6 +57,50 @@ pub async fn update_session(
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(state.db());
     let data = service.update_session(&session_id, request).await?;
+    Ok(ok(data))
+}
+
+pub async fn pin_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = SessionCommandService::new(state.db());
+    let data = service.pin_session(&session_id).await?;
+    Ok(ok(data))
+}
+
+pub async fn unpin_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = SessionCommandService::new(state.db());
+    let data = service.unpin_session(&session_id).await?;
+    Ok(ok(data))
+}
+
+pub async fn archive_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = SessionCommandService::new(state.db());
+    let data = service.archive_session(&session_id).await?;
+    Ok(ok(data))
+}
+
+pub async fn unarchive_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = SessionCommandService::new(state.db());
+    let data = service.unarchive_session(&session_id).await?;
     Ok(ok(data))
 }
 

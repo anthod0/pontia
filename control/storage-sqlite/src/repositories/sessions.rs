@@ -83,17 +83,20 @@ impl SqliteSessionRepository {
         Ok(())
     }
 
-    pub async fn list_sessions(&self) -> Result<Vec<SessionRow>> {
+    pub async fn list_sessions(&self, include_archived: bool) -> Result<Vec<SessionRow>> {
         Ok(sqlx::query_as::<_, SessionRow>(
             r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
                       s.execution_profile_id, s.execution_profile_version,
                       s.state, s.current_turn_id, s.workspace_id,
                       COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                      s.pinned_at, s.archived_at,
                       s.metadata, s.created_at, s.updated_at
                FROM sessions s
                LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
-               ORDER BY s.created_at, s.session_id"#,
+               WHERE (? OR s.archived_at IS NULL)
+               ORDER BY s.pinned_at IS NULL, s.pinned_at DESC, s.updated_at DESC, s.session_id"#,
         )
+        .bind(include_archived)
         .fetch_all(&self.pool)
         .await?)
     }
@@ -104,6 +107,7 @@ impl SqliteSessionRepository {
                       s.execution_profile_id, s.execution_profile_version,
                       s.state, s.current_turn_id, s.workspace_id,
                       COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                      s.pinned_at, s.archived_at,
                       s.metadata, s.created_at, s.updated_at
                FROM sessions s
                LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
@@ -162,5 +166,45 @@ impl SqliteSessionRepository {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    pub async fn pin_session(&self, session_id: &str) -> Result<u64> {
+        let result = sqlx::query(
+            "UPDATE sessions SET pinned_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    pub async fn unpin_session(&self, session_id: &str) -> Result<u64> {
+        let result = sqlx::query(
+            "UPDATE sessions SET pinned_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    pub async fn archive_session(&self, session_id: &str) -> Result<u64> {
+        let result = sqlx::query(
+            "UPDATE sessions SET archived_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), pinned_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    pub async fn unarchive_session(&self, session_id: &str) -> Result<u64> {
+        let result = sqlx::query(
+            "UPDATE sessions SET archived_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 }

@@ -201,6 +201,22 @@ pub fn router(state: impl Into<HttpState>) -> Router {
                 .delete(external::terminate_session),
         )
         .route(
+            "/external/v1/sessions/{session_id}/pin",
+            post(external::pin_session),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/unpin",
+            post(external::unpin_session),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/archive",
+            post(external::archive_session),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/unarchive",
+            post(external::unarchive_session),
+        )
+        .route(
             "/external/v1/sessions/{session_id}/interrupt",
             post(external::interrupt_session),
         )

@@ -12,6 +12,8 @@ pub struct SessionRow {
     pub current_turn_id: Option<String>,
     pub workspace_id: Option<String>,
     pub workspace_ref: Option<String>,
+    pub pinned_at: Option<String>,
+    pub archived_at: Option<String>,
     pub metadata: String,
     pub created_at: String,
     pub updated_at: String,

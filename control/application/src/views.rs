@@ -41,6 +41,8 @@ pub struct SessionView {
     pub current_turn_id: Option<String>,
     pub workspace_id: Option<String>,
     pub workspace: Option<String>,
+    pub pinned_at: Option<String>,
+    pub archived_at: Option<String>,
     pub capabilities: SessionCapabilities,
     pub model: Option<String>,
     pub context_usage: Option<ContextUsageView>,

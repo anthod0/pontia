@@ -1,6 +1,14 @@
 use super::validation::{client_dispatch_mode, client_readiness_mode, validate_handle};
 use super::*;
 use pontia_agent_clients::{DispatchMode, ReadinessMode, get_client_spec};
+use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
+
+enum SessionManagementAction {
+    Pin,
+    Unpin,
+    Archive,
+    Unarchive,
+}
 
 impl SessionCommandService {
     pub async fn create_session(
@@ -266,6 +274,50 @@ impl SessionCommandService {
             data,
             duplicate: false,
         })
+    }
+
+    pub async fn pin_session(&self, session_id: &str) -> Result<Value> {
+        self.update_session_management_state(session_id, SessionManagementAction::Pin)
+            .await
+    }
+
+    pub async fn unpin_session(&self, session_id: &str) -> Result<Value> {
+        self.update_session_management_state(session_id, SessionManagementAction::Unpin)
+            .await
+    }
+
+    pub async fn archive_session(&self, session_id: &str) -> Result<Value> {
+        self.update_session_management_state(session_id, SessionManagementAction::Archive)
+            .await
+    }
+
+    pub async fn unarchive_session(&self, session_id: &str) -> Result<Value> {
+        self.update_session_management_state(session_id, SessionManagementAction::Unarchive)
+            .await
+    }
+
+    async fn update_session_management_state(
+        &self,
+        session_id: &str,
+        action: SessionManagementAction,
+    ) -> Result<Value> {
+        let repository = SqliteSessionRepository::new(self.pool.clone());
+        let rows_affected = match action {
+            SessionManagementAction::Pin => repository.pin_session(session_id).await?,
+            SessionManagementAction::Unpin => repository.unpin_session(session_id).await?,
+            SessionManagementAction::Archive => repository.archive_session(session_id).await?,
+            SessionManagementAction::Unarchive => repository.unarchive_session(session_id).await?,
+        };
+        if rows_affected == 0 {
+            return Err(Error::NotFound(format!("session {session_id} not found")));
+        }
+
+        let query = ExternalQueryService::new(self.pool.clone());
+        let session = query
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| Error::Domain("updated session missing".to_string()))?;
+        Ok(json!({ "session": session }))
     }
 
     pub async fn update_session(

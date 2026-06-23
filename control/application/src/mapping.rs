@@ -36,6 +36,8 @@ pub(crate) fn session_row_to_view(row: SessionRow) -> Result<SessionView> {
         current_turn_id: row.current_turn_id,
         workspace_id: row.workspace_id,
         workspace: row.workspace_ref,
+        pinned_at: row.pinned_at,
+        archived_at: row.archived_at,
         capabilities: SessionCapabilities::default(),
         model,
         context_usage,
