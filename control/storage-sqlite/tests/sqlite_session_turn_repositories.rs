@@ -19,7 +19,7 @@ async fn test_pool() -> sqlx::SqlitePool {
 }
 
 #[tokio::test]
-async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_existing_order() {
+async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_recently_updated_order() {
     let pool = test_pool().await;
     sqlx::query(
         r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
@@ -49,9 +49,9 @@ async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_
     let rows = repository.list_sessions().await.expect("list sessions");
 
     let ids: Vec<_> = rows.iter().map(|row| row.session_id.as_str()).collect();
-    assert_eq!(ids, vec!["sess_a", "sess_b"]);
-    assert_eq!(rows[0].workspace_ref.as_deref(), Some("/canonical"));
-    assert_eq!(rows[1].workspace_ref.as_deref(), Some("/legacy-b"));
+    assert_eq!(ids, vec!["sess_b", "sess_a"]);
+    assert_eq!(rows[0].workspace_ref.as_deref(), Some("/legacy-b"));
+    assert_eq!(rows[1].workspace_ref.as_deref(), Some("/canonical"));
 }
 
 #[tokio::test]
