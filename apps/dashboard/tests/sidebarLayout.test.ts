@@ -36,6 +36,8 @@ const mocks = vi.hoisted(() => {
     sessionsLoading: writableStore(false),
     loadSessions: vi.fn(async () => []),
     updateSessionTitle: vi.fn(async () => undefined),
+    workspaces: writableStore([]),
+    workspacesLoading: writableStore(false),
   };
 });
 
@@ -50,11 +52,17 @@ vi.mock('../src/stores/sessions', () => ({
   loadSessions: mocks.loadSessions,
   updateSessionTitle: mocks.updateSessionTitle,
 }));
+vi.mock('../src/stores/workspaces', () => ({
+  workspaces: mocks.workspaces,
+  workspacesLoading: mocks.workspacesLoading,
+}));
 
 beforeEach(() => {
   window.history.pushState({}, '', '/dashboard/chat');
   mocks.sessions.set([]);
   mocks.sessionsLoading.set(false);
+  mocks.workspaces.set([]);
+  mocks.workspacesLoading.set(false);
   vi.clearAllMocks();
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -148,6 +156,107 @@ test('sidebar shows recent sessions with semantic status dot except exited sessi
   await fireEvent.click(screen.getByText('main · coder'));
 
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-active');
+});
+
+test('sidebar scrolls recent workspace and session groups together below fixed primary navigation', () => {
+  render(AppSidebarHost);
+
+  const newChatGroup = screen.getByText('New Chat').closest('[data-slot="sidebar-group"]');
+  const recentWorkspacesGroup = screen.getByText('Recent Workspaces').closest('[data-slot="sidebar-group"]');
+  const recentSessionsGroup = screen.getByText('Recent Sessions').closest('[data-slot="sidebar-group"]');
+  expect(newChatGroup).not.toBeNull();
+  expect(recentWorkspacesGroup).not.toBeNull();
+  expect(recentSessionsGroup).not.toBeNull();
+
+  const sharedScrollArea = recentWorkspacesGroup?.parentElement;
+  expect(sharedScrollArea).toHaveClass('overflow-y-auto');
+  expect(sharedScrollArea).toContainElement(recentWorkspacesGroup as HTMLElement);
+  expect(sharedScrollArea).toContainElement(recentSessionsGroup as HTMLElement);
+  expect(sharedScrollArea).not.toContainElement(newChatGroup as HTMLElement);
+
+  const recentSessionsContent = recentSessionsGroup?.querySelector('[data-slot="sidebar-group-content"]');
+  expect(recentSessionsContent).not.toHaveClass('overflow-y-auto');
+});
+
+test('sidebar groups recent sessions under non-empty recent workspaces without changing Recent Sessions', async () => {
+  mocks.workspaces.set([
+    {
+      workspace_id: 'workspace-active',
+      canonical_path: '/home/cheny/projects/pontia',
+      display_path: '~/projects/pontia',
+      name: 'Pontia',
+      state: 'active',
+      metadata: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      last_used_at: '2026-05-14T01:00:00Z',
+    },
+    {
+      workspace_id: 'workspace-empty',
+      canonical_path: '/home/cheny/projects/empty',
+      display_path: '~/projects/empty',
+      name: 'Empty workspace',
+      state: 'active',
+      metadata: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      last_used_at: null,
+    },
+    {
+      workspace_id: 'workspace-archived',
+      canonical_path: '/tmp/old',
+      display_path: '/tmp/old',
+      name: 'Old workspace',
+      state: 'archived',
+      metadata: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      last_used_at: null,
+    },
+  ]);
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-active',
+      workspace: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+  ]);
+
+  render(AppSidebarHost);
+
+  expect(screen.getByText('Recent Workspaces')).toBeInTheDocument();
+  const workspaceButton = screen.getByRole('button', { name: /pontia/i });
+  expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
+  expect(workspaceButton.querySelector('svg')).toHaveClass('lucide-folder');
+  expect(screen.queryByText('Empty workspace')).not.toBeInTheDocument();
+  expect(screen.queryByText('Old workspace')).not.toBeInTheDocument();
+  expect(screen.getByText('Recent Sessions')).toBeInTheDocument();
+  expect(screen.getByText('main · coder')).toBeInTheDocument();
+
+  await fireEvent.click(workspaceButton);
+
+  const workspaceGroup = workspaceButton.closest('[data-slot="sidebar-menu-item"]');
+  expect(workspaceButton).toHaveAttribute('aria-expanded', 'true');
+  const groupedSessionButton = within(workspaceGroup as HTMLElement).getByRole('button', { name: /main · coder/i });
+  expect(groupedSessionButton).toBeInTheDocument();
+  expect(groupedSessionButton).toHaveClass('h-8');
+  expect(groupedSessionButton).toHaveClass('text-sm');
+  expect(groupedSessionButton).not.toHaveClass('h-7');
+  expect(groupedSessionButton).not.toHaveClass('text-xs');
+  expect(groupedSessionButton.closest('[data-slot="sidebar-menu"]')).toHaveClass('pl-2');
+  expect(groupedSessionButton.closest('[data-slot="sidebar-menu"]')).not.toHaveClass('pl-6');
 });
 
 test('sidebar renames a recent session from the hover edit action without opening it', async () => {

@@ -33,16 +33,18 @@ test('places recent session status dots before titles and the hover rename actio
   expect(appSidebarSource).not.toContain('group-focus-within/menu-item:opacity-0');
 });
 
-test('allows more recent sessions while keeping the recent sessions area scrollable', () => {
+test('allows more recent sessions while scrolling recent workspace and session groups together', () => {
   expect(appSidebarSource).toContain('const recentSessionLimit = 50');
   expect(appSidebarSource).toContain("visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit)");
-  expect(appSidebarSource).toContain('<Sidebar.Group class="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">');
-  expect(appSidebarSource).toContain('<Sidebar.GroupContent class="no-scrollbar min-h-0 overflow-y-auto pr-1">');
+  expect(appSidebarSource).toContain('<Sidebar.Content class="overflow-hidden">');
+  expect(appSidebarSource).toContain('<div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden">');
+  expect(appSidebarSource).toContain('<Sidebar.GroupContent class="pr-1">');
+  expect(appSidebarSource).not.toContain('<Sidebar.GroupContent class="no-scrollbar min-h-0 overflow-y-auto pr-1">');
 });
 
-test('hides the entire recent sessions group when the sidebar is collapsed to icons', () => {
-  expect(appSidebarSource).toContain('<Sidebar.Group class="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">');
-  expect(appSidebarSource).not.toContain('<Sidebar.Group class="min-h-0 flex-1">');
+test('hides the recent workspace and session groups when the sidebar is collapsed to icons', () => {
+  expect(appSidebarSource).toContain('<div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden">');
+  expect(appSidebarSource).not.toContain('<div class="no-scrollbar min-h-0 flex-1 overflow-y-auto">');
 });
 
 test('lets the Recent Sessions header toggle the session list when the sidebar is expanded', () => {

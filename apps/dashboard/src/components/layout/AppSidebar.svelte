@@ -1,19 +1,26 @@
 <script lang="ts">
-  import { ChevronDown, Pencil, Settings, SquarePen } from '@lucide/svelte'
+  import { ChevronDown, Folder, Pencil, Settings, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import { sidebarMenuButtonVariants } from '$lib/components/ui/sidebar/sidebar-menu-button.svelte'
   import { cn } from '$lib/utils.js'
   import { sessions, sessionsLoading, updateSessionTitle } from '../../stores/sessions'
+  import { workspaces, workspacesLoading } from '../../stores/workspaces'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
+  import { workspaceTitle } from '../chat/sessionMetadata'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
-  import type { SessionView } from '../../api/types'
+  import type { SessionView, WorkspaceView } from '../../api/types'
 
   type Item = {
     label: string
     path: string
     icon: typeof SquarePen
+  }
+
+  type RecentWorkspaceGroup = {
+    workspace: WorkspaceView
+    sessions: SessionView[]
   }
 
   const primaryItems: Item[] = [
@@ -34,7 +41,10 @@
   let renameDialogOpen = $state(false)
   let renameError = $state<string | null>(null)
   let recentSessionsOpen = $state(true)
+  let expandedWorkspaceIds = $state<Record<string, boolean>>({})
   let recentSessions = $derived(visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit))
+  let activeWorkspaces = $derived($workspaces.filter((workspace) => workspace.state === 'active'))
+  let recentWorkspaceGroups = $derived(groupRecentSessionsByWorkspace(activeWorkspaces, recentSessions))
 
   $effect(() => {
     if (!renameDialogOpen && renamingSession && renamingSessionId === null) cancelRenameSession()
@@ -64,6 +74,31 @@
 
   function isSessionVisibleState(state: string) {
     return state !== 'exited'
+  }
+
+  function groupRecentSessionsByWorkspace(workspaces: WorkspaceView[], sessions: SessionView[]): RecentWorkspaceGroup[] {
+    const sessionsByWorkspaceId = new Map<string, SessionView[]>()
+    for (const session of sessions) {
+      if (!session.workspace_id) continue
+      const workspaceSessions = sessionsByWorkspaceId.get(session.workspace_id) ?? []
+      workspaceSessions.push(session)
+      sessionsByWorkspaceId.set(session.workspace_id, workspaceSessions)
+    }
+
+    return workspaces
+      .map((workspace) => ({ workspace, sessions: sessionsByWorkspaceId.get(workspace.workspace_id) ?? [] }))
+      .filter((group) => group.sessions.length > 0)
+  }
+
+  function isWorkspaceExpanded(workspaceId: string): boolean {
+    return expandedWorkspaceIds[workspaceId] ?? false
+  }
+
+  function toggleWorkspace(workspaceId: string): void {
+    expandedWorkspaceIds = {
+      ...expandedWorkspaceIds,
+      [workspaceId]: !isWorkspaceExpanded(workspaceId),
+    }
   }
 
   function sessionStateDotClass(state: string) {
@@ -147,7 +182,7 @@
       <span class="truncate group-data-[collapsible=icon]:hidden">PONTIA</span>
     </button>
   </Sidebar.Header>
-  <Sidebar.Content>
+  <Sidebar.Content class="overflow-hidden">
     <Sidebar.Group>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
@@ -163,8 +198,57 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
 
-    <Sidebar.Group class="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">
-      <Sidebar.GroupLabel class="p-0">
+    <div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden">
+      <Sidebar.Group>
+        <Sidebar.GroupLabel>Recent Workspaces</Sidebar.GroupLabel>
+      <Sidebar.GroupContent>
+        <Sidebar.Menu>
+          {#if ($workspacesLoading || $sessionsLoading) && !recentWorkspaceGroups.length}
+            <Sidebar.MenuSkeleton />
+            <Sidebar.MenuSkeleton />
+          {:else if recentWorkspaceGroups.length}
+            {#each recentWorkspaceGroups as group (group.workspace.workspace_id)}
+              {@const workspace = group.workspace}
+              {@const workspaceExpanded = isWorkspaceExpanded(workspace.workspace_id)}
+              <Sidebar.MenuItem>
+                <button
+                  type="button"
+                  class="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+                  title={workspace.canonical_path}
+                  aria-expanded={workspaceExpanded}
+                  onclick={() => toggleWorkspace(workspace.workspace_id)}
+                >
+                  <Folder class="size-4 shrink-0" />
+                  <span class="truncate">{workspaceTitle(workspace)}</span>
+                  <ChevronDown class={cn('ml-auto size-4 shrink-0 transition-transform', workspaceExpanded ? 'rotate-0' : '-rotate-90')} />
+                </button>
+                {#if workspaceExpanded}
+                  <Sidebar.Menu class="mt-1 pl-2">
+                    {#each group.sessions as session (session.session_id)}
+                      <Sidebar.MenuItem>
+                        <Sidebar.MenuButton isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
+                          {#if isSessionVisibleState(session.state)}
+                            <span class={`size-2 shrink-0 rounded-full ${sessionStateDotClass(session.state)} group-data-[collapsible=icon]:hidden`} aria-label={`${session.state} session`}></span>
+                          {/if}
+                          <span class="line-clamp-1">{sessionChatTitle(session)}</span>
+                        </Sidebar.MenuButton>
+                      </Sidebar.MenuItem>
+                    {/each}
+                  </Sidebar.Menu>
+                {/if}
+              </Sidebar.MenuItem>
+            {/each}
+          {:else}
+            <Sidebar.MenuItem>
+              <div class="px-2 py-1 text-xs text-sidebar-foreground/60">No recent workspaces</div>
+            </Sidebar.MenuItem>
+          {/if}
+        </Sidebar.Menu>
+        </Sidebar.GroupContent>
+      </Sidebar.Group>
+
+      <Sidebar.Group>
+        <Sidebar.GroupLabel class="p-0">
         <button
           type="button"
           class="flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-xs font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
@@ -176,7 +260,7 @@
         </button>
       </Sidebar.GroupLabel>
       {#if recentSessionsOpen}
-        <Sidebar.GroupContent class="no-scrollbar min-h-0 overflow-y-auto pr-1">
+        <Sidebar.GroupContent class="pr-1">
           <Sidebar.Menu>
             {#if $sessionsLoading && !recentSessions.length}
               <Sidebar.MenuSkeleton />
@@ -209,7 +293,8 @@
           </Sidebar.Menu>
         </Sidebar.GroupContent>
       {/if}
-    </Sidebar.Group>
+      </Sidebar.Group>
+    </div>
   </Sidebar.Content>
   <Sidebar.Footer>
     <Sidebar.Menu>
