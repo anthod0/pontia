@@ -36,8 +36,22 @@ test('places recent session status dots before titles and the hover rename actio
 test('allows more recent sessions while keeping the recent sessions area scrollable', () => {
   expect(appSidebarSource).toContain('const recentSessionLimit = 50');
   expect(appSidebarSource).toContain("visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit)");
-  expect(appSidebarSource).toContain('<Sidebar.Group class="min-h-0 flex-1">');
+  expect(appSidebarSource).toContain('<Sidebar.Group class="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">');
   expect(appSidebarSource).toContain('<Sidebar.GroupContent class="no-scrollbar min-h-0 overflow-y-auto pr-1">');
+});
+
+test('hides the entire recent sessions group when the sidebar is collapsed to icons', () => {
+  expect(appSidebarSource).toContain('<Sidebar.Group class="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">');
+  expect(appSidebarSource).not.toContain('<Sidebar.Group class="min-h-0 flex-1">');
+});
+
+test('lets the Recent Sessions header toggle the session list when the sidebar is expanded', () => {
+  expect(appSidebarSource).toContain('let recentSessionsOpen = $state(true)');
+  expect(appSidebarSource).toContain('aria-expanded={recentSessionsOpen}');
+  expect(appSidebarSource).toContain('onclick={() => (recentSessionsOpen = !recentSessionsOpen)}');
+  expect(appSidebarSource).toContain('{#if recentSessionsOpen}');
+  expect(appSidebarSource).toContain('<Sidebar.GroupLabel class="p-0">');
+  expect(appSidebarSource).toContain('Recent Sessions');
 });
 
 test('only marks New Chat active on the chat index route', () => {

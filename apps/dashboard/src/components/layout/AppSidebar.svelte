@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pencil, Settings, SquarePen } from '@lucide/svelte'
+  import { ChevronDown, Pencil, Settings, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -33,6 +33,7 @@
   let renamingSession = $state<SessionView | null>(null)
   let renameDialogOpen = $state(false)
   let renameError = $state<string | null>(null)
+  let recentSessionsOpen = $state(true)
   let recentSessions = $derived(visibleChatSessions($sessions, 'all').slice(0, recentSessionLimit))
 
   $effect(() => {
@@ -162,40 +163,52 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
 
-    <Sidebar.Group class="min-h-0 flex-1">
-      <Sidebar.GroupLabel>Recent Sessions</Sidebar.GroupLabel>
-      <Sidebar.GroupContent class="no-scrollbar min-h-0 overflow-y-auto pr-1">
-        <Sidebar.Menu>
-          {#if $sessionsLoading && !recentSessions.length}
-            <Sidebar.MenuSkeleton />
-            <Sidebar.MenuSkeleton />
-          {:else if recentSessions.length}
-            {#each recentSessions as session}
+    <Sidebar.Group class="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">
+      <Sidebar.GroupLabel class="p-0">
+        <button
+          type="button"
+          class="flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-xs font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+          aria-expanded={recentSessionsOpen}
+          onclick={() => (recentSessionsOpen = !recentSessionsOpen)}
+        >
+          <span>Recent Sessions</span>
+          <ChevronDown class={cn('size-4 transition-transform', recentSessionsOpen ? 'rotate-0' : '-rotate-90')} />
+        </button>
+      </Sidebar.GroupLabel>
+      {#if recentSessionsOpen}
+        <Sidebar.GroupContent class="no-scrollbar min-h-0 overflow-y-auto pr-1">
+          <Sidebar.Menu>
+            {#if $sessionsLoading && !recentSessions.length}
+              <Sidebar.MenuSkeleton />
+              <Sidebar.MenuSkeleton />
+            {:else if recentSessions.length}
+              {#each recentSessions as session}
+                <Sidebar.MenuItem>
+                  <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
+                    {#if isSessionVisibleState(session.state)}
+                      <span class={`size-2 shrink-0 rounded-full ${sessionStateDotClass(session.state)} group-data-[collapsible=icon]:hidden`} aria-label={`${session.state} session`}></span>
+                    {/if}
+                    <span class="line-clamp-1">{sessionChatTitle(session)}</span>
+                  </Sidebar.MenuButton>
+                  <Sidebar.MenuAction
+                    showOnHover
+                    aria-label={`Rename session ${sessionChatTitle(session)}`}
+                    title="Rename session"
+                    disabled={renamingSessionId === session.session_id}
+                    onclick={(event) => startRenamingSession(event, session)}
+                  >
+                    <Pencil />
+                  </Sidebar.MenuAction>
+                </Sidebar.MenuItem>
+              {/each}
+            {:else}
               <Sidebar.MenuItem>
-                <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
-                  {#if isSessionVisibleState(session.state)}
-                    <span class={`size-2 shrink-0 rounded-full ${sessionStateDotClass(session.state)} group-data-[collapsible=icon]:hidden`} aria-label={`${session.state} session`}></span>
-                  {/if}
-                  <span class="line-clamp-1">{sessionChatTitle(session)}</span>
-                </Sidebar.MenuButton>
-                <Sidebar.MenuAction
-                  showOnHover
-                  aria-label={`Rename session ${sessionChatTitle(session)}`}
-                  title="Rename session"
-                  disabled={renamingSessionId === session.session_id}
-                  onclick={(event) => startRenamingSession(event, session)}
-                >
-                  <Pencil />
-                </Sidebar.MenuAction>
+                <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No active sessions</div>
               </Sidebar.MenuItem>
-            {/each}
-          {:else}
-            <Sidebar.MenuItem>
-              <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No active sessions</div>
-            </Sidebar.MenuItem>
-          {/if}
-        </Sidebar.Menu>
-      </Sidebar.GroupContent>
+            {/if}
+          </Sidebar.Menu>
+        </Sidebar.GroupContent>
+      {/if}
     </Sidebar.Group>
   </Sidebar.Content>
   <Sidebar.Footer>
