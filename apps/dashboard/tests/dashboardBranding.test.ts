@@ -69,13 +69,12 @@ test('dashboard sidebar renders the SVG logo asset and brand text', () => {
   expect(screen.getByText('PONTIA')).toHaveClass('group-data-[collapsible=icon]:hidden');
 });
 
-test('top bar SSE status is icon-only with screen-reader text', () => {
+test('top bar omits SSE status chrome', () => {
   render(TopBarHost);
 
-  const status = screen.getByTitle('SSE live');
-  expect(status).toHaveTextContent('SSE live');
-  expect(status.querySelector('.lucide-wifi')).toBeInTheDocument();
-  expect(status.querySelector('span')).toHaveClass('sr-only');
-  expect(status.querySelector('span')).not.toHaveClass('md:hidden');
-  expect(status.querySelector('span')).not.toHaveClass('md:inline-flex');
+  const topBar = screen.getByRole('banner');
+  expect(topBar).not.toHaveTextContent('SSE live');
+  expect(topBar.querySelector('.lucide-wifi')).not.toBeInTheDocument();
+  expect(topBar.querySelector('.lucide-wifi-off')).not.toBeInTheDocument();
+  expect(screen.queryByTitle('SSE live')).not.toBeInTheDocument();
 });

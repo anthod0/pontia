@@ -550,14 +550,23 @@ test('sidebar highlights the matching recent session on chat and session console
   expect(screen.getByText('other').closest('button')).not.toHaveAttribute('data-active');
 });
 
-test('top bar omits static dashboard title, description copy, and settings control', () => {
+test('top bar is compact and transparent with only the ghost sidebar trigger', () => {
   render(TopBarHost);
 
-  expect(screen.queryByText('Dashboard v2')).not.toBeInTheDocument();
-  expect(screen.queryByText('DAG tasks, workspaces, profiles, and execution diagnostics')).not.toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /new chat/i })).toHaveAttribute('href', '/dashboard/chat');
-  expect(screen.queryByRole('link', { name: /browse tasks/i })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /settings/i })).not.toBeInTheDocument();
+  const topBar = screen.getByRole('banner');
+  expect(topBar).toHaveClass('h-10');
+  expect(topBar).toHaveClass('bg-transparent');
+  expect(topBar).not.toHaveClass('h-14');
+  expect(topBar).not.toHaveClass('border-b');
+  expect(topBar).not.toHaveClass('bg-background/95');
+
+  const buttons = within(topBar).getAllByRole('button');
+  expect(buttons).toHaveLength(1);
+  expect(buttons[0]).toHaveAttribute('data-sidebar', 'trigger');
+  expect(buttons[0]).toHaveClass('hover:bg-muted');
+  expect(within(topBar).queryByRole('link', { name: /new chat/i })).not.toBeInTheDocument();
+  expect(within(topBar).queryByText(/sse/i)).not.toBeInTheDocument();
+  expect(within(topBar).queryByText(/set api token/i)).not.toBeInTheDocument();
 });
 
 test('sidebar footer exposes settings as a section menu without agent profiles', async () => {
@@ -579,17 +588,11 @@ test('sidebar settings menu navigates to settings sections without document relo
   expect(mocks.navigate).toHaveBeenCalledWith('/settings/workspaces');
 });
 
-test('top bar New Chat uses SPA navigation and notifies mounted route components', async () => {
-  window.history.pushState({}, '', '/dashboard/chat/session-active');
-  const popstateListener = vi.fn();
-  window.addEventListener('popstate', popstateListener);
-
+test('top bar does not expose new chat navigation', () => {
   render(TopBarHost);
-  await fireEvent.click(screen.getByRole('link', { name: /new chat/i }));
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat');
-  expect(popstateListener).toHaveBeenCalledTimes(1);
-  window.removeEventListener('popstate', popstateListener);
+  expect(screen.queryByRole('link', { name: /new chat/i })).not.toBeInTheDocument();
+  expect(screen.queryByText('New Chat')).not.toBeInTheDocument();
 });
 
 test('settings common page contains controls without owning the section switcher', () => {
