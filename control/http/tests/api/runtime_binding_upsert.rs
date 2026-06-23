@@ -33,6 +33,22 @@ async fn post_upsert(state: AppState, body: Value) -> (StatusCode, Value) {
     .await
 }
 
+async fn get_agent_binding_by_client_session(
+    state: AppState,
+    client_type: &str,
+    client_session_key: &str,
+) -> (StatusCode, Value) {
+    request_json(
+        state,
+        "GET",
+        &format!(
+            "/internal/v1/agent-bindings?client_type={client_type}&client_session_key={client_session_key}",
+        ),
+        None,
+    )
+    .await
+}
+
 async fn delete_session(state: AppState, session_id: &str) -> (StatusCode, Value) {
     request_json(
         state,
@@ -76,6 +92,43 @@ async fn request_json(
         .to_bytes();
     let json = serde_json::from_slice(&body).expect("json body");
     (status, json)
+}
+
+#[tokio::test]
+async fn internal_agent_bindings_lookup_returns_existing_binding_by_client_session() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace.path().to_string_lossy().to_string();
+
+    let (upsert_status, upsert_response) =
+        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    assert_eq!(upsert_status, StatusCode::OK, "{upsert_response:?}");
+    let session_id = upsert_response["session"]["session_id"]
+        .as_str()
+        .expect("session id");
+
+    let (lookup_status, lookup_response) =
+        get_agent_binding_by_client_session(state, "pi", "pi_session_123").await;
+
+    assert_eq!(lookup_status, StatusCode::OK, "{lookup_response:?}");
+    assert_eq!(lookup_response["data"]["binding"]["session_id"], session_id);
+    assert_eq!(lookup_response["data"]["binding"]["client_type"], "pi");
+    assert_eq!(
+        lookup_response["data"]["binding"]["client_session_key"],
+        "pi_session_123"
+    );
+    assert_eq!(lookup_response["data"]["binding"]["launch_cwd"], workspace);
+}
+
+#[tokio::test]
+async fn internal_agent_bindings_lookup_returns_not_found_for_unknown_client_session() {
+    let state = test_state().await;
+
+    let (status, response) =
+        get_agent_binding_by_client_session(state, "pi", "missing_session").await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND, "{response:?}");
+    assert_eq!(response["error"]["code"], "not_found");
 }
 
 fn upsert_body(workspace: &str, pane_id: Option<&str>) -> Value {
@@ -369,6 +422,64 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
         .await
         .expect("agent binding count");
     assert_eq!(binding_count, 1);
+}
+
+#[tokio::test]
+async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let (first_status, first) =
+        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    assert_eq!(first_status, StatusCode::OK, "{first:?}");
+    let session_id = first["session"]["session_id"].as_str().unwrap().to_string();
+
+    let (exit_status, exit) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "event_id": "evt_upsert_existing_exit",
+            "session_id": session_id,
+            "turn_id": null,
+            "source": "agent_client",
+            "client_type": "pi",
+            "type": "session.exited",
+            "time": "2026-01-01T00:00:00Z",
+            "seq": null,
+            "payload": { "runtime_instance_id": "rtinst_first", "reason": "quit" }
+        })),
+    )
+    .await;
+    assert_eq!(exit_status, StatusCode::OK, "{exit:?}");
+
+    let mut second_body = upsert_body(&workspace, Some("%99"));
+    second_body["runtime_instance_id"] = json!("rtinst_second");
+    let (second_status, second) = post_upsert(state.clone(), second_body).await;
+    assert_eq!(second_status, StatusCode::OK, "{second:?}");
+    assert_eq!(second["session"]["session_id"], session_id);
+
+    let state_after_upsert: String =
+        sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
+            .bind(&session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("session state");
+    assert_eq!(state_after_upsert, "starting");
+
+    let event_types: Vec<String> = sqlx::query_scalar(
+        "SELECT event_type FROM events WHERE session_id = ? ORDER BY rowid DESC LIMIT 2",
+    )
+    .bind(&session_id)
+    .fetch_all(&state.db())
+    .await
+    .expect("event types");
+    assert_eq!(event_types, vec!["session.started", "session.resuming"]);
 }
 
 #[tokio::test]

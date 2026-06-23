@@ -7,7 +7,7 @@ use pontia_storage_sqlite::{
     },
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AgentBinding {
     pub id: String,
     pub session_id: String,
@@ -43,6 +43,18 @@ impl AgentBindingService {
             .upsert_binding(record)
             .await?;
         agent_binding_from_row(row)
+    }
+
+    pub async fn binding_for_client_session(
+        &self,
+        client_type: &str,
+        client_session_key: &str,
+    ) -> Result<Option<AgentBinding>> {
+        let row = SqliteAgentBindingRepository::new(self.pool.clone())
+            .binding_for_client_session(client_type, client_session_key)
+            .await?;
+
+        row.map(agent_binding_from_row).transpose()
     }
 
     pub async fn primary_binding_for_session(

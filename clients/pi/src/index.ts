@@ -159,6 +159,16 @@ function bindingUpsertUrl(env: EnvLike): string | undefined {
   return eventUrl.replace(/\/events\/?$/, "/runtime-bindings/upsert");
 }
 
+function agentBindingLookupUrl(env: EnvLike, discoveredBindingUpsertUrl?: string): string | undefined {
+  const explicit = optionalString(env.PONTIA_INTERNAL_AGENT_BINDING_LOOKUP_URL);
+  if (explicit) return explicit;
+  const upsertUrl = bindingUpsertUrl(env) ?? discoveredBindingUpsertUrl;
+  if (upsertUrl) return upsertUrl.replace(/\/runtime-bindings\/upsert\/?$/, "/agent-bindings");
+  const eventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL);
+  if (!eventUrl) return undefined;
+  return eventUrl.replace(/\/events\/?$/, "/agent-bindings");
+}
+
 function newRuntimeInstanceId(): string {
   return `rtinst_${randomUUID()}`;
 }
@@ -227,6 +237,24 @@ async function bindManualSession(
     runtimeInstanceId: resolvedRuntimeInstanceId,
     ...sessionDetails,
   };
+}
+
+async function hasExistingAgentBinding(
+  env: EnvLike,
+  fetchImpl: typeof fetch,
+  sessionDetails: Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">,
+): Promise<boolean> {
+  if (!sessionDetails.clientSessionKey) return false;
+  const discovered = bindingUpsertUrl(env) ? undefined : await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const baseUrl = agentBindingLookupUrl(env, discovered?.bindingUpsertUrl);
+  if (!baseUrl) return false;
+  const url = new URL(baseUrl);
+  url.searchParams.set("client_type", "pi");
+  url.searchParams.set("client_session_key", sessionDetails.clientSessionKey);
+  const response = await fetchImpl(url.toString());
+  if (response.status === 404) return false;
+  if (!response.ok) throw new Error(`agent binding lookup failed: ${response.status} ${response.statusText}`);
+  return true;
 }
 
 async function parseJsonResponse(response: Response): Promise<unknown> {
@@ -351,8 +379,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   pi.on("session_start", async (event, ctx) => {
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
-    if (readyReported && reason !== "fork") return;
-    if (reason !== "startup" && reason !== "new" && reason !== "fork") return;
+    if (readyReported && reason !== "fork" && reason !== "resume") return;
+    if (reason !== "startup" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
 
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
@@ -399,12 +427,18 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         }
         context = { ...loaded.context, ...sessionDetails };
       } else {
-        await logDiagnostic(logFile, {
-          level: "info",
-          code: "manual_pi_binding_deferred",
-          message: "manual pi session binding deferred until first agent turn",
-        });
-        return;
+        if (await hasExistingAgentBinding(env, fetchImpl, sessionDetails)) {
+          context = await bindManualSession(env, fetchImpl, sessionDetails);
+          if (!context) return;
+          if (reason === "resume") readyReported = false;
+        } else {
+          await logDiagnostic(logFile, {
+            level: "info",
+            code: "manual_pi_binding_deferred",
+            message: "manual pi session binding deferred until first agent turn",
+          });
+          return;
+        }
       }
 
       boundSessionContext = context;

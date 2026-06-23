@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use axum::{
     Json,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{Path, Query, State, rejection::JsonRejection},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -11,8 +11,9 @@ use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use pontia_application::{
-    AppState, CurrentTurnClaimRequest, CurrentTurnClaimService, EventIngestService,
-    InternalEventValidationService, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
+    AgentBindingService, AppState, CurrentTurnClaimRequest, CurrentTurnClaimService,
+    EventIngestService, InternalEventValidationService, RuntimeBindingUpsertRequest,
+    RuntimeBindingUpsertService,
 };
 use pontia_core::{
     domain::{DomainEvent, EventSource, EventType},
@@ -44,6 +45,26 @@ pub struct InternalEventResponse {
     turn_id: Option<String>,
     state_version: i64,
     warnings: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AgentBindingQuery {
+    client_type: String,
+    client_session_key: String,
+}
+
+pub async fn get_agent_binding(
+    State(state): State<AppState>,
+    Query(query): Query<AgentBindingQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let client_type = required_query_param("client_type", &query.client_type)?;
+    let client_session_key = required_query_param("client_session_key", &query.client_session_key)?;
+    let binding = AgentBindingService::new(state.db())
+        .binding_for_client_session(client_type, client_session_key)
+        .await?
+        .ok_or_else(|| Error::NotFound("agent binding not found".to_string()))?;
+
+    Ok(Json(json!({ "data": { "binding": binding } })))
 }
 
 pub async fn upsert_runtime_binding(
@@ -119,6 +140,16 @@ pub async fn post_event(
         state_version: result.state_version,
         warnings,
     }))
+}
+
+fn required_query_param<'a>(name: &str, value: &'a str) -> Result<&'a str, ApiError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(ApiError::invalid_request(format!(
+            "{name} query parameter is required"
+        )));
+    }
+    Ok(value)
 }
 
 fn domain_error_as_invalid_request(error: Error) -> ApiError {

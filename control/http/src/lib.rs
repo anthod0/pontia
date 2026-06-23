@@ -68,6 +68,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
         .route("/dashboard/{*path}", get(dashboard::dashboard_path))
         .route("/internal/v1/events", post(internal::post_event))
         .route(
+            "/internal/v1/agent-bindings",
+            get(internal::get_agent_binding),
+        )
+        .route(
             "/internal/v1/runtime-bindings/upsert",
             post(internal::upsert_runtime_binding),
         )

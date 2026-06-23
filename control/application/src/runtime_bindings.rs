@@ -76,7 +76,11 @@ impl RuntimeBindingUpsertService {
             .session_id_for_client_session(&request.client_type, &request.client_session_key)
             .await?;
         let session_id = match existing_session_id {
-            Some(session_id) => session_id,
+            Some(session_id) => {
+                self.record_resume_lifecycle_for_exited_session(&session_id, &request)
+                    .await?;
+                session_id
+            }
             None => self.create_bound_session(&request, &workspace).await?,
         };
 
@@ -269,6 +273,46 @@ impl RuntimeBindingUpsertService {
                 .await;
         }
         Ok(None)
+    }
+
+    async fn record_resume_lifecycle_for_exited_session(
+        &self,
+        session_id: &str,
+        request: &RuntimeBindingUpsertRequest,
+    ) -> Result<()> {
+        let state: Option<String> =
+            sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        if state.as_deref() != Some("exited") {
+            return Ok(());
+        }
+
+        let ingest = EventIngestService::new(self.pool.clone());
+        ingest
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.to_string(),
+                None,
+                EventSource::AgentClient,
+                request.client_type.clone(),
+                EventType::SessionResuming,
+                json!({}),
+            ))
+            .await?;
+        ingest
+            .ingest_event(DomainEvent::new(
+                new_event_id().to_string(),
+                session_id.to_string(),
+                None,
+                EventSource::AgentClient,
+                request.client_type.clone(),
+                EventType::SessionStarted,
+                json!({}),
+            ))
+            .await?;
+        Ok(())
     }
 
     async fn create_bound_session(

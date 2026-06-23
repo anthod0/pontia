@@ -143,11 +143,73 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
+  test("manual session_start startup immediately reattaches when client session already has a pontia binding", async () => {
+    const workspace = await realpath(await tempDir());
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "http://localhost/external/v1/workspaces") {
+        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      }
+      if (url === "http://localhost/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_resumed") {
+        return new Response(JSON.stringify({ data: { binding: { session_id: "sess_existing", client_type: "pi", client_session_key: "pi_session_resumed" } } }), { status: 200 });
+      }
+      if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          client_type: "pi",
+          client_session_key: "pi_session_resumed",
+          client_session_file: "/tmp/pi/resumed.jsonl",
+          runtime_instance_id: expect.stringMatching(/^rtinst_/),
+          tmux: { socket_path: "/tmp/tmux-1000/default", pane_id: "%42" },
+        });
+        return new Response(JSON.stringify({
+          session: { session_id: "sess_existing" },
+          runtime: {
+            runtime_instance_id: "rtinst_reattached",
+            internal_event_url: "http://localhost/internal/v1/events",
+          },
+        }), { status: 200 });
+      }
+      return new Response(`unexpected ${url}`, { status: 500 });
+    });
+    const { handlers, reported } = install({
+      env: {
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
+        PONTIA_EXTERNAL_API_TOKEN: "token",
+        TMUX: "/tmp/tmux-1000/default,2071,502",
+        TMUX_PANE: "%42",
+      },
+      fetch: fetchImpl as any,
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: {
+        getSessionId: () => "pi_session_resumed",
+        getSessionFile: () => "/tmp/pi/resumed.jsonl",
+        getSessionDir: () => "/tmp/pi",
+        getCwd: () => workspace,
+      },
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_existing",
+      payload: {
+        runtime_instance_id: "rtinst_reattached",
+        client_session_key: "pi_session_resumed",
+        client_session_file: "/tmp/pi/resumed.jsonl",
+      },
+    });
+  });
+
   test("session_start without managed runtime env does not create a pontia session before first turn", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async (url: string) => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      }
+      if (url === "http://localhost/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_manual") {
+        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
       }
       return new Response("unexpected", { status: 500 });
     });
@@ -171,7 +233,8 @@ describe("pontia pi extension lifecycle", () => {
       },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).not.toHaveBeenCalledWith("http://localhost/internal/v1/runtime-bindings/upsert", expect.anything());
     expect(reported).toEqual([]);
   });
 
@@ -246,6 +309,9 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
+      if (url === "http://127.0.0.1:18080/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_discovered") {
+        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+      }
       return new Response("unexpected", { status: 500 });
     });
     const { handlers, reported } = install({ env: { HOME: root }, fetch: fetchImpl as any });
@@ -254,7 +320,7 @@ describe("pontia pi extension lifecycle", () => {
       sessionManager: { getSessionId: () => "pi_session_discovered", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
     expect(reported).toEqual([]);
   });
 
@@ -263,6 +329,9 @@ describe("pontia pi extension lifecycle", () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      }
+      if (url === "http://localhost/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_manual") {
+        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
       }
       expect(JSON.parse(String(init?.body))).not.toHaveProperty("tmux");
       return new Response(JSON.stringify({
@@ -297,7 +366,7 @@ describe("pontia pi extension lifecycle", () => {
       sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
   test("agent_start consumes backend-delivered current-turn context after reporting started", async () => {
@@ -437,6 +506,43 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "session.ready", "turn.started"]);
     expect(reported[1]).toMatchObject({ session_id: "sess_child", payload: { runtime_instance_id: "rtinst_child" } });
     expect(reported[2]).toMatchObject({ session_id: "sess_child", payload: { input: { summary: "fork prompt" } } });
+  });
+
+  test("session_start resume immediately reattaches when switched client session has a pontia binding", async () => {
+    const workspace = await realpath(await tempDir());
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url === "http://localhost/external/v1/workspaces") {
+        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      }
+      if (url === "http://localhost/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_resume") {
+        return new Response(JSON.stringify({ data: { binding: { session_id: "sess_resume" } } }), { status: 200 });
+      }
+      if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+        return new Response(JSON.stringify({
+          session: { session_id: "sess_resume" },
+          runtime: {
+            runtime_instance_id: "rtinst_resume",
+            internal_event_url: "http://localhost/internal/v1/events",
+          },
+        }), { status: 200 });
+      }
+      return new Response(`unexpected ${url}`, { status: 500 });
+    });
+    const { handlers, reported } = install({
+      env: {
+        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
+        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
+        PONTIA_EXTERNAL_API_TOKEN: "token",
+      },
+      fetch: fetchImpl as any,
+    });
+
+    await handlers.session_start({ reason: "resume" }, {
+      sessionManager: { getSessionId: () => "pi_session_resume", getCwd: () => workspace },
+    });
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({ session_id: "sess_resume" });
   });
 
   test("session_start with partial managed runtime env does not attach or report ready", async () => {

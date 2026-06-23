@@ -56,6 +56,24 @@ impl SqliteAgentBindingRepository {
         .await?)
     }
 
+    pub async fn binding_for_client_session(
+        &self,
+        client_type: &str,
+        client_session_key: &str,
+    ) -> Result<Option<AgentBindingRow>> {
+        Ok(sqlx::query_as::<_, AgentBindingRow>(
+            r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered
+               FROM agent_bindings
+               WHERE client_type = ? AND client_session_key = ?
+               ORDER BY updated_at DESC, id DESC
+               LIMIT 1"#,
+        )
+        .bind(client_type)
+        .bind(client_session_key)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
     pub async fn primary_binding_for_session(
         &self,
         session_id: &str,
