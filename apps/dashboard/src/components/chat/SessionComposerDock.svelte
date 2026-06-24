@@ -60,7 +60,7 @@
   let composerDisabled = $derived(!canAcceptWebInput || session.state === 'error' || submitting)
 </script>
 
-<div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-surface px-2 pb-2 pt-1 sm:px-4 md:left-[var(--sidebar-width)] md:px-6 md:pb-3">
+<div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-surface px-2 pb-2 pt-1 sm:px-4 md:left-[var(--sidebar-width)] md:px-6 md:pb-3 transition-[left] duration-200 ease-linear group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]">
   <div aria-hidden="true" data-chat-composer-fade="outward" class="pointer-events-none absolute inset-x-0 bottom-full h-12 bg-gradient-to-t from-surface via-surface/70 to-transparent"></div>
   <div class="mx-auto w-full max-w-4xl">
     <div role="group" aria-label="Session status and controls" class="mb-1 flex min-w-0 items-center justify-between gap-2 px-2">

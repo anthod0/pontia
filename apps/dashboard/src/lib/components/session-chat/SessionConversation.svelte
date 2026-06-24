@@ -233,7 +233,7 @@
         {#if displayItem.kind === 'agent_status'}
           <Message.Root from="assistant" data-chat-agent-status>
             <Message.Content>
-              <AgentStatus state={sessionState} />
+              <AgentStatus state={sessionState} interruptEnabled={_interruptEnabled} interruptBusy={_interruptBusy} onInterrupt={_onInterrupt} />
             </Message.Content>
           </Message.Root>
         {:else if displayItem.kind === 'agent_exit_status'}
@@ -243,7 +243,7 @@
           <Message.Root from={chatMessage.role} data-chat-message-id={chatMessage.id}>
             <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
               {#if displayItem.showAgentStatus}
-                <AgentStatus state={sessionState} />
+                <AgentStatus state={sessionState} interruptEnabled={_interruptEnabled} interruptBusy={_interruptBusy} onInterrupt={_onInterrupt} />
               {/if}
               {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
                 <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />

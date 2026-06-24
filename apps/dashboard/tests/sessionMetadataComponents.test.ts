@@ -145,6 +145,11 @@ describe('session metadata component boundaries', () => {
     const composerDock = document.querySelector('[data-chat-composer-dock="fixed"]');
     expect(composerDock).toBeInTheDocument();
     expect(composerDock).toHaveClass('bg-surface');
+    expect(composerDock).toHaveClass('md:left-[var(--sidebar-width)]');
+    expect(composerDock).toHaveClass('group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]');
+    expect(composerDock).toHaveClass('transition-[left]');
+    expect(composerDock).toHaveClass('duration-200');
+    expect(composerDock).toHaveClass('ease-linear');
     expect(composerDock).toHaveClass('pt-1');
     expect(composerDock).not.toHaveClass('md:pt-2');
     expect(composerDock).not.toHaveClass('bg-muted/20');

@@ -1,16 +1,21 @@
 <script lang="ts">
-  import { CircleDot, XCircle } from '@lucide/svelte'
+  import { CircleDot, Square, XCircle } from '@lucide/svelte'
+  import { Button } from '$lib/components/ui/button/index.js'
   import { cn } from '$lib/utils.js'
   import BlocksWaveSpinner from './BlocksWaveSpinner.svelte'
 
   interface Props {
     state: string | null
     class?: string
+    interruptEnabled?: boolean
+    interruptBusy?: boolean
+    onInterrupt?: () => void
   }
 
-  let { state, class: className }: Props = $props()
+  let { state, class: className, interruptEnabled = false, interruptBusy = false, onInterrupt }: Props = $props()
 
   const status = $derived(agentStatusForState(state))
+  const showInterrupt = $derived(state === 'busy' && interruptEnabled && Boolean(onInterrupt))
 
   function agentStatusForState(value: string | null): { label: string; tone: 'active' | 'error' | 'idle' | 'unknown' } | null {
     if (!value) return null
@@ -42,5 +47,20 @@
       {/if}
     </span>
     <span class="truncate text-xs leading-4">{status.label}</span>
+    {#if showInterrupt}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        class="ml-auto gap-1.5 text-muted-foreground hover:text-foreground"
+        disabled={interruptBusy}
+        aria-label="Interrupt agent"
+        title="Interrupt agent"
+        onclick={() => onInterrupt?.()}
+      >
+        <Square class="size-4" />
+        <span>Interrupt</span>
+      </Button>
+    {/if}
   </div>
 {/if}

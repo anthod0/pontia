@@ -63,6 +63,26 @@ test('conversation hides the agent status component while the session is idle', 
   expect(screen.queryByText('Agent idle')).not.toBeInTheDocument();
 });
 
+test('conversation shows an interrupt button in the busy agent status', async () => {
+  const onInterrupt = vi.fn();
+
+  render(SessionConversation, {
+    props: {
+      sessionState: 'busy',
+      messages,
+      interruptEnabled: true,
+      onInterrupt,
+    },
+  });
+
+  const interruptButton = screen.getByRole('button', { name: /interrupt agent/i });
+  expect(interruptButton).toHaveAttribute('title', 'Interrupt agent');
+  expect(interruptButton).toHaveTextContent('Interrupt');
+  await fireEvent.click(interruptButton);
+
+  expect(onInterrupt).toHaveBeenCalledTimes(1);
+});
+
 test('conversation renders exited status as a terminal divider after the conversation', () => {
   render(SessionConversation, { props: { sessionState: 'exited', messages } });
 
@@ -325,7 +345,7 @@ test('conversation renders agent status without an assistant loading placeholder
   expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
   expect(document.querySelector('[data-chat-message-id="busy:assistant-loading-placeholder"]')).not.toBeInTheDocument();
   expect(document.querySelector('[data-chat-agent-status]')).toHaveClass('is-assistant', 'items-start');
-  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /interrupt agent/i })).toBeInTheDocument();
 
   expect(onInterrupt).not.toHaveBeenCalled();
 });
