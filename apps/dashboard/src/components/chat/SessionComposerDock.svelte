@@ -57,7 +57,7 @@
   let composerDisabled = $derived(!canAcceptWebInput || session.state === 'error' || submitting)
 </script>
 
-<div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-muted/20 px-4 pb-2 pt-1 backdrop-blur md:left-[var(--sidebar-width)] md:px-6 md:pb-3 md:pt-2">
+<div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 px-4 pb-2 pt-1 backdrop-blur [mask-image:linear-gradient(to_bottom,transparent,black_18px)] md:left-[var(--sidebar-width)] md:px-6 md:pb-3 md:pt-2">
   <div class="mx-auto w-full max-w-7xl">
     <div role="group" aria-label="Session status and controls" class="mb-1 flex min-w-0 items-center justify-between gap-2 px-2">
       <div class="flex min-w-0 flex-1 items-center gap-2">
@@ -67,13 +67,13 @@
       </div>
       <div class="flex shrink-0 items-center justify-end gap-2">
         <div data-chat-desktop-inbox class="relative hidden sm:block">
-          <Button variant="outline" size="sm" class="gap-2" aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`} onclick={onOpenInbox}>
+          <Button variant="ghost" size="sm" class="gap-2" aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`} onclick={onOpenInbox}>
             <Inbox class="size-4" /> <span>Inbox</span>
           </Button>
           {#if inboxActionableCount > 0}<Badge variant="secondary" class="absolute -right-2 -top-2 h-5 min-w-5 rounded-full px-1.5 text-xs shadow-sm">{inboxActionableCount}</Badge>{/if}
         </div>
         {#if !isTerminalChatSession(session)}
-          <Button class="hidden sm:inline-flex" variant="destructive" size="sm" disabled={actionBusy} aria-label="Exit session" onclick={onExit}><LogOut class="size-4" /> Exit</Button>
+          <Button class="hidden sm:inline-flex text-destructive hover:text-destructive" variant="ghost" size="sm" disabled={actionBusy} aria-label="Exit session" onclick={onExit}><LogOut class="size-4" /> Exit</Button>
         {/if}
         <DropdownMenu.Root bind:open={advancedControlsOpen}>
           <div class="relative">

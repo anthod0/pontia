@@ -66,7 +66,7 @@
       {/if}
     </span>
   </Popover.Trigger>
-  <Popover.Content side="top" align="start" role="dialog" aria-label="Session details" portalProps={{ disabled: true }} class="w-[min(20rem,calc(100vw-2rem))] p-3">
+  <Popover.Content side="top" align="start" role="dialog" aria-label="Session details" class="w-[min(20rem,calc(100vw-2rem))] p-3">
     <dl class="space-y-2 text-sm">
       {#each metadataItems as item (item.key)}
         <div class="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2">
