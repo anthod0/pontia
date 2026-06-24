@@ -1,138 +1,22 @@
-use super::*;
+use std::path::{Path, PathBuf};
+
 use nucleo_matcher::{
     Config, Matcher,
     pattern::{AtomKind, CaseMatching, Normalization, Pattern},
 };
+use sqlx::SqlitePool;
+
+use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig, WorkspaceRootConfig};
+use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
-pub use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig, WorkspaceRootConfig};
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct WorkspaceRootView {
-    pub root_id: String,
-    pub label: String,
-    pub canonical_path: Option<String>,
-    pub state: String,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct WorkspaceDirectoryEntryView {
-    pub name: String,
-    pub path: String,
-    pub kind: String,
-    pub is_workspace: bool,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct WorkspaceDirectoryListingView {
-    pub root_id: String,
-    pub path: String,
-    pub canonical_path: String,
-    pub parent_path: Option<String>,
-    pub entries: Vec<WorkspaceDirectoryEntryView>,
-    pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct FilePickerFileView {
-    pub path: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct FilePickerResultView {
-    pub files: Vec<FilePickerFileView>,
-    pub truncated: bool,
-    pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct RegisterWorkspaceRequest {
-    pub root_id: String,
-    #[serde(default)]
-    pub path: String,
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct RenameWorkspaceRequest {
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkspaceRecord {
-    pub workspace_id: String,
-    pub canonical_path: String,
-}
-
-pub async fn upsert_workspace(pool: &SqlitePool, workspace: &str) -> Result<WorkspaceRecord> {
-    let input_path = PathBuf::from(workspace);
-    std::fs::create_dir_all(&input_path)?;
-    let canonical_path = std::fs::canonicalize(&input_path)?.display().to_string();
-    upsert_canonical_workspace(pool, &canonical_path, None).await
-}
-
-pub(crate) async fn upsert_canonical_workspace(
-    pool: &SqlitePool,
-    canonical_path: &str,
-    requested_name: Option<&str>,
-) -> Result<WorkspaceRecord> {
-    let display_path = canonical_path.to_string();
-    let name = requested_name
-        .filter(|name| !name.trim().is_empty())
-        .map(ToString::to_string)
-        .or_else(|| {
-            Path::new(&canonical_path)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(ToString::to_string)
-        });
-
-    let repository = SqliteWorkspaceRepository::new(pool.clone());
-    if let Some(row) = repository
-        .get_workspace_record_by_canonical_path(canonical_path)
-        .await?
-    {
-        repository
-            .reactivate_workspace(&row.workspace_id, &display_path, name.as_deref())
-            .await?;
-        return Ok(WorkspaceRecord {
-            workspace_id: row.workspace_id,
-            canonical_path: canonical_path.to_string(),
-        });
-    }
-
-    let workspace_id = new_workspace_id().to_string();
-    repository
-        .insert_workspace(
-            &workspace_id,
-            canonical_path,
-            &display_path,
-            name.as_deref(),
-        )
-        .await?;
-
-    Ok(WorkspaceRecord {
-        workspace_id,
-        canonical_path: canonical_path.to_string(),
-    })
-}
-
-pub async fn get_workspace_record(
-    pool: &SqlitePool,
-    workspace_id: &str,
-) -> Result<Option<WorkspaceRecord>> {
-    SqliteWorkspaceRepository::new(pool.clone())
-        .get_workspace_record(workspace_id)
-        .await?
-        .map(|row| {
-            Ok(WorkspaceRecord {
-                workspace_id: row.workspace_id,
-                canonical_path: row.canonical_path,
-            })
-        })
-        .transpose()
-}
+use super::{
+    FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,
+    WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceRootView,
+    helpers::{canonical_root, path_to_api_relative, resolve_relative_path, should_skip_directory},
+    persistence::{get_workspace_record, upsert_canonical_workspace},
+};
+use crate::{ExternalQueryService, WorkspaceView};
 
 #[derive(Clone)]
 pub struct WorkspaceBrowserService {
@@ -474,66 +358,4 @@ impl WorkspaceBrowserService {
             .find(|root| root.root_id == root_id)
             .ok_or_else(|| Error::NotFound(format!("workspace root {root_id} not found")))
     }
-}
-
-fn canonical_root(root: &WorkspaceRootConfig) -> Result<PathBuf> {
-    let path = std::fs::canonicalize(&root.path)?;
-    if !path.is_dir() {
-        return Err(Error::NotFound(format!(
-            "workspace root {} is not available",
-            root.root_id
-        )));
-    }
-    Ok(path)
-}
-
-fn resolve_relative_path(root: &Path, relative_path: &str) -> Result<PathBuf> {
-    let relative = Path::new(relative_path.trim());
-    if relative.is_absolute() {
-        return Err(Error::Domain(
-            "workspace browser path must be relative".to_string(),
-        ));
-    }
-    for component in relative.components() {
-        match component {
-            std::path::Component::Normal(_) | std::path::Component::CurDir => {}
-            _ => {
-                return Err(Error::Domain(
-                    "workspace browser path cannot escape the configured root".to_string(),
-                ));
-            }
-        }
-    }
-    let candidate = if relative.as_os_str().is_empty() {
-        root.to_path_buf()
-    } else {
-        root.join(relative)
-    };
-    let canonical = std::fs::canonicalize(&candidate).map_err(|err| {
-        if err.kind() == std::io::ErrorKind::NotFound {
-            Error::NotFound(format!("directory {relative_path:?} not found"))
-        } else {
-            Error::Io(err)
-        }
-    })?;
-    if !canonical.starts_with(root) {
-        return Err(Error::Domain(
-            "workspace browser path cannot escape the configured root".to_string(),
-        ));
-    }
-    Ok(canonical)
-}
-
-fn path_to_api_relative(path: &Path) -> String {
-    path.components()
-        .filter_map(|component| match component {
-            std::path::Component::Normal(value) => Some(value.to_string_lossy().to_string()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
-fn should_skip_directory(name: &str) -> bool {
-    matches!(name, ".git" | "node_modules" | "target")
 }

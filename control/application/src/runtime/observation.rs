@@ -1,6 +1,16 @@
-use super::*;
-use pontia_agent_clients::{self, RuntimeBehavior};
+use serde_json::{Value, json};
+use sqlx::SqlitePool;
+
+use pontia_agent_clients::{RuntimeBehavior, get_client_spec};
+use pontia_core::{
+    domain::{DomainEvent, EventSource, EventType},
+    error::{Error, Result},
+    ids::new_event_id,
+};
+use pontia_runtime::GenericRuntimeManager;
 use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
+
+use crate::{EventIngestService, ExternalQueryService};
 
 fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
     metadata["in_process"]["runtime_handle"]
@@ -33,7 +43,7 @@ impl RuntimeObservationService {
             return Ok(());
         }
 
-        let Some(client_spec) = agent_clients::get_client_spec(&session.client_type) else {
+        let Some(client_spec) = get_client_spec(&session.client_type) else {
             return Ok(());
         };
         match client_spec.adapter.runtime {

@@ -1,49 +1,40 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-    path::{Path, PathBuf},
-    str::FromStr,
-};
-
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use sqlx::SqlitePool;
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use std::str::FromStr;
 
 use pontia_agent_clients as agent_clients;
-use pontia_config::AppConfig;
 pub use pontia_config::FilePickerConfig;
 use pontia_core::{
     domain::{
-        DomainEvent, EventSource, EventType, ProjectionState, SessionProjection, SessionState,
-        TurnProjection, TurnState,
+        DomainEvent, EventSource, EventType, SessionProjection, SessionState, TurnProjection,
+        TurnState,
     },
     error::{Error, Result},
-    ids::{new_event_id, new_message_id, new_session_id, new_turn_id, new_workspace_id},
+    ids::{new_event_id, new_message_id, new_session_id, new_turn_id},
 };
 use pontia_runtime::{AgentInput, GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use sqlx::SqlitePool;
 
 mod agent_bindings;
-mod artifacts;
+pub mod app;
+pub mod artifacts;
 mod events;
 mod git_status;
 mod inbox;
+pub mod ingestion;
 mod mapping;
-mod queries;
+pub mod queries;
 mod raw_transcripts;
-mod runtime_bindings;
-mod runtime_control;
-mod runtime_observation;
-mod runtime_readiness;
-mod sessions;
-mod state;
-mod tasks;
-mod turns;
-mod views;
-mod workspaces;
+pub mod runtime;
+pub mod runtime_control;
+pub mod sessions;
+pub mod tasks;
+pub mod turns;
+pub mod views;
+pub mod workspaces;
 
 pub use agent_bindings::{AgentBinding, AgentBindingService, UpsertAgentBindingRequest};
+pub use app::{AppState, initialize};
 pub use artifacts::{
     ArtifactContentService, ArtifactDiscoveryService, ArtifactRegistration,
     ArtifactRegistrationService,
@@ -59,49 +50,28 @@ pub use raw_transcripts::{
     TimelineItemDetailPage, TimelineItemDetailRequest, TimelinePage, TimelinePageRequest,
     resolve_and_parse_timeline_page,
 };
-pub use runtime_bindings::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
+pub use runtime::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
+pub use runtime::{RuntimeObservationService, RuntimeReadinessService};
 pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};
-pub use runtime_observation::RuntimeObservationService;
-pub use runtime_readiness::RuntimeReadinessService;
 pub use sessions::{
     CreateSessionOutcome, CreateSessionRequest, InitialTaskRequest, SessionCommandService,
     UpdateSessionRequest,
 };
-pub use state::{AppState, initialize};
 pub use tasks::{CreateTaskOutcome, TaskCommandService};
 pub use turns::{CurrentTurnClaimRequest, CurrentTurnClaimService, TurnCommandService};
-pub use views::*;
+pub use views::{
+    ArtifactContent, ArtifactDiscoveryOutcome, ArtifactView, ContextUsageCapability,
+    ContextUsageView, EventStreamItem, EventStreamScope, EventView, InboxInputView,
+    InboxMessageView, SessionCapabilities, SessionLineageView, SessionView, TaskEventStreamItem,
+    TaskEventView, TaskView, TurnInputView, TurnOutputView, TurnView, WorkspaceGitStatusView,
+    WorkspaceView,
+};
 pub use workspaces::{
     FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,
     WorkspaceBrowserConfig, WorkspaceBrowserService, WorkspaceDirectoryEntryView,
     WorkspaceDirectoryListingView, WorkspaceRootConfig, WorkspaceRootView,
 };
 
+pub(crate) use app::{default_client_type, is_supported_client_type};
 pub(crate) use mapping::*;
 pub use workspaces::{WorkspaceRecord, get_workspace_record, upsert_workspace};
-
-use std::sync::{OnceLock, RwLock};
-
-fn default_client_type_store() -> &'static RwLock<String> {
-    static DEFAULT_CLIENT_TYPE: OnceLock<RwLock<String>> = OnceLock::new();
-    DEFAULT_CLIENT_TYPE
-        .get_or_init(|| RwLock::new(agent_clients::default_real_client_type().to_string()))
-}
-
-pub(crate) fn set_default_client_type(client_type: String) {
-    let mut guard = default_client_type_store()
-        .write()
-        .expect("default client type lock poisoned");
-    *guard = client_type;
-}
-
-fn default_client_type() -> String {
-    default_client_type_store()
-        .read()
-        .expect("default client type lock poisoned")
-        .clone()
-}
-
-fn is_supported_client_type(client_type: &str) -> bool {
-    agent_clients::is_supported_client_type(client_type)
-}
