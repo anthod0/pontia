@@ -142,6 +142,21 @@ describe('session metadata component boundaries', () => {
     });
 
     expect(screen.getByRole('group', { name: 'Session status and controls' })).toBeInTheDocument();
+    const composerDock = document.querySelector('[data-chat-composer-dock="fixed"]');
+    expect(composerDock).toBeInTheDocument();
+    expect(composerDock).toHaveClass('bg-surface');
+    expect(composerDock).toHaveClass('pt-1');
+    expect(composerDock).not.toHaveClass('md:pt-2');
+    expect(composerDock).not.toHaveClass('bg-muted/20');
+    expect(composerDock).not.toHaveClass('backdrop-blur');
+    expect(composerDock).not.toHaveClass('[mask-image:linear-gradient(to_bottom,transparent,black_18px)]');
+    const outwardFade = document.querySelector('[data-chat-composer-fade="outward"]');
+    expect(outwardFade).toBeInTheDocument();
+    expect(outwardFade).toHaveClass('h-12');
+    expect(outwardFade).toHaveClass('bg-gradient-to-t');
+    expect(outwardFade).toHaveClass('from-surface');
+    expect(outwardFade).toHaveClass('via-surface/70');
+    expect(outwardFade).toHaveClass('to-transparent');
     expect(screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ })).toBeInTheDocument();
     expect(screen.queryByLabelText(/session state:/i)).not.toBeInTheDocument();
     expect(screen.queryByText('Session state:')).not.toBeInTheDocument();

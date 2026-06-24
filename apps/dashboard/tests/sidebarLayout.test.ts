@@ -688,6 +688,8 @@ test('chat app shell reserves composer space only for session chat routes', () =
   expect(sessionMain).not.toBeNull();
   expect(sessionMain).not.toHaveClass('min-h-0');
   expect(sessionMain).not.toHaveClass('overflow-hidden');
+  expect(sessionMain).toHaveClass('bg-surface');
+  expect(sessionMain).not.toHaveClass('bg-muted/20');
   expect(sessionMain).toHaveClass('pb-40');
   expect(sessionMain?.firstElementChild).not.toHaveClass('h-full');
   expect(sessionMain?.firstElementChild).not.toHaveClass('min-h-0');
@@ -698,6 +700,8 @@ test('chat app shell reserves composer space only for session chat routes', () =
 
   const newChatMain = screen.getByText('App shell page content').closest('main');
   expect(newChatMain).not.toBeNull();
+  expect(newChatMain).toHaveClass('bg-surface');
+  expect(newChatMain).not.toHaveClass('bg-muted/20');
   expect(newChatMain).toHaveClass('p-4');
   expect(newChatMain).not.toHaveClass('pb-40');
   expect(newChatMain).not.toHaveClass('md:pb-44');
@@ -710,6 +714,8 @@ test('settings app shell removes centered main chrome so the settings nav can al
 
   const main = screen.getByText('App shell page content').closest('main');
   expect(main).not.toBeNull();
+  expect(main).toHaveClass('bg-surface');
+  expect(main).not.toHaveClass('bg-muted/20');
   expect(main).not.toHaveClass('p-4');
   expect(main).not.toHaveClass('md:p-6');
   expect(main?.firstElementChild).not.toHaveClass('mx-auto');
