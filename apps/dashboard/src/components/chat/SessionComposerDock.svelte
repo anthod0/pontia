@@ -70,20 +70,20 @@
       </div>
       <div class="flex shrink-0 items-center justify-end gap-2">
         <ButtonGroup.Root class="flex" aria-label="Primary session actions" data-chat-primary-actions>
-          <Button variant="outline" size="sm" class="hidden gap-2 sm:inline-flex" onclick={onNewChat}>
+          <Button variant="ghost" size="sm" class="hidden gap-2 sm:inline-flex" onclick={onNewChat}>
             <SquarePen class="size-4" /> <span>New Chat</span>
           </Button>
-          <Button data-chat-desktop-inbox variant="outline" size="sm" class="relative hidden gap-2 sm:inline-flex" aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`} onclick={onOpenInbox}>
+          <Button data-chat-desktop-inbox variant="ghost" size="sm" class="relative hidden gap-2 sm:inline-flex" aria-label={`Open inbox, ${inboxActionableCount} message${inboxActionableCount === 1 ? '' : 's'}`} onclick={onOpenInbox}>
             <Inbox class="size-4" /> <span>Inbox</span>
             {#if inboxActionableCount > 0}<Badge variant="secondary" class="absolute -right-2 -top-2 h-5 min-w-5 rounded-full px-1.5 text-xs shadow-sm">{inboxActionableCount}</Badge>{/if}
           </Button>
           {#if !isTerminalChatSession(session)}
-            <Button class="hidden text-destructive hover:text-destructive sm:inline-flex" variant="outline" size="sm" disabled={actionBusy} aria-label="Exit session" onclick={onExit}><LogOut class="size-4" /> Exit</Button>
+            <Button class="hidden text-destructive hover:text-destructive sm:inline-flex" variant="ghost" size="sm" disabled={actionBusy} aria-label="Exit session" onclick={onExit}><LogOut class="size-4" /> Exit</Button>
           {/if}
           <DropdownMenu.Root bind:open={advancedControlsOpen}>
             <DropdownMenu.Trigger disabled={actionBusy} aria-label={inboxActionableCount > 0 ? `Advanced session controls, ${inboxActionableCount} inbox message${inboxActionableCount === 1 ? '' : 's'}` : 'Advanced session controls'}>
               {#snippet child({ props })}
-                <Button {...props} variant="outline" size="icon-sm" class="relative">
+                <Button {...props} variant="ghost" size="icon-sm" class="relative">
                   <EllipsisVertical class="size-4" />
                   {#if inboxActionableCount > 0}<Badge data-chat-mobile-inbox-count variant="secondary" class="absolute -right-2 -top-2 h-5 min-w-5 rounded-full px-1.5 text-xs shadow-sm sm:hidden">{inboxActionableCount}</Badge>{/if}
                 </Button>

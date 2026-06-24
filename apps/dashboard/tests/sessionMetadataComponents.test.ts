@@ -153,7 +153,10 @@ describe('session metadata component boundaries', () => {
     expect(within(primaryActions).getByRole('button', { name: /exit session/i })).toBeInTheDocument();
     expect(within(primaryActions).getByRole('button', { name: /advanced session controls/i })).toBeInTheDocument();
     expect(Array.from(primaryActions.children).map((child) => child.getAttribute('data-slot'))).toEqual(['button', 'button', 'button', 'dropdown-menu-trigger']);
-    for (const button of within(primaryActions).getAllByRole('button')) expect(button).toHaveClass('border');
+    for (const button of within(primaryActions).getAllByRole('button')) {
+      expect(button).toHaveClass('hover:bg-muted');
+      expect(button).not.toHaveClass('border');
+    }
 
     await fireEvent.click(screen.getByRole('button', { name: /advanced session controls/i }));
 
