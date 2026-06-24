@@ -17,7 +17,7 @@
 
 <div
   bind:this={ref}
-  class={cn('group flex w-full max-w-[95%] flex-col gap-2', from === 'user' ? 'is-user ml-auto items-end' : 'is-assistant items-start', className)}
+  class={cn('group flex w-full max-w-[95%] min-w-0 flex-col gap-2', from === 'user' ? 'is-user ml-auto items-end' : 'is-assistant items-start', className)}
   data-role={from}
   {...restProps}
 >

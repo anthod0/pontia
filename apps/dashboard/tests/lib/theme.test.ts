@@ -12,4 +12,11 @@ describe('system theme styling', () => {
     expect(appCss).not.toMatch(/^\.dark\s*\{/m);
     expect(mainTs).not.toContain('initializeSystemTheme');
   });
+
+  test('loads a dark highlight.js theme when the system is in dark mode', () => {
+    const appCss = readFileSync(resolve(__dirname, '../../src/app.css'), 'utf8');
+
+    expect(appCss).toContain("@import 'highlight.js/styles/github.css';");
+    expect(appCss).toContain("@import 'highlight.js/styles/github-dark-dimmed.css' (prefers-color-scheme: dark);");
+  });
 });

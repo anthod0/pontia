@@ -27,6 +27,29 @@ test('conversation renders messages without role headers', () => {
   expect(screen.queryByText('AI')).not.toBeInTheDocument();
 });
 
+test('conversation constrains assistant code blocks to the message width', async () => {
+  const longLine = 'const value = "' + 'x'.repeat(240) + '";';
+  render(SessionConversation, {
+    props: {
+      messages: [
+        messages[0],
+        {
+          id: 'message-code',
+          role: 'assistant',
+          content: `Here is the code:\n\n\`\`\`ts\n${longLine}\n\`\`\``,
+          status: 'sent',
+        },
+      ],
+    },
+  });
+
+  expect(await screen.findByRole('button', { name: /copy code block/i })).toBeInTheDocument();
+  expect(document.querySelector('[data-chat-conversation-content]')).toHaveClass('min-w-0');
+  expect(document.querySelector('[data-role="assistant"]')).toHaveClass('min-w-0');
+  expect(document.querySelector('pre')).toHaveClass('max-w-full');
+  expect(document.querySelector('[data-code-block-body]')).toHaveClass('max-w-full', 'overflow-x-auto');
+});
+
 test('conversation shows the current agent status above only the latest assistant reply', () => {
   render(SessionConversation, {
     props: {

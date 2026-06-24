@@ -521,8 +521,8 @@
       onStartChat={() => void startChat()}
     />
   {:else}
-    <div class="mx-auto w-full max-w-4xl flex-1">
-      <div class="flex flex-col rounded-xl bg-transparent">
+    <div class="mx-auto min-w-0 w-full max-w-4xl flex-1">
+      <div class="flex min-w-0 flex-col rounded-xl bg-transparent">
         {#if $sessionDetailLoading && !selectedSession}
           <div class="space-y-4 p-6"><Skeleton class="h-10 w-1/3" /><Skeleton class="h-80 w-full" /></div>
         {:else if !selectedSession}

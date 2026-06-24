@@ -213,7 +213,7 @@
 
 </script>
 
-<Conversation.Root class="h-auto min-h-0 flex-1 overflow-visible">
+<Conversation.Root class="h-auto min-h-0 min-w-0 flex-1 overflow-visible">
   {#if loading}
     <Conversation.EmptyState title="Loading conversation…" description="Fetching the latest session transcript." />
   {:else if !displayMessages.length}
@@ -225,7 +225,7 @@
       </Empty.Header>
     </Empty.Root>
   {:else}
-    <Conversation.Content bind:ref={scrollContainer} data-chat-conversation-content class="overflow-visible px-0 py-4 sm:p-4">
+    <Conversation.Content bind:ref={scrollContainer} data-chat-conversation-content class="min-w-0 overflow-visible px-0 py-4 sm:p-4">
       {#if hasMoreHistory && historyLoading}
         <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading earlier messages…</div>
       {/if}
