@@ -16,13 +16,13 @@ serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time = { workspace = true, features = ["formatting", "parsing", "serde"] }
-tokio = { version = "1", features = ["sync"] }
+tokio = { version = "1", features = ["rt", "sync", "time"] }
 tracing = "0.1"
 uuid = { workspace = true, features = ["v7", "serde"] }
 
 [dev-dependencies]
 tempfile = "3"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 
 [features]
 default = []

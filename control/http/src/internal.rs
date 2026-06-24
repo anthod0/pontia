@@ -108,7 +108,9 @@ pub async fn post_event(
 
     if event.event_type == EventType::SessionMessageUpdated {
         let state_version = service.volatile_state_version(&event.session_id).await?;
-        state.volatile_events().publish(event.clone());
+        state
+            .volatile_events()
+            .publish_debounced_session_message_updated(event.clone());
         return Ok(Json(InternalEventResponse {
             accepted: true,
             duplicate: false,
