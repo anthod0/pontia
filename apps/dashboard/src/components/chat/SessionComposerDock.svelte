@@ -57,8 +57,8 @@
   let composerDisabled = $derived(!canAcceptWebInput || session.state === 'error' || submitting)
 </script>
 
-<div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 px-4 pb-2 pt-1 backdrop-blur [mask-image:linear-gradient(to_bottom,transparent,black_18px)] md:left-[var(--sidebar-width)] md:px-6 md:pb-3 md:pt-2">
-  <div class="mx-auto w-full max-w-7xl">
+<div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 px-2 pb-2 pt-1 backdrop-blur [mask-image:linear-gradient(to_bottom,transparent,black_18px)] sm:px-4 md:left-[var(--sidebar-width)] md:px-6 md:pb-3 md:pt-2">
+  <div class="mx-auto w-full max-w-4xl">
     <div role="group" aria-label="Session status and controls" class="mb-1 flex min-w-0 items-center justify-between gap-2 px-2">
       <div class="flex min-w-0 flex-1 items-center gap-2">
         <div data-testid="session-status-mobile-metadata" class="relative min-w-0 flex-1">

@@ -987,8 +987,9 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(composerDock).not.toBeNull();
   expect(composerDock).toHaveClass('fixed');
   expect(composerDock).toHaveClass('bottom-0');
+  expect(conversationContent?.closest('.max-w-4xl')).not.toBeNull();
   expect(composerDock?.firstElementChild).toHaveClass('mx-auto');
-  expect(composerDock?.firstElementChild).toHaveClass('max-w-7xl');
+  expect(composerDock?.firstElementChild).toHaveClass('max-w-4xl');
 
   expect(screen.queryByLabelText('Session state: idle')).not.toBeInTheDocument();
 
@@ -1230,7 +1231,9 @@ test('styles assistant markdown tables', async () => {
   ).toBe(true);
 });
 
-test('highlights fenced code blocks in assistant markdown', async () => {
+test('highlights fenced code blocks in assistant markdown and copies their text', async () => {
+  const writeText = vi.fn(async () => undefined);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -1259,6 +1262,23 @@ test('highlights fenced code blocks in assistant markdown', async () => {
   expect(markdownContainer?.className).not.toContain('[&_pre]:p-3');
   expect(markdownContainer?.className).not.toContain('[&_pre_code]:bg-transparent');
   expect(markdownContainer?.className).not.toContain('[&_pre_code]:p-0');
+  const copyCodeButton = await screen.findByRole('button', { name: /copy code block/i });
+  const pre = container.querySelector('pre');
+  expect(pre).toHaveClass('w-full');
+  expect(pre).toHaveClass('border');
+  expect(pre).toHaveClass('border-border');
+  const assistantContent = pre?.closest('[data-role="assistant"]')?.firstElementChild;
+  expect(assistantContent).toHaveClass('group-[.is-assistant]:w-full');
+  const codeBlockHeader = container.querySelector('[data-code-block-header]');
+  expect(codeBlockHeader).toHaveTextContent('ts');
+  expect(codeBlockHeader).not.toHaveClass('border-b');
+  expect(codeBlockHeader).not.toHaveClass('bg-muted/40');
+
+  expect(navigator.clipboard?.writeText).toBe(writeText);
+  expect(copyCodeButton.querySelector('svg')).toBeInTheDocument();
+  await fireEvent.click(copyCodeButton);
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith('const answer: number = 42;'));
+  expect(await screen.findByRole('button', { name: /code block copied/i })).toBeInTheDocument();
 });
 
 test('opens an inbox sheet with actionable pending, failed, and dispatching messages only', async () => {
