@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => {
     pinSession: vi.fn(async () => undefined),
     unpinSession: vi.fn(async () => undefined),
     archiveSession: vi.fn(async () => undefined),
+    terminateSession: vi.fn(async () => undefined),
     workspaces: writableStore([]),
     workspacesLoading: writableStore(false),
   };
@@ -53,6 +54,7 @@ vi.mock('../src/stores/sessions', () => ({
   pinSession: mocks.pinSession,
   unpinSession: mocks.unpinSession,
   archiveSession: mocks.archiveSession,
+  terminateSession: mocks.terminateSession,
 }));
 vi.mock('../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
@@ -437,6 +439,45 @@ test('sidebar session actions menu pins unpinned sessions without opening them',
   await fireEvent.click(screen.getByRole('button', { name: /open session actions for original title/i }));
   await fireEvent.click(screen.getByRole('menuitem', { name: /pin/i }));
   expect(mocks.pinSession).toHaveBeenCalledWith('session-active');
+  expect(mocks.navigate).not.toHaveBeenCalled();
+});
+
+test('sidebar session actions menu exits sessions without opening them', async () => {
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      title: 'Original title',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-1',
+      workspace: null,
+      pinned_at: null,
+      archived_at: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+  ]);
+  render(AppSidebarHost);
+
+  await fireEvent.click(screen.getByRole('button', { name: /open session actions for original title/i }));
+  const menu = screen.getByRole('menu');
+  const menuItems = within(menu).getAllByRole('menuitem').map((item) => item.textContent?.trim());
+  const separator = menu.querySelector('[data-slot="dropdown-menu-separator"]');
+
+  expect(menuItems).toEqual(['Rename', 'Pin', 'Archive', 'Exit']);
+  expect(separator).not.toBeNull();
+  expect(separator?.compareDocumentPosition(within(menu).getByRole('menuitem', { name: /^exit$/i }))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+  await fireEvent.click(within(menu).getByRole('menuitem', { name: /^exit$/i }));
+  expect(mocks.terminateSession).toHaveBeenCalledWith('session-active');
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 

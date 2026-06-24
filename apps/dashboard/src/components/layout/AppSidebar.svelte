@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { Archive, ChevronDown, EllipsisVertical, Folder, Pencil, Pin, PinOff, Settings, SquarePen } from '@lucide/svelte'
+  import { Archive, ChevronDown, EllipsisVertical, Folder, LogOut, Pencil, Pin, PinOff, Settings, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import { sidebarMenuButtonVariants } from '$lib/components/ui/sidebar/sidebar-menu-button.svelte'
   import { cn } from '$lib/utils.js'
-  import { archiveSession, pinSession, sessions, sessionsLoading, unpinSession, updateSessionTitle } from '../../stores/sessions'
+  import { archiveSession, pinSession, sessions, sessionsLoading, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
   import { workspaces, workspacesLoading } from '../../stores/workspaces'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
   import { workspaceTitle } from '../chat/sessionMetadata'
@@ -73,6 +73,10 @@
 
   function isSessionVisibleState(state: string) {
     return state !== 'exited'
+  }
+
+  function isTerminalSessionState(state: string) {
+    return state === 'exited' || state === 'error'
   }
 
   function groupRecentSessionsByWorkspace(workspaces: WorkspaceView[], sessions: SessionView[]): RecentWorkspaceGroup[] {
@@ -166,6 +170,15 @@
     }
   }
 
+  async function exitSessionFromSidebar(session: SessionView): Promise<void> {
+    sessionManagementBusyId = session.session_id
+    try {
+      await terminateSession(session.session_id)
+    } finally {
+      sessionManagementBusyId = null
+    }
+  }
+
   async function togglePinSessionFromMenu(session: SessionView): Promise<void> {
     sessionActionMenuOpenKey = null
     await togglePinSession(session)
@@ -174,6 +187,11 @@
   async function archiveSessionFromMenu(session: SessionView): Promise<void> {
     sessionActionMenuOpenKey = null
     await archiveSessionFromSidebar(session)
+  }
+
+  async function exitSessionFromMenu(session: SessionView): Promise<void> {
+    sessionActionMenuOpenKey = null
+    await exitSessionFromSidebar(session)
   }
 
   async function confirmRenameSession(title: string | null): Promise<void> {
@@ -243,6 +261,12 @@
         <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
           <Archive class="size-4" /> Archive
         </DropdownMenu.Item>
+        {#if !isTerminalSessionState(session.state)}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item variant="destructive" disabled={sessionManagementBusyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
+            <LogOut class="size-4" /> Exit
+          </DropdownMenu.Item>
+        {/if}
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   </Sidebar.MenuItem>
