@@ -581,7 +581,7 @@ test('creates a session with initial prompt, workspace, and client then opens it
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new');
 });
 
-test('shows busy agent status without the removed interrupt placeholder control', async () => {
+test('shows busy agent status with an interrupt action when supported', async () => {
   const busySession = session({ state: 'busy', current_turn_id: 'turn-1', capabilities: { interrupt: true } });
   mocks.loadedSessions = [busySession];
   mocks.sessions.set([busySession]);
@@ -592,8 +592,8 @@ test('shows busy agent status without the removed interrupt placeholder control'
   render(ChatPage);
 
   expect(await screen.findByLabelText('Agent status: Agent working')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
-  expect(mocks.interruptSession).not.toHaveBeenCalled();
+  await fireEvent.click(screen.getByRole('button', { name: /interrupt agent/i }));
+  await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith('session-1'));
 });
 
 test('renames the selected chat session from advanced controls', async () => {
@@ -1019,8 +1019,9 @@ test('lets existing chat routes use document scroll with a fixed bottom composer
   expect(composerDock).toHaveClass('fixed');
   expect(composerDock).toHaveClass('bottom-0');
   expect(conversationContent?.closest('.max-w-4xl')).not.toBeNull();
-  expect(composerDock?.firstElementChild).toHaveClass('mx-auto');
-  expect(composerDock?.firstElementChild).toHaveClass('max-w-4xl');
+  const composerShell = Array.from(composerDock?.children ?? []).find((child) => child.classList.contains('mx-auto'));
+  expect(composerShell).toHaveClass('mx-auto');
+  expect(composerShell).toHaveClass('max-w-4xl');
 
   expect(screen.queryByLabelText('Session state: idle')).not.toBeInTheDocument();
 
@@ -1367,7 +1368,9 @@ test('opens an inbox sheet with actionable pending, failed, and dispatching mess
   const primaryActions = screen.getByRole('group', { name: /primary session actions/i });
   expect(primaryActions).toHaveClass('flex');
   expect(Array.from(primaryActions.children).map((child) => child.getAttribute('data-slot'))).toEqual(['button', 'button', 'button', 'dropdown-menu-trigger']);
-  for (const button of within(primaryActions).getAllByRole('button')) expect(button).toHaveClass('border');
+  for (const button of within(primaryActions).getAllByRole('button')) {
+    expect(button.className.split(/\s+/)).not.toContain('border');
+  }
 
   const advancedButton = screen.getByRole('button', { name: /advanced session controls, 2 inbox messages/i });
   const advancedBubble = advancedButton.parentElement?.querySelector('[data-chat-mobile-inbox-count]');
