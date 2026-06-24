@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Archive, ChevronDown, Folder, MoreHorizontal, Pencil, Pin, PinOff, Settings, SquarePen } from '@lucide/svelte'
+  import { Archive, ChevronDown, EllipsisVertical, Folder, Pencil, Pin, PinOff, Settings, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -203,7 +203,7 @@
   <Sidebar.MenuItem>
     <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
       {#if session.pinned_at}
-        <Pin class="size-3.5 shrink-0 text-sidebar-foreground/60" aria-label="Pinned session" />
+        <Pin class="size-3.5 shrink-0 fill-current text-black" aria-label="Pinned session" />
       {/if}
       <span class="line-clamp-1">{sessionChatTitle(session)}</span>
     </Sidebar.MenuButton>
@@ -225,7 +225,7 @@
       >
         {#snippet child({ props })}
           <DropdownMenu.Trigger {...props}>
-            <MoreHorizontal />
+            <EllipsisVertical />
           </DropdownMenu.Trigger>
         {/snippet}
       </Sidebar.MenuAction>

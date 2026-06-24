@@ -116,7 +116,7 @@ impl SqliteSessionRepository {
                               ORDER BY s.updated_at DESC, s.session_id
                           ) AS unpinned_row_num
                    FROM sessions s
-                   LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+                   JOIN workspaces w ON w.workspace_id = s.workspace_id AND w.state = 'active'
                    WHERE (? OR s.archived_at IS NULL)
                )
                SELECT session_id, client_type, title, handle, role, description,

@@ -19,7 +19,8 @@ async fn test_pool() -> sqlx::SqlitePool {
 }
 
 #[tokio::test]
-async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_recently_updated_order() {
+async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_recently_updated_order()
+ {
     let pool = test_pool().await;
     sqlx::query(
         r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
@@ -49,21 +50,58 @@ async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_
     let rows = repository.list_sessions().await.expect("list sessions");
 
     let ids: Vec<_> = rows.iter().map(|row| row.session_id.as_str()).collect();
-    assert_eq!(ids, vec!["sess_b", "sess_a"]);
-    assert_eq!(rows[0].workspace_ref.as_deref(), Some("/legacy-b"));
-    assert_eq!(rows[1].workspace_ref.as_deref(), Some("/canonical"));
+    assert_eq!(ids, vec!["sess_a"]);
+    assert_eq!(rows[0].workspace_ref.as_deref(), Some("/canonical"));
+}
+
+#[tokio::test]
+async fn sqlite_session_repository_lists_only_sessions_in_active_workspaces() {
+    let pool = test_pool().await;
+    sqlx::query(
+        r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name, state)
+           VALUES
+           ('ws_active', '/active', '/active', 'active', 'active'),
+           ('ws_archived', '/archived', '/archived', 'archived', 'archived')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert workspaces");
+    sqlx::query(
+        r#"INSERT INTO sessions
+           (session_id, client_type, title, handle, role, state, workspace_id, metadata, created_at, updated_at)
+           VALUES
+           ('active_ws_session', 'pi', 'Active workspace', 'active', 'worker', 'ready', 'ws_active', '{}', '2026-06-15T12:00:03Z', '2026-06-15T12:00:03Z'),
+           ('archived_ws_session', 'pi', 'Archived workspace', 'archived', 'worker', 'ready', 'ws_archived', '{}', '2026-06-15T12:00:02Z', '2026-06-15T12:00:02Z'),
+           ('legacy_session', 'pi', 'Legacy', 'legacy', 'worker', 'ready', NULL, '{}', '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert sessions");
+
+    let repository = SqliteSessionRepository::new(pool);
+    let rows = repository.list_sessions().await.expect("list sessions");
+
+    let ids: Vec<_> = rows.iter().map(|row| row.session_id.as_str()).collect();
+    assert_eq!(ids, vec!["active_ws_session"]);
 }
 
 #[tokio::test]
 async fn sqlite_session_repository_includes_pinned_sessions_outside_limit_when_requested() {
     let pool = test_pool().await;
     sqlx::query(
+        r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
+           VALUES ('ws_active', '/active', '/active', 'active')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert workspace");
+    sqlx::query(
         r#"INSERT INTO sessions
-           (session_id, client_type, title, handle, role, state, pinned_at, archived_at, metadata, created_at, updated_at)
+           (session_id, client_type, title, handle, role, state, workspace_id, pinned_at, archived_at, metadata, created_at, updated_at)
            VALUES
-           ('recent', 'pi', 'Recent', 'recent', 'worker', 'ready', NULL, NULL, '{}', '2026-06-15T12:00:03Z', '2026-06-15T12:00:03Z'),
-           ('old_pinned', 'pi', 'Old pinned', 'old-pinned', 'worker', 'ready', '2026-06-15T12:00:00Z', NULL, '{}', '2026-06-15T12:00:00Z', '2026-06-15T12:00:00Z'),
-           ('archived_pinned', 'pi', 'Archived pinned', 'archived-pinned', 'worker', 'ready', '2026-06-15T12:00:01Z', '2026-06-15T12:00:02Z', '{}', '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z')"#,
+           ('recent', 'pi', 'Recent', 'recent', 'worker', 'ready', 'ws_active', NULL, NULL, '{}', '2026-06-15T12:00:03Z', '2026-06-15T12:00:03Z'),
+           ('old_pinned', 'pi', 'Old pinned', 'old-pinned', 'worker', 'ready', 'ws_active', '2026-06-15T12:00:00Z', NULL, '{}', '2026-06-15T12:00:00Z', '2026-06-15T12:00:00Z'),
+           ('archived_pinned', 'pi', 'Archived pinned', 'archived-pinned', 'worker', 'ready', 'ws_active', '2026-06-15T12:00:01Z', '2026-06-15T12:00:02Z', '{}', '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z')"#,
     )
     .execute(&pool)
     .await
