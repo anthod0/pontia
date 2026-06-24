@@ -391,6 +391,37 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+test('prefers the new chat workspace query parameter over the remembered workspace', async () => {
+  window.history.pushState({}, '', '/dashboard/chat?workspace=workspace-2');
+  window.localStorage.setItem('pontia.chat.lastWorkspaceId', 'workspace-1');
+  mocks.workspaces.set([
+    workspace({ workspace_id: 'workspace-1', name: 'pontia' }),
+    workspace({ workspace_id: 'workspace-2', name: 'sandbox', canonical_path: '/repo/sandbox', display_path: '~/repo/sandbox' }),
+  ]);
+
+  render(ChatPage);
+
+  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('sandbox');
+  expect(window.localStorage.getItem('pontia.chat.lastWorkspaceId')).toBe('workspace-1');
+});
+
+test('opens new chat from a session menu with the current workspace query parameter', async () => {
+  const selected = session({ session_id: 'session-2', workspace_id: 'workspace-2' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+
+  render(ChatPage);
+
+  await fireEvent.click(await screen.findByRole('button', { name: /advanced session controls/i }));
+  await fireEvent.click(await screen.findByRole('menuitem', { name: /new chat/i }));
+
+  expect(mocks.navigate).toHaveBeenCalledWith('/chat', { workspace: 'workspace-2' });
+});
+
 test('prefers the last selected new chat workspace when it is still available', async () => {
   window.localStorage.setItem('pontia.chat.lastWorkspaceId', 'workspace-2');
   mocks.workspaces.set([
@@ -1331,9 +1362,12 @@ test('opens an inbox sheet with actionable pending, failed, and dispatching mess
 
   const inboxButton = await screen.findByRole('button', { name: /open inbox, 2 messages/i });
   expect(inboxButton).toHaveTextContent('Inbox');
-  expect(inboxButton).not.toHaveTextContent('2');
-  expect(inboxButton.closest('[data-chat-desktop-inbox]')).toHaveClass('hidden');
-  expect(inboxButton.closest('[data-chat-desktop-inbox]')).toHaveClass('sm:block');
+  expect(inboxButton).toHaveTextContent('2');
+  expect(inboxButton).toHaveAttribute('data-chat-desktop-inbox');
+  const primaryActions = screen.getByRole('group', { name: /primary session actions/i });
+  expect(primaryActions).toHaveClass('flex');
+  expect(Array.from(primaryActions.children).map((child) => child.getAttribute('data-slot'))).toEqual(['button', 'button', 'button', 'dropdown-menu-trigger']);
+  for (const button of within(primaryActions).getAllByRole('button')) expect(button).toHaveClass('border');
 
   const advancedButton = screen.getByRole('button', { name: /advanced session controls, 2 inbox messages/i });
   const advancedBubble = advancedButton.parentElement?.querySelector('[data-chat-mobile-inbox-count]');
@@ -1346,7 +1380,7 @@ test('opens an inbox sheet with actionable pending, failed, and dispatching mess
 
   await fireEvent.click(mobileInboxMenuItem);
 
-  expect(container.querySelector('[data-chat-desktop-inbox]')).toHaveClass('hidden');
+  expect(container.querySelector('button[data-chat-desktop-inbox]')).toBeInTheDocument();
 
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
   expect(screen.getByText('Sending now')).toBeInTheDocument();
@@ -1474,13 +1508,11 @@ test('loads and renders an existing chat session with metadata and workspace nam
   expect(screen.queryByLabelText('Session state: busy')).not.toBeInTheDocument();
   const workspaceBadge = screen.getAllByLabelText('Workspace: /repo/pontia')[0];
   const workspaceName = within(workspaceBadge).getByText('pontia');
-  const clientDetail = screen.getAllByLabelText('Client: claude-code')[0];
   const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
   expect(screen.queryByText('State: busy')).not.toBeInTheDocument();
   expect(workspaceBadge).toContainElement(workspaceName);
-  expect(workspaceBadge.compareDocumentPosition(clientDetail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(clientDetail.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.queryByRole('button', { name: /new chat/i })).not.toBeInTheDocument();
+  expect(sessionDetailsButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByRole('button', { name: /new chat/i })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: /new chat/i })).not.toBeInTheDocument();
 });
 

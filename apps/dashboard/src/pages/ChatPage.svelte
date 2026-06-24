@@ -73,6 +73,7 @@
   let lastToastedError: string | null = null
   let inboxSheetOpen = false
   let renameSessionDialogOpen = false
+  let queryWorkspaceSelectionId: string | null = null
   let unsubscribeDashboardEvents: (() => void) | null = null
   let foregroundRefreshInFlight: Promise<void> | null = null
 
@@ -113,13 +114,11 @@
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
   $: inboxActionableCount = visibleInboxMessages.filter((message) => message.state === 'pending' || message.state === 'failed').length
-  $: if ($workspaces.length && (!createWorkspaceId || !$workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId))) {
-    createWorkspaceId = preferredCreateWorkspaceId()
-  }
+  $: if ($workspaces.length && !selectedSessionId) ensureCreateWorkspaceSelection()
   $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
   $: clientTypeOptions = CLIENT_TYPE_OPTIONS
   $: if (!clientTypeOptions.includes(createClientType)) createClientType = clientTypeOptions[0] ?? createClientType
-  $: if (createWorkspaceId && $workspaces.length) rememberCreateWorkspaceSelection(createWorkspaceId)
+  $: if (createWorkspaceId && $workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
   $: canCreate = Boolean(prompt.trim() && createWorkspaceId && createClientType.trim() && !creating)
   $: canSend = canSendSessionMessage(selectedSession, input) && !submitting
   $: passiveErrorMessage = $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError
@@ -136,6 +135,15 @@
 
   function requestedSessionIdFromLocation(): string {
     return getPathParams().sessionId ?? new URLSearchParams(window.location.search).get('session') ?? ''
+  }
+
+  function readQueryWorkspaceId(): string | null {
+    return new URLSearchParams(window.location.search).get('workspace')
+  }
+
+  function availableWorkspaceId(workspaceId: string | null): string | null {
+    if (!workspaceId) return null
+    return $workspaces.some((workspace) => workspace.workspace_id === workspaceId) ? workspaceId : null
   }
 
   function readRememberedWorkspaceId(): string | null {
@@ -156,13 +164,22 @@
   }
 
   function preferredCreateWorkspaceId(): string {
-    const rememberedWorkspaceId = readRememberedWorkspaceId()
-    if (rememberedWorkspaceId && $workspaces.some((workspace) => workspace.workspace_id === rememberedWorkspaceId)) return rememberedWorkspaceId
+    const queryWorkspaceId = availableWorkspaceId(readQueryWorkspaceId())
+    if (queryWorkspaceId) return queryWorkspaceId
+    const rememberedWorkspaceId = availableWorkspaceId(readRememberedWorkspaceId())
+    if (rememberedWorkspaceId) return rememberedWorkspaceId
     return $workspaces[0]?.workspace_id ?? ''
   }
 
   function ensureCreateWorkspaceSelection(): void {
     if (!$workspaces.length) return
+    const queryWorkspaceId = availableWorkspaceId(readQueryWorkspaceId())
+    if (queryWorkspaceId) {
+      queryWorkspaceSelectionId = queryWorkspaceId
+      if (createWorkspaceId !== queryWorkspaceId) createWorkspaceId = queryWorkspaceId
+      return
+    }
+    queryWorkspaceSelectionId = null
     if (createWorkspaceId && $workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId)) return
     createWorkspaceId = preferredCreateWorkspaceId()
   }
@@ -310,10 +327,19 @@
     navigate(selectedSessionId ? `/sessions/${selectedSessionId}` : '/sessions')
   }
 
-  function openNewChat(): void {
+  function openNewChat(workspaceId?: string | null): void {
+    const queryWorkspaceId = workspaceId?.trim() || null
     selectedSessionId = ''
     actionError = null
     resetTimelineState()
+    if (queryWorkspaceId) {
+      const availableQueryWorkspaceId = availableWorkspaceId(queryWorkspaceId)
+      queryWorkspaceSelectionId = availableQueryWorkspaceId
+      if (availableQueryWorkspaceId) createWorkspaceId = availableQueryWorkspaceId
+      navigate('/chat', { workspace: queryWorkspaceId })
+      return
+    }
+    queryWorkspaceSelectionId = null
     navigate('/chat')
   }
 
@@ -328,6 +354,7 @@
       await refreshSessionGitStatus(currentSelectedSession())
     } else {
       resetTimelineState()
+      ensureCreateWorkspaceSelection()
     }
   }
 
@@ -504,7 +531,7 @@
               <Empty.Title>Session not found</Empty.Title>
               <Empty.Description>Start a new chat or select a recent session from the sidebar.</Empty.Description>
             </Empty.Header>
-            <Empty.Content><Button onclick={openNewChat}>Start a new chat</Button></Empty.Content>
+            <Empty.Content><Button onclick={() => openNewChat()}>Start a new chat</Button></Empty.Content>
           </Empty.Root>
         {:else}
           <SessionConversation
@@ -535,6 +562,7 @@
             onOpenInbox={() => (inboxSheetOpen = true)}
             onExit={() => void runSessionLifecycle('exit')}
             onOpenConsole={openSessionConsole}
+            onNewChat={() => openNewChat(selectedSession.workspace_id)}
             onRename={openRenameSelectedSessionDialog}
             onRestart={() => void runSessionLifecycle('restart')}
             onSend={() => void sendMessage()}
