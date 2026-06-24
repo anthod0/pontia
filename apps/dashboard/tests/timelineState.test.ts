@@ -44,6 +44,7 @@ function page(overrides: Partial<TimelinePage> = {}): TimelinePage {
 }
 
 beforeEach(() => {
+  vi.useRealTimers();
   vi.clearAllMocks();
   mocks.getSessionTimeline.mockReset();
   resetTimelineState();
@@ -150,7 +151,7 @@ test('message update with matching binding loads updates after the saved tail cu
   expect(get(timelineState).tailCursor).toBe('tail-2');
 });
 
-test('message updates for the same session are serialized so each refresh uses the latest tail cursor', async () => {
+test('message updates for the same session coalesce bursts into one trailing refresh', async () => {
   let resolveFirstUpdate: (value: TimelinePage) => void = () => {};
   const firstRefresh = new Promise<TimelinePage>((resolve) => {
     resolveFirstUpdate = resolve;
@@ -159,12 +160,16 @@ test('message updates for the same session are serialized so each refresh uses t
   mocks.getSessionTimeline
     .mockResolvedValueOnce(page({ tail_cursor: 'tail-1' }))
     .mockReturnValueOnce(firstRefresh)
-    .mockResolvedValueOnce(page({ items: [], tail_cursor: 'tail-2' }));
+    .mockResolvedValueOnce(page({
+      items: [{ ...page().items[0], item_id: 'item-3', content_ref: 'ref-3', content_preview: 'latest' }],
+      tail_cursor: 'tail-3',
+    }));
 
   await loadSessionTimeline('sess-1', { mode: 'rebuild' });
 
   const firstUpdate = handleTimelineMessageUpdated('sess-1', 'bind-1');
   const secondUpdate = handleTimelineMessageUpdated('sess-1', 'bind-1');
+  const thirdUpdate = handleTimelineMessageUpdated('sess-1', 'bind-1');
 
   await vi.waitFor(() => {
     expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(2, 'sess-1', { after: 'tail-1' });
@@ -174,10 +179,38 @@ test('message updates for the same session are serialized so each refresh uses t
     items: [{ ...page().items[0], item_id: 'item-2', content_ref: 'ref-2', content_preview: 'next' }],
     tail_cursor: 'tail-2',
   }));
-  await Promise.all([firstUpdate, secondUpdate]);
+  await Promise.all([firstUpdate, secondUpdate, thirdUpdate]);
 
+  expect(mocks.getSessionTimeline).toHaveBeenCalledTimes(3);
   expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(3, 'sess-1', { after: 'tail-2' });
-  expect(get(timelineState).items.map((item) => item.item_id)).toEqual(['item-1', 'item-2']);
+  expect(get(timelineState).items.map((item) => item.item_id)).toEqual(['item-1', 'item-2', 'item-3']);
+});
+
+test('message updates are throttled to at most one request every 100ms', async () => {
+  vi.useFakeTimers();
+  mocks.getSessionTimeline
+    .mockResolvedValueOnce(page({ tail_cursor: 'tail-1' }))
+    .mockResolvedValueOnce(page({
+      items: [{ ...page().items[0], item_id: 'item-2', content_ref: 'ref-2', content_preview: 'next' }],
+      tail_cursor: 'tail-2',
+    }))
+    .mockResolvedValueOnce(page({
+      items: [{ ...page().items[0], item_id: 'item-3', content_ref: 'ref-3', content_preview: 'latest' }],
+      tail_cursor: 'tail-3',
+    }));
+
+  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
+  await handleTimelineMessageUpdated('sess-1', 'bind-1');
+
+  const throttledUpdate = handleTimelineMessageUpdated('sess-1', 'bind-1');
+  await vi.advanceTimersByTimeAsync(99);
+  expect(mocks.getSessionTimeline).toHaveBeenCalledTimes(2);
+
+  await vi.advanceTimersByTimeAsync(1);
+  await throttledUpdate;
+
+  expect(mocks.getSessionTimeline).toHaveBeenCalledTimes(3);
+  expect(mocks.getSessionTimeline).toHaveBeenNthCalledWith(3, 'sess-1', { after: 'tail-2' });
 });
 
 test('tail update keeps timeline items unique by item id', async () => {

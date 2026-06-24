@@ -65,6 +65,23 @@ function assistantDeltaFromEvent(event: unknown): string | undefined {
   return undefined;
 }
 
+const transcriptBoundaryStreamEventTypes = new Set([
+  "thinking_start",
+  "thinking_end",
+  "text_start",
+  "text_end",
+  "toolcall_start",
+  "toolcall_end",
+]);
+
+function isTranscriptBoundaryMessageUpdate(event: unknown): boolean {
+  if (!event || typeof event !== "object") return false;
+  const streamEvent = (event as Record<string, unknown>).assistantMessageEvent;
+  if (!streamEvent || typeof streamEvent !== "object") return false;
+  const type = (streamEvent as Record<string, unknown>).type;
+  return typeof type === "string" && transcriptBoundaryStreamEventTypes.has(type);
+}
+
 function errorMessageFromAgentEnd(event: unknown): string | undefined {
   if (!event || typeof event !== "object") return undefined;
   const record = event as Record<string, unknown>;
@@ -316,34 +333,15 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let boundSessionContext: SessionContext | undefined;
   let deferredManualSessionDetails: Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd"> | undefined;
   let pontiaDisabled = false;
-  let pendingRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
 
-  function clearPendingRefresh(): void {
-    if (!pendingRefreshTimer) return;
-    clearTimeout(pendingRefreshTimer);
-    pendingRefreshTimer = undefined;
-  }
-
   async function scheduleMessageRefresh(reason: SessionMessageUpdatedReason): Promise<void> {
     if (!activeTurn || activeTurn.ended) return;
-    if (reason !== "update") {
-      clearPendingRefresh();
-      await activeTurn.reporter.report(activeTurn.context, buildSessionMessageUpdatedEvent(activeTurn.context, reason));
-      return;
-    }
-    if (pendingRefreshTimer) return;
-    const state = activeTurn;
-    pendingRefreshTimer = setTimeout(() => {
-      pendingRefreshTimer = undefined;
-      if (activeTurn !== state || state.ended) return;
-      void state.reporter.report(state.context, buildSessionMessageUpdatedEvent(state.context, "update"));
-    }, 100);
+    await activeTurn.reporter.report(activeTurn.context, buildSessionMessageUpdatedEvent(activeTurn.context, reason));
   }
 
   async function reportFinalMessageRefresh(state: ActiveTurnState): Promise<void> {
-    clearPendingRefresh();
     await state.reporter.report(state.context, buildSessionMessageUpdatedEvent(state.context, "final"));
   }
 
@@ -565,15 +563,20 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const fullText = assistantTextFromMessage((event as unknown as Record<string, unknown> | undefined)?.message);
     if (fullText) {
       activeTurn.output = fullText;
-      void scheduleMessageRefresh("update");
-      return;
+    } else {
+      const delta = assistantDeltaFromEvent(event);
+      if (delta) activeTurn.output += delta;
     }
 
-    const delta = assistantDeltaFromEvent(event);
-    if (delta) {
-      activeTurn.output += delta;
-      void scheduleMessageRefresh("update");
-    }
+    if (isTranscriptBoundaryMessageUpdate(event)) await scheduleMessageRefresh("update");
+  });
+
+  pi.on("tool_execution_start", async () => {
+    await scheduleMessageRefresh("update");
+  });
+
+  pi.on("tool_execution_end", async () => {
+    await scheduleMessageRefresh("update");
   });
 
   pi.on("message_end", async (event, ctx) => {

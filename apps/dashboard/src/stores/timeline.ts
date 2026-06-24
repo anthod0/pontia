@@ -48,14 +48,25 @@ function refreshKindForLoadMode(mode: LoadMode): TimelineRefreshKind {
 
 export const timelineState = writable<TimelineState>(emptyState());
 
-const timelineUpdateQueues = new Map<string, Promise<void>>();
+type TimelineUpdateQueue = {
+  promise: Promise<void>;
+  dirty: boolean;
+  bindingId: string | null;
+};
+
+const TIMELINE_UPDATE_MIN_INTERVAL_MS = 100;
+
+const timelineUpdateQueues = new Map<string, TimelineUpdateQueue>();
+const timelineUpdateStartedAt = new Map<string, number>();
 
 export function resetTimelineState(sessionId = ''): void {
   timelineState.set(emptyState(sessionId));
   if (sessionId) {
     timelineUpdateQueues.delete(sessionId);
+    timelineUpdateStartedAt.delete(sessionId);
   } else {
     timelineUpdateQueues.clear();
+    timelineUpdateStartedAt.clear();
   }
 }
 
@@ -245,16 +256,42 @@ async function refreshSessionTimelineUpdates(sessionId: string, tailCursor: stri
 }
 
 export function handleTimelineMessageUpdated(sessionId: string, bindingId: string | null = null): Promise<void> {
-  const previous = timelineUpdateQueues.get(sessionId) ?? Promise.resolve();
-  const next = previous
-    .catch(() => {})
-    .then(() => handleTimelineMessageUpdatedNow(sessionId, bindingId));
+  const existing = timelineUpdateQueues.get(sessionId);
+  if (existing) {
+    existing.dirty = true;
+    if (bindingId) existing.bindingId = bindingId;
+    return existing.promise;
+  }
 
-  timelineUpdateQueues.set(sessionId, next);
-  void next.finally(() => {
-    if (timelineUpdateQueues.get(sessionId) === next) timelineUpdateQueues.delete(sessionId);
-  });
-  return next;
+  const queue: TimelineUpdateQueue = {
+    promise: Promise.resolve(),
+    dirty: false,
+    bindingId,
+  };
+  queue.promise = runTimelineUpdateQueue(sessionId, queue);
+  timelineUpdateQueues.set(sessionId, queue);
+  return queue.promise;
+}
+
+async function runTimelineUpdateQueue(sessionId: string, queue: TimelineUpdateQueue): Promise<void> {
+  try {
+    do {
+      queue.dirty = false;
+      await waitForTimelineUpdateSlot(sessionId);
+      timelineUpdateStartedAt.set(sessionId, Date.now());
+      await handleTimelineMessageUpdatedNow(sessionId, queue.bindingId);
+    } while (queue.dirty);
+  } finally {
+    if (timelineUpdateQueues.get(sessionId) === queue) timelineUpdateQueues.delete(sessionId);
+  }
+}
+
+async function waitForTimelineUpdateSlot(sessionId: string): Promise<void> {
+  const lastStartedAt = timelineUpdateStartedAt.get(sessionId);
+  if (lastStartedAt === undefined) return;
+  const remainingMs = TIMELINE_UPDATE_MIN_INTERVAL_MS - (Date.now() - lastStartedAt);
+  if (remainingMs <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, remainingMs));
 }
 
 async function handleTimelineMessageUpdatedNow(sessionId: string, bindingId: string | null = null): Promise<void> {

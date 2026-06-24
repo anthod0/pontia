@@ -17,17 +17,17 @@ function taskEvent(taskId: string): DashboardStreamEvent {
   };
 }
 
-function sessionEvent(): DashboardStreamEvent {
+function sessionEvent(type = 'session.updated'): DashboardStreamEvent {
   return {
     kind: 'session_event',
-    id: 'event-session',
+    id: `event-session-${type}`,
     occurred_at: '2026-05-14T00:00:00Z',
     event: {
-      event_id: 'event-session',
+      event_id: `event-session-${type}`,
       session_id: 'session-1',
       turn_id: null,
       source: 'runtime',
-      type: 'session.updated',
+      type,
       time: '2026-05-14T00:00:00Z',
       payload: {},
     },
@@ -74,4 +74,25 @@ test('refreshes selected session detail without reloading the whole session list
   await scheduler.flushNow();
 
   expect(calls).toEqual(['session:session-1']);
+});
+
+test('ignores high-frequency transcript message updates for projection refreshes', async () => {
+  const calls: string[] = [];
+  const scheduler = createDashboardRefreshScheduler({
+    delayMs: 0,
+    getSelectedTaskId: () => null,
+    getSelectedSessionId: () => 'session-1',
+    loadTasks: async () => { calls.push('tasks'); },
+    loadWorkspaces: async () => { calls.push('workspaces'); },
+    loadAgentProfiles: async () => { calls.push('profiles'); },
+    loadSessions: async () => { calls.push('sessions'); },
+    refreshTask: async (taskId) => { calls.push(`task:${taskId}`); },
+    refreshSession: async (sessionId) => { calls.push(`session:${sessionId}`); },
+  });
+
+  scheduler.handleEvent(sessionEvent('session.message_updated'));
+  scheduler.handleEvent(sessionEvent('session.message_updated'));
+  await scheduler.flushNow();
+
+  expect(calls).toEqual([]);
 });

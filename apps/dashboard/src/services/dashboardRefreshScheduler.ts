@@ -87,6 +87,7 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
       const selected = options.getSelectedTaskId();
       if (selected && streamEvent.event.task_id === selected) pending.taskIds.add(selected);
     } else if (streamEvent.kind === 'session_event') {
+      if (streamEvent.event.type === 'session.message_updated') return;
       const selected = options.getSelectedSessionId();
       if (selected && streamEvent.event.session_id === selected) {
         pending.sessionIds.add(selected);

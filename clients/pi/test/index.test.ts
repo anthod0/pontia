@@ -589,6 +589,8 @@ describe("pontia pi extension lifecycle", () => {
     expect(pi.on).toHaveBeenCalledWith("agent_start", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_update", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_end", expect.any(Function));
+    expect(pi.on).toHaveBeenCalledWith("tool_execution_start", expect.any(Function));
+    expect(pi.on).toHaveBeenCalledWith("tool_execution_end", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("agent_end", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
     expect(pi.registerTool).not.toHaveBeenCalled();
@@ -802,31 +804,73 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported[4]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
   });
 
-  test("coalesces streaming message_update refresh hints and preserves terminal final update", async () => {
+  test("reports transcript refresh hints for structured assistant stream boundaries but not text deltas", async () => {
     vi.useFakeTimers();
     const { handlers, reported } = install();
 
     await handlers.agent_start({}, {});
-    await handlers.message_update({ assistantMessageEvent: { text_delta: "hello " } }, {});
-    await handlers.message_update({ assistantMessageEvent: { text_delta: "world" } }, {});
-    expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
+    await handlers.message_update({ assistantMessageEvent: { type: "thinking_start", contentIndex: 0, partial: {} } }, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "reason", partial: {} } }, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "thinking_end", contentIndex: 0, content: "reason", partial: {} } }, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "text_start", contentIndex: 1, partial: {} } }, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "text_delta", contentIndex: 1, delta: "hello", partial: {} } }, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "text_end", contentIndex: 1, content: "hello", partial: {} } }, {});
+    await vi.advanceTimersByTimeAsync(1000);
 
-    await vi.advanceTimersByTimeAsync(99);
-    expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
-
-    await vi.advanceTimersByTimeAsync(1);
-    expect(reported.map((event) => event.type)).toEqual(["turn.started", "session.message_updated"]);
-    expect(reported[1]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "update" } });
+    expect(reported.map((event) => event.type)).toEqual([
+      "turn.started",
+      "session.message_updated",
+      "session.message_updated",
+      "session.message_updated",
+      "session.message_updated",
+    ]);
+    expect(reported.slice(1).map((event) => event.payload)).toEqual([
+      { reason: "update" },
+      { reason: "update" },
+      { reason: "update" },
+      { reason: "update" },
+    ]);
 
     await handlers.agent_end({ messages: [] }, {});
     expect(reported.map((event) => event.type)).toEqual([
       "turn.started",
       "session.message_updated",
+      "session.message_updated",
+      "session.message_updated",
+      "session.message_updated",
       "turn.output",
       "turn.completed",
       "session.message_updated",
     ]);
-    expect(reported[4]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
+    expect(reported[7]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
+  });
+
+  test("reports transcript refresh hints when tool calls start and finish successfully or with errors", async () => {
+    const { handlers, reported } = install();
+
+    await handlers.agent_start({}, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: {} } }, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "toolcall_delta", contentIndex: 0, delta: "{}", partial: {} } }, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "toolcall_end", contentIndex: 0, toolCall: { type: "toolCall", id: "call_1", name: "read", arguments: { path: "README.md" } }, partial: {} } }, {});
+    await handlers.tool_execution_start({ toolCallId: "call_1", toolName: "read", args: { path: "README.md" } }, {});
+    await handlers.tool_execution_end({ toolCallId: "call_1", toolName: "read", result: {}, isError: false }, {});
+    await handlers.tool_execution_end({ toolCallId: "call_2", toolName: "bash", result: {}, isError: true }, {});
+
+    expect(reported.map((event) => event.type)).toEqual([
+      "turn.started",
+      "session.message_updated",
+      "session.message_updated",
+      "session.message_updated",
+      "session.message_updated",
+      "session.message_updated",
+    ]);
+    expect(reported.slice(1).map((event) => event.payload)).toEqual([
+      { reason: "update" },
+      { reason: "update" },
+      { reason: "update" },
+      { reason: "update" },
+      { reason: "update" },
+    ]);
   });
 
   test("generates a fresh pontia turn id for each real pi agent_start", async () => {
