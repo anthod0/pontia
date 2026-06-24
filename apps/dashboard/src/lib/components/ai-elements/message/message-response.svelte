@@ -61,7 +61,7 @@
 
       pre.dataset.codeBlockEnhanced = 'true'
       pre.classList.add('w-full', '!overflow-hidden', 'rounded-lg', 'border', 'border-border', 'bg-background')
-      codeBlock.classList.add('block', 'min-w-full', '!bg-transparent', '!px-4', '!py-4')
+      codeBlock.classList.add('block', 'min-w-full', '!bg-transparent', '!px-4', '!py-4', '!text-sm')
 
       const header = document.createElement('div')
       header.dataset.codeBlockHeader = 'true'
