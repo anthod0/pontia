@@ -10,7 +10,7 @@
   import { copyText } from '$lib/copyText'
   import { chatAutoScrollKey, scrollDocumentToBottom } from '../../session-chat/autoScroll'
   import DraftDagFlow from '../../../components/dag/DraftDagFlow.svelte'
-  import AgentExitStatus from './AgentExitStatus.svelte'
+  import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
   import type { DagProposalView, JsonObject } from '../../../api/types'
@@ -154,11 +154,11 @@
   type ConversationDisplayItem =
     | { kind: 'message'; id: string; message: SessionChatMessage; showAgentStatus: boolean }
     | { kind: 'agent_status'; id: string }
-    | { kind: 'agent_exit_status'; id: string }
+    | { kind: 'agent_bottom_status'; id: string }
 
   function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null): ConversationDisplayItem[] {
-    const showExitStatus = state === 'exited'
-    const showStatus = Boolean(state && state !== 'idle' && !showExitStatus)
+    const showBottomStatus = state === 'exited' || state === 'interrupted'
+    const showStatus = Boolean(state && state !== 'idle' && !showBottomStatus)
     const latestAssistantId = chatMessages.at(-1)?.role === 'assistant' ? chatMessages.at(-1)?.id : null
     const items: ConversationDisplayItem[] = chatMessages.map((message) => ({
       kind: 'message',
@@ -166,7 +166,7 @@
       message,
       showAgentStatus: showStatus && message.id === latestAssistantId,
     }))
-    if (showExitStatus) return [...items, { kind: 'agent_exit_status', id: 'agent-exit-status' }]
+    if (showBottomStatus) return [...items, { kind: 'agent_bottom_status', id: `agent-bottom-status:${state}` }]
     if (!showStatus || latestAssistantId) return items
     return [...items, { kind: 'agent_status', id: `agent-status:${state}` }]
   }
@@ -236,8 +236,8 @@
               <AgentStatus state={sessionState} interruptEnabled={_interruptEnabled} interruptBusy={_interruptBusy} onInterrupt={_onInterrupt} />
             </Message.Content>
           </Message.Root>
-        {:else if displayItem.kind === 'agent_exit_status'}
-          <AgentExitStatus state={sessionState} />
+        {:else if displayItem.kind === 'agent_bottom_status'}
+          <AgentBottomStatus state={sessionState} />
         {:else}
           {@const chatMessage = displayItem.message}
           <Message.Root from={chatMessage.role} data-chat-message-id={chatMessage.id}>

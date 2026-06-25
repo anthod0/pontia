@@ -106,16 +106,31 @@ test('conversation shows an interrupt button in the busy agent status', async ()
   expect(onInterrupt).toHaveBeenCalledTimes(1);
 });
 
-test('conversation renders exited status as a terminal divider after the conversation', () => {
+test('conversation renders exited status as a left-aligned bottom status after the conversation', () => {
   render(SessionConversation, { props: { sessionState: 'exited', messages } });
 
   expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
   expect(screen.queryByText('Session exited')).not.toBeInTheDocument();
 
-  const terminalStatus = screen.getByText('session exited · send a message to resume');
-  expect(terminalStatus).toBeInTheDocument();
-  expect(terminalStatus.closest('[data-chat-session-terminal-status]')).toBeInTheDocument();
-  expect(screen.getByText('I will inspect it now.').compareDocumentPosition(terminalStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const bottomStatus = screen.getByText('session exited · send a message to resume');
+  const bottomStatusContainer = bottomStatus.closest('[data-chat-session-bottom-status]');
+  expect(bottomStatusContainer).toBeInTheDocument();
+  expect(bottomStatusContainer).toHaveClass('justify-start');
+  expect(bottomStatusContainer?.querySelector('.h-px')).not.toBeInTheDocument();
+  expect(screen.getByText('I will inspect it now.').compareDocumentPosition(bottomStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('conversation renders interrupted status as a left-aligned bottom status after the conversation', () => {
+  render(SessionConversation, { props: { sessionState: 'interrupted', messages } });
+
+  expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
+
+  const bottomStatus = screen.getByText('session interrupted');
+  const bottomStatusContainer = bottomStatus.closest('[data-chat-session-bottom-status]');
+  expect(bottomStatusContainer).toBeInTheDocument();
+  expect(bottomStatusContainer).toHaveClass('justify-start');
+  expect(bottomStatusContainer?.querySelector('.h-px')).not.toBeInTheDocument();
+  expect(screen.getByText('I will inspect it now.').compareDocumentPosition(bottomStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test('conversation copies assistant reply content with the http-compatible fallback', async () => {

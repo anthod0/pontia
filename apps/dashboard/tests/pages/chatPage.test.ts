@@ -1689,6 +1689,27 @@ test('does not render inline chat error alerts', async () => {
   expect(screen.queryByText('Could not load session detail')).not.toBeInTheDocument();
 });
 
+test('uses selected session detail state for bottom interrupted status when the session list is stale', async () => {
+  const staleListSession = session({ session_id: 'session-2', state: 'busy', current_turn_id: 'turn-1' });
+  const interruptedDetailSession = session({ session_id: 'session-2', state: 'interrupted', current_turn_id: null });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [staleListSession];
+  mocks.sessions.set([staleListSession]);
+  mocks.sessionDetail.set({
+    session: interruptedDetailSession,
+    turns: [turn({ session_id: 'session-2', state: 'interrupted', output: null, completed_at: '2026-05-14T00:00:03Z' })],
+    inboxMessages: [],
+    events: [],
+    artifacts: [],
+  });
+
+  render(ChatPage);
+
+  expect(await screen.findByText('session interrupted')).toBeInTheDocument();
+  expect(screen.queryByText('Agent working')).not.toBeInTheDocument();
+});
+
 test('hides exit on exited sessions and waits for idle after automatic resume before sending a message', async () => {
   const user = userEvent.setup();
   const selected = session({ session_id: 'session-2', state: 'exited' });
