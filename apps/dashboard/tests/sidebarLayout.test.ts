@@ -764,16 +764,19 @@ test('dashboard routes use chat as the default and remove top-level overview', a
   const rootRoute = routerConf.routes.find((route) => route.path === '/');
   const settingsRoute = routerConf.routes.find((route) => route.path === '/settings');
 
-  const chatPage = await import('../src/pages/ChatPage.svelte');
+  const newChatPage = await import('../src/pages/NewChatPage.svelte');
+  const sessionChatPage = await import('../src/pages/SessionChatPage.svelte');
   const settingsRedirectPage = await import('../src/pages/SettingsRedirectPage.svelte');
 
   expect(rootRoute).toBeDefined();
-  expect((await rootRoute?.render())?.default).toBe(chatPage.default);
+  expect((await rootRoute?.render())?.default).toBe(newChatPage.default);
   expect(paths).not.toContain('/overview');
   expect(paths).not.toContain('/tasks');
   expect(paths.some((path) => path.startsWith('/tasks/'))).toBe(false);
   expect(settingsRoute).toBeDefined();
   expect((await settingsRoute?.render())?.default).toBe(settingsRedirectPage.default);
+  expect((await routerConf.routes.find((route) => route.path === '/chat')?.render())?.default).toBe(newChatPage.default);
+  expect((await routerConf.routes.find((route) => route.path === '/chat/{sessionId}')?.render())?.default).toBe(sessionChatPage.default);
   expect(paths).toContain('/chat/{sessionId}');
   expect(paths).toContain('/sessions/{sessionId}');
   expect(paths).toContain('/settings/common');

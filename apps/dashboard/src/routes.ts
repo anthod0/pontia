@@ -3,10 +3,10 @@ import type { RouterConf } from 'svelte-mini-router'
 export const routerConf: RouterConf = {
   baseUrl: '/dashboard',
   routes: [
-    { path: '/', render: () => import('./pages/ChatPage.svelte') },
+    { path: '/', render: () => import('./pages/NewChatPage.svelte') },
     { path: '/workspaces', render: () => import('./pages/WorkspacesPage.svelte') },
-    { path: '/chat', render: () => import('./pages/ChatPage.svelte') },
-    { path: '/chat/{sessionId}', render: () => import('./pages/ChatPage.svelte') },
+    { path: '/chat', render: () => import('./pages/NewChatPage.svelte') },
+    { path: '/chat/{sessionId}', render: () => import('./pages/SessionChatPage.svelte') },
     { path: '/sessions', render: () => import('./pages/SessionsPage.svelte') },
     { path: '/sessions/{sessionId}', render: () => import('./pages/SessionDetailPage.svelte') },
     { path: '/agent-profiles', render: () => import('./pages/AgentProfilesPage.svelte') },

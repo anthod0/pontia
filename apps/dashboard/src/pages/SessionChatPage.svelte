@@ -12,13 +12,11 @@
   import {
     canSendSessionMessage,
     timelineItemsToChatMessages,
-    titleFromInitialPrompt,
     turnsToChatMessages,
   } from '$lib/session-chat/sessionChat'
   import {
     chatMessagesWithOptimistic,
     optimisticInitialMessages,
-    rememberOptimisticInitialMessage,
   } from '../stores/optimisticChat'
   import {
     loadWorkspaces,
@@ -27,11 +25,9 @@
     workspaceGitStatusErrors,
     workspaces,
     workspacesError,
-    workspacesLoading,
   } from '../stores/workspaces'
   import {
     cancelInboxMessage,
-    createSession,
     dismissInboxMessage,
     loadSessionDetail,
     loadSessions,
@@ -54,18 +50,12 @@
     timelineState,
   } from '../stores/timeline'
   import { subscribeDashboardEvents } from '../services/eventStream'
-  import NewChatPanel from '../components/chat/NewChatPanel.svelte'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
   import InboxSheet from '../components/chat/InboxSheet.svelte'
   import RenameSessionDialog from '../components/chat/RenameSessionDialog.svelte'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
 
   let selectedSessionId = ''
-  let prompt = ''
-  let createWorkspaceId = ''
-  let createClientType = 'pi'
-  let creating = false
-
   let input = ''
   let submitting = false
   let actionBusy = false
@@ -74,20 +64,14 @@
   let lastToastedError: string | null = null
   let inboxSheetOpen = false
   let renameSessionDialogOpen = false
-  let queryWorkspaceSelectionId: string | null = null
   let unsubscribeDashboardEvents: (() => void) | null = null
   let foregroundRefreshInFlight: Promise<void> | null = null
 
-
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
-  const CLIENT_TYPE_OPTIONS = ['pi']
-  const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
-  const newChatSelectorTriggerClass = 'h-7 rounded-full px-3 text-sm font-normal text-muted-foreground'
 
   onMount(async () => {
     selectedSessionId = requestedSessionIdFromLocation()
     await Promise.all([loadSessions(), loadWorkspaces()])
-    ensureCreateWorkspaceSelection()
     if (selectedSessionId) {
       await loadSelectedSession(selectedSessionId)
       await refreshSessionGitStatus(currentSelectedSession())
@@ -115,75 +99,28 @@
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
   $: inboxActionableCount = visibleInboxMessages.filter((message) => message.state === 'pending' || message.state === 'failed').length
-  $: if ($workspaces.length && !selectedSessionId) ensureCreateWorkspaceSelection()
-  $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
-  $: clientTypeOptions = CLIENT_TYPE_OPTIONS
-  $: if (!clientTypeOptions.includes(createClientType)) createClientType = clientTypeOptions[0] ?? createClientType
-  $: if (createWorkspaceId && $workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
-  $: canCreate = Boolean(prompt.trim() && createWorkspaceId && createClientType.trim() && !creating)
   $: canSend = canSendSessionMessage(selectedSession, input) && !submitting
   $: rawPassiveErrorMessage = $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError
   $: passiveErrorMessage = rawPassiveErrorMessage && !isTransientNetworkError(rawPassiveErrorMessage) ? rawPassiveErrorMessage : null
   $: errorMessage = actionError ?? passiveErrorMessage
-  $: shouldToastError = Boolean(errorMessage)
   $: {
-    if (errorMessage && shouldToastError && errorMessage !== lastToastedError) {
+    if (errorMessage && errorMessage !== lastToastedError) {
       toast.error('Chat error', { description: errorMessage })
       lastToastedError = errorMessage
     }
     if (!errorMessage) lastToastedError = null
   }
 
-
   function requestedSessionIdFromLocation(): string {
-    return getPathParams().sessionId ?? new URLSearchParams(window.location.search).get('session') ?? ''
-  }
-
-  function readQueryWorkspaceId(): string | null {
-    return new URLSearchParams(window.location.search).get('workspace')
+    const routeSessionId = getPathParams().sessionId
+    if (routeSessionId) return routeSessionId
+    const pathMatch = window.location.pathname.match(/\/chat\/([^/?#]+)$/)
+    return pathMatch ? decodeURIComponent(pathMatch[1]) : ''
   }
 
   function availableWorkspaceId(workspaceId: string | null): string | null {
     if (!workspaceId) return null
     return $workspaces.some((workspace) => workspace.workspace_id === workspaceId) ? workspaceId : null
-  }
-
-  function readRememberedWorkspaceId(): string | null {
-    try {
-      return window.localStorage.getItem(LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY)
-    } catch {
-      return null
-    }
-  }
-
-  function rememberCreateWorkspaceSelection(workspaceId: string): void {
-    if (!workspaceId || !$workspaces.some((workspace) => workspace.workspace_id === workspaceId)) return
-    try {
-      window.localStorage.setItem(LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY, workspaceId)
-    } catch {
-      // Ignore unavailable storage; the workspace selector should still work.
-    }
-  }
-
-  function preferredCreateWorkspaceId(): string {
-    const queryWorkspaceId = availableWorkspaceId(readQueryWorkspaceId())
-    if (queryWorkspaceId) return queryWorkspaceId
-    const rememberedWorkspaceId = availableWorkspaceId(readRememberedWorkspaceId())
-    if (rememberedWorkspaceId) return rememberedWorkspaceId
-    return $workspaces[0]?.workspace_id ?? ''
-  }
-
-  function ensureCreateWorkspaceSelection(): void {
-    if (!$workspaces.length) return
-    const queryWorkspaceId = availableWorkspaceId(readQueryWorkspaceId())
-    if (queryWorkspaceId) {
-      queryWorkspaceSelectionId = queryWorkspaceId
-      if (createWorkspaceId !== queryWorkspaceId) createWorkspaceId = queryWorkspaceId
-      return
-    }
-    queryWorkspaceSelectionId = null
-    if (createWorkspaceId && $workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId)) return
-    createWorkspaceId = preferredCreateWorkspaceId()
   }
 
   function currentSelectedSession(): SessionView | null {
@@ -331,17 +268,13 @@
 
   function openNewChat(workspaceId?: string | null): void {
     const queryWorkspaceId = workspaceId?.trim() || null
-    selectedSessionId = ''
     actionError = null
     resetTimelineState()
     if (queryWorkspaceId) {
       const availableQueryWorkspaceId = availableWorkspaceId(queryWorkspaceId)
-      queryWorkspaceSelectionId = availableQueryWorkspaceId
-      if (availableQueryWorkspaceId) createWorkspaceId = availableQueryWorkspaceId
-      navigate('/chat', { workspace: queryWorkspaceId })
+      navigate('/chat', { workspace: availableQueryWorkspaceId ?? queryWorkspaceId })
       return
     }
-    queryWorkspaceSelectionId = null
     navigate('/chat')
   }
 
@@ -356,7 +289,6 @@
       await refreshSessionGitStatus(currentSelectedSession())
     } else {
       resetTimelineState()
-      ensureCreateWorkspaceSelection()
     }
   }
 
@@ -368,41 +300,6 @@
       loadSessionDetail(sessionId),
       hasLoadedTimeline ? handleTimelineMessageUpdated(sessionId) : loadSessionTimeline(sessionId, { mode: 'rebuild' }),
     ])
-  }
-
-  function handleNewChatKeydown(event: KeyboardEvent): void {
-    const shouldSubmit = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey
-    if (shouldSubmit) {
-      event.preventDefault()
-      void startChat()
-    }
-  }
-
-  async function startChat(): Promise<void> {
-    if (!canCreate) return
-    creating = true
-    actionError = null
-    try {
-      const initialPrompt = prompt.trim()
-      const result = await createSession({
-        client_type: createClientType.trim(),
-        workspace_id: createWorkspaceId,
-        title: titleFromInitialPrompt(initialPrompt),
-        initial_task: { input: initialPrompt, metadata: { source: 'dashboard_chat' } },
-        metadata: { source: 'dashboard_chat' },
-      })
-      selectedSessionId = result.session.session_id
-      rememberOptimisticInitialMessage(result.session.session_id, initialPrompt, result.initial_turn)
-      prompt = ''
-      resetTimelineState(result.session.session_id)
-      navigate(`/chat/${result.session.session_id}`)
-      await Promise.all([loadSessionDetail(result.session.session_id), loadSessionTimeline(result.session.session_id, { mode: 'rebuild' })])
-      await refreshSessionGitStatus(currentSelectedSession())
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error)
-    } finally {
-      creating = false
-    }
   }
 
   async function loadEarlierMessages(): Promise<void> {
@@ -504,76 +401,61 @@
       submitting = false
     }
   }
-</script><svelte:window onpopstate={() => void selectSessionFromLocation()} />
+</script>
 
-<section class={selectedSessionId ? 'flex flex-col gap-4 pb-40' : 'flex min-h-[calc(100svh-5.5rem)] flex-col md:min-h-[calc(100svh-6.5rem)]'}>
-  {#if !selectedSessionId}
-    <NewChatPanel
-      bind:prompt
-      bind:workspaceId={createWorkspaceId}
-      bind:clientType={createClientType}
-      {creating}
-      {canCreate}
-      workspaces={$workspaces}
-      workspacesLoading={$workspacesLoading}
-      {selectedWorkspace}
-      {clientTypeOptions}
-      selectorTriggerClass={newChatSelectorTriggerClass}
-      onPromptKeydown={handleNewChatKeydown}
-      onStartChat={() => void startChat()}
-    />
-  {:else}
-    <div class="mx-auto min-w-0 w-full max-w-4xl flex-1">
-      <div class="flex min-w-0 flex-col rounded-xl bg-transparent">
-        {#if $sessionDetailLoading && !selectedSession}
-          <div class="space-y-4 p-6"><Skeleton class="h-10 w-1/3" /><Skeleton class="h-80 w-full" /></div>
-        {:else if !selectedSession}
-          <Empty.Root class="h-full">
-            <Empty.Header>
-              <Empty.Title>Session not found</Empty.Title>
-              <Empty.Description>Start a new chat or select a recent session from the sidebar.</Empty.Description>
-            </Empty.Header>
-            <Empty.Content><Button onclick={() => openNewChat()}>Start a new chat</Button></Empty.Content>
-          </Empty.Root>
-        {:else}
-          <SessionConversation
-            {messages}
-            sessionState={selectedSession.state}
-            loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
-            interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
-            interruptBusy={actionBusy}
-            hasMoreHistory={$timelineState.hasMore}
-            historyLoading={$timelineState.refreshKind === 'history'}
-            autoScrollKey={$timelineState.sessionId === selectedSessionId ? $timelineState.tailCursor : null}
-            onInterrupt={() => void interruptSelectedSession()}
-            onLoadMoreHistory={loadEarlierMessages}
-          />
+<svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
-          <SessionComposerDock
-            bind:input
-            session={selectedSession}
-            gitStatus={selectedSessionGitStatus}
-            gitStatusErrors={$workspaceGitStatusErrors}
-            workspaces={$workspaces}
-            metadataItems={selectedSessionMetadataItems}
-            metadataSummary={selectedSessionMetadataSummary}
-            {inboxActionableCount}
-            {submitting}
-            {actionBusy}
-            {canSend}
-            onOpenInbox={() => (inboxSheetOpen = true)}
-            onExit={() => void runSessionLifecycle('exit')}
-            onOpenConsole={openSessionConsole}
-            onNewChat={() => openNewChat(selectedSession.workspace_id)}
-            onRename={openRenameSelectedSessionDialog}
-            onRestart={() => void runSessionLifecycle('restart')}
-            onSend={() => void sendMessage()}
-            onFocus={() => void refreshCurrentSessionGitStatus()}
-          />
-        {/if}
-      </div>
+<section class="flex flex-col gap-4 pb-40">
+  <div class="mx-auto min-w-0 w-full max-w-4xl flex-1">
+    <div class="flex min-w-0 flex-col rounded-xl bg-transparent">
+      {#if $sessionDetailLoading && !selectedSession}
+        <div class="space-y-4 p-6"><Skeleton class="h-10 w-1/3" /><Skeleton class="h-80 w-full" /></div>
+      {:else if !selectedSession}
+        <Empty.Root class="h-full">
+          <Empty.Header>
+            <Empty.Title>Session not found</Empty.Title>
+            <Empty.Description>Start a new chat or select a recent session from the sidebar.</Empty.Description>
+          </Empty.Header>
+          <Empty.Content><Button onclick={() => openNewChat()}>Start a new chat</Button></Empty.Content>
+        </Empty.Root>
+      {:else}
+        <SessionConversation
+          {messages}
+          sessionState={selectedSession.state}
+          loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
+          interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
+          interruptBusy={actionBusy}
+          hasMoreHistory={$timelineState.hasMore}
+          historyLoading={$timelineState.refreshKind === 'history'}
+          autoScrollKey={$timelineState.sessionId === selectedSessionId ? $timelineState.tailCursor : null}
+          onInterrupt={() => void interruptSelectedSession()}
+          onLoadMoreHistory={loadEarlierMessages}
+        />
+
+        <SessionComposerDock
+          bind:input
+          session={selectedSession}
+          gitStatus={selectedSessionGitStatus}
+          gitStatusErrors={$workspaceGitStatusErrors}
+          workspaces={$workspaces}
+          metadataItems={selectedSessionMetadataItems}
+          metadataSummary={selectedSessionMetadataSummary}
+          {inboxActionableCount}
+          {submitting}
+          {actionBusy}
+          {canSend}
+          onOpenInbox={() => (inboxSheetOpen = true)}
+          onExit={() => void runSessionLifecycle('exit')}
+          onOpenConsole={openSessionConsole}
+          onNewChat={() => openNewChat(selectedSession.workspace_id)}
+          onRename={openRenameSelectedSessionDialog}
+          onRestart={() => void runSessionLifecycle('restart')}
+          onSend={() => void sendMessage()}
+          onFocus={() => void refreshCurrentSessionGitStatus()}
+        />
+      {/if}
     </div>
-  {/if}
+  </div>
 </section>
 
 <RenameSessionDialog
