@@ -63,8 +63,7 @@
       </Button>
     </div>
   </PromptInput.Body>
-  <PromptInput.Toolbar class="justify-between">
-    <p class="px-2 text-xs text-muted-foreground">Enter to send · Shift+Enter / Ctrl+Enter for newline</p>
+  <PromptInput.Toolbar class="justify-end pt-0">
     <PromptInput.Submit disabled={disabled || submitDisabled || busy} />
   </PromptInput.Toolbar>
 </PromptInput.Root>
@@ -85,8 +84,7 @@
       <PromptInput.Body class="min-h-0 flex-1">
         <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
       </PromptInput.Body>
-      <PromptInput.Toolbar class="shrink-0 justify-between">
-        <p class="px-2 text-xs text-muted-foreground">Enter to send · Shift+Enter / Ctrl+Enter for newline</p>
+      <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
         <PromptInput.Submit disabled={disabled || submitDisabled || busy} />
       </PromptInput.Toolbar>
     </PromptInput.Root>

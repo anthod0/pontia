@@ -81,8 +81,7 @@
           <FileMentionTextarea id="chat-prompt" bind:value={prompt} workspaceId={workspaceId} placeholder="Ask the agent to implement, inspect, or explain something…" onkeydown={onPromptKeydown} />
         </PromptInput.Body>
 
-        <PromptInput.Toolbar class="justify-between gap-2 pt-1">
-          <p class="px-2 text-xs text-muted-foreground">Enter to send · Shift+Enter / Ctrl+Enter for newline</p>
+        <PromptInput.Toolbar class="justify-end gap-2 pt-0">
           <PromptInput.Submit disabled={!canCreate || creating} aria-label={creating ? 'Starting chat' : 'Start chat'} />
         </PromptInput.Toolbar>
       </PromptInput.Root>

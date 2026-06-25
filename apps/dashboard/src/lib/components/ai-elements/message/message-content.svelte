@@ -16,8 +16,8 @@
   bind:this={ref}
   class={cn(
     'min-w-0 max-w-full break-words text-base leading-relaxed',
-    'group-[.is-user]:rounded-2xl group-[.is-user]:bg-primary group-[.is-user]:px-3 group-[.is-user]:py-3 group-[.is-user]:text-primary-foreground sm:group-[.is-user]:px-4',
-    'group-[.is-assistant]:w-full group-[.is-assistant]:rounded-2xl group-[.is-assistant]:bg-transparent group-[.is-assistant]:px-3 group-[.is-assistant]:py-3 group-[.is-assistant]:text-card-foreground sm:group-[.is-assistant]:px-4',
+    'group-[.is-user]:rounded-2xl group-[.is-user]:bg-secondary group-[.is-user]:px-3 group-[.is-user]:py-3 group-[.is-user]:text-foreground sm:group-[.is-user]:px-4',
+    'group-[.is-assistant]:w-full group-[.is-assistant]:rounded-2xl group-[.is-assistant]:bg-transparent group-[.is-assistant]:py-3 group-[.is-assistant]:text-card-foreground',
     className,
   )}
   {...restProps}

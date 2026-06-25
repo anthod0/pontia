@@ -106,7 +106,12 @@ test('shows the initial prompt immediately after starting a chat while timeline 
   mocks.pathParams = { sessionId: 'session-new' };
   render(SessionChatPage);
 
-  expect(await screen.findByText('hi')).toBeInTheDocument();
+  const userMessage = await screen.findByText('hi');
+  const userContent = userMessage.closest('[data-role="user"]')?.firstElementChild;
+  expect(userContent).toHaveClass('group-[.is-user]:bg-secondary');
+  expect(userContent).toHaveClass('group-[.is-user]:text-foreground');
+  expect(userContent).not.toHaveClass('group-[.is-user]:bg-primary');
+  expect(userContent).not.toHaveClass('group-[.is-user]:text-primary-foreground');
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });
 
@@ -542,6 +547,8 @@ test('highlights fenced code blocks in assistant markdown and copies their text'
   expect(pre).toHaveClass('border-border');
   const assistantContent = pre?.closest('[data-role="assistant"]')?.firstElementChild;
   expect(assistantContent).toHaveClass('group-[.is-assistant]:w-full');
+  expect(assistantContent).not.toHaveClass('group-[.is-assistant]:px-3');
+  expect(assistantContent).not.toHaveClass('sm:group-[.is-assistant]:px-4');
   const codeBlockHeader = container.querySelector('[data-code-block-header]');
   expect(codeBlockHeader).toHaveTextContent('ts');
   expect(codeBlockHeader).not.toHaveClass('border-b');
@@ -867,7 +874,11 @@ test('follow-up composer submits with Enter while preserving modified Enter for 
   render(SessionChatPage);
 
   const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
-  expect(screen.getByText('Enter to send · Shift+Enter / Ctrl+Enter for newline')).toBeInTheDocument();
+  expect(followUpInput).toHaveClass('block');
+  expect(screen.queryByText('Enter to send · Shift+Enter / Ctrl+Enter for newline')).not.toBeInTheDocument();
+  const composerToolbar = screen.getByRole('button', { name: /send/i }).parentElement;
+  expect(composerToolbar).toHaveClass('pt-0');
+  expect(composerToolbar).not.toHaveClass('pt-2');
 
   await user.type(followUpInput, 'continue this session');
   expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', shiftKey: true })).toBe(true);
