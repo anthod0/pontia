@@ -14,6 +14,6 @@
 <textarea
   bind:this={ref}
   bind:value
-  class={cn('min-h-20 w-full resize-none border-0 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50', className)}
+  class={cn('field-sizing-content max-h-48 min-h-10 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50', className)}
   {...restProps}
 ></textarea>

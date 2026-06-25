@@ -29,24 +29,14 @@
     onFocus,
   }: Props = $props()
 
-  let expanded = $state(false)
   let fullscreenOpen = $state(false)
 
   $effect(() => {
     onValueChange(value)
   })
 
-  function isMobileViewport(): boolean {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia?.('(max-width: 639px)').matches ?? window.innerWidth < 640
-  }
-
-  function toggleComposerSize(): void {
-    if (isMobileViewport()) {
-      fullscreenOpen = true
-      return
-    }
-    expanded = !expanded
+  function openFullscreenComposer(): void {
+    fullscreenOpen = true
   }
 
   function submitAndCloseFullscreen(): void {
@@ -67,9 +57,9 @@
 <PromptInput.Root class="w-full" {onSubmit}>
   <PromptInput.Body>
     <div class="relative">
-      <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class={`h-10 min-h-10 pr-10 md:h-auto ${expanded ? 'md:min-h-56' : 'md:min-h-20'}`} />
-      <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1" aria-label={expanded ? 'Collapse message composer' : 'Expand message composer'} onclick={toggleComposerSize}>
-        {#if expanded}<Minimize2 class="size-4" />{:else}<Maximize2 class="size-4" />{/if}
+      <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class="min-h-10 pr-10" />
+      <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={openFullscreenComposer}>
+        <Maximize2 class="size-4" />
       </Button>
     </div>
   </PromptInput.Body>
