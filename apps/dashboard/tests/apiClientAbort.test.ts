@@ -57,10 +57,14 @@ test('serializes session list limit and pinned inclusion query options', async (
   expect(fetchMock).toHaveBeenCalledWith('/external/v1/sessions?limit=50&include_pinned=true', expect.any(Object));
 });
 
-test('retries transient fetch failures before surfacing chat data errors', async () => {
+test.each([
+  new TypeError('Failed to fetch'),
+  new DOMException('NetworkError when attempting to fetch resource.', 'NetworkError'),
+  new Error('net::ERR_NETWORK_CHANGED'),
+])('retries transient fetch failures before surfacing chat data errors: %s', async (networkError) => {
   vi.useFakeTimers();
   const fetchMock = vi.fn()
-    .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    .mockRejectedValueOnce(networkError)
     .mockResolvedValueOnce(jsonResponse({ turns: [] }));
   vi.stubGlobal('fetch', fetchMock);
 

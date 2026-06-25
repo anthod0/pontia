@@ -945,7 +945,7 @@ test('coalesces bursty selected-session idle events into one git status refresh'
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
 });
 
-test('toasts passive fetch errors from automatic chat refreshes', async () => {
+test('does not toast transient network errors from automatic chat refreshes', async () => {
   const selected = session({ session_id: 'session-2', state: 'running' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -971,11 +971,12 @@ test('toasts passive fetch errors from automatic chat refreshes', async () => {
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
   mocks.toastError.mockClear();
 
-  mocks.sessionDetailError.set('fetch error');
-  mocks.timelineState.set({ ...mocks.timelineState.get(), error: 'Failed to fetch' });
+  mocks.sessionDetailError.set('Failed to fetch');
+  mocks.timelineState.set({ ...mocks.timelineState.get(), error: 'net::ERR_NETWORK_CHANGED' });
   mocks.sessionsError.set('NetworkError when attempting to fetch resource.');
 
-  await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith('Chat error', { description: 'fetch error' }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(mocks.toastError).not.toHaveBeenCalled();
 });
 
 test('lets existing chat routes use document scroll with a fixed bottom composer', async () => {

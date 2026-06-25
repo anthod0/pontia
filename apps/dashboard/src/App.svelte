@@ -6,6 +6,7 @@
   import AppShell from './components/layout/AppShell.svelte'
   import { Toaster } from './lib/components/ui/sonner/index.js'
   import { startEventStream, stopEventStream } from './services/eventStream'
+  import { refreshDashboardSnapshot } from './services/dashboardSnapshotRefresh'
   import { loadAgentProfiles } from './stores/agentProfiles'
   import { token } from './stores/auth'
   import { loadSessions } from './stores/sessions'
@@ -23,7 +24,14 @@
     dashboardStarted = true
   }
 
+  function handleOnline(): void {
+    if (!authenticatedToken) return
+    void refreshDashboardSnapshot({ reason: 'online' })
+  }
+
   onMount(() => {
+    window.addEventListener('online', handleOnline)
+
     unsubscribeToken = token.subscribe((value) => {
       const trimmed = value.trim()
       const previousToken = authenticatedToken
@@ -49,6 +57,7 @@
   })
 
   onDestroy(() => {
+    window.removeEventListener('online', handleOnline)
     unsubscribeToken?.()
     stopEventStream()
   })

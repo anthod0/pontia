@@ -13,6 +13,8 @@ import { loadTasks, refreshTask, selectedTaskId } from '../stores/tasks';
 import { loadSessions, loadSessionDetail, sessionDetail } from '../stores/sessions';
 import { loadWorkspaces } from '../stores/workspaces';
 import { createDashboardRefreshScheduler } from './dashboardRefreshScheduler';
+import { isAuthenticationFailure } from '../api/client';
+import { refreshDashboardSnapshot } from './dashboardSnapshotRefresh';
 
 const API_BASE = '/external/v1';
 
@@ -39,10 +41,6 @@ let controller: AbortController | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let generation = 0;
 let started = false;
-
-function isAuthenticationFailure(status: number): boolean {
-  return status === 401 || status === 403;
-}
 
 function clearReconnectTimer(): void {
   if (reconnectTimer) {
@@ -99,10 +97,15 @@ async function connect(streamGeneration: number): Promise<void> {
         stopEventStream();
         return;
       }
+      if (after) {
+        dashboardStreamCursor.set(null);
+        await refreshDashboardSnapshot({ reason: 'sse_fallback' });
+      }
       throw new Error(`Dashboard event stream failed: ${response.status} ${response.statusText}`);
     }
 
     sseStatus.set('open');
+    void refreshDashboardSnapshot({ reason: 'sse_open' });
     await readSse(response.body, handleDashboardEvent);
 
     if (streamGeneration === generation && started) scheduleReconnect(streamGeneration);

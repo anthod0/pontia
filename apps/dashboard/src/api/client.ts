@@ -45,16 +45,20 @@ function idempotencyKey(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function isAbortError(error: unknown): boolean {
+export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-function isTransientFetchError(error: unknown): boolean {
+export function isTransientNetworkError(error: unknown): boolean {
+  if (isAbortError(error)) return false;
   if (error instanceof TypeError) return true;
-  return error instanceof DOMException && error.name === 'NetworkError';
+  if (error instanceof DOMException && error.name === 'NetworkError') return true;
+
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  return /Failed to fetch|NetworkError|ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED|ERR_NETWORK_ACCESS_DENIED|Load failed/i.test(message);
 }
 
-function isAuthenticationFailure(status: number): boolean {
+export function isAuthenticationFailure(status: number): boolean {
   return status === 401 || status === 403;
 }
 
@@ -81,7 +85,7 @@ async function fetchWithTransientNetworkRetry(input: RequestInfo | URL, init: Re
     try {
       return await fetch(input, init);
     } catch (error) {
-      if (isAbortError(error) || !isTransientFetchError(error) || attempt >= TRANSIENT_NETWORK_RETRY_DELAYS_MS.length) throw error;
+      if (!isTransientNetworkError(error) || attempt >= TRANSIENT_NETWORK_RETRY_DELAYS_MS.length) throw error;
       await delay(TRANSIENT_NETWORK_RETRY_DELAYS_MS[attempt], init.signal);
       attempt += 1;
     }

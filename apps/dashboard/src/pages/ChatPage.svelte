@@ -7,6 +7,7 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
+  import { isTransientNetworkError } from '../api/client'
   import type { DashboardStreamEvent, InboxMessageView, SessionView } from '../api/types'
   import {
     canSendSessionMessage,
@@ -121,7 +122,8 @@
   $: if (createWorkspaceId && $workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
   $: canCreate = Boolean(prompt.trim() && createWorkspaceId && createClientType.trim() && !creating)
   $: canSend = canSendSessionMessage(selectedSession, input) && !submitting
-  $: passiveErrorMessage = $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError
+  $: rawPassiveErrorMessage = $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError
+  $: passiveErrorMessage = rawPassiveErrorMessage && !isTransientNetworkError(rawPassiveErrorMessage) ? rawPassiveErrorMessage : null
   $: errorMessage = actionError ?? passiveErrorMessage
   $: shouldToastError = Boolean(errorMessage)
   $: {
