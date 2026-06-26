@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from 'svelte'
+  import { onDestroy, onMount, tick, type Component } from 'svelte'
   import { Bot, Check, Copy, GitBranch } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
@@ -9,12 +9,23 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { copyText } from '$lib/copyText'
   import { chatAutoScrollKey, scrollDocumentToBottom } from '../../session-chat/autoScroll'
-  import DraftDagFlow from '../../../components/dag/DraftDagFlow.svelte'
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
   import type { DagProposalView, JsonObject } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
+
+  type DraftDagFlowProps = {
+    workItems: JsonObject[]
+    edges: JsonObject[]
+  }
+
+  type DraftDagFlowComponent = Component<DraftDagFlowProps>
+
+  const defaultLoadDraftDagFlow = async (): Promise<DraftDagFlowComponent> => {
+    const module = await import('../../../components/dag/DraftDagFlow.svelte')
+    return module.default
+  }
 
   interface Props {
     messages: SessionChatMessage[]
@@ -30,6 +41,7 @@
     autoScrollKey?: string | null
     onInterrupt?: () => void
     onLoadMoreHistory?: () => void | Promise<void>
+    loadDraftDagFlow?: () => Promise<DraftDagFlowComponent>
   }
 
   let {
@@ -46,9 +58,14 @@
     autoScrollKey = null,
     onInterrupt: _onInterrupt,
     onLoadMoreHistory,
+    loadDraftDagFlow = defaultLoadDraftDagFlow,
   }: Props = $props()
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let draftDagSheetOpen = $state(false)
+  let DraftDagFlowComponent = $state<DraftDagFlowComponent | null>(null)
+  let draftDagFlowLoading = $state(false)
+  let draftDagFlowError = $state<string | null>(null)
+  let draftDagFlowLoadInFlight: Promise<void> | null = null
   let copiedMessageId = $state<string | null>(null)
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const displayMessages = $derived(messages)
@@ -121,6 +138,26 @@
 
   function openDraftDagSheet(): void {
     draftDagSheetOpen = true
+    void ensureDraftDagFlowLoaded()
+  }
+
+  async function ensureDraftDagFlowLoaded(): Promise<void> {
+    if (DraftDagFlowComponent || draftDagFlowLoadInFlight) return
+    draftDagFlowLoading = true
+    draftDagFlowError = null
+    const load = loadDraftDagFlow()
+      .then((component) => {
+        DraftDagFlowComponent = component
+      })
+      .catch((error) => {
+        draftDagFlowError = error instanceof Error ? error.message : 'Unable to load DAG renderer.'
+      })
+      .finally(() => {
+        if (draftDagFlowLoadInFlight === load) draftDagFlowLoadInFlight = null
+        draftDagFlowLoading = false
+      })
+    draftDagFlowLoadInFlight = load
+    await load
   }
 
   async function copyAssistantReply(message: SessionChatMessage): Promise<void> {
@@ -329,7 +366,13 @@
 
         {#if draftWorkItems.length}
           <div class="mt-4">
-            <DraftDagFlow workItems={draftWorkItems} edges={draftEdges} />
+            {#if DraftDagFlowComponent}
+              <DraftDagFlowComponent workItems={draftWorkItems} edges={draftEdges} />
+            {:else if draftDagFlowError}
+              <p class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{draftDagFlowError}</p>
+            {:else if draftDagFlowLoading}
+              <p class="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">Loading DAG renderer…</p>
+            {/if}
           </div>
         {:else}
           <p class="mt-3 text-sm text-muted-foreground">This draft proposal does not include work items.</p>
