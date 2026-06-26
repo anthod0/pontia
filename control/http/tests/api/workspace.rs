@@ -470,6 +470,61 @@ async fn renames_workspace_without_changing_path() {
 }
 
 #[tokio::test]
+async fn list_workspaces_returns_only_active_workspaces() {
+    let root = tempfile::tempdir().expect("root");
+    let active_app = root.path().join("active-app");
+    let archived_app = root.path().join("archived-app");
+    std::fs::create_dir(&active_app).expect("active app");
+    std::fs::create_dir(&archived_app).expect("archived app");
+    let state = test_state(vec![WorkspaceRootConfig {
+        root_id: "projects".to_string(),
+        label: "Projects".to_string(),
+        path: root.path().display().to_string(),
+    }])
+    .await;
+
+    let (_, active_body) = post_json(
+        state.clone(),
+        "/external/v1/workspaces",
+        json!({"root_id":"projects", "path":"active-app"}),
+    )
+    .await;
+    let active_workspace_id = active_body["data"]["workspace"]["workspace_id"]
+        .as_str()
+        .unwrap();
+    let (_, archived_body) = post_json(
+        state.clone(),
+        "/external/v1/workspaces",
+        json!({"root_id":"projects", "path":"archived-app"}),
+    )
+    .await;
+    let archived_workspace_id = archived_body["data"]["workspace"]["workspace_id"]
+        .as_str()
+        .unwrap();
+
+    sqlx::query("UPDATE workspaces SET state = 'archived' WHERE workspace_id = ?")
+        .bind(archived_workspace_id)
+        .execute(&state.db())
+        .await
+        .expect("archive workspace");
+
+    let (status, body) = get_json(state.clone(), "/external/v1/workspaces").await;
+    assert_eq!(status, StatusCode::OK);
+    let workspaces = body["data"]["workspaces"].as_array().unwrap();
+    assert_eq!(workspaces.len(), 1);
+    assert_eq!(workspaces[0]["workspace_id"], active_workspace_id);
+    assert_eq!(workspaces[0]["state"], "active");
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/workspaces/{archived_workspace_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["workspace"]["state"], "archived");
+}
+
+#[tokio::test]
 async fn soft_deletes_workspace_hiding_it_from_list_but_preserving_direct_lookup() {
     let root = tempfile::tempdir().expect("root");
     let app = root.path().join("app");
