@@ -146,6 +146,41 @@ test('renders a compact directory/action table and opens directories through the
   expect(mocks.browseWorkspaceRoot).toHaveBeenLastCalledWith('root-1', 'sandbox', {});
 });
 
+test('shows outside-root active workspace banner and revokes workspaces from the dialog', async () => {
+  const user = userEvent.setup();
+  mocks.roots = [{ root_id: 'root-1', label: 'Projects', canonical_path: '/repo/project', state: 'available' }];
+  mocks.workspaceRoots.set(mocks.roots);
+  mocks.workspaces.set([
+    workspace({ workspace_id: 'inside', name: 'inside', canonical_path: '/repo/project/app', display_path: '/repo/project/app' }),
+    workspace({ workspace_id: 'outside', name: 'outside', canonical_path: '/repo/project-other/app', display_path: '/repo/project-other/app' }),
+  ]);
+
+  render(WorkspacesPage);
+
+  expect(await screen.findByText('1 active workspace outside configured roots')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Review outside-root workspaces' }));
+
+  const dialog = screen.getByRole('dialog', { name: 'Outside-root active workspaces' });
+  expect(within(dialog).getByText('/repo/project-other/app')).toBeInTheDocument();
+  expect(within(dialog).queryByText('/repo/project/app')).not.toBeInTheDocument();
+
+  await user.click(within(dialog).getByRole('button', { name: 'Revoke outside' }));
+
+  expect(mocks.deleteWorkspace).toHaveBeenCalledWith('outside');
+});
+
+test('uses path-boundary checks when classifying outside-root workspaces', async () => {
+  mocks.roots = [{ root_id: 'root-1', label: 'Projects', canonical_path: '/repo/project', state: 'available' }];
+  mocks.workspaceRoots.set(mocks.roots);
+  mocks.workspaces.set([
+    workspace({ workspace_id: 'nearby', name: 'nearby', canonical_path: '/repo/project-old', display_path: '/repo/project-old' }),
+  ]);
+
+  render(WorkspacesPage);
+
+  expect(await screen.findByText('1 active workspace outside configured roots')).toBeInTheDocument();
+});
+
 test('toggles workspace active state directly and keeps rename dialog for editing names', async () => {
   const user = userEvent.setup();
   const confirmSpy = vi.spyOn(window, 'confirm');

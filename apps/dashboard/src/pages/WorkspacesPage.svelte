@@ -26,6 +26,7 @@
   let renamingWorkspace: WorkspaceView | null = null
   let renamingWorkspaceName = ''
   let renameWorkspaceDialogOpen = false
+  let outsideRootWorkspacesDialogOpen = false
   let savingRename = false
 
   onMount(() => {
@@ -42,6 +43,11 @@
   })
 
   $: selectedRoot = $workspaceRoots.find((root) => root.root_id === rootId) ?? null
+  $: configuredRootPaths = $workspaceRoots
+    .map((root) => root.canonical_path)
+    .filter((path): path is string => Boolean(path?.trim()))
+    .map(normalizeAbsolutePath)
+  $: outsideRootWorkspaces = $workspaces.filter((workspace) => workspace.state === 'active' && !isPathInsideAnyRoot(workspace.canonical_path, configuredRootPaths))
   $: if (!renameWorkspaceDialogOpen && renamingWorkspace && !savingRename) {
     renamingWorkspace = null
     renamingWorkspaceName = ''
@@ -78,6 +84,22 @@
     const canonicalPath = canonicalPathForEntry(entry)
     if (!canonicalPath) return null
     return $workspaces.find((workspace) => workspace.canonical_path === canonicalPath || workspace.display_path === canonicalPath) ?? null
+  }
+
+  function normalizeAbsolutePath(path: string): string {
+    const trimmed = path.trim()
+    if (trimmed === '/') return '/'
+    return trimmed.replace(/\/+$/, '')
+  }
+
+  function isPathInsideRoot(path: string, rootPath: string): boolean {
+    const normalizedPath = normalizeAbsolutePath(path)
+    const normalizedRoot = normalizeAbsolutePath(rootPath)
+    return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`)
+  }
+
+  function isPathInsideAnyRoot(path: string, rootPaths: string[]): boolean {
+    return rootPaths.some((rootPath) => isPathInsideRoot(path, rootPath))
   }
 
   async function activateEntry(entry: WorkspaceDirectoryEntryView): Promise<void> {
@@ -162,6 +184,19 @@
       <CircleAlert class="size-4" />
       <Alert.Title>Workspace error</Alert.Title>
       <Alert.Description>{deleteError ?? renameError ?? registerError ?? browserError ?? $workspacesError}</Alert.Description>
+    </Alert.Root>
+  {/if}
+
+  {#if outsideRootWorkspaces.length}
+    <Alert.Root>
+      <CircleAlert class="size-4" />
+      <Alert.Title>{outsideRootWorkspaces.length} active workspace{outsideRootWorkspaces.length === 1 ? '' : 's'} outside configured roots</Alert.Title>
+      <Alert.Description>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <span>These active workspaces are registered but are not under any configured workspace root.</span>
+          <Button size="sm" variant="outline" onclick={() => { outsideRootWorkspacesDialogOpen = true }}>Review outside-root workspaces</Button>
+        </div>
+      </Alert.Description>
     </Alert.Root>
   {/if}
 
@@ -273,6 +308,50 @@
     </Card.Content>
   </Card.Root>
 </section>
+
+<Dialog.Root bind:open={outsideRootWorkspacesDialogOpen}>
+  <Dialog.Content class="max-w-3xl">
+    <Dialog.Header>
+      <Dialog.Title>Outside-root active workspaces</Dialog.Title>
+      <Dialog.Description>
+        Revoke workspace registrations that are not covered by configured roots.
+      </Dialog.Description>
+    </Dialog.Header>
+    <div class="mt-4 max-h-[28rem] overflow-auto rounded-lg border">
+      <Table.Root>
+        <Table.Header>
+          <Table.Row>
+            <Table.Head>Workspace</Table.Head>
+            <Table.Head>Path</Table.Head>
+            <Table.Head class="text-right">Action</Table.Head>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {#each outsideRootWorkspaces as workspace (workspace.workspace_id)}
+            <Table.Row>
+              <Table.Cell class="font-medium">{workspace.name ?? workspace.display_path}</Table.Cell>
+              <Table.Cell class="max-w-[24rem] truncate text-muted-foreground" title={workspace.canonical_path}>{workspace.canonical_path}</Table.Cell>
+              <Table.Cell class="text-right">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label={`Revoke ${workspace.name ?? workspace.display_path}`}
+                  onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id)}
+                  disabled={deletingWorkspaceId === workspace.workspace_id}
+                >
+                  Revoke
+                </Button>
+              </Table.Cell>
+            </Table.Row>
+          {/each}
+        </Table.Body>
+      </Table.Root>
+    </div>
+    <Dialog.Footer class="mt-5">
+      <Button type="button" variant="outline" onclick={() => { outsideRootWorkspacesDialogOpen = false }}>Close</Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={renameWorkspaceDialogOpen}>
   {#if renamingWorkspace}
