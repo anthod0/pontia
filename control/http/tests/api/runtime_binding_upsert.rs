@@ -1,3 +1,4 @@
+use crate::test_app::TestApp;
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
@@ -5,22 +6,17 @@ use axum::{
 use http_body_util::BodyExt;
 use pontia_application::AppState;
 use pontia_http as http;
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use sqlx::Row;
 use std::process::{Command, Stdio};
 use tower::ServiceExt;
 
 async fn test_state() -> AppState {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("runtime-binding-upsert.db");
-    let _kept_dir = dir.keep();
-    let database_url = format!("sqlite://{}", db_path.display());
-    let db = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
-    AppState::builder(db)
+    TestApp::builder()
+        .database_name("runtime-binding-upsert.db")
         .external_api_token(Some("test-token".to_string()))
-        .build()
+        .build_state()
+        .await
 }
 
 async fn post_upsert(state: AppState, body: Value) -> (StatusCode, Value) {
@@ -318,7 +314,10 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     assert_eq!(metadata["capabilities"]["accept_task"], true);
     assert_eq!(metadata["capabilities"]["context_usage"], "estimated");
     let expected_state_dir = pontia_home.path().join("state");
-    assert_eq!(metadata["log_dir"], expected_state_dir.display().to_string());
+    assert_eq!(
+        metadata["log_dir"],
+        expected_state_dir.display().to_string()
+    );
     assert_eq!(
         metadata["runtime_log"],
         expected_state_dir.join("runtime.log").display().to_string()

@@ -1,3 +1,4 @@
+use crate::test_app::TestApp;
 use std::{fs, io::Write};
 
 use axum::{
@@ -10,7 +11,6 @@ use pontia_application::{
 };
 use pontia_core::domain::{DomainEvent, EventSource, EventType};
 use pontia_http as http;
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use tempfile::tempdir;
 use tokio::sync::Mutex;
@@ -20,15 +20,11 @@ const TOKEN: &str = "test-token";
 static PI_AGENT_DIR_ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
 async fn test_state() -> AppState {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("raw-transcript-api.db");
-    let _kept_dir = dir.keep();
-    let database_url = format!("sqlite://{}", db_path.display());
-    let db = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
-    AppState::builder(db)
+    TestApp::builder()
+        .database_name("raw-transcript-api.db")
         .external_api_token(Some(TOKEN.to_string()))
-        .build()
+        .build_state()
+        .await
 }
 
 async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {

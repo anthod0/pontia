@@ -1,3 +1,4 @@
+use crate::test_app::TestApp;
 use std::{fs, path::Path};
 
 use axum::{
@@ -8,22 +9,17 @@ use http_body_util::BodyExt;
 use pontia_application::{AppState, EventIngestService};
 use pontia_core::domain::{DomainEvent, EventSource, EventType};
 use pontia_http as http;
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
 
 async fn test_state(name: &str) -> AppState {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join(format!("{name}.db"));
-    let _kept_dir = dir.keep();
-    let database_url = format!("sqlite://{}", db_path.display());
-    let db = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
-    AppState::builder(db)
+    TestApp::builder()
+        .database_name(format!("{name}.db"))
         .external_api_token(Some(TOKEN.to_string()))
-        .build()
+        .build_state()
+        .await
 }
 
 fn event(

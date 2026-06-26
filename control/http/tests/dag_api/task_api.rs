@@ -4,6 +4,8 @@ mod generic_client;
 mod http;
 #[path = "../support/task_state.rs"]
 mod task_state;
+#[path = "../support/test_app.rs"]
+mod test_app;
 
 use axum::http::StatusCode;
 use generic_client::GenericClientTestScope;

@@ -5,6 +5,8 @@ mod generic_client;
 mod http;
 #[path = "support/task_state.rs"]
 mod task_state;
+#[path = "support/test_app.rs"]
+mod test_app;
 
 #[path = "api/agent_profile.rs"]
 mod agent_profile;
@@ -36,6 +38,8 @@ mod session_workspace_linking;
 mod task_creation;
 #[path = "api/task_lifecycle.rs"]
 mod task_lifecycle;
+#[path = "api/test_app_support.rs"]
+mod test_app_support;
 #[path = "api/turn_submit.rs"]
 mod turn_submit;
 #[path = "api/workspace.rs"]

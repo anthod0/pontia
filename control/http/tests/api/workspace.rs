@@ -6,11 +6,10 @@ use http_body_util::BodyExt;
 use pontia_application::{AppState, FilePickerConfig, WorkspaceBrowserConfig, WorkspaceRootConfig};
 use pontia_config::GraphRuntimeConfig;
 use pontia_http as http;
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use crate::generic_client::GenericClientTestScope;
+use crate::{generic_client::GenericClientTestScope, test_app::TestApp};
 
 const TOKEN: &str = "test-token";
 
@@ -22,18 +21,14 @@ async fn test_state_with_file_picker(
     roots: Vec<WorkspaceRootConfig>,
     file_picker: FilePickerConfig,
 ) -> AppState {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("workspace_api.db");
-    let _kept_dir = dir.keep();
-    let database_url = format!("sqlite://{}", db_path.display());
-    let db = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
-    AppState::builder(db)
+    TestApp::builder()
+        .database_name("workspace_api.db")
         .external_api_token(Some(TOKEN.to_string()))
         .graph(GraphRuntimeConfig::default())
         .workspace_browser(WorkspaceBrowserConfig { roots })
         .file_picker(file_picker)
-        .build()
+        .build_state()
+        .await
 }
 
 async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {

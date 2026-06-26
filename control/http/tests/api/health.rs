@@ -1,3 +1,4 @@
+use crate::test_app::TestApp;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -7,16 +8,13 @@ use tower::ServiceExt;
 
 use pontia_application::AppState;
 use pontia_http as http;
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 async fn test_state() -> AppState {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("health.db");
-    let _kept_dir = dir.keep();
-    let database_url = format!("sqlite://{}", db_path.display());
-    let db = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
-    AppState::builder(db).external_api_token(None).build()
+    TestApp::builder()
+        .database_name("health.db")
+        .external_api_token(None)
+        .build_state()
+        .await
 }
 
 #[tokio::test]

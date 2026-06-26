@@ -1,3 +1,4 @@
+use crate::test_app::TestApp;
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
@@ -6,18 +7,15 @@ use http_body_util::BodyExt;
 use pontia_application::{AppState, EventIngestService};
 use pontia_core::domain::{SessionState, TurnState};
 use pontia_http as http;
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
 async fn test_state() -> AppState {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("internal_event.db");
-    let _kept_dir = dir.keep();
-    let database_url = format!("sqlite://{}", db_path.display());
-    let db = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
-    AppState::builder(db).external_api_token(None).build()
+    TestApp::builder()
+        .database_name("internal_event.db")
+        .external_api_token(None)
+        .build_state()
+        .await
 }
 
 fn event_body(
