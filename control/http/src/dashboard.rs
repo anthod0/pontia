@@ -283,9 +283,12 @@ fn collect_index_files(root: &Path, matches: &mut Vec<PathBuf>) -> std::result::
 }
 
 fn default_cache_dir() -> PathBuf {
-    match env::var_os("HOME") {
-        Some(home) => PathBuf::from(home).join(".cache/pontia/dashboard"),
-        None => PathBuf::from(".cache/pontia/dashboard"),
+    match env::var_os("PONTIA_HOME") {
+        Some(home) if !home.is_empty() => PathBuf::from(home).join("cache/dashboard"),
+        _ => match env::var_os("HOME") {
+            Some(home) => PathBuf::from(home).join(".pontia/cache/dashboard"),
+            None => PathBuf::from(".pontia/cache/dashboard"),
+        },
     }
 }
 

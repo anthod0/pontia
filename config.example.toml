@@ -1,5 +1,5 @@
 bind_addr = "127.0.0.1:8080"
-database_url = "sqlite://~/.local/share/pontia/pontia.db"
+database_url = "sqlite://~/.pontia/data/pontia.db"
 external_api_token = "dev-token"
 run_migrations = true
 
@@ -8,7 +8,7 @@ run_migrations = true
 source = "apps/dashboard/dist"
 # Used only for remote sources. On startup pontia tries to refresh this cache;
 # if refresh fails, an existing cached dashboard is served.
-cache_dir = "~/.cache/pontia/dashboard"
+cache_dir = "~/.pontia/cache/dashboard"
 
 [runtime.pi]
 tui_command = "pi -e /absolute/path/to/pontia/clients/pi"

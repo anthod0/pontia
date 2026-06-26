@@ -11,7 +11,7 @@ use pontia_agent_clients as agent_clients;
 use pontia_core::error::{Error, Result};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
-const DEFAULT_DATABASE_URL: &str = "sqlite://~/.local/share/pontia/pontia.db";
+const DEFAULT_PONTIA_HOME: &str = "~/.pontia";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
@@ -216,16 +216,17 @@ impl AppConfig {
     pub fn from_env() -> Result<Self> {
         let _ = dotenvy::dotenv();
         let vars: HashMap<String, String> = env::vars().collect();
-        let config_path = explicit_config_path(&vars).or_else(default_config_path_if_exists);
+        let config_path =
+            explicit_config_path(&vars).or_else(|| default_config_path_if_exists(&vars));
         Self::from_vars_and_file(&vars, config_path.as_deref())
     }
 
     pub fn from_env_with_config_path(config_path: Option<&Path>) -> Result<Self> {
         let _ = dotenvy::dotenv();
         let vars: HashMap<String, String> = env::vars().collect();
-        let config_path = config_path
-            .map(Path::to_path_buf)
-            .or_else(|| explicit_config_path(&vars).or_else(default_config_path_if_exists));
+        let config_path = config_path.map(Path::to_path_buf).or_else(|| {
+            explicit_config_path(&vars).or_else(|| default_config_path_if_exists(&vars))
+        });
         Self::from_vars_and_file(&vars, config_path.as_deref())
     }
 
@@ -254,8 +255,8 @@ impl AppConfig {
 
         let database_url = get(vars, "PONTIA_DATABASE_URL")
             .or_else(|| file.and_then(|config| config.database_url.as_deref()))
-            .unwrap_or(DEFAULT_DATABASE_URL)
-            .to_string();
+            .map(ToString::to_string)
+            .unwrap_or_else(|| default_database_url(vars));
 
         let external_api_token = get(vars, "PONTIA_EXTERNAL_API_TOKEN")
             .or_else(|| file.and_then(|config| config.external_api_token.as_deref()))
@@ -356,10 +357,41 @@ fn explicit_config_path(vars: &HashMap<String, String>) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-fn default_config_path_if_exists() -> Option<PathBuf> {
-    let home = env::var_os("HOME")?;
-    let path = PathBuf::from(home).join(".config/pontia/config.toml");
+fn default_config_path_if_exists(vars: &HashMap<String, String>) -> Option<PathBuf> {
+    let path = pontia_home_path(vars).join("config.toml");
     path.exists().then_some(path)
+}
+
+fn default_database_url(vars: &HashMap<String, String>) -> String {
+    format!(
+        "sqlite://{}",
+        pontia_home_string(vars).trim_end_matches('/').to_string() + "/data/pontia.db"
+    )
+}
+
+fn pontia_home_string(vars: &HashMap<String, String>) -> String {
+    get(vars, "PONTIA_HOME")
+        .filter(|value| !value.trim().is_empty())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| DEFAULT_PONTIA_HOME.to_string())
+}
+
+fn pontia_home_path(vars: &HashMap<String, String>) -> PathBuf {
+    expand_home_path(&pontia_home_string(vars))
+}
+
+fn expand_home_path(path: &str) -> PathBuf {
+    if path == "~" {
+        return env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(path));
+    }
+    if let Some(rest) = path.strip_prefix("~/")
+        && let Some(home) = env::var_os("HOME")
+    {
+        return PathBuf::from(home).join(rest);
+    }
+    PathBuf::from(path)
 }
 
 fn read_file_config(path: &Path) -> Result<FileConfig> {

@@ -19,7 +19,7 @@ export type LoadSessionContextResult =
   | { ok: false; reason: string; logFile: string };
 
 function fallbackLogDir(env: EnvLike = process.env): string {
-  return env.XDG_STATE_HOME ? join(env.XDG_STATE_HOME, "pontia") : join(homedir(), ".local", "state", "pontia");
+  return join(env.PONTIA_HOME ?? join(env.HOME ?? homedir(), ".pontia"), "state");
 }
 
 function defaultHookLogFile(env: EnvLike = process.env): string {

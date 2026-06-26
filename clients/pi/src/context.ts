@@ -22,7 +22,7 @@ export interface LoadTurnContextOptions {
 }
 
 function fallbackLogDir(env: EnvLike = process.env): string {
-  return env.XDG_STATE_HOME ? join(env.XDG_STATE_HOME, "pontia") : join(homedir(), ".local", "state", "pontia");
+  return join(env.PONTIA_HOME ?? join(env.HOME ?? homedir(), ".pontia"), "state");
 }
 
 export function defaultHookLogFile(env: EnvLike = process.env): string {

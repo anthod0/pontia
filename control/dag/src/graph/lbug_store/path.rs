@@ -25,13 +25,10 @@ mod tests {
     #[test]
     fn expands_leading_tilde_before_opening_lbug_database() {
         let expanded = super::expand_home_prefix_with_home(
-            Path::new("~/.local/share/pontia/graph/lbug"),
+            Path::new("~/.pontia/data/graph/lbug"),
             Path::new("/home/example"),
         );
 
-        assert_eq!(
-            expanded,
-            Path::new("/home/example/.local/share/pontia/graph/lbug")
-        );
+        assert_eq!(expanded, Path::new("/home/example/.pontia/data/graph/lbug"));
     }
 }

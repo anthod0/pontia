@@ -37,15 +37,16 @@ fn pontia_log_dir() -> Result<PathBuf> {
     if let Ok(path) = std::env::var("PONTIA_LOG_DIR") {
         return Ok(PathBuf::from(path));
     }
-    if let Ok(path) = std::env::var("XDG_STATE_HOME") {
-        return Ok(PathBuf::from(path).join("pontia"));
+    if let Ok(path) = std::env::var("PONTIA_HOME")
+        && !path.trim().is_empty()
+    {
+        return Ok(PathBuf::from(path).join("state"));
     }
-
     let home = std::env::var("HOME").map_err(|_| Error::InvalidConfig {
         key: "HOME",
-        message: "required to derive pontia log directory".to_string(),
+        message: "required to derive pontia home directory".to_string(),
     })?;
-    Ok(PathBuf::from(home).join(".local/state/pontia"))
+    Ok(PathBuf::from(home).join(".pontia/state"))
 }
 
 #[cfg(test)]
@@ -67,5 +68,46 @@ mod tests {
         assert_eq!(paths.log_dir, tempdir.path());
         assert_eq!(paths.runtime_log, tempdir.path().join("runtime.log"));
         assert_eq!(paths.pi_hook_log, tempdir.path().join("pi-hook.log"));
+    }
+
+    #[test]
+    fn log_paths_default_to_pontia_home_state_dir() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        unsafe {
+            std::env::remove_var("PONTIA_LOG_DIR");
+            std::env::remove_var("PONTIA_HOME");
+            std::env::remove_var("XDG_STATE_HOME");
+            std::env::set_var("HOME", tempdir.path());
+        }
+
+        let paths = log_paths("sess_test").expect("log paths");
+
+        assert_eq!(paths.log_dir, tempdir.path().join(".pontia/state"));
+        assert_eq!(
+            paths.runtime_log,
+            tempdir.path().join(".pontia/state/runtime.log")
+        );
+        assert_eq!(
+            paths.pi_hook_log,
+            tempdir.path().join(".pontia/state/pi-hook.log")
+        );
+    }
+
+    #[test]
+    fn log_paths_respect_pontia_home() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        unsafe {
+            std::env::remove_var("PONTIA_LOG_DIR");
+            std::env::set_var("PONTIA_HOME", tempdir.path());
+        }
+
+        let paths = log_paths("sess_test").expect("log paths");
+
+        unsafe {
+            std::env::remove_var("PONTIA_HOME");
+        }
+        assert_eq!(paths.log_dir, tempdir.path().join("state"));
+        assert_eq!(paths.runtime_log, tempdir.path().join("state/runtime.log"));
+        assert_eq!(paths.pi_hook_log, tempdir.path().join("state/pi-hook.log"));
     }
 }

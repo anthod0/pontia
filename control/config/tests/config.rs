@@ -310,14 +310,60 @@ fn rejects_config_arg_without_path() {
 }
 
 #[test]
+fn pontia_home_overrides_development_default_data_paths() {
+    let config = AppConfig::from_vars(&HashMap::from([(
+        "PONTIA_HOME".to_string(),
+        "/tmp/custom-pontia".to_string(),
+    )]))
+    .expect("defaults load");
+
+    assert_eq!(
+        config.database_url,
+        "sqlite:///tmp/custom-pontia/data/pontia.db"
+    );
+    assert_eq!(
+        config.graph.db_dir.as_deref(),
+        Some("/tmp/custom-pontia/data/graph/lbug")
+    );
+}
+
+#[test]
+fn pontia_home_overrides_default_config_file_path() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let config_path = dir.path().join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+bind_addr = "127.0.0.1:4545"
+external_api_token = "home-config-token"
+"#,
+    )
+    .expect("write config");
+
+    unsafe {
+        std::env::set_var("PONTIA_HOME", dir.path());
+        std::env::remove_var("PONTIA_CONFIG");
+    }
+
+    let config = AppConfig::from_env_with_config_path(None).expect("config should load");
+
+    unsafe {
+        std::env::remove_var("PONTIA_HOME");
+    }
+
+    assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4545");
+    assert_eq!(
+        config.external_api_token.as_deref(),
+        Some("home-config-token")
+    );
+}
+
+#[test]
 fn provides_development_defaults_for_optional_values() {
     let config = AppConfig::from_vars(&HashMap::<String, String>::new()).expect("defaults load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
-    assert_eq!(
-        config.database_url,
-        "sqlite://~/.local/share/pontia/pontia.db"
-    );
+    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia.db");
     assert_eq!(config.external_api_token, None);
     assert_eq!(config.dashboard.source, None);
     assert_eq!(config.dashboard.cache_dir, None);
@@ -326,7 +372,7 @@ fn provides_development_defaults_for_optional_values() {
     assert!(config.graph.enabled);
     assert_eq!(
         config.graph.db_dir.as_deref(),
-        Some("~/.local/share/pontia/graph/lbug")
+        Some("~/.pontia/data/graph/lbug")
     );
     assert!(config.workspace_browser.roots.is_empty());
 }

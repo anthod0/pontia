@@ -113,19 +113,21 @@ pnpm --dir=apps/dashboard run build
 
 ### Configure pontia
 
-`pontia` can read configuration from `~/.config/pontia/config.toml`, from an explicit `--config` path, or from environment variables.
+`pontia` can read configuration from `$PONTIA_HOME/config.toml` (default `~/.pontia/config.toml`), from an explicit `--config` path, or from environment variables.
+
+Set `PONTIA_HOME` to move the whole pontia home root; derived defaults such as the database, graph data, logs, and dashboard cache live under that root.
 
 Minimal example:
 
 ```toml
 bind_addr = "127.0.0.1:8080"
-database_url = "sqlite://~/.local/share/pontia/pontia.db"
+database_url = "sqlite://~/.pontia/data/pontia.db"
 external_api_token = "dev-token"
 run_migrations = true
 
 [dashboard]
 source = "apps/dashboard/dist"
-cache_dir = "~/.cache/pontia/dashboard"
+cache_dir = "~/.pontia/cache/dashboard"
 
 [runtime.pi]
 tui_command = "pi --approve -e /absolute/path/to/pontia/clients/pi"

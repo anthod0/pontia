@@ -25,10 +25,17 @@ describe("loadTurnContext", () => {
     );
   });
 
-  test("falls back to XDG state pontia directory for hook log when explicit log directory is missing", async () => {
-    const stateHome = await tempWorkspace();
-    expect(defaultHookLogFile({ XDG_STATE_HOME: stateHome, PONTIA_WORKSPACE: "/project" })).toBe(
-      join(stateHome, "pontia", "pi-hook.log"),
+  test("falls back to pontia home state directory for hook log when explicit log directory is missing", async () => {
+    const home = await tempWorkspace();
+    expect(defaultHookLogFile({ HOME: home, PONTIA_WORKSPACE: "/project" })).toBe(
+      join(home, ".pontia", "state", "pi-hook.log"),
+    );
+  });
+
+  test("uses PONTIA_HOME for the default hook log path", async () => {
+    const pontiaHome = await tempWorkspace();
+    expect(defaultHookLogFile({ PONTIA_HOME: pontiaHome, PONTIA_WORKSPACE: "/project" })).toBe(
+      join(pontiaHome, "state", "pi-hook.log"),
     );
   });
 

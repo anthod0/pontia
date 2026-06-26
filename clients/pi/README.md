@@ -22,16 +22,18 @@ On `session_start`, the extension first tries the managed pre-bound runtime envi
 
 On startup, the extension first verifies that the pi cwd is an active, explicitly registered pontia workspace through the External workspace API. If the workspace is missing, deleted, or pontia cannot be reached for this check, the extension disables pontia reporting for that pi process.
 
-When `PONTIA_SESSION_ID` is absent and the active workspace check passes, the extension defers binding a manually started pi TUI until the first real `agent_start`. This matches pi's behavior where a startup-only client session can be discarded when the user exits without sending a prompt, so pontia does not persist an empty session just because pi opened. On first turn, the extension calls the Internal runtime binding upsert API. Configure either `PONTIA_INTERNAL_BINDING_UPSERT_URL` directly or `PONTIA_INTERNAL_EVENT_URL` so the upsert URL can be derived by replacing `/events` with `/runtime-bindings/upsert`. The backend creates or reuses the pontia `session_id`; the extension only reports the real pi `client_session_key` from `ctx.sessionManager.getSessionId()`. If no Internal API URL is configured, the extension skips pontia reporting instead of guessing a default server address.
+When `PONTIA_SESSION_ID` is absent and the active workspace check passes, the extension defers binding a manually started pi TUI until the first real `agent_start`. This matches pi's behavior where a startup-only client session can be discarded when the user exits without sending a prompt, so pontia does not persist an empty session just because pi opened. On first turn, the extension calls the Internal runtime binding upsert API. Configure either `PONTIA_INTERNAL_BINDING_UPSERT_URL` directly or `PONTIA_INTERNAL_EVENT_URL` so the upsert URL can be derived by replacing `/events` with `/runtime-bindings/upsert`; if those are absent, the extension discovers a local pontia server from `PONTIA_CONFIG` or `~/.pontia/config.toml`. The backend creates or reuses the pontia `session_id`; the extension only reports the real pi `client_session_key` from `ctx.sessionManager.getSessionId()`. If pontia cannot be discovered or reached, the extension skips pontia reporting.
 
 ## Runtime environment
 
-The extension reads configuration from environment variables:
+The extension reads runtime context from environment variables and, for manually started sessions, can discover the pontia server from `PONTIA_CONFIG` or `${PONTIA_HOME:-$HOME/.pontia}/config.toml`:
 
 | Variable | Required | Default |
 | --- | --- | --- |
 | `PONTIA_WORKSPACE` | recommended | pi process cwd |
-| `PONTIA_LOG_DIR` | optional | `${XDG_STATE_HOME:-$HOME/.local/state}/pontia` |
+| `PONTIA_HOME` | optional | `$HOME/.pontia` |
+| `PONTIA_CONFIG` | optional | `$PONTIA_HOME/config.toml` |
+| `PONTIA_LOG_DIR` | optional | `$PONTIA_HOME/state` |
 | `PONTIA_SESSION_ID` | required for reporting | none |
 | `PONTIA_RUNTIME_INSTANCE_ID` | required for reporting | none |
 | `PONTIA_INTERNAL_EVENT_URL` | required for pre-bound reporting; optional for deriving binding upsert URL | none |
@@ -64,7 +66,7 @@ When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane ex
 2. Export environment for the pi process:
 
    ```bash
-   export PONTIA_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/pontia"
+   export PONTIA_LOG_DIR="$HOME/.pontia/state"
    mkdir -p "$PONTIA_LOG_DIR"
    export PONTIA_WORKSPACE="$PWD"
    export PONTIA_SESSION_ID="sess_xxx"

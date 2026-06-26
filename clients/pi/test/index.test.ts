@@ -292,15 +292,12 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("session_start without pontia env reads pi settings pontia config but defers binding until first turn", async () => {
+  test("session_start without pontia env reads pontia home config but defers binding until first turn", async () => {
     const root = await tempDir();
     const workspace = await realpath(await tempDir());
-    const settingsFile = join(root, ".pi", "agent", "settings.json");
-    const pontiaConfig = join(root, ".config", "pontia-stable", "config.toml");
-    await mkdir(join(root, ".pi", "agent"), { recursive: true });
-    await mkdir(join(root, ".config", "pontia-stable"), { recursive: true });
-    await writeFile(settingsFile, JSON.stringify({ pontia: { config: pontiaConfig } }));
-    await writeFile(pontiaConfig, 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "stable-token"\n');
+    const pontiaConfig = join(root, ".pontia", "config.toml");
+    await mkdir(join(root, ".pontia"), { recursive: true });
+    await writeFile(pontiaConfig, 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "home-token"\n');
 
     const fetchImpl = vi.fn(async (url: string) => {
       if (url === "http://127.0.0.1:18080/healthz") {

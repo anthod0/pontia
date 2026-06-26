@@ -4,13 +4,10 @@ use sqlx::Row;
 #[test]
 fn expands_tilde_sqlite_database_urls_before_connecting() {
     let normalized =
-        normalize_sqlite_database_url("sqlite://~/.local/share/pontia/pontia.db", "/home/alice")
+        normalize_sqlite_database_url("sqlite://~/.pontia/data/pontia.db", "/home/alice")
             .expect("normalize");
 
-    assert_eq!(
-        normalized,
-        "sqlite:///home/alice/.local/share/pontia/pontia.db"
-    );
+    assert_eq!(normalized, "sqlite:///home/alice/.pontia/data/pontia.db");
 }
 
 #[tokio::test]
