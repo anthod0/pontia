@@ -300,13 +300,15 @@ async fn create_session_accepts_title_and_exposes_it_on_session_views() {
 async fn session_management_pin_archive_and_unarchive_update_session_views_and_list_filters() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace_path = workspace.path().to_string_lossy();
 
     let (create_status, create_body) = post_json(
         state.clone(),
         "/external/v1/sessions",
         Some(TOKEN),
         None,
-        json!({"client_type":"generic", "title":"managed session"}),
+        json!({"client_type":"generic", "title":"managed session", "workspace": workspace_path}),
     )
     .await;
     assert_eq!(create_status, StatusCode::CREATED);

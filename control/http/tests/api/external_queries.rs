@@ -38,6 +38,29 @@ fn event(
     )
 }
 
+async fn bind_session_to_active_workspace(state: &AppState, session_id: &str) {
+    let workspace_id = format!("ws_{session_id}");
+    let canonical_path = format!("/tmp/{workspace_id}");
+    sqlx::query(
+        r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name, state)
+           VALUES (?, ?, ?, ?, 'active')"#,
+    )
+    .bind(&workspace_id)
+    .bind(&canonical_path)
+    .bind(&canonical_path)
+    .bind(&workspace_id)
+    .execute(&state.db())
+    .await
+    .unwrap();
+    sqlx::query("UPDATE sessions SET workspace_id = ?, workspace_ref = ? WHERE session_id = ?")
+        .bind(&workspace_id)
+        .bind(&canonical_path)
+        .bind(session_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+}
+
 async fn seed_session_turn(state: &AppState) {
     let service = EventIngestService::new(state.db());
     service
@@ -106,6 +129,8 @@ async fn seed_session_turn(state: &AppState) {
     .execute(&state.db())
     .await
     .unwrap();
+
+    bind_session_to_active_workspace(state, "sess_external_queries_1").await;
 
     sqlx::query(
         r#"INSERT INTO artifacts
@@ -316,6 +341,7 @@ async fn external_api_exposes_projected_session_context_usage() {
         ))
         .await
         .unwrap();
+    bind_session_to_active_workspace(&state, "sess_external_queries_context").await;
 
     let (list_status, list_body) = get(state.clone(), "/external/v1/sessions", Some(TOKEN)).await;
     let (get_status, get_body) = get(
