@@ -1,24 +1,14 @@
 use std::{collections::HashMap, fs};
 
-use pontia_config::{
-    AppConfig, FilePickerConfig, RuntimeClientConfig, RuntimeConfig, config_path_from_args,
-};
+use pontia_config::{AppConfig, FilePickerConfig, RuntimeClientConfig, RuntimeConfig};
 
 #[test]
 fn loads_config_from_key_value_source() {
     let vars = HashMap::from([
         ("PONTIA_BIND_ADDR".to_string(), "127.0.0.1:4000".to_string()),
         (
-            "PONTIA_DATABASE_URL".to_string(),
-            "sqlite://./data/control-plane.db".to_string(),
-        ),
-        (
             "PONTIA_DASHBOARD_SOURCE".to_string(),
             "https://example.test/dashboard.tar.gz".to_string(),
-        ),
-        (
-            "PONTIA_DASHBOARD_CACHE_DIR".to_string(),
-            "/tmp/pontia-dashboard-cache".to_string(),
         ),
         (
             "PONTIA_EXTERNAL_API_TOKEN".to_string(),
@@ -28,10 +18,6 @@ fn loads_config_from_key_value_source() {
         ("PONTIA_DEFAULT_CLIENT_TYPE".to_string(), "pi".to_string()),
         ("PONTIA_GRAPH_ENABLED".to_string(), "true".to_string()),
         (
-            "PONTIA_GRAPH_DB_DIR".to_string(),
-            "/tmp/pontia-graph".to_string(),
-        ),
-        (
             "PONTIA_WORKSPACE_ROOTS".to_string(),
             "projects|Projects|/home/me/projects;tmp|Temporary|/tmp".to_string(),
         ),
@@ -40,20 +26,19 @@ fn loads_config_from_key_value_source() {
     let config = AppConfig::from_vars(&vars).expect("config should load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4000");
-    assert_eq!(config.database_url, "sqlite://./data/control-plane.db");
+    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia.db");
     assert_eq!(config.external_api_token.as_deref(), Some("dev-token"));
     assert_eq!(
         config.dashboard.source.as_deref(),
         Some("https://example.test/dashboard.tar.gz")
     );
-    assert_eq!(
-        config.dashboard.cache_dir.as_deref(),
-        Some("/tmp/pontia-dashboard-cache")
-    );
     assert!(!config.run_migrations);
     assert_eq!(config.default_client_type, "pi");
     assert!(config.graph.enabled);
-    assert_eq!(config.graph.db_dir.as_deref(), Some("/tmp/pontia-graph"));
+    assert_eq!(
+        config.graph.db_dir.as_deref(),
+        Some("~/.pontia/data/graph/lbug")
+    );
     assert_eq!(config.workspace_browser.roots.len(), 2);
     assert_eq!(config.workspace_browser.roots[0].root_id, "projects");
     assert_eq!(config.workspace_browser.roots[0].label, "Projects");
@@ -109,12 +94,9 @@ ignore_globs = []
 }
 
 #[test]
-fn graph_enabled_defaults_db_dir_next_to_sqlite_data_file() {
+fn graph_enabled_defaults_db_dir_under_pontia_home() {
     let vars = HashMap::from([
-        (
-            "PONTIA_DATABASE_URL".to_string(),
-            "sqlite:///tmp/pontia/control.db".to_string(),
-        ),
+        ("PONTIA_HOME".to_string(), "/tmp/pontia".to_string()),
         ("PONTIA_GRAPH_ENABLED".to_string(), "true".to_string()),
     ]);
 
@@ -123,7 +105,7 @@ fn graph_enabled_defaults_db_dir_next_to_sqlite_data_file() {
     assert!(config.graph.enabled);
     assert_eq!(
         config.graph.db_dir.as_deref(),
-        Some("/tmp/pontia/graph/lbug")
+        Some("/tmp/pontia/data/graph/lbug")
     );
 }
 
@@ -135,14 +117,12 @@ fn loads_config_from_toml_file() {
         &config_path,
         r#"
 bind_addr = "127.0.0.1:4040"
-database_url = "sqlite:///tmp/from-file.db"
 external_api_token = "file-token"
 run_migrations = false
 default_client_type = "pi"
 
 [dashboard]
 source = "/opt/pontia/dashboard"
-cache_dir = "/var/cache/pontia/dashboard"
 
 [runtime.pi]
 tui_command = "pi --approve -e /tmp/pontia/clients/pi"
@@ -162,15 +142,11 @@ roots = [
         .expect("config should load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4040");
-    assert_eq!(config.database_url, "sqlite:///tmp/from-file.db");
+    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia.db");
     assert_eq!(config.external_api_token.as_deref(), Some("file-token"));
     assert_eq!(
         config.dashboard.source.as_deref(),
         Some("/opt/pontia/dashboard")
-    );
-    assert_eq!(
-        config.dashboard.cache_dir.as_deref(),
-        Some("/var/cache/pontia/dashboard")
     );
     assert!(!config.run_migrations);
     assert_eq!(config.default_client_type, "pi");
@@ -205,7 +181,6 @@ default_client_type = "pi"
 
 [dashboard]
 source = "/from/file/dashboard"
-cache_dir = "/from/file/cache"
 
 [runtime.pi]
 tui_command = "pi from file"
@@ -226,10 +201,6 @@ tui_command = "pi from file"
             "PONTIA_DASHBOARD_SOURCE".to_string(),
             "/from/env/dashboard".to_string(),
         ),
-        (
-            "PONTIA_DASHBOARD_CACHE_DIR".to_string(),
-            "/from/env/cache".to_string(),
-        ),
         ("PONTIA_DEFAULT_CLIENT_TYPE".to_string(), "pi".to_string()),
     ]);
 
@@ -248,10 +219,6 @@ tui_command = "pi from file"
     assert_eq!(
         config.dashboard.source.as_deref(),
         Some("/from/env/dashboard")
-    );
-    assert_eq!(
-        config.dashboard.cache_dir.as_deref(),
-        Some("/from/env/cache")
     );
     assert_eq!(config.default_client_type, "pi");
 }
@@ -286,28 +253,6 @@ fn rejects_generic_as_default_client_type() {
     assert!(error.to_string().contains("default client type must be pi"));
 }
 
-#[test]
-fn parses_config_path_from_cli_args() {
-    let path = config_path_from_args([
-        "pontia".to_string(),
-        "--config".to_string(),
-        "/tmp/pontia.toml".to_string(),
-    ])
-    .expect("parse args");
-
-    assert_eq!(
-        path.as_deref(),
-        Some(std::path::Path::new("/tmp/pontia.toml"))
-    );
-}
-
-#[test]
-fn rejects_config_arg_without_path() {
-    let error = config_path_from_args(["pontia".to_string(), "--config".to_string()])
-        .expect_err("missing path should fail");
-
-    assert!(error.to_string().contains("--config requires a path"));
-}
 
 #[test]
 fn pontia_home_overrides_development_default_data_paths() {
@@ -340,15 +285,24 @@ external_api_token = "home-config-token"
     )
     .expect("write config");
 
+    let previous_home = std::env::var_os("PONTIA_HOME");
+    let previous_token = std::env::var_os("PONTIA_EXTERNAL_API_TOKEN");
     unsafe {
         std::env::set_var("PONTIA_HOME", dir.path());
-        std::env::remove_var("PONTIA_CONFIG");
+        std::env::remove_var("PONTIA_EXTERNAL_API_TOKEN");
     }
 
-    let config = AppConfig::from_env_with_config_path(None).expect("config should load");
+    let config = AppConfig::from_env().expect("config should load");
 
     unsafe {
-        std::env::remove_var("PONTIA_HOME");
+        match previous_home {
+            Some(value) => std::env::set_var("PONTIA_HOME", value),
+            None => std::env::remove_var("PONTIA_HOME"),
+        }
+        match previous_token {
+            Some(value) => std::env::set_var("PONTIA_EXTERNAL_API_TOKEN", value),
+            None => std::env::remove_var("PONTIA_EXTERNAL_API_TOKEN"),
+        }
     }
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4545");
@@ -366,7 +320,6 @@ fn provides_development_defaults_for_optional_values() {
     assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia.db");
     assert_eq!(config.external_api_token, None);
     assert_eq!(config.dashboard.source, None);
-    assert_eq!(config.dashboard.cache_dir, None);
     assert!(config.run_migrations);
     assert_eq!(config.default_client_type, "pi");
     assert!(config.graph.enabled);

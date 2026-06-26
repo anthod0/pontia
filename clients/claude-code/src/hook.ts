@@ -1,7 +1,7 @@
 import { type EnvLike } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { buildSessionReadyEvent, type InternalEvent } from "./events.js";
-import { loadSessionContext } from "./session.js";
+import { defaultHookLogFile, loadSessionContext } from "./session.js";
 import { EventReporter } from "./reporter.js";
 
 export type ClaudeHookCommand = "prompt-submit" | "session-start" | "stop" | "stop-failure";
@@ -36,15 +36,13 @@ export async function handleClaudeHook(
 
     return 0;
   } catch (error) {
-    const logFile = env.PONTIA_CLAUDE_HOOK_LOG;
-    if (logFile) {
-      await logDiagnostic(logFile, {
+    const logFile = defaultHookLogFile(env);
+    await logDiagnostic(logFile, {
         level: "error",
         code: "unexpected_hook_exception",
         message: "Claude Code hook handling failed",
         details: error instanceof Error ? error.message : String(error),
-      });
-    }
+    });
     return 0;
   }
 }

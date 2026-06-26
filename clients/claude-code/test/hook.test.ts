@@ -34,7 +34,7 @@ describe("handleClaudeHook", () => {
       PONTIA_SESSION_ID: "sess_ready",
       PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
       PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-      PONTIA_CLAUDE_HOOK_LOG: "/tmp/claude-hook.log",
+      PONTIA_HOME: "/tmp/pontia-test",
     };
 
     const exitCode = await handleClaudeHook("session-start", { hook_event_name: "SessionStart", source: "startup" }, deps);

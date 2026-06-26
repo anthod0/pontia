@@ -288,12 +288,14 @@ async fn file_picker_can_include_hidden_and_normally_ignored_files_from_config()
         "module.exports = {}\n",
     )
     .expect("dep");
-    let mut file_picker = FilePickerConfig::default();
-    file_picker.include_hidden = true;
-    file_picker.respect_gitignore = false;
-    file_picker.respect_ignore_files = false;
-    file_picker.respect_git_exclude = false;
-    file_picker.ignore_globs = vec![];
+    let file_picker = FilePickerConfig {
+        include_hidden: true,
+        respect_gitignore: false,
+        respect_ignore_files: false,
+        respect_git_exclude: false,
+        ignore_globs: vec![],
+        ..FilePickerConfig::default()
+    };
     let state = test_state_with_file_picker(
         vec![WorkspaceRootConfig {
             root_id: "projects".to_string(),

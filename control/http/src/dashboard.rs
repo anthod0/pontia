@@ -93,13 +93,8 @@ async fn resolve_local_dashboard(source: &str) -> ResolvedDashboard {
     }
 }
 
-async fn resolve_remote_dashboard(source: &str, config: &DashboardConfig) -> ResolvedDashboard {
-    let cache_dir = config
-        .cache_dir
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .map(expand_tilde)
-        .unwrap_or_else(default_cache_dir);
+async fn resolve_remote_dashboard(source: &str, _config: &DashboardConfig) -> ResolvedDashboard {
+    let cache_dir = default_cache_dir();
     let current_dir = cache_dir.join("current");
 
     match refresh_remote_cache(source, &cache_dir, &current_dir).await {

@@ -88,10 +88,7 @@ impl GenericRuntimeManager {
             .create(true)
             .append(true)
             .open(&log_path)?;
-        let runtime_paths = script::RuntimePaths {
-            log_dir: &log_paths.log_dir,
-            log_path: &log_path,
-        };
+        let runtime_paths = script::RuntimePaths { log_path: &log_path };
         let launch_script_path = script::write_ephemeral_launch_script(
             &workspace,
             &runtime_paths,

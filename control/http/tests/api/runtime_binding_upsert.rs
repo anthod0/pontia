@@ -168,9 +168,9 @@ fn upsert_body_with_tmux(
 
 #[tokio::test]
 async fn fork_upsert_creates_independent_child_session_with_lineage() {
-    let log_dir = tempfile::tempdir().expect("log dir");
+    let pontia_home = tempfile::tempdir().expect("pontia home");
     unsafe {
-        std::env::set_var("PONTIA_LOG_DIR", log_dir.path());
+        std::env::set_var("PONTIA_HOME", pontia_home.path());
     }
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
@@ -256,9 +256,9 @@ async fn fork_upsert_creates_independent_child_session_with_lineage() {
 
 #[tokio::test]
 async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() {
-    let log_dir = tempfile::tempdir().expect("log dir");
+    let pontia_home = tempfile::tempdir().expect("pontia home");
     unsafe {
-        std::env::set_var("PONTIA_LOG_DIR", log_dir.path());
+        std::env::set_var("PONTIA_HOME", pontia_home.path());
     }
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
@@ -317,18 +317,19 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     assert_eq!(metadata["tmux"]["session_name"], "dev");
     assert_eq!(metadata["capabilities"]["accept_task"], true);
     assert_eq!(metadata["capabilities"]["context_usage"], "estimated");
-    unsafe {
-        std::env::remove_var("PONTIA_LOG_DIR");
-    }
-    assert_eq!(metadata["log_dir"], log_dir.path().display().to_string());
+    let expected_state_dir = pontia_home.path().join("state");
+    assert_eq!(metadata["log_dir"], expected_state_dir.display().to_string());
     assert_eq!(
         metadata["runtime_log"],
-        log_dir.path().join("runtime.log").display().to_string()
+        expected_state_dir.join("runtime.log").display().to_string()
     );
     assert_eq!(
         metadata["pi_hook_log"],
-        log_dir.path().join("pi-hook.log").display().to_string()
+        expected_state_dir.join("pi-hook.log").display().to_string()
     );
+    unsafe {
+        std::env::remove_var("PONTIA_HOME");
+    }
 
     let binding_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings WHERE session_id = ? AND client_type = 'pi' AND client_session_key = 'pi_session_123'")
         .bind(session_id)

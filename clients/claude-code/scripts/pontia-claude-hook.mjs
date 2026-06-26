@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 import { appendFile, mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 const command = process.argv[2];
 const env = process.env;
 
+function stringValue(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
 function logFile() {
-  return typeof env.PONTIA_CLAUDE_HOOK_LOG === "string" && env.PONTIA_CLAUDE_HOOK_LOG.trim()
-    ? env.PONTIA_CLAUDE_HOOK_LOG.trim()
-    : undefined;
+  return join(stringValue(env.PONTIA_HOME) ?? join(stringValue(env.HOME) ?? homedir(), ".pontia"), "state", "claude-hook.log");
 }
 
 async function appendDiagnostic(entry) {
@@ -35,10 +38,6 @@ async function stdinJson() {
   }
 }
 
-function stringValue(value) {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
 async function loadSessionContext() {
   const sessionId = stringValue(env.PONTIA_SESSION_ID);
   const runtimeInstanceId = stringValue(env.PONTIA_RUNTIME_INSTANCE_ID);
@@ -47,7 +46,7 @@ async function loadSessionContext() {
   if (!sessionId) errors.push("PONTIA_SESSION_ID is required");
   if (!runtimeInstanceId) errors.push("PONTIA_RUNTIME_INSTANCE_ID is required");
   if (!internalEventUrl) errors.push("PONTIA_INTERNAL_EVENT_URL is required");
-  if (!logFile()) errors.push("PONTIA_CLAUDE_HOOK_LOG is required");
+
   if (errors.length) {
     await appendDiagnostic({ level: "error", code: "invalid_session_context", message: errors.join("; ") });
     return undefined;

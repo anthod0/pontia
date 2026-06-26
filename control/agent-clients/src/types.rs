@@ -101,7 +101,6 @@ pub struct TmuxRuntimeBehavior {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HookLogBehavior {
-    pub env: &'static str,
     pub file_name: &'static str,
     pub metadata_key: &'static str,
 }

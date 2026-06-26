@@ -26,8 +26,7 @@ function fallbackLogDir(env: EnvLike = process.env): string {
 }
 
 export function defaultHookLogFile(env: EnvLike = process.env): string {
-  const logDir = env.PONTIA_LOG_DIR ?? fallbackLogDir(env);
-  return join(logDir, "pi-hook.log");
+  return join(fallbackLogDir(env), "pi-hook.log");
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -108,7 +107,7 @@ async function claimTurnContext(env: EnvLike, logFile: string, fetchImpl: typeof
 }
 
 export async function loadTurnContext(env: EnvLike = process.env, options: LoadTurnContextOptions = {}): Promise<LoadTurnContextResult> {
-  const logFile = env.PONTIA_PI_HOOK_LOG ?? defaultHookLogFile(env);
+  const logFile = defaultHookLogFile(env);
   const claimed = await claimTurnContext(env, logFile, options.fetch ?? fetch);
   if (claimed) return claimed;
   return { ok: false, reason: "current turn claim unavailable", logFile, silent: true };

@@ -1,3 +1,5 @@
+import { defaultHookLogFile } from "./session.js";
+
 export interface TurnContext {
   sessionId: string;
   turnId: string;
@@ -14,7 +16,7 @@ export async function loadTurnContext(env: EnvLike = process.env): Promise<LoadT
   return {
     ok: false,
     reason: "Claude Code turn hooks are disabled",
-    logFile: env.PONTIA_CLAUDE_HOOK_LOG,
+    logFile: defaultHookLogFile(env),
     silent: true,
   };
 }

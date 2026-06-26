@@ -31,23 +31,13 @@ pub async fn test_state() -> AppState {
 }
 
 fn configure_test_runtime_env() {
-    static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
-    static LOG_DIR: OnceLock<PathBuf> = OnceLock::new();
-    let data_dir = DATA_DIR.get_or_init(|| {
-        let dir = tempfile::tempdir().expect("agent-tools runtime data tempdir");
-        let path = dir.path().join("data");
-        let _kept_dir = dir.keep();
-        path
-    });
-    let log_dir = LOG_DIR.get_or_init(|| {
-        let dir = tempfile::tempdir().expect("agent-tools runtime log tempdir");
-        let path = dir.path().join("logs");
-        let _kept_dir = dir.keep();
-        path
+    static PONTIA_HOME: OnceLock<PathBuf> = OnceLock::new();
+    let pontia_home = PONTIA_HOME.get_or_init(|| {
+        let dir = tempfile::tempdir().expect("agent-tools pontia home tempdir");
+        dir.keep()
     });
     unsafe {
-        std::env::set_var("PONTIA_DATA_DIR", data_dir);
-        std::env::set_var("PONTIA_LOG_DIR", log_dir);
+        std::env::set_var("PONTIA_HOME", pontia_home);
         std::env::set_var(
             "PONTIA_PI_TUI_COMMAND",
             "cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"",

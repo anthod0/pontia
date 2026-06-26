@@ -18,13 +18,6 @@ async function tempWorkspace() {
 }
 
 describe("loadTurnContext", () => {
-  test("derives default log path from PONTIA_LOG_DIR", async () => {
-    const logDir = await tempWorkspace();
-    expect(defaultHookLogFile({ PONTIA_LOG_DIR: logDir, PONTIA_WORKSPACE: "/project" })).toBe(
-      join(logDir, "pi-hook.log"),
-    );
-  });
-
   test("falls back to pontia home state directory for hook log when explicit log directory is missing", async () => {
     const home = await tempWorkspace();
     expect(defaultHookLogFile({ HOME: home, PONTIA_WORKSPACE: "/project" })).toBe(
@@ -90,7 +83,7 @@ describe("loadTurnContext", () => {
   test("does not read current-turn files when API claim is unavailable", async () => {
     const workspace = await tempWorkspace();
     const contextFile = join(workspace, "turn.json");
-    const logFile = join(workspace, "hook.log");
+    const logFile = join(workspace, "state", "pi-hook.log");
     await writeFile(
       contextFile,
       JSON.stringify({
@@ -104,7 +97,7 @@ describe("loadTurnContext", () => {
 
     const result = await loadTurnContext({
       PONTIA_WORKSPACE: workspace,
-      PONTIA_PI_HOOK_LOG: logFile,
+      PONTIA_HOME: workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -116,9 +109,9 @@ describe("loadTurnContext", () => {
 
   test("silently skips when pontia API claim env is absent", async () => {
     const workspace = await tempWorkspace();
-    const logFile = join(workspace, "hook.log");
+    const logFile = join(workspace, "state", "pi-hook.log");
 
-    const result = await loadTurnContext({ PONTIA_PI_HOOK_LOG: logFile });
+    const result = await loadTurnContext({ PONTIA_HOME: workspace });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected missing context");

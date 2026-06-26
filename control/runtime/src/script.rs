@@ -5,9 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia_agent_clients::{
-    self as agent_clients, DispatchBehavior, HookLogBehavior, RuntimeBehavior,
-};
+use pontia_agent_clients::{self as agent_clients, DispatchBehavior, RuntimeBehavior};
 use pontia_core::error::{Error, Result};
 
 use super::{
@@ -20,7 +18,6 @@ use super::{
 };
 
 pub(super) struct RuntimePaths<'a> {
-    pub(super) log_dir: &'a Path,
     pub(super) log_path: &'a Path,
 }
 
@@ -112,24 +109,12 @@ pub(super) fn write_launch_script(
         .as_ref()
         .map(|agent_kind| format!("export PONTIA_AGENT_KIND={}\n", shell_quote(agent_kind)))
         .unwrap_or_default();
-    let hook_log_export = client_spec
-        .tmux_runtime()
-        .and_then(|runtime| runtime.hook_log)
-        .map(|hook_log| {
-            let path = hook_log_path(runtime_paths, hook_log);
-            format!(
-                "export {}={}\n",
-                hook_log.env,
-                shell_quote(&path.display().to_string())
-            )
-        })
-        .unwrap_or_default();
     let content = format!(
         r#"#!/usr/bin/env sh
 export PONTIA_SESSION_ID={}
 export PONTIA_CLIENT_TYPE={}
 export PONTIA_WORKSPACE={}
-export PONTIA_LOG_DIR={}
+export PONTIA_HOME={}
 export PONTIA_RUNTIME_LOG={}
 export PONTIA_INTERNAL_EVENT_URL={}
 export PONTIA_EXTERNAL_API_URL={}
@@ -142,20 +127,19 @@ cleanup_pontia_launch_script() {{
   fi
 }}
 trap cleanup_pontia_launch_script EXIT HUP INT TERM
-{}{}{}
+{}{}
 cleanup_pontia_launch_script
 {}
 "#,
         shell_quote(&request.session_id),
         shell_quote(&request.client_type),
         shell_quote(&workspace.display().to_string()),
-        shell_quote(&runtime_paths.log_dir.display().to_string()),
+        shell_quote(&pontia_home_for_export()),
         shell_quote(&runtime_paths.log_path.display().to_string()),
         shell_quote(&internal_event_url()),
         shell_quote(&external_api_url()),
         shell_quote(&external_api_token()),
         shell_quote(runtime_instance_id),
-        hook_log_export,
         agent_kind_export,
         log_setup,
         runtime_body,
@@ -174,11 +158,15 @@ pub(super) fn shell_quote_path(path: &Path) -> String {
     shell_quote(&path.display().to_string())
 }
 
-fn hook_log_path(
-    runtime_paths: &RuntimePaths<'_>,
-    hook_log: HookLogBehavior,
-) -> std::path::PathBuf {
-    runtime_paths.log_dir.join(hook_log.file_name)
+fn pontia_home_for_export() -> String {
+    std::env::var("PONTIA_HOME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| {
+            std::env::var("HOME")
+                .map(|home| format!("{home}/.pontia"))
+                .unwrap_or_else(|_| ".pontia".to_string())
+        })
 }
 
 pub(super) fn internal_event_url() -> String {
@@ -237,10 +225,7 @@ mod tests {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let script_path = tempdir.path().join("launch.sh");
         let log_path = tempdir.path().join("runtime.log");
-        let paths = RuntimePaths {
-            log_dir: tempdir.path(),
-            log_path: &log_path,
-        };
+        let paths = RuntimePaths { log_path: &log_path };
         let request = RuntimeStartRequest {
             session_id: "sess_resume_1".to_string(),
             client_type: "pi".to_string(),
@@ -277,10 +262,7 @@ mod tests {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let script_path = tempdir.path().join("launch.sh");
         let log_path = tempdir.path().join("runtime.log");
-        let paths = RuntimePaths {
-            log_dir: tempdir.path(),
-            log_path: &log_path,
-        };
+        let paths = RuntimePaths { log_path: &log_path };
         let request = RuntimeStartRequest {
             session_id: "sess_token_from_config".to_string(),
             client_type: "pi".to_string(),
@@ -317,7 +299,6 @@ mod tests {
     fn runtime_script_prefers_explicit_start_command() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let paths = RuntimePaths {
-            log_dir: tempdir.path(),
             log_path: &tempdir.path().join("runtime.log"),
         };
         let request = RuntimeStartRequest {

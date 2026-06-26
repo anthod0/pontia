@@ -23,8 +23,7 @@ function fallbackLogDir(env: EnvLike = process.env): string {
 }
 
 function defaultHookLogFile(env: EnvLike = process.env): string {
-  const logDir = env.PONTIA_LOG_DIR ?? fallbackLogDir(env);
-  return join(logDir, "pi-hook.log");
+  return join(fallbackLogDir(env), "pi-hook.log");
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -33,15 +32,14 @@ function optionalString(value: unknown): string | undefined {
 
 function hasPontiaRuntimeIntent(env: EnvLike): boolean {
   return Boolean(
-    optionalString(env.PONTIA_LOG_DIR) ||
-      optionalString(env.PONTIA_SESSION_ID) ||
+    optionalString(env.PONTIA_SESSION_ID) ||
       optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ||
       optionalString(env.PONTIA_INTERNAL_EVENT_URL),
   );
 }
 
 export async function loadSessionContext(env: EnvLike = process.env): Promise<LoadSessionContextResult> {
-  const logFile = env.PONTIA_PI_HOOK_LOG ?? defaultHookLogFile(env);
+  const logFile = defaultHookLogFile(env);
   const sessionId = optionalString(env.PONTIA_SESSION_ID);
   const internalEventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL);
   const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID);

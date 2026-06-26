@@ -391,7 +391,7 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_SESSION_ID: "sess_consumed",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_consumed",
         PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_PI_HOOK_LOG: join(dir, "hook.log"),
+        PONTIA_HOME: dir,
       },
       fetch: fetchImpl as any,
       loadContext: (env) => loadTurnContext(env, { fetch: fetchImpl as any }),

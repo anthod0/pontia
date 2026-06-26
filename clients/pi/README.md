@@ -22,23 +22,21 @@ On `session_start`, the extension first tries the managed pre-bound runtime envi
 
 On startup, the extension first verifies that the pi cwd is an active, explicitly registered pontia workspace through the External workspace API. If the workspace is missing, deleted, or pontia cannot be reached for this check, the extension disables pontia reporting for that pi process.
 
-When `PONTIA_SESSION_ID` is absent and the active workspace check passes, the extension defers binding a manually started pi TUI until the first real `agent_start`. This matches pi's behavior where a startup-only client session can be discarded when the user exits without sending a prompt, so pontia does not persist an empty session just because pi opened. On first turn, the extension calls the Internal runtime binding upsert API. Configure either `PONTIA_INTERNAL_BINDING_UPSERT_URL` directly or `PONTIA_INTERNAL_EVENT_URL` so the upsert URL can be derived by replacing `/events` with `/runtime-bindings/upsert`; if those are absent, the extension discovers a local pontia server from `PONTIA_CONFIG`, `~/.pi/agent/settings.json` `pontia.config`, or `~/.pontia/config.toml`. The backend creates or reuses the pontia `session_id`; the extension only reports the real pi `client_session_key` from `ctx.sessionManager.getSessionId()`. If pontia cannot be discovered or reached, the extension skips pontia reporting.
+When `PONTIA_SESSION_ID` is absent and the active workspace check passes, the extension defers binding a manually started pi TUI until the first real `agent_start`. This matches pi's behavior where a startup-only client session can be discarded when the user exits without sending a prompt, so pontia does not persist an empty session just because pi opened. On first turn, the extension calls the Internal runtime binding upsert API. Configure either `PONTIA_INTERNAL_BINDING_UPSERT_URL` directly or `PONTIA_INTERNAL_EVENT_URL` so the upsert URL can be derived by replacing `/events` with `/runtime-bindings/upsert`; if those are absent, the extension discovers a local pontia server from `${PONTIA_HOME:-$HOME/.pontia}/config.toml`. The backend creates or reuses the pontia `session_id`; the extension only reports the real pi `client_session_key` from `ctx.sessionManager.getSessionId()`. If pontia cannot be discovered or reached, the extension skips pontia reporting.
 
 ## Runtime environment
 
-The extension reads runtime context from environment variables and, for manually started sessions, can discover the pontia server from `PONTIA_CONFIG`, `~/.pi/agent/settings.json` `pontia.config`, or `${PONTIA_HOME:-$HOME/.pontia}/config.toml`:
+The extension reads runtime context from environment variables and, for manually started sessions, can discover the pontia server from `${PONTIA_HOME:-$HOME/.pontia}/config.toml`:
 
 | Variable | Required | Default |
 | --- | --- | --- |
 | `PONTIA_WORKSPACE` | recommended | pi process cwd |
 | `PONTIA_HOME` | optional | `$HOME/.pontia` |
-| `PONTIA_CONFIG` | optional | `$PONTIA_HOME/config.toml` |
-| `PONTIA_LOG_DIR` | optional | `$PONTIA_HOME/state` |
 | `PONTIA_SESSION_ID` | required for reporting | none |
 | `PONTIA_RUNTIME_INSTANCE_ID` | required for reporting | none |
 | `PONTIA_INTERNAL_EVENT_URL` | required for pre-bound reporting; optional for deriving binding upsert URL | none |
 | `PONTIA_INTERNAL_BINDING_UPSERT_URL` | optional for manual TUI binding | derived from `PONTIA_INTERNAL_EVENT_URL` |
-| `PONTIA_PI_HOOK_LOG` | recommended | `$PONTIA_LOG_DIR/pi-hook.log` |
+| hook log | derived | `$PONTIA_HOME/state/pi-hook.log` |
 
 Backend-delivered input is claimed through the Internal API endpoint derived from `PONTIA_INTERNAL_EVENT_URL`: `/internal/v1/sessions/{session_id}/current-turn/claim`. `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_INTERNAL_EVENT_URL` are required for this pre-bound claim path. `inbox_message_id`, when present in the claim response, is used to link backend-delivered input to the real turn after `agent_start`. `turn_id` is intentionally omitted for pi: the plugin generates the authoritative pontia turn id when pi reports a real `agent_start`.
 
@@ -60,19 +58,18 @@ DAG task development is currently frozen while pontia focuses on session-first W
 
 ## Manual validation
 
-When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_LOG_DIR`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_PI_HOOK_LOG` for the hook. Backend-delivered input is made available through the Internal current-turn claim API. A manually opened pi TUI can instead bind on startup through `PONTIA_INTERNAL_BINDING_UPSERT_URL` or `PONTIA_INTERNAL_EVENT_URL`. The steps below are useful for standalone plugin validation.
+When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_HOME`, and `PONTIA_INTERNAL_EVENT_URL` for the hook. Backend-delivered input is made available through the Internal current-turn claim API. A manually opened pi TUI can instead bind on startup through `PONTIA_INTERNAL_BINDING_UPSERT_URL` or `PONTIA_INTERNAL_EVENT_URL`. The steps below are useful for standalone plugin validation.
 
 1. Start pontia so `/internal/v1/events` and the current-turn claim API are reachable.
 2. Export environment for the pi process:
 
    ```bash
-   export PONTIA_LOG_DIR="$HOME/.pontia/state"
-   mkdir -p "$PONTIA_LOG_DIR"
+   export PONTIA_HOME="$HOME/.pontia"
+   mkdir -p "$PONTIA_HOME/state"
    export PONTIA_WORKSPACE="$PWD"
    export PONTIA_SESSION_ID="sess_xxx"
    export PONTIA_RUNTIME_INSTANCE_ID="rtinst_xxx"
    export PONTIA_INTERNAL_EVENT_URL="http://127.0.0.1:8080/internal/v1/events"
-   export PONTIA_PI_HOOK_LOG="$PONTIA_LOG_DIR/pi-hook.log"
    ```
 
 3. Run a real pi session:
@@ -86,5 +83,5 @@ When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane ex
 5. If reporting fails, inspect diagnostics:
 
    ```bash
-   tail -f "$PONTIA_LOG_DIR/pi-hook.log"
+   tail -f "$PONTIA_HOME/state/pi-hook.log"
    ```

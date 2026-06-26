@@ -159,7 +159,6 @@ async fn configured_local_dashboard_without_index_reports_missing_entrypoint() {
     let dir = tempfile::tempdir().expect("tempdir");
     let dashboard = resolve_dashboard(&DashboardConfig {
         source: Some(dir.path().display().to_string()),
-        cache_dir: None,
     })
     .await;
     let (status, message) = request_dashboard(dashboard).await;
@@ -186,10 +185,12 @@ async fn remote_dashboard_refreshes_cache_and_falls_back_when_refresh_fails() {
         axum::serve(listener, app).await.expect("archive server");
     });
 
-    let cache_dir = tempfile::tempdir().expect("cache dir");
+    let pontia_home = tempfile::tempdir().expect("pontia home");
+    unsafe {
+        std::env::set_var("PONTIA_HOME", pontia_home.path());
+    }
     let config = DashboardConfig {
         source: Some(format!("http://{addr}/dashboard.zip")),
-        cache_dir: Some(cache_dir.path().display().to_string()),
     };
     let dashboard = resolve_dashboard(&config).await;
     let html = request_dashboard_html(dashboard).await;

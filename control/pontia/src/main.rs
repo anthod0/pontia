@@ -1,5 +1,5 @@
 use pontia_application as application;
-use pontia_config::{AppConfig, config_path_from_args};
+use pontia_config::AppConfig;
 use pontia_core::error::Result;
 use pontia_http as http;
 use std::{
@@ -14,8 +14,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 async fn main() -> Result<()> {
     init_tracing();
 
-    let config_path = config_path_from_args(std::env::args())?;
-    let config = AppConfig::from_env_with_config_path(config_path.as_deref())?;
+    let config = AppConfig::from_env()?;
     let app_state = application::initialize(&config).await?;
     let dashboard = http::dashboard::resolve_dashboard(&config.dashboard).await;
     let state = http::HttpState::new(app_state, dashboard);

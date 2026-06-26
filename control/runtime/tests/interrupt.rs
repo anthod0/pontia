@@ -47,8 +47,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     write_fake_tmux(&fake_tmux);
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
     unsafe {
-        std::env::set_var("PONTIA_DATA_DIR", tempdir.path().join("data"));
-        std::env::set_var("PONTIA_LOG_DIR", tempdir.path().join("logs"));
+        std::env::set_var("PONTIA_HOME", tempdir.path().join("pontia-home"));
         std::env::remove_var("PONTIA_PI_TUI_COMMAND");
     }
     set_runtime_config(RuntimeConfig {
@@ -74,8 +73,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
 
     restore_fake_tmux(original_path);
     unsafe {
-        std::env::remove_var("PONTIA_DATA_DIR");
-        std::env::remove_var("PONTIA_LOG_DIR");
+        std::env::remove_var("PONTIA_HOME");
     }
     set_runtime_config(RuntimeConfig::default());
 
@@ -105,8 +103,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
     write_fake_tmux(&fake_tmux);
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
     unsafe {
-        std::env::set_var("PONTIA_DATA_DIR", tempdir.path().join("data"));
-        std::env::set_var("PONTIA_LOG_DIR", tempdir.path().join("logs"));
+        std::env::set_var("PONTIA_HOME", tempdir.path().join("pontia-home"));
         std::env::set_var("PONTIA_PI_TUI_COMMAND", "pi from env");
     }
     set_runtime_config(RuntimeConfig {
@@ -132,8 +129,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
 
     restore_fake_tmux(original_path);
     unsafe {
-        std::env::remove_var("PONTIA_DATA_DIR");
-        std::env::remove_var("PONTIA_LOG_DIR");
+        std::env::remove_var("PONTIA_HOME");
         std::env::remove_var("PONTIA_PI_TUI_COMMAND");
     }
     set_runtime_config(RuntimeConfig::default());

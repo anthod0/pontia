@@ -209,7 +209,6 @@ mod tests {
         let temp_path = dir.path();
         let script_path = temp_path.join("launch.sh");
         let paths = script::RuntimePaths {
-            log_dir: temp_path,
             log_path: &temp_path.join("runtime.log"),
         };
 

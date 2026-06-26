@@ -30,7 +30,6 @@ pub struct AppConfig {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct DashboardConfig {
     pub source: Option<String>,
-    pub cache_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -184,7 +183,6 @@ fn apply_runtime_env_overrides(vars: &HashMap<String, String>, runtime: &mut Run
 #[derive(Debug, Default, Deserialize)]
 struct FileConfig {
     bind_addr: Option<String>,
-    database_url: Option<String>,
     external_api_token: Option<String>,
     run_migrations: Option<bool>,
     default_client_type: Option<String>,
@@ -194,39 +192,11 @@ struct FileConfig {
     dashboard: Option<DashboardConfig>,
 }
 
-pub fn config_path_from_args<I>(args: I) -> Result<Option<PathBuf>>
-where
-    I: IntoIterator<Item = String>,
-{
-    let mut args = args.into_iter().skip(1);
-    let mut config_path = None;
-    while let Some(arg) = args.next() {
-        if arg == "--config" {
-            let path = args.next().ok_or_else(|| Error::InvalidConfig {
-                key: "--config",
-                message: "--config requires a path".to_string(),
-            })?;
-            config_path = Some(PathBuf::from(path));
-        }
-    }
-    Ok(config_path)
-}
-
 impl AppConfig {
     pub fn from_env() -> Result<Self> {
         let _ = dotenvy::dotenv();
         let vars: HashMap<String, String> = env::vars().collect();
-        let config_path =
-            explicit_config_path(&vars).or_else(|| default_config_path_if_exists(&vars));
-        Self::from_vars_and_file(&vars, config_path.as_deref())
-    }
-
-    pub fn from_env_with_config_path(config_path: Option<&Path>) -> Result<Self> {
-        let _ = dotenvy::dotenv();
-        let vars: HashMap<String, String> = env::vars().collect();
-        let config_path = config_path.map(Path::to_path_buf).or_else(|| {
-            explicit_config_path(&vars).or_else(|| default_config_path_if_exists(&vars))
-        });
+        let config_path = default_config_path_if_exists(&vars);
         Self::from_vars_and_file(&vars, config_path.as_deref())
     }
 
@@ -253,10 +223,7 @@ impl AppConfig {
                 message: err.to_string(),
             })?;
 
-        let database_url = get(vars, "PONTIA_DATABASE_URL")
-            .or_else(|| file.and_then(|config| config.database_url.as_deref()))
-            .map(ToString::to_string)
-            .unwrap_or_else(|| default_database_url(vars));
+        let database_url = default_database_url(vars);
 
         let external_api_token = get(vars, "PONTIA_EXTERNAL_API_TOKEN")
             .or_else(|| file.and_then(|config| config.external_api_token.as_deref()))
@@ -282,10 +249,7 @@ impl AppConfig {
         };
         let graph = GraphRuntimeConfig {
             enabled: graph_enabled,
-            db_dir: get(vars, "PONTIA_GRAPH_DB_DIR")
-                .filter(|value| !value.trim().is_empty())
-                .map(ToString::to_string)
-                .or_else(|| graph_enabled.then(|| default_graph_db_dir(&database_url))),
+            db_dir: graph_enabled.then(|| default_graph_db_dir(vars)),
         };
 
         let workspace_browser = match get(vars, "PONTIA_WORKSPACE_ROOTS") {
@@ -307,10 +271,6 @@ impl AppConfig {
         if let Some(value) = get(vars, "PONTIA_DASHBOARD_SOURCE") {
             dashboard.source = non_empty(value);
         }
-        if let Some(value) = get(vars, "PONTIA_DASHBOARD_CACHE_DIR") {
-            dashboard.cache_dir = non_empty(value);
-        }
-
         let mut runtime = file
             .and_then(|config| config.runtime.clone())
             .unwrap_or_default();
@@ -349,12 +309,6 @@ fn validate_real_default_client_type(key: &'static str, client_type: &str) -> Re
 
 fn non_empty(value: &str) -> Option<String> {
     (!value.trim().is_empty()).then(|| value.to_string())
-}
-
-fn explicit_config_path(vars: &HashMap<String, String>) -> Option<PathBuf> {
-    get(vars, "PONTIA_CONFIG")
-        .filter(|value| !value.trim().is_empty())
-        .map(PathBuf::from)
 }
 
 fn default_config_path_if_exists(vars: &HashMap<String, String>) -> Option<PathBuf> {
@@ -396,24 +350,17 @@ fn expand_home_path(path: &str) -> PathBuf {
 
 fn read_file_config(path: &Path) -> Result<FileConfig> {
     let contents = std::fs::read_to_string(path).map_err(|err| Error::InvalidConfig {
-        key: "PONTIA_CONFIG",
+        key: "PONTIA_HOME",
         message: format!("failed to read {}: {err}", path.display()),
     })?;
     toml::from_str(&contents).map_err(|err| Error::InvalidConfig {
-        key: "PONTIA_CONFIG",
+        key: "PONTIA_HOME",
         message: format!("failed to parse {}: {err}", path.display()),
     })
 }
 
-fn default_graph_db_dir(database_url: &str) -> String {
-    let path = database_url
-        .strip_prefix("sqlite://")
-        .unwrap_or(database_url);
-    let parent = std::path::Path::new(path)
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| std::path::Path::new("."));
-    parent.join("graph").join("lbug").display().to_string()
+fn default_graph_db_dir(vars: &HashMap<String, String>) -> String {
+    pontia_home_string(vars).trim_end_matches('/').to_string() + "/data/graph/lbug"
 }
 
 fn parse_workspace_roots(value: &str) -> Result<Vec<WorkspaceRootConfig>> {

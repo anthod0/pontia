@@ -34,9 +34,6 @@ pub(super) fn log_paths(_session_id: &str) -> Result<LogPaths> {
 }
 
 fn pontia_log_dir() -> Result<PathBuf> {
-    if let Ok(path) = std::env::var("PONTIA_LOG_DIR") {
-        return Ok(PathBuf::from(path));
-    }
     if let Ok(path) = std::env::var("PONTIA_HOME")
         && !path.trim().is_empty()
     {
@@ -54,29 +51,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn log_paths_are_global_under_pontia_log_dir() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        unsafe {
-            std::env::set_var("PONTIA_LOG_DIR", tempdir.path());
-        }
-
-        let paths = log_paths("sess_test").expect("log paths");
-
-        unsafe {
-            std::env::remove_var("PONTIA_LOG_DIR");
-        }
-        assert_eq!(paths.log_dir, tempdir.path());
-        assert_eq!(paths.runtime_log, tempdir.path().join("runtime.log"));
-        assert_eq!(paths.pi_hook_log, tempdir.path().join("pi-hook.log"));
-    }
-
-    #[test]
     fn log_paths_default_to_pontia_home_state_dir() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         unsafe {
-            std::env::remove_var("PONTIA_LOG_DIR");
             std::env::remove_var("PONTIA_HOME");
-            std::env::remove_var("XDG_STATE_HOME");
             std::env::set_var("HOME", tempdir.path());
         }
 
@@ -97,7 +75,6 @@ mod tests {
     fn log_paths_respect_pontia_home() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         unsafe {
-            std::env::remove_var("PONTIA_LOG_DIR");
             std::env::set_var("PONTIA_HOME", tempdir.path());
         }
 

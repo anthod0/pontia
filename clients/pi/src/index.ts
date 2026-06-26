@@ -74,7 +74,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       if (!profilePrompt) return { systemPrompt: currentSystemPrompt };
       return { systemPrompt: `${currentSystemPrompt}\n\n${profilePrompt}` };
     } catch (error) {
-      await logDiagnostic(env.PONTIA_PI_HOOK_LOG ?? defaultHookLogFile(env), {
+      await logDiagnostic(defaultHookLogFile(env), {
         level: "warn",
         code: "system_prompt_append_failed",
         message: "failed to append pontia execution profile system prompt",
@@ -151,7 +151,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       boundSessionContext = context;
       readyReported = await makeReporter(logFile).report(context, buildSessionReadyEvent(context));
     } catch (error) {
-      const logFile = env.PONTIA_PI_HOOK_LOG ?? "pi-hook.log";
+      const logFile = defaultHookLogFile(env);
       await logDiagnostic(logFile, {
         level: "error",
         code: "unexpected_extension_exception",
@@ -173,7 +173,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       if (!context) return;
       await makeReporter(logFile).report(context, buildSessionExitedEvent(context, reason));
     } catch (error) {
-      const logFile = env.PONTIA_PI_HOOK_LOG ?? "pi-hook.log";
+      const logFile = defaultHookLogFile(env);
       await logDiagnostic(logFile, {
         level: "error",
         code: "unexpected_extension_exception",
@@ -255,7 +255,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     } catch (error) {
       pendingPrompt = undefined;
       activeTurn = undefined;
-      const logFile = env.PONTIA_PI_HOOK_LOG ?? "pi-hook.log";
+      const logFile = defaultHookLogFile(env);
       await logDiagnostic(logFile, {
         level: "error",
         code: "unexpected_extension_exception",
