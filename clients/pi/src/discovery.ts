@@ -33,12 +33,32 @@ function expandPath(path: string, env: EnvLike): string {
   return isAbsolute(expanded) ? expanded : resolve(expanded);
 }
 
+function settingsPath(env: EnvLike): string {
+  return join(homeDir(env), ".pi", "agent", "settings.json");
+}
+
 function pontiaHomeDir(env: EnvLike): string {
   return optionalString(env.PONTIA_HOME) ?? join(homeDir(env), ".pontia");
 }
 
 function defaultPontiaConfigPath(env: EnvLike): string {
   return join(pontiaHomeDir(env), "config.toml");
+}
+
+async function readPiSettingsPontiaConfig(env: EnvLike): Promise<string | undefined> {
+  let raw: string;
+  try {
+    raw = await readFile(settingsPath(env), "utf8");
+  } catch {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const pontia = parsed.pontia && typeof parsed.pontia === "object" && !Array.isArray(parsed.pontia) ? parsed.pontia as Record<string, unknown> : undefined;
+    return optionalString(pontia?.config);
+  } catch {
+    return undefined;
+  }
 }
 
 function parseTomlString(raw: string, key: string): string | undefined {
@@ -89,7 +109,8 @@ export async function resolvePontiaConnection(options: PontiaDiscoveryOptions = 
   }
 
   const configFromEnv = optionalString(env.PONTIA_CONFIG);
-  const configPath = expandPath(configFromEnv ?? defaultPontiaConfigPath(env), env);
+  const configFromSettings = configFromEnv ? undefined : await readPiSettingsPontiaConfig(env);
+  const configPath = expandPath(configFromEnv ?? configFromSettings ?? defaultPontiaConfigPath(env), env);
 
   let raw: string;
   try {

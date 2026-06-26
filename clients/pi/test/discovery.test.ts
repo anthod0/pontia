@@ -18,20 +18,20 @@ async function tempDir() {
 }
 
 describe("resolvePontiaConnection", () => {
-  test("ignores pi settings pontia config and reads default pontia home config", async () => {
+  test("reads pontia config path from pi settings before default pontia home config", async () => {
     const root = await tempDir();
     const settingsFile = join(root, ".pi", "agent", "settings.json");
-    const settingsPontiaConfig = join(root, ".config", "pontia-stable", "config.toml");
+    const settingsPontiaConfig = join(root, ".pontia-stable", "config.toml");
     const homePontiaConfig = join(root, ".pontia", "config.toml");
     await mkdir(join(root, ".pi", "agent"), { recursive: true });
-    await mkdir(join(root, ".config", "pontia-stable"), { recursive: true });
+    await mkdir(join(root, ".pontia-stable"), { recursive: true });
     await mkdir(join(root, ".pontia"), { recursive: true });
     await writeFile(settingsFile, JSON.stringify({ pontia: { config: settingsPontiaConfig } }));
     await writeFile(settingsPontiaConfig, 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "stable-token"\n');
     await writeFile(homePontiaConfig, 'bind_addr = "127.0.0.1:18081"\nexternal_api_token = "home-token"\n');
 
     const fetchImpl = vi.fn(async (url: string) => {
-      expect(url).toBe("http://127.0.0.1:18081/healthz");
+      expect(url).toBe("http://127.0.0.1:18080/healthz");
       return new Response("ok", { status: 200 });
     });
 
@@ -41,11 +41,11 @@ describe("resolvePontiaConnection", () => {
     });
 
     expect(result).toEqual({
-      baseUrl: "http://127.0.0.1:18081",
-      internalEventUrl: "http://127.0.0.1:18081/internal/v1/events",
-      bindingUpsertUrl: "http://127.0.0.1:18081/internal/v1/runtime-bindings/upsert",
-      externalApiUrl: "http://127.0.0.1:18081/external/v1",
-      externalApiToken: "home-token",
+      baseUrl: "http://127.0.0.1:18080",
+      internalEventUrl: "http://127.0.0.1:18080/internal/v1/events",
+      bindingUpsertUrl: "http://127.0.0.1:18080/internal/v1/runtime-bindings/upsert",
+      externalApiUrl: "http://127.0.0.1:18080/external/v1",
+      externalApiToken: "stable-token",
     });
   });
 
