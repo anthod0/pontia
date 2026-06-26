@@ -11,11 +11,6 @@ fn runtime_config() -> &'static RwLock<RuntimeConfig> {
     CONFIG.get_or_init(|| RwLock::new(RuntimeConfig::default()))
 }
 
-fn external_api_token_config() -> &'static RwLock<Option<String>> {
-    static CONFIG: OnceLock<RwLock<Option<String>>> = OnceLock::new();
-    CONFIG.get_or_init(|| RwLock::new(None))
-}
-
 fn runtime_bind_addr_config() -> &'static RwLock<Option<SocketAddr>> {
     static CONFIG: OnceLock<RwLock<Option<SocketAddr>>> = OnceLock::new();
     CONFIG.get_or_init(|| RwLock::new(None))
@@ -26,13 +21,6 @@ pub fn set_runtime_config(config: RuntimeConfig) {
         .write()
         .expect("runtime config lock poisoned");
     *guard = config;
-}
-
-pub fn set_runtime_external_api_token(token: Option<String>) {
-    let mut guard = external_api_token_config()
-        .write()
-        .expect("runtime external api token lock poisoned");
-    *guard = token;
 }
 
 pub fn set_runtime_bind_addr(bind_addr: SocketAddr) {
@@ -50,19 +38,8 @@ pub fn reset_runtime_bind_addr_for_tests() {
     *guard = None;
 }
 
-pub(super) fn configured_external_api_token() -> Option<String> {
-    external_api_token_config()
-        .read()
-        .expect("runtime external api token lock poisoned")
-        .clone()
-}
-
 pub fn configured_internal_event_url() -> Option<String> {
     configured_api_base_url().map(|base_url| format!("{base_url}/internal/v1/events"))
-}
-
-pub fn configured_external_api_url() -> Option<String> {
-    configured_api_base_url().map(|base_url| format!("{base_url}/external/v1"))
 }
 
 fn configured_api_base_url() -> Option<String> {

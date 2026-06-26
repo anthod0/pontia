@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { resolvePontiaConnection } from "./discovery.js";
 
 export interface TurnContext {
   sessionId: string;
@@ -47,19 +48,19 @@ function claimUrl(internalEventUrl: string, sessionId: string): string | undefin
   }
 }
 
-function contextFromRecord(record: Record<string, unknown>, env: EnvLike, logFile: string): LoadTurnContextResult {
+function contextFromRecord(record: Record<string, unknown>, env: EnvLike, logFile: string, discoveredInternalEventUrl?: string): LoadTurnContextResult {
   const errors: string[] = [];
   const sessionId = optionalString(record.session_id);
   const turnId = optionalString(record.turn_id);
   const clientType = optionalString(record.client_type);
-  const internalEventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL) ?? optionalString(record.internal_event_url);
+  const internalEventUrl = optionalString(record.internal_event_url) ?? discoveredInternalEventUrl;
   const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? optionalString(record.runtime_instance_id);
   const input = optionalString(record.input);
   const inboxMessageId = optionalString(record.inbox_message_id);
 
   if (!sessionId) errors.push("session_id is required");
   if (clientType !== "pi") errors.push("client_type must be pi");
-  if (!internalEventUrl) errors.push("internal_event_url or PONTIA_INTERNAL_EVENT_URL is required");
+  if (!internalEventUrl) errors.push("internal_event_url or pontia connection from PONTIA_HOME/config.toml is required");
   if (!runtimeInstanceId) errors.push("runtime_instance_id or PONTIA_RUNTIME_INSTANCE_ID is required");
 
   if (errors.length > 0) {
@@ -84,8 +85,10 @@ function contextFromRecord(record: Record<string, unknown>, env: EnvLike, logFil
 async function claimTurnContext(env: EnvLike, logFile: string, fetchImpl: typeof fetch): Promise<LoadTurnContextResult | undefined> {
   const sessionId = optionalString(env.PONTIA_SESSION_ID);
   const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID);
-  const internalEventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL);
-  if (!sessionId || !runtimeInstanceId || !internalEventUrl) return undefined;
+  if (!sessionId || !runtimeInstanceId) return undefined;
+  const connection = await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const internalEventUrl = connection?.internalEventUrl;
+  if (!internalEventUrl) return undefined;
   const url = claimUrl(internalEventUrl, sessionId);
   if (!url) return undefined;
 
@@ -100,7 +103,7 @@ async function claimTurnContext(env: EnvLike, logFile: string, fetchImpl: typeof
     const data = asRecord(body)?.data;
     const currentTurn = asRecord(asRecord(data)?.current_turn);
     if (!currentTurn) return { ok: false, reason: "no pending current turn", logFile, silent: true };
-    return contextFromRecord(currentTurn, env, logFile);
+    return contextFromRecord(currentTurn, env, logFile, internalEventUrl);
   } catch {
     return undefined;
   }

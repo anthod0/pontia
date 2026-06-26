@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -32,6 +33,8 @@ const context: TurnContext = {
 };
 
 const tmpDirs: string[] = [];
+const defaultPontiaHome = mkdtempSync(join(tmpdir(), "pontia-pi-index-home-"));
+writeFileSync(join(defaultPontiaHome, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
 
 afterEach(async () => {
   vi.useRealTimers();
@@ -49,7 +52,6 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
   const { pi, handlers } = fakePi();
   const reported: InternalEvent[] = [];
   createPontiaPiExtension(pi as any, {
-    env: {},
     loadContext: vi.fn(async () => ({ ok: true as const, context, logFile: "hook.log" })),
     makeReporter: vi.fn(() => ({ report: vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
       reported.push(event);
@@ -57,6 +59,7 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
     }) })),
     logDiagnostic: vi.fn(async () => undefined),
     ...overrides,
+    env: { PONTIA_HOME: defaultPontiaHome, ...(overrides.env ?? {}) },
   });
   return { handlers, reported };
 }
@@ -72,9 +75,6 @@ describe("pontia pi extension lifecycle", () => {
       env: {
         PONTIA_SESSION_ID: "sess_ready",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });
@@ -114,9 +114,6 @@ describe("pontia pi extension lifecycle", () => {
       env: {
         PONTIA_SESSION_ID: "sess_new",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_new",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });
@@ -172,9 +169,6 @@ describe("pontia pi extension lifecycle", () => {
     });
     const { handlers, reported } = install({
       env: {
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
         TMUX: "/tmp/tmux-1000/default,2071,502",
         TMUX_PANE: "%42",
       },
@@ -215,9 +209,6 @@ describe("pontia pi extension lifecycle", () => {
     });
     const { handlers, reported } = install({
       env: {
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
         TMUX: "/tmp/tmux-1000/default,2071,502",
         TMUX_PANE: "%42",
       },
@@ -249,9 +240,6 @@ describe("pontia pi extension lifecycle", () => {
     const logDiagnostic = vi.fn(async () => undefined);
     const { handlers, reported } = install({
       env: {
-        PONTIA_INTERNAL_BINDING_UPSERT_URL: "http://localhost/internal/v1/runtime-bindings/upsert",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
       logDiagnostic,
@@ -278,9 +266,6 @@ describe("pontia pi extension lifecycle", () => {
       env: {
         PONTIA_SESSION_ID: "sess_ready",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });
@@ -300,9 +285,6 @@ describe("pontia pi extension lifecycle", () => {
     await writeFile(pontiaConfig, 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "home-token"\n');
 
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url === "http://127.0.0.1:18080/healthz") {
-        return new Response("ok", { status: 200 });
-      }
       if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
@@ -311,13 +293,13 @@ describe("pontia pi extension lifecycle", () => {
       }
       return new Response("unexpected", { status: 500 });
     });
-    const { handlers, reported } = install({ env: { HOME: root }, fetch: fetchImpl as any });
+    const { handlers, reported } = install({ env: { PONTIA_HOME: join(root, ".pontia") }, fetch: fetchImpl as any });
 
     await handlers.session_start({ reason: "startup" }, {
       sessionManager: { getSessionId: () => "pi_session_discovered", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(reported).toEqual([]);
   });
 
@@ -341,9 +323,6 @@ describe("pontia pi extension lifecycle", () => {
     });
     const { handlers } = install({
       env: {
-        PONTIA_INTERNAL_BINDING_UPSERT_URL: "http://localhost/internal/v1/runtime-bindings/upsert",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
         TMUX: "/tmp/tmux-1000/default,2071,502",
       },
       fetch: fetchImpl as any,
@@ -386,11 +365,11 @@ describe("pontia pi extension lifecycle", () => {
       ),
     );
 
+    await writeFile(join(dir, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_consumed",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_consumed",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
         PONTIA_HOME: dir,
       },
       fetch: fetchImpl as any,
@@ -422,9 +401,6 @@ describe("pontia pi extension lifecycle", () => {
     });
     const { handlers, reported } = install({
       env: {
-        PONTIA_INTERNAL_BINDING_UPSERT_URL: "http://localhost/internal/v1/runtime-bindings/upsert",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
       loadContext: vi.fn(async () => ({
@@ -477,10 +453,6 @@ describe("pontia pi extension lifecycle", () => {
       env: {
         PONTIA_SESSION_ID: "sess_parent",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_parent",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_INTERNAL_BINDING_UPSERT_URL: "http://localhost/internal/v1/runtime-bindings/upsert",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
       loadContext: vi.fn(async () => ({
@@ -527,9 +499,6 @@ describe("pontia pi extension lifecycle", () => {
     });
     const { handlers, reported } = install({
       env: {
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });
@@ -563,7 +532,6 @@ describe("pontia pi extension lifecycle", () => {
       env: {
         PONTIA_SESSION_ID: "sess_ready",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
       },
     });
 
@@ -600,9 +568,6 @@ describe("pontia pi extension lifecycle", () => {
       env: {
         PONTIA_SESSION_ID: "sess_exit",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });
@@ -629,9 +594,6 @@ describe("pontia pi extension lifecycle", () => {
       env: {
         PONTIA_SESSION_ID: "sess_exit",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });
@@ -658,9 +620,6 @@ describe("pontia pi extension lifecycle", () => {
       env: {
         PONTIA_SESSION_ID: "sess_exit",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });
@@ -686,8 +645,6 @@ describe("pontia pi extension lifecycle", () => {
     const { handlers } = install({
       env: {
         PONTIA_SESSION_ID: "sess_1",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });
@@ -708,8 +665,6 @@ describe("pontia pi extension lifecycle", () => {
     const { handlers } = install({
       env: {
         PONTIA_SESSION_ID: "sess_1",
-        PONTIA_EXTERNAL_API_URL: "http://localhost/external/v1",
-        PONTIA_EXTERNAL_API_TOKEN: "token",
       },
       fetch: fetchImpl as any,
     });

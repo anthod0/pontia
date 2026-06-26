@@ -9,7 +9,7 @@ use std::{
 
 use pontia_config::{AppConfig, FilePickerConfig, GraphRuntimeConfig};
 use pontia_core::{domain::DomainEvent, error::Result};
-use pontia_runtime::{set_runtime_bind_addr, set_runtime_config, set_runtime_external_api_token};
+use pontia_runtime::{set_runtime_bind_addr, set_runtime_config};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 use super::set_default_client_type;
@@ -289,7 +289,6 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
 
     set_default_client_type(config.default_client_type.clone());
     set_runtime_config(config.runtime.clone());
-    set_runtime_external_api_token(config.external_api_token.clone());
     set_runtime_bind_addr(config.bind_addr);
     Ok(AppState::builder(db)
         .external_api_token(config.external_api_token.clone())

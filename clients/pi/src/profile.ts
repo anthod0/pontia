@@ -1,13 +1,11 @@
 import type { EnvLike } from "./context.js";
+import { resolvePontiaConnection } from "./discovery.js";
 import { fetchJson, optionalString, responseDataRecord } from "./internal-api.js";
 
-function externalApiUrl(env: EnvLike): string | undefined {
-  return optionalString(env.PONTIA_EXTERNAL_API_URL)?.replace(/\/+$/, "");
-}
-
 export async function loadProfileSystemPrompt(env: EnvLike, fetchImpl: typeof fetch): Promise<string | undefined> {
-  const baseUrl = externalApiUrl(env);
-  const token = optionalString(env.PONTIA_EXTERNAL_API_TOKEN);
+  const connection = await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const baseUrl = connection?.externalApiUrl;
+  const token = connection?.externalApiToken;
   const sessionId = optionalString(env.PONTIA_SESSION_ID);
   if (!baseUrl || !token || !sessionId) return undefined;
 

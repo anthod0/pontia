@@ -33,6 +33,6 @@ pnpm test
 pnpm typecheck
 ```
 
-On `SessionStart` startup, the hook reads `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, `PONTIA_INTERNAL_EVENT_URL`, and `PONTIA_HOME` to post a one-time `session.ready` signal from `agent_client`; diagnostics are written to `$PONTIA_HOME/state/claude-hook.log`.
+On `SessionStart` startup, the hook reads `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_HOME`; it discovers the backend from `$PONTIA_HOME/config.toml` and posts a one-time `session.ready` signal from `agent_client`. Diagnostics are written to `$PONTIA_HOME/state/claude-hook.log`.
 
 Claude Code turn hooks are currently disabled.

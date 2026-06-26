@@ -90,12 +90,6 @@ fn configure_test_runtime_env() {
     });
     unsafe {
         std::env::set_var("PONTIA_HOME", pontia_home);
-        std::env::set_var(
-            "PONTIA_INTERNAL_EVENT_URL",
-            "http://127.0.0.1:9/internal/v1/events",
-        );
-        std::env::set_var("PONTIA_EXTERNAL_API_URL", "http://127.0.0.1:9/external/v1");
-        std::env::set_var("PONTIA_EXTERNAL_API_TOKEN", TOKEN);
     }
 }
 

@@ -31,22 +31,8 @@ function hasPreboundSessionIntent(env: EnvLike): boolean {
   return Boolean(optionalString(env.PONTIA_SESSION_ID));
 }
 
-function bindingUpsertUrl(env: EnvLike): string | undefined {
-  const explicit = optionalString(env.PONTIA_INTERNAL_BINDING_UPSERT_URL);
-  if (explicit) return explicit;
-  const eventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL);
-  if (!eventUrl) return undefined;
-  return eventUrl.replace(/\/events\/?$/, "/runtime-bindings/upsert");
-}
-
-function agentBindingLookupUrl(env: EnvLike, discoveredBindingUpsertUrl?: string): string | undefined {
-  const explicit = optionalString(env.PONTIA_INTERNAL_AGENT_BINDING_LOOKUP_URL);
-  if (explicit) return explicit;
-  const upsertUrl = bindingUpsertUrl(env) ?? discoveredBindingUpsertUrl;
-  if (upsertUrl) return upsertUrl.replace(/\/runtime-bindings\/upsert\/?$/, "/agent-bindings");
-  const eventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL);
-  if (!eventUrl) return undefined;
-  return eventUrl.replace(/\/events\/?$/, "/agent-bindings");
+function agentBindingLookupUrl(discoveredBindingUpsertUrl?: string): string | undefined {
+  return discoveredBindingUpsertUrl?.replace(/\/runtime-bindings\/upsert\/?$/, "/agent-bindings");
 }
 
 function newRuntimeInstanceId(): string {
@@ -69,8 +55,8 @@ export async function bindManualSession(
 ): Promise<SessionContext | undefined> {
   if (hasPreboundSessionIntent(env) && options.startKind !== "fork") return undefined;
   if (!sessionDetails.clientSessionKey) return undefined;
-  const discovered = bindingUpsertUrl(env) ? undefined : await resolvePontiaConnection({ env, fetch: fetchImpl });
-  const url = bindingUpsertUrl(env) ?? discovered?.bindingUpsertUrl;
+  const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const url = discovered?.bindingUpsertUrl;
   if (!url) return undefined;
 
   const runtimeInstanceId = options.startKind === "fork"
@@ -102,7 +88,7 @@ export async function bindManualSession(
   const runtime = asRecord(record?.runtime);
   const sessionId = optionalString(session?.session_id);
   const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id) ?? runtimeInstanceId;
-  const internalEventUrl = optionalString(runtime?.internal_event_url) ?? optionalString(env.PONTIA_INTERNAL_EVENT_URL);
+  const internalEventUrl = optionalString(runtime?.internal_event_url) ?? discovered?.internalEventUrl;
   if (!sessionId) throw new Error("runtime binding upsert response missing session.session_id");
   if (!internalEventUrl) throw new Error("runtime binding upsert response missing runtime.internal_event_url");
 
@@ -121,8 +107,8 @@ export async function hasExistingAgentBinding(
   sessionDetails: PiSessionDetails,
 ): Promise<boolean> {
   if (!sessionDetails.clientSessionKey) return false;
-  const discovered = bindingUpsertUrl(env) ? undefined : await resolvePontiaConnection({ env, fetch: fetchImpl });
-  const baseUrl = agentBindingLookupUrl(env, discovered?.bindingUpsertUrl);
+  const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const baseUrl = agentBindingLookupUrl(discovered?.bindingUpsertUrl);
   if (!baseUrl) return false;
   const url = new URL(baseUrl);
   url.searchParams.set("client_type", "pi");

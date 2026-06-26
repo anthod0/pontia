@@ -55,7 +55,7 @@ function baseUrlFromBindAddr(bindAddr: string): string | undefined {
   const port = bracketMatch?.[2] ?? plainMatch?.[2];
   if (!host || !port) return undefined;
   const localHost = host === "0.0.0.0" || host === "::" || host === "[::]" ? "127.0.0.1" : host;
-  return `http://${localHost}:${port}`;
+  return port === "80" ? `http://${localHost}` : `http://${localHost}:${port}`;
 }
 
 function connectionFromBaseUrl(baseUrl: string, externalApiToken?: string): PontiaConnection {
@@ -69,25 +69,8 @@ function connectionFromBaseUrl(baseUrl: string, externalApiToken?: string): Pont
   };
 }
 
-async function isHealthy(fetchImpl: typeof fetch, baseUrl: string): Promise<boolean> {
-  try {
-    const response = await fetchImpl(`${baseUrl.replace(/\/+$/, "")}/healthz`);
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
 export async function resolvePontiaConnection(options: PontiaDiscoveryOptions = {}): Promise<PontiaConnection | undefined> {
   const env = options.env ?? process.env;
-  const fetchImpl = options.fetch ?? fetch;
-
-  const explicitEventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL);
-  if (explicitEventUrl) {
-    const baseUrl = explicitEventUrl.replace(/\/internal\/v1\/events\/?$/, "");
-    return connectionFromBaseUrl(baseUrl, optionalString(env.PONTIA_EXTERNAL_API_TOKEN));
-  }
-
   const configPath = expandPath(defaultPontiaConfigPath(env), env);
 
   let raw: string;
@@ -101,7 +84,5 @@ export async function resolvePontiaConnection(options: PontiaDiscoveryOptions = 
   if (!bindAddr) return undefined;
   const baseUrl = baseUrlFromBindAddr(bindAddr);
   if (!baseUrl) return undefined;
-  if (!(await isHealthy(fetchImpl, baseUrl))) return undefined;
-
-  return connectionFromBaseUrl(baseUrl, optionalString(env.PONTIA_EXTERNAL_API_TOKEN) ?? parseTomlString(raw, "external_api_token"));
+  return connectionFromBaseUrl(baseUrl, parseTomlString(raw, "external_api_token"));
 }

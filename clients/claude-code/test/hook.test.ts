@@ -1,7 +1,25 @@
-import { describe, expect, test, vi } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { handleClaudeHook } from "../src/hook.js";
 import type { TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
+
+const tmpDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tmpDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+  tmpDirs.length = 0;
+});
+
+async function pontiaHomeWithConfig() {
+  const dir = await mkdtemp(join(tmpdir(), "pontia-claude-hook-"));
+  tmpDirs.push(dir);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "config.toml"), 'bind_addr = "localhost:80"\n');
+  return dir;
+}
 
 const context: TurnContext = {
   sessionId: "sess_1",
@@ -33,8 +51,7 @@ describe("handleClaudeHook", () => {
     deps.env = {
       PONTIA_SESSION_ID: "sess_ready",
       PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
-      PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
-      PONTIA_HOME: "/tmp/pontia-test",
+      PONTIA_HOME: await pontiaHomeWithConfig(),
     };
 
     const exitCode = await handleClaudeHook("session-start", { hook_event_name: "SessionStart", source: "startup" }, deps);

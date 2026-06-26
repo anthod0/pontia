@@ -96,6 +96,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       const logFile = loaded.logFile;
       let context: SessionContext | undefined;
 
+      if (env.PONTIA_SESSION_ID && !loaded.ok) return;
+
       const workspaceActive = await isActiveRegisteredWorkspace(env, fetchImpl, sessionDetails.clientCwd);
       if (workspaceActive !== true) {
         pontiaDisabled = true;

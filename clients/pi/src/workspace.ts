@@ -2,11 +2,7 @@ import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { EnvLike } from "./context.js";
 import { resolvePontiaConnection } from "./discovery.js";
-import { asRecord, fetchJson, optionalString, responseDataRecord } from "./internal-api.js";
-
-function externalApiUrl(env: EnvLike): string | undefined {
-  return optionalString(env.PONTIA_EXTERNAL_API_URL)?.replace(/\/+$/, "");
-}
+import { asRecord, fetchJson, responseDataRecord } from "./internal-api.js";
 
 async function canonicalPath(path: string): Promise<string> {
   try {
@@ -17,10 +13,6 @@ async function canonicalPath(path: string): Promise<string> {
 }
 
 export async function resolveWorkspaceApi(env: EnvLike, fetchImpl: typeof fetch): Promise<{ externalApiUrl: string; externalApiToken: string } | undefined> {
-  const explicitUrl = externalApiUrl(env);
-  const explicitToken = optionalString(env.PONTIA_EXTERNAL_API_TOKEN);
-  if (explicitUrl && explicitToken) return { externalApiUrl: explicitUrl, externalApiToken: explicitToken };
-
   const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
   if (!discovered?.externalApiToken) return undefined;
   return { externalApiUrl: discovered.externalApiUrl, externalApiToken: discovered.externalApiToken };

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -11,8 +11,30 @@ function stringValue(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+function pontiaHome() {
+  return stringValue(env.PONTIA_HOME) ?? join(stringValue(env.HOME) ?? homedir(), ".pontia");
+}
+
 function logFile() {
-  return join(stringValue(env.PONTIA_HOME) ?? join(stringValue(env.HOME) ?? homedir(), ".pontia"), "state", "claude-hook.log");
+  return join(pontiaHome(), "state", "claude-hook.log");
+}
+
+async function internalEventUrlFromPontiaHome() {
+  let raw;
+  try {
+    raw = await readFile(join(pontiaHome(), "config.toml"), "utf8");
+  } catch {
+    return undefined;
+  }
+  const match = raw.match(/^\s*bind_addr\s*=\s*"([^"]*)"/m);
+  const bindAddr = stringValue(match?.[1]);
+  if (!bindAddr) return undefined;
+  const parts = bindAddr.match(/^([^:]+):(\d+)$/);
+  if (!parts) return undefined;
+  const host = parts[1] === "0.0.0.0" || parts[1] === "::" ? "127.0.0.1" : parts[1];
+  const port = parts[2];
+  const baseUrl = port === "80" ? `http://${host}` : `http://${host}:${port}`;
+  return `${baseUrl}/internal/v1/events`;
 }
 
 async function appendDiagnostic(entry) {
@@ -41,11 +63,11 @@ async function stdinJson() {
 async function loadSessionContext() {
   const sessionId = stringValue(env.PONTIA_SESSION_ID);
   const runtimeInstanceId = stringValue(env.PONTIA_RUNTIME_INSTANCE_ID);
-  const internalEventUrl = stringValue(env.PONTIA_INTERNAL_EVENT_URL);
+  const internalEventUrl = await internalEventUrlFromPontiaHome();
   const errors = [];
   if (!sessionId) errors.push("PONTIA_SESSION_ID is required");
   if (!runtimeInstanceId) errors.push("PONTIA_RUNTIME_INSTANCE_ID is required");
-  if (!internalEventUrl) errors.push("PONTIA_INTERNAL_EVENT_URL is required");
+  if (!internalEventUrl) errors.push("pontia connection from PONTIA_HOME/config.toml is required");
 
   if (errors.length) {
     await appendDiagnostic({ level: "error", code: "invalid_session_context", message: errors.join("; ") });

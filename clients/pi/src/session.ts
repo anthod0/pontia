@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { appendDiagnostic } from "./diagnostics.js";
 import type { EnvLike } from "./context.js";
+import { resolvePontiaConnection } from "./discovery.js";
 
 export interface SessionContext {
   sessionId: string;
@@ -33,20 +34,20 @@ function optionalString(value: unknown): string | undefined {
 function hasPontiaRuntimeIntent(env: EnvLike): boolean {
   return Boolean(
     optionalString(env.PONTIA_SESSION_ID) ||
-      optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ||
-      optionalString(env.PONTIA_INTERNAL_EVENT_URL),
+      optionalString(env.PONTIA_RUNTIME_INSTANCE_ID),
   );
 }
 
 export async function loadSessionContext(env: EnvLike = process.env): Promise<LoadSessionContextResult> {
   const logFile = defaultHookLogFile(env);
   const sessionId = optionalString(env.PONTIA_SESSION_ID);
-  const internalEventUrl = optionalString(env.PONTIA_INTERNAL_EVENT_URL);
   const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID);
+  const connection = await resolvePontiaConnection({ env });
+  const internalEventUrl = connection?.internalEventUrl;
   const errors: string[] = [];
 
   if (!sessionId) errors.push("PONTIA_SESSION_ID is required");
-  if (!internalEventUrl) errors.push("PONTIA_INTERNAL_EVENT_URL is required");
+  if (!internalEventUrl) errors.push("pontia connection from PONTIA_HOME/config.toml is required");
   if (!runtimeInstanceId) errors.push("PONTIA_RUNTIME_INSTANCE_ID is required");
 
   if (errors.length > 0) {

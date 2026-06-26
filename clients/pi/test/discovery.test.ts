@@ -30,15 +30,14 @@ describe("resolvePontiaConnection", () => {
     await writeFile(settingsPontiaConfig, 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "stable-token"\n');
     await writeFile(homePontiaConfig, 'bind_addr = "127.0.0.1:18081"\nexternal_api_token = "home-token"\n');
 
-    const fetchImpl = vi.fn(async (url: string) => {
-      expect(url).toBe("http://127.0.0.1:18081/healthz");
-      return new Response("ok", { status: 200 });
-    });
+    const fetchImpl = vi.fn();
 
     const result = await resolvePontiaConnection({
       env: { HOME: root },
       fetch: fetchImpl as any,
     });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
 
     expect(result).toEqual({
       baseUrl: "http://127.0.0.1:18081",
@@ -55,15 +54,14 @@ describe("resolvePontiaConnection", () => {
     await mkdir(join(root, ".pontia"), { recursive: true });
     await writeFile(pontiaConfig, 'bind_addr = "127.0.0.1:8088"\nexternal_api_token = "home-token"\n');
 
-    const fetchImpl = vi.fn(async (url: string) => {
-      expect(url).toBe("http://127.0.0.1:8088/healthz");
-      return new Response("ok", { status: 200 });
-    });
+    const fetchImpl = vi.fn();
 
     const result = await resolvePontiaConnection({
       env: { HOME: root },
       fetch: fetchImpl as any,
     });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
 
     expect(result?.baseUrl).toBe("http://127.0.0.1:8088");
     expect(result?.externalApiToken).toBe("home-token");
@@ -76,15 +74,14 @@ describe("resolvePontiaConnection", () => {
     await mkdir(pontiaHome, { recursive: true });
     await writeFile(pontiaConfig, 'bind_addr = "127.0.0.1:8089"\nexternal_api_token = "custom-home-token"\n');
 
-    const fetchImpl = vi.fn(async (url: string) => {
-      expect(url).toBe("http://127.0.0.1:8089/healthz");
-      return new Response("ok", { status: 200 });
-    });
+    const fetchImpl = vi.fn();
 
     const result = await resolvePontiaConnection({
       env: { HOME: root, PONTIA_HOME: pontiaHome },
       fetch: fetchImpl as any,
     });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
 
     expect(result?.baseUrl).toBe("http://127.0.0.1:8089");
     expect(result?.externalApiToken).toBe("custom-home-token");

@@ -17,6 +17,12 @@ async function tempWorkspace() {
   return dir;
 }
 
+async function pontiaHomeWithConfig(bindAddr = "localhost:80") {
+  const dir = await tempWorkspace();
+  await writeFile(join(dir, "config.toml"), `bind_addr = "${bindAddr}"\nexternal_api_token = "token"\n`);
+  return dir;
+}
+
 describe("loadTurnContext", () => {
   test("falls back to pontia home state directory for hook log when explicit log directory is missing", async () => {
     const home = await tempWorkspace();
@@ -54,12 +60,13 @@ describe("loadTurnContext", () => {
       );
     }) as typeof fetch;
 
+    const pontiaHome = await pontiaHomeWithConfig();
     const result = await loadTurnContext(
       {
         PONTIA_WORKSPACE: workspace,
+        PONTIA_HOME: pontiaHome,
         PONTIA_SESSION_ID: "sess_api",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_api",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
       },
       { fetch: fetchImpl },
     );
@@ -73,7 +80,7 @@ describe("loadTurnContext", () => {
       sessionId: "sess_api",
       turnId: undefined,
       clientType: "pi",
-      internalEventUrl: "http://localhost/internal/v1/events",
+      internalEventUrl: "http://from-api/internal/v1/events",
       runtimeInstanceId: "rtinst_api",
       input: "from web ui",
       inboxMessageId: "msg_api",
@@ -137,11 +144,12 @@ describe("loadTurnContext", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       )) as typeof fetch;
 
+    const pontiaHome = await pontiaHomeWithConfig();
     const result = await loadTurnContext(
       {
+        PONTIA_HOME: pontiaHome,
         PONTIA_SESSION_ID: "sess_3",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_file_3",
-        PONTIA_INTERNAL_EVENT_URL: "http://from-env/internal/v1/events",
       },
       { fetch: fetchImpl },
     );
@@ -154,7 +162,7 @@ describe("loadTurnContext", () => {
       input: "typed in web ui",
       inboxMessageId: "msg_3",
       runtimeInstanceId: "rtinst_file_3",
-      internalEventUrl: "http://from-env/internal/v1/events",
+      internalEventUrl: "http://from-api/internal/v1/events",
     });
   });
 
@@ -165,11 +173,12 @@ describe("loadTurnContext", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       )) as typeof fetch;
 
+    const pontiaHome = await pontiaHomeWithConfig();
     const result = await loadTurnContext(
       {
+        PONTIA_HOME: pontiaHome,
         PONTIA_SESSION_ID: "sess_4",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_4",
-        PONTIA_INTERNAL_EVENT_URL: "http://localhost/internal/v1/events",
       },
       { fetch: fetchImpl },
     );
