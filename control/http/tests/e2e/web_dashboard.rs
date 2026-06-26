@@ -7,24 +7,20 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use pontia_application::AppState;
 use pontia_config::DashboardConfig;
 use pontia_http::{
     self as http,
     dashboard::{ResolvedDashboard, resolve_dashboard},
 };
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+
+use crate::test_app::TestApp;
 
 async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> http::HttpState {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("dashboard.db");
-    let _kept_dir = dir.keep();
-    let database_url = format!("sqlite://{}", db_path.display());
-    let db = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
-    let app_state = AppState::builder(db)
+    let app_state = TestApp::builder()
+        .database_name("dashboard.db")
         .external_api_token(Some("test-token".to_owned()))
-        .build();
+        .build_state()
+        .await;
     http::HttpState::new(app_state, dashboard)
 }
 

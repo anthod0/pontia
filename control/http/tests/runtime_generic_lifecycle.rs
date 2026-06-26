@@ -6,28 +6,26 @@ use http_body_util::BodyExt;
 use pontia_agent_clients::AgentClientCapabilities;
 use pontia_application::{AppState, RuntimeObservationService};
 use pontia_http as http;
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
 #[path = "support/generic_client.rs"]
 mod generic_client;
+#[path = "support/test_app.rs"]
+mod test_app;
 
 use generic_client::GenericClientTestScope;
+use test_app::TestApp;
 
 const TOKEN: &str = "test-token";
 
 async fn test_state(name: &str) -> AppState {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join(format!("{name}.db"));
-    let _kept_dir = dir.keep();
-    let database_url = format!("sqlite://{}", db_path.display());
-    let db = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
-    AppState::builder(db)
+    TestApp::builder()
+        .database_name(format!("{name}.db"))
         .external_api_token(Some(TOKEN.to_string()))
-        .build()
+        .build_state()
+        .await
 }
 
 async fn request(

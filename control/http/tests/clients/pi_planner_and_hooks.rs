@@ -12,26 +12,25 @@ use http_body_util::BodyExt;
 use pontia_agent_clients::GenericTestClient;
 use pontia_application::AppState;
 use pontia_http as http;
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+use pontia_runtime::set_runtime_bind_addr;
 use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
+
+use crate::test_app::TestApp;
 
 const TOKEN: &str = "test-token";
 
 async fn test_state(name: &str) -> AppState {
     assert_tmux_available();
     configure_test_runtime_env();
+    set_runtime_bind_addr("127.0.0.1:9".parse().expect("test bind addr"));
     GenericTestClient::clear_recorded_inputs();
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join(format!("{name}.db"));
-    let _kept_dir = dir.keep();
-    let database_url = format!("sqlite://{}", db_path.display());
-    let db = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
-    AppState::builder(db)
+    TestApp::builder()
+        .database_name(format!("{name}.db"))
         .external_api_token(Some(TOKEN.to_string()))
-        .build()
+        .build_state()
+        .await
 }
 
 fn assert_tmux_available() {

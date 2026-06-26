@@ -8,7 +8,6 @@ use http_body_util::BodyExt;
 use pontia_application::AppState;
 use pontia_config::AppConfig;
 use pontia_http as http;
-use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use std::{
@@ -18,16 +17,18 @@ use std::{
 };
 use tower::ServiceExt;
 
+use crate::test_app::TestApp;
+
 pub async fn test_state() -> AppState {
     configure_test_runtime_env();
-    let db = connect_sqlite("sqlite://:memory:").await.expect("connect");
-    run_migrations(&db).await.expect("migrate");
     let config = AppConfig::from_vars(&std::collections::HashMap::new()).expect("default config");
-    AppState::builder(db)
+    TestApp::builder()
+        .in_memory_db()
         .external_api_token(None)
         .graph(config.graph)
         .workspace_browser(config.workspace_browser)
-        .build()
+        .build_state()
+        .await
 }
 
 fn configure_test_runtime_env() {

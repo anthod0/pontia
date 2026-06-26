@@ -1,5 +1,7 @@
 #[path = "support/agent_tools.rs"]
 mod agent_tools_support;
+#[path = "support/test_app.rs"]
+mod test_app;
 
 #[path = "agent_tools/authorization.rs"]
 mod authorization;
