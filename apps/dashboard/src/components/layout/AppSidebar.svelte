@@ -3,6 +3,7 @@
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
+  import * as Kbd from '$lib/components/ui/kbd/index.js'
   import { sidebarMenuButtonVariants } from '$lib/components/ui/sidebar/sidebar-menu-button.svelte'
   import { cn } from '$lib/utils.js'
   import { archiveSession, pinSession, sessions, sessionsLoading, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
@@ -217,6 +218,13 @@
 
 <svelte:window onpopstate={() => (currentPath = normalizePath(window.location.pathname))} />
 
+{#snippet shortcutHint(key: string)}
+  <Kbd.Group class="ml-auto shrink-0 text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden" aria-hidden="true">
+    <Kbd.Root class="px-1 py-0 text-[10px]">Alt</Kbd.Root>
+    <Kbd.Root class="px-1 py-0 text-[10px]">{key}</Kbd.Root>
+  </Kbd.Group>
+{/snippet}
+
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
   <Sidebar.MenuItem>
     <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
@@ -295,6 +303,9 @@
               <Sidebar.MenuButton isActive={isActive(item.path)} tooltipContent={item.label} onclick={() => go(item.path)}>
                 <item.icon />
                 <span>{item.label}</span>
+                {#if item.path === '/chat'}
+                  {@render shortcutHint('N')}
+                {/if}
               </Sidebar.MenuButton>
             </Sidebar.MenuItem>
           {/each}

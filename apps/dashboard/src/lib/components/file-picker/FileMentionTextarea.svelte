@@ -15,6 +15,7 @@
     id?: string
     onkeydown?: (event: KeyboardEvent) => void
     onfocus?: (event: FocusEvent) => void
+    shortcutFocusTarget?: boolean
   }
 
   let {
@@ -26,6 +27,7 @@
     id,
     onkeydown,
     onfocus,
+    shortcutFocusTarget = false,
   }: Props = $props()
 
   let textarea = $state<HTMLTextAreaElement | null>(null)
@@ -132,6 +134,7 @@
     bind:value
     {placeholder}
     {disabled}
+    data-chat-shortcut-focus-target={shortcutFocusTarget ? 'true' : undefined}
     class={className}
     onkeydown={handleKeydown}
     oninput={refreshMention}

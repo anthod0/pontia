@@ -83,6 +83,27 @@ beforeEach(() => {
   });
 });
 
+function chatSession(session_id: string, state: string, updated_at: string, pinned_at: string | null = null) {
+  return {
+    session_id,
+    client_type: 'pi',
+    handle: session_id,
+    role: null,
+    description: null,
+    execution_profile_id: null,
+    execution_profile_version: null,
+    state,
+    current_turn_id: null,
+    workspace_id: 'workspace-1',
+    workspace: null,
+    capabilities: {},
+    created_at: '2026-05-14T00:00:00Z',
+    updated_at,
+    pinned_at,
+    metadata: {},
+  };
+}
+
 test('sidebar shows session control items and hides overview and DAG task navigation', () => {
   render(AppSidebarHost);
 
@@ -622,7 +643,7 @@ test('sidebar highlights the matching recent session on chat and session console
   expect(screen.getByText('other').closest('button')).not.toHaveAttribute('data-active');
 });
 
-test('top bar is compact and transparent with only the ghost sidebar trigger', () => {
+test('top bar is compact and transparent with sidebar trigger and chat help button', () => {
   render(TopBarHost);
 
   const topBar = screen.getByRole('banner');
@@ -633,9 +654,12 @@ test('top bar is compact and transparent with only the ghost sidebar trigger', (
   expect(topBar).not.toHaveClass('bg-background/95');
 
   const buttons = within(topBar).getAllByRole('button');
-  expect(buttons).toHaveLength(1);
+  expect(buttons).toHaveLength(2);
   expect(buttons[0]).toHaveAttribute('data-sidebar', 'trigger');
   expect(buttons[0]).toHaveClass('hover:bg-muted');
+  expect(buttons[1]).toHaveAccessibleName(/keyboard shortcuts/i);
+  expect(buttons[1]).toHaveClass('hidden', 'sm:inline-flex');
+  expect(buttons[1]).not.toHaveClass('ml-auto');
   expect(within(topBar).queryByRole('link', { name: /new chat/i })).not.toBeInTheDocument();
   expect(within(topBar).queryByText(/sse/i)).not.toBeInTheDocument();
   expect(within(topBar).queryByText(/set api token/i)).not.toBeInTheDocument();
@@ -677,6 +701,148 @@ test('settings common page contains controls without owning the section switcher
   expect(screen.getByRole('button', { name: /save token/i })).toBeInTheDocument();
   expect(screen.getByText(/live stream/i)).toBeInTheDocument();
   expect(screen.queryByRole('navigation', { name: /settings sections/i })).not.toBeInTheDocument();
+});
+
+test('chat shortcuts switch among active sessions on chat routes', async () => {
+  window.history.pushState({}, '', '/dashboard/chat/session-older');
+  mocks.sessions.set([
+    chatSession('session-busy', 'busy', '2026-05-14T04:00:00Z'),
+    chatSession('session-error', 'error', '2026-05-14T03:00:00Z'),
+    chatSession('session-older', 'idle', '2026-05-14T02:00:00Z'),
+    chatSession('session-exited', 'exited', '2026-05-14T01:00:00Z'),
+  ]);
+
+  render(AppShellHost);
+
+  await fireEvent.keyDown(window, { key: 'j', altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat/session-busy');
+
+  window.history.pushState({}, '', '/dashboard/chat/session-busy');
+  await fireEvent.keyDown(window, { key: 'k', altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat/session-older');
+});
+
+test('sidebar shows new chat kbd hint without showing numeric hints beside sessions', () => {
+  mocks.sessions.set([
+    chatSession('session-recent', 'idle', '2026-05-14T04:00:00Z'),
+    chatSession('session-pinned', 'idle', '2026-05-14T01:00:00Z', '2026-05-14T05:00:00Z'),
+  ]);
+
+  render(AppSidebarHost);
+
+  const newChat = screen.getByText('New Chat').closest('button');
+  expect(newChat).not.toBeNull();
+  expect(within(newChat as HTMLElement).getByText('Alt')).toBeInTheDocument();
+  expect(within(newChat as HTMLElement).getByText('N')).toBeInTheDocument();
+
+  const pinnedSession = screen.getByText('session-pinned').closest('button');
+  expect(pinnedSession).not.toBeNull();
+  expect(within(pinnedSession as HTMLElement).queryByText('1')).not.toBeInTheDocument();
+  const recentSession = screen.getByText('session-recent').closest('button');
+  expect(recentSession).not.toBeNull();
+  expect(within(recentSession as HTMLElement).queryByText('2')).not.toBeInTheDocument();
+});
+
+test('chat help shortcut opens a kbd shortcut reference dialog', async () => {
+  render(AppShellHost);
+
+  await fireEvent.keyDown(window, { key: '?', altKey: true, shiftKey: true });
+
+  const dialog = screen.getByRole('dialog', { name: /keyboard shortcuts/i });
+  expect(within(dialog).getByText(/next active chat/i)).toBeInTheDocument();
+  expect(within(dialog).getByText(/focus chat input/i)).toBeInTheDocument();
+  expect(within(dialog).getAllByText('Alt').length).toBeGreaterThan(0);
+  expect(within(dialog).getByText('?')).toBeInTheDocument();
+});
+
+test('chat header help button opens the shortcuts dialog and is hidden on mobile', async () => {
+  render(AppShellHost);
+
+  const helpButton = screen.getByRole('button', { name: /keyboard shortcuts/i });
+  expect(helpButton).toHaveClass('hidden');
+  expect(helpButton).toHaveClass('sm:inline-flex');
+
+  await fireEvent.click(helpButton);
+
+  expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeInTheDocument();
+});
+
+test('chat numeric shortcuts open active sessions by sidebar order and skip inactive sessions', async () => {
+  mocks.sessions.set([
+    chatSession('session-recent', 'idle', '2026-05-14T04:00:00Z'),
+    chatSession('session-pinned', 'idle', '2026-05-14T01:00:00Z', '2026-05-14T05:00:00Z'),
+    chatSession('session-error', 'error', '2026-05-14T06:00:00Z'),
+  ]);
+
+  render(AppShellHost);
+
+  await fireEvent.keyDown(window, { key: '1', altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat/session-pinned');
+
+  await fireEvent.keyDown(window, { key: '2', altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat/session-recent');
+
+  await fireEvent.keyDown(window, { key: '3', altKey: true });
+  expect(mocks.navigate).not.toHaveBeenLastCalledWith('/chat/session-error');
+});
+
+test('chat shortcuts are scoped to chat routes and do not interrupt typing', async () => {
+  mocks.sessions.set([chatSession('session-recent', 'idle', '2026-05-14T04:00:00Z')]);
+
+  render(AppShellHost);
+
+  window.history.pushState({}, '', '/dashboard/settings/common');
+  await fireEvent.keyDown(window, { key: '1', altKey: true });
+  expect(mocks.navigate).not.toHaveBeenCalled();
+
+  window.history.pushState({}, '', '/dashboard/chat');
+  const input = document.createElement('textarea');
+  document.body.appendChild(input);
+  input.focus();
+  await fireEvent.keyDown(window, { key: '1', altKey: true });
+  expect(mocks.navigate).not.toHaveBeenCalled();
+  input.remove();
+});
+
+test('chat new and focus shortcuts work on chat routes', async () => {
+  render(AppShellHost);
+  const input = document.createElement('textarea');
+  input.setAttribute('data-chat-shortcut-focus-target', 'true');
+  document.body.appendChild(input);
+
+  await fireEvent.keyDown(window, { key: 'n', altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat');
+
+  await fireEvent.keyDown(window, { key: 'l', altKey: true });
+  expect(document.activeElement).toBe(input);
+  input.remove();
+});
+
+test('chat new shortcut on a session route preserves the current session workspace', async () => {
+  window.history.pushState({}, '', '/dashboard/chat/session-current');
+  mocks.sessions.set([
+    {
+      ...chatSession('session-current', 'idle', '2026-05-14T04:00:00Z'),
+      workspace_id: 'workspace-current',
+    },
+  ]);
+
+  render(AppShellHost);
+
+  await fireEvent.keyDown(window, { key: 'n', altKey: true });
+
+  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat', { workspace: 'workspace-current' });
+});
+
+test('chat app shell uses the surface background behind the transparent header', () => {
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+
+  render(AppShellHost);
+
+  const topBar = screen.getByRole('banner');
+  expect(topBar).toHaveClass('bg-transparent');
+  expect(topBar.parentElement).toHaveClass('bg-surface');
+  expect(topBar.parentElement).not.toHaveClass('bg-background');
 });
 
 test('chat app shell reserves composer space only for session chat routes', () => {

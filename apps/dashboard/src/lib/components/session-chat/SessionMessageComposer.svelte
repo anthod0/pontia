@@ -57,7 +57,7 @@
 <PromptInput.Root class="w-full" {onSubmit}>
   <PromptInput.Body>
     <div class="relative">
-      <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class="min-h-10 pr-10" />
+      <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} shortcutFocusTarget onkeydown={handleKeydown} onfocus={onFocus} class="min-h-10 pr-10" />
       <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={openFullscreenComposer}>
         <Maximize2 class="size-4" />
       </Button>
@@ -82,7 +82,7 @@
 
     <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
       <PromptInput.Body class="min-h-0 flex-1">
-        <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
+        <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} shortcutFocusTarget onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
       </PromptInput.Body>
       <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
         <PromptInput.Submit disabled={disabled || submitDisabled || busy} />

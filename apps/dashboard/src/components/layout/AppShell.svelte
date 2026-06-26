@@ -3,6 +3,7 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import AppSidebar from './AppSidebar.svelte'
   import TopBar from './TopBar.svelte'
+  import ChatShortcuts from '../chat/ChatShortcuts.svelte'
   import SettingsShell from '../settings/SettingsShell.svelte'
 
   let { children }: { children: Snippet } = $props()
@@ -38,8 +39,9 @@
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
 <Sidebar.Provider>
+  <ChatShortcuts />
   <AppSidebar />
-  <Sidebar.Inset>
+  <Sidebar.Inset class="bg-surface">
     <TopBar />
     <main class={mainClass}>
       <div class={contentClass}>

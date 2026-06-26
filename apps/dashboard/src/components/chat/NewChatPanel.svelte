@@ -78,7 +78,7 @@
 
       <PromptInput.Root class="w-full" onSubmit={onStartChat}>
         <PromptInput.Body>
-          <FileMentionTextarea id="chat-prompt" bind:value={prompt} workspaceId={workspaceId} placeholder="Ask the agent to implement, inspect, or explain something…" onkeydown={onPromptKeydown} />
+          <FileMentionTextarea id="chat-prompt" bind:value={prompt} workspaceId={workspaceId} placeholder="Ask the agent to implement, inspect, or explain something…" shortcutFocusTarget onkeydown={onPromptKeydown} />
         </PromptInput.Body>
 
         <PromptInput.Toolbar class="justify-end gap-2 pt-0">
