@@ -46,7 +46,10 @@ const mocks = vi.hoisted(() => {
       workspaceRoots.set(mocks.roots);
       return mocks.roots;
     }),
-    browseWorkspaceRoot: vi.fn(async () => mocks.listing),
+    browseWorkspaceRoot: vi.fn(async (_rootId: string, path = '') => {
+      if (path === 'missing-workspace') throw new Error('directory not found');
+      return mocks.listing;
+    }),
     loadWorkspaceGitStatus: vi.fn(async () => undefined),
     refreshWorkspaceGitStatus: vi.fn(async () => undefined),
     registerWorkspace: vi.fn(async () => undefined),
@@ -157,16 +160,38 @@ test('shows outside-root active workspace banner and revokes workspaces from the
 
   render(WorkspacesPage);
 
-  expect(await screen.findByText('1 active workspace outside configured roots')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Review outside-root workspaces' }));
+  expect(await screen.findByText('1 unavailable active workspace')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Review' }));
 
-  const dialog = screen.getByRole('dialog', { name: 'Outside-root active workspaces' });
+  const dialog = screen.getByRole('dialog', { name: 'Unavailable active workspaces' });
   expect(within(dialog).getByText('/repo/project-other/app')).toBeInTheDocument();
   expect(within(dialog).queryByText('/repo/project/app')).not.toBeInTheDocument();
 
   await user.click(within(dialog).getByRole('button', { name: 'Revoke outside' }));
 
   expect(mocks.deleteWorkspace).toHaveBeenCalledWith('outside');
+});
+
+test('shows unavailable active workspaces when the workspace directory is missing under a configured root', async () => {
+  const user = userEvent.setup();
+  mocks.roots = [{ root_id: 'root-1', label: 'Projects', canonical_path: '/repo/project', state: 'available' }];
+  mocks.workspaceRoots.set(mocks.roots);
+  mocks.workspaces.set([
+    workspace({ workspace_id: 'missing', name: 'missing-workspace', canonical_path: '/repo/project/missing-workspace', display_path: '/repo/project/missing-workspace' }),
+  ]);
+
+  render(WorkspacesPage);
+
+  expect(await screen.findByText('1 unavailable active workspace')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Review' }));
+
+  const dialog = screen.getByRole('dialog', { name: 'Unavailable active workspaces' });
+  expect(within(dialog).getByText('/repo/project/missing-workspace')).toBeInTheDocument();
+  expect(within(dialog).getByText('Missing directory')).toBeInTheDocument();
+
+  await user.click(within(dialog).getByRole('button', { name: 'Revoke missing-workspace' }));
+
+  expect(mocks.deleteWorkspace).toHaveBeenCalledWith('missing');
 });
 
 test('uses path-boundary checks when classifying outside-root workspaces', async () => {
@@ -178,7 +203,7 @@ test('uses path-boundary checks when classifying outside-root workspaces', async
 
   render(WorkspacesPage);
 
-  expect(await screen.findByText('1 active workspace outside configured roots')).toBeInTheDocument();
+  expect(await screen.findByText('1 unavailable active workspace')).toBeInTheDocument();
 });
 
 test('toggles workspace active state directly and keeps rename dialog for editing names', async () => {
