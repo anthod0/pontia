@@ -30,7 +30,6 @@
 
   const CLIENT_TYPE_OPTIONS = ['pi']
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
-  const newChatSelectorTriggerClass = 'h-7 rounded-full px-3 text-sm font-normal text-muted-foreground'
 
   onMount(async () => {
     await Promise.all([loadSessions(), loadWorkspaces()])
@@ -147,7 +146,6 @@
     workspacesLoading={$workspacesLoading}
     {selectedWorkspace}
     {clientTypeOptions}
-    selectorTriggerClass={newChatSelectorTriggerClass}
     onPromptKeydown={handleNewChatKeydown}
     onStartChat={() => void startChat()}
   />

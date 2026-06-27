@@ -47,25 +47,32 @@ test('remembers the selected new chat workspace after starting a chat', async ()
 });
 
 
-test('renders a clean centered prompt input on the bare chat route instead of selecting an existing session', async () => {
+test('renders a clean centered prompt input with inline workspace and client selectors on the bare chat route', async () => {
   render(NewChatPage);
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
   expect(promptInput).toHaveValue('');
-  expect(screen.getByRole('heading', { name: /new chat/i })).toBeInTheDocument();
-  expect(screen.getByText('Start a new agent session from a prompt, workspace, and client.')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: /new chat/i })).not.toBeInTheDocument();
+  expect(screen.queryByText('Start a new agent session from a prompt, workspace, and client.')).not.toBeInTheDocument();
+  expect(screen.getByText('Start a new agent session from')).toBeInTheDocument();
+  expect(screen.getByText(', use')).toBeInTheDocument();
   const centeredPanel = screen.getByTestId('new-chat-centered-panel');
   const pageSection = centeredPanel.closest('section');
   expect(pageSection).toHaveClass('min-h-[calc(100svh-5.5rem)]');
   expect(pageSection).toHaveClass('md:min-h-[calc(100svh-6.5rem)]');
   expect(pageSection?.className).not.toContain('100vh');
   expect(centeredPanel).toHaveClass('justify-center');
-  expect(centeredPanel).toContainElement(screen.getByRole('heading', { name: /new chat/i }));
   expect(centeredPanel).toContainElement(promptInput);
   expect(screen.queryByText(/Enter the first prompt/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/^Prompt$/i)).not.toBeInTheDocument();
-  expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('pontia');
-  expect(screen.getByLabelText(/client/i)).toHaveTextContent('pi');
+  const workspaceSelector = screen.getByLabelText(/workspace/i);
+  const clientSelector = screen.getByLabelText(/client/i);
+  expect(workspaceSelector).toHaveTextContent('pontia');
+  expect(clientSelector).toHaveTextContent('pi');
+  expect(workspaceSelector).toHaveClass('rounded-md');
+  expect(workspaceSelector).not.toHaveClass('rounded-full');
+  expect(clientSelector).toHaveClass('rounded-md');
+  expect(clientSelector).not.toHaveClass('rounded-full');
   expect(screen.queryByLabelText(/profile/i)).not.toBeInTheDocument();
   expect(mocks.loadSessionDetail).not.toHaveBeenCalled();
 });
