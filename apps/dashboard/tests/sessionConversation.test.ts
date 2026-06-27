@@ -1,7 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { expect, test, vi } from 'vitest';
 import SessionConversation from '../src/lib/components/session-chat/SessionConversation.svelte';
 import type { SessionChatMessage } from '../src/lib/session-chat/sessionChat';
+
+const testDir = dirname(fileURLToPath(import.meta.url));
+const sessionConversationSourcePath = resolve(testDir, '../src/lib/components/session-chat/SessionConversation.svelte');
 
 const messages: SessionChatMessage[] = [
   {
@@ -25,6 +31,47 @@ test('conversation renders messages without role headers', () => {
   expect(screen.getByText('I will inspect it now.')).toBeInTheDocument();
   expect(screen.queryByText('You')).not.toBeInTheDocument();
   expect(screen.queryByText('AI')).not.toBeInTheDocument();
+});
+
+test('conversation groups assistant-side items after each user message', () => {
+  render(SessionConversation, {
+    props: {
+      sessionState: 'busy',
+      messages: [
+        ...messages,
+        {
+          id: 'message-3',
+          role: 'user',
+          content: 'Keep going.',
+          status: 'sent',
+        },
+      ],
+    },
+  });
+
+  const assistantGroups = document.querySelectorAll('[data-chat-assistant-group]');
+  expect(assistantGroups).toHaveLength(2);
+  expect(assistantGroups[0]).toContainElement(document.querySelector('[data-chat-message-id="message-2"]'));
+  expect(assistantGroups[1]).toContainElement(document.querySelector('[data-chat-agent-status]'));
+  expect(assistantGroups[1]).toHaveClass('chat-turn-tail-space');
+  expect(document.querySelector('[data-chat-tail-spacer]')).not.toBeInTheDocument();
+});
+
+test('conversation expands the latest assistant group instead of the assistant message', () => {
+  render(SessionConversation, { props: { messages } });
+
+  const assistantGroup = document.querySelector('[data-chat-assistant-group]');
+  expect(assistantGroup).toHaveClass('chat-turn-tail-space');
+  expect(assistantGroup).toContainElement(document.querySelector('[data-chat-message-id="message-2"]'));
+  expect(document.querySelector('[data-chat-message-id="message-2"]')).not.toHaveClass('chat-turn-tail-space');
+  expect(document.querySelector('[data-chat-tail-spacer]')).not.toBeInTheDocument();
+});
+
+test('conversation tail space does not force a fixed minimum floor', () => {
+  const source = readFileSync(sessionConversationSourcePath, 'utf8');
+
+  expect(source).toContain('min-height: calc(100dvh - 31rem);');
+  expect(source).not.toContain('min-height: max(8rem, calc(100dvh - 31rem));');
 });
 
 test('conversation constrains assistant code blocks to the message width', async () => {

@@ -70,6 +70,8 @@
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const displayMessages = $derived(messages)
   const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
+  const displayGroups = $derived(conversationDisplayGroups(displayItems))
+  const latestAssistantGroupId = $derived([...displayGroups].reverse().find((group) => group.kind === 'assistant_group')?.id ?? null)
   const scrollKey = $derived(autoScrollKey ?? chatAutoScrollKey(displayMessages))
   const plannerDraftAnchorId = $derived(lastAssistantMessageId(displayMessages))
   const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
@@ -193,6 +195,10 @@
     | { kind: 'agent_status'; id: string }
     | { kind: 'agent_bottom_status'; id: string }
 
+  type ConversationDisplayGroup =
+    | { kind: 'user_message'; id: string; item: Extract<ConversationDisplayItem, { kind: 'message' }> }
+    | { kind: 'assistant_group'; id: string; items: ConversationDisplayItem[] }
+
   function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null): ConversationDisplayItem[] {
     const showBottomStatus = state === 'exited' || state === 'interrupted'
     const showStatus = Boolean(state && state !== 'idle' && !showBottomStatus)
@@ -206,6 +212,31 @@
     if (showBottomStatus) return [...items, { kind: 'agent_bottom_status', id: `agent-bottom-status:${state}` }]
     if (!showStatus || latestAssistantId) return items
     return [...items, { kind: 'agent_status', id: `agent-status:${state}` }]
+  }
+
+  function conversationDisplayGroups(items: ConversationDisplayItem[]): ConversationDisplayGroup[] {
+    const groups: ConversationDisplayGroup[] = []
+    let assistantGroup: Extract<ConversationDisplayGroup, { kind: 'assistant_group' }> | null = null
+
+    function flushAssistantGroup(): void {
+      if (!assistantGroup) return
+      groups.push(assistantGroup)
+      assistantGroup = null
+    }
+
+    for (const item of items) {
+      if (item.kind === 'message' && item.message.role === 'user') {
+        flushAssistantGroup()
+        groups.push({ kind: 'user_message', id: `user:${item.id}`, item })
+        continue
+      }
+
+      assistantGroup ??= { kind: 'assistant_group', id: `assistant-group:${item.id}`, items: [] }
+      assistantGroup.items.push(item)
+    }
+
+    flushAssistantGroup()
+    return groups
   }
 
   interface ScrollAnchor {
@@ -250,6 +281,80 @@
 
 </script>
 
+{#snippet conversationItem(displayItem: ConversationDisplayItem)}
+  {#if displayItem.kind === 'agent_status'}
+    <Message.Root from="assistant" data-chat-agent-status>
+      <Message.Content>
+        <AgentStatus state={sessionState} interruptEnabled={_interruptEnabled} interruptBusy={_interruptBusy} onInterrupt={_onInterrupt} />
+      </Message.Content>
+    </Message.Root>
+  {:else if displayItem.kind === 'agent_bottom_status'}
+    <AgentBottomStatus state={sessionState} />
+  {:else}
+    {@const chatMessage = displayItem.message}
+    <Message.Root from={chatMessage.role} data-chat-message-id={chatMessage.id}>
+      <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
+        {#if displayItem.showAgentStatus}
+          <AgentStatus state={sessionState} interruptEnabled={_interruptEnabled} interruptBusy={_interruptBusy} onInterrupt={_onInterrupt} />
+        {/if}
+        {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
+          <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
+        {/if}
+        {#if chatMessage.content.trim()}
+          <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
+          {#if chatMessage.role === 'assistant'}
+            {@const isCopied = copiedMessageId === chatMessage.id}
+            <div class="mt-2 flex justify-start">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={isCopied ? 'Assistant reply copied' : 'Copy assistant reply'}
+                title={isCopied ? 'Copied' : 'Copy assistant reply'}
+                onclick={() => copyAssistantReply(chatMessage)}
+              >
+                {#if isCopied}
+                  <Check class="size-3.5" /> Copied
+                {:else}
+                  <Copy class="size-3.5" /> Copy
+                {/if}
+              </Button>
+            </div>
+          {/if}
+        {/if}
+      </Message.Content>
+    </Message.Root>
+
+    {#if plannerTaskId && chatMessage.id === plannerDraftAnchorId}
+    <section class="mx-auto w-full max-w-4xl px-4 pb-5" aria-label="Planner draft DAG action">
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3">
+        <div class="min-w-0">
+          <p class="text-sm font-medium">Planner draft DAG</p>
+          <p class="truncate text-xs text-muted-foreground">Task {plannerTaskId}</p>
+        </div>
+        {#if draftPlannerProposalLoading}
+          <span class="text-sm text-muted-foreground">Loading proposal…</span>
+        {:else if draftPlannerProposal}
+          {@const draftWorkItems = proposalWorkItems(draftPlannerProposal)}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label={`View draft DAG for turn ${chatMessage.turnId}`}
+            onclick={openDraftDagSheet}
+          >
+            <GitBranch class="size-4" /> View draft DAG
+            <Badge variant="secondary" class="ml-1">{draftWorkItems.length} items</Badge>
+          </Button>
+        {:else}
+          <span class="text-sm text-muted-foreground">Waiting for proposal…</span>
+        {/if}
+      </div>
+    </section>
+    {/if}
+  {/if}
+{/snippet}
+
 <Conversation.Root class="h-auto min-h-0 min-w-0 flex-1 overflow-visible">
   {#if loading}
     <Conversation.EmptyState title="Loading conversation…" description="Fetching the latest session transcript." />
@@ -266,77 +371,15 @@
       {#if hasMoreHistory && historyLoading}
         <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading earlier messages…</div>
       {/if}
-      {#each displayItems as displayItem (displayItem.id)}
-        {#if displayItem.kind === 'agent_status'}
-          <Message.Root from="assistant" data-chat-agent-status>
-            <Message.Content>
-              <AgentStatus state={sessionState} interruptEnabled={_interruptEnabled} interruptBusy={_interruptBusy} onInterrupt={_onInterrupt} />
-            </Message.Content>
-          </Message.Root>
-        {:else if displayItem.kind === 'agent_bottom_status'}
-          <AgentBottomStatus state={sessionState} />
+      {#each displayGroups as displayGroup (displayGroup.id)}
+        {#if displayGroup.kind === 'user_message'}
+          {@render conversationItem(displayGroup.item)}
         {:else}
-          {@const chatMessage = displayItem.message}
-          <Message.Root from={chatMessage.role} data-chat-message-id={chatMessage.id}>
-            <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
-              {#if displayItem.showAgentStatus}
-                <AgentStatus state={sessionState} interruptEnabled={_interruptEnabled} interruptBusy={_interruptBusy} onInterrupt={_onInterrupt} />
-              {/if}
-              {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
-                <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
-              {/if}
-              {#if chatMessage.content.trim()}
-                <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
-                {#if chatMessage.role === 'assistant'}
-                  {@const isCopied = copiedMessageId === chatMessage.id}
-                  <div class="mt-2 flex justify-start">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-label={isCopied ? 'Assistant reply copied' : 'Copy assistant reply'}
-                      title={isCopied ? 'Copied' : 'Copy assistant reply'}
-                      onclick={() => copyAssistantReply(chatMessage)}
-                    >
-                      {#if isCopied}
-                        <Check class="size-3.5" /> Copied
-                      {:else}
-                        <Copy class="size-3.5" /> Copy
-                      {/if}
-                    </Button>
-                  </div>
-                {/if}
-              {/if}
-            </Message.Content>
-          </Message.Root>
-
-          {#if plannerTaskId && chatMessage.id === plannerDraftAnchorId}
-          <section class="mx-auto w-full max-w-4xl px-4 pb-5" aria-label="Planner draft DAG action">
-            <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3">
-              <div class="min-w-0">
-                <p class="text-sm font-medium">Planner draft DAG</p>
-                <p class="truncate text-xs text-muted-foreground">Task {plannerTaskId}</p>
-              </div>
-              {#if draftPlannerProposalLoading}
-                <span class="text-sm text-muted-foreground">Loading proposal…</span>
-              {:else if draftPlannerProposal}
-                {@const draftWorkItems = proposalWorkItems(draftPlannerProposal)}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label={`View draft DAG for turn ${chatMessage.turnId}`}
-                  onclick={openDraftDagSheet}
-                >
-                  <GitBranch class="size-4" /> View draft DAG
-                  <Badge variant="secondary" class="ml-1">{draftWorkItems.length} items</Badge>
-                </Button>
-              {:else}
-                <span class="text-sm text-muted-foreground">Waiting for proposal…</span>
-              {/if}
-            </div>
-          </section>
-          {/if}
+          <div class={displayGroup.id === latestAssistantGroupId ? 'chat-turn-tail-space' : ''} data-chat-assistant-group>
+            {#each displayGroup.items as displayItem (displayItem.id)}
+              {@render conversationItem(displayItem)}
+            {/each}
+          </div>
         {/if}
       {/each}
     </Conversation.Content>
@@ -381,3 +424,14 @@
     </Sheet.Content>
   {/if}
 </Sheet.Root>
+
+<style>
+  :global(.chat-turn-tail-space) {
+    /*
+      Keep the latest turn high enough to pin fresh user input near the top,
+      while accounting for the sticky header, a one-line user bubble, inline
+      agent status, and a collapsed thought summary inside the live turn.
+    */
+    min-height: calc(100dvh - 31rem);
+  }
+</style>
