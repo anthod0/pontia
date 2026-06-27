@@ -134,7 +134,10 @@ impl GenericRuntimeManager {
             .map(|hook_log| {
                 (
                     hook_log.metadata_key,
-                    log_paths.pi_hook_log.display().to_string(),
+                    log_paths
+                        .client_hook_log(hook_log.file_name)
+                        .display()
+                        .to_string(),
                 )
             });
         let workspace = workspace.display().to_string();

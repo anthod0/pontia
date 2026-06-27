@@ -23,7 +23,12 @@ pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult};
 pub struct PontiaLogPaths {
     pub log_dir: PathBuf,
     pub runtime_log: PathBuf,
-    pub pi_hook_log: PathBuf,
+}
+
+impl PontiaLogPaths {
+    pub fn client_hook_log(&self, file_name: &str) -> PathBuf {
+        self.log_dir.join(file_name)
+    }
 }
 
 pub fn pontia_log_paths() -> pontia_core::error::Result<PontiaLogPaths> {
@@ -31,7 +36,6 @@ pub fn pontia_log_paths() -> pontia_core::error::Result<PontiaLogPaths> {
     Ok(PontiaLogPaths {
         log_dir: paths.log_dir,
         runtime_log: paths.runtime_log,
-        pi_hook_log: paths.pi_hook_log,
     })
 }
 

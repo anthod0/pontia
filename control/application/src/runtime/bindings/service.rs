@@ -91,10 +91,21 @@ impl RuntimeBindingUpsertService {
             .create(true)
             .append(true)
             .open(&log_paths.runtime_log)?;
-        std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_paths.pi_hook_log)?;
+        let hook_log_metadata = client_spec
+            .tmux_runtime()
+            .and_then(|runtime| runtime.hook_log)
+            .map(|hook_log| {
+                (
+                    hook_log.metadata_key,
+                    log_paths.client_hook_log(hook_log.file_name),
+                )
+            });
+        if let Some((_, hook_log_path)) = hook_log_metadata.as_ref() {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(hook_log_path)?;
+        }
         let internal_event_url = configured_internal_event_url()
             .unwrap_or_else(|| "http://127.0.0.1:8080/internal/v1/events".to_string());
         let capabilities = capabilities_for_tmux(client_spec, request.tmux.as_ref());
@@ -110,13 +121,18 @@ impl RuntimeBindingUpsertService {
             .as_ref()
             .and_then(|tmux| non_empty(tmux.pane_id.as_deref()));
 
+        let hook_log_metadata_display = hook_log_metadata
+            .as_ref()
+            .map(|(metadata_key, path)| (*metadata_key, path.display().to_string()));
         let metadata = binding_metadata(
             &request,
             &workspace.canonical_path,
             &internal_event_url,
             &log_paths.log_dir.display().to_string(),
             &log_paths.runtime_log.display().to_string(),
-            &log_paths.pi_hook_log.display().to_string(),
+            hook_log_metadata_display
+                .as_ref()
+                .map(|(metadata_key, path)| (*metadata_key, path.as_str())),
             &capabilities,
         );
 

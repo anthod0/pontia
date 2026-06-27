@@ -21,14 +21,18 @@ pub(super) fn workspace_path(request: &RuntimeStartRequest) -> Result<PathBuf> {
 pub(super) struct LogPaths {
     pub(super) log_dir: PathBuf,
     pub(super) runtime_log: PathBuf,
-    pub(super) pi_hook_log: PathBuf,
+}
+
+impl LogPaths {
+    pub(super) fn client_hook_log(&self, file_name: &str) -> PathBuf {
+        self.log_dir.join(file_name)
+    }
 }
 
 pub(super) fn log_paths(_session_id: &str) -> Result<LogPaths> {
     let log_dir = pontia_log_dir()?;
     Ok(LogPaths {
         runtime_log: log_dir.join("runtime.log"),
-        pi_hook_log: log_dir.join("pi-hook.log"),
         log_dir,
     })
 }
@@ -66,8 +70,12 @@ mod tests {
             tempdir.path().join(".pontia/state/runtime.log")
         );
         assert_eq!(
-            paths.pi_hook_log,
+            paths.client_hook_log("pi-hook.log"),
             tempdir.path().join(".pontia/state/pi-hook.log")
+        );
+        assert_eq!(
+            paths.client_hook_log("custom-hook.log"),
+            tempdir.path().join(".pontia/state/custom-hook.log")
         );
     }
 
@@ -85,6 +93,9 @@ mod tests {
         }
         assert_eq!(paths.log_dir, tempdir.path().join("state"));
         assert_eq!(paths.runtime_log, tempdir.path().join("state/runtime.log"));
-        assert_eq!(paths.pi_hook_log, tempdir.path().join("state/pi-hook.log"));
+        assert_eq!(
+            paths.client_hook_log("pi-hook.log"),
+            tempdir.path().join("state/pi-hook.log")
+        );
     }
 }

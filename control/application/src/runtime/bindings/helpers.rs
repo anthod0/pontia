@@ -44,7 +44,7 @@ pub(super) fn binding_metadata(
     internal_event_url: &str,
     log_dir: &str,
     runtime_log: &str,
-    pi_hook_log: &str,
+    hook_log_metadata: Option<(&str, &str)>,
     capabilities: &SessionCapabilities,
 ) -> Value {
     let mut metadata = serde_json::Map::new();
@@ -93,7 +93,9 @@ pub(super) fn binding_metadata(
     );
     metadata.insert("log_dir".to_string(), json!(log_dir));
     metadata.insert("runtime_log".to_string(), json!(runtime_log));
-    metadata.insert("pi_hook_log".to_string(), json!(pi_hook_log));
+    if let Some((metadata_key, hook_log_path)) = hook_log_metadata {
+        metadata.insert(metadata_key.to_string(), json!(hook_log_path));
+    }
     metadata.insert("internal_event_url".to_string(), json!(internal_event_url));
     metadata.insert("capabilities".to_string(), json!(capabilities));
 
@@ -124,6 +126,44 @@ pub(super) fn tmux_metadata(tmux: &RuntimeBindingTmuxRequest) -> Value {
     }
     insert_optional(&mut metadata, "pane_current_path", &tmux.pane_current_path);
     Value::Object(metadata)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::bindings::RuntimeBindingUpsertRequest;
+
+    #[test]
+    fn binding_metadata_uses_client_hook_log_metadata_key() {
+        let metadata = binding_metadata(
+            &RuntimeBindingUpsertRequest {
+                client_type: "custom".to_string(),
+                client_session_key: "client-session".to_string(),
+                client_session_file: None,
+                client_session_dir: None,
+                client_cwd: None,
+                launch_cwd: None,
+                runtime_instance_id: "rtinst_custom".to_string(),
+                start_command: None,
+                start_kind: None,
+                parent_session_id: None,
+                parent_client_session_key: None,
+                forked_from_turn_id: None,
+                forked_from_client_node_id: None,
+                lineage_metadata: Value::Null,
+                tmux: None,
+            },
+            "/workspace",
+            "http://127.0.0.1:8080/internal/v1/events",
+            "/pontia/state",
+            "/pontia/state/runtime.log",
+            Some(("custom_hook_log", "/pontia/state/custom-hook.log")),
+            &SessionCapabilities::default(),
+        );
+
+        assert_eq!(metadata["custom_hook_log"], "/pontia/state/custom-hook.log");
+        assert!(metadata.get("pi_hook_log").is_none());
+    }
 }
 
 pub(super) fn agent_binding_metadata(request: &RuntimeBindingUpsertRequest) -> Value {
