@@ -281,7 +281,8 @@ impl GraphProjectionService {
             .as_ref()
             .ok_or_else(|| Error::InvalidConfig {
                 key: "PONTIA_HOME",
-                message: "graph.enabled requires a Ladybug database path derived from pontia home".to_string(),
+                message: "graph.enabled requires a Ladybug database path derived from pontia home"
+                    .to_string(),
             })?;
         LbugDagGraphStore::open(db_dir).await
     }

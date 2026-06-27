@@ -253,7 +253,6 @@ fn rejects_generic_as_default_client_type() {
     assert!(error.to_string().contains("default client type must be pi"));
 }
 
-
 #[test]
 fn pontia_home_overrides_development_default_data_paths() {
     let config = AppConfig::from_vars(&HashMap::from([(
