@@ -5,6 +5,7 @@
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
   import { isTransientNetworkError } from '../api/client'
   import { titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
+  import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import { rememberOptimisticInitialMessage } from '../stores/optimisticChat'
   import {
     loadWorkspaces,
@@ -20,7 +21,6 @@
   } from '../stores/sessions'
   import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
 
-  let prompt = ''
   let createWorkspaceId = ''
   let createClientType = 'pi'
   let creating = false
@@ -41,7 +41,7 @@
   $: clientTypeOptions = CLIENT_TYPE_OPTIONS
   $: if (!clientTypeOptions.includes(createClientType)) createClientType = clientTypeOptions[0] ?? createClientType
   $: if (createWorkspaceId && $workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
-  $: canCreate = Boolean(prompt.trim() && createWorkspaceId && createClientType.trim() && !creating)
+  $: canCreate = Boolean($chatDraft.trim() && createWorkspaceId && createClientType.trim() && !creating)
   $: rawPassiveErrorMessage = $sessionsError ?? $workspacesError
   $: passiveErrorMessage = rawPassiveErrorMessage && !isTransientNetworkError(rawPassiveErrorMessage) ? rawPassiveErrorMessage : null
   $: errorMessage = actionError ?? passiveErrorMessage
@@ -113,7 +113,7 @@
     creating = true
     actionError = null
     try {
-      const initialPrompt = prompt.trim()
+      const initialPrompt = $chatDraft.trim()
       const result = await createSession({
         client_type: createClientType.trim(),
         workspace_id: createWorkspaceId,
@@ -123,7 +123,7 @@
       })
       rememberCreateWorkspaceSelection(createWorkspaceId)
       rememberOptimisticInitialMessage(result.session.session_id, initialPrompt, result.initial_turn)
-      prompt = ''
+      clearChatDraft()
       resetTimelineState(result.session.session_id)
       navigate(`/chat/${result.session.session_id}`)
       await Promise.all([loadSessionDetail(result.session.session_id), loadSessionTimeline(result.session.session_id, { mode: 'rebuild' })])
@@ -137,7 +137,7 @@
 
 <section class="flex min-h-[calc(100svh-5.5rem)] flex-col md:min-h-[calc(100svh-6.5rem)]">
   <NewChatPanel
-    bind:prompt
+    bind:prompt={$chatDraft}
     bind:workspaceId={createWorkspaceId}
     bind:clientType={createClientType}
     {creating}

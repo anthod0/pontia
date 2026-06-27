@@ -18,6 +18,7 @@
     chatMessagesWithOptimistic,
     optimisticInitialMessages,
   } from '../stores/optimisticChat'
+  import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import {
     loadWorkspaces,
     refreshWorkspaceGitStatus,
@@ -56,7 +57,6 @@
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
 
   let selectedSessionId = ''
-  let input = ''
   let submitting = false
   let actionBusy = false
   let inboxActionMessageId: string | null = null
@@ -99,7 +99,7 @@
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
   $: inboxActionableCount = visibleInboxMessages.filter((message) => message.state === 'pending' || message.state === 'failed').length
-  $: canSend = canSendSessionMessage(selectedSession, input) && !submitting
+  $: canSend = canSendSessionMessage(selectedSession, $chatDraft) && !submitting
   $: rawPassiveErrorMessage = $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError
   $: passiveErrorMessage = rawPassiveErrorMessage && !isTransientNetworkError(rawPassiveErrorMessage) ? rawPassiveErrorMessage : null
   $: errorMessage = actionError ?? passiveErrorMessage
@@ -282,7 +282,6 @@
     const nextSessionId = requestedSessionIdFromLocation()
     if (nextSessionId === selectedSessionId) return
     selectedSessionId = nextSessionId
-    input = ''
     actionError = null
     if (selectedSessionId) {
       await loadSelectedSession(selectedSessionId)
@@ -383,7 +382,7 @@
     if (!canSend || !selectedSessionId) return
     submitting = true
     actionError = null
-    const message = input.trim()
+    const message = $chatDraft.trim()
     try {
       if (selectedSession?.state === 'exited') {
         await resumeSession(selectedSessionId)
@@ -394,7 +393,7 @@
         delivery_policy: 'after_idle',
         metadata: { source: 'dashboard_chat' },
       })
-      input = ''
+      clearChatDraft()
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -433,7 +432,7 @@
         />
 
         <SessionComposerDock
-          bind:input
+          bind:input={$chatDraft}
           session={selectedSession}
           gitStatus={selectedSessionGitStatus}
           gitStatusErrors={$workspaceGitStatusErrors}
