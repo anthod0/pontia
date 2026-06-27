@@ -236,13 +236,23 @@ impl EventIngestService {
             return Ok(());
         }
 
-        let session_exists = SqliteSessionRepository::new(self.pool.clone())
-            .exists(&event.session_id)
+        let session = SqliteSessionRepository::new(self.pool.clone())
+            .get_session(&event.session_id)
             .await?;
-        if !session_exists {
+        let Some(session) = session else {
             return Err(Error::Domain(format!(
                 "{} from {} references unknown session {}",
                 event.event_type, event.source, event.session_id
+            )));
+        };
+        if event.client_type != session.client_type {
+            return Err(Error::Domain(format!(
+                "{} from {} has client_type {} but session {} uses client_type {}",
+                event.event_type,
+                event.source,
+                event.client_type,
+                event.session_id,
+                session.client_type
             )));
         }
 

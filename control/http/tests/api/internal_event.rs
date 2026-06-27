@@ -238,7 +238,7 @@ async fn internal_event_api_accepts_context_usage_and_updates_session_metadata_o
         3,
     );
     event["source"] = json!("agent_client");
-    event["client_type"] = json!("pi");
+    event["client_type"] = json!("generic");
     event["payload"] = json!({
         "context_usage": {
             "used_tokens": 42000,
@@ -672,6 +672,57 @@ async fn internal_event_api_rejects_confirmed_runtime_event_with_mismatched_runt
             .as_str()
             .unwrap()
             .contains("does not match")
+    );
+}
+
+#[tokio::test]
+async fn internal_event_api_rejects_confirmed_runtime_event_with_mismatched_client_type() {
+    let state = test_state().await;
+    let launch_cwd = tempfile::tempdir().expect("workspace");
+    let launch_cwd = launch_cwd
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let mut created = event_body(
+        "evt_internal_event_bound_wrong_client_created",
+        "session.created",
+        "sess_internal_event_bound_wrong_client",
+        None,
+        1,
+    );
+    created["source"] = json!("external_api");
+    created["client_type"] = json!("generic");
+    post_event(state.clone(), created).await;
+    sqlx::query(
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'generic', 'rtinst_expected_client', ?, ?)",
+    )
+    .bind("sess_internal_event_bound_wrong_client")
+    .bind(launch_cwd.display().to_string())
+    .bind(json!({"runtime_instance_id":"rtinst_expected_client", "workspace": launch_cwd.display().to_string()}).to_string())
+    .execute(&state.db())
+    .await
+    .expect("runtime binding");
+
+    let mut event = event_body(
+        "evt_internal_event_bound_wrong_client_started",
+        "turn.started",
+        "sess_internal_event_bound_wrong_client",
+        Some("turn_internal_event_bound_wrong_client"),
+        2,
+    );
+    event["source"] = json!("agent_client");
+    event["client_type"] = json!("pi");
+    event["payload"] = json!({"runtime_instance_id":"rtinst_expected_client"});
+
+    let (status, body) = post_event(state, event).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("client_type")
     );
 }
 
