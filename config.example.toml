@@ -13,8 +13,6 @@ cache_dir = "~/.pontia/cache/dashboard"
 [runtime.pi]
 tui_command = "pi -e /absolute/path/to/pontia/clients/pi"
 
-[runtime.claude_code]
-tui_command = "claude"
 
 [workspace_browser]
 roots = [

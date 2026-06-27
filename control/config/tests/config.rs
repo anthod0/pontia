@@ -127,8 +127,8 @@ source = "/opt/pontia/dashboard"
 [runtime.pi]
 tui_command = "pi --approve -e /tmp/pontia/clients/pi"
 
-[runtime."claude-code"]
-tui_command = "claude from file"
+[runtime.custom]
+tui_command = "custom-agent from file"
 
 [workspace_browser]
 roots = [
@@ -160,9 +160,9 @@ roots = [
     assert_eq!(
         config
             .runtime
-            .tui_command_for_client_config_key("claude-code")
+            .tui_command_for_client_config_key("custom")
             .as_deref(),
-        Some("claude from file")
+        Some("custom-agent from file")
     );
     assert_eq!(config.workspace_browser.roots.len(), 1);
     assert_eq!(config.workspace_browser.roots[0].root_id, "projects");

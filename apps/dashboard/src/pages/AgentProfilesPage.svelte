@@ -317,7 +317,7 @@
           </div>
           <div class="space-y-2">
             <Label for="profile-clients">Supported client types</Label>
-            <Input id="profile-clients" bind:value={draft.supported_client_types_text} placeholder="pi, claude_code" />
+            <Input id="profile-clients" bind:value={draft.supported_client_types_text} placeholder="pi" />
             {#if draftErrors.supported_client_types_text}<p class="text-xs text-destructive">{draftErrors.supported_client_types_text}</p>{/if}
           </div>
           <div class="space-y-2">

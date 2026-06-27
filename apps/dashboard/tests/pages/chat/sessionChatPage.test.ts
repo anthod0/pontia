@@ -705,7 +705,7 @@ test('supports cancelling pending inbox messages and retrying or removing failed
 test('loads and renders an existing chat session with metadata and workspace name above the prompt input without a page header', async () => {
   const selected = session({
     session_id: 'session-2',
-    client_type: 'claude-code',
+    client_type: 'pi',
     handle: 'second',
     role: 'reviewer',
     description: 'Review dashboard changes',
@@ -728,16 +728,16 @@ test('loads and renders an existing chat session with metadata and workspace nam
   expect(await screen.findByText('hi there')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: /second · reviewer/i })).not.toBeInTheDocument();
   expect(screen.queryByText('Description: Review dashboard changes')).not.toBeInTheDocument();
-  const sessionDetailsButton = screen.getByRole('button', { name: /Session details: pontia · claude-code · coder@1 · second/i });
+  const sessionDetailsButton = screen.getByRole('button', { name: /Session details: pontia · pi · coder@1 · second/i });
   await userEvent.click(sessionDetailsButton);
-  const clientBadge = screen.getAllByLabelText('Client: claude-code')[0];
+  const clientBadge = screen.getAllByLabelText('Client: pi')[0];
   const profileBadge = screen.getAllByLabelText('Profile: coder@1')[0];
   expect(clientBadge).toBeInTheDocument();
   expect(profileBadge).toBeInTheDocument();
   expect(screen.getAllByLabelText('Handle: second')[0]).toBeInTheDocument();
   expect(within(clientBadge.closest('div') as HTMLElement).getByLabelText('Client')).toHaveClass('lucide-terminal');
   expect(within(profileBadge.closest('div') as HTMLElement).getByLabelText('Profile')).toHaveClass('lucide-bot');
-  expect(screen.queryByText('Client: claude-code')).not.toBeInTheDocument();
+  expect(screen.queryByText('Client: pi')).not.toBeInTheDocument();
   expect(screen.queryByText('Profile: coder@1')).not.toBeInTheDocument();
   expect(screen.queryByText('Handle: second')).not.toBeInTheDocument();
   expect(screen.queryByText('Workspace: workspace-1')).not.toBeInTheDocument();

@@ -12,7 +12,7 @@
 
 It aims to provide:
 
-- **Real agent TUI runtime** — use real agent TUIs as runtimes instead of subprocesses such as `claude -p`, allowing sessions to stay alive for a long time while using vendor subscriptions compliantly.
+- **Real agent TUI runtime** — use real agent TUIs as runtimes instead of short-lived subprocess prompts, allowing sessions to stay alive for a long time while preserving official client behavior.
 - **One long-lived session, control from anywhere** — start, continue, observe, or steer the same agent session from desktop, Web, mobile, or TUI surfaces.
 - **Observable long-running tasks** — let agents plan large tasks as DAGs, then expose each planning and implementation node so developers can understand, intervene, retry, and repair the work.
 
@@ -22,9 +22,7 @@ In short: `pontia` keeps official agent work alive, visible, controllable, and f
 
 ### Real agent TUI runtime
 
-Each vendor has its own TUI agent and subscription model. Since June 15, `claude -p` usage has also moved toward usage-based billing. It is reasonable to expect subscriptions to become more constrained over time and more strongly tied to official TUI clients.
-
-`pontia` therefore uses real agent TUIs as runtimes instead of subprocesses such as `claude -p`, allowing sessions to stay alive for a long time while using vendor subscriptions compliantly.
+Each vendor has its own TUI agent and subscription model. `pontia` therefore uses real agent TUIs as runtimes instead of short-lived subprocess prompts, allowing sessions to stay alive for a long time while preserving official client behavior.
 
 Current state: uses pi to implement the control model.
 
@@ -66,7 +64,7 @@ Current state: early task, DAG, work-item, proposal, scheduler, and provenance m
 
 `pontia` is designed around a simple split:
 
-- **Use real agent TUIs as runtimes**: pi, Claude Code, and future clients run as long-lived real TUI processes, currently hosted through tmux, rather than short-lived subprocess commands such as `claude -p`. This keeps sessions alive while preserving official client behavior and legitimate subscription-based usage.
+- **Use real agent TUIs as runtimes**: pi and future clients run as long-lived real TUI processes, currently hosted through tmux, rather than short-lived subprocess prompts. This keeps sessions alive while preserving official client behavior.
 - **pontia owns the durable control state**: sessions, turns, tasks, DAG nodes, events, artifacts, and projections live outside the agent process.
 - **Every UI is a control surface**: desktop TUI, Web Dashboard, mobile Web, HTTP API, and future clients should attach to the same underlying session instead of creating separate worlds. Runtime bindings and capabilities describe what each live client can do; for example, a pi TUI outside tmux is still observable but reports `accept_task = false`, so the Web composer is disabled.
 - **Long-running tasks are WorkItem DAGs**: large tasks are represented as ordered dependency graphs. A Planner creates and repairs the graph, while Workers stay intentionally simple and execute work items mechanically. Failures, new information, or human interruptions should patch the DAG into a new execution path, with each node remaining inspectable, retryable, and repairable.
@@ -82,7 +80,7 @@ Install:
 - sqlite3 CLI
 - tmux
 - pnpm
-- pi CLI and/or Claude Code if you want to run those clients locally
+- pi CLI if you want to run the current client integration locally
 
 ### SQLx compile-time checks
 
@@ -130,8 +128,6 @@ source = "apps/dashboard/dist"
 [runtime.pi]
 tui_command = "pi --approve -e /absolute/path/to/pontia/clients/pi"
 
-[runtime.claude_code]
-tui_command = "claude"
 
 [workspace_browser]
 roots = [

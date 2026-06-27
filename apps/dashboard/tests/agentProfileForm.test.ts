@@ -7,7 +7,7 @@ const profile: AgentProfileView = {
   version: 'v1',
   name: 'Planner',
   description: 'Plans work',
-  supported_client_types: ['pi', 'claude_code'],
+  supported_client_types: ['pi'],
   agent_kind: 'planner',
   system_prompt_template: 'system',
   turn_prompt_template: 'turn',
@@ -32,9 +32,15 @@ test('creates a version draft by copying the current profile and clearing only t
   expect(draft.profile_id).toBe('planner');
   expect(draft.version).toBe('');
   expect(draft.name).toBe('Planner');
-  expect(draft.supported_client_types_text).toBe('pi, claude_code');
+  expect(draft.supported_client_types_text).toBe('pi');
   expect(draft.agent_kind).toBe('planner');
   expect(draft.artifact_contract_text).toMatch(/"kind": "patch"/);
+});
+
+test('defaults new agent profiles to the active pi client only', () => {
+  const draft = createAgentProfileDraft();
+
+  expect(draft.supported_client_types_text).toBe('pi');
 });
 
 test('builds an upsert input with parsed JSON fields and split client types', () => {
@@ -42,7 +48,7 @@ test('builds an upsert input with parsed JSON fields and split client types', ()
   draft.profile_id = 'coder';
   draft.version = 'v1';
   draft.name = 'Coder';
-  draft.supported_client_types_text = 'pi, claude_code, pi';
+  draft.supported_client_types_text = 'pi, pi';
   draft.description = '';
   draft.artifact_contract_text = '{"outputs":["patch"]}';
 
@@ -50,7 +56,7 @@ test('builds an upsert input with parsed JSON fields and split client types', ()
 
   expect(result.ok).toBe(true);
   if (!result.ok) return;
-  expect(result.input.supported_client_types).toEqual(['pi', 'claude_code']);
+  expect(result.input.supported_client_types).toEqual(['pi']);
   expect(result.input.agent_kind).toBe('executor');
   expect(result.input.description).toBe(null);
   expect(result.input.artifact_contract).toEqual({ outputs: ['patch'] });
