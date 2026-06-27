@@ -49,8 +49,42 @@
     if (!markdown || !ref) return
 
     const root = ref
-    void tick().then(() => addCodeCopyButtons(root))
+    void tick().then(() => {
+      addCodeCopyButtons(root)
+      enhanceMarkdownLinks(root)
+    })
   })
+
+  function enhanceMarkdownLinks(root: HTMLDivElement): void {
+    const links = Array.from(root.querySelectorAll<HTMLAnchorElement>('a[href]'))
+
+    for (const link of links) {
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      if (link.querySelector('[data-markdown-external-link-icon]')) continue
+
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      icon.setAttribute('aria-hidden', 'true')
+      icon.setAttribute('data-markdown-external-link-icon', 'true')
+      icon.setAttribute('data-testid', 'markdown-external-link-icon')
+      icon.setAttribute('viewBox', '0 0 24 24')
+      icon.setAttribute('fill', 'none')
+      icon.setAttribute('stroke', 'currentColor')
+      icon.setAttribute('stroke-width', '2')
+      icon.setAttribute('stroke-linecap', 'round')
+      icon.setAttribute('stroke-linejoin', 'round')
+      icon.setAttribute('class', 'ml-1 inline-block size-3.5 align-[-0.125em]')
+
+      const paths = ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6']
+      for (const d of paths) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        path.setAttribute('d', d)
+        icon.append(path)
+      }
+
+      link.append(' ', icon)
+    }
+  }
 
   function addCodeCopyButtons(root: HTMLDivElement): void {
     const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>('pre > code'))
