@@ -10,9 +10,7 @@ use pontia_core::error::{Error, Result};
 
 use super::{
     RuntimeStartRequest,
-    config::{
-        configured_internal_event_url, configured_tui_command,
-    },
+    config::{configured_internal_event_url, configured_tui_command},
     utils::shell_quote,
 };
 
@@ -26,7 +24,7 @@ pub(super) fn write_ephemeral_launch_script(
     request: &RuntimeStartRequest,
     runtime_instance_id: &str,
 ) -> Result<PathBuf> {
-    let launch_dir = std::env::temp_dir().join("pontia-launch");
+    let launch_dir = pontia_home_path_for_export().join("state/launch");
     std::fs::create_dir_all(&launch_dir)?;
     let path = launch_dir.join(format!("{runtime_instance_id}.sh"));
     write_launch_script(
@@ -152,13 +150,18 @@ pub(super) fn shell_quote_path(path: &Path) -> String {
 }
 
 fn pontia_home_for_export() -> String {
+    pontia_home_path_for_export().display().to_string()
+}
+
+fn pontia_home_path_for_export() -> PathBuf {
     std::env::var("PONTIA_HOME")
         .ok()
         .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
         .unwrap_or_else(|| {
             std::env::var("HOME")
-                .map(|home| format!("{home}/.pontia"))
-                .unwrap_or_else(|_| ".pontia".to_string())
+                .map(|home| PathBuf::from(home).join(".pontia"))
+                .unwrap_or_else(|_| PathBuf::from(".pontia"))
         })
 }
 
@@ -192,7 +195,9 @@ mod tests {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let script_path = tempdir.path().join("launch.sh");
         let log_path = tempdir.path().join("runtime.log");
-        let paths = RuntimePaths { log_path: &log_path };
+        let paths = RuntimePaths {
+            log_path: &log_path,
+        };
         let request = RuntimeStartRequest {
             session_id: "sess_resume_1".to_string(),
             client_type: "pi".to_string(),

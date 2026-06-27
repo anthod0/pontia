@@ -77,10 +77,12 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     }
     set_runtime_config(RuntimeConfig::default());
 
+    let pontia_home = tempdir.path().join("pontia-home");
+    let expected_launch_dir = pontia_home.join("state/launch");
     let log = std::fs::read_to_string(tmux_log).expect("tmux log");
     assert!(
-        log.contains("/tmp/pontia-launch/"),
-        "tmux should execute an ephemeral launch script from /tmp, got:\n{log}"
+        log.contains(expected_launch_dir.to_str().expect("utf-8 launch dir")),
+        "tmux should execute an ephemeral launch script from PONTIA_HOME/state/launch, got:\n{log}"
     );
     assert!(
         log.contains("; rm -f "),
@@ -254,7 +256,7 @@ fn restore_fake_tmux(original_path: String) {
 fn launch_script_path_from_tmux_log(log: &str) -> String {
     log.split_whitespace()
         .map(|part| part.trim_matches(|ch| ch == '\'' || ch == ';'))
-        .find(|part| part.starts_with("/tmp/pontia-launch/") && part.ends_with(".sh"))
+        .find(|part| part.contains("/state/launch/") && part.ends_with(".sh"))
         .expect("launch script path in tmux log")
         .to_string()
 }
