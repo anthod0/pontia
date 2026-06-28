@@ -50,10 +50,6 @@ Backend-delivered input is claimed through the Internal API endpoint discovered 
 
 The extension does not parse TUI screen contents and does not infer turn completion from tmux, process state, or runtime exit.
 
-## pontia tools
-
-DAG task development is currently frozen while pontia focuses on session-first Web UI and bidirectional session control. The pi extension no longer registers agent-visible DAG tools. The shared contract at `clients/tools/pontia-tools.v1.json` is retained for backend compatibility and future revival.
-
 ## Manual validation
 
 When pi is launched by pontia `client_type = "pi"` runtime, the Control Plane exports `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_HOME` for the hook. Backend-delivered input is made available through the Internal current-turn claim API discovered from `$PONTIA_HOME/config.toml`. The steps below are useful for standalone plugin validation.
