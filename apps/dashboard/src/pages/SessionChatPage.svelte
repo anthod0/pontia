@@ -73,9 +73,11 @@
   let scrollDownButtonHideTimer: ReturnType<typeof setTimeout> | null = null
   let bottomIntersectionObserver: IntersectionObserver | null = null
   let promptInputScrollBaselineKey: string | null = null
+  let destroyed = false
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
   const SCROLL_DOWN_BUTTON_ANIMATION_MS = 200
+  const INITIAL_SCROLL_SETTLE_PASSES = 2
 
   onMount(async () => {
     selectedSessionId = requestedSessionIdFromLocation()
@@ -84,6 +86,7 @@
       await loadSelectedSession(selectedSessionId)
       await refreshSessionGitStatus(currentSelectedSession())
     }
+    if (destroyed) return
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
     window.addEventListener('focus', handleForegroundResume)
     window.addEventListener('pageshow', handleForegroundResume)
@@ -91,6 +94,7 @@
   })
 
   onDestroy(() => {
+    destroyed = true
     unsubscribeDashboardEvents?.()
     window.removeEventListener('focus', handleForegroundResume)
     window.removeEventListener('pageshow', handleForegroundResume)
@@ -251,9 +255,21 @@
     }
   }
 
+  function nextAnimationFrame(): Promise<void> {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+  }
+
   function scrollChatToBottom(): void {
     scrollDocumentToBottom()
     setScrollDownButtonVisible(false)
+  }
+
+  async function scrollChatToBottomAfterLayout(): Promise<void> {
+    await tick()
+    await nextAnimationFrame()
+    for (let pass = 0; pass < INITIAL_SCROLL_SETTLE_PASSES; pass += 1) {
+      scrollChatToBottom()
+    }
   }
 
   function handleForegroundResume(): void {
@@ -361,8 +377,7 @@
       loadSessionDetail(sessionId),
       hasLoadedTimeline ? handleTimelineMessageUpdated(sessionId) : loadSessionTimeline(sessionId, { mode: 'rebuild' }),
     ])
-    await tick()
-    scrollChatToBottom()
+    await scrollChatToBottomAfterLayout()
   }
 
   async function loadEarlierMessages(): Promise<void> {
@@ -486,17 +501,19 @@
           <Empty.Content><Button onclick={() => openNewChat()}>Start a new chat</Button></Empty.Content>
         </Empty.Root>
       {:else}
-        <SessionConversation
-          {messages}
-          sessionState={selectedSession.state}
-          loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
-          interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
-          interruptBusy={actionBusy}
-          hasMoreHistory={$timelineState.hasMore}
-          historyLoading={$timelineState.refreshKind === 'history'}
-          onInterrupt={() => void interruptSelectedSession()}
-          onLoadMoreHistory={loadEarlierMessages}
-        />
+        {#key selectedSessionId}
+          <SessionConversation
+            {messages}
+            sessionState={selectedSession.state}
+            loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
+            interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
+            interruptBusy={actionBusy}
+            hasMoreHistory={$timelineState.hasMore}
+            historyLoading={$timelineState.refreshKind === 'history'}
+            onInterrupt={() => void interruptSelectedSession()}
+            onLoadMoreHistory={loadEarlierMessages}
+          />
+        {/key}
         <div aria-hidden="true" class="h-px w-px" data-chat-bottom-sentinel use:observeBottomSentinel></div>
 
         {#if scrollDownButtonRendered}

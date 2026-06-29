@@ -248,6 +248,85 @@ test('scrolls to the document bottom after entering a selected chat', async () =
 });
 
 
+test('scrolls to the settled document bottom when switching chats through SPA navigation', async () => {
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const originalScrollHeight = Object.getOwnPropertyDescriptor(document.documentElement, 'scrollHeight')
+    ?? Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+  const firstSession = session({ session_id: 'session-1', state: 'idle' });
+  const secondSession = session({ session_id: 'session-2', state: 'idle' });
+  let layoutPasses = 0;
+
+  try {
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      configurable: true,
+      get: () => {
+        layoutPasses += 1;
+        return layoutPasses < 2 ? 2048 : 4096;
+      },
+    });
+    window.history.pushState({}, '', '/dashboard/chat/session-1');
+    mocks.pathParams = { sessionId: 'session-1' };
+    mocks.loadedSessions = [firstSession, secondSession];
+    mocks.sessions.set([firstSession, secondSession]);
+    mocks.sessionDetail.set({ session: firstSession, turns: [turn({ session_id: 'session-1' })], inboxMessages: [], events: [], artifacts: [] });
+    mocks.loadSessionDetail.mockImplementation(async (sessionId: string) => {
+      const selected = sessionId === 'session-2' ? secondSession : firstSession;
+      mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: sessionId })], inboxMessages: [], events: [], artifacts: [] });
+      return null;
+    });
+
+    render(SessionChatPage);
+    await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+    scrollTo.mockClear();
+
+    layoutPasses = 0;
+    window.history.pushState({}, '', '/dashboard/chat/session-2');
+    mocks.pathParams = { sessionId: 'session-2' };
+    window.dispatchEvent(new PopStateEvent('popstate'));
+
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
+  } finally {
+    scrollTo.mockRestore();
+    mocks.loadSessionDetail.mockImplementation(async () => null);
+    if (originalScrollHeight) Object.defineProperty(document.documentElement, 'scrollHeight', originalScrollHeight);
+    else delete (document.documentElement as HTMLElement & { scrollHeight?: number }).scrollHeight;
+  }
+});
+
+
+test('does not load earlier chat history before the initial selected chat scroll settles', async () => {
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.timelineState.set({
+    sessionId: 'session-2',
+    bindingId: 'binding-1',
+    items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
+    headCursor: 'older-cursor',
+    tailCursor: 'tail-cursor',
+    sourceId: 'source-1',
+    hasMore: true,
+    loading: false,
+    refreshing: false,
+    error: null,
+  });
+
+  render(SessionChatPage);
+
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
+  window.dispatchEvent(new Event('scroll'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'more' });
+  scrollTo.mockRestore();
+});
+
+
 test('loads earlier chat history when the chat scroll reaches the top', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
@@ -273,6 +352,7 @@ test('loads earlier chat history when the chat scroll reaches the top', async ()
   expect(screen.queryByRole('button', { name: /load earlier messages/i })).not.toBeInTheDocument();
 
   Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
+  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
   window.dispatchEvent(new Event('scroll'));
 
   await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'more' }));

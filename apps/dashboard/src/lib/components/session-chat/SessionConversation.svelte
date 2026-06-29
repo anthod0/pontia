@@ -73,13 +73,20 @@
   const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
   const TOP_HISTORY_LOAD_THRESHOLD_PX = 80
   let topHistoryLoadInFlight = false
+  let topHistoryLoadArmed = false
 
   onMount(() => {
     window.addEventListener('scroll', handleWindowScroll, { passive: true })
+    window.addEventListener('wheel', armTopHistoryLoad, { passive: true })
+    window.addEventListener('touchstart', armTopHistoryLoad, { passive: true })
+    window.addEventListener('keydown', handleWindowKeydown)
   })
 
   onDestroy(() => {
     window.removeEventListener('scroll', handleWindowScroll)
+    window.removeEventListener('wheel', armTopHistoryLoad)
+    window.removeEventListener('touchstart', armTopHistoryLoad)
+    window.removeEventListener('keydown', handleWindowKeydown)
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
   })
 
@@ -149,11 +156,22 @@
     displayMessages.length
     hasMoreHistory
     historyLoading
+    if (!topHistoryLoadArmed) return
     void tick().then(maybeLoadMoreHistoryFromTop)
   })
 
   function handleWindowScroll(): void {
+    if (!topHistoryLoadArmed) return
     void maybeLoadMoreHistoryFromTop()
+  }
+
+  function armTopHistoryLoad(): void {
+    topHistoryLoadArmed = true
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent): void {
+    if (!['ArrowUp', 'PageUp', 'Home', ' '].includes(event.key)) return
+    armTopHistoryLoad()
   }
 
   function maybeLoadMoreHistoryFromTop(): void {
