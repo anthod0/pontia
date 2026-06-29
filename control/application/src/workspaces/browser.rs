@@ -210,7 +210,7 @@ impl WorkspaceBrowserService {
         let timeout = std::time::Duration::from_millis(config.timeout_ms);
         let normalized_query = query.trim().trim_start_matches('@');
         let mut warnings = Vec::new();
-        let mut candidates = Vec::<String>::new();
+        let mut candidates = Vec::<FilePickerFileView>::new();
         let mut truncated = false;
 
         for entry in walker.build() {
@@ -228,10 +228,10 @@ impl WorkspaceBrowserService {
                     continue;
                 }
             };
-            if !entry
-                .file_type()
-                .is_some_and(|file_type| file_type.is_file())
-            {
+            let Some(file_type) = entry.file_type() else {
+                continue;
+            };
+            if !file_type.is_file() && !file_type.is_dir() {
                 continue;
             }
             let path = entry.path();
@@ -242,7 +242,22 @@ impl WorkspaceBrowserService {
             if relative.is_empty() {
                 continue;
             }
-            candidates.push(relative);
+            let kind = if file_type.is_dir() {
+                "directory"
+            } else {
+                "file"
+            }
+            .to_string();
+            let name = Path::new(&relative)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(&relative)
+                .to_string();
+            candidates.push(FilePickerFileView {
+                path: relative,
+                name,
+                kind,
+            });
             if candidates.len() >= candidate_limit {
                 truncated = true;
                 break;
@@ -260,14 +275,7 @@ impl WorkspaceBrowserService {
             .match_list(candidates, &mut matcher)
             .into_iter()
             .take(result_limit)
-            .map(|(path, _)| FilePickerFileView {
-                name: Path::new(&path)
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or(&path)
-                    .to_string(),
-                path,
-            })
+            .map(|(entry, _)| entry)
             .collect();
 
         Ok(FilePickerResultView {

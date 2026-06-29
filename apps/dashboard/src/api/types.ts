@@ -166,6 +166,7 @@ export interface WorkspaceDirectoryListingView {
 export interface FilePickerFileView {
   path: string;
   name: string;
+  kind: 'directory' | 'file' | string;
 }
 
 export interface FilePickerResultView {

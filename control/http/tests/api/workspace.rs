@@ -228,7 +228,7 @@ async fn refreshing_git_status_updates_sqlite_projection_read_by_get() {
 }
 
 #[tokio::test]
-async fn file_picker_returns_fuzzy_workspace_relative_files_and_respects_ignore_config() {
+async fn file_picker_returns_directories_and_files_and_respects_ignore_config() {
     let root = tempfile::tempdir().expect("root");
     let app = root.path().join("app");
     std::fs::create_dir_all(app.join("src")).expect("src");
@@ -256,18 +256,29 @@ async fn file_picker_returns_fuzzy_workspace_relative_files_and_respects_ignore_
 
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/workspaces/{workspace_id}/file-picker?query=main"),
+        &format!("/external/v1/workspaces/{workspace_id}/file-picker?query=src"),
     )
     .await;
 
     assert_eq!(status, StatusCode::OK);
     let files = body["data"]["files"].as_array().expect("files");
-    assert_eq!(files[0]["path"], "src/main.rs");
-    assert_eq!(files[0]["name"], "main.rs");
+    assert!(
+        files.iter().any(|entry| entry["path"] == "src"
+            && entry["name"] == "src"
+            && entry["kind"] == "directory"),
+        "files: {files:?}"
+    );
+    assert!(
+        files.iter().any(|entry| entry["path"] == "src/main.rs"
+            && entry["name"] == "main.rs"
+            && entry["kind"] == "file"),
+        "files: {files:?}"
+    );
     assert!(
         files
             .iter()
-            .all(|file| file["path"] != "node_modules/pkg/index.js")
+            .all(|file| file["path"] != "node_modules/pkg/index.js"
+                && file["path"] != "node_modules/pkg")
     );
 }
 

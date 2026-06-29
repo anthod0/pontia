@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import { File } from '@lucide/svelte'
+  import { File, Folder } from '@lucide/svelte'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import { listWorkspaceFilePickerEntries } from '../../../api/client'
   import type { FilePickerFileView } from '../../../api/types'
@@ -31,6 +31,7 @@
   }: Props = $props()
 
   let textarea = $state<HTMLTextAreaElement | null>(null)
+  let listbox = $state<HTMLDivElement | null>(null)
   let mention = $state<ActiveFileMention | null>(null)
   let files = $state<FilePickerFileView[]>([])
   let open = $state(false)
@@ -49,19 +50,26 @@
     controller?.abort()
   }
 
+  function sameMention(a: ActiveFileMention | null, b: ActiveFileMention | null): boolean {
+    return a !== null && b !== null && a.start === b.start && a.end === b.end && a.query === b.query
+  }
+
   function refreshMention(): void {
     if (!textarea || disabled || !workspaceId) {
       closePicker()
       return
     }
     const current = activeFileMention(value, textarea.selectionStart ?? value.length)
+    const previous = mention
     mention = current
     open = current !== null
-    selectedIndex = 0
     if (!current) {
       files = []
+      selectedIndex = 0
       return
     }
+    if (sameMention(previous, current)) return
+    selectedIndex = 0
     scheduleSearch(current.query)
   }
 
@@ -78,7 +86,7 @@
     const localRequestId = ++requestId
     loading = true
     try {
-      const result = await listWorkspaceFilePickerEntries(workspaceId, query, { limit: 50, signal: localController.signal })
+      const result = await listWorkspaceFilePickerEntries(workspaceId, query, { limit: 20, signal: localController.signal })
       if (localRequestId !== requestId) return
       files = result.files
       selectedIndex = 0
@@ -100,16 +108,32 @@
     textarea?.setSelectionRange(next.cursor, next.cursor)
   }
 
+  function isPickerControlKey(key: string): boolean {
+    return key === 'ArrowDown' || key === 'ArrowUp' || key === 'Enter' || key === 'Tab' || key === 'Escape'
+  }
+
+  async function scrollSelectedIntoView(): Promise<void> {
+    await tick()
+    listbox
+      ?.querySelector(`[data-file-suggestion-index="${selectedIndex}"]`)
+      ?.scrollIntoView({ block: 'nearest' })
+  }
+
+  function moveSelection(delta: number): void {
+    selectedIndex = files.length ? (selectedIndex + delta + files.length) % files.length : 0
+    void scrollSelectedIntoView()
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (open) {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
-        selectedIndex = files.length ? (selectedIndex + 1) % files.length : 0
+        moveSelection(1)
         return
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault()
-        selectedIndex = files.length ? (selectedIndex - 1 + files.length) % files.length : 0
+        moveSelection(-1)
         return
       }
       if ((event.key === 'Enter' || event.key === 'Tab') && files[selectedIndex]) {
@@ -125,6 +149,11 @@
     }
     onkeydown?.(event)
   }
+
+  function handleKeyup(event: KeyboardEvent): void {
+    if (isPickerControlKey(event.key)) return
+    refreshMention()
+  }
 </script>
 
 <div class="relative w-full">
@@ -138,13 +167,13 @@
     class={className}
     onkeydown={handleKeydown}
     oninput={refreshMention}
-    onkeyup={refreshMention}
+    onkeyup={handleKeyup}
     onclick={refreshMention}
     onfocus={(event) => { onfocus?.(event); refreshMention() }}
   />
 
   {#if open}
-    <div class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg" role="listbox" aria-label="File suggestions">
+    <div bind:this={listbox} class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg" role="listbox" aria-label="File suggestions">
       {#if loading && files.length === 0}
         <div class="px-3 py-2 text-sm text-muted-foreground">Searching files…</div>
       {:else if files.length === 0}
@@ -156,10 +185,15 @@
             class={`flex w-full min-w-0 items-center gap-2 rounded-md px-3 py-2 text-left text-sm ${index === selectedIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent hover:text-accent-foreground'}`}
             role="option"
             aria-selected={index === selectedIndex}
+            data-file-suggestion-index={index}
             onmouseenter={() => (selectedIndex = index)}
             onmousedown={(event) => { event.preventDefault(); void choose(file) }}
           >
-            <File class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            {#if file.kind === 'directory'}
+              <Folder class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            {:else}
+              <File class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            {/if}
             <span class="min-w-0 truncate">@{file.path}</span>
           </button>
         {/each}

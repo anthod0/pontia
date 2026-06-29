@@ -30,6 +30,13 @@ pub struct WorkspaceDirectoryListingView {
 pub struct FilePickerFileView {
     pub path: String,
     pub name: String,
+    pub kind: String,
+}
+
+impl AsRef<str> for FilePickerFileView {
+    fn as_ref(&self) -> &str {
+        &self.path
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
