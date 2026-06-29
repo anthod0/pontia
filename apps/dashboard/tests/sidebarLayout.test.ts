@@ -126,6 +126,22 @@ test('sidebar shows session control items and hides overview and DAG task naviga
   expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
 });
 
+test('sidebar session action appears on hover or focus-visible, not plain focus-within', () => {
+  mocks.sessions.set([chatSession('session-active', 'idle', '2026-05-14T01:00:00Z')]);
+
+  render(AppSidebarHost);
+
+  const action = screen.getByRole('button', { name: /open session actions for session-active/i });
+  expect(action).toHaveClass('group-hover/menu-item:opacity-100');
+  expect(action).toHaveClass('group-has-[:focus-visible]/menu-item:opacity-100');
+  expect(action).not.toHaveClass('group-focus-within/menu-item:opacity-100');
+
+  const status = screen.getByLabelText('idle session');
+  expect(status).toHaveClass('group-hover/menu-item:opacity-0');
+  expect(status).toHaveClass('group-has-[:focus-visible]/menu-item:opacity-0');
+  expect(status).not.toHaveClass('group-focus-within/menu-item:opacity-0');
+});
+
 test('sidebar shows recent sessions with semantic status dot except exited sessions, and opens chat for the selected session', async () => {
   mocks.sessions.set([
     {
