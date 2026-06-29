@@ -192,6 +192,23 @@ test('shows workspace git status in the selected chat composer summary', async (
 });
 
 
+test('scrolls to the document bottom after entering a selected chat', async () => {
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+
+  render(SessionChatPage);
+
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
+  scrollTo.mockRestore();
+});
+
+
 test('loads earlier chat history when the chat scroll reaches the top', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
@@ -891,6 +908,121 @@ test('follow-up composer submits with Enter while preserving modified Enter for 
     delivery_policy: 'after_idle',
     metadata: { source: 'dashboard_chat' },
   }));
+});
+
+
+test('shows a floating scroll-down button away from the bottom and scrolls down when clicked', async () => {
+  const user = userEvent.setup();
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 1600 });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+
+  render(SessionChatPage);
+
+  await screen.findByText('hi there');
+  scrollTo.mockClear();
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 100 });
+  window.dispatchEvent(new Event('scroll'));
+  const scrollDownButton = await screen.findByRole('button', { name: /scroll to bottom/i });
+  const scrollDownContainer = scrollDownButton.closest('[data-chat-scroll-down-container]');
+  expect(scrollDownContainer).toHaveClass('transition-[left]');
+  expect(scrollDownContainer).toHaveClass('chat-scroll-down-enter');
+  expect(scrollDownContainer).toHaveClass('duration-200');
+  expect(scrollDownContainer).toHaveClass('ease-linear');
+  await user.click(scrollDownButton);
+
+  expect(scrollTo).toHaveBeenCalledWith({ top: 2400 });
+  await waitFor(() => expect(screen.queryByRole('button', { name: /scroll to bottom/i })).not.toBeInTheDocument());
+  scrollTo.mockRestore();
+});
+
+
+test('hides the floating scroll-down button at the bottom', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 1600 });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+
+  render(SessionChatPage);
+
+  await screen.findByText('hi there');
+  expect(screen.queryByRole('button', { name: /scroll to bottom/i })).not.toBeInTheDocument();
+});
+
+
+test('scrolls to the document bottom after sending from the prompt input', async () => {
+  const user = userEvent.setup();
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.submitInboxMessage.mockResolvedValue(undefined);
+
+  render(SessionChatPage);
+
+  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  await user.type(followUpInput, 'continue this session');
+  await user.click(screen.getByRole('button', { name: /send/i }));
+
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
+  scrollTo.mockRestore();
+});
+
+
+test('does not scroll to the document bottom after retrying an inbox message', async () => {
+  const user = userEvent.setup();
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [],
+    inboxMessages: [
+      inboxMessage({
+        message_id: 'message-failed',
+        session_id: 'session-2',
+        state: 'failed',
+        input: { summary: 'fix the failing dashboard test' },
+      }),
+    ],
+    events: [],
+    artifacts: [],
+  });
+  mocks.submitInboxMessage.mockResolvedValue(undefined);
+
+  render(SessionChatPage);
+
+  await user.click(await screen.findByRole('button', { name: /open inbox, 1 message/i }));
+  scrollTo.mockClear();
+  await user.click(await screen.findByRole('button', { name: /retry inbox message fix the failing dashboard test/i }));
+
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
+    input: 'fix the failing dashboard test',
+    delivery_policy: 'after_idle',
+    metadata: {},
+  }));
+  expect(scrollTo).not.toHaveBeenCalled();
+  scrollTo.mockRestore();
 });
 
 

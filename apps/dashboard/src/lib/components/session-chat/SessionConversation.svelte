@@ -8,7 +8,6 @@
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { copyText } from '$lib/copyText'
-  import { chatAutoScrollKey, scrollDocumentToBottom } from '../../session-chat/autoScroll'
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
@@ -38,7 +37,6 @@
     interruptBusy?: boolean
     hasMoreHistory?: boolean
     historyLoading?: boolean
-    autoScrollKey?: string | null
     onInterrupt?: () => void
     onLoadMoreHistory?: () => void | Promise<void>
     loadDraftDagFlow?: () => Promise<DraftDagFlowComponent>
@@ -55,7 +53,6 @@
     interruptBusy: _interruptBusy = false,
     hasMoreHistory = false,
     historyLoading = false,
-    autoScrollKey = null,
     onInterrupt: _onInterrupt,
     onLoadMoreHistory,
     loadDraftDagFlow = defaultLoadDraftDagFlow,
@@ -72,14 +69,10 @@
   const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
   const displayGroups = $derived(conversationDisplayGroups(displayItems))
   const latestAssistantGroupId = $derived([...displayGroups].reverse().find((group) => group.kind === 'assistant_group')?.id ?? null)
-  const scrollKey = $derived(autoScrollKey ?? chatAutoScrollKey(displayMessages))
   const plannerDraftAnchorId = $derived(lastAssistantMessageId(displayMessages))
   const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
   const TOP_HISTORY_LOAD_THRESHOLD_PX = 80
-  const BOTTOM_AUTO_SCROLL_THRESHOLD_PX = 160
   let topHistoryLoadInFlight = false
-  let previousScrollKey: string | null = null
-  let shouldAutoScrollAfterUpdate = false
 
   onMount(() => {
     window.addEventListener('scroll', handleWindowScroll, { passive: true })
@@ -89,27 +82,6 @@
     window.removeEventListener('scroll', handleWindowScroll)
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
   })
-
-  $effect.pre(() => {
-    scrollKey
-    shouldAutoScrollAfterUpdate = previousScrollKey === null || isDocumentNearBottom()
-  })
-
-  $effect(() => {
-    const nextScrollKey = scrollKey
-    if (previousScrollKey === null) {
-      previousScrollKey = nextScrollKey
-      return
-    }
-    if (previousScrollKey === nextScrollKey) return
-    previousScrollKey = nextScrollKey
-    if (shouldAutoScrollAfterUpdate) void tick().then(scrollDocumentToBottom)
-  })
-
-  function isDocumentNearBottom(): boolean {
-    const distanceFromBottom = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight)
-    return distanceFromBottom <= BOTTOM_AUTO_SCROLL_THRESHOLD_PX
-  }
 
   function lastAssistantMessageId(chatMessages: SessionChatMessage[]): string | null {
     for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
@@ -239,41 +211,10 @@
     return groups
   }
 
-  interface ScrollAnchor {
-    messageId: string
-    top: number
-  }
-
-  function messageElements(): HTMLElement[] {
-    return Array.from(document.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
-  }
-
-  function captureScrollAnchor(): ScrollAnchor | null {
-    const anchor = messageElements().find((element) => element.getBoundingClientRect().bottom > 0)
-    if (!anchor?.dataset.chatMessageId) return null
-    return { messageId: anchor.dataset.chatMessageId, top: anchor.getBoundingClientRect().top }
-  }
-
-  function restoreScrollAnchor(anchor: ScrollAnchor | null): boolean {
-    if (!anchor) return false
-    const element = messageElements().find((candidate) => candidate.dataset.chatMessageId === anchor.messageId)
-    if (!element) return false
-    const topDelta = element.getBoundingClientRect().top - anchor.top
-    if (topDelta !== 0) window.scrollTo({ top: window.scrollY + topDelta })
-    return true
-  }
-
   async function loadMoreHistoryFromTop(): Promise<void> {
     topHistoryLoadInFlight = true
-    const anchor = captureScrollAnchor()
-    const previousScrollHeight = document.documentElement.scrollHeight
-    const previousScrollY = window.scrollY
     try {
       await onLoadMoreHistory?.()
-      await tick()
-      const restoredAnchor = restoreScrollAnchor(anchor)
-      const heightDelta = document.documentElement.scrollHeight - previousScrollHeight
-      if (!restoredAnchor && heightDelta > 0) window.scrollTo({ top: previousScrollY + heightDelta })
     } finally {
       topHistoryLoadInFlight = false
     }

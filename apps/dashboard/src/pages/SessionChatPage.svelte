@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import { toast } from 'svelte-sonner'
+  import { ChevronDown } from '@lucide/svelte'
   import { getPathParams, navigate } from 'svelte-mini-router'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -52,6 +53,7 @@
   } from '../stores/timeline'
   import { subscribeDashboardEvents } from '../services/eventStream'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
+  import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import InboxSheet from '../components/chat/InboxSheet.svelte'
   import RenameSessionDialog from '../components/chat/RenameSessionDialog.svelte'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
@@ -66,8 +68,13 @@
   let renameSessionDialogOpen = false
   let unsubscribeDashboardEvents: (() => void) | null = null
   let foregroundRefreshInFlight: Promise<void> | null = null
+  let showScrollDownButton = false
+  let scrollDownButtonRendered = false
+  let scrollDownButtonHideTimer: ReturnType<typeof setTimeout> | null = null
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
+  const SCROLL_DOWN_BUTTON_THRESHOLD_PX = 120
+  const SCROLL_DOWN_BUTTON_ANIMATION_MS = 200
 
   onMount(async () => {
     selectedSessionId = requestedSessionIdFromLocation()
@@ -77,8 +84,11 @@
       await refreshSessionGitStatus(currentSelectedSession())
     }
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
+    updateScrollDownButtonVisibility()
     window.addEventListener('focus', handleForegroundResume)
     window.addEventListener('pageshow', handleForegroundResume)
+    window.addEventListener('scroll', updateScrollDownButtonVisibility, { passive: true })
+    window.addEventListener('resize', updateScrollDownButtonVisibility)
     document.addEventListener('visibilitychange', handleVisibilityChange)
   })
 
@@ -86,7 +96,10 @@
     unsubscribeDashboardEvents?.()
     window.removeEventListener('focus', handleForegroundResume)
     window.removeEventListener('pageshow', handleForegroundResume)
+    window.removeEventListener('scroll', updateScrollDownButtonVisibility)
+    window.removeEventListener('resize', updateScrollDownButtonVisibility)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
+    if (scrollDownButtonHideTimer) clearTimeout(scrollDownButtonHideTimer)
   })
 
   $: selectedSession = selectedSessionId ? ($sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : $sessions.find((session) => session.session_id === selectedSessionId) ?? null) : null
@@ -194,6 +207,38 @@
     }
   }
 
+  function distanceFromDocumentBottom(): number {
+    return Math.max(0, document.documentElement.scrollHeight - (window.scrollY + window.innerHeight))
+  }
+
+  function setScrollDownButtonVisible(visible: boolean): void {
+    if (scrollDownButtonHideTimer) {
+      clearTimeout(scrollDownButtonHideTimer)
+      scrollDownButtonHideTimer = null
+    }
+
+    if (visible) {
+      scrollDownButtonRendered = true
+      showScrollDownButton = true
+      return
+    }
+
+    showScrollDownButton = false
+    scrollDownButtonHideTimer = setTimeout(() => {
+      if (!showScrollDownButton) scrollDownButtonRendered = false
+      scrollDownButtonHideTimer = null
+    }, SCROLL_DOWN_BUTTON_ANIMATION_MS)
+  }
+
+  function updateScrollDownButtonVisibility(): void {
+    setScrollDownButtonVisible(distanceFromDocumentBottom() > SCROLL_DOWN_BUTTON_THRESHOLD_PX)
+  }
+
+  function scrollChatToBottom(): void {
+    scrollDocumentToBottom()
+    setScrollDownButtonVisible(false)
+  }
+
   function handleForegroundResume(): void {
     if (document.visibilityState === 'hidden') return
     const sessionId = selectedSessionId
@@ -299,6 +344,8 @@
       loadSessionDetail(sessionId),
       hasLoadedTimeline ? handleTimelineMessageUpdated(sessionId) : loadSessionTimeline(sessionId, { mode: 'rebuild' }),
     ])
+    await tick()
+    scrollChatToBottom()
   }
 
   async function loadEarlierMessages(): Promise<void> {
@@ -394,6 +441,8 @@
         metadata: { source: 'dashboard_chat' },
       })
       clearChatDraft()
+      await tick()
+      scrollChatToBottom()
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -426,10 +475,30 @@
           interruptBusy={actionBusy}
           hasMoreHistory={$timelineState.hasMore}
           historyLoading={$timelineState.refreshKind === 'history'}
-          autoScrollKey={$timelineState.sessionId === selectedSessionId ? $timelineState.tailCursor : null}
           onInterrupt={() => void interruptSelectedSession()}
           onLoadMoreHistory={loadEarlierMessages}
         />
+
+        {#if scrollDownButtonRendered}
+          <div
+            data-chat-scroll-down-container
+            class={`pointer-events-none fixed bottom-36 left-0 right-0 z-40 px-2 transition-[left] duration-200 ease-linear sm:px-4 md:left-[var(--sidebar-width)] md:px-6 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${showScrollDownButton ? 'chat-scroll-down-enter' : 'chat-scroll-down-exit'}`}
+          >
+            <div class="mx-auto flex w-full max-w-4xl justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                class="pointer-events-auto rounded-full shadow-lg"
+                aria-label="Scroll to bottom"
+                title="Scroll to bottom"
+                onclick={scrollChatToBottom}
+              >
+                <ChevronDown class="size-4" />
+              </Button>
+            </div>
+          </div>
+        {/if}
 
         <SessionComposerDock
           bind:input={$chatDraft}
@@ -475,3 +544,35 @@
   onRetry={(message) => void retryFailedInboxMessage(message)}
   onDismiss={(message) => void dismissFailedInboxMessage(message)}
 />
+
+<style>
+  :global([data-chat-scroll-down-container].chat-scroll-down-enter) {
+    animation: chat-scroll-down-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  :global([data-chat-scroll-down-container].chat-scroll-down-exit) {
+    animation: chat-scroll-down-out 160ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  @keyframes chat-scroll-down-in {
+    from {
+      opacity: 0;
+      translate: 0 0.75rem;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  @keyframes chat-scroll-down-out {
+    from {
+      opacity: 1;
+      translate: 0 0;
+    }
+    to {
+      opacity: 0;
+      translate: 0 0.75rem;
+    }
+  }
+</style>

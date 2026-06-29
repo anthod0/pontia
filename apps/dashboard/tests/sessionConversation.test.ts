@@ -222,7 +222,7 @@ test('conversation auto-loads earlier history when initial content is already at
   await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
 });
 
-test('conversation keeps the first visible message anchored after prepending history', async () => {
+test('conversation does not adjust scroll position after prepending history', async () => {
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
   Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 1000 });
@@ -239,7 +239,8 @@ test('conversation keeps the first visible message anchored after prepending his
 
   render(SessionConversation, { props: { messages, hasMoreHistory: true, onLoadMoreHistory } });
 
-  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 72 }));
+  await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
+  expect(scrollTo).not.toHaveBeenCalled();
   rectSpy.mockRestore();
   scrollTo.mockRestore();
 });
@@ -256,7 +257,7 @@ test('conversation does not scroll the document to the bottom on initial render'
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test('conversation scrolls the document to the bottom when a new message arrives while already near the bottom', async () => {
+test('conversation does not scroll the document to the bottom when messages update near the bottom', async () => {
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
   Object.defineProperty(window, 'scrollY', { configurable: true, value: 3200 });
@@ -266,26 +267,9 @@ test('conversation scrolls the document to the bottom when a new message arrives
   await new Promise((resolve) => setTimeout(resolve, 0));
   scrollTo.mockClear();
   await rerender({ messages });
-
-  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
-});
-
-test('conversation can use an external auto-scroll key instead of message content changes', async () => {
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 3200 });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
-  const { rerender } = render(SessionConversation, { props: { messages: [messages[0]], autoScrollKey: 'cursor-1' } });
-
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  scrollTo.mockClear();
-  await rerender({ messages: [{ ...messages[0], content: 'Same timeline cursor, rebuilt message.' }], autoScrollKey: 'cursor-1' });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   expect(scrollTo).not.toHaveBeenCalled();
-
-  await rerender({ messages, autoScrollKey: 'cursor-2' });
-  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
 });
 
 test('conversation does not scroll the document to the bottom when refreshing while reading earlier messages', async () => {
