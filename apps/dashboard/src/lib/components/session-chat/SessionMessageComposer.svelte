@@ -3,6 +3,7 @@
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import FileMentionTextarea from '$lib/components/file-picker/FileMentionTextarea.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
+  import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
 
   interface Props {
@@ -46,11 +47,22 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    const shouldSubmit = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey
-    if (shouldSubmit) {
+    const isPlainEnter = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey
+    if (!isPlainEnter) return
+
+    const nextValue = promptValueAfterEnter(value)
+    if (nextValue !== null) {
       event.preventDefault()
-      if (!disabled && !submitDisabled && !busy) onSubmit()
+      value = nextValue
+      const textarea = event.currentTarget instanceof HTMLTextAreaElement ? event.currentTarget : null
+      queueMicrotask(() => {
+        textarea?.setSelectionRange(nextValue.length, nextValue.length)
+      })
+      return
     }
+
+    event.preventDefault()
+    if (!disabled && !submitDisabled && !busy) onSubmit()
   }
 </script>
 
