@@ -126,7 +126,7 @@ run_migrations = true
 source = "apps/dashboard/dist"
 
 [runtime.pi]
-tui_command = "pi --approve -e /absolute/path/to/pontia/clients/pi"
+tui_command = "pi -e /absolute/path/to/pontia/clients/pi"
 
 
 [workspace_browser]

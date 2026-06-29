@@ -41,7 +41,7 @@ fn configure_test_runtime_env() {
         std::env::set_var("PONTIA_HOME", pontia_home);
         std::env::set_var(
             "PONTIA_PI_TUI_COMMAND",
-            "cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"",
+            "sh -c 'cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"' --",
         );
     }
 }

@@ -28,7 +28,8 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     adapter: AgentClientAdapter {
         runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
             command_env: Some("PONTIA_PI_TUI_COMMAND"),
-            default_command: "pi --approve",
+            default_command: "pi",
+            startup_args: &["--approve"],
             session_identity_arg: Some("--session-id"),
             hook_log: Some(HookLogBehavior {
                 file_name: "pi-hook.log",

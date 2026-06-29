@@ -102,7 +102,7 @@ impl TestAppBuilder {
         if self.pi_runtime_stub {
             env.set(
                 "PONTIA_PI_TUI_COMMAND",
-                OsString::from("cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\""),
+                OsString::from("sh -c 'cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"' --"),
             );
         }
 

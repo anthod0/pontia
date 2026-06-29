@@ -26,7 +26,7 @@ async fn test_app_creates_isolated_state_home_and_workspace() {
     );
     assert_eq!(
         std::env::var("PONTIA_PI_TUI_COMMAND").ok().as_deref(),
-        Some("cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"")
+        Some("sh -c 'cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"' --")
     );
 }
 

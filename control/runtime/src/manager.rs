@@ -8,9 +8,7 @@ use pontia_core::{
     time::utc_now,
 };
 
-use super::{
-    AgentInput, RuntimeStartRequest, RuntimeStartResult, config, in_process, paths, script, tmux,
-};
+use super::{AgentInput, RuntimeStartRequest, RuntimeStartResult, in_process, paths, script, tmux};
 
 #[derive(Debug, Clone, Default)]
 pub struct GenericRuntimeManager;
@@ -48,24 +46,9 @@ impl GenericRuntimeManager {
             return in_process::start_session(request, capabilities, restart_count);
         }
 
-        let start_command = request.start_command.clone().or_else(|| {
-            client_spec.tmux_runtime().map(|runtime| {
-                runtime
-                    .command_env
-                    .and_then(|env| std::env::var(env).ok())
-                    .or_else(|| config::configured_tui_command(&request.client_type))
-                    .unwrap_or_else(|| {
-                        let mut command = runtime.default_command.to_string();
-                        if let Some(session_identity_arg) = runtime.session_identity_arg {
-                            command.push(' ');
-                            command.push_str(session_identity_arg);
-                            command.push(' ');
-                            command.push_str(&request.session_id);
-                        }
-                        command
-                    })
-            })
-        });
+        let start_command = client_spec
+            .tmux_runtime()
+            .map(|runtime| script::tmux_start_command(&request, runtime, false));
         let base_tmux_session = tmux::tmux_session_name(&request);
         let reuse_target = reuse_target.filter(|(socket_path, pane_id)| {
             tmux::is_reusable_pontia_shell_pane(socket_path, pane_id, &request.session_id)

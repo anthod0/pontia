@@ -94,6 +94,7 @@ pub enum RuntimeBehavior {
 pub struct TmuxRuntimeBehavior {
     pub command_env: Option<&'static str>,
     pub default_command: &'static str,
+    pub startup_args: &'static [&'static str],
     pub session_identity_arg: Option<&'static str>,
     pub hook_log: Option<HookLogBehavior>,
     pub runtime_config_key: Option<&'static str>,

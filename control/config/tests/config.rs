@@ -125,7 +125,7 @@ default_client_type = "pi"
 source = "/opt/pontia/dashboard"
 
 [runtime.pi]
-tui_command = "pi --approve -e /tmp/pontia/clients/pi"
+tui_command = "pi -e /tmp/pontia/clients/pi"
 
 [runtime.custom]
 tui_command = "custom-agent from file"
@@ -155,7 +155,7 @@ roots = [
             .runtime
             .tui_command_for_client_config_key("pi")
             .as_deref(),
-        Some("pi --approve -e /tmp/pontia/clients/pi")
+        Some("pi -e /tmp/pontia/clients/pi")
     );
     assert_eq!(
         config

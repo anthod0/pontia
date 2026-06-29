@@ -5,7 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia_agent_clients::{self as agent_clients, DispatchBehavior, RuntimeBehavior};
+use pontia_agent_clients::{
+    self as agent_clients, DispatchBehavior, RuntimeBehavior, TmuxRuntimeBehavior,
+};
 use pontia_core::error::{Error, Result};
 
 use super::{
@@ -16,6 +18,36 @@ use super::{
 
 pub(super) struct RuntimePaths<'a> {
     pub(super) log_path: &'a Path,
+}
+
+pub(crate) fn tmux_start_command(
+    request: &RuntimeStartRequest,
+    tmux_runtime: TmuxRuntimeBehavior,
+    quote_session_id: bool,
+) -> String {
+    let Some(command) = request.start_command.clone() else {
+        let mut command = tmux_runtime
+            .command_env
+            .and_then(|env| std::env::var(env).ok())
+            .or_else(|| configured_tui_command(&request.client_type))
+            .unwrap_or_else(|| tmux_runtime.default_command.to_string());
+        for arg in tmux_runtime.startup_args {
+            command.push(' ');
+            command.push_str(arg);
+        }
+        if let Some(session_identity_arg) = tmux_runtime.session_identity_arg {
+            command.push(' ');
+            command.push_str(session_identity_arg);
+            command.push(' ');
+            if quote_session_id {
+                command.push_str(&shell_quote(&request.session_id));
+            } else {
+                command.push_str(&request.session_id);
+            }
+        }
+        return command;
+    };
+    command
 }
 
 pub(super) fn write_ephemeral_launch_script(
@@ -52,25 +84,7 @@ pub(super) fn write_launch_script(
     })?;
     let (log_setup, runtime_body) = match client_spec.adapter.runtime {
         RuntimeBehavior::Tmux(tmux_runtime) => {
-            let mut command = request
-                .start_command
-                .clone()
-                .or_else(|| {
-                    tmux_runtime
-                        .command_env
-                        .and_then(|env| std::env::var(env).ok())
-                })
-                .or_else(|| configured_tui_command(&request.client_type))
-                .unwrap_or_else(|| tmux_runtime.default_command.to_string());
-            if request.start_command.is_none()
-                && let Some(session_identity_arg) = tmux_runtime.session_identity_arg
-                && command.trim() == tmux_runtime.default_command
-            {
-                command.push(' ');
-                command.push_str(session_identity_arg);
-                command.push(' ');
-                command.push_str(&shell_quote(&request.session_id));
-            }
+            let command = tmux_start_command(request, tmux_runtime, true);
             (
                 format!(
                     "echo {} >> \"$PONTIA_RUNTIME_LOG\"",

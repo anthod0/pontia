@@ -54,7 +54,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         clients: HashMap::from([(
             "pi".to_string(),
             RuntimeClientConfig {
-                tui_command: Some("pi --approve -e /configured/clients/pi".to_string()),
+                tui_command: Some("custom-pi -e /configured/clients/pi".to_string()),
             },
         )]),
     });
@@ -91,9 +91,10 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     let launch_script = std::fs::read_to_string(launch_script_path_from_tmux_log(&log))
         .expect("ephemeral launch script");
     assert!(
-        launch_script.contains("pi --approve -e /configured/clients/pi"),
+        launch_script.contains("custom-pi -e /configured/clients/pi --approve --session-id"),
         "{launch_script}"
     );
+    assert!(launch_script.contains("sess_configured"), "{launch_script}");
 }
 
 #[test]
@@ -106,7 +107,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
     unsafe {
         std::env::set_var("PONTIA_HOME", tempdir.path().join("pontia-home"));
-        std::env::set_var("PONTIA_PI_TUI_COMMAND", "pi from env");
+        std::env::set_var("PONTIA_PI_TUI_COMMAND", "custom-pi from-env");
     }
     set_runtime_config(RuntimeConfig {
         clients: HashMap::from([(
@@ -139,7 +140,14 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
     let log = std::fs::read_to_string(tmux_log).expect("tmux log");
     let launch_script = std::fs::read_to_string(launch_script_path_from_tmux_log(&log))
         .expect("ephemeral launch script");
-    assert!(launch_script.contains("pi from env"), "{launch_script}");
+    assert!(
+        launch_script.contains("custom-pi from-env --approve --session-id"),
+        "{launch_script}"
+    );
+    assert!(
+        launch_script.contains("sess_env_override"),
+        "{launch_script}"
+    );
     assert!(!launch_script.contains("pi from config"), "{launch_script}");
 }
 

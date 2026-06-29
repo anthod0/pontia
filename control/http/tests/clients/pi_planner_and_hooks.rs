@@ -100,7 +100,7 @@ async fn pi_initial_task_create_session_returns_before_ready_dispatch() {
     unsafe {
         std::env::set_var(
             "PONTIA_PI_TUI_COMMAND",
-            "cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"",
+            "sh -c 'cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"' --",
         );
     }
 
@@ -130,7 +130,7 @@ async fn create_pi_session(state: AppState, workspace: &Path) -> String {
     unsafe {
         std::env::set_var(
             "PONTIA_PI_TUI_COMMAND",
-            "cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"",
+            "sh -c 'cat >> \"$PONTIA_WORKSPACE/pi-tui-input.log\"' --",
         );
     }
     let (status, body) = request_json(

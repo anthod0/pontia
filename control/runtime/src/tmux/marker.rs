@@ -143,7 +143,7 @@ fn foreground_processes_for_tty(tty: &str) -> Option<String> {
     if !output.status.success() {
         return None;
     }
-    Some(String::from_utf8(output.stdout).ok()?)
+    String::from_utf8(output.stdout).ok()
 }
 
 fn foreground_command_is_reusable_shell(ps_output: &str) -> bool {
@@ -162,9 +162,7 @@ fn foreground_command_is_reusable_shell(ps_output: &str) -> bool {
 }
 
 fn is_reusable_shell_command(command: &str) -> bool {
-    REUSABLE_SHELL_COMMANDS
-        .iter()
-        .any(|shell| command == *shell)
+    REUSABLE_SHELL_COMMANDS.contains(&command)
 }
 
 fn pane_current_command(socket_path: &str, pane_id: &str) -> Option<String> {
