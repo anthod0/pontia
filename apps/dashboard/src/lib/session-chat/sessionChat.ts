@@ -66,6 +66,9 @@ export function visibleChatSessions<T extends Pick<SessionView, 'state' | 'creat
     .filter((session) => filter === 'all' || !terminalStates.has(session.state))
     .slice()
     .sort((a, b) => {
+      const aTerminal = terminalStates.has(a.state);
+      const bTerminal = terminalStates.has(b.state);
+      if (aTerminal !== bTerminal) return aTerminal ? 1 : -1;
       const aPinned = a.pinned_at !== null;
       const bPinned = b.pinned_at !== null;
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
