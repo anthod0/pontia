@@ -73,6 +73,7 @@
   let scrollDownButtonHideTimer: ReturnType<typeof setTimeout> | null = null
   let bottomIntersectionObserver: IntersectionObserver | null = null
   let promptInputScrollBaselineKey: string | null = null
+  let historyObserverEnabled = false
   let destroyed = false
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
@@ -365,11 +366,13 @@
       await loadSelectedSession(selectedSessionId)
       await refreshSessionGitStatus(currentSelectedSession())
     } else {
+      historyObserverEnabled = false
       resetTimelineState()
     }
   }
 
   async function loadSelectedSession(sessionId: string): Promise<void> {
+    historyObserverEnabled = false
     const currentTimeline = get(timelineState)
     const hasLoadedTimeline = currentTimeline.sessionId === sessionId && currentTimeline.items.length > 0
     if (!hasLoadedTimeline) resetTimelineState(sessionId)
@@ -378,6 +381,7 @@
       hasLoadedTimeline ? handleTimelineMessageUpdated(sessionId) : loadSessionTimeline(sessionId, { mode: 'rebuild' }),
     ])
     await scrollChatToBottomAfterLayout()
+    if (!destroyed && selectedSessionId === sessionId) historyObserverEnabled = true
   }
 
   async function loadEarlierMessages(): Promise<void> {
@@ -510,6 +514,7 @@
             interruptBusy={actionBusy}
             hasMoreHistory={$timelineState.hasMore}
             historyLoading={$timelineState.refreshKind === 'history'}
+            {historyObserverEnabled}
             onInterrupt={() => void interruptSelectedSession()}
             onLoadMoreHistory={loadEarlierMessages}
           />

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick, type Component } from 'svelte'
+  import { onDestroy, type Component } from 'svelte'
   import { Bot, Check, Copy, GitBranch } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
@@ -37,6 +37,7 @@
     interruptBusy?: boolean
     hasMoreHistory?: boolean
     historyLoading?: boolean
+    historyObserverEnabled?: boolean
     onInterrupt?: () => void
     onLoadMoreHistory?: () => void | Promise<void>
     loadDraftDagFlow?: () => Promise<DraftDagFlowComponent>
@@ -53,6 +54,7 @@
     interruptBusy: _interruptBusy = false,
     hasMoreHistory = false,
     historyLoading = false,
+    historyObserverEnabled = false,
     onInterrupt: _onInterrupt,
     onLoadMoreHistory,
     loadDraftDagFlow = defaultLoadDraftDagFlow,
@@ -71,22 +73,9 @@
   const latestAssistantGroupId = $derived([...displayGroups].reverse().find((group) => group.kind === 'assistant_group')?.id ?? null)
   const plannerDraftAnchorId = $derived(lastAssistantMessageId(displayMessages))
   const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
-  const TOP_HISTORY_LOAD_THRESHOLD_PX = 80
   let topHistoryLoadInFlight = false
-  let topHistoryLoadArmed = false
-
-  onMount(() => {
-    window.addEventListener('scroll', handleWindowScroll, { passive: true })
-    window.addEventListener('wheel', armTopHistoryLoad, { passive: true })
-    window.addEventListener('touchstart', armTopHistoryLoad, { passive: true })
-    window.addEventListener('keydown', handleWindowKeydown)
-  })
 
   onDestroy(() => {
-    window.removeEventListener('scroll', handleWindowScroll)
-    window.removeEventListener('wheel', armTopHistoryLoad)
-    window.removeEventListener('touchstart', armTopHistoryLoad)
-    window.removeEventListener('keydown', handleWindowKeydown)
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
   })
 
@@ -152,32 +141,15 @@
     }, 1600)
   }
 
-  $effect(() => {
-    displayMessages.length
-    hasMoreHistory
-    historyLoading
-    if (!topHistoryLoadArmed) return
-    void tick().then(maybeLoadMoreHistoryFromTop)
-  })
-
-  function handleWindowScroll(): void {
-    if (!topHistoryLoadArmed) return
-    void maybeLoadMoreHistoryFromTop()
-  }
-
-  function armTopHistoryLoad(): void {
-    topHistoryLoadArmed = true
-  }
-
-  function handleWindowKeydown(event: KeyboardEvent): void {
-    if (!['ArrowUp', 'PageUp', 'Home', ' '].includes(event.key)) return
-    armTopHistoryLoad()
-  }
-
-  function maybeLoadMoreHistoryFromTop(): void {
-    if (window.scrollY > TOP_HISTORY_LOAD_THRESHOLD_PX) return
-    if (!hasMoreHistory || historyLoading || topHistoryLoadInFlight || !onLoadMoreHistory) return
-    void loadMoreHistoryFromTop()
+  function observeTopHistorySentinel(node: HTMLElement): { destroy: () => void } {
+    if (typeof IntersectionObserver === 'undefined') return { destroy: () => undefined }
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      if (!historyObserverEnabled || !hasMoreHistory || historyLoading || topHistoryLoadInFlight || !onLoadMoreHistory) return
+      void loadMoreHistoryFromTop()
+    })
+    observer.observe(node)
+    return { destroy: () => observer.disconnect() }
   }
 
   type ConversationDisplayItem =
@@ -327,6 +299,9 @@
     </Empty.Root>
   {:else}
     <Conversation.Content bind:ref={scrollContainer} data-chat-conversation-content class="min-w-0 overflow-visible px-0 py-4 sm:p-4">
+      {#if historyObserverEnabled && hasMoreHistory}
+        <div aria-hidden="true" class="h-px w-px" data-chat-history-top-sentinel use:observeTopHistorySentinel></div>
+      {/if}
       {#if hasMoreHistory && historyLoading}
         <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading earlier messages…</div>
       {/if}

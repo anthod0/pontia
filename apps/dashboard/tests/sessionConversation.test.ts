@@ -9,6 +9,40 @@ import type { SessionChatMessage } from '../src/lib/session-chat/sessionChat';
 const testDir = dirname(fileURLToPath(import.meta.url));
 const sessionConversationSourcePath = resolve(testDir, '../src/lib/components/session-chat/SessionConversation.svelte');
 
+class TestIntersectionObserver implements IntersectionObserver {
+  static instances: TestIntersectionObserver[] = [];
+
+  readonly root: Element | Document | null = null;
+  readonly rootMargin = '0px';
+  readonly thresholds = [0];
+  private observedElement: Element | null = null;
+
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    TestIntersectionObserver.instances.push(this);
+  }
+
+  observe(element: Element): void {
+    this.observedElement = element;
+  }
+
+  unobserve(): void {}
+
+  disconnect(): void {}
+
+  takeRecords(): IntersectionObserverEntry[] { return []; }
+
+  trigger(isIntersecting: boolean): void {
+    if (!this.observedElement) return;
+    this.callback([{ isIntersecting, target: this.observedElement } as IntersectionObserverEntry], this);
+  }
+}
+
+function installIntersectionObserverMock(): void {
+  TestIntersectionObserver.instances = [];
+  Object.defineProperty(window, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
+  Object.defineProperty(globalThis, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
+}
+
 const messages: SessionChatMessage[] = [
   {
     id: 'message-1',
@@ -197,51 +231,56 @@ test('conversation copies assistant reply content with the http-compatible fallb
   expect(screen.getByRole('button', { name: /assistant reply copied/i })).toBeInTheDocument();
 });
 
-test('conversation loads earlier history when scrolled to the top', async () => {
+test('conversation waits to observe earlier history until history observer is enabled', async () => {
+  installIntersectionObserverMock();
   const onLoadMoreHistory = vi.fn();
-  render(SessionConversation, { props: { messages, hasMoreHistory: true, onLoadMoreHistory } });
 
-  expect(screen.queryByRole('button', { name: /load earlier messages/i })).not.toBeInTheDocument();
+  const { rerender } = render(SessionConversation, {
+    props: { messages, hasMoreHistory: true, historyObserverEnabled: false, onLoadMoreHistory },
+  });
 
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 120 });
-  window.dispatchEvent(new Event('scroll'));
+  expect(TestIntersectionObserver.instances).toHaveLength(0);
+  await new Promise((resolve) => setTimeout(resolve, 0));
   expect(onLoadMoreHistory).not.toHaveBeenCalled();
 
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
-  window.dispatchEvent(new Event('scroll'));
+  await rerender({ messages, hasMoreHistory: true, historyObserverEnabled: true, onLoadMoreHistory });
 
-  await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(TestIntersectionObserver.instances.length).toBeGreaterThan(0));
+  expect(onLoadMoreHistory).not.toHaveBeenCalled();
 });
 
-test('conversation auto-loads earlier history when initial content is already at the top', async () => {
+test('conversation loads earlier history when the top sentinel intersects after observer is enabled', async () => {
+  installIntersectionObserverMock();
   const onLoadMoreHistory = vi.fn();
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+  render(SessionConversation, {
+    props: { messages, hasMoreHistory: true, historyObserverEnabled: true, onLoadMoreHistory },
+  });
 
-  render(SessionConversation, { props: { messages, hasMoreHistory: true, onLoadMoreHistory } });
+  expect(screen.queryByRole('button', { name: /load earlier messages/i })).not.toBeInTheDocument();
+  await waitFor(() => expect(TestIntersectionObserver.instances.length).toBeGreaterThan(0));
+  TestIntersectionObserver.instances.at(-1)?.trigger(false);
+  expect(onLoadMoreHistory).not.toHaveBeenCalled();
+
+  TestIntersectionObserver.instances.at(-1)?.trigger(true);
 
   await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
 });
 
 test('conversation does not adjust scroll position after prepending history', async () => {
+  installIntersectionObserverMock();
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
   Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 1000 });
-  let firstMessageTop = 100;
-  const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-    if (this.dataset.chatMessageId === 'message-1') {
-      return { top: firstMessageTop, bottom: firstMessageTop + 40, left: 0, right: 100, width: 100, height: 40, x: 0, y: firstMessageTop, toJSON: () => ({}) };
-    }
-    return { top: -100, bottom: -60, left: 0, right: 100, width: 100, height: 40, x: 0, y: -100, toJSON: () => ({}) };
-  });
-  const onLoadMoreHistory = vi.fn(async () => {
-    firstMessageTop = 132;
+  const onLoadMoreHistory = vi.fn(async () => undefined);
+
+  render(SessionConversation, {
+    props: { messages, hasMoreHistory: true, historyObserverEnabled: true, onLoadMoreHistory },
   });
 
-  render(SessionConversation, { props: { messages, hasMoreHistory: true, onLoadMoreHistory } });
+  await waitFor(() => expect(TestIntersectionObserver.instances.length).toBeGreaterThan(0));
+  TestIntersectionObserver.instances.at(-1)?.trigger(true);
 
   await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
   expect(scrollTo).not.toHaveBeenCalled();
-  rectSpy.mockRestore();
   scrollTo.mockRestore();
 });
 

@@ -13,7 +13,7 @@ class TestIntersectionObserver implements IntersectionObserver {
   readonly root: Element | Document | null = null;
   readonly rootMargin = '0px';
   readonly thresholds = [0.01];
-  private observedElement: Element | null = null;
+  observedElement: Element | null = null;
 
   constructor(private readonly callback: IntersectionObserverCallback) {
     TestIntersectionObserver.instances.push(this);
@@ -39,6 +39,12 @@ function installIntersectionObserverMock(): void {
   TestIntersectionObserver.instances = [];
   Object.defineProperty(window, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
   Object.defineProperty(globalThis, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
+}
+
+function observedHistorySentinels(): Element[] {
+  return TestIntersectionObserver.instances
+    .map((instance) => instance.observedElement)
+    .filter((element): element is Element => Boolean(element?.hasAttribute('data-chat-history-top-sentinel')));
 }
 
 async function triggerLatestBottomIntersection(isIntersecting: boolean): Promise<void> {
@@ -327,7 +333,8 @@ test('does not load earlier chat history before the initial selected chat scroll
 });
 
 
-test('loads earlier chat history when the chat scroll reaches the top', async () => {
+test('loads earlier chat history when the top history sentinel intersects', async () => {
+  installIntersectionObserverMock();
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -351,9 +358,8 @@ test('loads earlier chat history when the chat scroll reaches the top', async ()
 
   expect(screen.queryByRole('button', { name: /load earlier messages/i })).not.toBeInTheDocument();
 
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
-  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
-  window.dispatchEvent(new Event('scroll'));
+  await waitFor(() => expect(observedHistorySentinels()).toHaveLength(1));
+  TestIntersectionObserver.instances.find((instance) => instance.observedElement?.hasAttribute('data-chat-history-top-sentinel'))?.trigger(true);
 
   await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'more' }));
 });
@@ -1027,6 +1033,50 @@ test('follow-up composer submits with Enter while preserving modified Enter for 
     delivery_policy: 'after_idle',
     metadata: { source: 'dashboard_chat' },
   }));
+});
+
+
+test('enables history intersection loading only after initial timeline load and bottom scroll', async () => {
+  installIntersectionObserverMock();
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  let resolveTimeline: () => void = () => {};
+  const timelineLoaded = new Promise<void>((resolve) => {
+    resolveTimeline = resolve;
+  });
+  mocks.loadSessionTimeline.mockImplementationOnce(async (sessionId: string) => {
+    await timelineLoaded;
+    mocks.timelineState.set({
+      sessionId,
+      bindingId: 'binding-1',
+      items: timelineItemsFromTurns([turn({ session_id: sessionId })]),
+      headCursor: 'head-1',
+      tailCursor: 'tail-1',
+      sourceId: 'pi:/tmp/session.jsonl',
+      hasMore: true,
+      loading: false,
+      refreshing: false,
+      error: null,
+    });
+    return null;
+  });
+
+  render(SessionChatPage);
+
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild' }));
+  expect(observedHistorySentinels()).toHaveLength(0);
+
+  resolveTimeline();
+
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 2400 }));
+  await waitFor(() => expect(observedHistorySentinels()).toHaveLength(1));
+  scrollTo.mockRestore();
 });
 
 
