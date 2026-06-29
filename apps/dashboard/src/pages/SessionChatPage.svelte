@@ -71,9 +71,10 @@
   let showScrollDownButton = false
   let scrollDownButtonRendered = false
   let scrollDownButtonHideTimer: ReturnType<typeof setTimeout> | null = null
+  let bottomIntersectionObserver: IntersectionObserver | null = null
+  let promptInputScrollBaselineKey: string | null = null
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
-  const SCROLL_DOWN_BUTTON_THRESHOLD_PX = 120
   const SCROLL_DOWN_BUTTON_ANIMATION_MS = 200
 
   onMount(async () => {
@@ -84,11 +85,8 @@
       await refreshSessionGitStatus(currentSelectedSession())
     }
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
-    updateScrollDownButtonVisibility()
     window.addEventListener('focus', handleForegroundResume)
     window.addEventListener('pageshow', handleForegroundResume)
-    window.addEventListener('scroll', updateScrollDownButtonVisibility, { passive: true })
-    window.addEventListener('resize', updateScrollDownButtonVisibility)
     document.addEventListener('visibilitychange', handleVisibilityChange)
   })
 
@@ -96,9 +94,8 @@
     unsubscribeDashboardEvents?.()
     window.removeEventListener('focus', handleForegroundResume)
     window.removeEventListener('pageshow', handleForegroundResume)
-    window.removeEventListener('scroll', updateScrollDownButtonVisibility)
-    window.removeEventListener('resize', updateScrollDownButtonVisibility)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
+    bottomIntersectionObserver?.disconnect()
     if (scrollDownButtonHideTimer) clearTimeout(scrollDownButtonHideTimer)
   })
 
@@ -122,6 +119,11 @@
       lastToastedError = errorMessage
     }
     if (!errorMessage) lastToastedError = null
+  }
+  $: currentMessagesRenderKey = chatMessagesRenderKey(messages)
+  $: if (promptInputScrollBaselineKey !== null && currentMessagesRenderKey !== promptInputScrollBaselineKey) {
+    promptInputScrollBaselineKey = null
+    void tick().then(scrollChatToBottom)
   }
 
   function requestedSessionIdFromLocation(): string {
@@ -207,9 +209,10 @@
     }
   }
 
-  function distanceFromDocumentBottom(): number {
-    return Math.max(0, document.documentElement.scrollHeight - (window.scrollY + window.innerHeight))
+  function chatMessagesRenderKey(chatMessages: typeof messages): string {
+    return chatMessages.map((message) => [message.id, message.status, message.content].join('\u001f')).join('\u001e')
   }
+
 
   function setScrollDownButtonVisible(visible: boolean): void {
     if (scrollDownButtonHideTimer) {
@@ -230,8 +233,22 @@
     }, SCROLL_DOWN_BUTTON_ANIMATION_MS)
   }
 
-  function updateScrollDownButtonVisibility(): void {
-    setScrollDownButtonVisible(distanceFromDocumentBottom() > SCROLL_DOWN_BUTTON_THRESHOLD_PX)
+  function observeBottomSentinel(node: HTMLElement): { destroy: () => void } {
+    bottomIntersectionObserver?.disconnect()
+    if (typeof IntersectionObserver === 'undefined') return { destroy: () => undefined }
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      setScrollDownButtonVisible(!entry.isIntersecting)
+    }, { threshold: 0.01 })
+    bottomIntersectionObserver = observer
+    observer.observe(node)
+    return {
+      destroy: () => {
+        observer.disconnect()
+        if (bottomIntersectionObserver === observer) bottomIntersectionObserver = null
+      },
+    }
   }
 
   function scrollChatToBottom(): void {
@@ -430,6 +447,7 @@
     submitting = true
     actionError = null
     const message = $chatDraft.trim()
+    promptInputScrollBaselineKey = chatMessagesRenderKey(messages)
     try {
       if (selectedSession?.state === 'exited') {
         await resumeSession(selectedSessionId)
@@ -444,6 +462,7 @@
       await tick()
       scrollChatToBottom()
     } catch (error) {
+      promptInputScrollBaselineKey = null
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
       submitting = false
@@ -478,6 +497,7 @@
           onInterrupt={() => void interruptSelectedSession()}
           onLoadMoreHistory={loadEarlierMessages}
         />
+        <div aria-hidden="true" class="h-px w-px" data-chat-bottom-sentinel use:observeBottomSentinel></div>
 
         {#if scrollDownButtonRendered}
           <div

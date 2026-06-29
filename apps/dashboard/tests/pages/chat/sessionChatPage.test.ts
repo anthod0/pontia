@@ -7,6 +7,45 @@ import type { CreateSessionResult } from '../../../src/api/types';
 const NewChatPage = (await import('../../../src/pages/NewChatPage.svelte')).default;
 const SessionChatPage = (await import('../../../src/pages/SessionChatPage.svelte')).default;
 
+class TestIntersectionObserver implements IntersectionObserver {
+  static instances: TestIntersectionObserver[] = [];
+
+  readonly root: Element | Document | null = null;
+  readonly rootMargin = '0px';
+  readonly thresholds = [0.01];
+  private observedElement: Element | null = null;
+
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    TestIntersectionObserver.instances.push(this);
+  }
+
+  observe(element: Element): void {
+    this.observedElement = element;
+  }
+
+  unobserve(): void {}
+
+  disconnect(): void {}
+
+  takeRecords(): IntersectionObserverEntry[] { return []; }
+
+  trigger(isIntersecting: boolean): void {
+    if (!this.observedElement) return;
+    this.callback([{ isIntersecting, target: this.observedElement } as IntersectionObserverEntry], this);
+  }
+}
+
+function installIntersectionObserverMock(): void {
+  TestIntersectionObserver.instances = [];
+  Object.defineProperty(window, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
+  Object.defineProperty(globalThis, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
+}
+
+async function triggerLatestBottomIntersection(isIntersecting: boolean): Promise<void> {
+  await waitFor(() => expect(TestIntersectionObserver.instances.length).toBeGreaterThan(0));
+  TestIntersectionObserver.instances.at(-1)?.trigger(isIntersecting);
+}
+
 test('opens new chat from a session menu with the current workspace query parameter', async () => {
   const selected = session({ session_id: 'session-2', workspace_id: 'workspace-2' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
@@ -912,11 +951,10 @@ test('follow-up composer submits with Enter while preserving modified Enter for 
 
 
 test('shows a floating scroll-down button away from the bottom and scrolls down when clicked', async () => {
+  installIntersectionObserverMock();
   const user = userEvent.setup();
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   const selected = session({ session_id: 'session-2', state: 'idle' });
-  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 1600 });
   Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -928,8 +966,7 @@ test('shows a floating scroll-down button away from the bottom and scrolls down 
 
   await screen.findByText('hi there');
   scrollTo.mockClear();
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 100 });
-  window.dispatchEvent(new Event('scroll'));
+  await triggerLatestBottomIntersection(false);
   const scrollDownButton = await screen.findByRole('button', { name: /scroll to bottom/i });
   const scrollDownContainer = scrollDownButton.closest('[data-chat-scroll-down-container]');
   expect(scrollDownContainer).toHaveClass('transition-[left]');
@@ -944,10 +981,37 @@ test('shows a floating scroll-down button away from the bottom and scrolls down 
 });
 
 
-test('hides the floating scroll-down button at the bottom', async () => {
+test('shows the floating scroll-down button after switching sessions when the document is away from the bottom', async () => {
+  installIntersectionObserverMock();
   const selected = session({ session_id: 'session-2', state: 'idle' });
-  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 1600 });
+  const other = session({ session_id: 'session-3', state: 'idle' });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected, other];
+  mocks.sessions.set([selected, other]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+
+  render(SessionChatPage);
+
+  await screen.findByText('hi there');
+  await triggerLatestBottomIntersection(true);
+  expect(screen.queryByRole('button', { name: /scroll to bottom/i })).not.toBeInTheDocument();
+
+  mocks.pathParams = { sessionId: 'session-3' };
+  window.history.pushState({}, '', '/dashboard/chat/session-3');
+  mocks.sessionDetail.set({ session: other, turns: [turn({ session_id: 'session-3' })], inboxMessages: [], events: [], artifacts: [] });
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-3', { mode: 'rebuild' }));
+  await triggerLatestBottomIntersection(false);
+
+  expect(await screen.findByRole('button', { name: /scroll to bottom/i })).toBeInTheDocument();
+});
+
+
+test('hides the floating scroll-down button at the bottom', async () => {
+  installIntersectionObserverMock();
+  const selected = session({ session_id: 'session-2', state: 'idle' });
   Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -958,6 +1022,7 @@ test('hides the floating scroll-down button at the bottom', async () => {
   render(SessionChatPage);
 
   await screen.findByText('hi there');
+  await triggerLatestBottomIntersection(true);
   expect(screen.queryByRole('button', { name: /scroll to bottom/i })).not.toBeInTheDocument();
 });
 
@@ -981,6 +1046,43 @@ test('scrolls to the document bottom after sending from the prompt input', async
   await user.click(screen.getByRole('button', { name: /send/i }));
 
   await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
+  scrollTo.mockRestore();
+});
+
+
+test('scrolls again when a prompt input send is rendered after the submit response', async () => {
+  const user = userEvent.setup();
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  let scrollHeight = 4096;
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, get: () => scrollHeight });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.submitInboxMessage.mockResolvedValue(undefined);
+
+  render(SessionChatPage);
+
+  await screen.findByText('hi there');
+  scrollTo.mockClear();
+  const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
+  await user.type(followUpInput, 'continue this session');
+  await user.click(screen.getByRole('button', { name: /send/i }));
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
+
+  scrollHeight = 5000;
+  mocks.timelineState.set({
+    ...mocks.timelineState.get(),
+    sessionId: 'session-2',
+    items: timelineItemsFromTurns([
+      turn({ turn_id: 'turn-1', session_id: 'session-2' }),
+      turn({ turn_id: 'turn-2', session_id: 'session-2', input: { summary: 'continue this session' }, output: null, completed_at: null }),
+    ]),
+  });
+
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 5000 }));
   scrollTo.mockRestore();
 });
 
