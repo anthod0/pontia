@@ -129,6 +129,53 @@ mod tests {
     }
 
     #[test]
+    fn marked_shell_pane_with_foreground_child_process_is_not_reusable() {
+        let session = format!("pontia_test_reuse_foreground_child_{}", std::process::id());
+        let status = Command::new("tmux")
+            .args(["new-session", "-d", "-s", &session, "sh"])
+            .stderr(Stdio::null())
+            .status()
+            .expect("spawn tmux");
+        assert!(status.success(), "tmux session should start");
+
+        let binding = pane_binding(&session).expect("pane binding");
+        mark_pontia_pane(
+            &binding.socket_path,
+            &binding.pane_id,
+            "session_reuse",
+            "rtinst_reuse",
+        )
+        .expect("mark pontia pane");
+        send_keys(
+            &binding.socket_path,
+            &binding.pane_id,
+            &["sleep 60", "Enter"],
+        )
+        .expect("start foreground child process");
+
+        for _ in 0..50 {
+            if !is_reusable_pontia_shell_pane(
+                &binding.socket_path,
+                &binding.pane_id,
+                "session_reuse",
+            ) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!is_reusable_pontia_shell_pane(
+            &binding.socket_path,
+            &binding.pane_id,
+            "session_reuse",
+        ));
+
+        let _ = Command::new("tmux")
+            .args(["kill-session", "-t", &session])
+            .stderr(Stdio::null())
+            .status();
+    }
+
+    #[test]
     fn pane_with_non_shell_foreground_command_is_not_reusable() {
         let session = format!("pontia_test_reuse_busy_{}", std::process::id());
         let status = Command::new("tmux")
