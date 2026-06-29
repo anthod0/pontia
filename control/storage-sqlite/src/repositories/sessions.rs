@@ -66,24 +66,11 @@ impl SqliteSessionRepository {
                    description = excluded.description,
                    execution_profile_id = excluded.execution_profile_id,
                    execution_profile_version = excluded.execution_profile_version,
-                   updated_at = CASE
-                       WHEN client_type IS NOT excluded.client_type
-                         OR title IS NOT excluded.title
-                         OR handle IS NOT excluded.handle
-                         OR role IS NOT excluded.role
-                         OR description IS NOT excluded.description
-                         OR execution_profile_id IS NOT excluded.execution_profile_id
-                         OR execution_profile_version IS NOT excluded.execution_profile_version
-                         OR state IS NOT excluded.state
-                         OR current_turn_id IS NOT excluded.current_turn_id
-                         OR metadata IS NOT excluded.metadata
-                       THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                       ELSE updated_at
-                   END,
                    state = excluded.state,
                    current_turn_id = excluded.current_turn_id,
                    state_version = excluded.state_version,
-                   metadata = excluded.metadata"#,
+                   metadata = excluded.metadata,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"#,
         )
         .bind(session.session_id)
         .bind(session.client_type)
