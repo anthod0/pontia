@@ -229,7 +229,7 @@
   <Sidebar.MenuItem>
     <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
       {#if session.pinned_at}
-        <Pin class="size-3.5 shrink-0 fill-current text-black" aria-label="Pinned session" />
+        <Pin class="size-3.5 shrink-0 fill-current" aria-label="Pinned session" />
       {/if}
       <span class="line-clamp-1">{sessionChatTitle(session)}</span>
     </Sidebar.MenuButton>

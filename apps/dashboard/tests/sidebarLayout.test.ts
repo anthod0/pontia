@@ -332,7 +332,7 @@ test('sidebar groups recent sessions under non-empty recent workspaces without c
   expect(workspaceSessionTitles).toEqual(['main · coder', 'Newer unpinned']);
 });
 
-test('sidebar pinned session uses a solid black pin and vertical ellipsis action icon', () => {
+test('sidebar pinned session uses theme-adaptive solid pin and vertical ellipsis action icon', () => {
   mocks.sessions.set([
     {
       session_id: 'session-pinned',
@@ -359,7 +359,7 @@ test('sidebar pinned session uses a solid black pin and vertical ellipsis action
   render(AppSidebarHost);
 
   expect(screen.getByLabelText('Pinned session')).toHaveClass('fill-current');
-  expect(screen.getByLabelText('Pinned session')).toHaveClass('text-black');
+  expect(screen.getByLabelText('Pinned session')).not.toHaveClass('text-black');
   expect(screen.getByRole('button', { name: /open session actions for pinned title/i }).querySelector('svg')).toHaveClass('lucide-ellipsis-vertical');
 });
 
