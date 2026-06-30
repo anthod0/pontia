@@ -164,7 +164,7 @@ fn reducer_rejects_second_active_turn_in_same_session() {
 }
 
 #[test]
-fn artifact_and_runtime_binding_are_auxiliary_not_domain_transitions() {
+fn runtime_binding_is_auxiliary_not_domain_transition() {
     let mut projection = ProjectionState::default();
 
     projection
@@ -176,7 +176,6 @@ fn artifact_and_runtime_binding_are_auxiliary_not_domain_transitions() {
     let before = projection.session("sess_1").unwrap().clone();
 
     projection.record_runtime_binding("sess_1", "tmux:abc");
-    projection.record_artifact_index("art_1", "sess_1", Some("turn_1"));
 
     assert_eq!(projection.session("sess_1").unwrap(), &before);
 }

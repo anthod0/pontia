@@ -131,23 +131,6 @@ async fn seed_session_turn(state: &AppState) {
     .unwrap();
 
     bind_session_to_active_workspace(state, "sess_external_queries_1").await;
-
-    sqlx::query(
-        r#"INSERT INTO artifacts
-           (artifact_id, session_id, turn_id, kind, name, source_ref, size_bytes, metadata)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-    )
-    .bind("art_external_queries_1")
-    .bind("sess_external_queries_1")
-    .bind("turn_external_queries_1")
-    .bind("log")
-    .bind("agent.log")
-    .bind("registered://agent.log")
-    .bind(12_i64)
-    .bind(json!({"preview":"hello world", "source_ref":"internal-path"}).to_string())
-    .execute(&state.db())
-    .await
-    .unwrap();
 }
 
 async fn get(state: AppState, uri: &str, token: Option<&str>) -> (StatusCode, Value) {
@@ -453,50 +436,6 @@ async fn external_api_lists_session_and_turn_events() {
 }
 
 #[tokio::test]
-async fn external_api_lists_and_gets_artifact_metadata_without_source_ref() {
-    let state = test_state().await;
-    seed_session_turn(&state).await;
-
-    let (list_status, list_body) = get(
-        state.clone(),
-        "/external/v1/sessions/sess_external_queries_1/artifacts",
-        Some(TOKEN),
-    )
-    .await;
-    let (get_status, get_body) = get(
-        state,
-        "/external/v1/artifacts/art_external_queries_1",
-        Some(TOKEN),
-    )
-    .await;
-
-    assert_eq!(list_status, StatusCode::OK);
-    assert_eq!(list_body["data"]["artifacts"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        list_body["data"]["artifacts"][0]["artifact_id"],
-        "art_external_queries_1"
-    );
-    assert_eq!(list_body["data"]["artifacts"][0]["preview"], "hello world");
-    assert!(
-        list_body["data"]["artifacts"][0]
-            .get("source_ref")
-            .is_none()
-    );
-
-    assert_eq!(get_status, StatusCode::OK);
-    assert_eq!(
-        get_body["data"]["artifact"]["artifact_id"],
-        "art_external_queries_1"
-    );
-    assert!(get_body["data"]["artifact"].get("source_ref").is_none());
-    assert!(
-        get_body["data"]["artifact"]["metadata"]
-            .get("source_ref")
-            .is_none()
-    );
-}
-
-#[tokio::test]
 async fn external_api_returns_clear_not_found_errors() {
     let state = test_state().await;
 
@@ -506,11 +445,8 @@ async fn external_api_returns_clear_not_found_errors() {
         Some(TOKEN),
     )
     .await;
-    let artifact = get(state, "/external/v1/artifacts/art_missing", Some(TOKEN)).await;
 
     assert_eq!(session.0, StatusCode::NOT_FOUND);
     assert_eq!(session.1["data"], Value::Null);
     assert_eq!(session.1["error"]["code"], "not_found");
-    assert_eq!(artifact.0, StatusCode::NOT_FOUND);
-    assert_eq!(artifact.1["error"]["code"], "not_found");
 }

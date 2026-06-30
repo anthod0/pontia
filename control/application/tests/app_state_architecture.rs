@@ -30,17 +30,6 @@ async fn app_state_is_available_from_app_namespace() {
 }
 
 #[test]
-fn application_exposes_artifacts_namespace() {
-    fn assert_discovery_service(_: pontia_application::artifacts::ArtifactDiscoveryService) {}
-    fn assert_registration_service(_: pontia_application::artifacts::ArtifactRegistrationService) {}
-    fn assert_content_service(_: pontia_application::artifacts::ArtifactContentService) {}
-
-    let _ = assert_discovery_service;
-    let _ = assert_registration_service;
-    let _ = assert_content_service;
-}
-
-#[test]
 fn application_exposes_workspaces_namespace() {
     fn assert_browser_service(_: pontia_application::workspaces::WorkspaceBrowserService) {}
     fn assert_register_request(_: pontia_application::workspaces::RegisterWorkspaceRequest) {}
@@ -77,15 +66,12 @@ fn application_exposes_view_submodule_namespaces() {
     fn assert_turn_view(_: pontia_application::views::turns::TurnView) {}
     fn assert_inbox_view(_: pontia_application::views::inbox::InboxMessageView) {}
     fn assert_event_view(_: pontia_application::views::events::EventView) {}
-    fn assert_artifact_view(_: pontia_application::views::artifacts::ArtifactView) {}
-
     let _ = assert_session_view;
     let _ = assert_workspace_view;
     let _ = assert_task_view;
     let _ = assert_turn_view;
     let _ = assert_inbox_view;
     let _ = assert_event_view;
-    let _ = assert_artifact_view;
 }
 
 #[test]

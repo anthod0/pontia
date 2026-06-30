@@ -19,7 +19,6 @@
     ['DAG', `/tasks/${taskId}/dag`],
     ['Work Items', `/tasks/${taskId}/work-items`],
     ['Sessions', `/tasks/${taskId}/sessions`],
-    ['Artifacts', `/tasks/${taskId}/artifacts`],
     ['Activity', `/tasks/${taskId}/activity`],
   ] as const
 

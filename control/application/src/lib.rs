@@ -17,7 +17,6 @@ use sqlx::SqlitePool;
 
 mod agent_bindings;
 pub mod app;
-pub mod artifacts;
 mod events;
 mod git_status;
 mod inbox;
@@ -35,12 +34,8 @@ pub mod workspaces;
 
 pub use agent_bindings::{AgentBinding, AgentBindingService, UpsertAgentBindingRequest};
 pub use app::{AppState, initialize};
-pub use artifacts::{
-    ArtifactContentService, ArtifactDiscoveryService, ArtifactRegistration,
-    ArtifactRegistrationService,
-};
+pub(crate) use events::nested_string;
 pub use events::{EventIngestResult, EventIngestService, InternalEventValidationService};
-pub(crate) use events::{nested_array_strings, nested_string, remove_internal_metadata_fields};
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
 pub use queries::ExternalQueryService;
@@ -60,11 +55,10 @@ pub use sessions::{
 pub use tasks::{CreateTaskOutcome, TaskCommandService};
 pub use turns::{CurrentTurnClaimRequest, CurrentTurnClaimService, TurnCommandService};
 pub use views::{
-    ArtifactContent, ArtifactDiscoveryOutcome, ArtifactView, ContextUsageCapability,
-    ContextUsageView, EventStreamItem, EventStreamScope, EventView, InboxInputView,
-    InboxMessageView, SessionCapabilities, SessionLineageView, SessionView, TaskEventStreamItem,
-    TaskEventView, TaskView, TurnInputView, TurnOutputView, TurnView, WorkspaceGitStatusView,
-    WorkspaceView,
+    ContextUsageCapability, ContextUsageView, EventStreamItem, EventStreamScope, EventView,
+    InboxInputView, InboxMessageView, SessionCapabilities, SessionLineageView, SessionView,
+    TaskEventStreamItem, TaskEventView, TaskView, TurnInputView, TurnOutputView, TurnView,
+    WorkspaceGitStatusView, WorkspaceView,
 };
 pub use workspaces::{
     FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,

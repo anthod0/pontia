@@ -35,10 +35,6 @@ pub fn new_runtime_instance_id() -> ExternalId {
     prefixed_id("rtinst")
 }
 
-pub fn new_artifact_id() -> ExternalId {
-    prefixed_id("art")
-}
-
 pub fn new_workspace_id() -> ExternalId {
     prefixed_id("wks")
 }

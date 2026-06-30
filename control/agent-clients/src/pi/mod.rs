@@ -17,7 +17,6 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     interrupt: true,
     stream_output: true,
     heartbeat: false,
-    artifact_sources: true,
     timeline: true,
     context_usage: ContextUsageCapability::Estimated,
 };

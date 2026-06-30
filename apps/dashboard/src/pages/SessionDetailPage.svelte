@@ -276,9 +276,6 @@
               <div class="rounded border border-dashed p-4 text-sm text-muted-foreground">No output summary was reported for this turn.</div>
             {/if}
           </div>
-          {#if currentTurnOutput.turn.output?.artifact_ids?.length}
-            <p class="text-xs text-muted-foreground">Artifacts: {currentTurnOutput.turn.output.artifact_ids.map(shortId).join(', ')}</p>
-          {/if}
         {:else}
           <Empty.Root><Empty.Header><Empty.Title>No current turn output</Empty.Title><Empty.Description>Create or drive a turn to see its output here.</Empty.Description></Empty.Header></Empty.Root>
         {/if}
@@ -317,12 +314,12 @@
 
 
     <Card.Root>
-      <Card.Header><Card.Title>Turns</Card.Title><Card.Description>{$sessionDetail.turns.length} turns with output and artifact references.</Card.Description></Card.Header>
+      <Card.Header><Card.Title>Turns</Card.Title><Card.Description>{$sessionDetail.turns.length} turns with output.</Card.Description></Card.Header>
       <Card.Content>
         {#if $sessionDetail.turns.length}
           <div class="overflow-x-auto">
             <Table.Root>
-              <Table.Header><Table.Row><Table.Head>Turn</Table.Head><Table.Head>State</Table.Head><Table.Head>Input</Table.Head><Table.Head>Output</Table.Head><Table.Head>Artifacts</Table.Head><Table.Head>Completed</Table.Head></Table.Row></Table.Header>
+              <Table.Header><Table.Row><Table.Head>Turn</Table.Head><Table.Head>State</Table.Head><Table.Head>Input</Table.Head><Table.Head>Output</Table.Head><Table.Head>Completed</Table.Head></Table.Row></Table.Header>
               <Table.Body>
                 {#each $sessionDetail.turns as turn}
                   <Table.Row>
@@ -330,7 +327,6 @@
                     <Table.Cell><Badge variant="secondary">{turn.state}</Badge></Table.Cell>
                     <Table.Cell class="max-w-xs truncate">{turn.input?.summary ?? jsonPreview(turn.input)}</Table.Cell>
                     <Table.Cell class="max-w-xs truncate">{turn.output?.summary ?? (turn.failure ? jsonPreview(turn.failure) : '—')}</Table.Cell>
-                    <Table.Cell>{turn.output?.artifact_ids?.length ? turn.output.artifact_ids.map(shortId).join(', ') : '—'}</Table.Cell>
                     <Table.Cell>{turn.completed_at ? formatDateTime(turn.completed_at) : '—'}</Table.Cell>
                   </Table.Row>
                 {/each}

@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { sessionEventDetailRows, sessionEventSummary } from '../../../src/pages/sessions/sessionEvents';
 
 test('summarizes session event payloads using important human-readable fields', () => {
-  expect(sessionEventSummary({ summary: 'Turn completed', state: 'completed', artifact_ids: ['artifact-long-id-1', 'artifact-long-id-2'] })).toBe('Turn completed · state=completed · artifacts=2');
+  expect(sessionEventSummary({ summary: 'Turn completed', state: 'completed' })).toBe('Turn completed · state=completed');
   expect(sessionEventSummary({ output: { summary: 'Implemented log view' }, reason: 'done' })).toBe('Implemented log view · reason=done');
   expect(sessionEventSummary({ error: { message: 'adapter timed out' } })).toBe('adapter timed out');
 });

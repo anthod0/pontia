@@ -24,7 +24,6 @@ const session: SessionView = {
     interrupt: true,
     stream_output: true,
     heartbeat: false,
-    artifact_sources: true,
   },
   created_at: '2026-06-22T00:00:00.000Z',
   updated_at: '2026-06-22T00:00:00.000Z',
@@ -45,7 +44,6 @@ const api = vi.hoisted(() => ({
   restartSession: vi.fn(),
   resumeSession: vi.fn(),
   terminateSession: vi.fn(),
-  discoverArtifacts: vi.fn(),
 }));
 
 vi.mock('../../src/api/client', () => api);
@@ -76,6 +74,6 @@ describe('sessions store createSession', () => {
     let detailValue: unknown = undefined;
     const unsubscribeDetail = sessionDetail.subscribe((value) => { detailValue = value; });
     unsubscribeDetail();
-    expect(detailValue).toEqual({ session, turns: [], inboxMessages: [], events: [], artifacts: [] });
+    expect(detailValue).toEqual({ session, turns: [], inboxMessages: [], events: [] });
   });
 });

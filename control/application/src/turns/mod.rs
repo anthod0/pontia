@@ -120,8 +120,7 @@ mod tests {
                 "report_turn_finished": true,
                 "interrupt": true,
                 "stream_output": true,
-                "heartbeat": false,
-                "artifact_sources": true
+                "heartbeat": false
             }
         }).to_string())
         .execute(&pool)
@@ -235,8 +234,7 @@ mod tests {
                 "report_turn_finished": true,
                 "interrupt": true,
                 "stream_output": true,
-                "heartbeat": false,
-                "artifact_sources": true
+                "heartbeat": false
             }
         }).to_string())
         .execute(&pool)

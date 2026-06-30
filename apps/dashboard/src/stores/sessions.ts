@@ -4,7 +4,6 @@ import {
   cancelInboxMessage as apiCancelInboxMessage,
   createSession as apiCreateSession,
   dismissInboxMessage as apiDismissInboxMessage,
-  discoverArtifacts,
   getSession,
   interruptSession as apiInterruptSession,
   listEvents,
@@ -20,7 +19,6 @@ import {
   updateSession as apiUpdateSession,
 } from '../api/client';
 import type {
-  ArtifactView,
   CreateSessionInput,
   CreateSessionResult,
   EventView,
@@ -48,7 +46,6 @@ export interface SessionConsoleDetail {
   turns: TurnView[];
   inboxMessages: InboxMessageView[];
   events: EventView[];
-  artifacts: ArtifactView[];
 }
 
 export const sessions = writable<SessionView[]>([]);
@@ -117,7 +114,7 @@ export async function loadSessionDetail(sessionId: string, options: LoadOptions 
       listInboxMessages(sessionId),
       listEvents(sessionId),
     ]);
-    const detail = { session, turns, inboxMessages, events, artifacts: [] } satisfies SessionConsoleDetail;
+    const detail = { session, turns, inboxMessages, events } satisfies SessionConsoleDetail;
     sessionDetail.set(detail);
     sessions.update((items) => items.map((item) => item.session_id === session.session_id ? session : item));
     return detail;
@@ -141,7 +138,6 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     turns: result.initial_turn ? [result.initial_turn] : [],
     inboxMessages: [],
     events: [],
-    artifacts: [],
   });
   return result;
 }
@@ -215,11 +211,6 @@ export async function resumeSession(sessionId: string): Promise<void> {
 export async function terminateSession(sessionId: string): Promise<void> {
   await apiTerminateSession(sessionId);
   await loadSessions();
-  await loadSessionDetail(sessionId);
-}
-
-export async function discoverSessionArtifacts(sessionId: string): Promise<void> {
-  await discoverArtifacts(sessionId);
   await loadSessionDetail(sessionId);
 }
 

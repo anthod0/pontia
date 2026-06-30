@@ -5,7 +5,6 @@ const api = vi.hoisted(() => ({
   cancelInboxMessage: vi.fn(),
   createSession: vi.fn(),
   dismissInboxMessage: vi.fn(),
-  discoverArtifacts: vi.fn(),
   getSession: vi.fn(),
   interruptSession: vi.fn(),
   listEvents: vi.fn(),

@@ -1,12 +1,10 @@
-use std::{fs, path::Path};
-
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
 use pontia_agent_clients::{AgentClientCapabilities, GenericTestClient};
-use pontia_application::{AppState, ArtifactRegistration, ArtifactRegistrationService};
+use pontia_application::AppState;
 use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -63,29 +61,6 @@ async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
         .await
         .expect("response");
     response_json(response).await
-}
-
-async fn get_bytes(state: AppState, uri: &str) -> (StatusCode, Vec<u8>) {
-    let response = http::router(state)
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(uri)
-                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    let status = response.status();
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .expect("body")
-        .to_bytes()
-        .to_vec();
-    (status, body)
 }
 
 async fn response_json(response: axum::response::Response) -> (StatusCode, Value) {
@@ -163,10 +138,6 @@ fn runtime_payload(runtime_instance_id: &str, payload: Value) -> Value {
     Value::Object(payload)
 }
 
-fn file_url(path: &Path) -> String {
-    format!("file://{}", path.display())
-}
-
 #[tokio::test]
 async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime() {
     let _scope = GenericClientTestScope::new()
@@ -186,7 +157,6 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
     assert_eq!(session["client_type"], "generic");
     assert_eq!(session["capabilities"]["interrupt"], true);
     assert_eq!(session["capabilities"]["stream_output"], true);
-    assert_eq!(session["capabilities"]["artifact_sources"], true);
 
     let metadata: String =
         sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
@@ -215,7 +185,6 @@ async fn capability_model_declares_default_generic_adapter_capabilities() {
     assert_eq!(capabilities["interrupt"], false);
     assert_eq!(capabilities["stream_output"], false);
     assert_eq!(capabilities["heartbeat"], false);
-    assert_eq!(capabilities["artifact_sources"], false);
 
     assert!(AgentClientCapabilities::generic_default().accept_task);
 }
@@ -338,58 +307,6 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
 }
 
 #[tokio::test]
-async fn artifact_source_provider_registers_readable_artifacts_without_exposing_source_ref() {
-    let _scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_contract_artifact_source").await;
-    let session_id = create_session(state.clone()).await;
-    let (turn_id, _) = submit_turn(state.clone(), &session_id, "produce artifact").await;
-    let dir = tempfile::tempdir().expect("artifact dir");
-    let artifact_path = dir.path().join("result.txt");
-    fs::write(&artifact_path, "artifact from adapter").expect("write artifact");
-
-    let registration = ArtifactRegistration {
-        artifact_id: "art_generic_contract_registered".to_string(),
-        session_id: session_id.clone(),
-        turn_id: Some(turn_id.clone()),
-        kind: "file".to_string(),
-        name: "result.txt".to_string(),
-        source_ref: file_url(&artifact_path),
-        size_bytes: Some(21),
-        metadata: json!({"preview":"artifact from adapter","source_ref":"must stay internal"}),
-    };
-    ArtifactRegistrationService::new(state.db())
-        .register(registration)
-        .await
-        .expect("register artifact");
-
-    let (metadata_status, metadata_body) = get_json(
-        state.clone(),
-        "/external/v1/artifacts/art_generic_contract_registered",
-    )
-    .await;
-    assert_eq!(metadata_status, StatusCode::OK);
-    assert_eq!(metadata_body["data"]["artifact"]["session_id"], session_id);
-    assert_eq!(metadata_body["data"]["artifact"]["turn_id"], turn_id);
-    assert_eq!(
-        metadata_body["data"]["artifact"]["preview"],
-        "artifact from adapter"
-    );
-    assert!(
-        metadata_body["data"]["artifact"]["metadata"]
-            .get("source_ref")
-            .is_none()
-    );
-
-    let (content_status, content) = get_bytes(
-        state,
-        "/external/v1/artifacts/art_generic_contract_registered/content",
-    )
-    .await;
-    assert_eq!(content_status, StatusCode::OK);
-    assert_eq!(content, b"artifact from adapter");
-}
-
-#[tokio::test]
 async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state("generic_contract_degradation").await;
@@ -439,18 +356,4 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
         .map(|event| event["type"].as_str().unwrap())
         .collect();
     assert!(!event_types.contains(&"turn.interrupt_requested"));
-
-    let (artifacts_status, artifacts_body) = get_json(
-        state,
-        &format!("/external/v1/sessions/{session_id}/artifacts"),
-    )
-    .await;
-    assert_eq!(artifacts_status, StatusCode::OK);
-    assert_eq!(
-        artifacts_body["data"]["artifacts"]
-            .as_array()
-            .unwrap()
-            .len(),
-        0
-    );
 }

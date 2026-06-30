@@ -1,5 +1,4 @@
 mod agent_profiles;
-mod artifacts;
 mod auth;
 mod common;
 mod dag;
@@ -19,7 +18,6 @@ pub use agent_profiles::{
     delete_agent_profile_version, get_agent_profile, get_agent_profile_version,
     list_agent_profile_versions, list_agent_profiles, update_agent_profile_version,
 };
-pub use artifacts::{discover_artifacts, get_artifact, get_artifact_content, list_artifacts};
 pub use auth::validate_auth;
 pub use common::{ApiResponse, ExternalApiError};
 pub use dag::{

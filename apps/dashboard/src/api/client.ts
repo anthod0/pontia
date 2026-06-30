@@ -4,8 +4,6 @@ import { ApiError } from './errors';
 import type {
   AgentProfileView,
   ApiEnvelope,
-  ArtifactContent,
-  ArtifactView,
   CreateDagTaskInput,
   CreateDagTaskResult,
   CreateSessionInput,
@@ -362,38 +360,6 @@ export async function getTimelineItemDetail(
     `/sessions/${encodeURIComponent(sessionId)}/timeline/detail?ref=${encodeURIComponent(contentRef)}`,
     options,
   );
-}
-
-export async function listArtifacts(sessionId: string): Promise<ArtifactView[]> {
-  return (await request<{ artifacts: ArtifactView[] }>(`/sessions/${sessionId}/artifacts`)).artifacts;
-}
-
-export async function discoverArtifacts(sessionId: string): Promise<ArtifactView[]> {
-  return (await request<{ artifacts: ArtifactView[] }>(`/sessions/${sessionId}/artifacts/discover`, { method: 'POST', mutating: true })).artifacts;
-}
-
-export async function getArtifactContent(artifactId: string): Promise<ArtifactContent> {
-  const headers = new Headers();
-  const bearer = get(token).trim();
-  if (bearer) headers.set('Authorization', `Bearer ${bearer}`);
-  const response = await fetchWithTransientNetworkRetry(`${API_BASE}/artifacts/${artifactId}/content`, { headers });
-  const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
-  const bytes = await response.arrayBuffer();
-  if (!response.ok) {
-    const text = new TextDecoder().decode(bytes);
-    try {
-      const envelope = JSON.parse(text) as ApiEnvelope<unknown>;
-      throw new ApiError(
-        envelope.error?.message ?? response.statusText,
-        envelope.error?.code ?? 'request_failed',
-        response.status,
-      );
-    } catch (error) {
-      if (error instanceof ApiError) throw error;
-      throw new ApiError(text || response.statusText, 'request_failed', response.status);
-    }
-  }
-  return { artifactId, contentType, bytes, text: new TextDecoder().decode(bytes) };
 }
 
 export async function interruptSession(sessionId: string): Promise<unknown> {

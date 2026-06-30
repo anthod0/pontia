@@ -10,10 +10,6 @@ mod test_app;
 
 #[path = "api/agent_profile.rs"]
 mod agent_profile;
-#[path = "api/artifact_content.rs"]
-mod artifact_content;
-#[path = "api/artifact_discovery.rs"]
-mod artifact_discovery;
 #[path = "api/external_event_stream.rs"]
 mod external_event_stream;
 #[path = "api/external_queries.rs"]

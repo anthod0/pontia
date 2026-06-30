@@ -36,7 +36,6 @@ pub struct ProjectionState {
     sessions: HashMap<String, SessionProjection>,
     turns: HashMap<String, TurnProjection>,
     runtime_bindings: HashMap<String, String>,
-    artifact_index: HashMap<String, (String, Option<String>)>,
 }
 
 impl ProjectionState {
@@ -51,7 +50,6 @@ impl ProjectionState {
                 .collect(),
             turns: turns.into_iter().map(|t| (t.turn_id.clone(), t)).collect(),
             runtime_bindings: HashMap::new(),
-            artifact_index: HashMap::new(),
         }
     }
 
@@ -74,18 +72,6 @@ impl ProjectionState {
     pub fn record_runtime_binding(&mut self, session_id: &str, binding: &str) {
         self.runtime_bindings
             .insert(session_id.to_string(), binding.to_string());
-    }
-
-    pub fn record_artifact_index(
-        &mut self,
-        artifact_id: &str,
-        session_id: &str,
-        turn_id: Option<&str>,
-    ) {
-        self.artifact_index.insert(
-            artifact_id.to_string(),
-            (session_id.to_string(), turn_id.map(str::to_string)),
-        );
     }
 
     pub fn apply(&mut self, event: &DomainEvent) -> crate::error::Result<()> {

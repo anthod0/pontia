@@ -24,9 +24,6 @@ export function sessionEventSummary(payload: JsonObject | null | undefined): str
   const state = primitiveText(payload.state);
   if (state) parts.push(`state=${state}`);
 
-  const artifactCount = artifactIds(payload).length;
-  if (artifactCount > 0) parts.push(`artifacts=${artifactCount}`);
-
   return parts.slice(0, 4).join(' · ');
 }
 
@@ -64,12 +61,6 @@ function primitiveText(value: unknown): string | null {
   if (typeof value === 'string' && value.trim()) return value.trim();
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return null;
-}
-
-function artifactIds(payload: JsonObject): unknown[] {
-  if (Array.isArray(payload.artifact_ids)) return payload.artifact_ids;
-  if (isRecord(payload.output) && Array.isArray(payload.output.artifact_ids)) return payload.output.artifact_ids;
-  return [];
 }
 
 function compactValue(value: unknown): string {

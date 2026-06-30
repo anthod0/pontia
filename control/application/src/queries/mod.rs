@@ -1,6 +1,5 @@
 use super::*;
 
-mod artifacts;
 mod events;
 mod git_status;
 mod sessions;

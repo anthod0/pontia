@@ -46,10 +46,6 @@ impl ExternalQueryService {
                         turn.input.summary = nested_string(&payload, &["input", "summary"])
                             .or_else(|| nested_string(&payload, &["input_summary"]));
                     }
-                    if turn.input.artifact_id.is_none() {
-                        turn.input.artifact_id = nested_string(&payload, &["input", "artifact_id"])
-                            .or_else(|| nested_string(&payload, &["input_artifact_id"]));
-                    }
                 }
                 "turn.output" | "turn.completed" => {
                     if event_type == "turn.completed" && turn.state != "completed" {
@@ -61,13 +57,6 @@ impl ExternalQueryService {
                     if turn.output.summary.is_none() {
                         turn.output.summary = nested_string(&payload, &["output", "summary"])
                             .or_else(|| nested_string(&payload, &["output_summary"]));
-                    }
-                    if turn.output.artifact_ids.is_empty()
-                        && let Some(ids) =
-                            nested_array_strings(&payload, &["output", "artifact_ids"])
-                                .or_else(|| nested_array_strings(&payload, &["artifact_ids"]))
-                    {
-                        turn.output.artifact_ids = ids;
                     }
                     if event_type == "turn.completed" {
                         break;

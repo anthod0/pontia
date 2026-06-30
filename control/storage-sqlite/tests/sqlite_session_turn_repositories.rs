@@ -213,8 +213,8 @@ async fn sqlite_turn_repository_lists_turns_and_event_rows_with_existing_order()
            ('turn_a', 'sess_turns', 'completed', 'input a', 'output a', NULL, ?,
             '2026-06-15T12:00:00Z', '2026-06-15T12:00:00Z')"#,
     )
-    .bind(json!({"artifact_ids": ["artifact_b"]}).to_string())
-    .bind(json!({"artifact_ids": ["artifact_a"]}).to_string())
+    .bind(json!({"note": "b"}).to_string())
+    .bind(json!({"note": "a"}).to_string())
     .execute(&pool)
     .await
     .expect("insert turns");
@@ -238,10 +238,7 @@ async fn sqlite_turn_repository_lists_turns_and_event_rows_with_existing_order()
         .expect("list turns");
     let ids: Vec<_> = rows.iter().map(|row| row.turn_id.as_str()).collect();
     assert_eq!(ids, vec!["turn_a", "turn_b"]);
-    assert_eq!(
-        rows[0].metadata,
-        json!({"artifact_ids": ["artifact_a"]}).to_string()
-    );
+    assert_eq!(rows[0].metadata, json!({"note": "a"}).to_string());
 
     let event_rows = repository
         .list_turn_event_enrichment_rows("sess_turns", "turn_a")

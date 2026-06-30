@@ -282,21 +282,5 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             "/external/v1/sessions/{session_id}/turns/{turn_id}/events",
             get(external::list_turn_events),
         )
-        .route(
-            "/external/v1/sessions/{session_id}/artifacts",
-            get(external::list_artifacts),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/artifacts/discover",
-            post(external::discover_artifacts),
-        )
-        .route(
-            "/external/v1/artifacts/{artifact_id}",
-            get(external::get_artifact),
-        )
-        .route(
-            "/external/v1/artifacts/{artifact_id}/content",
-            get(external::get_artifact_content),
-        )
         .with_state(state)
 }

@@ -1,6 +1,5 @@
 use super::*;
 use pontia_storage_sqlite::models::{
-    artifacts::ArtifactRow,
     events::{DomainEventRow, EventRow, EventStreamRow, TaskEventStreamRow},
     git_status::WorkspaceGitStatusRow,
     inbox::InboxMessageRow,
@@ -130,16 +129,6 @@ pub(crate) fn task_event_stream_row_to_item(
 
 pub(crate) fn turn_row_to_view(row: TurnRow) -> Result<TurnView> {
     let metadata_json: Value = serde_json::from_str(&row.metadata)?;
-    let artifact_ids = metadata_json
-        .get("artifact_ids")
-        .and_then(Value::as_array)
-        .map(|ids| {
-            ids.iter()
-                .filter_map(Value::as_str)
-                .map(ToString::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
 
     Ok(TurnView {
         turn_id: row.turn_id,
@@ -147,14 +136,9 @@ pub(crate) fn turn_row_to_view(row: TurnRow) -> Result<TurnView> {
         state: row.state,
         input: TurnInputView {
             summary: row.input_summary,
-            artifact_id: metadata_json
-                .get("input_artifact_id")
-                .and_then(Value::as_str)
-                .map(ToString::to_string),
         },
         output: TurnOutputView {
             summary: row.output_summary,
-            artifact_ids,
         },
         failure: row.failure_message,
         created_at: row.created_at,
@@ -212,26 +196,6 @@ pub(crate) fn event_stream_row_to_item(row: EventStreamRow) -> Result<EventStrea
     let rowid = row.rowid;
     let event = event_stream_row_to_view(row)?;
     Ok(EventStreamItem { rowid, event })
-}
-
-pub(crate) fn artifact_row_to_view(row: ArtifactRow) -> Result<ArtifactView> {
-    let mut metadata_json: Value = serde_json::from_str(&row.metadata)?;
-    remove_internal_metadata_fields(&mut metadata_json);
-
-    Ok(ArtifactView {
-        artifact_id: row.artifact_id,
-        session_id: row.session_id,
-        turn_id: row.turn_id,
-        kind: row.kind,
-        name: row.name,
-        size_bytes: row.size_bytes,
-        preview: metadata_json
-            .get("preview")
-            .and_then(Value::as_str)
-            .map(ToString::to_string),
-        created_at: row.created_at,
-        metadata: metadata_json,
-    })
 }
 
 pub(crate) fn row_to_session(row: SessionProjectionRow) -> Result<SessionProjection> {

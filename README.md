@@ -46,7 +46,7 @@ Current state: early task, DAG, work-item, proposal, scheduler, and provenance m
 
 ## Roadmap
 
-- [x] Control plane foundation: backend, SQLite state, events, sessions, turns, artifacts
+- [x] Control plane foundation: backend, SQLite state, events, sessions, turns
 - [x] Real agent TUI runtime through tmux
 - [x] pi agent integrations
 - [x] Basic Web Dashboard
@@ -54,7 +54,6 @@ Current state: early task, DAG, work-item, proposal, scheduler, and provenance m
 - [x] Basic DAG planning and execution
 - [ ] Bidirectional control from anywhere
 - [ ] Human approval / review gates
-- [ ] Artifact browsing and diff/review workflow
 - [ ] Long-running DAG task scheduler
 - [ ] API stability and versioned documentation
 - [ ] More agent client integrations
@@ -65,7 +64,7 @@ Current state: early task, DAG, work-item, proposal, scheduler, and provenance m
 `pontia` is designed around a simple split:
 
 - **Use real agent TUIs as runtimes**: pi and future clients run as long-lived real TUI processes, currently hosted through tmux, rather than short-lived subprocess prompts. This keeps sessions alive while preserving official client behavior.
-- **pontia owns the durable control state**: sessions, turns, tasks, DAG nodes, events, artifacts, and projections live outside the agent process.
+- **pontia owns the durable control state**: sessions, turns, tasks, DAG nodes, events, and projections live outside the agent process.
 - **Every UI is a control surface**: desktop TUI, Web Dashboard, mobile Web, HTTP API, and future clients should attach to the same underlying session instead of creating separate worlds. Runtime bindings and capabilities describe what each live client can do; for example, a pi TUI outside tmux is still observable but reports `accept_task = false`, so the Web composer is disabled.
 - **Long-running tasks are WorkItem DAGs**: large tasks are represented as ordered dependency graphs. A Planner creates and repairs the graph, while Workers stay intentionally simple and execute work items mechanically. Failures, new information, or human interruptions should patch the DAG into a new execution path, with each node remaining inspectable, retryable, and repairable.
 

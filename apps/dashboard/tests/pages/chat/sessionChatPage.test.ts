@@ -58,7 +58,7 @@ test('opens new chat from a session menu with the current workspace query parame
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -73,7 +73,7 @@ test('shows busy agent status with an interrupt action when supported', async ()
   const busySession = session({ state: 'busy', current_turn_id: 'turn-1', capabilities: { interrupt: true } });
   mocks.loadedSessions = [busySession];
   mocks.sessions.set([busySession]);
-  mocks.sessionDetail.set({ session: busySession, turns: [turn({ state: 'running', output: null, completed_at: null })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: busySession, turns: [turn({ state: 'running', output: null, completed_at: null })], inboxMessages: [], events: [] });
   mocks.pathParams = { sessionId: 'session-1' };
   window.history.pushState({}, '', '/dashboard/chat/session-1');
 
@@ -93,7 +93,7 @@ test('renames the selected chat session from advanced controls', async () => {
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.updateSessionTitle.mockResolvedValue(renamed);
   render(SessionChatPage);
 
@@ -121,7 +121,7 @@ test('shows the initial prompt immediately after starting a chat while timeline 
   });
   mocks.createSession.mockImplementation(async () => {
     mocks.sessions.set([created]);
-    mocks.sessionDetail.set({ session: created, turns: [initialTurn], inboxMessages: [], events: [], artifacts: [] });
+    mocks.sessionDetail.set({ session: created, turns: [initialTurn], inboxMessages: [], events: [] });
     return { session: created, initial_turn: initialTurn } satisfies CreateSessionResult;
   });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
@@ -175,7 +175,7 @@ test('falls back to projected turns when a TUI-launched session timeline is not 
   mocks.pathParams = { sessionId: 'session-tui' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [activeTurn], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [activeTurn], inboxMessages: [], events: [] });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     mocks.timelineState.set({
       sessionId,
@@ -206,7 +206,7 @@ test('shows workspace git status in the selected chat composer summary', async (
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.workspaces.set([workspace({ workspace_id: 'workspace-1', name: 'project', canonical_path: '/repo/pontia', display_path: '~/repo/pontia' })]);
   mocks.workspaceGitStatuses.set({
     'workspace-1': {
@@ -245,7 +245,7 @@ test('scrolls to the document bottom after entering a selected chat', async () =
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -274,10 +274,10 @@ test('scrolls to the settled document bottom when switching chats through SPA na
     mocks.pathParams = { sessionId: 'session-1' };
     mocks.loadedSessions = [firstSession, secondSession];
     mocks.sessions.set([firstSession, secondSession]);
-    mocks.sessionDetail.set({ session: firstSession, turns: [turn({ session_id: 'session-1' })], inboxMessages: [], events: [], artifacts: [] });
+    mocks.sessionDetail.set({ session: firstSession, turns: [turn({ session_id: 'session-1' })], inboxMessages: [], events: [] });
     mocks.loadSessionDetail.mockImplementation(async (sessionId: string) => {
       const selected = sessionId === 'session-2' ? secondSession : firstSession;
-      mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: sessionId })], inboxMessages: [], events: [], artifacts: [] });
+      mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: sessionId })], inboxMessages: [], events: [] });
       return null;
     });
 
@@ -308,7 +308,7 @@ test('does not load earlier chat history before the initial selected chat scroll
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   mocks.timelineState.set({
     sessionId: 'session-2',
     bindingId: 'binding-1',
@@ -340,7 +340,7 @@ test('loads earlier chat history when the top history sentinel intersects', asyn
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   mocks.timelineState.set({
     sessionId: 'session-2',
     bindingId: 'binding-1',
@@ -371,7 +371,7 @@ test('refreshes an already-loaded selected chat through the tail cursor without 
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   mocks.timelineState.set({
     sessionId: 'session-2',
     bindingId: 'binding-1',
@@ -422,7 +422,7 @@ test('coalesces bursty selected-session idle events into one git status refresh'
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -462,7 +462,7 @@ test('does not toast transient network errors from automatic chat refreshes', as
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   mocks.timelineState.set({
     sessionId: 'session-2',
     bindingId: 'binding-1',
@@ -509,7 +509,7 @@ test('mobile composer resize button opens a fullscreen follow-up composer sharin
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
   try {
@@ -606,7 +606,7 @@ test('shows idle thought summary trigger above the final assistant response', as
     refreshing: false,
     error: null,
   });
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   const timelineSnapshot = mocks.timelineState.get();
   mocks.loadSessionTimeline.mockImplementationOnce(async () => {
     mocks.timelineState.set(timelineSnapshot);
@@ -640,8 +640,7 @@ test('renders assistant output as markdown while leaving user prompts as plain t
     })],
     inboxMessages: [],
     events: [],
-    artifacts: [],
-  });
+      });
 
   const { container } = render(SessionChatPage);
 
@@ -667,8 +666,7 @@ test('highlights fenced code blocks in assistant markdown and copies their text'
     })],
     inboxMessages: [],
     events: [],
-    artifacts: [],
-  });
+      });
 
   const { container } = render(SessionChatPage);
 
@@ -747,8 +745,7 @@ test('opens an inbox sheet with actionable pending, failed, and dispatching mess
       }),
     ],
     events: [],
-    artifacts: [],
-  });
+      });
 
   const { container } = render(SessionChatPage);
 
@@ -823,8 +820,7 @@ test('supports cancelling pending inbox messages and retrying or removing failed
       }),
     ],
     events: [],
-    artifacts: [],
-  });
+      });
 
   render(SessionChatPage);
   await userEvent.click(await screen.findByRole('button', { name: /open inbox, 2 messages/i }));
@@ -861,7 +857,7 @@ test('loads and renders an existing chat session with metadata and workspace nam
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   mocks.workspaces.set([workspace({ workspace_id: 'workspace-1', name: 'pontia', canonical_path: '/repo/pontia', display_path: '~/repo/pontia' })]);
 
   render(SessionChatPage);
@@ -916,7 +912,7 @@ test('shows supported context usage in chat session metadata while hiding unsupp
   mocks.pathParams = { sessionId: 'session-usage' };
   mocks.loadedSessions = [withUsage];
   mocks.sessions.set([withUsage]);
-  mocks.sessionDetail.set({ session: withUsage, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: withUsage, turns: [], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -932,7 +928,7 @@ test('shows supported context usage in chat session metadata while hiding unsupp
   mocks.pathParams = { sessionId: 'session-unsupported' };
   mocks.loadedSessions = [unsupported];
   mocks.sessions.set([unsupported]);
-  mocks.sessionDetail.set({ session: unsupported, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: unsupported, turns: [], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -948,7 +944,7 @@ test('places session controls near the prompt input and keeps advanced controls 
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -986,8 +982,7 @@ test('disables follow-up input for sessions that do not advertise web-write capa
     turns: [turn({ session_id: 'session-2', input: { summary: 'tui input' }, output: { summary: 'tui output' } })],
     inboxMessages: [],
     events: [],
-    artifacts: [],
-  });
+      });
 
   render(SessionChatPage);
 
@@ -1010,7 +1005,7 @@ test('follow-up composer submits with Enter while preserving modified Enter for 
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
   render(SessionChatPage);
@@ -1045,7 +1040,7 @@ test('enables history intersection loading only after initial timeline load and 
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   let resolveTimeline: () => void = () => {};
   const timelineLoaded = new Promise<void>((resolve) => {
     resolveTimeline = resolve;
@@ -1090,7 +1085,7 @@ test('shows a floating scroll-down button away from the bottom and scrolls down 
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -1120,7 +1115,7 @@ test('shows the floating scroll-down button after switching sessions when the do
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected, other];
   mocks.sessions.set([selected, other]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -1130,7 +1125,7 @@ test('shows the floating scroll-down button after switching sessions when the do
 
   mocks.pathParams = { sessionId: 'session-3' };
   window.history.pushState({}, '', '/dashboard/chat/session-3');
-  mocks.sessionDetail.set({ session: other, turns: [turn({ session_id: 'session-3' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: other, turns: [turn({ session_id: 'session-3' })], inboxMessages: [], events: [] });
   window.dispatchEvent(new PopStateEvent('popstate'));
   await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-3', { mode: 'rebuild' }));
   await triggerLatestBottomIntersection(false);
@@ -1147,7 +1142,7 @@ test('hides the floating scroll-down button at the bottom', async () => {
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
@@ -1166,7 +1161,7 @@ test('scrolls to the document bottom after sending from the prompt input', async
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
   render(SessionChatPage);
@@ -1190,7 +1185,7 @@ test('scrolls again when a prompt input send is rendered after the submit respon
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
   render(SessionChatPage);
@@ -1238,8 +1233,7 @@ test('does not scroll to the document bottom after retrying an inbox message', a
       }),
     ],
     events: [],
-    artifacts: [],
-  });
+      });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
   render(SessionChatPage);
@@ -1264,7 +1258,7 @@ test('does not render inline chat error alerts', async () => {
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.sessionDetailError.set('Could not load session detail');
 
   render(SessionChatPage);
@@ -1288,8 +1282,7 @@ test('uses selected session detail state for bottom interrupted status when the 
     turns: [turn({ session_id: 'session-2', state: 'interrupted', output: null, completed_at: '2026-05-14T00:00:03Z' })],
     inboxMessages: [],
     events: [],
-    artifacts: [],
-  });
+      });
 
   render(SessionChatPage);
 
@@ -1307,10 +1300,10 @@ test('hides exit on exited sessions and waits for idle after automatic resume be
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.resumeSession.mockImplementation(async () => {
     mocks.sessions.set([starting]);
-    mocks.sessionDetail.set({ session: starting, turns: [], inboxMessages: [], events: [], artifacts: [] });
+    mocks.sessionDetail.set({ session: starting, turns: [], inboxMessages: [], events: [] });
   });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
@@ -1331,7 +1324,7 @@ test('hides exit on exited sessions and waits for idle after automatic resume be
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
   mocks.sessions.set([idle]);
-  mocks.sessionDetail.set({ session: idle, turns: [], inboxMessages: [], events: [], artifacts: [] });
+  mocks.sessionDetail.set({ session: idle, turns: [], inboxMessages: [], events: [] });
 
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
     input: 'continue this session',

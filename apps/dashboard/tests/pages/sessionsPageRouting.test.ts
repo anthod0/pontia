@@ -38,11 +38,10 @@ const mocks = vi.hoisted(() => {
     loadSessions: vi.fn(async () => mocks.loadedSessions),
     loadSessionDetail: vi.fn(async (sessionId: string) => {
       const selected = mocks.loadedSessions.find((session) => session.session_id === sessionId) ?? null;
-      if (selected) mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [], artifacts: [] });
+      if (selected) mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
       return null;
     }),
     createSession: vi.fn(),
-    discoverSessionArtifacts: vi.fn(),
     interruptSession: vi.fn(),
     restartSession: vi.fn(),
     submitInboxMessage: vi.fn(),
@@ -65,7 +64,6 @@ vi.mock('../../src/stores/sessions', () => ({
   loadSessions: mocks.loadSessions,
   loadSessionDetail: mocks.loadSessionDetail,
   createSession: mocks.createSession,
-  discoverSessionArtifacts: mocks.discoverSessionArtifacts,
   interruptSession: mocks.interruptSession,
   restartSession: mocks.restartSession,
   submitInboxMessage: mocks.submitInboxMessage,
