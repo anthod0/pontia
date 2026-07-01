@@ -3,6 +3,7 @@
 /.sqlx/
 node_modules/
 apps/web/dist/
+clients/claude/dist/
 /.worktrees/
 /data/
 /ref/
@@ -16,3 +17,4 @@ TODO.md
 MILESTONE.md
 archive/
 tmp/
+specs/
