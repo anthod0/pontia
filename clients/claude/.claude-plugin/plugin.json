@@ -1,0 +1,6 @@
+{
+  "name": "pontia-claude",
+  "displayName": "Pontia Claude Code Integration",
+  "version": "0.1.0",
+  "description": "Reports Claude Code lifecycle events to pontia"
+}

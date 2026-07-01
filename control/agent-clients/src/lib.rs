@@ -1,3 +1,4 @@
+pub mod claude;
 mod generic_test;
 pub mod pi;
 pub mod raw_transcripts;
@@ -8,7 +9,7 @@ pub use types::*;
 
 use raw_transcripts::{AgentBindingResolver, RawTranscriptParser};
 
-pub const AGENT_CLIENTS: &[AgentClientSpec] = &[generic_test::SPEC, pi::SPEC];
+pub const AGENT_CLIENTS: &[AgentClientSpec] = &[generic_test::SPEC, pi::SPEC, claude::SPEC];
 
 pub fn default_real_client_spec() -> &'static AgentClientSpec {
     &pi::SPEC
@@ -107,6 +108,62 @@ mod tests {
     fn registry_knows_builtin_clients_and_rejects_unknown() {
         assert!(is_supported_client_type("generic"));
         assert!(is_supported_client_type("pi"));
+        assert!(is_supported_client_type("claude"));
         assert!(!is_supported_client_type("unsupported"));
+    }
+
+    #[test]
+    fn claude_spec_matches_phase_2_contract() {
+        let spec = get_client_spec("claude").expect("claude client spec registered");
+        assert_eq!(spec.client_type, "claude");
+        assert_eq!(
+            spec.capabilities,
+            AgentClientCapabilities {
+                accept_task: true,
+                report_turn_started: true,
+                report_turn_finished: true,
+                interrupt: true,
+                stream_output: false,
+                heartbeat: false,
+                timeline: false,
+                context_usage: ContextUsageCapability::Unsupported,
+            }
+        );
+        assert_eq!(spec.adapter.dispatch, DispatchBehavior::TmuxPaste);
+        assert_eq!(spec.adapter.readiness, ReadinessBehavior::AgentClientEvent);
+        assert_eq!(
+            spec.adapter.client_session_identity,
+            ClientSessionIdentityBehavior::RequiredOnReady
+        );
+        assert_eq!(
+            spec.adapter.turn_context,
+            TurnContextBehavior::InternalApiClaim
+        );
+        assert_eq!(spec.adapter.current_turn_id, CurrentTurnIdBehavior::Omit);
+        assert_eq!(
+            spec.adapter.turn_lifecycle,
+            TurnLifecycleBehavior::ClientManagedForInteractiveTmux
+        );
+        assert_eq!(spec.runtime_binding_kind(), Some("claude_tui"));
+        assert_eq!(
+            spec.adapter.system_prompt_injection,
+            SystemPromptInjectionBehavior::Disabled
+        );
+        assert_eq!(spec.adapter.transcript, TranscriptBehavior::Unsupported);
+
+        let runtime = spec.tmux_runtime().expect("claude uses tmux runtime");
+        assert_eq!(runtime.command_env, Some("PONTIA_CLAUDE_TUI_COMMAND"));
+        assert_eq!(runtime.default_command, "claude");
+        assert_eq!(runtime.startup_args, &[] as &[&str]);
+        assert_eq!(runtime.session_identity_arg, None);
+        assert_eq!(runtime.runtime_config_key, Some("claude"));
+        let hook_log = runtime.hook_log.expect("claude hook log configured");
+        assert_eq!(hook_log.file_name, "claude-hook.log");
+        assert_eq!(hook_log.metadata_key, "claude_hook_log");
+    }
+
+    #[test]
+    fn claude_raw_transcript_backend_is_unsupported_in_phase_2() {
+        assert!(raw_transcript_backend_for("claude").is_none());
     }
 }

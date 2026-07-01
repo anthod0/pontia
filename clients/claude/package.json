@@ -1,0 +1,17 @@
+{
+  "name": "@pontia/claude-client-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "keywords": ["claude-plugin", "pontia-client-plugin"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}
