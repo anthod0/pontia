@@ -16,6 +16,7 @@
   import { contextUsageRatio, contextUsageSummary } from '$lib/contextUsage'
   import type { ContextUsageView, InboxDeliveryPolicy, SessionView } from '../api/types'
   import { selectCurrentTurnOutput } from './sessions/currentTurnOutput'
+  import { capabilityRows, extraCapabilityRows } from './sessions/sessionCapabilities'
   import { sessionEventDetailRows, sessionEventSummary, sessionEventTurnLabel } from './sessions/sessionEvents'
   import { isTerminalSession, sessionDisplayTitle } from './sessions/sessionList'
   import {
@@ -177,14 +178,14 @@
     <Empty.Header><Empty.Title>Select a session</Empty.Title><Empty.Description>Choose a session to inspect metadata, turns, inbox, events, and output references.</Empty.Description></Empty.Header>
   </Empty.Root>
 {:else}
-  <Tabs.Root value="overview" class="space-y-4">
+  <Tabs.Root value="messages" class="space-y-4">
     <Tabs.List>
-      <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
       <Tabs.Trigger value="messages">Messages</Tabs.Trigger>
+      <Tabs.Trigger value="details">Details</Tabs.Trigger>
       <Tabs.Trigger value="events">Events</Tabs.Trigger>
     </Tabs.List>
 
-    <Tabs.Content value="overview" class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+    <Tabs.Content value="details" class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <Card.Root>
         <Card.Header>
           <Card.Title>{sessionTitle($sessionDetail.session)}</Card.Title>
@@ -215,8 +216,29 @@
       </Card.Root>
 
       <Card.Root>
-        <Card.Header><Card.Title>Capabilities</Card.Title><Card.Description>Advertised runtime behavior; unsupported actions are not faked.</Card.Description></Card.Header>
-        <Card.Content><pre class="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-muted p-3 text-xs">{JSON.stringify($sessionDetail.session.capabilities, null, 2)}</pre></Card.Content>
+        <Card.Header><Card.Title>Capabilities</Card.Title></Card.Header>
+        <Card.Content class="space-y-4">
+          <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            {#each capabilityRows($sessionDetail.session.capabilities) as capability}
+              <div class="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+                <span class="font-medium">{capability.label}</span>
+                <Badge variant={capability.supported ? 'default' : 'secondary'}>{capability.value}</Badge>
+              </div>
+            {/each}
+          </div>
+          {@const extraCapabilities = extraCapabilityRows($sessionDetail.session.capabilities)}
+          {#if extraCapabilities.length}
+            <div class="space-y-2 border-t pt-3">
+              <div class="text-xs uppercase tracking-wide text-muted-foreground">Additional</div>
+              {#each extraCapabilities as [key, value]}
+                <div class="flex items-start justify-between gap-3 text-sm">
+                  <span class="text-muted-foreground">{key}</span>
+                  <span class="break-all text-right font-mono text-xs">{value}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </Card.Content>
       </Card.Root>
     </Tabs.Content>
 
