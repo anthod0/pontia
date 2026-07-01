@@ -199,6 +199,31 @@ describe("pontia claude hook", () => {
     });
   });
 
+  test("Stop falls back to latest transcript assistant text when last_assistant_message is missing", async () => {
+    const dir = await tempDir();
+    const transcriptPath = join(dir, "session.jsonl");
+    writeFileSync(transcriptPath, [
+      JSON.stringify({ type: "user", message: { role: "user", content: "hello" } }),
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "thinking", thinking: "plan" }] } }),
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Hi there" }] } }),
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "redacted_thinking", data: "opaque" }] } }),
+      "",
+    ].join("\n"));
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { current_turn: {
+      session_id: "sess_1",
+      turn_id: "turn_1",
+      client_type: "claude",
+      runtime_instance_id: "rtinst_1",
+      internal_event_url: "http://localhost/internal/v1/events",
+    } } }), { status: 200 }));
+    const { deps, reported } = install({ fetch: fetchImpl as any });
+
+    await runClaudeHook(baseInput({ hook_event_name: "Stop", transcript_path: transcriptPath }), deps);
+
+    expect(reported.map((event) => event.type)).toEqual(["turn.output", "turn.completed"]);
+    expect(reported[0]).toMatchObject({ payload: { output: { summary: "Hi there" } } });
+  });
+
   test("StopFailure resolves current turn and reports failed", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { current_turn: {
       session_id: "sess_1",

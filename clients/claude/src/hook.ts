@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { stdin as processStdin } from "node:process";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { claimTurnContext, defaultHookLogFile, loadCurrentTurnByClientSession, loadSessionContext, type EnvLike, type SessionContext, type TurnContext } from "./context.js";
@@ -47,6 +48,63 @@ function failureMessage(input: ClaudeHookInput): string {
   const error = optionalString(input.error) ?? "Claude Code turn failed";
   const details = optionalString(input.error_details);
   return details ? `${error}: ${details}` : error;
+}
+
+function assistantTextFromTranscriptEntry(entry: unknown): string | undefined {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+  const record = entry as Record<string, unknown>;
+  if (record.type !== "assistant") return undefined;
+  const message = record.message;
+  if (!message || typeof message !== "object" || Array.isArray(message)) return undefined;
+  const content = (message as Record<string, unknown>).content;
+  if (typeof content === "string") return optionalString(content);
+  if (!Array.isArray(content)) return undefined;
+  const texts = content
+    .filter((block): block is Record<string, unknown> => Boolean(block) && typeof block === "object" && !Array.isArray(block))
+    .filter((block) => block.type === "text")
+    .map((block) => optionalString(block.text))
+    .filter((text): text is string => Boolean(text));
+  return optionalString(texts.join("\n"));
+}
+
+function isUserTranscriptEntry(entry: unknown): boolean {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+  const record = entry as Record<string, unknown>;
+  if (record.type !== "user") return false;
+  const message = record.message;
+  return Boolean(message && typeof message === "object" && !Array.isArray(message) && (message as Record<string, unknown>).role === "user");
+}
+
+async function latestAssistantTextFromTranscript(path: string): Promise<string | undefined> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    return undefined;
+  }
+  let afterLastUser = false;
+  let latestText: string | undefined;
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (isUserTranscriptEntry(entry)) {
+      afterLastUser = true;
+      latestText = undefined;
+      continue;
+    }
+    if (!afterLastUser) continue;
+    latestText = assistantTextFromTranscriptEntry(entry) ?? latestText;
+  }
+  return latestText;
+}
+
+async function stopOutput(input: ClaudeHookInput): Promise<string | undefined> {
+  return optionalString(input.last_assistant_message) ?? await latestAssistantTextFromTranscript(optionalString(input.transcript_path) ?? "");
 }
 
 async function reportReadyForManagedSession(input: ClaudeHookInput, deps: RequiredDeps): Promise<void> {
@@ -161,7 +219,7 @@ async function handleStop(input: ClaudeHookInput, deps: RequiredDeps): Promise<v
   }
   const context = activeTurnContext(loaded.context);
   const reporter = deps.makeReporter(loaded.logFile);
-  const output = optionalString(input.last_assistant_message);
+  const output = await stopOutput(input);
   if (output) {
     const ok = await reporter.report(context, buildTurnOutputEvent(context, output));
     if (!ok) return;
