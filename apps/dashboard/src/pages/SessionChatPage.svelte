@@ -371,15 +371,30 @@
     }
   }
 
+  function sessionSupportsTimeline(session: SessionView | null): boolean {
+    return session?.capabilities.timeline === true
+  }
+
+  function redirectToSessionDetail(sessionId: string): void {
+    historyObserverEnabled = false
+    resetTimelineState(sessionId)
+    navigate(`/sessions/${sessionId}`)
+  }
+
   async function loadSelectedSession(sessionId: string): Promise<void> {
     historyObserverEnabled = false
+    await loadSessionDetail(sessionId)
+    const loadedSession = currentSelectedSession()
+    if (loadedSession && !sessionSupportsTimeline(loadedSession)) {
+      redirectToSessionDetail(sessionId)
+      return
+    }
+
     const currentTimeline = get(timelineState)
     const hasLoadedTimeline = currentTimeline.sessionId === sessionId && currentTimeline.items.length > 0
     if (!hasLoadedTimeline) resetTimelineState(sessionId)
-    await Promise.all([
-      loadSessionDetail(sessionId),
-      hasLoadedTimeline ? handleTimelineMessageUpdated(sessionId) : loadSessionTimeline(sessionId, { mode: 'rebuild' }),
-    ])
+    if (hasLoadedTimeline) await handleTimelineMessageUpdated(sessionId)
+    else await loadSessionTimeline(sessionId, { mode: 'rebuild' })
     await scrollChatToBottomAfterLayout()
     if (!destroyed && selectedSessionId === sessionId) historyObserverEnabled = true
   }

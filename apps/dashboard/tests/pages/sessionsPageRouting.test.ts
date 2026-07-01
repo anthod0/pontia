@@ -140,6 +140,37 @@ test('session detail page shows unsupported context usage state', async () => {
   expect(await screen.findByText(/context usage not supported by this client/i)).toBeInTheDocument();
 });
 
+test('session detail page groups session metadata and message workflow into focused tabs', async () => {
+  window.history.pushState({}, '', '/dashboard/sessions/session-1');
+  mocks.pathParams = { sessionId: 'session-1' };
+
+  render(SessionDetailPage);
+
+  expect(await screen.findByRole('tab', { name: /overview/i, selected: true })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: /messages/i })).toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: /turns/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: /^events$/i })).toBeInTheDocument();
+  const tabList = screen.getByRole('tablist');
+  expect(tabList).toHaveAttribute('data-variant', 'default');
+  expect(tabList).not.toHaveClass(/w-full|overflow-x-auto|sm:w-fit/);
+  expect(screen.getByText(/capabilities/i)).toBeInTheDocument();
+  for (const element of screen.getAllByText(/context usage/i)) {
+    expect(element).not.toBeVisible();
+  }
+
+  await fireEvent.click(screen.getByRole('tab', { name: /messages/i }));
+  expect(screen.queryByText(/current turn output/i)).not.toBeInTheDocument();
+  expect(screen.queryByText('Send follow-up instructions to this session.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Inbox message')).not.toBeInTheDocument();
+  const turns = screen.getByText('Turns');
+  const submitInput = screen.getByText('Submit input');
+  const contextUsage = screen.getByText('Context usage');
+  const inbox = screen.getByText('Inbox');
+  expect(turns.compareDocumentPosition(submitInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(submitInput.compareDocumentPosition(contextUsage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(contextUsage.compareDocumentPosition(inbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 test('session detail page renders populated context usage', async () => {
   const withUsage = session({
     session_id: 'session-usage',

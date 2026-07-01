@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, MessageCircle, RefreshCw, Send, ShieldAlert, TerminalSquare } from '@lucide/svelte'
+  import { CircleAlert, MessageCircle, RefreshCw, Send, TerminalSquare } from '@lucide/svelte'
   import { getPathParams, navigate } from 'svelte-mini-router'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -10,6 +10,7 @@
   import { Label } from '$lib/components/ui/label/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
+  import * as Tabs from '$lib/components/ui/tabs/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import { formatDateTime, jsonPreview, shortId } from '../components/tasks/format'
   import { contextUsageRatio, contextUsageSummary } from '$lib/contextUsage'
@@ -46,7 +47,6 @@
   $: currentTurnOutput = $sessionDetail ? selectCurrentTurnOutput($sessionDetail.session, $sessionDetail.turns) : null
   $: inboxSubmitReason = inboxSubmitUnsupportedReason(selectedSession)
   $: canSubmitInbox = Boolean(selectedSessionId && inboxInput.trim() && !submittingInbox && !inboxSubmitReason)
-  $: normalTurnReason = 'GET /sessions/:id/turns is read-only history. Direct POST is not exposed; use the inbox controls below.'
   $: interruptReason = interruptUnsupportedReason(selectedSession)
   $: restartReason = selectedSession && isTerminalSession(selectedSession) ? 'Terminal sessions cannot be restarted.' : null
   $: terminateReason = selectedSession && isTerminalSession(selectedSession) ? 'Session is already terminal.' : null
@@ -156,12 +156,6 @@
     </div>
   </div>
 
-  <Alert.Root>
-    <ShieldAlert class="size-4" />
-    <Alert.Title>External API only</Alert.Title>
-    <Alert.Description>This detail view uses session projections, turns, inbox messages, and events returned by `/external/v1/*`; it does not infer state from runtime files, tmux, SQLite, or workspace contents.</Alert.Description>
-  </Alert.Root>
-
   {#if $sessionDetailError || actionError}
     <Alert.Root variant="destructive">
       <CircleAlert class="size-4" />
@@ -183,126 +177,40 @@
     <Empty.Header><Empty.Title>Select a session</Empty.Title><Empty.Description>Choose a session to inspect metadata, turns, inbox, events, and output references.</Empty.Description></Empty.Header>
   </Empty.Root>
 {:else}
-  <div class="space-y-4">
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>{sessionTitle($sessionDetail.session)}</Card.Title>
-        <Card.Description>{$sessionDetail.session.description ?? 'No session description.'}</Card.Description>
-      </Card.Header>
-      <Card.Content class="space-y-4">
-        <div class="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
-          {#each [
-            ['Session ID', $sessionDetail.session.session_id],
-            ['Client', $sessionDetail.session.client_type],
-            ['State', $sessionDetail.session.state],
-            ['Workspace', $sessionDetail.session.workspace_id ?? $sessionDetail.session.workspace ?? '—'],
-            ['Profile', $sessionDetail.session.execution_profile_id ?? '—'],
-            ['Current turn', $sessionDetail.session.current_turn_id ?? '—'],
-          ] as [label, value]}
-            <div class="rounded-lg border p-3"><div class="text-xs uppercase tracking-wide text-muted-foreground">{label}</div><div class="mt-1 break-words font-medium">{value}</div></div>
-          {/each}
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" disabled={actionBusy || Boolean(interruptReason)} title={interruptReason ?? 'Interrupt current turn'} onclick={() => void runControl('interrupt')}>Interrupt</Button>
-          <Button size="sm" variant="outline" disabled={actionBusy || Boolean(restartReason)} title={restartReason ?? 'Restart session'} onclick={() => void runControl('restart')}>Restart</Button>
-          <Button size="sm" variant="destructive" disabled={actionBusy || Boolean(terminateReason)} title={terminateReason ?? 'Terminate session'} onclick={() => void runControl('terminate')}>Terminate/exit</Button>
-        </div>
-        {#if interruptReason || restartReason || terminateReason}
-          <p class="text-xs text-muted-foreground">Unsupported/degraded controls: {interruptReason ?? restartReason ?? terminateReason}</p>
-        {/if}
-      </Card.Content>
-    </Card.Root>
+  <Tabs.Root value="overview" class="space-y-4">
+    <Tabs.List>
+      <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
+      <Tabs.Trigger value="messages">Messages</Tabs.Trigger>
+      <Tabs.Trigger value="events">Events</Tabs.Trigger>
+    </Tabs.List>
 
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>Context usage</Card.Title>
-        <Card.Description>Latest session-level context window usage reported by the agent client.</Card.Description>
-      </Card.Header>
-      <Card.Content class="space-y-3">
-        {#if ($sessionDetail.session.capabilities?.context_usage ?? 'unsupported') === 'unsupported'}
-          <p class="text-sm text-muted-foreground">Context usage not supported by this client.</p>
-        {:else if !$sessionDetail.session.context_usage}
-          <p class="text-sm text-muted-foreground">Waiting for context usage...</p>
-        {:else}
-          {@const usage = $sessionDetail.session.context_usage}
-          {@const ratio = contextUsageRatio(usage)}
-          <div class="space-y-2">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="font-medium">{contextUsageSummary(usage)}</div>
-              {#if $sessionDetail.session.model}<Badge variant="secondary">{$sessionDetail.session.model}</Badge>{/if}
-            </div>
-            {#if ratio !== null}
-              <div class="h-2 overflow-hidden rounded-full bg-muted" aria-label="Context usage progress">
-                <div class={`h-full ${contextUsageTone(usage)}`} style={`width: ${Math.min(100, Math.max(0, ratio * 100))}%`}></div>
-              </div>
-            {/if}
-            <p class="text-xs text-muted-foreground">Observed {formatDateTime(usage.observed_at)}</p>
-          </div>
-        {/if}
-      </Card.Content>
-    </Card.Root>
-
-    <Card.Root>
-      <Card.Header>
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <Card.Title>{currentTurnOutput?.title ?? 'Current turn output'}</Card.Title>
-            <Card.Description>
-              {#if currentTurnOutput}
-                Turn {shortId(currentTurnOutput.turn.turn_id)} · {currentTurnOutput.turn.state} · started {currentTurnOutput.turn.started_at ? formatDateTime(currentTurnOutput.turn.started_at) : '—'}{currentTurnOutput.turn.completed_at ? ` · completed ${formatDateTime(currentTurnOutput.turn.completed_at)}` : ''}
-              {:else}
-                No turns are available for this session yet.
-              {/if}
-            </Card.Description>
-          </div>
-          {#if currentTurnOutput}<Badge variant="secondary">{currentTurnOutput.turn.state}</Badge>{/if}
-        </div>
-      </Card.Header>
-      <Card.Content class="space-y-3">
-        {#if currentTurnOutput}
-          <div class="rounded-lg border bg-muted/40 p-3 text-sm">
-            <div class="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Input</div>
-            <div class="whitespace-pre-wrap">{currentTurnOutput.turn.input?.summary ?? jsonPreview(currentTurnOutput.turn.input)}</div>
-          </div>
-          <div class="rounded-lg border p-3">
-            <div class="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Output</div>
-            {#if currentTurnOutput.outputSummary}
-              <pre class="max-h-[28rem] overflow-auto whitespace-pre-wrap text-sm leading-relaxed">{currentTurnOutput.outputSummary}</pre>
-            {:else if currentTurnOutput.turn.failure}
-              <pre class="max-h-[28rem] overflow-auto whitespace-pre-wrap text-sm text-destructive">{jsonPreview(currentTurnOutput.turn.failure)}</pre>
-            {:else if currentTurnOutput.turn.state === 'running' || currentTurnOutput.turn.state === 'queued'}
-              <div class="rounded border border-dashed p-4 text-sm text-muted-foreground">Waiting for output…</div>
-            {:else}
-              <div class="rounded border border-dashed p-4 text-sm text-muted-foreground">No output summary was reported for this turn.</div>
-            {/if}
-          </div>
-        {:else}
-          <Empty.Root><Empty.Header><Empty.Title>No current turn output</Empty.Title><Empty.Description>Create or drive a turn to see its output here.</Empty.Description></Empty.Header></Empty.Root>
-        {/if}
-      </Card.Content>
-    </Card.Root>
-
-    <div class="grid gap-4 lg:grid-cols-2">
+    <Tabs.Content value="overview" class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <Card.Root>
-        <Card.Header><Card.Title>Submit input</Card.Title><Card.Description>Normal turn submission is shown explicitly as unsupported when the API does not expose it.</Card.Description></Card.Header>
-        <Card.Content class="space-y-3">
-          <div class="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">{normalTurnReason}</div>
-          <div class="space-y-2">
-            <Label for="inbox-input">Inbox message</Label>
-            <Textarea id="inbox-input" bind:value={inboxInput} placeholder="Send follow-up instructions…" disabled={Boolean(inboxSubmitReason)} />
-            {#if inboxSubmitReason}<p class="text-xs text-muted-foreground">{inboxSubmitReason}</p>{/if}
+        <Card.Header>
+          <Card.Title>{sessionTitle($sessionDetail.session)}</Card.Title>
+          <Card.Description>{$sessionDetail.session.description ?? 'No session description.'}</Card.Description>
+        </Card.Header>
+        <Card.Content class="space-y-4">
+          <div class="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
+            {#each [
+              ['Session ID', $sessionDetail.session.session_id],
+              ['Client', $sessionDetail.session.client_type],
+              ['State', $sessionDetail.session.state],
+              ['Workspace', $sessionDetail.session.workspace_id ?? $sessionDetail.session.workspace ?? '—'],
+              ['Profile', $sessionDetail.session.execution_profile_id ?? '—'],
+              ['Current turn', $sessionDetail.session.current_turn_id ?? '—'],
+            ] as [label, value]}
+              <div class="rounded-lg border p-3"><div class="text-xs uppercase tracking-wide text-muted-foreground">{label}</div><div class="mt-1 break-words font-medium">{value}</div></div>
+            {/each}
           </div>
-          <div class="space-y-2">
-            <Label for="inbox-policy">Delivery policy</Label>
-            <select id="inbox-policy" bind:value={inboxPolicy} class="h-9 w-full rounded-md border bg-transparent px-3 text-sm">
-              <option value="after_idle">after_idle</option>
-              <option value="interrupt_now">interrupt_now</option>
-            </select>
-            {#if inboxPolicy === 'interrupt_now' && !$sessionDetail.session.capabilities?.interrupt}
-              <p class="text-xs text-muted-foreground">This runtime does not advertise interrupt capability; the External API may reject or mark the message failed.</p>
-            {/if}
+          <div class="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" disabled={actionBusy || Boolean(interruptReason)} title={interruptReason ?? 'Interrupt current turn'} onclick={() => void runControl('interrupt')}>Interrupt</Button>
+            <Button size="sm" variant="outline" disabled={actionBusy || Boolean(restartReason)} title={restartReason ?? 'Restart session'} onclick={() => void runControl('restart')}>Restart</Button>
+            <Button size="sm" variant="destructive" disabled={actionBusy || Boolean(terminateReason)} title={terminateReason ?? 'Terminate session'} onclick={() => void runControl('terminate')}>Terminate/exit</Button>
           </div>
-          <Button onclick={submitInbox} disabled={!canSubmitInbox}><Send class="size-4" /> {submittingInbox ? 'Submitting…' : 'Submit inbox message'}</Button>
+          {#if interruptReason || restartReason || terminateReason}
+            <p class="text-xs text-muted-foreground">Unsupported/degraded controls: {interruptReason ?? restartReason ?? terminateReason}</p>
+          {/if}
         </Card.Content>
       </Card.Root>
 
@@ -310,91 +218,143 @@
         <Card.Header><Card.Title>Capabilities</Card.Title><Card.Description>Advertised runtime behavior; unsupported actions are not faked.</Card.Description></Card.Header>
         <Card.Content><pre class="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-muted p-3 text-xs">{JSON.stringify($sessionDetail.session.capabilities, null, 2)}</pre></Card.Content>
       </Card.Root>
-    </div>
+    </Tabs.Content>
 
-
-    <Card.Root>
-      <Card.Header><Card.Title>Turns</Card.Title><Card.Description>{$sessionDetail.turns.length} turns with output.</Card.Description></Card.Header>
-      <Card.Content>
-        {#if $sessionDetail.turns.length}
-          <div class="overflow-x-auto">
-            <Table.Root>
-              <Table.Header><Table.Row><Table.Head>Turn</Table.Head><Table.Head>State</Table.Head><Table.Head>Input</Table.Head><Table.Head>Output</Table.Head><Table.Head>Completed</Table.Head></Table.Row></Table.Header>
-              <Table.Body>
-                {#each $sessionDetail.turns as turn}
-                  <Table.Row>
-                    <Table.Cell class="font-medium">{shortId(turn.turn_id)}</Table.Cell>
-                    <Table.Cell><Badge variant="secondary">{turn.state}</Badge></Table.Cell>
-                    <Table.Cell class="max-w-xs truncate">{turn.input?.summary ?? jsonPreview(turn.input)}</Table.Cell>
-                    <Table.Cell class="max-w-xs truncate">{turn.output?.summary ?? (turn.failure ? jsonPreview(turn.failure) : '—')}</Table.Cell>
-                    <Table.Cell>{turn.completed_at ? formatDateTime(turn.completed_at) : '—'}</Table.Cell>
-                  </Table.Row>
-                {/each}
-              </Table.Body>
-            </Table.Root>
-          </div>
-        {:else}
-          <Empty.Root><Empty.Header><Empty.Title>No turns</Empty.Title><Empty.Description>This session has no turn history yet.</Empty.Description></Empty.Header></Empty.Root>
-        {/if}
-      </Card.Content>
-    </Card.Root>
-
-    <div class="grid gap-4 xl:grid-cols-2">
+    <Tabs.Content value="messages" class="space-y-4">
       <Card.Root>
-        <Card.Header><Card.Title>Inbox</Card.Title><Card.Description>{$sessionDetail.inboxMessages.length} messages.</Card.Description></Card.Header>
-        <Card.Content class="space-y-3">
-          {#if $sessionDetail.inboxMessages.length}
-            {#each $sessionDetail.inboxMessages.slice().reverse() as message}
-              <div class="rounded-lg border p-3 text-sm">
-                <div class="flex flex-wrap items-center justify-between gap-2"><span class="font-medium">{message.input.summary}</span><Badge variant="secondary">{message.state}</Badge></div>
-                <div class="mt-1 text-xs text-muted-foreground">{message.delivery_policy} · turn {shortId(message.turn_id)} · {formatDateTime(message.updated_at)}</div>
-                {#if message.failure_message}<p class="mt-2 text-xs text-destructive">{message.failure_message}</p>{/if}
-              </div>
-            {/each}
+        <Card.Header><Card.Title>Turns</Card.Title><Card.Description>{$sessionDetail.turns.length} turns with output.</Card.Description></Card.Header>
+        <Card.Content>
+          {#if $sessionDetail.turns.length}
+            <div class="overflow-x-auto">
+              <Table.Root>
+                <Table.Header><Table.Row><Table.Head>Turn</Table.Head><Table.Head>State</Table.Head><Table.Head>Input</Table.Head><Table.Head>Output</Table.Head><Table.Head>Completed</Table.Head></Table.Row></Table.Header>
+                <Table.Body>
+                  {#each $sessionDetail.turns as turn}
+                    <Table.Row>
+                      <Table.Cell class="font-medium">{shortId(turn.turn_id)}</Table.Cell>
+                      <Table.Cell><Badge variant="secondary">{turn.state}</Badge></Table.Cell>
+                      <Table.Cell class="max-w-xs truncate">{turn.input?.summary ?? jsonPreview(turn.input)}</Table.Cell>
+                      <Table.Cell class="max-w-xs truncate">{turn.output?.summary ?? (turn.failure ? jsonPreview(turn.failure) : '—')}</Table.Cell>
+                      <Table.Cell>{turn.completed_at ? formatDateTime(turn.completed_at) : '—'}</Table.Cell>
+                    </Table.Row>
+                  {/each}
+                </Table.Body>
+              </Table.Root>
+            </div>
           {:else}
-            <Empty.Root><Empty.Header><Empty.Title>No inbox messages</Empty.Title><Empty.Description>Submit a message above to queue follow-up input.</Empty.Description></Empty.Header></Empty.Root>
+            <Empty.Root><Empty.Header><Empty.Title>No turns</Empty.Title><Empty.Description>This session has no turn history yet.</Empty.Description></Empty.Header></Empty.Root>
           {/if}
         </Card.Content>
       </Card.Root>
 
-    </div>
-
-    <Card.Root>
-      <Card.Header><Card.Title>Session events</Card.Title><Card.Description>{$sessionDetail.events.length} events shown as compact log lines. Expand a row for full details.</Card.Description></Card.Header>
-      <Card.Content>
-        {#if $sessionDetail.events.length}
-          <div class="overflow-hidden rounded-lg border">
-            {#each $sessionDetail.events.slice(0, 50) as event}
-              <details class="group border-b last:border-b-0">
-                <summary class="grid cursor-pointer list-none gap-2 px-3 py-2 text-sm hover:bg-muted/50 md:grid-cols-[11rem_minmax(10rem,16rem)_7rem_7rem_minmax(0,1fr)] md:items-center">
-                  <span class="font-mono text-xs text-muted-foreground">{formatDateTime(event.time)}</span>
-                  <span class="min-w-0 truncate font-medium" title={event.type}>{event.type}</span>
-                  <span class="truncate text-xs text-muted-foreground" title={event.source}>{event.source}</span>
-                  <span class="font-mono text-xs text-muted-foreground">turn {sessionEventTurnLabel(event.turn_id)}</span>
-                  <span class="min-w-0 truncate text-muted-foreground" title={sessionEventSummary(event.payload)}>{sessionEventSummary(event.payload)}</span>
-                </summary>
-                <div class="space-y-3 border-t bg-muted/20 p-3 text-sm">
-                  <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                    {#each sessionEventDetailRows(event) as [label, value]}
-                      <div class="rounded-md border bg-background p-2">
-                        <div class="text-[0.7rem] uppercase tracking-wide text-muted-foreground">{label}</div>
-                        <div class="mt-1 break-words font-mono text-xs">{value}</div>
-                      </div>
-                    {/each}
-                  </div>
-                  <div>
-                    <div class="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Raw payload</div>
-                    <pre class="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-background p-2 text-xs">{JSON.stringify(event.payload, null, 2)}</pre>
-                  </div>
-                </div>
-              </details>
-            {/each}
+      <Card.Root>
+        <Card.Header><Card.Title>Submit input</Card.Title></Card.Header>
+        <Card.Content class="space-y-3">
+          <Textarea id="inbox-input" aria-label="Inbox message" bind:value={inboxInput} placeholder="Send follow-up instructions…" disabled={Boolean(inboxSubmitReason)} />
+          {#if inboxSubmitReason}<p class="text-xs text-muted-foreground">{inboxSubmitReason}</p>{/if}
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
+            <div class="w-full space-y-2 sm:w-48">
+              <Label for="inbox-policy">Delivery policy</Label>
+              <select id="inbox-policy" bind:value={inboxPolicy} class="h-9 w-full rounded-md border bg-transparent px-3 text-sm">
+                <option value="after_idle">after_idle</option>
+                <option value="interrupt_now">interrupt_now</option>
+              </select>
+            </div>
+            <Button class="sm:mb-0" onclick={submitInbox} disabled={!canSubmitInbox}><Send class="size-4" /> {submittingInbox ? 'Submitting…' : 'Submit inbox message'}</Button>
           </div>
-        {:else}
-          <Empty.Root><Empty.Header><Empty.Title>No events</Empty.Title><Empty.Description>No session events are available.</Empty.Description></Empty.Header></Empty.Root>
-        {/if}
-      </Card.Content>
-    </Card.Root>
-  </div>
+          {#if inboxPolicy === 'interrupt_now' && !$sessionDetail.session.capabilities?.interrupt}
+            <p class="text-xs text-muted-foreground">This session may not support immediate interruption; the message may be queued or fail.</p>
+          {/if}
+        </Card.Content>
+      </Card.Root>
+
+      <div class="grid gap-4 xl:grid-cols-2">
+        <Card.Root>
+          <Card.Header>
+            <Card.Title>Context usage</Card.Title>
+            <Card.Description>Latest session-level context window usage reported by the agent client.</Card.Description>
+          </Card.Header>
+          <Card.Content class="space-y-3">
+            {#if ($sessionDetail.session.capabilities?.context_usage ?? 'unsupported') === 'unsupported'}
+              <p class="text-sm text-muted-foreground">Context usage not supported by this client.</p>
+            {:else if !$sessionDetail.session.context_usage}
+              <p class="text-sm text-muted-foreground">Waiting for context usage...</p>
+            {:else}
+              {@const usage = $sessionDetail.session.context_usage}
+              {@const ratio = contextUsageRatio(usage)}
+              <div class="space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="font-medium">{contextUsageSummary(usage)}</div>
+                  {#if $sessionDetail.session.model}<Badge variant="secondary">{$sessionDetail.session.model}</Badge>{/if}
+                </div>
+                {#if ratio !== null}
+                  <div class="h-2 overflow-hidden rounded-full bg-muted" aria-label="Context usage progress">
+                    <div class={`h-full ${contextUsageTone(usage)}`} style={`width: ${Math.min(100, Math.max(0, ratio * 100))}%`}></div>
+                  </div>
+                {/if}
+                <p class="text-xs text-muted-foreground">Observed {formatDateTime(usage.observed_at)}</p>
+              </div>
+            {/if}
+          </Card.Content>
+        </Card.Root>
+
+        <Card.Root>
+          <Card.Header><Card.Title>Inbox</Card.Title><Card.Description>{$sessionDetail.inboxMessages.length} messages.</Card.Description></Card.Header>
+          <Card.Content class="space-y-3">
+            {#if $sessionDetail.inboxMessages.length}
+              {#each $sessionDetail.inboxMessages.slice().reverse() as message}
+                <div class="rounded-lg border p-3 text-sm">
+                  <div class="flex flex-wrap items-center justify-between gap-2"><span class="font-medium">{message.input.summary}</span><Badge variant="secondary">{message.state}</Badge></div>
+                  <div class="mt-1 text-xs text-muted-foreground">{message.delivery_policy} · turn {shortId(message.turn_id)} · {formatDateTime(message.updated_at)}</div>
+                  {#if message.failure_message}<p class="mt-2 text-xs text-destructive">{message.failure_message}</p>{/if}
+                </div>
+              {/each}
+            {:else}
+              <Empty.Root><Empty.Header><Empty.Title>No inbox messages</Empty.Title><Empty.Description>Submit a message above to queue follow-up input.</Empty.Description></Empty.Header></Empty.Root>
+            {/if}
+          </Card.Content>
+        </Card.Root>
+      </div>
+    </Tabs.Content>
+
+    <Tabs.Content value="events" class="space-y-4">
+      <Card.Root>
+        <Card.Header><Card.Title>Session events</Card.Title><Card.Description>{$sessionDetail.events.length} events shown as compact log lines. Expand a row for full details.</Card.Description></Card.Header>
+        <Card.Content>
+          {#if $sessionDetail.events.length}
+            <div class="overflow-hidden rounded-lg border">
+              {#each $sessionDetail.events.slice(0, 50) as event}
+                <details class="group border-b last:border-b-0">
+                  <summary class="grid cursor-pointer list-none gap-2 px-3 py-2 text-sm hover:bg-muted/50 md:grid-cols-[11rem_minmax(10rem,16rem)_7rem_7rem_minmax(0,1fr)] md:items-center">
+                    <span class="font-mono text-xs text-muted-foreground">{formatDateTime(event.time)}</span>
+                    <span class="min-w-0 truncate font-medium" title={event.type}>{event.type}</span>
+                    <span class="truncate text-xs text-muted-foreground" title={event.source}>{event.source}</span>
+                    <span class="font-mono text-xs text-muted-foreground">turn {sessionEventTurnLabel(event.turn_id)}</span>
+                    <span class="min-w-0 truncate text-muted-foreground" title={sessionEventSummary(event.payload)}>{sessionEventSummary(event.payload)}</span>
+                  </summary>
+                  <div class="space-y-3 border-t bg-muted/20 p-3 text-sm">
+                    <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      {#each sessionEventDetailRows(event) as [label, value]}
+                        <div class="rounded-md border bg-background p-2">
+                          <div class="text-[0.7rem] uppercase tracking-wide text-muted-foreground">{label}</div>
+                          <div class="mt-1 break-words font-mono text-xs">{value}</div>
+                        </div>
+                      {/each}
+                    </div>
+                    <div>
+                      <div class="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Raw payload</div>
+                      <pre class="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-background p-2 text-xs">{JSON.stringify(event.payload, null, 2)}</pre>
+                    </div>
+                  </div>
+                </details>
+              {/each}
+            </div>
+          {:else}
+            <Empty.Root><Empty.Header><Empty.Title>No events</Empty.Title><Empty.Description>No session events are available.</Empty.Description></Empty.Header></Empty.Root>
+          {/if}
+        </Card.Content>
+      </Card.Root>
+    </Tabs.Content>
+  </Tabs.Root>
 {/if}
 </section>
