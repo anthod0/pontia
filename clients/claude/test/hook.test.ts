@@ -124,6 +124,57 @@ describe("pontia claude hook", () => {
     });
   });
 
+  test("UserPromptSubmit accepts managed pending turn without backend turn_id and reports generated turn.started", async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("http://localhost/internal/v1/sessions/sess_1/current-turn/claim");
+      expect(JSON.parse(String(init?.body))).toMatchObject({ runtime_instance_id: "rtinst_1", client_type: "claude" });
+      return new Response(JSON.stringify({ data: { current_turn: {
+        session_id: "sess_1",
+        client_type: "claude",
+        runtime_instance_id: "rtinst_1",
+        internal_event_url: "http://localhost/internal/v1/events",
+      } } }), { status: 200 });
+    });
+    const { deps, reported } = install({
+      env: { PONTIA_HOME: defaultPontiaHome, PONTIA_SESSION_ID: "sess_1", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1" },
+      fetch: fetchImpl as any,
+    });
+
+    await runClaudeHook(baseInput({ hook_event_name: "UserPromptSubmit", prompt: "build it" }), deps);
+
+    expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_1",
+      source: "agent_adapter",
+      client_type: "claude",
+      payload: { runtime_instance_id: "rtinst_1", input: { summary: "build it" } },
+    });
+    expect(reported[0]?.turn_id).toMatch(/^turn_/);
+  });
+
+  test("UserPromptSubmit reports managed TUI prompt when no pending backend turn exists", async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("http://localhost/internal/v1/sessions/sess_1/current-turn/claim");
+      expect(JSON.parse(String(init?.body))).toMatchObject({ runtime_instance_id: "rtinst_1", client_type: "claude" });
+      return new Response(JSON.stringify({ data: { current_turn: null } }), { status: 200 });
+    });
+    const { deps, reported } = install({
+      env: { PONTIA_HOME: defaultPontiaHome, PONTIA_SESSION_ID: "sess_1", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1" },
+      fetch: fetchImpl as any,
+    });
+
+    await runClaudeHook(baseInput({ hook_event_name: "UserPromptSubmit", prompt: "typed in tui" }), deps);
+
+    expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_1",
+      source: "agent_adapter",
+      client_type: "claude",
+      payload: { runtime_instance_id: "rtinst_1", input: { summary: "typed in tui" } },
+    });
+    expect(reported[0]?.turn_id).toMatch(/^turn_/);
+  });
+
   test("Stop resolves current turn by Claude session id, reports final output then completed", async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       expect(url).toBe("http://localhost/internal/v1/agent-bindings/current-turn?client_type=claude&client_session_key=claude_session_1");

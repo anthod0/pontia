@@ -70,7 +70,6 @@ function contextFromRecord(record: Record<string, unknown>, env: EnvLike, logFil
   const resolvedInternalEventUrl = optionalString(record.internal_event_url) ?? internalEventUrl;
   const errors: string[] = [];
   if (!sessionId) errors.push("session_id is required");
-  if (!turnId) errors.push("turn_id is required");
   if (clientType !== "claude") errors.push("client_type must be claude");
   if (!runtimeInstanceId) errors.push("runtime_instance_id or PONTIA_RUNTIME_INSTANCE_ID is required");
   if (!resolvedInternalEventUrl) errors.push("internal_event_url is required");

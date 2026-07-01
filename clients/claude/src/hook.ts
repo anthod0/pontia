@@ -132,13 +132,19 @@ async function manualTurnContext(input: ClaudeHookInput, deps: RequiredDeps, log
 }
 
 async function handleUserPromptSubmit(input: ClaudeHookInput, deps: RequiredDeps): Promise<void> {
+  const prompt = optionalString(input.prompt);
   const claimed = await claimTurnContext(deps.env, deps.fetchImpl);
   const logFile = claimed.logFile;
   let context: TurnContext | undefined;
   if (claimed.ok) {
-    context = { ...claimed.context, input: optionalString(input.prompt) ?? claimed.context.input };
-  } else if (claimed.silent) {
-    context = await manualTurnContext(input, deps, logFile);
+    context = { ...claimed.context, input: prompt ?? claimed.context.input };
+  } else {
+    const loaded = await loadSessionContext(deps.env);
+    if (loaded.ok) {
+      context = { ...loaded.context, input: prompt };
+    } else if (claimed.silent) {
+      context = await manualTurnContext(input, deps, logFile);
+    }
   }
   if (!context) return;
   const active = activeTurnContext(context);
