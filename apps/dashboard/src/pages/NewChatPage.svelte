@@ -29,7 +29,7 @@
   let lastToastedError: string | null = null
   let queryWorkspaceSelectionId: string | null = null
 
-  const CLIENT_TYPE_OPTIONS = ['pi']
+  const CLIENT_TYPE_OPTIONS = ['pi', 'claude']
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
 
   onMount(async () => {

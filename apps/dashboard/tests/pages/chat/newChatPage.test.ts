@@ -98,3 +98,27 @@ test('creates a session with initial prompt, workspace, and client then opens it
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new');
 });
 
+
+test('can start a new chat with Claude Code as the selected client', async () => {
+  const user = userEvent.setup();
+  const created = session({ session_id: 'session-claude', client_type: 'claude' });
+  mocks.createSession.mockResolvedValue({ session: created, initial_turn: turn({ session_id: 'session-claude' }) } satisfies CreateSessionResult);
+  render(NewChatPage);
+
+  const clientSelector = await screen.findByLabelText(/client/i);
+  expect(clientSelector).toHaveTextContent('pi');
+  await user.click(clientSelector);
+  await user.keyboard('{ArrowDown}{Enter}{Escape}');
+  expect(clientSelector).toHaveTextContent('claude');
+  document.body.style.pointerEvents = '';
+
+  await user.type(screen.getByPlaceholderText('Ask the agent to implement, inspect, or explain something…'), 'Run this in Claude Code');
+  await fireEvent.click(screen.getByRole('button', { name: /start chat/i }));
+
+  await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({
+    client_type: 'claude',
+    workspace_id: 'workspace-1',
+  })));
+  expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-claude');
+});
+
