@@ -1,0 +1,13 @@
+{
+  "name": "pontia-local",
+  "owner": {
+    "name": "Pontia"
+  },
+  "plugins": [
+    {
+      "name": "pontia-claude",
+      "source": "./clients/claude",
+      "description": "Reports Claude Code lifecycle events to pontia"
+    }
+  ]
+}
