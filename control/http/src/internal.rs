@@ -68,6 +68,20 @@ pub async fn get_agent_binding(
     Ok(Json(json!({ "data": { "binding": binding } })))
 }
 
+pub async fn get_agent_binding_current_turn(
+    State(state): State<AppState>,
+    Query(query): Query<AgentBindingQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let client_type = required_query_param("client_type", &query.client_type)?;
+    let client_session_key = required_query_param("client_session_key", &query.client_session_key)?;
+    let current_turn = AgentBindingService::new(state.db())
+        .current_turn_for_client_session(client_type, client_session_key)
+        .await?
+        .ok_or_else(|| Error::NotFound("active turn for agent binding not found".to_string()))?;
+
+    Ok(Json(json!({ "data": { "current_turn": current_turn } })))
+}
+
 pub async fn upsert_runtime_binding(
     State(state): State<AppState>,
     request: Result<Json<RuntimeBindingUpsertRequest>, JsonRejection>,
