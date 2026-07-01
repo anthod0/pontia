@@ -38,6 +38,8 @@ The extension reads runtime context from environment variables and, for manually
 
 Backend-delivered input is claimed through the Internal API endpoint discovered from `$PONTIA_HOME/config.toml`: `/internal/v1/sessions/{session_id}/current-turn/claim`. `PONTIA_SESSION_ID`, `PONTIA_RUNTIME_INSTANCE_ID`, and `PONTIA_HOME` are required for this pre-bound claim path. `inbox_message_id`, when present in the claim response, is used to link backend-delivered input to the real turn after `agent_start`. `turn_id` is intentionally omitted for pi: the plugin generates the authoritative pontia turn id when pi reports a real `agent_start`.
 
+The extension is intentionally input-source agnostic at the hook layer. Backend-dispatched input reaches pi through the same real TUI and produces the same `agent_start` lifecycle signal as manually typed TUI input. The claim response is correlation metadata only; it must not determine whether a hook-observed prompt becomes a pontia turn.
+
 ## What the extension reports
 
 - On `session_start` with reason `startup`, it posts a one-time `session.ready` signal from `agent_client` for pre-bound managed sessions with the current `runtime_instance_id` plus the real pi session identity from `ctx.sessionManager.getSessionId()` as `client_session_key`. Manual pi TUI sessions defer binding and `session.ready` until the first `agent_start`.
