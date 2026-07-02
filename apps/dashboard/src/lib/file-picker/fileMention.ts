@@ -17,7 +17,7 @@ export function activeFileMention(value: string, cursor: number): ActiveFileMent
 }
 
 export function replaceFileMention(value: string, mention: ActiveFileMention, path: string): { value: string; cursor: number } {
-  const replacement = `@${path}`;
+  const replacement = `@${path} `;
   const nextValue = `${value.slice(0, mention.start)}${replacement}${value.slice(mention.end)}`;
   return { value: nextValue, cursor: mention.start + replacement.length };
 }

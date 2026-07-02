@@ -7,10 +7,10 @@ describe('file mention prompt editing', () => {
     expect(activeFileMention('email test@example.com', 18)).toBeNull();
   });
 
-  test('replaces only the active @ token with the selected file path', () => {
+  test('replaces the active @ token with the selected file path followed by a space', () => {
     expect(replaceFileMention('open @src/ma please', { start: 5, end: 12, query: 'src/ma' }, 'src/main.rs')).toEqual({
-      value: 'open @src/main.rs please',
-      cursor: 17,
+      value: 'open @src/main.rs  please',
+      cursor: 18,
     });
   });
 });
