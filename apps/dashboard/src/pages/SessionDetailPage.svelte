@@ -148,11 +148,10 @@
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
     <div class="space-y-2">
       <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TerminalSquare class="size-7" /> Session detail</h2>
-      <p class="max-w-3xl text-muted-foreground">Inspect and operate on one session. Use the sessions page for list browsing.</p>
     </div>
     <div class="flex gap-2">
       <Button variant="outline" onclick={() => navigate('/sessions')}>Back to Sessions</Button>
-      <Button variant="outline" onclick={openSelectedSessionChat}><MessageCircle class="size-4" /> Open Chat</Button>
+      <Button variant="outline" disabled={selectedSession?.capabilities?.timeline !== true} onclick={openSelectedSessionChat}><MessageCircle class="size-4" /> Open Chat</Button>
       <Button variant="outline" onclick={() => void refreshAll()}><RefreshCw class="size-4" /> Refresh</Button>
     </div>
   </div>

@@ -14,9 +14,14 @@ describe('SessionDetailPage presentation', () => {
     expect(pageSource).not.toContain('<Tabs.Trigger value="overview">Overview</Tabs.Trigger>');
   });
 
-  test('does not show the old capabilities explanatory sentence or raw capabilities json', () => {
+  test('does not show removed explanatory copy or raw capabilities json', () => {
+    expect(pageSource).not.toContain('Inspect and operate on one session. Use the sessions page for list browsing.');
     expect(pageSource).not.toContain('Advertised runtime behavior; unsupported actions are not faked.');
     expect(pageSource).not.toContain('JSON.stringify($sessionDetail.session.capabilities');
+  });
+
+  test('disables Open Chat when timeline is unsupported', () => {
+    expect(pageSource).toContain("disabled={selectedSession?.capabilities?.timeline !== true}");
   });
 });
 
