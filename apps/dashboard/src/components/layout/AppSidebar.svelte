@@ -142,6 +142,13 @@
     notifyRouteChanged()
   }
 
+  function openNewChatForWorkspace(event: MouseEvent, workspace: WorkspaceView): void {
+    event.stopPropagation()
+    navigate('/chat', { workspace: workspace.workspace_id })
+    currentPath = '/chat'
+    notifyRouteChanged()
+  }
+
   function setSessionActionMenuOpen(actionKey: string, open: boolean): void {
     sessionActionMenuOpenKey = open ? actionKey : null
   }
@@ -325,17 +332,25 @@
             {#each recentWorkspaceGroups as group (group.workspace.workspace_id)}
               {@const workspace = group.workspace}
               {@const workspaceExpanded = isWorkspaceExpanded(workspace.workspace_id)}
-              <li data-slot="sidebar-workspace-group" class="list-none">
+              <li data-slot="sidebar-workspace-group" class="group/workspace relative list-none">
                 <button
                   type="button"
-                  class="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+                  class="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 pr-8 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
                   title={workspace.canonical_path}
                   aria-expanded={workspaceExpanded}
                   onclick={() => toggleWorkspace(workspace.workspace_id)}
                 >
                   <Folder class="size-4 shrink-0" />
                   <span class="truncate">{workspaceTitle(workspace)}</span>
-                  <ChevronDown class={cn('ml-auto size-4 shrink-0 transition-transform', workspaceExpanded ? 'rotate-0' : '-rotate-90')} />
+                </button>
+                <button
+                  type="button"
+                  class="absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
+                  aria-label={`New chat in ${workspaceTitle(workspace)}`}
+                  title="New chat"
+                  onclick={(event) => openNewChatForWorkspace(event, workspace)}
+                >
+                  <SquarePen class="size-4" />
                 </button>
                 {#if workspaceExpanded}
                   <Sidebar.Menu class="mt-1 pl-2">

@@ -298,9 +298,10 @@ test('sidebar groups recent sessions under non-empty recent workspaces without c
   render(AppSidebarHost);
 
   expect(screen.getByText('Recent Workspaces')).toBeInTheDocument();
-  const workspaceButton = screen.getByRole('button', { name: /pontia/i });
+  const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
   expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
   expect(workspaceButton.querySelector('svg')).toHaveClass('lucide-folder');
+  expect(workspaceButton.querySelector('.lucide-chevron-down')).not.toBeInTheDocument();
   expect(screen.queryByText('Empty workspace')).not.toBeInTheDocument();
   expect(screen.queryByText('Old workspace')).not.toBeInTheDocument();
   expect(screen.getByText('Recent Sessions')).toBeInTheDocument();
@@ -330,6 +331,55 @@ test('sidebar groups recent sessions under non-empty recent workspaces without c
     .filter((button) => button.getAttribute('data-sidebar') === 'menu-button')
     .map((button) => button.textContent?.trim());
   expect(workspaceSessionTitles).toEqual(['main · coder', 'Newer unpinned']);
+});
+
+test('sidebar recent workspace hover action starts a new chat for that workspace without toggling expansion', async () => {
+  mocks.workspaces.set([
+    {
+      workspace_id: 'workspace-active',
+      canonical_path: '/home/cheny/projects/pontia',
+      display_path: '~/projects/pontia',
+      name: 'Pontia',
+      state: 'active',
+      metadata: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      last_used_at: '2026-05-14T01:00:00Z',
+    },
+  ]);
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      title: 'Shared session',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-active',
+      workspace: null,
+      pinned_at: null,
+      archived_at: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+  ]);
+
+  render(AppSidebarHost);
+
+  const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
+  const newChatButton = screen.getByRole('button', { name: /new chat in pontia/i });
+  expect(newChatButton).toHaveClass('opacity-0');
+
+  await fireEvent.click(newChatButton);
+
+  expect(mocks.navigate).toHaveBeenCalledWith('/chat', { workspace: 'workspace-active' });
+  expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('sidebar pinned session uses theme-adaptive solid pin and vertical ellipsis action icon', () => {
@@ -401,7 +451,7 @@ test('sidebar workspace session actions open only for the clicked workspace item
   ]);
   render(AppSidebarHost);
 
-  const workspaceButton = screen.getByRole('button', { name: /pontia/i });
+  const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
   await fireEvent.click(workspaceButton);
   const workspaceGroup = workspaceButton.closest('[data-slot="sidebar-workspace-group"]');
   const workspaceAction = within(workspaceGroup as HTMLElement).getByRole('button', { name: /open session actions for shared session/i });
