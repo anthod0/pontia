@@ -8,6 +8,7 @@ use pontia_core::Result;
 pub struct WorkspaceRecordRow {
     pub workspace_id: String,
     pub canonical_path: String,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +49,7 @@ impl SqliteWorkspaceRepository {
         workspace_id: &str,
     ) -> Result<Option<WorkspaceRecordRow>> {
         Ok(sqlx::query_as::<_, WorkspaceRecordRow>(
-            "SELECT workspace_id, canonical_path FROM workspaces WHERE workspace_id = ?",
+            "SELECT workspace_id, canonical_path, name FROM workspaces WHERE workspace_id = ?",
         )
         .bind(workspace_id)
         .fetch_optional(&self.pool)
@@ -60,7 +61,7 @@ impl SqliteWorkspaceRepository {
         canonical_path: &str,
     ) -> Result<Option<WorkspaceRecordRow>> {
         Ok(sqlx::query_as::<_, WorkspaceRecordRow>(
-            "SELECT workspace_id, canonical_path FROM workspaces WHERE canonical_path = ?",
+            "SELECT workspace_id, canonical_path, name FROM workspaces WHERE canonical_path = ?",
         )
         .bind(canonical_path)
         .fetch_optional(&self.pool)

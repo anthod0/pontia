@@ -1,5 +1,5 @@
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
     thread,
     time::Duration,
@@ -83,6 +83,13 @@ pub(crate) fn is_alive(runtime_handle: &str) -> bool {
 
 pub(crate) fn tmux_session_name(request: &RuntimeStartRequest) -> String {
     let short_id = short_session_id(&request.session_id);
+    let workspace = request
+        .workspace_name
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .map(ToString::to_string)
+        .or_else(|| workspace_basename(request.workspace.as_deref()))
+        .map(|value| sanitize_tmux_identifier(&value));
     let handle = request
         .handle
         .as_deref()
@@ -95,15 +102,25 @@ pub(crate) fn tmux_session_name(request: &RuntimeStartRequest) -> String {
         .filter(|value| !value.is_empty())
         .map(sanitize_tmux_identifier);
     let mut parts = vec!["pontia".to_string()];
+    if let Some(workspace) = workspace {
+        parts.push(workspace);
+    }
     if let Some(handle) = handle {
         parts.push(handle);
     }
     if let Some(role) = role {
         parts.push(role);
     }
-    if parts.len() == 1 {
-        return format!("pontia_{}", sanitize_tmux_identifier(&request.session_id));
-    }
     parts.push(short_id);
     parts.join("_")
+}
+
+fn workspace_basename(workspace: Option<&str>) -> Option<String> {
+    let workspace = workspace?.trim();
+    if workspace.is_empty() {
+        return None;
+    }
+    PathBuf::from(workspace)
+        .file_name()
+        .and_then(|name| name.to_str().map(ToString::to_string))
 }

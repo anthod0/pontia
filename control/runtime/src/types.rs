@@ -8,6 +8,7 @@ pub struct RuntimeStartRequest {
     pub session_id: String,
     pub client_type: String,
     pub workspace: Option<String>,
+    pub workspace_name: Option<String>,
     pub handle: Option<String>,
     pub role: Option<String>,
     pub agent_kind: Option<String>,

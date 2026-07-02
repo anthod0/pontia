@@ -70,6 +70,9 @@ impl SessionCommandService {
         let runtime_workspace = workspace_record
             .as_ref()
             .map(|workspace| workspace.canonical_path.clone());
+        let runtime_workspace_name = workspace_record
+            .as_ref()
+            .and_then(|workspace| workspace.name.clone());
 
         let session_id = new_session_id().to_string();
         let ingest = EventIngestService::new(self.pool.clone());
@@ -110,6 +113,7 @@ impl SessionCommandService {
             session_id: session_id.clone(),
             client_type: request.client_type.clone(),
             workspace: runtime_workspace.clone(),
+            workspace_name: runtime_workspace_name,
             handle: request.handle.clone(),
             role: request.role.clone(),
             agent_kind: pontia_agent_kind(&request.metadata),

@@ -258,6 +258,13 @@ impl RuntimeControlService {
             ))
             .await?;
         let tmux_binding = self.tmux_pane_binding(session_id).await?;
+        let runtime_workspace_name = if let Some(workspace_id) = session.workspace_id.as_deref() {
+            get_workspace_record(&self.pool, workspace_id)
+                .await?
+                .and_then(|workspace| workspace.name)
+        } else {
+            None
+        };
         let runtime = self
             .runtime
             .start_session_with_restart_count_and_reuse_target(
@@ -265,6 +272,7 @@ impl RuntimeControlService {
                     session_id: session_id.to_string(),
                     client_type: session.client_type.clone(),
                     workspace: session.workspace.clone(),
+                    workspace_name: runtime_workspace_name,
                     handle: session.handle.clone(),
                     role: session.role.clone(),
                     agent_kind: pontia_agent_kind(&session.metadata),
@@ -380,11 +388,19 @@ impl RuntimeControlService {
                 json!({}),
             ))
             .await?;
+        let runtime_workspace_name = if let Some(workspace_id) = session.workspace_id.as_deref() {
+            get_workspace_record(&self.pool, workspace_id)
+                .await?
+                .and_then(|workspace| workspace.name)
+        } else {
+            None
+        };
         let runtime = self.runtime.start_session_with_restart_count(
             RuntimeStartRequest {
                 session_id: session_id.to_string(),
                 client_type: session.client_type.clone(),
                 workspace: session.workspace.clone(),
+                workspace_name: runtime_workspace_name,
                 handle: session.handle.clone(),
                 role: session.role.clone(),
                 agent_kind: pontia_agent_kind(&session.metadata),

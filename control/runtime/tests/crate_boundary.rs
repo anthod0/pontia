@@ -8,6 +8,7 @@ fn runtime_crate_exposes_manager_and_start_types() {
             session_id: "sess_runtime_boundary".to_string(),
             client_type: "generic".to_string(),
             workspace: None,
+            workspace_name: None,
             handle: None,
             role: None,
             agent_kind: None,

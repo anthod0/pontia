@@ -41,6 +41,7 @@ pub(crate) async fn upsert_canonical_workspace(
         return Ok(WorkspaceRecord {
             workspace_id: row.workspace_id,
             canonical_path: canonical_path.to_string(),
+            name,
         });
     }
 
@@ -57,6 +58,7 @@ pub(crate) async fn upsert_canonical_workspace(
     Ok(WorkspaceRecord {
         workspace_id,
         canonical_path: canonical_path.to_string(),
+        name,
     })
 }
 
@@ -71,6 +73,7 @@ pub async fn get_workspace_record(
             Ok(WorkspaceRecord {
                 workspace_id: row.workspace_id,
                 canonical_path: row.canonical_path,
+                name: row.name,
             })
         })
         .transpose()

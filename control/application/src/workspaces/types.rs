@@ -63,4 +63,5 @@ pub struct RenameWorkspaceRequest {
 pub struct WorkspaceRecord {
     pub workspace_id: String,
     pub canonical_path: String,
+    pub name: Option<String>,
 }
