@@ -5,6 +5,7 @@ export const routerConf: RouterConf = {
   routes: [
     { path: '/', render: () => import('./pages/NewChatPage.svelte') },
     { path: '/workspaces', render: () => import('./pages/WorkspacesPage.svelte') },
+    { path: '/workspace/{workspaceId}', render: () => import('./pages/WorkspacePage.svelte') },
     { path: '/chat', render: () => import('./pages/NewChatPage.svelte') },
     { path: '/chat/{sessionId}', render: () => import('./pages/SessionChatPage.svelte') },
     { path: '/sessions', render: () => import('./pages/SessionsPage.svelte') },

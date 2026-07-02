@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Archive, ChevronDown, EllipsisVertical, Folder, LogOut, Pencil, Pin, PinOff, Settings, SquarePen } from '@lucide/svelte'
+  import { Archive, ChevronDown, EllipsisVertical, Folder, FolderOpen, LogOut, Pencil, Pin, PinOff, Settings, SquarePen } from '@lucide/svelte'
   import { navigate } from 'svelte-mini-router'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -139,6 +139,14 @@
   function openSession(sessionId: string) {
     navigate(`/chat/${sessionId}`)
     currentPath = `/chat/${sessionId}`
+    notifyRouteChanged()
+  }
+
+  function openWorkspacePage(event: MouseEvent, workspace: WorkspaceView): void {
+    event.stopPropagation()
+    const path = `/workspace/${workspace.workspace_id}`
+    navigate(path)
+    currentPath = path
     notifyRouteChanged()
   }
 
@@ -335,13 +343,22 @@
               <li data-slot="sidebar-workspace-group" class="group/workspace relative list-none">
                 <button
                   type="button"
-                  class="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 pr-8 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+                  class="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 pr-14 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
                   title={workspace.canonical_path}
                   aria-expanded={workspaceExpanded}
                   onclick={() => toggleWorkspace(workspace.workspace_id)}
                 >
                   <Folder class="size-4 shrink-0" />
                   <span class="truncate">{workspaceTitle(workspace)}</span>
+                </button>
+                <button
+                  type="button"
+                  class="absolute top-1.5 right-7 flex aspect-square w-5 items-center justify-center rounded-md text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
+                  aria-label={`Open ${workspaceTitle(workspace)} workspace page`}
+                  title="Open workspace"
+                  onclick={(event) => openWorkspacePage(event, workspace)}
+                >
+                  <FolderOpen class="size-4" />
                 </button>
                 <button
                   type="button"

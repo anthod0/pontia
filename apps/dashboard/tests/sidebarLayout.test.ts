@@ -333,6 +333,55 @@ test('sidebar groups recent sessions under non-empty recent workspaces without c
   expect(workspaceSessionTitles).toEqual(['main · coder', 'Newer unpinned']);
 });
 
+test('sidebar recent workspace hover action opens the workspace page without toggling expansion', async () => {
+  mocks.workspaces.set([
+    {
+      workspace_id: 'workspace-active',
+      canonical_path: '/home/cheny/projects/pontia',
+      display_path: '~/projects/pontia',
+      name: 'Pontia',
+      state: 'active',
+      metadata: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      last_used_at: '2026-05-14T01:00:00Z',
+    },
+  ]);
+  mocks.sessions.set([
+    {
+      session_id: 'session-active',
+      client_type: 'pi',
+      title: 'Shared session',
+      handle: 'main',
+      role: 'coder',
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'idle',
+      current_turn_id: null,
+      workspace_id: 'workspace-active',
+      workspace: null,
+      pinned_at: null,
+      archived_at: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T01:00:00Z',
+      metadata: {},
+    },
+  ]);
+
+  render(AppSidebarHost);
+
+  const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
+  const openWorkspaceButton = screen.getByRole('button', { name: /open pontia workspace page/i });
+  expect(openWorkspaceButton).toHaveClass('opacity-0');
+
+  await fireEvent.click(openWorkspaceButton);
+
+  expect(mocks.navigate).toHaveBeenCalledWith('/workspace/workspace-active');
+  expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
+});
+
 test('sidebar recent workspace hover action starts a new chat for that workspace without toggling expansion', async () => {
   mocks.workspaces.set([
     {
