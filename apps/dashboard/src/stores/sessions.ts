@@ -211,7 +211,9 @@ export async function resumeSession(sessionId: string): Promise<void> {
 export async function terminateSession(sessionId: string): Promise<void> {
   await apiTerminateSession(sessionId);
   await loadSessions();
-  await loadSessionDetail(sessionId);
+  if (get(sessionDetail)?.session.session_id === sessionId) {
+    await loadSessionDetail(sessionId);
+  }
 }
 
 export async function loadTaskSessions(task: TaskView | null, dag: TaskDagView | null): Promise<void> {
