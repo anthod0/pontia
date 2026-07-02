@@ -1,17 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { getPathParams, navigate } from 'svelte-mini-router'
-  import { CircleAlert, Folder, MessageSquare, RefreshCw } from '@lucide/svelte'
+  import { CircleAlert, Folder } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
-  import { Button } from '$lib/components/ui/button/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
-  import { Label } from '$lib/components/ui/label/index.js'
-  import { Textarea } from '$lib/components/ui/textarea/index.js'
+  import NewChatPanel from '../components/chat/NewChatPanel.svelte'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
   import { sessionChatTitle, titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
-  import { clientTitle, workspaceTitle } from '../components/chat/sessionMetadata'
+  import { workspaceTitle } from '../components/chat/sessionMetadata'
   import { rememberOptimisticInitialMessage } from '../stores/optimisticChat'
   import { clearChatDraft } from '../stores/chatDraft'
   import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
@@ -95,7 +93,7 @@
   }
 </script>
 
-<section class="mx-auto flex w-full max-w-5xl flex-col gap-6">
+<section data-testid="workspace-page" class="mx-auto flex w-full max-w-4xl flex-col gap-6">
   <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
     <div class="min-w-0 space-y-2">
       {#if selectedWorkspace}
@@ -115,7 +113,6 @@
         <p class="text-sm text-muted-foreground">No registered workspace matches {workspaceId}.</p>
       {/if}
     </div>
-    <Button variant="outline" onclick={() => void refreshPage()}><RefreshCw class="size-4" /> Refresh</Button>
   </div>
 
   {#if errorMessage}
@@ -126,38 +123,26 @@
     </Alert.Root>
   {/if}
 
-  <Card.Root>
-    <Card.Header>
-      <Card.Title>New session</Card.Title>
-      <Card.Description>Create a new chat session in this workspace.</Card.Description>
-    </Card.Header>
-    <Card.Content class="space-y-4">
-      <div class="grid gap-2 sm:max-w-xs">
-        <Label for="workspace-client-type">Client</Label>
-        <select id="workspace-client-type" bind:value={clientType} class="h-9 w-full rounded-md border bg-transparent px-3 text-sm">
-          {#each CLIENT_TYPE_OPTIONS as option}
-            <option value={option}>{clientTitle(option)}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="space-y-2">
-        <Label for="workspace-new-session-prompt">New session prompt</Label>
-        <Textarea id="workspace-new-session-prompt" bind:value={prompt} placeholder="Ask the agent to implement, inspect, or explain something…" class="min-h-28" disabled={!selectedWorkspace || creating} onkeydown={handlePromptKeydown} />
-      </div>
-    </Card.Content>
-    <Card.Footer class="justify-end">
-      <Button onclick={() => void startWorkspaceChat()} disabled={!canCreate} aria-label="Start workspace chat">
-        <MessageSquare class="size-4" />
-        {creating ? 'Starting…' : 'Start chat'}
-      </Button>
-    </Card.Footer>
-  </Card.Root>
+  <NewChatPanel
+    bind:prompt
+    workspaceId={workspaceId}
+    bind:clientType
+    {creating}
+    {canCreate}
+    workspaces={selectedWorkspace ? [selectedWorkspace] : []}
+    workspacesLoading={$workspacesLoading}
+    {selectedWorkspace}
+    clientTypeOptions={CLIENT_TYPE_OPTIONS}
+    fixedWorkspace
+    promptDisabled={!selectedWorkspace || creating}
+    onPromptKeydown={handlePromptKeydown}
+    onStartChat={() => void startWorkspaceChat()}
+  />
 
   <section aria-label="Workspace sessions" class="space-y-3">
     <div class="flex items-center justify-between gap-3">
       <div>
         <h3 class="text-xl font-semibold tracking-tight">Sessions</h3>
-        <p class="text-sm text-muted-foreground">Open an existing chat session for this workspace.</p>
       </div>
       <Badge variant="secondary">{workspaceSessions.length}</Badge>
     </div>
@@ -165,9 +150,9 @@
     {#if $sessionsLoading}
       <Card.Root><Card.Content class="py-6 text-sm text-muted-foreground">Loading sessions…</Card.Content></Card.Root>
     {:else if workspaceSessions.length}
-      <div class="grid gap-3">
+      <div data-testid="workspace-session-list" class="divide-y">
         {#each workspaceSessions as session (session.session_id)}
-          <button type="button" class="rounded-xl border bg-card p-4 text-left transition hover:bg-muted/70" onclick={() => openSession(session.session_id)}>
+          <button type="button" class="w-full px-1 py-3 text-left transition hover:bg-muted/50 sm:px-2" onclick={() => openSession(session.session_id)}>
             <div class="flex min-w-0 items-start justify-between gap-3">
               <div class="min-w-0 space-y-1">
                 <div class="truncate font-medium">{sessionChatTitle(session)}</div>

@@ -16,6 +16,8 @@
     workspacesLoading?: boolean
     selectedWorkspace: WorkspaceView | null
     clientTypeOptions: string[]
+    fixedWorkspace?: boolean
+    promptDisabled?: boolean
     onPromptKeydown: (event: KeyboardEvent) => void
     onStartChat: () => void
   }
@@ -30,6 +32,8 @@
     workspacesLoading = false,
     selectedWorkspace,
     clientTypeOptions,
+    fixedWorkspace = false,
+    promptDisabled = false,
     onPromptKeydown,
     onStartChat,
   }: Props = $props()
@@ -38,23 +42,30 @@
 <div data-testid="new-chat-centered-panel" class="flex min-h-0 flex-1 flex-col justify-center">
   <div class="mx-auto w-full max-w-4xl space-y-4">
     <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1 text-sm text-muted-foreground sm:text-base">
-      <span>Start a new agent session from</span>
-      <Select.Root type="single" bind:value={workspaceId} disabled={workspacesLoading}>
-        <Select.Trigger class="h-7 max-w-64 rounded-md border-0 bg-transparent px-1.5 text-sm font-medium text-foreground shadow-none hover:bg-muted focus:ring-1 sm:text-base" aria-label="Workspace" title={selectedWorkspace?.canonical_path ?? undefined}>
+      <span>Start a new agent session {fixedWorkspace ? 'in' : 'from'}</span>
+      {#if fixedWorkspace}
+        <span class="inline-flex h-7 max-w-64 items-center gap-1.5 rounded-md px-1.5 text-sm font-medium text-foreground sm:text-base" title={selectedWorkspace?.canonical_path ?? undefined}>
           <Folder class="size-4 text-muted-foreground" aria-hidden="true" />
           <span class="min-w-0 truncate">{#if selectedWorkspace}{workspaceTitle(selectedWorkspace)}{:else}Workspace{/if}</span>
-        </Select.Trigger>
-        <Select.Content align="start">
-          {#each workspaces as workspace (workspace.workspace_id)}
-            <Select.Item value={workspace.workspace_id} label={workspaceTitle(workspace)}>
-              <div class="flex min-w-0 flex-col">
-                <span class="truncate">{workspaceTitle(workspace)}</span>
-                <span class="truncate text-xs text-muted-foreground">{workspace.display_path}</span>
-              </div>
-            </Select.Item>
-          {/each}
-        </Select.Content>
-      </Select.Root>
+        </span>
+      {:else}
+        <Select.Root type="single" bind:value={workspaceId} disabled={workspacesLoading}>
+          <Select.Trigger class="h-7 max-w-64 rounded-md border-0 bg-transparent px-1.5 text-sm font-medium text-foreground shadow-none hover:bg-muted focus:ring-1 sm:text-base" aria-label="Workspace" title={selectedWorkspace?.canonical_path ?? undefined}>
+            <Folder class="size-4 text-muted-foreground" aria-hidden="true" />
+            <span class="min-w-0 truncate">{#if selectedWorkspace}{workspaceTitle(selectedWorkspace)}{:else}Workspace{/if}</span>
+          </Select.Trigger>
+          <Select.Content align="start">
+            {#each workspaces as workspace (workspace.workspace_id)}
+              <Select.Item value={workspace.workspace_id} label={workspaceTitle(workspace)}>
+                <div class="flex min-w-0 flex-col">
+                  <span class="truncate">{workspaceTitle(workspace)}</span>
+                  <span class="truncate text-xs text-muted-foreground">{workspace.display_path}</span>
+                </div>
+              </Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      {/if}
 
       <span>, use</span>
       <Select.Root type="single" bind:value={clientType}>
@@ -73,7 +84,7 @@
     <div class="space-y-3">
       <PromptInput.Root class="w-full" onSubmit={onStartChat}>
         <PromptInput.Body>
-          <FileMentionTextarea id="chat-prompt" bind:value={prompt} workspaceId={workspaceId} placeholder="Ask the agent to implement, inspect, or explain something…" shortcutFocusTarget onkeydown={onPromptKeydown} />
+          <FileMentionTextarea id="chat-prompt" bind:value={prompt} workspaceId={workspaceId} placeholder="Ask the agent to implement, inspect, or explain something…" disabled={promptDisabled} shortcutFocusTarget onkeydown={onPromptKeydown} />
         </PromptInput.Body>
 
         <PromptInput.Toolbar class="justify-end gap-2 pt-0">

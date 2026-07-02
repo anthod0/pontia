@@ -353,7 +353,7 @@
                 </button>
                 <button
                   type="button"
-                  class="absolute top-1.5 right-7 flex aspect-square w-5 items-center justify-center rounded-md text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
+                  class="absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
                   aria-label={`Open ${workspaceTitle(workspace)} workspace page`}
                   title="Open workspace"
                   onclick={(event) => openWorkspacePage(event, workspace)}
@@ -362,7 +362,7 @@
                 </button>
                 <button
                   type="button"
-                  class="absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
+                  class="absolute top-1.5 right-7 flex aspect-square w-5 items-center justify-center rounded-md text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
                   aria-label={`New chat in ${workspaceTitle(workspace)}`}
                   title="New chat"
                   onclick={(event) => openNewChatForWorkspace(event, workspace)}

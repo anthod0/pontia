@@ -145,17 +145,43 @@ test('registers a workspace detail route', () => {
   expect(routerConf.routes.some((route) => route.path === '/workspace/{workspaceId}')).toBe(true);
 });
 
-test('renders workspace title path and only sessions from that workspace', async () => {
+test('renders workspace title path and only sessions from that workspace without manual refresh chrome', async () => {
   render(WorkspacePage);
 
   expect(await screen.findByRole('heading', { name: 'Pontia Dev' })).toBeInTheDocument();
   expect(screen.getByText('/home/cheny/projects/pontia')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument();
+  const page = screen.getByTestId('workspace-page');
+  expect(page).toHaveClass('max-w-4xl');
+  expect(page).not.toHaveClass('max-w-5xl');
   expect(mocks.loadWorkspaces).toHaveBeenCalled();
   expect(mocks.loadSessions).toHaveBeenCalledWith({ includePinned: true, limit: 200 });
 
   const sessionsRegion = screen.getByRole('region', { name: 'Workspace sessions' });
-  expect(within(sessionsRegion).getByRole('button', { name: /Workspace session/i })).toBeInTheDocument();
+  expect(within(sessionsRegion).queryByText('Open an existing chat session for this workspace.')).not.toBeInTheDocument();
+  const sessionList = within(sessionsRegion).getByTestId('workspace-session-list');
+  expect(sessionList).toHaveClass('divide-y');
+  expect(sessionList).not.toHaveClass('gap-3');
+  const sessionItem = within(sessionList).getByRole('button', { name: /Workspace session/i });
+  expect(sessionItem).toBeInTheDocument();
+  expect(sessionItem).not.toHaveClass('rounded-xl');
+  expect(sessionItem).not.toHaveClass('border');
+  expect(sessionItem).not.toHaveClass('bg-card');
   expect(within(sessionsRegion).queryByText('Other session')).not.toBeInTheDocument();
+});
+
+test('uses the shared new chat prompt style for creating a workspace session', async () => {
+  render(WorkspacePage);
+
+  const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  const panel = screen.getByTestId('new-chat-centered-panel');
+  expect(panel).toContainElement(promptInput);
+  expect(screen.queryByRole('heading', { name: 'New session' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Create a new chat session in this workspace.')).not.toBeInTheDocument();
+  expect(screen.getByText('Start a new agent session in')).toBeInTheDocument();
+  expect(screen.getAllByText('Pontia Dev').length).toBeGreaterThan(0);
+  expect(within(panel).queryByRole('button', { name: /workspace/i })).not.toBeInTheDocument();
+  expect(within(panel).getByLabelText(/client/i)).toHaveTextContent('pi');
 });
 
 test('creates a new session in the workspace and opens its chat page', async () => {
@@ -166,8 +192,8 @@ test('creates a new session in the workspace and opens its chat page', async () 
 
   render(WorkspacePage);
 
-  await user.type(await screen.findByLabelText('New session prompt'), 'Start work');
-  await fireEvent.click(screen.getByRole('button', { name: 'Start workspace chat' }));
+  await user.type(await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…'), 'Start work');
+  await fireEvent.click(screen.getByRole('button', { name: 'Start chat' }));
 
   await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({
     client_type: 'pi',

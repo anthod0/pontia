@@ -375,6 +375,8 @@ test('sidebar recent workspace hover action opens the workspace page without tog
   const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
   const openWorkspaceButton = screen.getByRole('button', { name: /open pontia workspace page/i });
   expect(openWorkspaceButton).toHaveClass('opacity-0');
+  expect(openWorkspaceButton).toHaveClass('right-1');
+  expect(openWorkspaceButton).not.toHaveClass('right-7');
 
   await fireEvent.click(openWorkspaceButton);
 
@@ -424,6 +426,8 @@ test('sidebar recent workspace hover action starts a new chat for that workspace
   const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
   const newChatButton = screen.getByRole('button', { name: /new chat in pontia/i });
   expect(newChatButton).toHaveClass('opacity-0');
+  expect(newChatButton).toHaveClass('right-7');
+  expect(newChatButton).not.toHaveClass('right-1');
 
   await fireEvent.click(newChatButton);
 
