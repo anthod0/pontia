@@ -11,6 +11,27 @@ fn expands_tilde_sqlite_database_urls_before_connecting() {
 }
 
 #[tokio::test]
+async fn sqlite_connections_use_wal_journal_and_ten_second_busy_timeout() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("connection-options.db");
+    let database_url = format!("sqlite://{}", db_path.display());
+
+    let pool = connect_sqlite(&database_url).await.expect("connect sqlite");
+
+    let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&pool)
+        .await
+        .expect("query journal_mode");
+    let busy_timeout: i64 = sqlx::query_scalar("PRAGMA busy_timeout")
+        .fetch_one(&pool)
+        .await
+        .expect("query busy_timeout");
+
+    assert_eq!(journal_mode, "wal");
+    assert_eq!(busy_timeout, 10_000);
+}
+
+#[tokio::test]
 async fn connects_to_sqlite_and_runs_migrations() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("control-plane.db");

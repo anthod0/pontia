@@ -1,10 +1,13 @@
 pub mod models;
 pub mod repositories;
 
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use pontia_core::{Error, Result};
-use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
+use sqlx::{
+    SqlitePool,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode},
+};
 
 pub async fn connect_sqlite(database_url: &str) -> Result<SqlitePool> {
     let database_url = if sqlite_url_uses_home(database_url) {
@@ -17,7 +20,9 @@ pub async fn connect_sqlite(database_url: &str) -> Result<SqlitePool> {
     let options = database_url
         .parse::<SqliteConnectOptions>()?
         .create_if_missing(true)
-        .foreign_keys(true);
+        .foreign_keys(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_secs(10));
 
     Ok(SqlitePool::connect_with(options).await?)
 }
