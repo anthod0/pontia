@@ -249,7 +249,7 @@ test('conversation waits to observe earlier history until history observer is en
   expect(onLoadMoreHistory).not.toHaveBeenCalled();
 });
 
-test('conversation loads earlier history when the top sentinel intersects after observer is enabled', async () => {
+test('conversation waits for an extra upward pull after the top sentinel intersects before loading history', async () => {
   installIntersectionObserverMock();
   const onLoadMoreHistory = vi.fn();
   render(SessionConversation, {
@@ -259,18 +259,32 @@ test('conversation loads earlier history when the top sentinel intersects after 
   expect(screen.queryByRole('button', { name: /load earlier messages/i })).not.toBeInTheDocument();
   await waitFor(() => expect(TestIntersectionObserver.instances.length).toBeGreaterThan(0));
   TestIntersectionObserver.instances.at(-1)?.trigger(false);
+  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -160 }));
   expect(onLoadMoreHistory).not.toHaveBeenCalled();
 
   TestIntersectionObserver.instances.at(-1)?.trigger(true);
+  expect(await screen.findByText('Keep scrolling up to load earlier messages')).toBeInTheDocument();
+  expect(onLoadMoreHistory).not.toHaveBeenCalled();
+
+  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -64 }));
+  expect(onLoadMoreHistory).not.toHaveBeenCalled();
+  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -64 }));
 
   await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
 });
 
-test('conversation does not adjust scroll position after prepending history', async () => {
+test('conversation preserves the visible history anchor after prepending earlier messages', async () => {
   installIntersectionObserverMock();
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    callback(0);
+    return 1;
+  });
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 120 });
   Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 1000 });
-  const onLoadMoreHistory = vi.fn(async () => undefined);
+  const onLoadMoreHistory = vi.fn(async () => {
+    Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 1400 });
+  });
 
   render(SessionConversation, {
     props: { messages, hasMoreHistory: true, historyObserverEnabled: true, onLoadMoreHistory },
@@ -278,10 +292,12 @@ test('conversation does not adjust scroll position after prepending history', as
 
   await waitFor(() => expect(TestIntersectionObserver.instances.length).toBeGreaterThan(0));
   TestIntersectionObserver.instances.at(-1)?.trigger(true);
+  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -120 }));
 
-  await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
-  expect(scrollTo).not.toHaveBeenCalled();
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 520 }));
+  expect(onLoadMoreHistory).toHaveBeenCalledTimes(1);
   scrollTo.mockRestore();
+  requestAnimationFrame.mockRestore();
 });
 
 test('conversation does not scroll the document to the bottom on initial render', async () => {

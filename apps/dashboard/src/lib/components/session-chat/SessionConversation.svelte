@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, type Component } from 'svelte'
+  import { onDestroy, tick, type Component } from 'svelte'
   import { Bot, Check, Copy, GitBranch } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
@@ -74,6 +74,10 @@
   const plannerDraftAnchorId = $derived(lastAssistantMessageId(displayMessages))
   const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
   let topHistoryLoadInFlight = false
+  let topHistorySentinelVisible = $state(false)
+  let topHistoryPullDistance = $state(0)
+  let topHistoryTouchStartY: number | null = null
+  const TOP_HISTORY_PULL_THRESHOLD_PX = 96
 
   onDestroy(() => {
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
@@ -144,12 +148,17 @@
   function observeTopHistorySentinel(node: HTMLElement): { destroy: () => void } {
     if (typeof IntersectionObserver === 'undefined') return { destroy: () => undefined }
     const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return
-      if (!historyObserverEnabled || !hasMoreHistory || historyLoading || topHistoryLoadInFlight || !onLoadMoreHistory) return
-      void loadMoreHistoryFromTop()
+      topHistorySentinelVisible = entries.some((entry) => entry.isIntersecting)
+      if (!topHistorySentinelVisible) resetTopHistoryPull()
     })
     observer.observe(node)
-    return { destroy: () => observer.disconnect() }
+    return {
+      destroy: () => {
+        observer.disconnect()
+        topHistorySentinelVisible = false
+        resetTopHistoryPull()
+      },
+    }
   }
 
   type ConversationDisplayItem =
@@ -201,16 +210,88 @@
     return groups
   }
 
+  function topHistoryPullReady(): boolean {
+    return historyObserverEnabled && hasMoreHistory && topHistorySentinelVisible && !historyLoading && !topHistoryLoadInFlight && Boolean(onLoadMoreHistory)
+  }
+
+  function resetTopHistoryPull(): void {
+    topHistoryPullDistance = 0
+    topHistoryTouchStartY = null
+  }
+
+  function maybeLoadMoreHistoryFromPull(): void {
+    if (!topHistoryPullReady()) return
+    if (topHistoryPullDistance < TOP_HISTORY_PULL_THRESHOLD_PX) return
+    resetTopHistoryPull()
+    void loadMoreHistoryFromTop()
+  }
+
+  function handleHistoryWheel(event: WheelEvent): void {
+    if (!topHistoryPullReady()) {
+      if (!topHistorySentinelVisible || event.deltaY > 0) resetTopHistoryPull()
+      return
+    }
+
+    if (event.deltaY < 0) {
+      topHistoryPullDistance += Math.abs(event.deltaY)
+      maybeLoadMoreHistoryFromPull()
+      return
+    }
+
+    resetTopHistoryPull()
+  }
+
+  function handleHistoryTouchStart(event: TouchEvent): void {
+    if (!topHistoryPullReady()) return
+    topHistoryTouchStartY = event.touches[0]?.clientY ?? null
+    topHistoryPullDistance = 0
+  }
+
+  function handleHistoryTouchMove(event: TouchEvent): void {
+    if (!topHistoryPullReady() || topHistoryTouchStartY === null) return
+    const currentY = event.touches[0]?.clientY
+    if (currentY === undefined) return
+    topHistoryPullDistance = Math.max(0, currentY - topHistoryTouchStartY)
+  }
+
+  function handleHistoryTouchEnd(): void {
+    maybeLoadMoreHistoryFromPull()
+    if (!topHistoryLoadInFlight) resetTopHistoryPull()
+  }
+
+  function nextAnimationFrame(): Promise<void> {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+  }
+
+  function preserveDocumentScrollAnchor(previousScrollHeight: number, previousScrollY: number): void {
+    const scrollHeightDelta = document.documentElement.scrollHeight - previousScrollHeight
+    if (scrollHeightDelta <= 0) return
+    window.scrollTo({ top: previousScrollY + scrollHeightDelta })
+  }
+
   async function loadMoreHistoryFromTop(): Promise<void> {
     topHistoryLoadInFlight = true
+    const previousScrollHeight = document.documentElement.scrollHeight
+    const previousScrollY = window.scrollY
     try {
       await onLoadMoreHistory?.()
+      await tick()
+      await nextAnimationFrame()
+      preserveDocumentScrollAnchor(previousScrollHeight, previousScrollY)
     } finally {
       topHistoryLoadInFlight = false
     }
   }
 
 </script>
+
+<svelte:window
+  onwheel={handleHistoryWheel}
+  ontouchstart={handleHistoryTouchStart}
+  ontouchmove={handleHistoryTouchMove}
+  ontouchend={handleHistoryTouchEnd}
+  ontouchcancel={resetTopHistoryPull}
+/>
 
 {#snippet conversationItem(displayItem: ConversationDisplayItem)}
   {#if displayItem.kind === 'agent_status'}
@@ -304,6 +385,10 @@
       {/if}
       {#if hasMoreHistory && historyLoading}
         <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading earlier messages…</div>
+      {:else if historyObserverEnabled && hasMoreHistory && topHistorySentinelVisible}
+        <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite" data-chat-history-pull-hint>
+          {topHistoryPullDistance >= TOP_HISTORY_PULL_THRESHOLD_PX ? 'Release to load earlier messages' : 'Keep scrolling up to load earlier messages'}
+        </div>
       {/if}
       {#each displayGroups as displayGroup (displayGroup.id)}
         {#if displayGroup.kind === 'user_message'}

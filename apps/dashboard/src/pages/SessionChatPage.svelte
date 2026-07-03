@@ -74,6 +74,7 @@
   let bottomIntersectionObserver: IntersectionObserver | null = null
   let promptInputScrollBaselineKey: string | null = null
   let historyObserverEnabled = false
+  let initialChatScrollPending = false
   let destroyed = false
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
@@ -367,6 +368,7 @@
       await refreshSessionGitStatus(currentSelectedSession())
     } else {
       historyObserverEnabled = false
+      initialChatScrollPending = false
       resetTimelineState()
     }
   }
@@ -377,26 +379,36 @@
 
   function redirectToSessionDetail(sessionId: string): void {
     historyObserverEnabled = false
+    initialChatScrollPending = false
     resetTimelineState(sessionId)
     navigate(`/sessions/${sessionId}`)
   }
 
   async function loadSelectedSession(sessionId: string): Promise<void> {
     historyObserverEnabled = false
-    await loadSessionDetail(sessionId)
-    const loadedSession = currentSelectedSession()
-    if (loadedSession && !sessionSupportsTimeline(loadedSession)) {
-      redirectToSessionDetail(sessionId)
-      return
-    }
+    initialChatScrollPending = true
+    try {
+      await loadSessionDetail(sessionId)
+      const loadedSession = currentSelectedSession()
+      if (loadedSession && !sessionSupportsTimeline(loadedSession)) {
+        redirectToSessionDetail(sessionId)
+        return
+      }
 
-    const currentTimeline = get(timelineState)
-    const hasLoadedTimeline = currentTimeline.sessionId === sessionId && currentTimeline.items.length > 0
-    if (!hasLoadedTimeline) resetTimelineState(sessionId)
-    if (hasLoadedTimeline) await handleTimelineMessageUpdated(sessionId)
-    else await loadSessionTimeline(sessionId, { mode: 'rebuild' })
-    await scrollChatToBottomAfterLayout()
-    if (!destroyed && selectedSessionId === sessionId) historyObserverEnabled = true
+      const currentTimeline = get(timelineState)
+      const hasLoadedTimeline = currentTimeline.sessionId === sessionId && currentTimeline.items.length > 0
+      if (!hasLoadedTimeline) resetTimelineState(sessionId)
+      if (hasLoadedTimeline) await handleTimelineMessageUpdated(sessionId)
+      else await loadSessionTimeline(sessionId, { mode: 'rebuild' })
+      await scrollChatToBottomAfterLayout()
+      if (!destroyed && selectedSessionId === sessionId) {
+        initialChatScrollPending = false
+        historyObserverEnabled = true
+      }
+    } catch (error) {
+      if (!destroyed && selectedSessionId === sessionId) initialChatScrollPending = false
+      throw error
+    }
   }
 
   async function loadEarlierMessages(): Promise<void> {
@@ -520,20 +532,25 @@
           <Empty.Content><Button onclick={() => openNewChat()}>Start a new chat</Button></Empty.Content>
         </Empty.Root>
       {:else}
-        {#key selectedSessionId}
-          <SessionConversation
-            {messages}
-            sessionState={selectedSession.state}
-            loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
-            interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
-            interruptBusy={actionBusy}
-            hasMoreHistory={$timelineState.hasMore}
-            historyLoading={$timelineState.refreshKind === 'history'}
-            {historyObserverEnabled}
-            onInterrupt={() => void interruptSelectedSession()}
-            onLoadMoreHistory={loadEarlierMessages}
-          />
-        {/key}
+        <div
+          data-chat-initial-scroll-pending={initialChatScrollPending ? 'true' : 'false'}
+          class={initialChatScrollPending ? 'opacity-0' : ''}
+        >
+          {#key selectedSessionId}
+            <SessionConversation
+              {messages}
+              sessionState={selectedSession.state}
+              loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
+              interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
+              interruptBusy={actionBusy}
+              hasMoreHistory={$timelineState.hasMore}
+              historyLoading={$timelineState.refreshKind === 'history'}
+              {historyObserverEnabled}
+              onInterrupt={() => void interruptSelectedSession()}
+              onLoadMoreHistory={loadEarlierMessages}
+            />
+          {/key}
+        </div>
         <div aria-hidden="true" class="h-px w-px" data-chat-bottom-sentinel use:observeBottomSentinel></div>
 
         {#if scrollDownButtonRendered}

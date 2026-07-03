@@ -237,6 +237,41 @@ test('shows workspace git status in the selected chat composer summary', async (
 });
 
 
+test('keeps the selected chat transcript hidden until the initial bottom scroll settles', async () => {
+  let resolveTimeline: (() => void) | null = null;
+  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
+    await new Promise<void>((resolve) => (resolveTimeline = resolve));
+    mocks.timelineState.set({
+      sessionId,
+      bindingId: 'binding-1',
+      items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
+      headCursor: null,
+      tailCursor: null,
+      sourceId: 'source-1',
+      hasMore: false,
+      loading: false,
+      refreshing: false,
+      error: null,
+    });
+    return null;
+  });
+
+  render(SessionChatPage);
+
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild' }));
+  expect(document.querySelector('[data-chat-initial-scroll-pending="true"]')).toBeInTheDocument();
+
+  resolveTimeline?.();
+  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="true"]')).not.toBeInTheDocument());
+});
+
+
 test('scrolls to the document bottom after entering a selected chat', async () => {
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   const selected = session({ session_id: 'session-2', state: 'idle' });
@@ -333,9 +368,9 @@ test('does not load earlier chat history before the initial selected chat scroll
 });
 
 
-test('loads earlier chat history when the top history sentinel intersects', async () => {
+test('loads earlier chat history only after pulling beyond the top history sentinel', async () => {
   installIntersectionObserverMock();
-  const selected = session({ session_id: 'session-2', state: 'idle' });
+  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
@@ -360,6 +395,9 @@ test('loads earlier chat history when the top history sentinel intersects', asyn
 
   await waitFor(() => expect(observedHistorySentinels()).toHaveLength(1));
   TestIntersectionObserver.instances.find((instance) => instance.observedElement?.hasAttribute('data-chat-history-top-sentinel'))?.trigger(true);
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'more' });
+
+  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -120 }));
 
   await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'more' }));
 });
