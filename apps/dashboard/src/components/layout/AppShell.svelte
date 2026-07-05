@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onDestroy, onMount } from 'svelte'
   import type { Snippet } from 'svelte'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import AppSidebar from './AppSidebar.svelte'
   import TopBar from './TopBar.svelte'
   import ChatShortcuts from '../chat/ChatShortcuts.svelte'
   import SettingsShell from '../settings/SettingsShell.svelte'
+  import { installVisualViewportCssVars } from '$lib/visualViewport'
 
   let { children }: { children: Snippet } = $props()
   let currentPath = $state(window.location.pathname)
@@ -33,6 +35,16 @@
   const chatPath = $derived(isChatPath(currentPath))
   const chatSessionPath = $derived(isChatSessionPath(currentPath))
   const mainClass = $derived(settingsPath ? 'min-w-0 flex-1 bg-surface' : chatSessionPath ? 'min-w-0 flex-1 bg-surface p-4 pb-40 md:p-6 md:pb-44' : chatPath ? 'min-w-0 flex-1 bg-surface p-4 md:p-6' : 'min-w-0 flex-1 bg-surface p-4 md:p-6')
+
+  let uninstallVisualViewportCssVars: (() => void) | null = null
+
+  onMount(() => {
+    uninstallVisualViewportCssVars = installVisualViewportCssVars()
+  })
+
+  onDestroy(() => {
+    uninstallVisualViewportCssVars?.()
+  })
   const contentClass = $derived(settingsPath ? 'min-w-0 w-full' : 'mx-auto min-w-0 w-full max-w-7xl')
 </script>
 
