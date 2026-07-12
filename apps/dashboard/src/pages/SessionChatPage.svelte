@@ -17,7 +17,9 @@
   } from '$lib/session-chat/sessionChat'
   import {
     chatMessagesWithOptimistic,
+    discardOptimisticMessage,
     optimisticInitialMessages,
+    rememberOptimisticMessage,
   } from '../stores/optimisticChat'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import {
@@ -494,21 +496,26 @@
     actionError = null
     const message = $chatDraft.trim()
     promptInputScrollBaselineKey = chatMessagesRenderKey(messages)
+    const optimisticMessageId = rememberOptimisticMessage(selectedSessionId, message)
+    const waitForResume = selectedSession?.state === 'exited'
+    if (!waitForResume) clearChatDraft()
     try {
-      if (selectedSession?.state === 'exited') {
+      if (waitForResume) {
         await resumeSession(selectedSessionId)
         await waitForSessionIdle(selectedSessionId)
+        clearChatDraft()
       }
       await submitInboxMessage(selectedSessionId, {
         input: message,
         delivery_policy: 'after_idle',
         metadata: { source: 'dashboard_chat' },
       })
-      clearChatDraft()
       await tick()
       scrollChatToBottom()
     } catch (error) {
       promptInputScrollBaselineKey = null
+      if (optimisticMessageId) discardOptimisticMessage(selectedSessionId, optimisticMessageId)
+      if (!get(chatDraft).trim()) chatDraft.set(message)
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
       submitting = false

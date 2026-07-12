@@ -1036,6 +1036,52 @@ test('disables follow-up input for sessions that do not advertise web-write capa
 });
 
 
+test('shows a submitted follow-up immediately as loading until it appears in the timeline', async () => {
+  const user = userEvent.setup();
+  const selected = session({ session_id: 'session-optimistic', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-optimistic');
+  mocks.pathParams = { sessionId: 'session-optimistic' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  let resolveSubmission: (() => void) | null = null;
+  mocks.submitInboxMessage.mockImplementation(() => new Promise((resolve) => {
+    resolveSubmission = () => resolve(inboxMessage({
+      message_id: 'message-optimistic',
+      session_id: 'session-optimistic',
+      input: { summary: 'slow network message' },
+    }));
+  }));
+
+  render(SessionChatPage);
+
+  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  await user.type(followUpInput, 'slow network message');
+  await user.click(screen.getByRole('button', { name: /send/i }));
+
+  const optimisticMessage = await screen.findByText('slow network message');
+  expect(optimisticMessage.closest('[data-role="user"]')).toBeInTheDocument();
+  expect(screen.getByLabelText('Message delivery pending')).toBeInTheDocument();
+
+  mocks.timelineState.set({
+    ...mocks.timelineState.get(),
+    sessionId: 'session-optimistic',
+    items: timelineItemsFromTurns([turn({
+      turn_id: 'turn-optimistic',
+      session_id: 'session-optimistic',
+      input: { summary: 'slow network message' },
+      output: null,
+      state: 'running',
+      completed_at: null,
+    })]),
+  });
+
+  await waitFor(() => expect(screen.queryByLabelText('Message delivery pending')).not.toBeInTheDocument());
+  expect(screen.getAllByText('slow network message')).toHaveLength(1);
+  resolveSubmission?.();
+});
+
+
 test('follow-up composer submits with Enter while preserving modified Enter for newlines', async () => {
   const user = userEvent.setup();
   const selected = session({ session_id: 'session-2', state: 'idle' });
