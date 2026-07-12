@@ -8,7 +8,15 @@
 
   let { state, class: className }: Props = $props()
 
-  const statusText = $derived(state === 'exited' ? 'session exited · send a message to resume' : state === 'interrupted' ? 'session interrupted' : null)
+  const statusText = $derived(
+    state === 'starting'
+      ? 'Session starting'
+      : state === 'exited'
+        ? 'session exited · send a message to resume'
+        : state === 'interrupted'
+          ? 'session interrupted'
+          : null,
+  )
 </script>
 
 {#if statusText}

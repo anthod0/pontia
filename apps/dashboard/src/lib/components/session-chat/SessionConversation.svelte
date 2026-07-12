@@ -171,7 +171,7 @@
     | { kind: 'assistant_group'; id: string; items: ConversationDisplayItem[] }
 
   function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null): ConversationDisplayItem[] {
-    const showBottomStatus = state === 'exited' || state === 'interrupted'
+    const showBottomStatus = state === 'starting' || state === 'exited' || state === 'interrupted'
     const showStatus = Boolean(state && state !== 'idle' && !showBottomStatus)
     const latestAssistantId = chatMessages.at(-1)?.role === 'assistant' ? chatMessages.at(-1)?.id : null
     const items: ConversationDisplayItem[] = chatMessages.map((message) => ({

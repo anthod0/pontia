@@ -474,6 +474,24 @@ test('conversation renders agent status without an assistant loading placeholder
   expect(onInterrupt).not.toHaveBeenCalled();
 });
 
+test('conversation renders the starting status as a bottom status after the latest assistant content', () => {
+  render(SessionConversation, {
+    props: {
+      sessionState: 'starting',
+      messages,
+    },
+  });
+
+  const assistantMessage = document.querySelector('[data-chat-message-id="message-2"]');
+  const response = screen.getByText('I will inspect it now.');
+  const status = screen.getByLabelText('Session starting');
+  const bottomStatus = status.closest('[data-chat-session-bottom-status]');
+
+  expect(bottomStatus).toBeInTheDocument();
+  expect(assistantMessage).not.toContainElement(status);
+  expect(response.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 test('conversation renders assistant loading placeholder when session is starting and the latest user message has no assistant output', () => {
   render(SessionConversation, {
     props: {
@@ -491,9 +509,10 @@ test('conversation renders assistant loading placeholder when session is startin
   });
 
   expect(screen.getByText('Session starting')).toBeInTheDocument();
-  expect(screen.getByLabelText('Agent status: Session starting')).toBeInTheDocument();
+  expect(screen.getByLabelText('Session starting')).toHaveAttribute('data-chat-session-bottom-status');
+  expect(screen.queryByLabelText('Agent status: Session starting')).not.toBeInTheDocument();
   expect(screen.queryByText('Waiting for the agent session to become ready.')).not.toBeInTheDocument();
-  expect(screen.getByTestId('blocks-wave-spinner')).toBeInTheDocument();
+  expect(screen.queryByTestId('blocks-wave-spinner')).not.toBeInTheDocument();
   expect(screen.queryByText('Working')).not.toBeInTheDocument();
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });

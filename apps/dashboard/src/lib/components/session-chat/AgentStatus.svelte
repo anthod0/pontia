@@ -21,7 +21,6 @@
     if (!value) return null
     switch (value) {
       case 'created': return { label: 'Session created', tone: 'idle' }
-      case 'starting': return { label: 'Session starting', tone: 'active' }
       case 'busy': return { label: 'Agent working', tone: 'active' }
       case 'idle': return null
       case 'exited': return null
@@ -38,7 +37,7 @@
     role="status"
   >
     <span class="inline-flex size-5 shrink-0 items-center justify-center text-muted-foreground" aria-hidden="true">
-      {#if state === 'busy' || state === 'starting'}
+      {#if state === 'busy'}
         <BlocksWaveSpinner class="size-5" />
       {:else if status.tone === 'error'}
         <XCircle class="size-4 text-destructive" />
