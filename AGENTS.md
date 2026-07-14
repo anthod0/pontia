@@ -74,3 +74,17 @@ Notes:
 - SQLx compile-time query checks use a temporary SQLite database generated from `control/storage-sqlite/migrations/*.sql` by `scripts/sqlx-check-db.sh` / `just sqlx-db`.
 - Do not commit `.sqlx/`; run backend cargo commands through the `just` targets so `DATABASE_URL` points at the generated check database.
 - Client plugin packages currently have `test` and `typecheck` scripts, not `build` scripts.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked as local Markdown files under `.scratch/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the five canonical status strings. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Domain documentation uses the single-context layout. See `docs/agents/domain.md`.

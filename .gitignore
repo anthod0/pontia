@@ -17,4 +17,16 @@ TODO.md
 MILESTONE.md
 archive/
 tmp/
-specs/
+/specs/
+/docs/agents
+/.scratch/
+
+/.agents/
+/.claude/
+/.cursor/
+/.codex/
+
+/.out-of-scope/
+/docs/adr/
+/CONTEXT.md
+/CONTEXT-MAP.md
