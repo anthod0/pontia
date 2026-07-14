@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
 import type { SessionContext } from "./session.js";
 
+const MAX_TURN_OUTPUT_CHARS = 200;
+
 export type InternalEventType = "session.ready" | "session.exited" | "session.message_updated" | "session.context_usage_updated" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
 
 export interface ContextUsagePayload {
@@ -304,7 +306,7 @@ export function buildTurnStartedEvent(context: ActiveTurnContext): InternalEvent
 export function buildTurnOutputEvent(context: ActiveTurnContext, output: string): InternalEvent {
   return {
     ...baseAdapterTurnEvent(context, "turn.output"),
-    payload: { output: { summary: output } },
+    payload: { output: { summary: Array.from(output).slice(0, MAX_TURN_OUTPUT_CHARS).join("") } },
   };
 }
 

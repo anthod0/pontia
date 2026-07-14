@@ -62,6 +62,12 @@ describe("event builders", () => {
     expect(new Date(event.time).toISOString()).toBe(event.time);
   });
 
+  test("truncates turn.output summaries to 200 Unicode characters", () => {
+    const event = buildTurnOutputEvent(context, "界".repeat(201));
+
+    expect(event.payload).toEqual({ output: { summary: "界".repeat(200) } });
+  });
+
   test("builds turn.completed payload shape", () => {
     expect(buildTurnCompletedEvent(context)).toMatchObject({
       session_id: "sess_1",

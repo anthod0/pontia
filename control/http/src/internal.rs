@@ -22,6 +22,7 @@ use pontia_core::{
 use pontia_dag::DagRunResultService;
 
 const MAX_EVENT_PAYLOAD_BYTES: usize = 64 * 1024;
+const MAX_TURN_OUTPUT_CHARS: usize = 200;
 
 #[derive(Debug, Deserialize)]
 pub struct InternalEventRequest {
@@ -198,13 +199,15 @@ impl InternalEventRequest {
             return Err(ApiError::invalid_request("payload must be a JSON object"));
         }
 
+        let mut payload = self.payload;
+        if event_type == EventType::TurnOutput {
+            truncate_turn_output(&mut payload);
+        }
         if event_type == EventType::SessionContextUsageUpdated {
-            validate_context_usage_payload(&self.payload)?;
+            validate_context_usage_payload(&payload)?;
         }
 
-        let payload_size = serde_json::to_vec(&self.payload)
-            .map_err(Error::from)?
-            .len();
+        let payload_size = serde_json::to_vec(&payload).map_err(Error::from)?.len();
         if payload_size > MAX_EVENT_PAYLOAD_BYTES {
             return Err(ApiError::invalid_request(format!(
                 "payload exceeds maximum size of {MAX_EVENT_PAYLOAD_BYTES} bytes"
@@ -223,9 +226,19 @@ impl InternalEventRequest {
             event_type,
             occurred_at,
             seq: self.seq,
-            payload: self.payload,
+            payload,
         })
     }
+}
+
+fn truncate_turn_output(payload: &mut Value) {
+    let Some(Value::String(summary)) = payload.pointer_mut("/output/summary") else {
+        return;
+    };
+    if summary.chars().count() <= MAX_TURN_OUTPUT_CHARS {
+        return;
+    }
+    *summary = summary.chars().take(MAX_TURN_OUTPUT_CHARS).collect();
 }
 
 fn validate_context_usage_payload(payload: &Value) -> Result<(), ApiError> {

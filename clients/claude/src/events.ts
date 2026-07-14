@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { SessionContext, TurnContext } from "./context.js";
 
+const MAX_TURN_OUTPUT_CHARS = 200;
+
 export type InternalEventType = "session.ready" | "session.exited" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
 
 interface BaseInternalEvent {
@@ -79,7 +81,10 @@ export function buildTurnStartedEvent(context: ActiveTurnContext): InternalEvent
 }
 
 export function buildTurnOutputEvent(context: ActiveTurnContext, output: string): InternalEvent {
-  return { ...baseAdapterTurnEvent(context, "turn.output"), payload: { output: { summary: output } } };
+  return {
+    ...baseAdapterTurnEvent(context, "turn.output"),
+    payload: { output: { summary: Array.from(output).slice(0, MAX_TURN_OUTPUT_CHARS).join("") } },
+  };
 }
 
 export function buildTurnCompletedEvent(context: ActiveTurnContext): InternalEvent {

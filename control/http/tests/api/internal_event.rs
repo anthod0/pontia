@@ -1003,6 +1003,42 @@ async fn internal_event_api_rejects_large_payloads() {
 }
 
 #[tokio::test]
+async fn internal_event_api_truncates_turn_output_to_200_characters() {
+    let state = test_state().await;
+    post_event(
+        state.clone(),
+        event_body(
+            "evt_output_session",
+            "session.created",
+            "sess_output_truncation",
+            None,
+            1,
+        ),
+    )
+    .await;
+
+    let mut event = event_body(
+        "evt_output_truncated",
+        "turn.output",
+        "sess_output_truncation",
+        Some("turn_output_truncation"),
+        2,
+    );
+    event["payload"] = json!({ "output": { "summary": "界".repeat(201) } });
+
+    let (status, _) = post_event(state.clone(), event).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let payload: String =
+        sqlx::query_scalar("SELECT payload FROM events WHERE event_id = 'evt_output_truncated'")
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    let payload: Value = serde_json::from_str(&payload).unwrap();
+    assert_eq!(payload["output"]["summary"], "界".repeat(200));
+}
+
+#[tokio::test]
 async fn internal_event_api_accepts_sequence_gaps_with_warnings() {
     let state = test_state().await;
 
