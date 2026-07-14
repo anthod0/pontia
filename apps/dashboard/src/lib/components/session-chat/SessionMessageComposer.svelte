@@ -76,7 +76,7 @@
     </div>
   </PromptInput.Body>
   <PromptInput.Toolbar class="justify-end pt-0">
-    <PromptInput.Submit disabled={disabled || submitDisabled || busy} />
+    <PromptInput.Submit disabled={disabled || submitDisabled} {busy} />
   </PromptInput.Toolbar>
 </PromptInput.Root>
 
@@ -97,7 +97,7 @@
         <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} shortcutFocusTarget onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
       </PromptInput.Body>
       <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
-        <PromptInput.Submit disabled={disabled || submitDisabled || busy} />
+        <PromptInput.Submit disabled={disabled || submitDisabled} {busy} />
       </PromptInput.Toolbar>
     </PromptInput.Root>
   </Dialog.Content>

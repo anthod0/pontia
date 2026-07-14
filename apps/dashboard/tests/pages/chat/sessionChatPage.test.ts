@@ -1036,7 +1036,7 @@ test('disables follow-up input for sessions that do not advertise web-write capa
 });
 
 
-test('shows a submitted follow-up immediately as loading until it appears in the timeline', async () => {
+test('shows delivery loading on the submit button instead of below the optimistic message', async () => {
   const user = userEvent.setup();
   const selected = session({ session_id: 'session-optimistic', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-optimistic');
@@ -1061,7 +1061,8 @@ test('shows a submitted follow-up immediately as loading until it appears in the
 
   const optimisticMessage = await screen.findByText('slow network message');
   expect(optimisticMessage.closest('[data-role="user"]')).toBeInTheDocument();
-  expect(screen.getByLabelText('Message delivery pending')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Message delivery pending')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Sending message' })).toHaveAttribute('aria-busy', 'true');
 
   mocks.timelineState.set({
     ...mocks.timelineState.get(),
@@ -1076,9 +1077,10 @@ test('shows a submitted follow-up immediately as loading until it appears in the
     })]),
   });
 
-  await waitFor(() => expect(screen.queryByLabelText('Message delivery pending')).not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: 'Sending message' })).toBeInTheDocument();
   expect(screen.getAllByText('slow network message')).toHaveLength(1);
   resolveSubmission?.();
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Sending message' })).not.toBeInTheDocument());
 });
 
 

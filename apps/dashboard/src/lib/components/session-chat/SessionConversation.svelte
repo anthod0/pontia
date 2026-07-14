@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, tick, type Component } from 'svelte'
-  import { Bot, Check, Copy, GitBranch, LoaderCircle } from '@lucide/svelte'
+  import { Bot, Check, Copy, GitBranch } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -314,11 +314,6 @@
         {/if}
         {#if chatMessage.content.trim()}
           <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
-          {#if chatMessage.role === 'user' && chatMessage.status === 'pending'}
-            <span class="mt-1 flex justify-end text-muted-foreground" role="status" aria-label="Message delivery pending" title="Waiting for timeline confirmation">
-              <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />
-            </span>
-          {/if}
           {#if chatMessage.role === 'assistant'}
             {@const isCopied = copiedMessageId === chatMessage.id}
             <div class="mt-2 flex justify-start">
