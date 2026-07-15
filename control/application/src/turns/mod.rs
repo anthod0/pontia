@@ -16,7 +16,7 @@ use sqlx::SqlitePool;
 mod tests {
     use super::*;
     use pontia_core::{
-        domain::{DomainEvent, EventSource, EventType},
+        domain::{EventSource, EventType, ReportedEvent},
         ids::{new_event_id, new_session_id},
     };
 
@@ -62,7 +62,7 @@ mod tests {
         payload: Value,
     ) {
         service
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,

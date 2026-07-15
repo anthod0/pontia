@@ -96,7 +96,7 @@ pub enum EventType {
 }
 
 impl EventType {
-    pub fn requires_turn_id(self) -> bool {
+    pub fn is_turn_event(self) -> bool {
         matches!(
             self,
             Self::TurnCreated
@@ -109,6 +109,10 @@ impl EventType {
                 | Self::TurnInterrupted
                 | Self::TurnCancelled
         )
+    }
+
+    pub fn requires_turn_id(self) -> bool {
+        self.is_turn_event()
     }
 }
 
@@ -180,6 +184,43 @@ impl std::str::FromStr for EventType {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportedEvent {
+    pub event_id: String,
+    pub session_id: String,
+    pub turn_id: Option<String>,
+    pub source: EventSource,
+    pub client_type: String,
+    pub event_type: EventType,
+    pub occurred_at: OffsetDateTime,
+    pub seq: Option<i64>,
+    pub payload: Value,
+}
+
+impl ReportedEvent {
+    pub fn new(
+        event_id: String,
+        session_id: String,
+        turn_id: Option<String>,
+        source: EventSource,
+        client_type: String,
+        event_type: EventType,
+        payload: Value,
+    ) -> Self {
+        Self {
+            event_id,
+            session_id,
+            turn_id,
+            source,
+            client_type,
+            event_type,
+            occurred_at: utc_now(),
+            seq: None,
+            payload,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DomainEvent {
     pub event_id: String,
     pub session_id: String,
@@ -190,6 +231,7 @@ pub struct DomainEvent {
     pub occurred_at: OffsetDateTime,
     pub seq: Option<i64>,
     pub payload: Value,
+    pub turn_index: Option<i64>,
 }
 
 impl DomainEvent {
@@ -212,6 +254,29 @@ impl DomainEvent {
             occurred_at: utc_now(),
             seq: None,
             payload,
+            turn_index: None,
+        }
+    }
+
+    pub fn with_turn_index(mut self, turn_index: i64) -> Self {
+        self.turn_index = Some(turn_index);
+        self
+    }
+}
+
+impl From<ReportedEvent> for DomainEvent {
+    fn from(event: ReportedEvent) -> Self {
+        Self {
+            event_id: event.event_id,
+            session_id: event.session_id,
+            turn_id: event.turn_id,
+            source: event.source,
+            client_type: event.client_type,
+            event_type: event.event_type,
+            occurred_at: event.occurred_at,
+            seq: event.seq,
+            payload: event.payload,
+            turn_index: None,
         }
     }
 }

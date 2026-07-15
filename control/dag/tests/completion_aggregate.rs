@@ -56,7 +56,7 @@ async fn submit_result_marks_task_completed_from_runtime_projection_even_without
     .await
     .expect("insert session");
     sqlx::query(
-        "INSERT INTO turns (turn_id, session_id, state, metadata) VALUES (?, ?, 'running', '{}')",
+        "INSERT INTO turns (turn_id, session_id, turn_index, state, metadata) VALUES (?, ?, 1, 'running', '{}')",
     )
     .bind(turn_id)
     .bind(session_id)

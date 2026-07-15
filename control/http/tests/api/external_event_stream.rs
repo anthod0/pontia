@@ -7,7 +7,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_application::{AppState, EventIngestService};
-use pontia_core::domain::{DomainEvent, EventSource, EventType};
+use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use pontia_http as http;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -30,8 +30,8 @@ fn event(
     session_id: &str,
     turn_id: Option<&str>,
     payload: Value,
-) -> DomainEvent {
-    DomainEvent::new(
+) -> ReportedEvent {
+    ReportedEvent::new(
         event_id.to_string(),
         session_id.to_string(),
         turn_id.map(str::to_string),
@@ -42,7 +42,7 @@ fn event(
     )
 }
 
-async fn ingest(state: &AppState, event: DomainEvent) {
+async fn ingest(state: &AppState, event: ReportedEvent) {
     EventIngestService::new(state.db())
         .ingest_event(event)
         .await

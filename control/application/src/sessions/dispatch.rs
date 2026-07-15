@@ -26,7 +26,7 @@ impl SessionCommandService {
         self.runtime.submit_input(client_type, agent_input)?;
         if behavior.auto_start_turn {
             EventIngestService::new(self.pool.clone())
-                .ingest_event(DomainEvent::new(
+                .ingest_event(ReportedEvent::new(
                     new_event_id().to_string(),
                     session_id.to_string(),
                     Some(turn_id.to_string()),
@@ -102,7 +102,7 @@ impl SessionCommandService {
             Ok(()) => {
                 if !client_spec.owns_initial_tmux_turn() {
                     ingest
-                        .ingest_event(DomainEvent::new(
+                        .ingest_event(ReportedEvent::new(
                             new_event_id().to_string(),
                             session_id.to_string(),
                             Some(turn_id.to_string()),
@@ -116,7 +116,7 @@ impl SessionCommandService {
             }
             Err(error) => {
                 ingest
-                    .ingest_event(DomainEvent::new(
+                    .ingest_event(ReportedEvent::new(
                         new_event_id().to_string(),
                         session_id.to_string(),
                         Some(turn_id.to_string()),

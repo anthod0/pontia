@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 
 use pontia_agent_clients::{RuntimeBehavior, get_client_spec};
 use pontia_core::{
-    domain::{DomainEvent, EventSource, EventType},
+    domain::{EventSource, EventType, ReportedEvent},
     error::{Error, Result},
     ids::new_event_id,
 };
@@ -89,7 +89,7 @@ impl RuntimeObservationService {
         let ingest = EventIngestService::new(self.pool.clone());
         if let Some(turn_id) = session.current_turn_id.clone() {
             ingest
-                .ingest_event(DomainEvent::new(
+                .ingest_event(ReportedEvent::new(
                     new_event_id().to_string(),
                     session_id.to_string(),
                     Some(turn_id),
@@ -101,7 +101,7 @@ impl RuntimeObservationService {
                 .await?;
         }
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,

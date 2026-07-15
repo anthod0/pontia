@@ -4,6 +4,8 @@ use crate::models::sessions::{RuntimeBindingMetadataRow, SessionProjectionRow, S
 
 use pontia_core::Result;
 
+const LOAD_SESSION_PROJECTIONS_SQL: &str = "SELECT session_id, client_type, title, handle, role, description, execution_profile_id, execution_profile_version, state, current_turn_id, state_version, metadata FROM sessions WHERE session_id = ?";
+
 #[derive(Debug, Clone)]
 pub struct SessionProjectionUpsertRecord {
     pub session_id: String,
@@ -41,12 +43,24 @@ impl SqliteSessionRepository {
         &self,
         session_id: &str,
     ) -> Result<Vec<SessionProjectionRow>> {
-        Ok(sqlx::query_as::<_, SessionProjectionRow>(
-            "SELECT session_id, client_type, title, handle, role, description, execution_profile_id, execution_profile_version, state, current_turn_id, state_version, metadata FROM sessions WHERE session_id = ?",
+        Ok(
+            sqlx::query_as::<_, SessionProjectionRow>(LOAD_SESSION_PROJECTIONS_SQL)
+                .bind(session_id)
+                .fetch_all(&self.pool)
+                .await?,
         )
-        .bind(session_id)
-        .fetch_all(&self.pool)
-        .await?)
+    }
+
+    pub async fn load_projection_rows_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        session_id: &str,
+    ) -> Result<Vec<SessionProjectionRow>> {
+        Ok(
+            sqlx::query_as::<_, SessionProjectionRow>(LOAD_SESSION_PROJECTIONS_SQL)
+                .bind(session_id)
+                .fetch_all(&mut **tx)
+                .await?,
+        )
     }
 
     pub async fn upsert_projection_in_tx(

@@ -5,7 +5,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_application::{AppState, EventIngestService};
-use pontia_core::domain::{DomainEvent, EventSource, EventType};
+use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -26,8 +26,8 @@ fn event(
     session_id: &str,
     turn_id: Option<&str>,
     payload: Value,
-) -> DomainEvent {
-    DomainEvent::new(
+) -> ReportedEvent {
+    ReportedEvent::new(
         event_id.to_string(),
         session_id.to_string(),
         turn_id.map(str::to_string),
@@ -237,7 +237,7 @@ async fn external_api_falls_back_to_tmux_binding_capabilities_when_metadata_is_l
     let state = test_state().await;
     let service = EventIngestService::new(state.db());
     service
-        .ingest_event(DomainEvent::new(
+        .ingest_event(ReportedEvent::new(
             "evt_external_queries_legacy_cap_created".to_string(),
             "sess_external_queries_legacy_cap".to_string(),
             None,
@@ -249,7 +249,7 @@ async fn external_api_falls_back_to_tmux_binding_capabilities_when_metadata_is_l
         .await
         .unwrap();
     service
-        .ingest_event(DomainEvent::new(
+        .ingest_event(ReportedEvent::new(
             "evt_external_queries_legacy_cap_ready".to_string(),
             "sess_external_queries_legacy_cap".to_string(),
             None,
@@ -387,6 +387,7 @@ async fn external_api_lists_and_gets_turn_views() {
         "turn_external_queries_1"
     );
     assert_eq!(list_body["data"]["turns"][0]["state"], "completed");
+    assert_eq!(list_body["data"]["turns"][0]["turn_index"], 1);
 
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(
@@ -397,6 +398,7 @@ async fn external_api_lists_and_gets_turn_views() {
         get_body["data"]["turn"]["session_id"],
         "sess_external_queries_1"
     );
+    assert_eq!(get_body["data"]["turn"]["turn_index"], 1);
     assert_eq!(get_body["data"]["turn"]["input"]["summary"], "do work");
     assert_eq!(get_body["data"]["turn"]["output"]["summary"], "done");
     assert_eq!(get_body["data"]["turn"]["failure"], Value::Null);

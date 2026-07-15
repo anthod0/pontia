@@ -78,7 +78,7 @@ impl SessionCommandService {
         let ingest = EventIngestService::new(self.pool.clone());
 
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.clone(),
                 None,
@@ -98,7 +98,7 @@ impl SessionCommandService {
             ))
             .await?;
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.clone(),
                 None,
@@ -124,7 +124,7 @@ impl SessionCommandService {
             .await?;
 
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.clone(),
                 None,
@@ -136,7 +136,7 @@ impl SessionCommandService {
             .await?;
         if client_readiness_mode(&request.client_type)? == ReadinessMode::RuntimeManagerImmediate {
             ingest
-                .ingest_event(DomainEvent::new(
+                .ingest_event(ReportedEvent::new(
                     new_event_id().to_string(),
                     session_id.clone(),
                     None,
@@ -156,7 +156,7 @@ impl SessionCommandService {
             let plugin_owns_turn = client_spec.owns_initial_tmux_turn();
             if !plugin_owns_turn {
                 ingest
-                    .ingest_event(DomainEvent::new(
+                    .ingest_event(ReportedEvent::new(
                         new_event_id().to_string(),
                         session_id.clone(),
                         Some(turn_id.clone()),
@@ -170,7 +170,7 @@ impl SessionCommandService {
                     ))
                     .await?;
                 ingest
-                    .ingest_event(DomainEvent::new(
+                    .ingest_event(ReportedEvent::new(
                         new_event_id().to_string(),
                         session_id.clone(),
                         Some(turn_id.clone()),
@@ -342,7 +342,7 @@ impl SessionCommandService {
             .map(ToString::to_string);
 
         EventIngestService::new(self.pool.clone())
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,

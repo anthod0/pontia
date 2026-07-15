@@ -133,6 +133,7 @@ pub(crate) fn turn_row_to_view(row: TurnRow) -> Result<TurnView> {
     Ok(TurnView {
         turn_id: row.turn_id,
         session_id: row.session_id,
+        turn_index: row.turn_index,
         state: row.state,
         input: TurnInputView {
             summary: row.input_summary,
@@ -219,6 +220,7 @@ pub(crate) fn row_to_turn(row: TurnProjectionRow) -> Result<TurnProjection> {
     Ok(TurnProjection {
         turn_id: row.turn_id,
         session_id: row.session_id,
+        turn_index: row.turn_index,
         state: TurnState::from_str(&row.state)?,
         state_version: row.state_version,
         metadata: serde_json::from_str(&row.metadata)?,
@@ -242,5 +244,6 @@ pub(crate) fn row_to_event(row: DomainEventRow) -> Result<DomainEvent> {
         })?,
         seq: row.seq,
         payload: serde_json::from_str(&row.payload)?,
+        turn_index: row.turn_index,
     })
 }

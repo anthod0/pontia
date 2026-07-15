@@ -165,6 +165,30 @@ async fn internal_event_api_rejects_missing_required_schema_fields() {
 }
 
 #[tokio::test]
+async fn internal_event_api_rejects_pontia_owned_turn_index() {
+    let state = test_state().await;
+    let mut event = event_body(
+        "evt_internal_event_owned_index",
+        "turn.started",
+        "sess_internal_event_owned_index",
+        Some("turn_owned_index"),
+        1,
+    );
+    event["turn_index"] = json!(42);
+
+    let (status, body) = post_event(state, event).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Pontia-owned")
+    );
+}
+
+#[tokio::test]
 async fn internal_event_api_rejects_unknown_event_type() {
     let state = test_state().await;
     let (status, body) = post_event(

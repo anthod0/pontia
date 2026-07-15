@@ -9,7 +9,7 @@ use http_body_util::BodyExt;
 use pontia_application::{
     AgentBindingService, AppState, EventIngestService, UpsertAgentBindingRequest,
 };
-use pontia_core::domain::{DomainEvent, EventSource, EventType};
+use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use pontia_http as http;
 use serde_json::{Value, json};
 use tempfile::tempdir;
@@ -64,7 +64,7 @@ fn pi_session_dir(agent_dir: &std::path::Path, cwd: &std::path::Path) -> std::pa
 async fn seed_session_for_client(state: &AppState, session_id: &str, client_type: &str) {
     let service = EventIngestService::new(state.db());
     service
-        .ingest_event(DomainEvent::new(
+        .ingest_event(ReportedEvent::new(
             format!("evt_{session_id}_created"),
             session_id.to_string(),
             None,
@@ -83,7 +83,7 @@ async fn seed_session(state: &AppState, session_id: &str) {
 
 async fn seed_session_exited(state: &AppState, session_id: &str) {
     EventIngestService::new(state.db())
-        .ingest_event(DomainEvent::new(
+        .ingest_event(ReportedEvent::new(
             format!("evt_{session_id}_exited"),
             session_id.to_string(),
             None,

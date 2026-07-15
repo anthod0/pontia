@@ -15,6 +15,7 @@ pub struct TurnOutputView {
 pub struct TurnView {
     pub turn_id: String,
     pub session_id: String,
+    pub turn_index: i64,
     pub state: String,
     pub input: TurnInputView,
     pub output: TurnOutputView,

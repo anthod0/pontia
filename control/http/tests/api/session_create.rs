@@ -6,7 +6,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_application::{AppState, EventIngestService};
-use pontia_core::domain::{DomainEvent, EventSource, EventType};
+use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -561,7 +561,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
     let first_session_id = first.1["data"]["session"]["session_id"].as_str().unwrap();
 
     EventIngestService::new(state.db())
-        .ingest_event(DomainEvent::new(
+        .ingest_event(ReportedEvent::new(
             "evt_session_exited_for_handle_reuse".to_string(),
             first_session_id.to_string(),
             None,

@@ -3,7 +3,8 @@ use sqlx::SqlitePool;
 
 use pontia_core::{
     domain::{
-        DomainEvent, EventSource, EventType, ProjectionState, SessionProjection, TurnProjection,
+        DomainEvent, EventSource, EventType, ProjectionState, ReportedEvent, SessionProjection,
+        TurnProjection,
     },
     error::{Error, Result},
 };
@@ -28,7 +29,17 @@ impl EventIngestService {
         Self { pool }
     }
 
-    pub async fn ingest_event(&self, event: DomainEvent) -> Result<EventIngestResult> {
+    pub async fn ingest_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
+        self.ingest_domain_event(event.into()).await
+    }
+
+    async fn ingest_domain_event(&self, mut event: DomainEvent) -> Result<EventIngestResult> {
+        if event.event_type.is_turn_event() && event.turn_id.is_none() {
+            return Err(Error::Domain(format!(
+                "{} must carry turn_id",
+                event.event_type
+            )));
+        }
         if let Some(existing_version) = self
             .existing_event_state_version(&event.event_id, &event.session_id)
             .await?
@@ -43,12 +54,22 @@ impl EventIngestService {
             });
         }
 
-        let sessions = self.load_session_projection(&event.session_id).await?;
-        let turns = self.load_turn_projections(&event.session_id).await?;
+        let mut tx = self.pool.begin().await?;
+        self.enrich_turn_index_in_tx(&mut tx, &mut event).await?;
+        let sessions =
+            SqliteSessionRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
+                .await?
+                .into_iter()
+                .map(row_to_session)
+                .collect::<Result<Vec<_>>>()?;
+        let turns = SqliteTurnRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
+            .await?
+            .into_iter()
+            .map(row_to_turn)
+            .collect::<Result<Vec<_>>>()?;
         let mut projection = ProjectionState::with_existing(sessions, turns);
         projection.apply(&event)?;
 
-        let mut tx = self.pool.begin().await?;
         let payload = serde_json::to_string(&event.payload)?;
         let occurred_at = event
             .occurred_at
@@ -69,6 +90,7 @@ impl EventIngestService {
                 occurred_at,
                 seq: event.seq,
                 payload,
+                turn_index: event.turn_index,
             },
         )
         .await?;
@@ -106,6 +128,7 @@ impl EventIngestService {
                     TurnProjectionUpsertRecord {
                         turn_id: turn.turn_id.clone(),
                         session_id: turn.session_id.clone(),
+                        turn_index: turn.turn_index,
                         state: turn.state.to_string(),
                         state_version: turn.state_version,
                         metadata,
@@ -142,6 +165,32 @@ impl EventIngestService {
             turn_id: event.turn_id,
             state_version,
         })
+    }
+
+    async fn enrich_turn_index_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        event: &mut DomainEvent,
+    ) -> Result<()> {
+        if !event.event_type.is_turn_event() {
+            if event.turn_index.is_some() {
+                return Err(Error::Domain(
+                    "session event cannot carry Pontia-owned turn_index".to_string(),
+                ));
+            }
+            return Ok(());
+        }
+        let turn_id = event.turn_id.as_deref().expect("validated turn_id");
+
+        SqliteTurnRepository::serialize_session_turn_writes_in_tx(tx, &event.session_id).await?;
+        let persisted =
+            SqliteTurnRepository::turn_index_in_tx(tx, &event.session_id, turn_id).await?;
+        let turn_index = match persisted {
+            Some(turn_index) => turn_index,
+            None => SqliteTurnRepository::allocate_turn_index_in_tx(tx, &event.session_id).await?,
+        };
+        event.turn_index = Some(turn_index);
+        Ok(())
     }
 
     async fn link_started_turn_to_inbox_message(&self, event: &DomainEvent) -> Result<()> {
@@ -307,14 +356,6 @@ impl EventIngestService {
             .await?;
 
         rows.into_iter().map(row_to_session).collect()
-    }
-
-    async fn load_turn_projections(&self, session_id: &str) -> Result<Vec<TurnProjection>> {
-        let rows = SqliteTurnRepository::new(self.pool.clone())
-            .load_projection_rows(session_id)
-            .await?;
-
-        rows.into_iter().map(row_to_turn).collect()
     }
 }
 

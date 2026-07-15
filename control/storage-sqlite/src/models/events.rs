@@ -42,4 +42,5 @@ pub struct DomainEventRow {
     pub occurred_at: String,
     pub seq: Option<i64>,
     pub payload: String,
+    pub turn_index: Option<i64>,
 }

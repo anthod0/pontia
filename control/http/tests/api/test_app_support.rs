@@ -1,6 +1,6 @@
 use crate::test_app::TestApp;
 use pontia_application::EventIngestService;
-use pontia_core::domain::{DomainEvent, EventSource, EventType};
+use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use serde_json::json;
 use sqlx::query_scalar;
 
@@ -48,7 +48,7 @@ async fn build_state_remains_usable_after_helper_returns() {
 async fn build_state_supports_event_projection_updates() {
     let state = TestApp::builder().build_state().await;
     EventIngestService::new(state.db())
-        .ingest_event(DomainEvent::new(
+        .ingest_event(ReportedEvent::new(
             "evt_test_app_projection".to_string(),
             "sess_test_app_projection".to_string(),
             None,

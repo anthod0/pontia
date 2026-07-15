@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use pontia_agent_clients as agent_clients;
 use pontia_agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec};
 use pontia_core::{
-    domain::{DomainEvent, EventSource, EventType},
+    domain::{EventSource, EventType, ReportedEvent},
     error::{Error, Result},
     ids::{new_event_id, new_turn_id},
 };
@@ -127,7 +127,7 @@ impl TurnCommandService {
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 Some(turn_id.clone()),
@@ -141,7 +141,7 @@ impl TurnCommandService {
             ))
             .await?;
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 Some(turn_id.clone()),
@@ -165,7 +165,7 @@ impl TurnCommandService {
                 .submit_input(&session.client_type, agent_input.clone())?;
             if behavior.auto_start_turn {
                 ingest
-                    .ingest_event(DomainEvent::new(
+                    .ingest_event(ReportedEvent::new(
                         new_event_id().to_string(),
                         session_id.to_string(),
                         Some(turn_id.clone()),
@@ -221,7 +221,7 @@ impl TurnCommandService {
                         }) {
                         Ok(()) => {
                             ingest
-                                .ingest_event(DomainEvent::new(
+                                .ingest_event(ReportedEvent::new(
                                     new_event_id().to_string(),
                                     session_id.to_string(),
                                     Some(turn_id.clone()),
@@ -234,7 +234,7 @@ impl TurnCommandService {
                         }
                         Err(error) => {
                             ingest
-                                .ingest_event(DomainEvent::new(
+                                .ingest_event(ReportedEvent::new(
                                     new_event_id().to_string(),
                                     session_id.to_string(),
                                     Some(turn_id.clone()),
@@ -249,7 +249,7 @@ impl TurnCommandService {
                 }
                 None => {
                     ingest
-                        .ingest_event(DomainEvent::new(
+                        .ingest_event(ReportedEvent::new(
                             new_event_id().to_string(),
                             session_id.to_string(),
                             Some(turn_id.clone()),

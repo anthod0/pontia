@@ -26,6 +26,7 @@ pub struct SessionProjection {
 pub struct TurnProjection {
     pub turn_id: String,
     pub session_id: String,
+    pub turn_index: i64,
     pub state: TurnState,
     pub state_version: i64,
     pub metadata: Value,
@@ -281,11 +282,22 @@ impl ProjectionState {
         new_state: TurnState,
     ) -> crate::error::Result<()> {
         let turn_id = event.turn_id.as_deref().expect("validated turn_id");
+        let turn_index = event.turn_index.ok_or_else(|| {
+            Error::Domain(format!(
+                "domain event {} for turn {turn_id} is missing Pontia-owned turn_index",
+                event.event_id
+            ))
+        })?;
 
-        if let Some(existing) = self.turns.get(turn_id)
-            && existing.state.is_terminal()
-        {
-            return Ok(());
+        if let Some(existing) = self.turns.get(turn_id) {
+            if existing.session_id != event.session_id || existing.turn_index != turn_index {
+                return Err(Error::Domain(format!(
+                    "turn {turn_id} identity does not match immutable session_id and turn_index"
+                )));
+            }
+            if existing.state.is_terminal() {
+                return Ok(());
+            }
         }
 
         if new_state.is_active()
@@ -305,6 +317,7 @@ impl ProjectionState {
             .or_insert_with(|| TurnProjection {
                 turn_id: turn_id.to_string(),
                 session_id: event.session_id.clone(),
+                turn_index,
                 state: TurnState::Queued,
                 state_version: 0,
                 metadata: Value::Object(Default::default()),

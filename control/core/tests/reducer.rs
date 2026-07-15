@@ -4,7 +4,7 @@ use pontia_core::domain::{
 use serde_json::json;
 
 fn event(event_type: EventType, session_id: &str, turn_id: Option<&str>) -> DomainEvent {
-    DomainEvent::new(
+    let event = DomainEvent::new(
         format!("evt_{:?}_{:?}", event_type, turn_id).replace(['.', '"', ' '], "_"),
         session_id.to_string(),
         turn_id.map(str::to_string),
@@ -12,7 +12,12 @@ fn event(event_type: EventType, session_id: &str, turn_id: Option<&str>) -> Doma
         "generic".to_string(),
         event_type,
         json!({}),
-    )
+    );
+    match turn_id {
+        Some("turn_2") => event.with_turn_index(2),
+        Some(_) => event.with_turn_index(1),
+        None => event,
+    }
 }
 
 #[test]
@@ -115,15 +120,18 @@ fn reducer_derives_missing_session_title_from_first_turn_input() {
         .apply(&event(EventType::SessionCreated, "sess_1", None))
         .unwrap();
     projection
-        .apply(&DomainEvent::new(
-            "evt_turn_started_title".to_string(),
-            "sess_1".to_string(),
-            Some("turn_1".to_string()),
-            EventSource::AgentAdapter,
-            "pi".to_string(),
-            EventType::TurnStarted,
-            json!({ "input": { "summary": "  inspect TUI-created task titles\nwith details" } }),
-        ))
+        .apply(
+            &DomainEvent::new(
+                "evt_turn_started_title".to_string(),
+                "sess_1".to_string(),
+                Some("turn_1".to_string()),
+                EventSource::AgentAdapter,
+                "pi".to_string(),
+                EventType::TurnStarted,
+                json!({ "input": { "summary": "  inspect TUI-created task titles\nwith details" } }),
+            )
+            .with_turn_index(1),
+        )
         .unwrap();
 
     assert_eq!(
@@ -161,6 +169,36 @@ fn reducer_rejects_second_active_turn_in_same_session() {
         Some("turn_1")
     );
     assert!(projection.turn("turn_2").is_none());
+}
+
+#[test]
+fn reducer_rejects_a_changed_turn_index_during_replay() {
+    let mut projection = ProjectionState::default();
+    projection
+        .apply(&event(EventType::SessionCreated, "sess_1", None))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnCompleted, "sess_1", Some("turn_1")))
+        .unwrap();
+
+    let changed = DomainEvent::new(
+        "evt_changed_index".to_string(),
+        "sess_1".to_string(),
+        Some("turn_1".to_string()),
+        EventSource::ExternalApi,
+        "generic".to_string(),
+        EventType::TurnOutput,
+        json!({}),
+    )
+    .with_turn_index(2);
+    let error = projection
+        .apply(&changed)
+        .expect_err("turn index must be immutable during replay");
+    assert!(
+        error
+            .to_string()
+            .contains("immutable session_id and turn_index")
+    );
 }
 
 #[test]

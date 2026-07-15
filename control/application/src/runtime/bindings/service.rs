@@ -4,7 +4,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use pontia_agent_clients as agent_clients;
 use pontia_core::{
-    domain::{DomainEvent, EventSource, EventType},
+    domain::{EventSource, EventType, ReportedEvent},
     error::{Error, Result},
     ids::{new_event_id, new_session_id},
 };
@@ -296,7 +296,7 @@ impl RuntimeBindingUpsertService {
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,
@@ -307,7 +307,7 @@ impl RuntimeBindingUpsertService {
             ))
             .await?;
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,
@@ -328,7 +328,7 @@ impl RuntimeBindingUpsertService {
         let session_id = new_session_id().to_string();
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.clone(),
                 None,
@@ -345,7 +345,7 @@ impl RuntimeBindingUpsertService {
             ))
             .await?;
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.clone(),
                 None,
@@ -356,7 +356,7 @@ impl RuntimeBindingUpsertService {
             ))
             .await?;
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.clone(),
                 None,

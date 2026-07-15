@@ -4,8 +4,8 @@ use pontia_agent_clients as agent_clients;
 pub use pontia_config::FilePickerConfig;
 use pontia_core::{
     domain::{
-        DomainEvent, EventSource, EventType, SessionProjection, SessionState, TurnProjection,
-        TurnState,
+        DomainEvent, EventSource, EventType, ReportedEvent, SessionProjection, SessionState,
+        TurnProjection, TurnState,
     },
     error::{Error, Result},
     ids::{new_event_id, new_message_id, new_session_id, new_turn_id},

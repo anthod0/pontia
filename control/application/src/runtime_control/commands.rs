@@ -103,7 +103,7 @@ impl RuntimeControlService {
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 Some(turn_id.to_string()),
@@ -114,7 +114,7 @@ impl RuntimeControlService {
             ))
             .await?;
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 Some(turn_id.to_string()),
@@ -189,7 +189,7 @@ impl RuntimeControlService {
                 }
             }
             EventIngestService::new(self.pool.clone())
-                .ingest_event(DomainEvent::new(
+                .ingest_event(ReportedEvent::new(
                     new_event_id().to_string(),
                     session_id.to_string(),
                     None,
@@ -247,7 +247,7 @@ impl RuntimeControlService {
         let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,
@@ -287,7 +287,7 @@ impl RuntimeControlService {
             )?;
         self.upsert_runtime_binding(session_id, &runtime).await?;
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,
@@ -299,7 +299,7 @@ impl RuntimeControlService {
             .await?;
         if client_readiness_mode(&session.client_type)? == ReadinessMode::RuntimeManagerImmediate {
             ingest
-                .ingest_event(DomainEvent::new(
+                .ingest_event(ReportedEvent::new(
                     new_event_id().to_string(),
                     session_id.to_string(),
                     None,
@@ -378,7 +378,7 @@ impl RuntimeControlService {
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,
@@ -410,7 +410,7 @@ impl RuntimeControlService {
         )?;
         self.upsert_runtime_binding(session_id, &runtime).await?;
         ingest
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,
@@ -422,7 +422,7 @@ impl RuntimeControlService {
             .await?;
         if client_readiness_mode(&session.client_type)? == ReadinessMode::RuntimeManagerImmediate {
             ingest
-                .ingest_event(DomainEvent::new(
+                .ingest_event(ReportedEvent::new(
                     new_event_id().to_string(),
                     session_id.to_string(),
                     None,

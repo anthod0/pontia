@@ -330,6 +330,7 @@ export interface TaskDagView {
 export interface TurnView {
   turn_id: string;
   session_id: string;
+  turn_index: number;
   state: TurnState | string;
   input: { summary?: string; [key: string]: unknown } | null;
   output: { summary?: string; [key: string]: unknown } | null;

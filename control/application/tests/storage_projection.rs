@@ -1,5 +1,7 @@
 use pontia_application::EventIngestService;
-use pontia_core::domain::{DomainEvent, EventSource, EventType, SessionState, TurnState};
+use pontia_core::domain::{
+    EventSource, EventType, ProjectionState, ReportedEvent, SessionState, TurnState,
+};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 
@@ -18,8 +20,8 @@ fn event(
     event_type: EventType,
     session_id: &str,
     turn_id: Option<&str>,
-) -> DomainEvent {
-    DomainEvent::new(
+) -> ReportedEvent {
+    ReportedEvent::new(
         event_id.to_string(),
         session_id.to_string(),
         turn_id.map(str::to_string),
@@ -168,4 +170,158 @@ async fn storage_rejects_second_active_turn() {
             .as_deref(),
         Some("turn_1")
     );
+}
+
+#[tokio::test]
+async fn session_event_turn_context_does_not_allocate_a_turn_index() {
+    let service = service().await;
+    service
+        .ingest_event(event(
+            "evt_session",
+            EventType::SessionCreated,
+            "sess_1",
+            None,
+        ))
+        .await
+        .unwrap();
+    service
+        .ingest_event(event(
+            "evt_session_context",
+            EventType::SessionTitleUpdated,
+            "sess_1",
+            Some("turn_context"),
+        ))
+        .await
+        .unwrap();
+    service
+        .ingest_event(event(
+            "evt_turn",
+            EventType::TurnCompleted,
+            "sess_1",
+            Some("turn_1"),
+        ))
+        .await
+        .unwrap();
+
+    let events = service.list_events("sess_1").await.unwrap();
+    assert_eq!(events[1].turn_index, None);
+    assert_eq!(
+        service
+            .get_turn("turn_1")
+            .await
+            .unwrap()
+            .unwrap()
+            .turn_index,
+        1
+    );
+}
+
+#[tokio::test]
+async fn allocates_monotonic_indexes_and_reuses_them_for_later_events_and_replay() {
+    let service = service().await;
+    service
+        .ingest_event(event(
+            "evt_session",
+            EventType::SessionCreated,
+            "sess_1",
+            None,
+        ))
+        .await
+        .unwrap();
+
+    for (event_id, event_type, turn_id) in [
+        ("evt_1", EventType::TurnStarted, "turn_1"),
+        ("evt_2", EventType::TurnCompleted, "turn_1"),
+        ("evt_3", EventType::TurnStarted, "turn_2"),
+        ("evt_4", EventType::TurnCompleted, "turn_2"),
+    ] {
+        service
+            .ingest_event(event(event_id, event_type, "sess_1", Some(turn_id)))
+            .await
+            .unwrap();
+    }
+
+    assert_eq!(
+        service
+            .get_turn("turn_1")
+            .await
+            .unwrap()
+            .unwrap()
+            .turn_index,
+        1
+    );
+    assert_eq!(
+        service
+            .get_turn("turn_2")
+            .await
+            .unwrap()
+            .unwrap()
+            .turn_index,
+        2
+    );
+
+    let events = service.list_events("sess_1").await.unwrap();
+    let turn_one_indexes: Vec<_> = events
+        .iter()
+        .filter(|event| event.turn_id.as_deref() == Some("turn_1"))
+        .map(|event| event.turn_index)
+        .collect();
+    assert_eq!(turn_one_indexes, vec![Some(1), Some(1)]);
+
+    let mut replay = ProjectionState::default();
+    for event in &events {
+        replay.apply(event).unwrap();
+    }
+    assert_eq!(replay.turn("turn_1").unwrap().turn_index, 1);
+    assert_eq!(replay.turn("turn_2").unwrap().turn_index, 2);
+}
+
+#[tokio::test]
+async fn concurrent_first_events_receive_distinct_session_local_indexes() {
+    let service = service().await;
+    service
+        .ingest_event(event(
+            "evt_session",
+            EventType::SessionCreated,
+            "sess_1",
+            None,
+        ))
+        .await
+        .unwrap();
+
+    let left = service.clone();
+    let right = service.clone();
+    let (left_result, right_result) = tokio::join!(
+        left.ingest_event(event(
+            "evt_left",
+            EventType::TurnCompleted,
+            "sess_1",
+            Some("turn_left"),
+        )),
+        right.ingest_event(event(
+            "evt_right",
+            EventType::TurnCompleted,
+            "sess_1",
+            Some("turn_right"),
+        )),
+    );
+    left_result.unwrap();
+    right_result.unwrap();
+
+    let mut indexes = vec![
+        service
+            .get_turn("turn_left")
+            .await
+            .unwrap()
+            .unwrap()
+            .turn_index,
+        service
+            .get_turn("turn_right")
+            .await
+            .unwrap()
+            .unwrap()
+            .turn_index,
+    ];
+    indexes.sort_unstable();
+    assert_eq!(indexes, vec![1, 2]);
 }

@@ -5,7 +5,7 @@ use pontia_application::{
     WorkItemDraft, WorkItemEdgeDraft,
 };
 use pontia_core::{
-    domain::{DomainEvent, EventSource, EventType},
+    domain::{EventSource, EventType, ReportedEvent},
     ids::{new_event_id, new_task_id},
 };
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
@@ -104,7 +104,7 @@ async fn ingest_turn_completed(
     payload: serde_json::Value,
 ) {
     EventIngestService::new(pool.clone())
-        .ingest_event(DomainEvent::new(
+        .ingest_event(ReportedEvent::new(
             new_event_id().to_string(),
             session_id.to_string(),
             Some(turn_id.to_string()),
@@ -119,7 +119,7 @@ async fn ingest_turn_completed(
 
 async fn ingest_turn_failed(pool: &SqlitePool, session_id: &str, turn_id: &str, message: &str) {
     EventIngestService::new(pool.clone())
-        .ingest_event(DomainEvent::new(
+        .ingest_event(ReportedEvent::new(
             new_event_id().to_string(),
             session_id.to_string(),
             Some(turn_id.to_string()),

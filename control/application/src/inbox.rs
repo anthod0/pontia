@@ -343,7 +343,7 @@ impl InboxCommandService {
         payload: Value,
     ) -> Result<()> {
         EventIngestService::new(self.pool.clone())
-            .ingest_event(DomainEvent::new(
+            .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,

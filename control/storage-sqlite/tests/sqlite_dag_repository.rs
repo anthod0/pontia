@@ -188,8 +188,8 @@ async fn sqlite_dag_repository_lists_proposals_with_existing_filters_and_order()
     .await
     .expect("insert session");
     sqlx::query(
-        r#"INSERT INTO turns (turn_id, session_id, state)
-           VALUES ('turn_planner', 'sess_planner', 'completed')"#,
+        r#"INSERT INTO turns (turn_id, session_id, turn_index, state)
+           VALUES ('turn_planner', 'sess_planner', 1, 'completed')"#,
     )
     .execute(&pool)
     .await

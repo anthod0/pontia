@@ -16,7 +16,7 @@ use pontia_application::{
     RuntimeBindingUpsertService,
 };
 use pontia_core::{
-    domain::{DomainEvent, EventSource, EventType},
+    domain::{DomainEvent, EventSource, EventType, ReportedEvent},
     error::Error,
 };
 use pontia_dag::DagRunResultService;
@@ -36,6 +36,7 @@ pub struct InternalEventRequest {
     time: String,
     seq: Option<i64>,
     payload: Value,
+    turn_index: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -111,7 +112,8 @@ pub async fn post_event(
     request: Result<Json<InternalEventRequest>, JsonRejection>,
 ) -> Result<Json<InternalEventResponse>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let event = request.into_domain_event()?;
+    let reported_event = request.into_reported_event()?;
+    let event = DomainEvent::from(reported_event.clone());
     InternalEventValidationService::new()
         .validate(&event)
         .map_err(domain_error_as_invalid_request)?;
@@ -138,7 +140,7 @@ pub async fn post_event(
     }
 
     let warnings = service.sequence_warnings(&event).await?;
-    let result = service.ingest_event(event.clone()).await?;
+    let result = service.ingest_event(reported_event).await?;
     if !result.duplicate {
         DagRunResultService::with_graph(state.db(), state.graph())
             .sync_from_turn_event(&event)
@@ -183,7 +185,7 @@ fn domain_error_as_invalid_request(error: Error) -> ApiError {
 }
 
 impl InternalEventRequest {
-    fn into_domain_event(self) -> Result<DomainEvent, ApiError> {
+    fn into_reported_event(self) -> Result<ReportedEvent, ApiError> {
         let source = EventSource::from_str(&self.source)
             .map_err(|err| ApiError::invalid_request(err.to_string()))?;
         let event_type = EventType::from_str(&self.event_type)
@@ -193,6 +195,11 @@ impl InternalEventRequest {
             return Err(ApiError::invalid_request(format!(
                 "event {event_type} requires turn_id"
             )));
+        }
+        if self.turn_index.is_some() {
+            return Err(ApiError::invalid_request(
+                "turn_index is Pontia-owned and cannot be reported",
+            ));
         }
 
         if !self.payload.is_object() {
@@ -217,7 +224,7 @@ impl InternalEventRequest {
         let occurred_at = OffsetDateTime::parse(&self.time, &Rfc3339)
             .map_err(|err| ApiError::invalid_request(format!("invalid time: {err}")))?;
 
-        Ok(DomainEvent {
+        Ok(ReportedEvent {
             event_id: self.event_id,
             session_id: self.session_id,
             turn_id: self.turn_id,

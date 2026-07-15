@@ -131,7 +131,7 @@ pub async fn insert_dag_session_with_client(
     .await
     .expect("insert session");
     sqlx::query(
-        "INSERT INTO turns (turn_id, session_id, state, metadata) VALUES (?, ?, 'running', ?)",
+        "INSERT INTO turns (turn_id, session_id, turn_index, state, metadata) VALUES (?, ?, 1, 'running', ?)",
     )
     .bind(turn_id)
     .bind(session_id)
@@ -283,8 +283,8 @@ pub async fn insert_proposal(pool: &SqlitePool, proposal_id: &str, task_id: &str
     .await
     .expect("insert proposal session");
     sqlx::query(
-        r#"INSERT OR IGNORE INTO turns (turn_id, session_id, state, metadata)
-           VALUES (?, ?, 'completed', ?)"#,
+        r#"INSERT OR IGNORE INTO turns (turn_id, session_id, turn_index, state, metadata)
+           VALUES (?, ?, 1, 'completed', ?)"#,
     )
     .bind(&turn_id)
     .bind(&session_id)
