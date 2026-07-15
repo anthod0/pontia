@@ -2,6 +2,7 @@ use crate::test_app::TestApp;
 use std::{
     fs,
     io::Write,
+    path::PathBuf,
     sync::{Arc, Mutex as StdMutex},
 };
 
@@ -123,6 +124,64 @@ fn pi_session_dir(agent_dir: &std::path::Path, cwd: &std::path::Path) -> std::pa
             .replace(['/', '\\', ':'], "-")
     );
     agent_dir.join("sessions").join(safe)
+}
+
+struct ActivePiTimelineFixture {
+    _temp: tempfile::TempDir,
+    state: AppState,
+    session_id: &'static str,
+    transcript: PathBuf,
+}
+
+async fn active_pi_timeline_fixture(
+    session_id: &'static str,
+    session_key: &str,
+    turn_id: &str,
+    started_event_id: &str,
+) -> ActivePiTimelineFixture {
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let state = test_state().await;
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(
+        &transcript,
+        b"{\"type\":\"message\",\"id\":\"root\",\"parentId\":null}\n",
+    )
+    .unwrap();
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    post_pi_turn_event(
+        state.clone(),
+        session_id,
+        turn_id,
+        started_event_id,
+        "turn.started",
+        json!({ "previous_leaf_id": "root" }),
+    )
+    .await;
+
+    ActivePiTimelineFixture {
+        _temp: temp,
+        state,
+        session_id,
+        transcript,
+    }
 }
 
 async fn seed_session_for_client(state: &AppState, session_id: &str, client_type: &str) {
@@ -257,6 +316,55 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
             .as_str()
             .unwrap()
             .contains("turn_unsealed")
+    );
+}
+
+#[tokio::test]
+async fn turn_timeline_only_allows_the_session_current_globally_newest_open_turn() {
+    let state = test_state().await;
+    let session_id = "sess_open_turn_qualification";
+    seed_session(&state, session_id).await;
+    sqlx::query(
+        "INSERT INTO turns (turn_id, session_id, turn_index, head_cursor, state) VALUES ('turn_open', ?, 1, 'head', 'running')",
+    )
+    .bind(session_id)
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "turn_timeline_unavailable");
+
+    sqlx::query("UPDATE sessions SET current_turn_id = 'turn_open' WHERE session_id = ?")
+        .bind(session_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO turns (turn_id, session_id, turn_index, head_cursor, tail_cursor, state) VALUES ('turn_newer', ?, 2, 'head', 'tail', 'completed')",
+    )
+    .bind(session_id)
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward&limit=1"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "turn_timeline_unavailable");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("turn_open")
     );
 }
 
@@ -575,6 +683,177 @@ async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_index() {
             .unwrap()
             .contains("question one")
     );
+}
+
+#[tokio::test]
+async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_boundaries() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let fixture = active_pi_timeline_fixture(
+        "sess_active_turn_empty",
+        "active-turn-empty",
+        "turn_active",
+        "evt_active_turn_started",
+    )
+    .await;
+    let state = fixture.state.clone();
+    let session_id = fixture.session_id;
+    let transcript = &fixture.transcript;
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["data"]["items"], json!([]));
+    assert!(body["data"]["next_turn_id"].is_null());
+
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            concat!(
+                "{\"type\":\"message\",\"id\":\"user\",\"parentId\":\"root\",\"message\":{\"role\":\"user\",\"content\":\"question\"}}\n",
+                "{\"type\":\"message\",\"id\":\"answer\",\"parentId\":\"user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"partial answer\"}]}}\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let (status, growing) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{growing:?}");
+    assert_eq!(growing["data"]["items"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        growing["data"]["items"][1]["content_preview"],
+        "partial answer"
+    );
+
+    let active_turn = EventIngestService::new(state.db())
+        .get_turn("turn_active")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(active_turn.head_cursor.is_some());
+    assert!(active_turn.tail_cursor.is_none());
+
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            b"{\"type\":\"message\",\"id\":\"final\",\"parentId\":\"answer\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"final answer\"}]}}\n",
+        )
+        .unwrap();
+    let (status, grown) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{grown:?}");
+    assert_eq!(grown["data"]["items"].as_array().unwrap().len(), 3);
+    assert_eq!(grown["data"]["items"][2]["content_preview"], "final answer");
+    assert!(
+        EventIngestService::new(state.db())
+            .get_turn("turn_active")
+            .await
+            .unwrap()
+            .unwrap()
+            .tail_cursor
+            .is_none()
+    );
+
+    post_pi_turn_event(
+        state.clone(),
+        session_id,
+        "turn_active",
+        "evt_active_turn_completed",
+        "turn.completed",
+        json!({ "terminal_leaf_id": "final" }),
+    )
+    .await;
+    let (status, sealed) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{sealed:?}");
+    assert_eq!(sealed["data"]["items"], grown["data"]["items"]);
+    assert!(
+        EventIngestService::new(state.db())
+            .get_turn("turn_active")
+            .await
+            .unwrap()
+            .unwrap()
+            .tail_cursor
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn turn_timeline_rejects_unassignable_active_pi_entries() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let fixture = active_pi_timeline_fixture(
+        "sess_active_turn_unassignable",
+        "active-turn-unassignable",
+        "turn_active_invalid",
+        "evt_active_turn_invalid_started",
+    )
+    .await;
+    let state = fixture.state.clone();
+    let session_id = fixture.session_id;
+    let transcript = &fixture.transcript;
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            concat!(
+                "{\"type\":\"message\",\"parentId\":\"root\",\"message\":{\"role\":\"user\",\"content\":\"missing id\"}}\n",
+                "{\"type\":\"message\",\"id\":\"answer\",\"parentId\":\"root\",\"message\":{\"role\":\"assistant\",\"content\":\"answer\"}}\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "turn_timeline_invalid");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("turn_active_invalid")
+    );
+
+    let root = b"{\"type\":\"message\",\"id\":\"root\",\"parentId\":null}\n";
+    for invalid_suffix in [
+        concat!(
+            "{\"type\":\"message\",\"id\":\"branch_one\",\"parentId\":\"root\"}\n",
+            "{\"type\":\"message\",\"id\":\"branch_two\",\"parentId\":\"root\"}\n"
+        )
+        .as_bytes(),
+        b"{not json}\n".as_slice(),
+        b"{\"type\":\"message\",\"id\":\"partial\",\"parentId\":\"root\"}".as_slice(),
+    ] {
+        fs::write(&transcript, [root.as_slice(), invalid_suffix].concat()).unwrap();
+        let (status, body) = get_json(
+            state.clone(),
+            &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+        assert_eq!(body["error"]["code"], "turn_timeline_invalid");
+    }
 }
 
 async fn post_pi_turn_event(

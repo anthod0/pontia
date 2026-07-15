@@ -62,7 +62,7 @@ pub struct TurnTimelineRange {
     pub turn_id: String,
     pub turn_index: i64,
     pub head_cursor: String,
-    pub tail_cursor: String,
+    pub tail_cursor: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

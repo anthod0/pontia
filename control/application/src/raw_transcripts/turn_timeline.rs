@@ -8,7 +8,7 @@ use pontia_agent_clients::{
         TurnTimelineReadRequest,
     },
 };
-use pontia_core::error::Error;
+use pontia_core::{domain::TurnState, error::Error};
 use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 
 use crate::{AgentBindingService, ExternalQueryService};
@@ -62,13 +62,12 @@ impl TurnTimelineService {
         anchor_turn_id: Option<String>,
         limit: usize,
     ) -> Result<TurnTimelinePage, TurnTimelineServiceError> {
-        if ExternalQueryService::new(self.pool.clone())
+        let Some(session) = ExternalQueryService::new(self.pool.clone())
             .get_session(&session_id)
             .await?
-            .is_none()
-        {
+        else {
             return Err(TurnTimelineServiceError::SessionNotFound);
-        }
+        };
 
         let turns = SqliteTurnRepository::new(self.pool.clone())
             .list_turns(&session_id)
@@ -106,14 +105,28 @@ impl TurnTimelineService {
         let mut selected = directional.into_iter().take(limit).collect::<Vec<_>>();
         selected.sort_by_key(|turn| turn.turn_index);
 
+        let newest_turn_id = turns.last().map(|turn| turn.turn_id.as_str());
         let mut ranges = Vec::with_capacity(selected.len());
         for turn in selected {
-            let (Some(head_cursor), Some(tail_cursor)) =
-                (turn.head_cursor.clone(), turn.tail_cursor.clone())
-            else {
+            let turn_state = turn.state.parse::<TurnState>()?;
+            let Some(head_cursor) = turn.head_cursor.clone() else {
                 return Err(TurnTimelineServiceError::TurnUnavailable {
                     turn_id: turn.turn_id.clone(),
                 });
+            };
+            let tail_cursor = match turn.tail_cursor.clone() {
+                Some(tail_cursor) => Some(tail_cursor),
+                None if session.current_turn_id.as_deref() == Some(turn.turn_id.as_str())
+                    && newest_turn_id == Some(turn.turn_id.as_str())
+                    && turn_state.is_active() =>
+                {
+                    None
+                }
+                None => {
+                    return Err(TurnTimelineServiceError::TurnUnavailable {
+                        turn_id: turn.turn_id.clone(),
+                    });
+                }
             };
             ranges.push(TurnTimelineRange {
                 turn_id: turn.turn_id.clone(),

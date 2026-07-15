@@ -151,26 +151,44 @@ impl TurnTimelineReader for PiTimelineAdapter {
         let mut items = Vec::new();
         for range in request.ranges {
             let head = decode_range_cursor(&range.turn_id, &range.head_cursor, &request.source.id)?;
-            let tail = decode_range_cursor(&range.turn_id, &range.tail_cursor, &request.source.id)?;
             if head.native_entry_anchor.is_none() && range.turn_index != 1 {
                 return invalid_range(
                     &range.turn_id,
                     "only the first Session Turn may have a null head anchor",
                 );
             }
-            if head.byte_offset > tail.byte_offset || tail.byte_offset > source_length {
+            let (tail_offset, terminal_id, is_active) = match range.tail_cursor.as_deref() {
+                Some(tail_cursor) => {
+                    let tail =
+                        decode_range_cursor(&range.turn_id, tail_cursor, &request.source.id)?;
+                    let Some(terminal_id) = tail.native_entry_anchor else {
+                        return invalid_range(
+                            &range.turn_id,
+                            "terminal native entry anchor is missing",
+                        );
+                    };
+                    (tail.byte_offset, Some(terminal_id), false)
+                }
+                None => (source_length, None, true),
+            };
+            if head.byte_offset > tail_offset || tail_offset > source_length {
                 return invalid_range(
                     &range.turn_id,
                     "cursor offsets are reversed or outside the source",
                 );
             }
-            let Some(terminal_id) = tail.native_entry_anchor.as_deref() else {
-                return invalid_range(&range.turn_id, "terminal native entry anchor is missing");
-            };
 
-            let bytes =
-                read_range_from_source(&request.source, head.byte_offset, tail.byte_offset)?;
-            let parsed = parse_window(&range.turn_id, &bytes, head.byte_offset)?;
+            let bytes = read_range_from_source(&request.source, head.byte_offset, tail_offset)?;
+            let (parsed, record_count) = parse_window(&range.turn_id, &bytes, head.byte_offset)?;
+            if is_active && record_count == 0 {
+                continue;
+            }
+            if is_active && parsed.len() != record_count {
+                return invalid_range(
+                    &range.turn_id,
+                    "active timeline contains an entry without a native id",
+                );
+            }
             let mut by_id = HashMap::new();
             for (index, (entry_id, _)) in parsed.iter().enumerate() {
                 if by_id.insert(entry_id.as_str(), index).is_some() {
@@ -179,6 +197,10 @@ impl TurnTimelineReader for PiTimelineAdapter {
             }
 
             let mut chain = Vec::new();
+            let terminal_id = terminal_id
+                .as_deref()
+                .or_else(|| parsed.last().map(|(entry_id, _)| entry_id.as_str()))
+                .expect("an active range with no parsed entries was handled above");
             let mut current = terminal_id;
             let mut visited = HashSet::new();
             loop {
@@ -205,6 +227,12 @@ impl TurnTimelineReader for PiTimelineAdapter {
                 current = parent;
             }
             chain.reverse();
+            if is_active && chain.len() != parsed.len() {
+                return invalid_range(
+                    &range.turn_id,
+                    "active timeline entries do not form one consecutive parent chain",
+                );
+            }
 
             for index in chain {
                 let (entry_id, entry) = &parsed[index];
@@ -240,13 +268,15 @@ fn parse_window(
     turn_id: &str,
     bytes: &[u8],
     base_offset: usize,
-) -> std::result::Result<Vec<(String, ParsedEntry)>, TurnTimelineReadError> {
+) -> std::result::Result<(Vec<(String, ParsedEntry)>, usize), TurnTimelineReadError> {
     if !bytes.is_empty() && !bytes.ends_with(b"\n") {
         return invalid_range(turn_id, "timeline range ends with incomplete JSONL");
     }
     let mut parsed = Vec::new();
+    let mut record_count = 0;
     let mut local_start = 0;
     for line in bytes.split_inclusive(|byte| *byte == b'\n') {
+        record_count += 1;
         let local_end = local_start + line.len();
         let text = std::str::from_utf8(line)
             .map_err(|_| invalid_range_error(turn_id, "timeline JSONL is not UTF-8"))?
@@ -274,7 +304,7 @@ fn parse_window(
         }
         local_start = local_end;
     }
-    Ok(parsed)
+    Ok((parsed, record_count))
 }
 
 fn invalid_range<T>(turn_id: &str, message: &str) -> std::result::Result<T, TurnTimelineReadError> {

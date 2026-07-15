@@ -161,7 +161,7 @@ fn turn_timeline_service_error(error: TurnTimelineServiceError) -> ExternalApiEr
         TurnTimelineServiceError::TurnUnavailable { turn_id } => ExternalApiError::custom(
             StatusCode::CONFLICT,
             "turn_timeline_unavailable",
-            format!("Turn {turn_id} has no complete sealed timeline range"),
+            format!("Turn {turn_id} has no available timeline range"),
         ),
         TurnTimelineServiceError::TimelineInvalid { turn_id } => ExternalApiError::custom(
             StatusCode::CONFLICT,

@@ -129,7 +129,7 @@ fn pi_turn_reader_restores_parent_chain_and_filters_unrelated_physical_entries()
                 turn_id: "turn_1".to_string(),
                 turn_index: 1,
                 head_cursor: cursor(root.len(), Some("root")),
-                tail_cursor: cursor(contents.len(), Some("answer")),
+                tail_cursor: Some(cursor(contents.len(), Some("answer"))),
             }],
         })
         .unwrap();
@@ -148,7 +148,7 @@ fn pi_turn_reader_rejects_semantic_overlap_and_invalid_ranges() {
         turn_id: "turn_1".to_string(),
         turn_index: 1,
         head_cursor: cursor(0, None),
-        tail_cursor: cursor(contents.len(), Some("entry")),
+        tail_cursor: Some(cursor(contents.len(), Some("entry"))),
     };
     let overlap = PiTimelineAdapter::new()
         .read_turn_ranges(TurnTimelineReadRequest {
@@ -210,7 +210,7 @@ fn pi_turn_reader_rejects_semantic_overlap_and_invalid_ranges() {
                     turn_id: "turn_invalid".to_string(),
                     turn_index: 1,
                     head_cursor,
-                    tail_cursor,
+                    tail_cursor: Some(tail_cursor),
                 }],
             })
             .unwrap_err()
@@ -228,7 +228,7 @@ fn pi_turn_reader_rejects_semantic_overlap_and_invalid_ranges() {
                 turn_id: "turn_incomplete".to_string(),
                 turn_index: 1,
                 head_cursor: cursor(0, None),
-                tail_cursor: cursor(incomplete.len(), Some("entry")),
+                tail_cursor: Some(cursor(incomplete.len(), Some("entry"))),
             }],
         })
         .unwrap_err()
