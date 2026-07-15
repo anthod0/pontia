@@ -49,7 +49,3 @@ Equivalent TOML config:
 [dashboard]
 source = "apps/dashboard/dist"
 ```
-
-## Implementation plan
-
-See `../../specs/plans/2026-05-13-dashboard-v2.md`.
