@@ -1,4 +1,4 @@
-import { inboxMessage, mocks, session, timelineItemsFromTurns, turn, workspace } from './fixtures';
+import { inboxMessage, mocks, session, timelineItemsFromTurns, timelineStateValue, turn, workspace } from './fixtures';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
@@ -125,18 +125,7 @@ test('shows the initial prompt immediately after starting a chat while timeline 
     return { session: created, initial_turn: initialTurn } satisfies CreateSessionResult;
   });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set({
-      sessionId,
-      bindingId: null,
-      items: [],
-      headCursor: null,
-    tailCursor: null,
-            sourceId: null,
-      hasMore: false,
-            loading: false,
-      refreshing: false,
-      error: null,
-    });
+    mocks.timelineState.set(timelineStateValue({ sessionId, status: 'empty' }));
     return null;
   });
   render(NewChatPage);
@@ -177,18 +166,7 @@ test('does not substitute projected Turn summaries while timeline history is sti
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [activeTurn], inboxMessages: [], events: [] });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set({
-      sessionId,
-      bindingId: null,
-      items: [],
-      headCursor: null,
-      tailCursor: null,
-      sourceId: null,
-      hasMore: false,
-      loading: true,
-      refreshing: false,
-      error: null,
-    });
+    mocks.timelineState.set(timelineStateValue({ sessionId, loading: true, status: 'loading' }));
     return null;
   });
 
@@ -246,18 +224,12 @@ test('keeps the selected chat transcript hidden until the initial bottom scroll 
   mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     await new Promise<void>((resolve) => (resolveTimeline = resolve));
-    mocks.timelineState.set({
+    mocks.timelineState.set(timelineStateValue({
       sessionId,
-      bindingId: 'binding-1',
       items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
-      headCursor: null,
-      tailCursor: null,
-      sourceId: 'source-1',
-      hasMore: false,
-      loading: false,
-      refreshing: false,
-      error: null,
-    });
+      latestTurnId: 'turn-1',
+      status: 'ready',
+    }));
     return null;
   });
 
@@ -343,18 +315,14 @@ test('does not load earlier chat history before the initial selected chat scroll
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.timelineState.set({
+  mocks.timelineState.set(timelineStateValue({
     sessionId: 'session-2',
-    bindingId: 'binding-1',
     items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
-    headCursor: 'older-cursor',
-    tailCursor: 'tail-cursor',
-    sourceId: 'source-1',
+    nextOlderTurnId: 'turn-older',
+    latestTurnId: 'turn-1',
     hasMore: true,
-    loading: false,
-    refreshing: false,
-    error: null,
-  });
+    status: 'ready',
+  }));
 
   render(SessionChatPage);
 
@@ -375,18 +343,14 @@ test('loads earlier chat history only after pulling beyond the top history senti
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.timelineState.set({
+  mocks.timelineState.set(timelineStateValue({
     sessionId: 'session-2',
-    bindingId: 'binding-1',
     items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
-    headCursor: 'older-cursor',
-    tailCursor: 'tail-cursor',
-        sourceId: 'source-1',
+    nextOlderTurnId: 'turn-older',
+    latestTurnId: 'turn-1',
     hasMore: true,
-        loading: false,
-    refreshing: false,
-    error: null,
-  });
+    status: 'ready',
+  }));
 
   render(SessionChatPage);
 
@@ -409,47 +373,43 @@ test('refreshes an already-loaded selected chat through its latest projected Tur
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.timelineState.set({
+  mocks.timelineState.set(timelineStateValue({
     sessionId: 'session-2',
-    bindingId: 'binding-1',
     items: timelineItemsFromTurns([
       turn({ turn_id: 'turn-older', session_id: 'session-2', input: { summary: 'older question' }, output: { summary: 'older answer' } }),
       turn({ turn_id: 'turn-latest', session_id: 'session-2', input: { summary: 'latest question' }, output: { summary: 'latest answer' } }),
     ]),
-    headCursor: 'older-cursor',
-    tailCursor: 'tail-cursor',
-        sourceId: 'source-1',
+    nextOlderTurnId: 'turn-older',
+    latestTurnId: 'turn-latest',
     hasMore: true,
-        loading: false,
-    refreshing: false,
-    error: null,
-  });
+    status: 'ready',
+  }));
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2', 'turn-1'));
+  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1'));
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'rebuild' });
   expect(mocks.resetTimelineState).not.toHaveBeenCalledWith('session-2');
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   mocks.loadSessionDetail.mockClear();
   mocks.loadSessionTimeline.mockClear();
-  mocks.handleTimelineMessageUpdated.mockClear();
+  mocks.refreshSessionTimeline.mockClear();
   await new Promise((resolve) => setTimeout(resolve, 0));
   mocks.loadSessionTimeline.mockClear();
-  mocks.handleTimelineMessageUpdated.mockClear();
-  mocks.timelineState.set({
+  mocks.refreshSessionTimeline.mockClear();
+  mocks.timelineState.set(timelineStateValue({
     ...mocks.timelineState.get(),
     sessionId: 'session-2',
     items: timelineItemsFromTurns([
       turn({ turn_id: 'turn-older', session_id: 'session-2', input: { summary: 'older question' }, output: { summary: 'older answer' } }),
       turn({ turn_id: 'turn-latest', session_id: 'session-2', input: { summary: 'latest question' }, output: { summary: 'latest answer' } }),
     ]),
-  });
+  }));
 
   window.dispatchEvent(new Event('focus'));
 
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2', { showLoading: false }));
-  expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2', 'turn-1');
+  expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1');
 });
 
 
@@ -466,7 +426,7 @@ test('coalesces bursty selected-session idle events into one git status refresh'
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
   mocks.refreshWorkspaceGitStatus.mockClear();
-  mocks.handleTimelineMessageUpdated.mockClear();
+  mocks.refreshSessionTimeline.mockClear();
 
   const idleEvent = (eventId: string, type: string, turnId: string | null = null) => ({
     kind: 'session_event' as const,
@@ -491,7 +451,7 @@ test('coalesces bursty selected-session idle events into one git status refresh'
 
   await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1));
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
-  expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2', 'turn-1');
+  expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1');
 });
 
 
@@ -502,22 +462,16 @@ test('does not toast transient network errors from automatic chat refreshes', as
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.timelineState.set({
+  mocks.timelineState.set(timelineStateValue({
     sessionId: 'session-2',
-    bindingId: 'binding-1',
     items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
-    headCursor: null,
-    tailCursor: null,
-        sourceId: 'source-1',
-    hasMore: false,
-        loading: false,
-    refreshing: false,
-    error: null,
-  });
+    latestTurnId: 'turn-1',
+    status: 'ready',
+  }));
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2', 'turn-1'));
+  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1'));
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
   mocks.toastError.mockClear();
 
@@ -584,9 +538,8 @@ test('shows idle thought summary trigger above the final assistant response', as
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.timelineState.set({
+  mocks.timelineState.set(timelineStateValue({
     sessionId: 'session-2',
-    bindingId: 'binding-1',
     items: [
       {
         item_id: 'turn-1:user',
@@ -637,14 +590,9 @@ test('shows idle thought summary trigger above the final assistant response', as
         turn_id: 'turn-1',
       },
     ],
-    headCursor: null,
-    tailCursor: null,
-        sourceId: 'source-1',
-    hasMore: false,
-        loading: false,
-    refreshing: false,
-    error: null,
-  });
+    latestTurnId: 'turn-1',
+    status: 'ready',
+  }));
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   const timelineSnapshot = mocks.timelineState.get();
   mocks.loadSessionTimeline.mockImplementationOnce(async () => {
@@ -1065,7 +1013,7 @@ test('shows delivery loading on the submit button instead of below the optimisti
   expect(screen.queryByLabelText('Message delivery pending')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Sending message' })).toHaveAttribute('aria-busy', 'true');
 
-  mocks.timelineState.set({
+  mocks.timelineState.set(timelineStateValue({
     ...mocks.timelineState.get(),
     sessionId: 'session-optimistic',
     items: timelineItemsFromTurns([turn({
@@ -1076,7 +1024,7 @@ test('shows delivery loading on the submit button instead of below the optimisti
       state: 'running',
       completed_at: null,
     })]),
-  });
+  }));
 
   expect(screen.getByRole('button', { name: 'Sending message' })).toBeInTheDocument();
   expect(screen.getAllByText('slow network message')).toHaveLength(1);
@@ -1134,18 +1082,14 @@ test('enables history intersection loading only after initial timeline load and 
   });
   mocks.loadSessionTimeline.mockImplementationOnce(async (sessionId: string) => {
     await timelineLoaded;
-    mocks.timelineState.set({
+    mocks.timelineState.set(timelineStateValue({
       sessionId,
-      bindingId: 'binding-1',
       items: timelineItemsFromTurns([turn({ session_id: sessionId })]),
-      headCursor: 'head-1',
-      tailCursor: 'tail-1',
-      sourceId: 'pi:/tmp/session.jsonl',
+      nextOlderTurnId: 'turn-older',
+      latestTurnId: 'turn-1',
       hasMore: true,
-      loading: false,
-      refreshing: false,
-      error: null,
-    });
+      status: 'ready',
+    }));
     return null;
   });
 
@@ -1352,7 +1296,7 @@ test('renders an explicit degraded state instead of projected or partial history
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set({
+    mocks.timelineState.set(timelineStateValue({
       sessionId,
       items: [],
       nextOlderTurnId: null,
@@ -1364,7 +1308,7 @@ test('renders an explicit degraded state instead of projected or partial history
       status: 'range_invalid',
       errorCode: 'turn_timeline_invalid',
       error: 'Turn turn-1 has an invalid timeline range',
-    });
+    }));
     return null;
   });
 

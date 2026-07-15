@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { loadSessions, loadSessionDetail, sessionDetail } from '../stores/sessions';
-import { handleTimelineMessageUpdated, loadSessionTimeline, timelineState } from '../stores/timeline';
+import { hasTimelineSnapshot, loadSessionTimeline, refreshSessionTimeline, timelineState } from '../stores/timeline';
 import { refreshWorkspaceGitStatus } from '../stores/workspaces';
 
 export type DashboardSnapshotRefreshReason = 'online' | 'sse_open' | 'sse_fallback';
@@ -29,10 +29,8 @@ async function refreshDashboardSnapshotNow(_options: DashboardSnapshotRefreshOpt
 
   if (selectedSessionId) {
     refreshes.push(loadSessionDetail(selectedSessionId, { showLoading: false }));
-    const hasTimelineSnapshot = timeline.sessionId === selectedSessionId
-      && (timeline.status === 'ready' || timeline.status === 'empty' || timeline.items.length > 0);
-    refreshes.push(hasTimelineSnapshot
-      ? handleTimelineMessageUpdated(selectedSessionId, timeline.latestTurnId)
+    refreshes.push(hasTimelineSnapshot(timeline, selectedSessionId)
+      ? refreshSessionTimeline(selectedSessionId, timeline.latestTurnId)
       : loadSessionTimeline(selectedSessionId, { mode: 'rebuild', latestTurnId: timeline.latestTurnId }));
   }
 

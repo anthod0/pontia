@@ -47,8 +47,9 @@
     updateSessionTitle,
   } from '../stores/sessions'
   import {
-    handleTimelineMessageUpdated,
+    hasTimelineSnapshot,
     loadSessionTimeline,
+    refreshSessionTimeline,
     resetTimelineState,
     timelineState,
   } from '../stores/timeline'
@@ -283,10 +284,8 @@
 
     const currentTimeline = get(timelineState)
     const latestTurnId = latestProjectedTurnId()
-    const hasTimelineSnapshot = currentTimeline.sessionId === sessionId
-      && (currentTimeline.status === 'ready' || currentTimeline.status === 'empty' || currentTimeline.items.length > 0)
-    const timelineRefresh = hasTimelineSnapshot
-      ? handleTimelineMessageUpdated(sessionId, latestTurnId)
+    const timelineRefresh = hasTimelineSnapshot(currentTimeline, sessionId)
+      ? refreshSessionTimeline(sessionId, latestTurnId)
       : loadSessionTimeline(sessionId, { mode: 'rebuild', latestTurnId })
 
     foregroundRefreshInFlight = Promise.all([
@@ -316,11 +315,11 @@
       if (streamEvent.event.session_id !== selectedSessionId) return
       if (isSessionIdleEvent(streamEvent.event.type)) {
         void refreshCurrentSessionGitStatus()
-        void handleTimelineMessageUpdated(selectedSessionId, streamEvent.event.turn_id)
+        void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
         return
       }
       if (streamEvent.event.type !== 'session.message_updated') return
-      void handleTimelineMessageUpdated(selectedSessionId, streamEvent.event.turn_id)
+      void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
       return
     }
   }
@@ -410,10 +409,9 @@
 
       const currentTimeline = get(timelineState)
       const latestTurnId = latestProjectedTurnId()
-      const hasLoadedTimeline = currentTimeline.sessionId === sessionId
-        && (currentTimeline.status === 'ready' || currentTimeline.status === 'empty' || currentTimeline.items.length > 0)
+      const hasLoadedTimeline = hasTimelineSnapshot(currentTimeline, sessionId)
       if (!hasLoadedTimeline) resetTimelineState(sessionId)
-      if (hasLoadedTimeline) await handleTimelineMessageUpdated(sessionId, latestTurnId)
+      if (hasLoadedTimeline) await refreshSessionTimeline(sessionId, latestTurnId)
       else await loadSessionTimeline(sessionId, { mode: 'rebuild', latestTurnId })
       await scrollChatToBottomAfterLayout()
       if (!destroyed && selectedSessionId === sessionId) {
@@ -442,7 +440,7 @@
     actionError = null
     try {
       await interruptSession(selectedSessionId)
-      await handleTimelineMessageUpdated(selectedSessionId, selectedSession?.current_turn_id ?? latestProjectedTurnId())
+      await refreshSessionTimeline(selectedSessionId, selectedSession?.current_turn_id ?? latestProjectedTurnId())
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {

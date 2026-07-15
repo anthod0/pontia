@@ -12,8 +12,8 @@ vi.mock('../src/api/client', () => ({
 }));
 
 const {
-  handleTimelineMessageUpdated,
   loadSessionTimeline,
+  refreshSessionTimeline,
   resetTimelineState,
   timelineState,
 } = await import('../src/stores/timeline');
@@ -68,7 +68,7 @@ test('realtime refresh uses an inclusive forward Turn anchor and atomically repl
     }));
 
   await loadSessionTimeline('sess-1', { mode: 'rebuild' });
-  await handleTimelineMessageUpdated('sess-1');
+  await refreshSessionTimeline('sess-1');
 
   expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-1', {
     direction: 'forward',
@@ -146,10 +146,10 @@ test('an active Turn grows from empty output and converges on its sealed group t
   await loadSessionTimeline('sess-1', { mode: 'rebuild', latestTurnId: 'turn-active' });
   expect(get(timelineState)).toMatchObject({ items: [], latestTurnId: 'turn-active', status: 'empty' });
 
-  await handleTimelineMessageUpdated('sess-1', 'turn-active');
+  await refreshSessionTimeline('sess-1', 'turn-active');
   expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual(['item-partial']);
 
-  await handleTimelineMessageUpdated('sess-1', 'turn-active');
+  await refreshSessionTimeline('sess-1', 'turn-active');
   expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual(['item-final']);
   expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, 'sess-1', {
     direction: 'forward',
@@ -170,7 +170,7 @@ test('an itemless active Turn remains the forward anchor when initial history in
   await loadSessionTimeline('sess-1', { mode: 'rebuild', latestTurnId: 'turn-active' });
   expect(get(timelineState).latestTurnId).toBe('turn-active');
 
-  await handleTimelineMessageUpdated('sess-1');
+  await refreshSessionTimeline('sess-1');
 
   expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-1', {
     direction: 'forward',
@@ -230,7 +230,7 @@ test('forward pagination commits no intermediate page when a later range fails',
     .mockRejectedValueOnce(new ApiError('Turn turn-2 has an invalid timeline range', 'turn_timeline_invalid', 409));
 
   await loadSessionTimeline('sess-1', { mode: 'rebuild' });
-  await handleTimelineMessageUpdated('sess-1');
+  await refreshSessionTimeline('sess-1');
 
   expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, 'sess-1', {
     direction: 'forward',

@@ -1,6 +1,7 @@
 import { cleanup } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { SessionConsoleDetail } from '../../../src/stores/sessions';
+import type { TimelineState } from '../../../src/stores/timeline';
 import type { CreateSessionResult, InboxMessageView, SessionView, TimelineItem, TurnView, WorkspaceView } from '../../../src/api/types';
 import { optimisticInitialMessages } from '../../../src/stores/optimisticChat';
 
@@ -24,6 +25,21 @@ const mocks = vi.hoisted(() => {
     };
   }
 
+  const timelineStateValue = (overrides: Partial<TimelineState> = {}): TimelineState => ({
+    sessionId: '',
+    items: [],
+    nextOlderTurnId: null,
+    latestTurnId: null,
+    hasMore: false,
+    loading: false,
+    refreshing: false,
+    refreshKind: null,
+    status: 'idle',
+    errorCode: null,
+    error: null,
+    ...overrides,
+  });
+
   const sessions = writableStore<SessionView[]>([]);
   const sessionsLoading = writableStore(false);
   const sessionsError = writableStore<string | null>(null);
@@ -35,19 +51,7 @@ const mocks = vi.hoisted(() => {
   const workspacesError = writableStore<string | null>(null);
   const workspaceGitStatuses = writableStore({});
   const workspaceGitStatusErrors = writableStore({});
-  const timelineState = writableStore<any>({
-    sessionId: '',
-    items: [] as TimelineItem[],
-    nextOlderTurnId: null as string | null,
-    latestTurnId: null as string | null,
-    hasMore: false,
-    loading: false,
-    refreshing: false,
-    refreshKind: null as 'history' | 'tail' | null,
-    status: 'idle' as string,
-    errorCode: null as string | null,
-    error: null,
-  });
+  const timelineState = writableStore<TimelineState>(timelineStateValue());
   const dashboardEventListeners = new Set<(event: unknown) => void>();
 
   return {
@@ -63,6 +67,7 @@ const mocks = vi.hoisted(() => {
     workspaceGitStatuses,
     workspaceGitStatusErrors,
     timelineState,
+    timelineStateValue,
     dashboardEventListeners,
     loadedSessions: [] as SessionView[],
     loadSessions: vi.fn(async () => mocks.loadedSessions),
@@ -77,21 +82,9 @@ const mocks = vi.hoisted(() => {
     updateSessionTitle: vi.fn(),
     createSession: vi.fn(),
     loadSessionTimeline: vi.fn(async (sessionId: string) => null),
-    handleTimelineMessageUpdated: vi.fn(async () => undefined),
+    refreshSessionTimeline: vi.fn(async () => undefined),
     resetTimelineState: vi.fn((sessionId = '') => {
-      mocks.timelineState.set({
-        sessionId,
-        items: [],
-        nextOlderTurnId: null,
-        latestTurnId: null,
-        hasMore: false,
-        loading: false,
-        refreshing: false,
-        refreshKind: null,
-        status: 'idle',
-        errorCode: null,
-        error: null,
-      });
+      mocks.timelineState.set(mocks.timelineStateValue({ sessionId }));
     }),
     loadWorkspaces: vi.fn(async () => undefined),
     refreshWorkspaceGitStatus: vi.fn(async () => undefined),
@@ -135,7 +128,8 @@ vi.mock('../../../src/stores/workspaces', () => ({
 vi.mock('../../../src/stores/timeline', () => ({
   timelineState: mocks.timelineState,
   loadSessionTimeline: mocks.loadSessionTimeline,
-  handleTimelineMessageUpdated: mocks.handleTimelineMessageUpdated,
+  refreshSessionTimeline: mocks.refreshSessionTimeline,
+  hasTimelineSnapshot: (state: TimelineState, sessionId: string) => state.sessionId === sessionId && (state.status === 'ready' || state.status === 'empty'),
   resetTimelineState: mocks.resetTimelineState,
 }));
 
@@ -251,6 +245,7 @@ export const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView
 });
 
 export { mocks };
+export const timelineStateValue = mocks.timelineStateValue;
 
 afterEach(() => {
   cleanup();
@@ -273,25 +268,13 @@ beforeEach(() => {
   mocks.workspacesError.set(null);
   mocks.workspaceGitStatuses.set({});
   mocks.workspaceGitStatusErrors.set({});
-  mocks.timelineState.set({
-    sessionId: '',
-    items: [],
-    nextOlderTurnId: null,
-    latestTurnId: null,
-    hasMore: false,
-    loading: false,
-    refreshing: false,
-    refreshKind: null,
-    status: 'idle',
-    errorCode: null,
-    error: null,
-  });
+  mocks.timelineState.set(mocks.timelineStateValue());
   optimisticInitialMessages.set({});
   mocks.dashboardEventListeners.clear();
   mocks.pathParams = {};
   mocks.loadSessionDetail.mockReset().mockResolvedValue(null);
   mocks.loadSessionTimeline.mockReset();
-  mocks.handleTimelineMessageUpdated.mockReset().mockResolvedValue(undefined);
+  mocks.refreshSessionTimeline.mockReset().mockResolvedValue(undefined);
   mocks.createSession.mockResolvedValue({ session: activeSession, initial_turn: null } satisfies CreateSessionResult);
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     const detail = mocks.sessionDetail.get();
@@ -302,7 +285,7 @@ beforeEach(() => {
       direction: 'backward' as const,
       next_turn_id: null,
     };
-    mocks.timelineState.set({
+    mocks.timelineState.set(mocks.timelineStateValue({
       sessionId,
       items: page.items,
       nextOlderTurnId: page.next_turn_id,
@@ -312,9 +295,7 @@ beforeEach(() => {
       refreshing: false,
       refreshKind: null,
       status: page.items.length ? 'ready' : 'empty',
-      errorCode: null,
-      error: null,
-    });
+    }));
     return page;
   });
   window.localStorage.clear();

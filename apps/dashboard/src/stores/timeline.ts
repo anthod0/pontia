@@ -54,6 +54,10 @@ function emptyState(sessionId = ''): TimelineState {
 
 export const timelineState = writable<TimelineState>(emptyState());
 
+export function hasTimelineSnapshot(state: TimelineState, sessionId: string): boolean {
+  return state.sessionId === sessionId && (state.status === 'ready' || state.status === 'empty');
+}
+
 type TimelineUpdateQueue = {
   promise: Promise<void>;
   resolve: () => void;
@@ -256,7 +260,7 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
   }
 }
 
-export function handleTimelineMessageUpdated(sessionId: string, turnId: string | null = null): Promise<void> {
+export function refreshSessionTimeline(sessionId: string, turnId: string | null = null): Promise<void> {
   const existing = timelineUpdateQueues.get(sessionId);
   if (existing) {
     existing.dirty = true;
@@ -297,7 +301,7 @@ async function runTimelineUpdateQueue(sessionId: string, queue: TimelineUpdateQu
   queue.running = true;
   queue.dirty = false;
   try {
-    await handleTimelineMessageUpdatedNow(sessionId, queue.turnId);
+    await refreshSessionTimelineNow(sessionId, queue.turnId);
     queue.running = false;
     if (queue.dirty && timelineUpdateQueues.get(sessionId) === queue) {
       scheduleTimelineUpdate(sessionId, queue);
@@ -320,7 +324,7 @@ function clearTimelineUpdateQueue(sessionId: string): void {
   if (!queue.running) queue.resolve();
 }
 
-async function handleTimelineMessageUpdatedNow(sessionId: string, turnId: string | null): Promise<void> {
+async function refreshSessionTimelineNow(sessionId: string, turnId: string | null): Promise<void> {
   const current = get(timelineState);
   if (current.sessionId && current.sessionId !== sessionId) return;
 

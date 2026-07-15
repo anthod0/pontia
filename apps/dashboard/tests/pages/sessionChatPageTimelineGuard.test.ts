@@ -61,20 +61,20 @@ const mocks = vi.hoisted(() => {
     refreshWorkspaceGitStatus: vi.fn(async () => undefined),
     timelineState: writableStore({
       sessionId: '',
-      bindingId: null,
       items: [],
-      headCursor: null,
-      tailCursor: null,
-      sourceId: null,
+      nextOlderTurnId: null,
+      latestTurnId: null,
       hasMore: false,
       loading: false,
       refreshing: false,
       refreshKind: null,
+      status: 'idle',
+      errorCode: null,
       error: null,
     }),
     loadSessionTimeline: vi.fn(async () => null),
     resetTimelineState: vi.fn(),
-    handleTimelineMessageUpdated: vi.fn(async () => undefined),
+    refreshSessionTimeline: vi.fn(async () => undefined),
     subscribeDashboardEvents: vi.fn(() => () => undefined),
   };
 });
@@ -112,7 +112,8 @@ vi.mock('../../src/stores/timeline', () => ({
   timelineState: mocks.timelineState,
   loadSessionTimeline: mocks.loadSessionTimeline,
   resetTimelineState: mocks.resetTimelineState,
-  handleTimelineMessageUpdated: mocks.handleTimelineMessageUpdated,
+  refreshSessionTimeline: mocks.refreshSessionTimeline,
+  hasTimelineSnapshot: () => false,
 }));
 vi.mock('../../src/services/eventStream', () => ({ subscribeDashboardEvents: mocks.subscribeDashboardEvents }));
 
