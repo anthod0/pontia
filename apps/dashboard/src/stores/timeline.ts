@@ -1,49 +1,55 @@
 import { get, writable } from 'svelte/store';
-import { getSessionTimeline } from '../api/client';
+import { getTurnTimeline } from '../api/client';
 import { ApiError } from '../api/errors';
-import type { TimelineItem, TimelinePage } from '../api/types';
+import type { TurnTimelineItem, TurnTimelinePage } from '../api/types';
 
 export type TimelineRefreshKind = 'history' | 'tail' | null;
+export type TimelineStatus =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'empty'
+  | 'query_error'
+  | 'capability_unavailable'
+  | 'range_unavailable'
+  | 'range_invalid'
+  | 'source_unavailable'
+  | 'error';
 
 export interface TimelineState {
   sessionId: string;
-  bindingId: string | null;
-  items: TimelineItem[];
-  headCursor: string | null;
-  tailCursor: string | null;
-  sourceId: string | null;
+  items: TurnTimelineItem[];
+  nextOlderTurnId: string | null;
+  latestTurnId: string | null;
   hasMore: boolean;
   loading: boolean;
   refreshing: boolean;
   refreshKind: TimelineRefreshKind;
+  status: TimelineStatus;
+  errorCode: string | null;
   error: string | null;
 }
 
 type LoadMode = 'rebuild' | 'more';
 
-const INVALIDATING_ERROR_CODES = new Set(['cursor_invalid', 'source_unavailable', 'content_ref_invalid']);
-const NON_FATAL_ERROR_CODES = new Set(['not_ready']);
-const DEFAULT_LIMIT = 3;
+const DEFAULT_HISTORY_LIMIT = 3;
+const FORWARD_LIMIT = 100;
+const TIMELINE_UPDATE_DEBOUNCE_MS = 100;
 
 function emptyState(sessionId = ''): TimelineState {
   return {
     sessionId,
-    bindingId: null,
     items: [],
-    headCursor: null,
-    tailCursor: null,
-    sourceId: null,
+    nextOlderTurnId: null,
+    latestTurnId: null,
     hasMore: false,
     loading: false,
     refreshing: false,
     refreshKind: null,
+    status: 'idle',
+    errorCode: null,
     error: null,
   };
-}
-
-function refreshKindForLoadMode(mode: LoadMode): TimelineRefreshKind {
-  if (mode === 'more') return 'history';
-  return null;
 }
 
 export const timelineState = writable<TimelineState>(emptyState());
@@ -55,10 +61,8 @@ type TimelineUpdateQueue = {
   timer: ReturnType<typeof setTimeout> | null;
   running: boolean;
   dirty: boolean;
-  bindingId: string | null;
+  turnId: string | null;
 };
-
-const TIMELINE_UPDATE_DEBOUNCE_MS = 100;
 
 const timelineUpdateQueues = new Map<string, TimelineUpdateQueue>();
 
@@ -67,13 +71,11 @@ export function resetTimelineState(sessionId = ''): void {
   if (sessionId) {
     clearTimelineUpdateQueue(sessionId);
   } else {
-    for (const queuedSessionId of timelineUpdateQueues.keys()) {
-      clearTimelineUpdateQueue(queuedSessionId);
-    }
+    for (const queuedSessionId of timelineUpdateQueues.keys()) clearTimelineUpdateQueue(queuedSessionId);
   }
 }
 
-function uniqueTimelineItems(items: TimelineItem[]): TimelineItem[] {
+function uniqueTimelineItems(items: TurnTimelineItem[]): TurnTimelineItem[] {
   const seen = new Set<string>();
   return items.filter((item) => {
     if (seen.has(item.item_id)) return false;
@@ -82,73 +84,68 @@ function uniqueTimelineItems(items: TimelineItem[]): TimelineItem[] {
   });
 }
 
-function upsertAppendTimelineItems(currentItems: TimelineItem[], nextItems: TimelineItem[]): TimelineItem[] {
-  const positions = new Map<string, number>();
-  const merged = uniqueTimelineItems(currentItems);
-  merged.forEach((item, index) => positions.set(item.item_id, index));
-  for (const item of nextItems) {
-    const index = positions.get(item.item_id);
-    if (index === undefined) {
-      positions.set(item.item_id, merged.length);
-      merged.push(item);
-    } else {
-      merged[index] = item;
-    }
-  }
-  return merged;
+function prependUnseenTurnGroups(
+  currentItems: TurnTimelineItem[],
+  previousItems: TurnTimelineItem[],
+): TurnTimelineItem[] {
+  const currentTurnIds = new Set(currentItems.map((item) => item.turn_id));
+  return [
+    ...uniqueTimelineItems(previousItems.filter((item) => !currentTurnIds.has(item.turn_id))),
+    ...currentItems,
+  ];
 }
 
-function prependUniqueTimelineItems(currentItems: TimelineItem[], previousItems: TimelineItem[]): TimelineItem[] {
-  const current = uniqueTimelineItems(currentItems);
-  const seen = new Set(current.map((item) => item.item_id));
-  const uniquePrevious = previousItems.filter((item) => {
-    if (seen.has(item.item_id)) return false;
-    seen.add(item.item_id);
-    return true;
-  });
-  return [...uniqueTimelineItems(uniquePrevious), ...current];
+function replaceReturnedTurnGroups(
+  currentItems: TurnTimelineItem[],
+  returnedItems: TurnTimelineItem[],
+): TurnTimelineItem[] {
+  const replacement = uniqueTimelineItems(returnedItems);
+  const returnedTurnIds = new Set(replacement.map((item) => item.turn_id));
+  if (!returnedTurnIds.size) return currentItems;
+
+  const firstReturnedIndex = currentItems.findIndex((item) => returnedTurnIds.has(item.turn_id));
+  if (firstReturnedIndex < 0) return [...currentItems, ...replacement];
+
+  return [
+    ...currentItems.slice(0, firstReturnedIndex).filter((item) => !returnedTurnIds.has(item.turn_id)),
+    ...replacement,
+    ...currentItems.slice(firstReturnedIndex).filter((item) => !returnedTurnIds.has(item.turn_id)),
+  ];
 }
 
-function applyPage(current: TimelineState, page: TimelinePage, mode: LoadMode): TimelineState {
-  const sameScope = (!current.bindingId || current.bindingId === page.binding_id)
-    && (!current.sourceId || current.sourceId === page.source_id);
-  const merge = mode !== 'rebuild' && current.sessionId === page.session_id && sameScope;
-  const items = !merge
-    ? uniqueTimelineItems(page.items)
-    : mode === 'more'
-      ? prependUniqueTimelineItems(current.items, page.items)
-      : upsertAppendTimelineItems(current.items, page.items);
-  return {
-    sessionId: page.session_id,
-    bindingId: page.binding_id,
-    items,
-    headCursor: page.head_cursor,
-    tailCursor: mode === 'more' && merge ? current.tailCursor : page.tail_cursor,
-    sourceId: page.source_id,
-    hasMore: page.has_more,
-    loading: false,
-    refreshing: false,
-    refreshKind: null,
-    error: null,
-  };
+function statusForItems(items: TurnTimelineItem[]): TimelineStatus {
+  return items.length ? 'ready' : 'empty';
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function shouldInvalidate(error: unknown): boolean {
-  return error instanceof ApiError && INVALIDATING_ERROR_CODES.has(error.code);
+function errorStatus(error: unknown): TimelineStatus {
+  if (!(error instanceof ApiError)) return 'error';
+  switch (error.code) {
+    case 'invalid_timeline_query': return 'query_error';
+    case 'timeline_capability_unavailable': return 'capability_unavailable';
+    case 'turn_timeline_unavailable': return 'range_unavailable';
+    case 'turn_timeline_invalid': return 'range_invalid';
+    case 'timeline_source_unavailable': return 'source_unavailable';
+    default: return 'error';
+  }
 }
 
-function isNonFatal(error: unknown): boolean {
-  return error instanceof ApiError && NON_FATAL_ERROR_CODES.has(error.code);
+function applyTimelineError(sessionId: string, error: unknown): void {
+  timelineState.update((state) => state.sessionId !== sessionId ? state : ({
+    ...emptyState(sessionId),
+    status: errorStatus(error),
+    errorCode: error instanceof ApiError ? error.code : 'request_failed',
+    error: errorMessage(error),
+  }));
 }
 
 export async function loadSessionTimeline(
   sessionId: string,
-  options: { mode?: LoadMode; limit?: number } = {},
-): Promise<TimelinePage | null> {
+  options: { mode?: LoadMode; limit?: number; latestTurnId?: string | null } = {},
+): Promise<TurnTimelinePage | null> {
   if (!sessionId) {
     resetTimelineState();
     return null;
@@ -156,113 +153,114 @@ export async function loadSessionTimeline(
 
   const mode = options.mode ?? 'rebuild';
   const current = get(timelineState);
-  const existingStateMatches = current.sessionId === sessionId;
-  const headCursor = mode === 'more' && existingStateMatches ? current.headCursor : null;
+  const sameSession = current.sessionId === sessionId;
+  const turnId = mode === 'more' && sameSession ? current.nextOlderTurnId : null;
+  if (mode === 'more' && !turnId) return null;
 
-  timelineState.update((state) => ({
-    ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
-    loading: mode === 'rebuild',
-    refreshing: mode !== 'rebuild',
-    refreshKind: refreshKindForLoadMode(mode),
-    error: null,
-  }));
+  timelineState.update((state) => {
+    const scoped = state.sessionId === sessionId ? state : emptyState(sessionId);
+    return {
+      ...scoped,
+      latestTurnId: options.latestTurnId ?? scoped.latestTurnId,
+      loading: mode === 'rebuild',
+      refreshing: mode === 'more',
+      refreshKind: mode === 'more' ? 'history' : null,
+      status: mode === 'rebuild' ? 'loading' : scoped.status,
+      errorCode: null,
+      error: null,
+    };
+  });
 
   try {
-    const page = await getSessionTimeline(sessionId, { before: headCursor ?? null, limit: options.limit ?? DEFAULT_LIMIT });
-    timelineState.update((state) => applyPage(state.sessionId === sessionId ? state : emptyState(sessionId), page, mode));
-    return page;
-  } catch (error) {
-    const message = errorMessage(error);
-    if (isNonFatal(error)) {
-      timelineState.update((state) => ({
-        ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
-        sessionId,
+    const page = await getTurnTimeline(sessionId, {
+      direction: 'backward',
+      ...(turnId ? { turnId } : {}),
+      limit: options.limit ?? DEFAULT_HISTORY_LIMIT,
+    });
+    timelineState.update((state) => {
+      if (state.sessionId !== sessionId) return state;
+      const items = mode === 'more'
+        ? prependUnseenTurnGroups(state.items, page.items)
+        : uniqueTimelineItems(page.items);
+      return {
+        ...state,
+        items,
+        nextOlderTurnId: page.next_turn_id,
+        latestTurnId: mode === 'rebuild' && options.latestTurnId
+          ? options.latestTurnId
+          : items.at(-1)?.turn_id ?? state.latestTurnId,
+        hasMore: page.next_turn_id !== null,
         loading: false,
         refreshing: false,
         refreshKind: null,
+        status: statusForItems(items),
+        errorCode: null,
         error: null,
-      }));
-    } else if (shouldInvalidate(error)) {
-      timelineState.set({ ...emptyState(sessionId), error: message });
-    } else {
-      timelineState.update((state) => ({ ...state, sessionId, loading: false, refreshing: false, refreshKind: null, error: message }));
-    }
+      };
+    });
+    return page;
+  } catch (error) {
+    applyTimelineError(sessionId, error);
     return null;
   }
 }
 
-function applyUpdates(current: TimelineState, updates: TimelinePage): TimelineState {
-  const sameScope = current.sessionId === updates.session_id
-    && (!current.bindingId || current.bindingId === updates.binding_id)
-    && (!current.sourceId || current.sourceId === updates.source_id);
-  if (!sameScope) {
-    return {
-      ...emptyState(updates.session_id),
-      bindingId: updates.binding_id,
-      sourceId: updates.source_id,
-      items: uniqueTimelineItems(updates.items),
-      headCursor: updates.head_cursor,
-      tailCursor: updates.tail_cursor,
-      hasMore: updates.has_more,
-      loading: false,
-      refreshing: false,
-      refreshKind: null,
-      error: null,
-    };
+async function loadForwardPages(sessionId: string, initialTurnId: string): Promise<TurnTimelineItem[]> {
+  const items: TurnTimelineItem[] = [];
+  const seenAnchors = new Set<string>();
+  let turnId: string | null = initialTurnId;
+
+  while (turnId) {
+    if (seenAnchors.has(turnId)) throw new Error('Turn timeline pagination returned a repeated anchor');
+    seenAnchors.add(turnId);
+    const page = await getTurnTimeline(sessionId, {
+      direction: 'forward',
+      turnId,
+      limit: FORWARD_LIMIT,
+    });
+    items.push(...page.items);
+    turnId = page.next_turn_id;
   }
-  return {
-    ...current,
-    bindingId: updates.binding_id,
-    sourceId: updates.source_id,
-    items: upsertAppendTimelineItems(current.items, updates.items),
-    tailCursor: updates.tail_cursor,
-    loading: false,
-    refreshing: false,
-    refreshKind: null,
-    error: null,
-  };
+
+  return items;
 }
 
-async function refreshSessionTimelineUpdates(sessionId: string, tailCursor: string | null): Promise<void> {
-  if (!tailCursor) {
-    await loadSessionTimeline(sessionId, { mode: 'rebuild' });
-    return;
-  }
-
+async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: string): Promise<void> {
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
     refreshing: true,
     refreshKind: 'tail',
+    errorCode: null,
     error: null,
   }));
 
   try {
-    const updates = await getSessionTimeline(sessionId, { after: tailCursor });
-    timelineState.update((state) => applyUpdates(state.sessionId === sessionId ? state : emptyState(sessionId), updates));
-  } catch (error) {
-    const message = errorMessage(error);
-    if (isNonFatal(error)) {
-      timelineState.update((state) => ({
-        ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
-        sessionId,
+    const updates = await loadForwardPages(sessionId, latestTurnId);
+    timelineState.update((state) => {
+      if (state.sessionId !== sessionId) return state;
+      const items = replaceReturnedTurnGroups(state.items, updates);
+      return {
+        ...state,
+        items,
+        latestTurnId: items.at(-1)?.turn_id ?? latestTurnId,
         loading: false,
         refreshing: false,
         refreshKind: null,
+        status: statusForItems(items),
+        errorCode: null,
         error: null,
-      }));
-    } else if (shouldInvalidate(error)) {
-      timelineState.set({ ...emptyState(sessionId), error: message });
-    } else {
-      timelineState.update((state) => ({ ...state, sessionId, loading: false, refreshing: false, refreshKind: null, error: message }));
-    }
+      };
+    });
+  } catch (error) {
+    applyTimelineError(sessionId, error);
   }
 }
 
-export function handleTimelineMessageUpdated(sessionId: string, bindingId: string | null = null): Promise<void> {
+export function handleTimelineMessageUpdated(sessionId: string, turnId: string | null = null): Promise<void> {
   const existing = timelineUpdateQueues.get(sessionId);
   if (existing) {
     existing.dirty = true;
-    if (bindingId) existing.bindingId = bindingId;
+    if (turnId) existing.turnId = turnId;
     if (!existing.running) scheduleTimelineUpdate(sessionId, existing);
     return existing.promise;
   }
@@ -279,7 +277,7 @@ export function handleTimelineMessageUpdated(sessionId: string, bindingId: strin
     timer: null,
     running: false,
     dirty: true,
-    bindingId,
+    turnId,
   };
   timelineUpdateQueues.set(sessionId, queue);
   scheduleTimelineUpdate(sessionId, queue);
@@ -299,7 +297,7 @@ async function runTimelineUpdateQueue(sessionId: string, queue: TimelineUpdateQu
   queue.running = true;
   queue.dirty = false;
   try {
-    await handleTimelineMessageUpdatedNow(sessionId, queue.bindingId);
+    await handleTimelineMessageUpdatedNow(sessionId, queue.turnId);
     queue.running = false;
     if (queue.dirty && timelineUpdateQueues.get(sessionId) === queue) {
       scheduleTimelineUpdate(sessionId, queue);
@@ -322,20 +320,14 @@ function clearTimelineUpdateQueue(sessionId: string): void {
   if (!queue.running) queue.resolve();
 }
 
-async function handleTimelineMessageUpdatedNow(sessionId: string, bindingId: string | null = null): Promise<void> {
+async function handleTimelineMessageUpdatedNow(sessionId: string, turnId: string | null): Promise<void> {
   const current = get(timelineState);
   if (current.sessionId && current.sessionId !== sessionId) return;
 
-  if (bindingId && current.bindingId && current.bindingId !== bindingId) {
-    resetTimelineState(sessionId);
+  const forwardAnchorTurnId = turnId ?? current.latestTurnId;
+  if (!forwardAnchorTurnId) {
     await loadSessionTimeline(sessionId, { mode: 'rebuild' });
     return;
   }
-
-  if (!current.items.length) {
-    await loadSessionTimeline(sessionId, { mode: 'rebuild' });
-    return;
-  }
-
-  await refreshSessionTimelineUpdates(sessionId, current.tailCursor);
+  await refreshSessionTimelineUpdates(sessionId, forwardAnchorTurnId);
 }

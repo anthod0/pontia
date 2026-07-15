@@ -29,9 +29,11 @@ async function refreshDashboardSnapshotNow(_options: DashboardSnapshotRefreshOpt
 
   if (selectedSessionId) {
     refreshes.push(loadSessionDetail(selectedSessionId, { showLoading: false }));
-    refreshes.push(timeline.sessionId === selectedSessionId && timeline.items.length
-      ? handleTimelineMessageUpdated(selectedSessionId)
-      : loadSessionTimeline(selectedSessionId, { mode: 'rebuild' }));
+    const hasTimelineSnapshot = timeline.sessionId === selectedSessionId
+      && (timeline.status === 'ready' || timeline.status === 'empty' || timeline.items.length > 0);
+    refreshes.push(hasTimelineSnapshot
+      ? handleTimelineMessageUpdated(selectedSessionId, timeline.latestTurnId)
+      : loadSessionTimeline(selectedSessionId, { mode: 'rebuild', latestTurnId: timeline.latestTurnId }));
   }
 
   if (workspaceId) refreshes.push(refreshWorkspaceGitStatus(workspaceId));

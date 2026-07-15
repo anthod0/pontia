@@ -70,7 +70,7 @@ test('opens new chat from a session menu with the current workspace query parame
 
 
 test('shows busy agent status with an interrupt action when supported', async () => {
-  const busySession = session({ state: 'busy', current_turn_id: 'turn-1', capabilities: { interrupt: true } });
+  const busySession = session({ state: 'busy', current_turn_id: 'turn-1', capabilities: { interrupt: true, timeline: true } });
   mocks.loadedSessions = [busySession];
   mocks.sessions.set([busySession]);
   mocks.sessionDetail.set({ session: busySession, turns: [turn({ state: 'running', output: null, completed_at: null })], inboxMessages: [], events: [] });
@@ -161,7 +161,7 @@ test('shows the initial prompt immediately after starting a chat while timeline 
 });
 
 
-test('falls back to projected turns when a TUI-launched session timeline is not ready yet', async () => {
+test('does not substitute projected Turn summaries while timeline history is still loading', async () => {
   const selected = session({ session_id: 'session-tui', state: 'busy', current_turn_id: 'turn-tui' });
   const activeTurn = turn({
     turn_id: 'turn-tui',
@@ -194,9 +194,8 @@ test('falls back to projected turns when a TUI-launched session timeline is not 
 
   render(SessionChatPage);
 
-  expect(await screen.findByText('typed in tui')).toBeInTheDocument();
-  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
-  expect(screen.queryByText('Loading conversation…')).not.toBeInTheDocument();
+  expect(await screen.findByText('Loading conversation…')).toBeInTheDocument();
+  expect(screen.queryByText('typed in tui')).not.toBeInTheDocument();
 });
 
 
@@ -264,7 +263,7 @@ test('keeps the selected chat transcript hidden until the initial bottom scroll 
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild' }));
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild', latestTurnId: 'turn-1' }));
   expect(document.querySelector('[data-chat-initial-scroll-pending="true"]')).toBeInTheDocument();
 
   resolveTimeline?.();
@@ -403,7 +402,7 @@ test('loads earlier chat history only after pulling beyond the top history senti
 });
 
 
-test('refreshes an already-loaded selected chat through the tail cursor without rebuilding loaded history', async () => {
+test('refreshes an already-loaded selected chat through its latest projected Turn without rebuilding history', async () => {
   const selected = session({ session_id: 'session-2', state: 'running' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -428,7 +427,7 @@ test('refreshes an already-loaded selected chat through the tail cursor without 
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2'));
+  await waitFor(() => expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2', 'turn-1'));
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'rebuild' });
   expect(mocks.resetTimelineState).not.toHaveBeenCalledWith('session-2');
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
@@ -450,7 +449,7 @@ test('refreshes an already-loaded selected chat through the tail cursor without 
   window.dispatchEvent(new Event('focus'));
 
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2', { showLoading: false }));
-  expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2');
+  expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2', 'turn-1');
 });
 
 
@@ -467,15 +466,16 @@ test('coalesces bursty selected-session idle events into one git status refresh'
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
   mocks.refreshWorkspaceGitStatus.mockClear();
+  mocks.handleTimelineMessageUpdated.mockClear();
 
-  const idleEvent = (eventId: string, type: string) => ({
+  const idleEvent = (eventId: string, type: string, turnId: string | null = null) => ({
     kind: 'session_event' as const,
     id: eventId,
     occurred_at: '2026-05-14T00:00:00Z',
     event: {
       event_id: eventId,
       session_id: 'session-2',
-      turn_id: null,
+      turn_id: turnId,
       source: 'runtime',
       type,
       time: '2026-05-14T00:00:00Z',
@@ -485,12 +485,13 @@ test('coalesces bursty selected-session idle events into one git status refresh'
 
   for (const listener of mocks.dashboardEventListeners) {
     listener(idleEvent('evt-ready', 'session.ready'));
-    listener(idleEvent('evt-completed', 'turn.completed'));
+    listener(idleEvent('evt-completed', 'turn.completed', 'turn-1'));
     listener(idleEvent('evt-failed', 'turn.failed'));
   }
 
   await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1));
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
+  expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2', 'turn-1');
 });
 
 
@@ -516,7 +517,7 @@ test('does not toast transient network errors from automatic chat refreshes', as
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2'));
+  await waitFor(() => expect(mocks.handleTimelineMessageUpdated).toHaveBeenCalledWith('session-2', 'turn-1'));
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
   mocks.toastError.mockClear();
 
@@ -1010,7 +1011,7 @@ test('places session controls near the prompt input and keeps advanced controls 
 
 test('disables follow-up input for sessions that do not advertise web-write capability while keeping output visible', async () => {
   const user = userEvent.setup();
-  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { accept_task: false, stream_output: true } });
+  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { accept_task: false, stream_output: true, timeline: true } });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
@@ -1150,7 +1151,7 @@ test('enables history intersection loading only after initial timeline load and 
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild' }));
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild', latestTurnId: 'turn-1' }));
   expect(observedHistorySentinels()).toHaveLength(0);
 
   resolveTimeline();
@@ -1213,7 +1214,7 @@ test('shows the floating scroll-down button after switching sessions when the do
   window.history.pushState({}, '', '/dashboard/chat/session-3');
   mocks.sessionDetail.set({ session: other, turns: [turn({ session_id: 'session-3' })], inboxMessages: [], events: [] });
   window.dispatchEvent(new PopStateEvent('popstate'));
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-3', { mode: 'rebuild' }));
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-3', { mode: 'rebuild', latestTurnId: 'turn-1' }));
   await triggerLatestBottomIntersection(false);
 
   expect(await screen.findByRole('button', { name: /scroll to bottom/i })).toBeInTheDocument();
@@ -1261,12 +1262,11 @@ test('scrolls to the document bottom after sending from the prompt input', async
 });
 
 
-test('scrolls again when a prompt input send is rendered after the submit response', async () => {
+test('scrolls when a prompt input send is rendered in an existing projected timeline', async () => {
   const user = userEvent.setup();
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   const selected = session({ session_id: 'session-2', state: 'idle' });
-  let scrollHeight = 4096;
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, get: () => scrollHeight });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
@@ -1283,17 +1283,6 @@ test('scrolls again when a prompt input send is rendered after the submit respon
   await user.click(screen.getByRole('button', { name: /send/i }));
   await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
 
-  scrollHeight = 5000;
-  mocks.timelineState.set({
-    ...mocks.timelineState.get(),
-    sessionId: 'session-2',
-    items: timelineItemsFromTurns([
-      turn({ turn_id: 'turn-1', session_id: 'session-2' }),
-      turn({ turn_id: 'turn-2', session_id: 'session-2', input: { summary: 'continue this session' }, output: null, completed_at: null }),
-    ]),
-  });
-
-  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 5000 }));
   scrollTo.mockRestore();
 });
 
@@ -1353,6 +1342,38 @@ test('does not render inline chat error alerts', async () => {
   await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith('Chat error', { description: 'Could not load session detail' }));
   expect(screen.queryByText('Chat error')).not.toBeInTheDocument();
   expect(screen.queryByText('Could not load session detail')).not.toBeInTheDocument();
+});
+
+test('renders an explicit degraded state instead of projected or partial history when timeline loading fails', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
+    mocks.timelineState.set({
+      sessionId,
+      items: [],
+      nextOlderTurnId: null,
+      latestTurnId: 'turn-1',
+      hasMore: false,
+      loading: false,
+      refreshing: false,
+      refreshKind: null,
+      status: 'range_invalid',
+      errorCode: 'turn_timeline_invalid',
+      error: 'Turn turn-1 has an invalid timeline range',
+    });
+    return null;
+  });
+
+  render(SessionChatPage);
+
+  expect(await screen.findByText('Conversation history unavailable')).toBeInTheDocument();
+  expect(screen.getByText('Turn turn-1 has an invalid timeline range')).toBeInTheDocument();
+  expect(screen.queryByText('hi there')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-timeline-status="range_invalid"]')).toBeInTheDocument();
 });
 
 

@@ -17,7 +17,8 @@ import type {
   SessionView,
   SubmitInboxMessageInput,
   TimelineItemDetail,
-  TimelinePage,
+  TurnTimelineDirection,
+  TurnTimelinePage,
   UpsertAgentProfileInput,
   TaskDagView,
   TaskEventView,
@@ -339,16 +340,17 @@ export async function listEvents(sessionId: string): Promise<EventView[]> {
   return (await request<{ events: EventView[] }>(`/sessions/${sessionId}/events`)).events;
 }
 
-export async function getSessionTimeline(
+export async function getTurnTimeline(
   sessionId: string,
-  options: { before?: string | null; after?: string | null; limit?: number; signal?: AbortSignal } = {},
-): Promise<TimelinePage> {
-  const params = new URLSearchParams();
-  if (options.before) params.set('before', options.before);
-  if (options.after) params.set('after', options.after);
+  options: { direction: TurnTimelineDirection; turnId?: string | null; limit?: number; signal?: AbortSignal },
+): Promise<TurnTimelinePage> {
+  const params = new URLSearchParams({ direction: options.direction });
+  if (options.turnId) params.set('turn_id', options.turnId);
   if (options.limit !== undefined) params.set('limit', String(options.limit));
-  const query = params.toString() ? `?${params.toString()}` : '';
-  return request<TimelinePage>(`/sessions/${encodeURIComponent(sessionId)}/timeline${query}`, { signal: options.signal });
+  return request<TurnTimelinePage>(
+    `/sessions/${encodeURIComponent(sessionId)}/turns/timeline?${params.toString()}`,
+    { signal: options.signal },
+  );
 }
 
 export async function getTimelineItemDetail(

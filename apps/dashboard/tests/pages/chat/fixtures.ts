@@ -2,6 +2,7 @@ import { cleanup } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { SessionConsoleDetail } from '../../../src/stores/sessions';
 import type { CreateSessionResult, InboxMessageView, SessionView, TimelineItem, TurnView, WorkspaceView } from '../../../src/api/types';
+import { optimisticInitialMessages } from '../../../src/stores/optimisticChat';
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -34,16 +35,17 @@ const mocks = vi.hoisted(() => {
   const workspacesError = writableStore<string | null>(null);
   const workspaceGitStatuses = writableStore({});
   const workspaceGitStatusErrors = writableStore({});
-  const timelineState = writableStore({
+  const timelineState = writableStore<any>({
     sessionId: '',
-    bindingId: null,
     items: [] as TimelineItem[],
-    headCursor: null,
-    tailCursor: null,
-        sourceId: null,
+    nextOlderTurnId: null as string | null,
+    latestTurnId: null as string | null,
     hasMore: false,
-        loading: false,
+    loading: false,
     refreshing: false,
+    refreshKind: null as 'history' | 'tail' | null,
+    status: 'idle' as string,
+    errorCode: null as string | null,
     error: null,
   });
   const dashboardEventListeners = new Set<(event: unknown) => void>();
@@ -79,14 +81,15 @@ const mocks = vi.hoisted(() => {
     resetTimelineState: vi.fn((sessionId = '') => {
       mocks.timelineState.set({
         sessionId,
-        bindingId: null,
         items: [],
-        headCursor: null,
-    tailCursor: null,
-                sourceId: null,
+        nextOlderTurnId: null,
+        latestTurnId: null,
         hasMore: false,
-                loading: false,
+        loading: false,
         refreshing: false,
+        refreshKind: null,
+        status: 'idle',
+        errorCode: null,
         error: null,
       });
     }),
@@ -162,7 +165,7 @@ export const session = (overrides: Partial<SessionView> = {}): SessionView => ({
   current_turn_id: null,
   workspace_id: 'workspace-1',
   workspace: null,
-  capabilities: { accept_task: true },
+  capabilities: { accept_task: true, timeline: true },
   model: null,
   context_usage: null,
   created_at: '2026-05-14T00:00:00Z',
@@ -174,6 +177,9 @@ export const session = (overrides: Partial<SessionView> = {}): SessionView => ({
 export const turn = (overrides: Partial<TurnView> = {}): TurnView => ({
   turn_id: 'turn-1',
   session_id: 'session-1',
+  turn_index: 1,
+  head_cursor: null,
+  tail_cursor: null,
   state: 'completed',
   input: { summary: 'hello' },
   output: { summary: 'hi there' },
@@ -269,41 +275,44 @@ beforeEach(() => {
   mocks.workspaceGitStatusErrors.set({});
   mocks.timelineState.set({
     sessionId: '',
-    bindingId: null,
     items: [],
-    headCursor: null,
-    tailCursor: null,
-        sourceId: null,
+    nextOlderTurnId: null,
+    latestTurnId: null,
     hasMore: false,
-        loading: false,
+    loading: false,
     refreshing: false,
+    refreshKind: null,
+    status: 'idle',
+    errorCode: null,
     error: null,
   });
+  optimisticInitialMessages.set({});
   mocks.dashboardEventListeners.clear();
   mocks.pathParams = {};
+  mocks.loadSessionDetail.mockReset().mockResolvedValue(null);
+  mocks.loadSessionTimeline.mockReset();
+  mocks.handleTimelineMessageUpdated.mockReset().mockResolvedValue(undefined);
   mocks.createSession.mockResolvedValue({ session: activeSession, initial_turn: null } satisfies CreateSessionResult);
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     const detail = mocks.sessionDetail.get();
     const turns = detail?.turns ?? [];
     const page = {
       session_id: sessionId,
-      binding_id: 'binding-1',
       items: timelineItemsFromTurns(turns),
-      head_cursor: null,
-      tail_cursor: null,
-      has_more: false,
-      source_id: 'source-1',
+      direction: 'backward' as const,
+      next_turn_id: null,
     };
     mocks.timelineState.set({
       sessionId,
-      bindingId: page.binding_id,
       items: page.items,
-      headCursor: page.head_cursor,
-      tailCursor: page.tail_cursor,
-      sourceId: page.source_id,
-      hasMore: page.has_more,
+      nextOlderTurnId: page.next_turn_id,
+      latestTurnId: page.items.at(-1)?.turn_id ?? null,
+      hasMore: page.next_turn_id !== null,
       loading: false,
       refreshing: false,
+      refreshKind: null,
+      status: page.items.length ? 'ready' : 'empty',
+      errorCode: null,
       error: null,
     });
     return page;
@@ -312,4 +321,3 @@ beforeEach(() => {
   document.body.style.pointerEvents = '';
   vi.clearAllMocks();
 });
-

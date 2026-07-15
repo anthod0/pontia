@@ -13,7 +13,6 @@
   import {
     canSendSessionMessage,
     timelineItemsToChatMessages,
-    turnsToChatMessages,
   } from '$lib/session-chat/sessionChat'
   import {
     chatMessagesWithOptimistic,
@@ -112,8 +111,8 @@
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, $workspaces, selectedSessionGitStatus, $workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
   $: timelineMessages = $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : []
-  $: projectedTurnMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? turnsToChatMessages($sessionDetail.turns) : []
-  $: messages = chatMessagesWithOptimistic(selectedSessionId, timelineMessages.length ? timelineMessages : projectedTurnMessages, $optimisticInitialMessages)
+  $: messages = chatMessagesWithOptimistic(selectedSessionId, timelineMessages, $optimisticInitialMessages)
+  $: timelineUnavailable = $timelineState.sessionId === selectedSessionId && Boolean($timelineState.error)
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
   $: inboxActionableCount = visibleInboxMessages.filter((message) => message.state === 'pending' || message.state === 'failed').length
@@ -283,9 +282,12 @@
     if (foregroundRefreshInFlight) return
 
     const currentTimeline = get(timelineState)
-    const timelineRefresh = currentTimeline.sessionId === sessionId && currentTimeline.items.length
-      ? handleTimelineMessageUpdated(sessionId)
-      : loadSessionTimeline(sessionId, { mode: 'rebuild' })
+    const latestTurnId = latestProjectedTurnId()
+    const hasTimelineSnapshot = currentTimeline.sessionId === sessionId
+      && (currentTimeline.status === 'ready' || currentTimeline.status === 'empty' || currentTimeline.items.length > 0)
+    const timelineRefresh = hasTimelineSnapshot
+      ? handleTimelineMessageUpdated(sessionId, latestTurnId)
+      : loadSessionTimeline(sessionId, { mode: 'rebuild', latestTurnId })
 
     foregroundRefreshInFlight = Promise.all([
       loadSessionDetail(sessionId, { showLoading: false }),
@@ -314,14 +316,23 @@
       if (streamEvent.event.session_id !== selectedSessionId) return
       if (isSessionIdleEvent(streamEvent.event.type)) {
         void refreshCurrentSessionGitStatus()
+        void handleTimelineMessageUpdated(selectedSessionId, streamEvent.event.turn_id)
         return
       }
       if (streamEvent.event.type !== 'session.message_updated') return
-      const rawBindingId = streamEvent.event.payload.binding_id
-      const bindingId = typeof rawBindingId === 'string' ? rawBindingId : null
-      void handleTimelineMessageUpdated(selectedSessionId, bindingId)
+      void handleTimelineMessageUpdated(selectedSessionId, streamEvent.event.turn_id)
       return
     }
+  }
+
+  function latestProjectedTurnId(): string | null {
+    if (!$sessionDetail || $sessionDetail.session.session_id !== selectedSessionId) return null
+    return $sessionDetail.turns.reduce<{ turnId: string | null; turnIndex: number }>(
+      (latest, turn) => turn.turn_index > latest.turnIndex
+        ? { turnId: turn.turn_id, turnIndex: turn.turn_index }
+        : latest,
+      { turnId: null, turnIndex: -1 },
+    ).turnId
   }
 
   function openRenameSelectedSessionDialog(): void {
@@ -398,10 +409,12 @@
       }
 
       const currentTimeline = get(timelineState)
-      const hasLoadedTimeline = currentTimeline.sessionId === sessionId && currentTimeline.items.length > 0
+      const latestTurnId = latestProjectedTurnId()
+      const hasLoadedTimeline = currentTimeline.sessionId === sessionId
+        && (currentTimeline.status === 'ready' || currentTimeline.status === 'empty' || currentTimeline.items.length > 0)
       if (!hasLoadedTimeline) resetTimelineState(sessionId)
-      if (hasLoadedTimeline) await handleTimelineMessageUpdated(sessionId)
-      else await loadSessionTimeline(sessionId, { mode: 'rebuild' })
+      if (hasLoadedTimeline) await handleTimelineMessageUpdated(sessionId, latestTurnId)
+      else await loadSessionTimeline(sessionId, { mode: 'rebuild', latestTurnId })
       await scrollChatToBottomAfterLayout()
       if (!destroyed && selectedSessionId === sessionId) {
         initialChatScrollPending = false
@@ -429,7 +442,7 @@
     actionError = null
     try {
       await interruptSession(selectedSessionId)
-      await loadSessionTimeline(selectedSessionId, { mode: 'rebuild' })
+      await handleTimelineMessageUpdated(selectedSessionId, selectedSession?.current_turn_id ?? latestProjectedTurnId())
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -543,20 +556,29 @@
           data-chat-initial-scroll-pending={initialChatScrollPending ? 'true' : 'false'}
           class={initialChatScrollPending ? 'opacity-0' : ''}
         >
-          {#key selectedSessionId}
-            <SessionConversation
-              {messages}
-              sessionState={selectedSession.state}
-              loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
-              interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
-              interruptBusy={actionBusy}
-              hasMoreHistory={$timelineState.hasMore}
-              historyLoading={$timelineState.refreshKind === 'history'}
-              {historyObserverEnabled}
-              onInterrupt={() => void interruptSelectedSession()}
-              onLoadMoreHistory={loadEarlierMessages}
-            />
-          {/key}
+          {#if timelineUnavailable}
+            <Empty.Root data-timeline-status={$timelineState.status} class="min-h-80">
+              <Empty.Header>
+                <Empty.Title>Conversation history unavailable</Empty.Title>
+                <Empty.Description>{$timelineState.error}</Empty.Description>
+              </Empty.Header>
+            </Empty.Root>
+          {:else}
+            {#key selectedSessionId}
+              <SessionConversation
+                {messages}
+                sessionState={selectedSession.state}
+                loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
+                interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
+                interruptBusy={actionBusy}
+                hasMoreHistory={$timelineState.hasMore}
+                historyLoading={$timelineState.refreshKind === 'history'}
+                {historyObserverEnabled}
+                onInterrupt={() => void interruptSelectedSession()}
+                onLoadMoreHistory={loadEarlierMessages}
+              />
+            {/key}
+          {/if}
         </div>
         <div aria-hidden="true" class="h-px w-px" data-chat-bottom-sentinel use:observeBottomSentinel></div>
 

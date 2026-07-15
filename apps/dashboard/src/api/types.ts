@@ -394,14 +394,15 @@ export interface TimelineItem {
   managed_tool_use?: ManagedToolUse | null;
 }
 
-export interface TimelinePage {
+export type TurnTimelineDirection = 'forward' | 'backward';
+
+export type TurnTimelineItem = TimelineItem & { turn_id: string };
+
+export interface TurnTimelinePage {
   session_id: string;
-  binding_id: string;
-  items: TimelineItem[];
-  head_cursor: string | null;
-  tail_cursor: string | null;
-  has_more: boolean;
-  source_id: string;
+  direction: TurnTimelineDirection;
+  items: TurnTimelineItem[];
+  next_turn_id: string | null;
 }
 
 export interface TimelineItemDetail {

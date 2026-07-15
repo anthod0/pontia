@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
+import { getTurnTimeline, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
 import { token } from '../src/stores/auth';
 
 beforeEach(() => {
@@ -55,6 +55,23 @@ test('serializes session list limit and pinned inclusion query options', async (
   await listSessions({ limit: 50, includePinned: true });
 
   expect(fetchMock).toHaveBeenCalledWith('/external/v1/sessions?limit=50&include_pinned=true', expect.any(Object));
+});
+
+test('loads projected Turn timeline ranges without exposing client-native cursors', async () => {
+  const fetchMock = vi.fn(async () => jsonResponse({
+    session_id: 'session-1',
+    direction: 'backward',
+    items: [],
+    next_turn_id: 'turn-older',
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+
+  await getTurnTimeline('session-1', { direction: 'backward', turnId: 'turn-latest', limit: 3 });
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/external/v1/sessions/session-1/turns/timeline?direction=backward&turn_id=turn-latest&limit=3',
+    expect.any(Object),
+  );
 });
 
 test.each([
