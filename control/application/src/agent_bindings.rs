@@ -4,6 +4,7 @@ use pontia_storage_sqlite::{
     repositories::{
         agent_bindings::{AgentBindingUpsertRecord, SqliteAgentBindingRepository},
         runtime_bindings::SqliteRuntimeBindingRepository,
+        sessions::SqliteSessionRepository,
     },
 };
 use sqlx::Row;
@@ -67,7 +68,12 @@ impl AgentBindingService {
             .binding_for_client_session(client_type, client_session_key)
             .await?;
 
-        row.map(agent_binding_from_row).transpose()
+        let binding = row.map(agent_binding_from_row).transpose()?;
+        if let Some(binding) = binding.as_ref() {
+            self.ensure_binding_agrees_with_session_and_runtime(binding)
+                .await?;
+        }
+        Ok(binding)
     }
 
     pub async fn current_turn_for_client_session(
@@ -127,21 +133,65 @@ impl AgentBindingService {
         }))
     }
 
-    pub async fn primary_binding_for_session(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<AgentBinding>> {
+    pub async fn binding_for_session(&self, session_id: &str) -> Result<Option<AgentBinding>> {
         let row = SqliteAgentBindingRepository::new(self.pool.clone())
-            .primary_binding_for_session(session_id)
+            .binding_for_session(session_id)
             .await?;
 
-        row.map(agent_binding_from_row).transpose()
+        let binding = row.map(agent_binding_from_row).transpose()?;
+        if let Some(binding) = binding.as_ref() {
+            self.ensure_binding_agrees_with_session_and_runtime(binding)
+                .await?;
+        }
+        Ok(binding)
     }
 
     pub async fn mark_discovered(&self, binding_id: &str) -> Result<()> {
         SqliteAgentBindingRepository::new(self.pool.clone())
             .mark_discovered(binding_id)
             .await
+    }
+
+    async fn ensure_binding_agrees_with_session_and_runtime(
+        &self,
+        binding: &AgentBinding,
+    ) -> Result<()> {
+        let session = SqliteSessionRepository::new(self.pool.clone())
+            .get_session(&binding.session_id)
+            .await?
+            .ok_or_else(|| {
+                Error::StateConflict(format!(
+                    "Agent binding {} references missing Session {}",
+                    binding.id, binding.session_id
+                ))
+            })?;
+        if session.client_type != binding.client_type {
+            return Err(Error::StateConflict(format!(
+                "Session {} client type does not match its Agent binding",
+                binding.session_id
+            )));
+        }
+
+        let Some(runtime_metadata) = SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .metadata(&binding.session_id)
+            .await?
+        else {
+            return Ok(());
+        };
+        let runtime_metadata: Value = serde_json::from_str(&runtime_metadata)?;
+        if let Some(runtime_client_session_key) = runtime_metadata
+            .get("client_session_key")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            && runtime_client_session_key != binding.client_session_key
+        {
+            return Err(Error::StateConflict(format!(
+                "Session {} Runtime binding client identity does not match its Agent binding",
+                binding.session_id
+            )));
+        }
+        Ok(())
     }
 }
 

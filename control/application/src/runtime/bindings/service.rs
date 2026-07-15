@@ -66,6 +66,8 @@ impl RuntimeBindingUpsertService {
             .await?;
         let session_id = match existing_session_id {
             Some(session_id) => {
+                self.ensure_existing_binding_agrees(&session_id, &request)
+                    .await?;
                 self.record_resume_lifecycle_for_exited_session(&session_id, &request)
                     .await?;
                 session_id
@@ -198,6 +200,27 @@ impl RuntimeBindingUpsertService {
             .await
     }
 
+    async fn ensure_existing_binding_agrees(
+        &self,
+        session_id: &str,
+        request: &RuntimeBindingUpsertRequest,
+    ) -> Result<()> {
+        let binding = AgentBindingService::new(self.pool.clone())
+            .binding_for_client_session(&request.client_type, &request.client_session_key)
+            .await?
+            .ok_or_else(|| {
+                Error::StateConflict(format!(
+                    "session {session_id} has no Agent binding for runtime binding update"
+                ))
+            })?;
+        if binding.session_id != session_id {
+            return Err(Error::StateConflict(format!(
+                "runtime binding update does not match session {session_id} Agent binding"
+            )));
+        }
+        Ok(())
+    }
+
     async fn upsert_fork_lineage(
         &self,
         child_session_id: &str,
@@ -227,7 +250,7 @@ impl RuntimeBindingUpsertService {
                 Some(key) => Some(key),
                 None => {
                     SqliteAgentBindingRepository::new(self.pool.clone())
-                        .latest_client_session_key(&parent_session_id, &request.client_type)
+                        .client_session_key_for_session(&parent_session_id, &request.client_type)
                         .await?
                 }
             };

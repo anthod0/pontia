@@ -404,7 +404,7 @@ fn pi_parser_falls_back_to_raw_kind_for_unmapped_message_roles() {
 }
 
 #[tokio::test]
-async fn service_can_resolve_and_parse_primary_binding_for_session() {
+async fn service_can_resolve_and_parse_the_binding_for_session() {
     let temp = tempdir().unwrap();
     let agent_dir = temp.path().join("agent");
     let cwd = temp.path().join("workspace");

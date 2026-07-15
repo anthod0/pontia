@@ -75,7 +75,7 @@ impl RuntimeControlService {
             return Ok(Some(command));
         };
         let Some(client_session_key) = self
-            .latest_client_session_key(session_id, client_type)
+            .client_session_key_for_session(session_id, client_type)
             .await?
         else {
             return Ok(Some(command));
@@ -86,13 +86,13 @@ impl RuntimeControlService {
         )))
     }
 
-    async fn latest_client_session_key(
+    async fn client_session_key_for_session(
         &self,
         session_id: &str,
         client_type: &str,
     ) -> Result<Option<String>> {
         SqliteAgentBindingRepository::new(self.pool.clone())
-            .latest_client_session_key(session_id, client_type)
+            .client_session_key_for_session(session_id, client_type)
             .await
     }
 

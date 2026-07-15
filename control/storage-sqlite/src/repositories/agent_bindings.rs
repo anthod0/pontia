@@ -64,9 +64,7 @@ impl SqliteAgentBindingRepository {
         Ok(sqlx::query_as::<_, AgentBindingRow>(
             r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered
                FROM agent_bindings
-               WHERE client_type = ? AND client_session_key = ?
-               ORDER BY updated_at DESC, id DESC
-               LIMIT 1"#,
+               WHERE client_type = ? AND client_session_key = ?"#,
         )
         .bind(client_type)
         .bind(client_session_key)
@@ -74,16 +72,11 @@ impl SqliteAgentBindingRepository {
         .await?)
     }
 
-    pub async fn primary_binding_for_session(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<AgentBindingRow>> {
+    pub async fn binding_for_session(&self, session_id: &str) -> Result<Option<AgentBindingRow>> {
         Ok(sqlx::query_as::<_, AgentBindingRow>(
             r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered
                FROM agent_bindings
-               WHERE session_id = ?
-               ORDER BY created_at, id
-               LIMIT 1"#,
+               WHERE session_id = ?"#,
         )
         .bind(session_id)
         .fetch_optional(&self.pool)
@@ -111,9 +104,7 @@ impl SqliteAgentBindingRepository {
         Ok(sqlx::query_scalar(
             r#"SELECT session_id
                FROM agent_bindings
-               WHERE client_type = ? AND client_session_key = ?
-               ORDER BY updated_at DESC, id DESC
-               LIMIT 1"#,
+               WHERE client_type = ? AND client_session_key = ?"#,
         )
         .bind(client_type)
         .bind(client_session_key)
@@ -121,7 +112,7 @@ impl SqliteAgentBindingRepository {
         .await?)
     }
 
-    pub async fn latest_client_session_key(
+    pub async fn client_session_key_for_session(
         &self,
         session_id: &str,
         client_type: &str,
@@ -129,9 +120,7 @@ impl SqliteAgentBindingRepository {
         Ok(sqlx::query_scalar(
             r#"SELECT client_session_key
                FROM agent_bindings
-               WHERE session_id = ? AND client_type = ?
-               ORDER BY updated_at DESC, id DESC
-               LIMIT 1"#,
+               WHERE session_id = ? AND client_type = ?"#,
         )
         .bind(session_id)
         .bind(client_type)

@@ -806,6 +806,152 @@ async fn internal_event_api_ready_agent_binding_is_idempotent_for_retries() {
 }
 
 #[tokio::test]
+async fn internal_event_api_rejects_ready_that_changes_the_sessions_client_identity() {
+    let state = test_state().await;
+    let launch_cwd = tempfile::tempdir().expect("workspace");
+    let launch_cwd = launch_cwd
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let mut created = event_body(
+        "evt_ready_identity_change_created",
+        "session.created",
+        "sess_ready_identity_change",
+        None,
+        1,
+    );
+    created["source"] = json!("external_api");
+    created["client_type"] = json!("pi");
+    post_event(state.clone(), created).await;
+    sqlx::query(
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'tmux', 'rtinst_identity_change', ?, ?)",
+    )
+    .bind("sess_ready_identity_change")
+    .bind(launch_cwd.display().to_string())
+    .bind(json!({
+        "runtime_instance_id": "rtinst_identity_change",
+        "workspace": launch_cwd.display().to_string(),
+        "client_session_key": "pi_expected"
+    }).to_string())
+    .execute(&state.db())
+    .await
+    .expect("runtime binding");
+    sqlx::query(
+        "INSERT INTO agent_bindings (id, session_id, client_type, launch_cwd, client_session_key) VALUES ('bind_identity_change', 'sess_ready_identity_change', 'pi', ?, 'pi_expected')",
+    )
+    .bind(launch_cwd.display().to_string())
+    .execute(&state.db())
+    .await
+    .expect("agent binding");
+
+    let mut ready = event_body(
+        "evt_ready_identity_change",
+        "session.ready",
+        "sess_ready_identity_change",
+        None,
+        2,
+    );
+    ready["source"] = json!("agent_client");
+    ready["client_type"] = json!("pi");
+    ready["payload"] = json!({
+        "runtime_instance_id": "rtinst_identity_change",
+        "client_session_key": "pi_conflicting"
+    });
+
+    let (status, body) = post_event(state.clone(), ready).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .expect("error message")
+            .contains("does not match")
+    );
+    let ready_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM events WHERE session_id = ? AND event_type = 'session.ready'",
+    )
+    .bind("sess_ready_identity_change")
+    .fetch_one(&state.db())
+    .await
+    .expect("ready event count");
+    assert_eq!(ready_count, 0);
+}
+
+#[tokio::test]
+async fn internal_event_api_rejects_ready_identity_already_bound_to_another_session() {
+    let state = test_state().await;
+    let launch_cwd = tempfile::tempdir().expect("workspace");
+    let launch_cwd = launch_cwd
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    for session_id in ["sess_identity_owner", "sess_identity_conflict"] {
+        let mut created = event_body(
+            &format!("evt_{session_id}_created"),
+            "session.created",
+            session_id,
+            None,
+            1,
+        );
+        created["source"] = json!("external_api");
+        created["client_type"] = json!("pi");
+        post_event(state.clone(), created).await;
+    }
+    sqlx::query(
+        "INSERT INTO agent_bindings (id, session_id, client_type, launch_cwd, client_session_key) VALUES ('bind_identity_owner', 'sess_identity_owner', 'pi', ?, 'pi_shared')",
+    )
+    .bind(launch_cwd.display().to_string())
+    .execute(&state.db())
+    .await
+    .expect("owner Agent binding");
+    sqlx::query(
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES ('sess_identity_conflict', 'tmux', 'rtinst_identity_conflict', ?, ?)",
+    )
+    .bind(launch_cwd.display().to_string())
+    .bind(json!({
+        "runtime_instance_id": "rtinst_identity_conflict",
+        "workspace": launch_cwd.display().to_string(),
+        "client_session_key": "pi_shared"
+    }).to_string())
+    .execute(&state.db())
+    .await
+    .expect("conflicting Runtime binding");
+
+    let mut ready = event_body(
+        "evt_ready_identity_conflict",
+        "session.ready",
+        "sess_identity_conflict",
+        None,
+        2,
+    );
+    ready["source"] = json!("agent_client");
+    ready["client_type"] = json!("pi");
+    ready["payload"] = json!({
+        "runtime_instance_id": "rtinst_identity_conflict",
+        "client_session_key": "pi_shared"
+    });
+
+    let (status, body) = post_event(state.clone(), ready).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .expect("error message")
+            .contains("another Session")
+    );
+    let binding_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM agent_bindings WHERE client_type = 'pi' AND client_session_key = 'pi_shared'",
+    )
+    .fetch_one(&state.db())
+    .await
+    .expect("binding count");
+    assert_eq!(binding_count, 1);
+}
+
+#[tokio::test]
 async fn internal_event_api_rejects_confirmed_turn_event_for_unknown_session() {
     let state = test_state().await;
     let mut event = event_body(

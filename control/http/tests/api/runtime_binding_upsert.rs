@@ -536,6 +536,85 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
 }
 
 #[tokio::test]
+async fn upsert_creates_a_new_session_for_a_new_pi_session_key() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let (first_status, first) =
+        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    assert_eq!(first_status, StatusCode::OK, "{first:?}");
+
+    let mut second_request = upsert_body(&workspace, Some("%43"));
+    second_request["client_session_key"] = json!("pi_session_456");
+    second_request["runtime_instance_id"] = json!("rtinst_second");
+    let (second_status, second) = post_upsert(state.clone(), second_request).await;
+
+    assert_eq!(second_status, StatusCode::OK, "{second:?}");
+    assert_ne!(
+        second["session"]["session_id"],
+        first["session"]["session_id"]
+    );
+    let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+        .fetch_one(&state.db())
+        .await
+        .expect("session count");
+    let binding_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings")
+        .fetch_one(&state.db())
+        .await
+        .expect("binding count");
+    assert_eq!(session_count, 2);
+    assert_eq!(binding_count, 2);
+}
+
+#[tokio::test]
+async fn upsert_rejects_a_runtime_binding_that_disagrees_with_the_agent_binding() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let (first_status, first) =
+        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    assert_eq!(first_status, StatusCode::OK, "{first:?}");
+    let session_id = first["session"]["session_id"].as_str().expect("session id");
+    sqlx::query(
+        "UPDATE runtime_bindings SET metadata = json_set(metadata, '$.client_session_key', 'pi_conflicting') WHERE session_id = ?",
+    )
+    .bind(session_id)
+    .execute(&state.db())
+    .await
+    .expect("corrupt runtime binding identity");
+
+    let mut retry = upsert_body(&workspace, Some("%99"));
+    retry["runtime_instance_id"] = json!("rtinst_rejected");
+    let (status, body) = post_upsert(state.clone(), retry).await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "state_conflict");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .expect("error message")
+            .contains("does not match")
+    );
+    let runtime_instance_id: String =
+        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("runtime binding");
+    assert_eq!(runtime_instance_id, "rtinst_first");
+}
+
+#[tokio::test]
 async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");

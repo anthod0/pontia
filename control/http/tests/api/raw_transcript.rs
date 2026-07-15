@@ -350,6 +350,53 @@ async fn timeline_external_api_returns_not_ready_for_missing_discovered_source_i
 }
 
 #[tokio::test]
+async fn timeline_external_api_rejects_agent_and_runtime_binding_identity_disagreement() {
+    let state = test_state().await;
+    let session_id = "sess_raw_binding_disagreement";
+    let cwd = tempdir().unwrap();
+    let cwd = cwd.path().canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: "pi_agent_identity".to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata) VALUES (?, 'tmux', 'rtinst_disagreement', ?, ?)",
+    )
+    .bind(session_id)
+    .bind(cwd.to_string_lossy().to_string())
+    .bind(json!({
+        "client_session_key": "pi_runtime_identity",
+        "runtime_instance_id": "rtinst_disagreement",
+        "workspace": cwd.to_string_lossy().to_string()
+    }).to_string())
+    .execute(&state.db())
+    .await
+    .expect("Runtime binding");
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/timeline"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "state_conflict");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .expect("error message")
+            .contains("does not match")
+    );
+}
+
+#[tokio::test]
 async fn timeline_external_api_does_not_mark_binding_discovered_until_timeline_parse_succeeds() {
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();

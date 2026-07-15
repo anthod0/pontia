@@ -64,7 +64,7 @@ async fn upserts_agent_binding_and_preserves_discovered_flag() {
 }
 
 #[tokio::test]
-async fn primary_binding_for_session_returns_earliest_binding() {
+async fn binding_for_session_returns_its_only_binding() {
     let pool = test_pool().await;
     insert_session(&pool, "sess_primary").await;
     let repository = SqliteAgentBindingRepository::new(pool);
@@ -75,35 +75,24 @@ async fn primary_binding_for_session_returns_earliest_binding() {
             session_id: "sess_primary".to_string(),
             client_type: "pi".to_string(),
             launch_cwd: "/workspace".to_string(),
-            client_session_key: "old-key".to_string(),
+            client_session_key: "only-key".to_string(),
             metadata: "{}".to_string(),
         })
         .await
-        .expect("insert old binding");
-    repository
-        .upsert_binding(AgentBindingUpsertRecord {
-            id: "bind_2".to_string(),
-            session_id: "sess_primary".to_string(),
-            client_type: "pi".to_string(),
-            launch_cwd: "/workspace".to_string(),
-            client_session_key: "new-key".to_string(),
-            metadata: "{}".to_string(),
-        })
-        .await
-        .expect("insert new binding");
+        .expect("insert binding");
 
     let primary = repository
-        .primary_binding_for_session("sess_primary")
+        .binding_for_session("sess_primary")
         .await
         .expect("primary binding")
         .expect("binding exists");
 
     assert_eq!(primary.id, "bind_1");
-    assert_eq!(primary.client_session_key, "old-key");
+    assert_eq!(primary.client_session_key, "only-key");
 }
 
 #[tokio::test]
-async fn looks_up_session_and_latest_key_from_agent_bindings() {
+async fn looks_up_both_sides_of_the_one_to_one_binding() {
     let pool = test_pool().await;
     insert_session(&pool, "sess_lookup").await;
     let repository = SqliteAgentBindingRepository::new(pool);
@@ -114,36 +103,25 @@ async fn looks_up_session_and_latest_key_from_agent_bindings() {
             session_id: "sess_lookup".to_string(),
             client_type: "pi".to_string(),
             launch_cwd: "/workspace".to_string(),
-            client_session_key: "old-key".to_string(),
+            client_session_key: "only-key".to_string(),
             metadata: "{}".to_string(),
         })
         .await
-        .expect("insert old binding");
-    repository
-        .upsert_binding(AgentBindingUpsertRecord {
-            id: "bind_lookup_2".to_string(),
-            session_id: "sess_lookup".to_string(),
-            client_type: "pi".to_string(),
-            launch_cwd: "/workspace".to_string(),
-            client_session_key: "new-key".to_string(),
-            metadata: "{}".to_string(),
-        })
-        .await
-        .expect("insert new binding");
+        .expect("insert binding");
 
     assert_eq!(
         repository
-            .session_id_for_client_session("pi", "new-key")
+            .session_id_for_client_session("pi", "only-key")
             .await
             .expect("session lookup"),
         Some("sess_lookup".to_string())
     );
     assert_eq!(
         repository
-            .latest_client_session_key("sess_lookup", "pi")
+            .client_session_key_for_session("sess_lookup", "pi")
             .await
             .expect("latest key"),
-        Some("new-key".to_string())
+        Some("only-key".to_string())
     );
 }
 
@@ -170,7 +148,7 @@ async fn agent_binding_can_be_upserted_inside_transaction() {
 
     let repository = SqliteAgentBindingRepository::new(pool);
     let primary = repository
-        .primary_binding_for_session("sess_tx_agent_binding")
+        .binding_for_session("sess_tx_agent_binding")
         .await
         .expect("primary binding")
         .expect("binding exists");

@@ -150,7 +150,7 @@ impl RawTranscriptService {
             })?;
 
         let binding = AgentBindingService::new(self.pool.clone())
-            .primary_binding_for_session(session_id)
+            .binding_for_session(session_id)
             .await?
             .ok_or_else(|| {
                 timeline_error(

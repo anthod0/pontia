@@ -9,6 +9,7 @@ use pontia_core::{
     error::{Error, Result},
 };
 use pontia_storage_sqlite::repositories::{
+    agent_bindings::SqliteAgentBindingRepository,
     events::{EventInsertRecord, SqliteEventRepository},
     inbox::SqliteInboxRepository,
     runtime_bindings::SqliteRuntimeBindingRepository,
@@ -305,6 +306,10 @@ impl EventIngestService {
             )));
         }
 
+        if event.event_type == EventType::SessionReady {
+            self.ensure_ready_identity_matches_bindings(event).await?;
+        }
+
         let expected_runtime_instance_id = SqliteRuntimeBindingRepository::new(self.pool.clone())
             .runtime_instance_id(&event.session_id)
             .await?;
@@ -332,6 +337,62 @@ impl EventIngestService {
             if provided_runtime_instance_id != expected_runtime_instance_id {
                 return Err(Error::Domain(format!(
                     "payload.runtime_instance_id does not match session {} runtime binding",
+                    event.session_id
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn ensure_ready_identity_matches_bindings(&self, event: &DomainEvent) -> Result<()> {
+        let Some(client_session_key) = event
+            .payload
+            .get("client_session_key")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Ok(());
+        };
+
+        let agent_bindings = SqliteAgentBindingRepository::new(self.pool.clone());
+        if let Some(binding) = agent_bindings
+            .binding_for_session(&event.session_id)
+            .await?
+            && (binding.client_type != event.client_type
+                || binding.client_session_key != client_session_key)
+        {
+            return Err(Error::Domain(format!(
+                "session.ready client identity does not match session {} Agent binding",
+                event.session_id
+            )));
+        }
+        if let Some(binding) = agent_bindings
+            .binding_for_client_session(&event.client_type, client_session_key)
+            .await?
+            && binding.session_id != event.session_id
+        {
+            return Err(Error::Domain(format!(
+                "session.ready client identity is already bound to another Session {}",
+                binding.session_id
+            )));
+        }
+
+        if let Some(runtime_metadata) = SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .metadata(&event.session_id)
+            .await?
+        {
+            let runtime_metadata: Value = serde_json::from_str(&runtime_metadata)?;
+            if let Some(runtime_client_session_key) = runtime_metadata
+                .get("client_session_key")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                && runtime_client_session_key != client_session_key
+            {
+                return Err(Error::Domain(format!(
+                    "session.ready client identity does not match session {} Runtime binding",
                     event.session_id
                 )));
             }
