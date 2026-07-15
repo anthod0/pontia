@@ -1,10 +1,12 @@
+use std::path::PathBuf;
+
 use serde_json::Value;
 use sqlx::SqlitePool;
 
 use pontia_core::{
     domain::{
         DomainEvent, EventSource, EventType, ProjectionState, ReportedEvent, SessionProjection,
-        TurnProjection,
+        TimelineBoundary, TurnProjection,
     },
     error::{Error, Result},
 };
@@ -20,6 +22,9 @@ use pontia_storage_sqlite::repositories::{
 use super::EventIngestResult;
 use crate::{
     InboxCommandService, UpsertAgentBindingRequest, row_to_event, row_to_session, row_to_turn,
+};
+use pontia_agent_clients::raw_transcripts::{
+    AgentBindingResolveRequest, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
 };
 
 #[derive(Clone)]
@@ -69,6 +74,8 @@ impl EventIngestService {
             });
         }
 
+        self.enrich_timeline_boundary(&mut event).await;
+
         let mut tx = self.pool.begin().await?;
         self.enrich_turn_index_in_tx(&mut tx, &mut event).await?;
         let sessions =
@@ -86,6 +93,11 @@ impl EventIngestService {
         projection.apply(&event)?;
 
         let payload = serde_json::to_string(&event.payload)?;
+        let timeline_boundary = event
+            .timeline_boundary
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
         let occurred_at = event
             .occurred_at
             .format(&time::format_description::well_known::Rfc3339)
@@ -106,6 +118,7 @@ impl EventIngestService {
                 seq: event.seq,
                 payload,
                 turn_index: event.turn_index,
+                timeline_boundary,
             },
         )
         .await?;
@@ -144,6 +157,8 @@ impl EventIngestService {
                         turn_id: turn.turn_id.clone(),
                         session_id: turn.session_id.clone(),
                         turn_index: turn.turn_index,
+                        head_cursor: turn.head_cursor.clone(),
+                        tail_cursor: turn.tail_cursor.clone(),
                         state: turn.state.to_string(),
                         state_version: turn.state_version,
                         metadata,
@@ -184,6 +199,110 @@ impl EventIngestService {
             turn_id: event.turn_id,
             state_version,
         })
+    }
+
+    async fn enrich_timeline_boundary(&self, event: &mut DomainEvent) {
+        let Some(kind) = timeline_boundary_kind(event.event_type) else {
+            return;
+        };
+        if event.client_type != "pi" || event.source != EventSource::AgentAdapter {
+            return;
+        }
+
+        let turn_id = event.turn_id.as_deref().expect("validated turn_id");
+        let binding = match crate::AgentBindingService::new(self.pool.clone())
+            .binding_for_session(&event.session_id)
+            .await
+        {
+            Ok(Some(binding)) => binding,
+            Ok(None) => {
+                warn_timeline_capture_failure(event, turn_id, None, "agent_binding_missing");
+                return;
+            }
+            Err(error) => {
+                warn_timeline_capture_failure(
+                    event,
+                    turn_id,
+                    None,
+                    &safe_timeline_adapter_error(&error),
+                );
+                return;
+            }
+        };
+
+        let Some(backend) = pontia_agent_clients::timeline_boundary_backend_for(&event.client_type)
+        else {
+            warn_timeline_capture_failure(event, turn_id, Some(&binding.id), "adapter_unavailable");
+            return;
+        };
+        let source = match backend.resolver.resolve(&AgentBindingResolveRequest {
+            id: binding.id.clone(),
+            session_id: binding.session_id.clone(),
+            client_type: binding.client_type.clone(),
+            launch_cwd: PathBuf::from(&binding.launch_cwd),
+            client_session_key: binding.client_session_key.clone(),
+        }) {
+            Ok(source) => source,
+            Err(error) => {
+                warn_timeline_capture_failure(
+                    event,
+                    turn_id,
+                    Some(&binding.id),
+                    &safe_timeline_adapter_error(&error),
+                );
+                return;
+            }
+        };
+
+        let native_entry_anchor = match kind {
+            TimelineBoundaryCaptureKind::Head => {
+                event.payload.pointer("/timeline_anchor/previous_leaf_id")
+            }
+            TimelineBoundaryCaptureKind::Tail => {
+                event.payload.pointer("/timeline_anchor/terminal_leaf_id")
+            }
+        }
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+        let allow_missing_native_entry_anchor = if kind == TimelineBoundaryCaptureKind::Head {
+            match sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM turns WHERE session_id = ? AND turn_id <> ?",
+            )
+            .bind(&event.session_id)
+            .bind(turn_id)
+            .fetch_one(&self.pool)
+            .await
+            {
+                Ok(count) => count == 0,
+                Err(_) => false,
+            }
+        } else {
+            false
+        };
+
+        match backend
+            .capturer
+            .capture_boundary(TimelineBoundaryCaptureRequest {
+                source,
+                kind,
+                native_entry_anchor,
+                allow_missing_native_entry_anchor,
+            }) {
+            Ok(boundary) => {
+                event.timeline_boundary = Some(match boundary.kind {
+                    TimelineBoundaryCaptureKind::Head => TimelineBoundary::head(boundary.cursor),
+                    TimelineBoundaryCaptureKind::Tail => TimelineBoundary::tail(boundary.cursor),
+                });
+            }
+            Err(error) => warn_timeline_capture_failure(
+                event,
+                turn_id,
+                Some(&binding.id),
+                &safe_timeline_adapter_error(&error),
+            ),
+        }
     }
 
     async fn enrich_turn_index_in_tx(
@@ -442,4 +561,48 @@ fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {
         event_type,
         EventType::SessionReady | EventType::SessionExited | EventType::TurnStarted
     )
+}
+
+fn timeline_boundary_kind(event_type: EventType) -> Option<TimelineBoundaryCaptureKind> {
+    match event_type {
+        EventType::TurnStarted => Some(TimelineBoundaryCaptureKind::Head),
+        EventType::TurnCompleted
+        | EventType::TurnFailed
+        | EventType::TurnInterrupted
+        | EventType::TurnCancelled => Some(TimelineBoundaryCaptureKind::Tail),
+        _ => None,
+    }
+}
+
+fn warn_timeline_capture_failure(
+    event: &DomainEvent,
+    turn_id: &str,
+    binding_id: Option<&str>,
+    adapter_error: &str,
+) {
+    tracing::warn!(
+        code = "timeline_boundary_capture_failed",
+        event_id = %event.event_id,
+        session_id = %event.session_id,
+        turn_id,
+        event_type = %event.event_type,
+        client_type = %event.client_type,
+        binding_id = binding_id.unwrap_or("unknown"),
+        adapter_error,
+        "failed to capture timeline boundary; lifecycle fact will still be persisted"
+    );
+}
+
+fn safe_timeline_adapter_error(error: &Error) -> String {
+    match error {
+        Error::Domain(message) => message.clone(),
+        Error::CapabilityUnavailable(message) if message.contains("source_unavailable:") => {
+            "source_unavailable".to_string()
+        }
+        Error::CapabilityUnavailable(_) => "capability_unavailable".to_string(),
+        Error::Io(error) => format!("io_error:{:?}", error.kind()),
+        Error::StateConflict(_) => "state_conflict".to_string(),
+        Error::NotFound(_) => "not_found".to_string(),
+        _ => "internal_error".to_string(),
+    }
 }

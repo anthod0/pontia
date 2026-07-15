@@ -220,6 +220,33 @@ impl ReportedEvent {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "position", rename_all = "snake_case")]
+pub enum TimelineBoundary {
+    Head { cursor: String },
+    Tail { cursor: String },
+}
+
+impl TimelineBoundary {
+    pub fn head(cursor: impl Into<String>) -> Self {
+        Self::Head {
+            cursor: cursor.into(),
+        }
+    }
+
+    pub fn tail(cursor: impl Into<String>) -> Self {
+        Self::Tail {
+            cursor: cursor.into(),
+        }
+    }
+
+    pub fn cursor(&self) -> &str {
+        match self {
+            Self::Head { cursor } | Self::Tail { cursor } => cursor,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DomainEvent {
     pub event_id: String,
@@ -232,6 +259,7 @@ pub struct DomainEvent {
     pub seq: Option<i64>,
     pub payload: Value,
     pub turn_index: Option<i64>,
+    pub timeline_boundary: Option<TimelineBoundary>,
 }
 
 impl DomainEvent {
@@ -255,11 +283,17 @@ impl DomainEvent {
             seq: None,
             payload,
             turn_index: None,
+            timeline_boundary: None,
         }
     }
 
     pub fn with_turn_index(mut self, turn_index: i64) -> Self {
         self.turn_index = Some(turn_index);
+        self
+    }
+
+    pub fn with_timeline_boundary(mut self, boundary: TimelineBoundary) -> Self {
+        self.timeline_boundary = Some(boundary);
         self
     }
 }
@@ -277,6 +311,7 @@ impl From<ReportedEvent> for DomainEvent {
             seq: event.seq,
             payload: event.payload,
             turn_index: None,
+            timeline_boundary: None,
         }
     }
 }

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{DomainEvent, EventType, SessionState, TurnState};
+use super::{DomainEvent, EventType, SessionState, TimelineBoundary, TurnState};
 use crate::error::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,6 +27,8 @@ pub struct TurnProjection {
     pub turn_id: String,
     pub session_id: String,
     pub turn_index: i64,
+    pub head_cursor: Option<String>,
+    pub tail_cursor: Option<String>,
     pub state: TurnState,
     pub state_version: i64,
     pub metadata: Value,
@@ -81,6 +83,22 @@ impl ProjectionState {
                 "event {} requires turn_id",
                 event.event_type
             )));
+        }
+        match (&event.timeline_boundary, event.event_type) {
+            (None, _) | (Some(TimelineBoundary::Head { .. }), EventType::TurnStarted) => {}
+            (
+                Some(TimelineBoundary::Tail { .. }),
+                EventType::TurnCompleted
+                | EventType::TurnFailed
+                | EventType::TurnInterrupted
+                | EventType::TurnCancelled,
+            ) => {}
+            _ => {
+                return Err(Error::Domain(format!(
+                    "event {} cannot carry its timeline boundary position",
+                    event.event_type
+                )));
+            }
         }
 
         if let Some(session) = self.sessions.get(&event.session_id)
@@ -318,10 +336,22 @@ impl ProjectionState {
                 turn_id: turn_id.to_string(),
                 session_id: event.session_id.clone(),
                 turn_index,
+                head_cursor: None,
+                tail_cursor: None,
                 state: TurnState::Queued,
                 state_version: 0,
                 metadata: Value::Object(Default::default()),
             });
+
+        match &event.timeline_boundary {
+            Some(TimelineBoundary::Head { cursor }) => {
+                turn.head_cursor = Some(cursor.clone());
+            }
+            Some(TimelineBoundary::Tail { cursor }) => {
+                turn.tail_cursor = Some(cursor.clone());
+            }
+            None => {}
+        }
 
         turn.state = new_state;
         if event.event_type == EventType::TurnCreated

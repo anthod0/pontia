@@ -37,6 +37,7 @@ pub struct InternalEventRequest {
     seq: Option<i64>,
     payload: Value,
     turn_index: Option<Value>,
+    timeline_boundary: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -199,6 +200,11 @@ impl InternalEventRequest {
         if self.turn_index.is_some() {
             return Err(ApiError::invalid_request(
                 "turn_index is Pontia-owned and cannot be reported",
+            ));
+        }
+        if self.timeline_boundary.is_some() {
+            return Err(ApiError::invalid_request(
+                "timeline_boundary is Pontia-owned and cannot be reported",
             ));
         }
 

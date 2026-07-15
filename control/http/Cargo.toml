@@ -30,6 +30,7 @@ pontia-storage-sqlite = { path = "../storage-sqlite" }
 sqlx.workspace = true
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "json"] }
 
 [features]
 default = []

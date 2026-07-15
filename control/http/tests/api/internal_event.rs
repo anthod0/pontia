@@ -189,6 +189,33 @@ async fn internal_event_api_rejects_pontia_owned_turn_index() {
 }
 
 #[tokio::test]
+async fn internal_event_api_rejects_pontia_owned_timeline_boundary() {
+    let state = test_state().await;
+    let mut event = event_body(
+        "evt_internal_event_owned_boundary",
+        "turn.started",
+        "sess_internal_event_owned_boundary",
+        Some("turn_owned_boundary"),
+        1,
+    );
+    event["timeline_boundary"] = json!({
+        "position": "head",
+        "cursor": "pi-jsonl-v2:binding:0:after:"
+    });
+
+    let (status, body) = post_event(state, event).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Pontia-owned")
+    );
+}
+
+#[tokio::test]
 async fn internal_event_api_rejects_unknown_event_type() {
     let state = test_state().await;
     let (status, body) = post_event(

@@ -11,3 +11,6 @@ serde_json = { workspace = true }
 [features]
 default = ["lbug"]
 lbug = ["pontia-core/lbug"]
+
+[dev-dependencies]
+tempfile = "3"

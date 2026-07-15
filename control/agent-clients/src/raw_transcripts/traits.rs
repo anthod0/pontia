@@ -3,8 +3,9 @@ use pontia_core::Result;
 use serde_json::Value;
 
 use super::{
-    AgentBindingResolveRequest, ManagedToolUse, ResolvedAgentBinding, TimelineItemDetailPage,
-    TimelineItemDetailRequest, TimelinePage, TimelinePageRequest,
+    AgentBindingResolveRequest, CapturedTimelineBoundary, ManagedToolUse, ResolvedAgentBinding,
+    TimelineBoundaryCaptureRequest, TimelineItemDetailPage, TimelineItemDetailRequest,
+    TimelinePage, TimelinePageRequest,
 };
 
 pub trait AgentBindingResolver {
@@ -20,6 +21,14 @@ pub trait RawTranscriptParser {
         &self,
         request: TimelineItemDetailRequest,
     ) -> Result<TimelineItemDetailPage>;
+}
+
+pub trait TimelineBoundaryCapturer {
+    fn client_type(&self) -> &'static str;
+    fn capture_boundary(
+        &self,
+        request: TimelineBoundaryCaptureRequest,
+    ) -> Result<CapturedTimelineBoundary>;
 }
 
 pub trait ToolUseParser {

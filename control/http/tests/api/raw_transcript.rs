@@ -1,5 +1,9 @@
 use crate::test_app::TestApp;
-use std::{fs, io::Write};
+use std::{
+    fs,
+    io::Write,
+    sync::{Arc, Mutex as StdMutex},
+};
 
 use axum::{
     body::Body,
@@ -9,15 +13,47 @@ use http_body_util::BodyExt;
 use pontia_application::{
     AgentBindingService, AppState, EventIngestService, UpsertAgentBindingRequest,
 };
-use pontia_core::domain::{EventSource, EventType, ReportedEvent};
+use pontia_core::domain::{
+    EventSource, EventType, ProjectionState, ReportedEvent, TimelineBoundary,
+};
 use pontia_http as http;
 use serde_json::{Value, json};
 use tempfile::tempdir;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
+use tracing::instrument::WithSubscriber;
+use tracing_subscriber::fmt::MakeWriter;
 
 const TOKEN: &str = "test-token";
 static PI_AGENT_DIR_ENV_LOCK: Mutex<()> = Mutex::const_new(());
+
+#[derive(Clone, Default)]
+struct CapturedLogWriter(Arc<StdMutex<Vec<u8>>>);
+
+impl CapturedLogWriter {
+    fn text(&self) -> String {
+        String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+    }
+}
+
+impl Write for CapturedLogWriter {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'writer> MakeWriter<'writer> for CapturedLogWriter {
+    type Writer = Self;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        self.clone()
+    }
+}
 
 async fn test_state() -> AppState {
     TestApp::builder()
@@ -49,6 +85,28 @@ async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
         .to_bytes();
     let json = serde_json::from_slice(&body).expect("json body");
     (status, json)
+}
+
+async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
+    let response = http::router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/internal/v1/events")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let status = response.status();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    (status, serde_json::from_slice(&body).expect("json body"))
 }
 
 fn pi_session_dir(agent_dir: &std::path::Path, cwd: &std::path::Path) -> std::path::PathBuf {
@@ -94,6 +152,296 @@ async fn seed_session_exited(state: &AppState, session_id: &str) {
         ))
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+
+    let state = test_state().await;
+    let session_id = "sess_pi_boundaries";
+    let turn_id = "turn_pi_boundaries";
+    let session_key = "pi-boundary-session";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(
+        &transcript,
+        b"{\"type\":\"message\",\"id\":\"previous_leaf\",\"parentId\":null}\n",
+    )
+    .unwrap();
+    let head_offset = fs::metadata(&transcript).unwrap().len();
+
+    let binding = AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+
+    let started = json!({
+        "event_id": "evt_pi_boundary_started",
+        "session_id": session_id,
+        "turn_id": turn_id,
+        "source": "agent_adapter",
+        "client_type": "pi",
+        "type": "turn.started",
+        "time": "2026-07-15T00:00:01Z",
+        "seq": null,
+        "payload": {
+            "runtime_instance_id": "rtinst_pi_boundary",
+            "timeline_anchor": { "previous_leaf_id": "previous_leaf" }
+        }
+    });
+    assert_eq!(
+        post_internal_event(state.clone(), started).await.0,
+        StatusCode::OK
+    );
+
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            concat!(
+                "{\"type\":\"message\",\"id\":\"user_leaf\",\"parentId\":\"previous_leaf\"}\n",
+                "{\"type\":\"message\",\"id\":\"terminal_leaf\",\"parentId\":\"user_leaf\"}\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let tail_offset = fs::metadata(&transcript).unwrap().len();
+
+    let completed = json!({
+        "event_id": "evt_pi_boundary_completed",
+        "session_id": session_id,
+        "turn_id": turn_id,
+        "source": "agent_adapter",
+        "client_type": "pi",
+        "type": "turn.completed",
+        "time": "2026-07-15T00:00:02Z",
+        "seq": null,
+        "payload": {
+            "runtime_instance_id": "rtinst_pi_boundary",
+            "timeline_anchor": { "terminal_leaf_id": "terminal_leaf" }
+        }
+    });
+    assert_eq!(
+        post_internal_event(state.clone(), completed).await.0,
+        StatusCode::OK
+    );
+
+    let expected_head = format!(
+        "pi-jsonl-v2:{}:{head_offset}:after:previous_leaf",
+        binding.id
+    );
+    let expected_tail = format!(
+        "pi-jsonl-v2:{}:{tail_offset}:after:terminal_leaf",
+        binding.id
+    );
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["data"]["turn"]["turn_index"], 1);
+    assert_eq!(body["data"]["turn"]["head_cursor"], expected_head);
+    assert_eq!(body["data"]["turn"]["tail_cursor"], expected_tail);
+
+    let events = EventIngestService::new(state.db())
+        .list_events(session_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        events[1].payload["timeline_anchor"]["previous_leaf_id"],
+        "previous_leaf"
+    );
+    assert_eq!(
+        events[1].timeline_boundary,
+        Some(TimelineBoundary::head(expected_head.clone()))
+    );
+    assert!(events[1].payload.get("timeline_boundary").is_none());
+    let mut replay = ProjectionState::default();
+    for event in &events {
+        replay.apply(event).unwrap();
+    }
+    let replayed = replay.turn(turn_id).unwrap();
+    assert_eq!(
+        replayed.head_cursor.as_deref(),
+        Some(expected_head.as_str())
+    );
+    assert_eq!(
+        replayed.tail_cursor.as_deref(),
+        Some(expected_tail.as_str())
+    );
+}
+
+#[tokio::test]
+async fn first_pi_turn_accepts_a_null_previous_leaf_when_that_turn_was_precreated() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let state = test_state().await;
+    let session_id = "sess_pi_first_null_boundary";
+    let turn_id = "turn_pi_first_null_boundary";
+    let session_key = "pi-first-null-boundary";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    fs::write(
+        session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl")),
+        b"",
+    )
+    .unwrap();
+    let binding = AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    EventIngestService::new(state.db())
+        .ingest_event(ReportedEvent::new(
+            "evt_pi_first_null_created".to_string(),
+            session_id.to_string(),
+            Some(turn_id.to_string()),
+            EventSource::ExternalApi,
+            "pi".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+
+    let started = json!({
+        "event_id": "evt_pi_first_null_started",
+        "session_id": session_id,
+        "turn_id": turn_id,
+        "source": "agent_adapter",
+        "client_type": "pi",
+        "type": "turn.started",
+        "time": "2026-07-15T00:00:01Z",
+        "seq": null,
+        "payload": {
+            "runtime_instance_id": "rtinst_pi_first_null",
+            "timeline_anchor": { "previous_leaf_id": null }
+        }
+    });
+    let (status, body) = post_internal_event(state.clone(), started).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    let turn = EventIngestService::new(state.db())
+        .get_turn(turn_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        turn.head_cursor.as_deref(),
+        Some(format!("pi-jsonl-v2:{}:0:after:", binding.id).as_str())
+    );
+}
+
+#[tokio::test]
+async fn timeline_capture_failure_keeps_lifecycle_fact_without_cursor_or_database_warning() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("missing-agent-dir");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let state = test_state().await;
+    let session_id = "sess_pi_boundary_missing";
+    seed_session(&state, session_id).await;
+    let binding = AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: temp.path().join("workspace").display().to_string(),
+            client_session_key: "missing-session".to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    let started = json!({
+        "event_id": "evt_pi_boundary_missing_started",
+        "session_id": session_id,
+        "turn_id": "turn_pi_boundary_missing",
+        "source": "agent_adapter",
+        "client_type": "pi",
+        "type": "turn.started",
+        "time": "2026-07-15T00:00:01Z",
+        "seq": null,
+        "payload": {
+            "runtime_instance_id": "rtinst_pi_boundary_missing",
+            "timeline_anchor": { "previous_leaf_id": null }
+        }
+    });
+
+    let captured_logs = CapturedLogWriter::default();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .without_time()
+        .with_writer(captured_logs.clone())
+        .finish();
+    let (status, body) = post_internal_event(state.clone(), started)
+        .with_subscriber(subscriber)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let turn = EventIngestService::new(state.db())
+        .get_turn("turn_pi_boundary_missing")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(turn.head_cursor.is_none());
+    let warning_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ingest_warnings WHERE event_id = 'evt_pi_boundary_missing_started'",
+    )
+    .fetch_one(&state.db())
+    .await
+    .unwrap();
+    assert_eq!(warning_count, 0);
+
+    let warning = captured_logs
+        .text()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|entry| entry["fields"]["code"] == "timeline_boundary_capture_failed")
+        .expect("structured timeline capture warning");
+    assert_eq!(warning["level"], "WARN");
+    assert_eq!(
+        warning["fields"]["event_id"],
+        "evt_pi_boundary_missing_started"
+    );
+    assert_eq!(warning["fields"]["session_id"], session_id);
+    assert_eq!(warning["fields"]["turn_id"], "turn_pi_boundary_missing");
+    assert_eq!(warning["fields"]["event_type"], "turn.started");
+    assert_eq!(warning["fields"]["client_type"], "pi");
+    assert_eq!(warning["fields"]["binding_id"], binding.id);
+    assert_eq!(warning["fields"]["adapter_error"], "source_unavailable");
+    assert!(
+        !captured_logs
+            .text()
+            .contains(&temp.path().display().to_string())
+    );
 }
 
 #[tokio::test]

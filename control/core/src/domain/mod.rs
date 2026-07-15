@@ -6,6 +6,6 @@ mod event;
 mod projection;
 mod state;
 
-pub use event::{DomainEvent, EventSource, EventType, ReportedEvent};
+pub use event::{DomainEvent, EventSource, EventType, ReportedEvent, TimelineBoundary};
 pub use projection::{ProjectionState, SessionProjection, TurnProjection};
 pub use state::{SessionState, TurnState};

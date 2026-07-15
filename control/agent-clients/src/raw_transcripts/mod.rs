@@ -4,9 +4,12 @@ mod types;
 
 pub use linear::LinearJsonlTimelineParser;
 pub(crate) use linear::{read_range_from_source, source_len};
-pub use traits::{AgentBindingResolver, RawTranscriptParser, ToolUseParser};
+pub use traits::{
+    AgentBindingResolver, RawTranscriptParser, TimelineBoundaryCapturer, ToolUseParser,
+};
 pub use types::{
-    AgentBindingResolveRequest, ManagedToolUse, ManagedToolUseInput, ResolvedAgentBinding,
+    AgentBindingResolveRequest, CapturedTimelineBoundary, ManagedToolUse, ManagedToolUseInput,
+    ResolvedAgentBinding, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
     TimelineItem, TimelineItemDetailPage, TimelineItemDetailRequest, TimelinePage,
     TimelinePageRequest,
 };

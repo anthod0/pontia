@@ -30,6 +30,16 @@ interface ActiveTurnState {
   ended: boolean;
 }
 
+function leafIdFromHookContext(ctx: unknown): string | null {
+  if (!ctx || typeof ctx !== "object") return null;
+  const sessionManager = (ctx as Record<string, unknown>).sessionManager;
+  if (!sessionManager || typeof sessionManager !== "object") return null;
+  const getLeafId = (sessionManager as Record<string, unknown>).getLeafId;
+  if (typeof getLeafId !== "function") return null;
+  const leafId = getLeafId.call(sessionManager);
+  return typeof leafId === "string" && leafId.length > 0 ? leafId : null;
+}
+
 export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPiExtensionDependencies = {}): void {
   const env = dependencies.env ?? process.env;
   const contextLoader = dependencies.loadContext ?? loadTurnContext;
@@ -186,6 +196,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("agent_start", async (_event, ctx) => {
+    const previousLeafId = leafIdFromHookContext(ctx);
     if (pontiaDisabled) return;
     try {
       const loaded = await contextLoader(env);
@@ -253,7 +264,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         output: "",
         ended: false,
       };
-      await reporter.report(activeTurn.context, buildTurnStartedEvent(activeTurn.context));
+      await reporter.report(activeTurn.context, buildTurnStartedEvent(activeTurn.context, previousLeafId));
     } catch (error) {
       pendingPrompt = undefined;
       activeTurn = undefined;
@@ -304,9 +315,10 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     activeTurn.ended = true;
 
     const state = activeTurn;
+    const terminalLeafId = leafIdFromHookContext(ctx);
     const failureMessage = errorMessageFromAgentEnd(event);
     if (failureMessage) {
-      await state.reporter.report(state.context, buildTurnFailedEvent(state.context, failureMessage));
+      await state.reporter.report(state.context, buildTurnFailedEvent(state.context, failureMessage, terminalLeafId));
       await reportFinalMessageRefresh(state);
       return;
     }
@@ -322,7 +334,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       if (!outputOk) return;
     }
 
-    await state.reporter.report(state.context, buildTurnCompletedEvent(state.context));
+    await state.reporter.report(state.context, buildTurnCompletedEvent(state.context, terminalLeafId));
     await reportFinalMessageRefresh(state);
   });
 }

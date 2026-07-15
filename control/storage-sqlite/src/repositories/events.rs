@@ -16,6 +16,7 @@ pub struct EventInsertRecord {
     pub seq: Option<i64>,
     pub payload: String,
     pub turn_index: Option<i64>,
+    pub timeline_boundary: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,8 +35,8 @@ impl SqliteEventRepository {
     ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO events
-               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload, turn_index)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload, turn_index, timeline_boundary)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(event.event_id)
         .bind(event.session_id)
@@ -47,6 +48,7 @@ impl SqliteEventRepository {
         .bind(event.seq)
         .bind(event.payload)
         .bind(event.turn_index)
+        .bind(event.timeline_boundary)
         .execute(&mut **tx)
         .await?;
 
@@ -98,7 +100,7 @@ impl SqliteEventRepository {
 
     pub async fn list_domain_event_rows(&self, session_id: &str) -> Result<Vec<DomainEventRow>> {
         Ok(sqlx::query_as::<_, DomainEventRow>(
-            r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload, turn_index
+            r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload, turn_index, timeline_boundary
                FROM events WHERE session_id = ? ORDER BY rowid"#,
         )
         .bind(session_id)

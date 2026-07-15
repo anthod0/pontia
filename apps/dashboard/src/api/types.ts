@@ -331,6 +331,8 @@ export interface TurnView {
   turn_id: string;
   session_id: string;
   turn_index: number;
+  head_cursor: string | null;
+  tail_cursor: string | null;
   state: TurnState | string;
   input: { summary?: string; [key: string]: unknown } | null;
   output: { summary?: string; [key: string]: unknown } | null;

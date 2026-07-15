@@ -289,10 +289,11 @@ export function contextUsageFromPiHook(event: unknown, ctx?: unknown): ContextUs
   return mergeContextUsageObservations(contextUsageFromPiEvent(event), contextUsageFromPiContext(ctx));
 }
 
-export function buildTurnStartedEvent(context: ActiveTurnContext): InternalEvent {
+export function buildTurnStartedEvent(context: ActiveTurnContext, previousLeafId: string | null = null): InternalEvent {
   const payload: Record<string, unknown> = {
     runtime_instance_id: context.runtimeInstanceId,
     input: context.input ? { summary: context.input } : {},
+    timeline_anchor: { previous_leaf_id: previousLeafId },
   };
   if (context.inboxMessageId) {
     payload.metadata = { inbox_message_id: context.inboxMessageId };
@@ -310,17 +311,24 @@ export function buildTurnOutputEvent(context: ActiveTurnContext, output: string)
   };
 }
 
-export function buildTurnCompletedEvent(context: ActiveTurnContext): InternalEvent {
+export function buildTurnCompletedEvent(context: ActiveTurnContext, terminalLeafId: string | null = null): InternalEvent {
   return {
     ...baseAdapterTurnEvent(context, "turn.completed"),
-    payload: {},
+    payload: {
+      runtime_instance_id: context.runtimeInstanceId,
+      timeline_anchor: { terminal_leaf_id: terminalLeafId },
+    },
   };
 }
 
-export function buildTurnFailedEvent(context: ActiveTurnContext, message: string): InternalEvent {
+export function buildTurnFailedEvent(context: ActiveTurnContext, message: string, terminalLeafId: string | null = null): InternalEvent {
   return {
     ...baseAdapterTurnEvent(context, "turn.failed"),
-    payload: { failure: { message } },
+    payload: {
+      runtime_instance_id: context.runtimeInstanceId,
+      failure: { message },
+      timeline_anchor: { terminal_leaf_id: terminalLeafId },
+    },
   };
 }
 

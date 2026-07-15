@@ -4,13 +4,15 @@ use crate::models::turns::{TurnEventEnrichmentRow, TurnProjectionRow, TurnRow};
 
 use pontia_core::Result;
 
-const LOAD_TURN_PROJECTIONS_SQL: &str = "SELECT turn_id, session_id, turn_index, state, state_version, metadata FROM turns WHERE session_id = ?";
+const LOAD_TURN_PROJECTIONS_SQL: &str = "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, state, state_version, metadata FROM turns WHERE session_id = ?";
 
 #[derive(Debug, Clone)]
 pub struct TurnProjectionUpsertRecord {
     pub turn_id: String,
     pub session_id: String,
     pub turn_index: i64,
+    pub head_cursor: Option<String>,
+    pub tail_cursor: Option<String>,
     pub state: String,
     pub state_version: i64,
     pub metadata: String,
@@ -97,7 +99,7 @@ impl SqliteTurnRepository {
 
     pub async fn get_projection(&self, turn_id: &str) -> Result<Option<TurnProjectionRow>> {
         Ok(sqlx::query_as::<_, TurnProjectionRow>(
-            "SELECT turn_id, session_id, turn_index, state, state_version, metadata FROM turns WHERE turn_id = ?",
+            "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, state, state_version, metadata FROM turns WHERE turn_id = ?",
         )
         .bind(turn_id)
         .fetch_optional(&self.pool)
@@ -110,9 +112,11 @@ impl SqliteTurnRepository {
     ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO turns
-               (turn_id, session_id, turn_index, state, state_version, metadata)
-               VALUES (?, ?, ?, ?, ?, ?)
+               (turn_id, session_id, turn_index, head_cursor, tail_cursor, state, state_version, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(turn_id) DO UPDATE SET
+                   head_cursor = excluded.head_cursor,
+                   tail_cursor = excluded.tail_cursor,
                    state = excluded.state,
                    state_version = excluded.state_version,
                    metadata = excluded.metadata,
@@ -121,6 +125,8 @@ impl SqliteTurnRepository {
         .bind(turn.turn_id)
         .bind(turn.session_id)
         .bind(turn.turn_index)
+        .bind(turn.head_cursor)
+        .bind(turn.tail_cursor)
         .bind(turn.state)
         .bind(turn.state_version)
         .bind(turn.metadata)
@@ -132,7 +138,7 @@ impl SqliteTurnRepository {
 
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnRow>> {
         Ok(sqlx::query_as::<_, TurnRow>(
-            r#"SELECT turn_id, session_id, turn_index, state, input_summary, output_summary,
+            r#"SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, state, input_summary, output_summary,
                       failure_message, metadata, created_at, updated_at
                FROM turns WHERE session_id = ? ORDER BY turn_index"#,
         )
@@ -143,7 +149,7 @@ impl SqliteTurnRepository {
 
     pub async fn get_turn(&self, session_id: &str, turn_id: &str) -> Result<Option<TurnRow>> {
         Ok(sqlx::query_as::<_, TurnRow>(
-            r#"SELECT turn_id, session_id, turn_index, state, input_summary, output_summary,
+            r#"SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, state, input_summary, output_summary,
                       failure_message, metadata, created_at, updated_at
                FROM turns WHERE session_id = ? AND turn_id = ?"#,
         )

@@ -20,6 +20,26 @@ pub struct ResolvedAgentBinding {
     pub fingerprint: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineBoundaryCaptureKind {
+    Head,
+    Tail,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimelineBoundaryCaptureRequest {
+    pub source: ResolvedAgentBinding,
+    pub kind: TimelineBoundaryCaptureKind,
+    pub native_entry_anchor: Option<String>,
+    pub allow_missing_native_entry_anchor: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapturedTimelineBoundary {
+    pub kind: TimelineBoundaryCaptureKind,
+    pub cursor: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimelinePageRequest {
     pub session_id: String,

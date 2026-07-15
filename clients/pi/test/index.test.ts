@@ -738,9 +738,54 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_end({ messages: [] }, {});
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.output", "turn.completed", "session.message_updated"]);
-    expect(reported[0].payload).toEqual({ runtime_instance_id: "rtinst_1", input: {} });
+    expect(reported[0].payload).toEqual({
+      runtime_instance_id: "rtinst_1",
+      input: {},
+      timeline_anchor: { previous_leaf_id: null },
+    });
     expect(reported[1].payload).toEqual({ output: { summary: "hello world" } });
     expect(reported[3]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
+  });
+
+  test("captures the previous and terminal Pi leaves at the lifecycle hook boundaries", async () => {
+    const observations: string[] = [];
+    let leafId: string | null = "entry_before_turn";
+    let releaseStarted!: () => void;
+    const startedReported = new Promise<void>((resolve) => {
+      releaseStarted = resolve;
+    });
+    const report = vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
+      observations.push(`report:${event.type}`);
+      if (event.type === "turn.started") await startedReported;
+      return true;
+    });
+    const { handlers } = install({ makeReporter: vi.fn(() => ({ report })) });
+    const hookContext = {
+      sessionManager: {
+        getLeafId: () => {
+          observations.push(`leaf:${leafId ?? "null"}`);
+          return leafId;
+        },
+      },
+    };
+
+    const starting = handlers.agent_start({}, hookContext);
+    await vi.waitFor(() => expect(report).toHaveBeenCalledTimes(1));
+    expect(observations).toEqual(["leaf:entry_before_turn", "report:turn.started"]);
+    expect(report.mock.calls[0]?.[1].payload).toMatchObject({
+      timeline_anchor: { previous_leaf_id: "entry_before_turn" },
+    });
+    releaseStarted();
+    await starting;
+
+    leafId = "entry_after_turn";
+    await handlers.agent_end({ messages: [] }, hookContext);
+
+    const completed = report.mock.calls.find(([, event]) => event.type === "turn.completed")?.[1];
+    expect(completed?.payload).toMatchObject({
+      timeline_anchor: { terminal_leaf_id: "entry_after_turn" },
+    });
+    expect(observations.indexOf("leaf:entry_after_turn")).toBeLessThan(observations.indexOf("report:turn.completed"));
   });
 
   test("uses assistant message_end full text without TUI parsing", async () => {
@@ -901,7 +946,11 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_end({ error: new Error("model failed"), messages: [] }, {});
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.failed", "session.message_updated"]);
-    expect(reported[1].payload).toEqual({ failure: { message: "model failed" } });
+    expect(reported[1].payload).toEqual({
+      runtime_instance_id: "rtinst_1",
+      failure: { message: "model failed" },
+      timeline_anchor: { terminal_leaf_id: null },
+    });
     expect(reported[2]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
   });
 });
