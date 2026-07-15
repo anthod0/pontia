@@ -1109,7 +1109,7 @@ async fn first_pi_turn_accepts_a_null_previous_leaf_when_that_turn_was_precreate
 }
 
 #[tokio::test]
-async fn timeline_capture_failure_keeps_lifecycle_fact_without_cursor_or_database_warning() {
+async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warning() {
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
     let agent_dir = temp.path().join("missing-agent-dir");
@@ -1158,14 +1158,6 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_without_cursor_or_databas
         .unwrap()
         .unwrap();
     assert!(turn.head_cursor.is_none());
-    let warning_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM ingest_warnings WHERE event_id = 'evt_pi_boundary_missing_started'",
-    )
-    .fetch_one(&state.db())
-    .await
-    .unwrap();
-    assert_eq!(warning_count, 0);
-
     let warning = captured_logs
         .text()
         .lines()

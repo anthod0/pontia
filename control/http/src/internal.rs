@@ -153,8 +153,16 @@ pub async fn post_event(
         warnings
     };
 
-    if !warnings.is_empty() {
-        service.record_warnings(&event, &warnings).await?;
+    for warning in &warnings {
+        tracing::warn!(
+            code = "event_ingest_sequence_anomaly",
+            event_id = %event.event_id,
+            session_id = %event.session_id,
+            turn_id = ?event.turn_id,
+            seq = event.seq,
+            warning,
+            "event ingest sequence anomaly"
+        );
     }
 
     Ok(Json(InternalEventResponse {

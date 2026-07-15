@@ -57,11 +57,6 @@ async fn sqlite_event_repository_supports_ingest_event_writes_and_reads() {
         Some(2)
     );
 
-    repository
-        .record_warnings("evt_1", "sess_1", &["sequence gap".to_string()])
-        .await
-        .expect("record warnings");
-
     let rows = repository
         .list_domain_event_rows("sess_1")
         .await

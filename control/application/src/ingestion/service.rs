@@ -401,12 +401,6 @@ impl EventIngestService {
         Ok(warning.into_iter().collect())
     }
 
-    pub async fn record_warnings(&self, event: &DomainEvent, warnings: &[String]) -> Result<()> {
-        SqliteEventRepository::new(self.pool.clone())
-            .record_warnings(&event.event_id, &event.session_id, warnings)
-            .await
-    }
-
     pub async fn volatile_state_version(&self, session_id: &str) -> Result<i64> {
         SqliteEventRepository::new(self.pool.clone())
             .session_event_count(session_id)

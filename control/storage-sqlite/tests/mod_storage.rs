@@ -46,6 +46,14 @@ async fn connects_to_sqlite_and_runs_migrations() {
         .expect("query migrations");
 
     assert!(migration_count >= 1);
+
+    let ingest_warnings_table_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ingest_warnings'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect ingest_warnings table");
+    assert_eq!(ingest_warnings_table_count, 0);
 }
 
 #[tokio::test]

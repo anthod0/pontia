@@ -117,26 +117,6 @@ impl SqliteEventRepository {
         .await?)
     }
 
-    pub async fn record_warnings(
-        &self,
-        event_id: &str,
-        session_id: &str,
-        warnings: &[String],
-    ) -> Result<()> {
-        for warning in warnings {
-            sqlx::query(
-                "INSERT INTO ingest_warnings (event_id, session_id, warning) VALUES (?, ?, ?)",
-            )
-            .bind(event_id)
-            .bind(session_id)
-            .bind(warning)
-            .execute(&self.pool)
-            .await?;
-        }
-
-        Ok(())
-    }
-
     pub async fn list_session_events(&self, session_id: &str) -> Result<Vec<EventRow>> {
         Ok(sqlx::query_as::<_, EventRow>(
             r#"SELECT event_id, session_id, turn_id, source, event_type, occurred_at, payload

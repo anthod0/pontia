@@ -1,3 +1,8 @@
+use std::{
+    io::{self, Write},
+    sync::{Arc, Mutex as StdMutex},
+};
+
 use crate::test_app::TestApp;
 use axum::{
     body::Body,
@@ -9,6 +14,40 @@ use pontia_core::domain::{SessionState, TurnState};
 use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
+use tracing::instrument::WithSubscriber;
+use tracing_subscriber::fmt::MakeWriter;
+
+#[derive(Clone, Default)]
+struct CapturedLogWriter(Arc<StdMutex<Vec<u8>>>);
+
+impl CapturedLogWriter {
+    fn text(&self) -> String {
+        String::from_utf8(self.0.lock().expect("captured log lock").clone())
+            .expect("captured logs are utf-8")
+    }
+}
+
+impl Write for CapturedLogWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0
+            .lock()
+            .expect("captured log lock")
+            .extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'writer> MakeWriter<'writer> for CapturedLogWriter {
+    type Writer = Self;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        self.clone()
+    }
+}
 
 async fn test_state() -> AppState {
     TestApp::builder()
@@ -1250,6 +1289,12 @@ async fn internal_event_api_accepts_sequence_gaps_with_warnings() {
         ),
     )
     .await;
+    let captured_logs = CapturedLogWriter::default();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .without_time()
+        .with_writer(captured_logs.clone())
+        .finish();
     let (status, body) = post_event(
         state,
         event_body(
@@ -1260,6 +1305,7 @@ async fn internal_event_api_accepts_sequence_gaps_with_warnings() {
             3,
         ),
     )
+    .with_subscriber(subscriber)
     .await;
 
     assert_eq!(status, StatusCode::OK);
@@ -1267,6 +1313,23 @@ async fn internal_event_api_accepts_sequence_gaps_with_warnings() {
     assert_eq!(body["warnings"].as_array().unwrap().len(), 1);
     assert!(
         body["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("sequence gap")
+    );
+
+    let warning = captured_logs
+        .text()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|entry| entry["fields"]["code"] == "event_ingest_sequence_anomaly")
+        .expect("structured sequence anomaly warning");
+    assert_eq!(warning["level"], "WARN");
+    assert_eq!(warning["fields"]["event_id"], "evt_internal_event_11");
+    assert_eq!(warning["fields"]["session_id"], "sess_internal_event_8");
+    assert_eq!(warning["fields"]["seq"], 3);
+    assert!(
+        warning["fields"]["warning"]
             .as_str()
             .unwrap()
             .contains("sequence gap")
