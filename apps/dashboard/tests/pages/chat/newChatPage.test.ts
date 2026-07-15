@@ -47,7 +47,7 @@ test('remembers the selected new chat workspace after starting a chat', async ()
 });
 
 
-test('renders a clean centered prompt input with inline workspace and client selectors on the bare chat route', async () => {
+test('renders a bottom-aligned prompt input with inline workspace and client selectors on the bare chat route', async () => {
   render(NewChatPage);
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
@@ -56,13 +56,14 @@ test('renders a clean centered prompt input with inline workspace and client sel
   expect(screen.queryByText('Start a new agent session from a prompt, workspace, and client.')).not.toBeInTheDocument();
   expect(screen.getByText('Start a new agent session from')).toBeInTheDocument();
   expect(screen.getByText(', use')).toBeInTheDocument();
-  const centeredPanel = screen.getByTestId('new-chat-centered-panel');
-  const pageSection = centeredPanel.closest('section');
+  const panel = screen.getByTestId('new-chat-panel');
+  const pageSection = panel.closest('section');
   expect(pageSection).toHaveClass('min-h-[calc(100svh-5.5rem)]');
   expect(pageSection).toHaveClass('md:min-h-[calc(100svh-6.5rem)]');
   expect(pageSection?.className).not.toContain('100vh');
-  expect(centeredPanel).toHaveClass('justify-center');
-  expect(centeredPanel).toContainElement(promptInput);
+  expect(panel).toHaveClass('justify-end');
+  expect(panel).not.toHaveClass('justify-center');
+  expect(panel).toContainElement(promptInput);
   expect(screen.queryByText(/Enter the first prompt/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/^Prompt$/i)).not.toBeInTheDocument();
   const workspaceSelector = screen.getByLabelText(/workspace/i);

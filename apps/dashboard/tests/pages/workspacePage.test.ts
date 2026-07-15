@@ -174,7 +174,8 @@ test('uses the shared new chat prompt style for creating a workspace session', a
   render(WorkspacePage);
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  const panel = screen.getByTestId('new-chat-centered-panel');
+  const panel = screen.getByTestId('new-chat-panel');
+  expect(panel).toHaveClass('justify-center');
   expect(panel).toContainElement(promptInput);
   expect(screen.queryByRole('heading', { name: 'New session' })).not.toBeInTheDocument();
   expect(screen.queryByText('Create a new chat session in this workspace.')).not.toBeInTheDocument();

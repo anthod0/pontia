@@ -158,6 +158,7 @@
     workspacesLoading={$workspacesLoading}
     {selectedWorkspace}
     {clientTypeOptions}
+    placement="bottom"
     onPromptKeydown={handleNewChatKeydown}
     onStartChat={() => void startChat()}
   />

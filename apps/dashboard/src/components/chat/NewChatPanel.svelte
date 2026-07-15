@@ -18,6 +18,7 @@
     clientTypeOptions: string[]
     fixedWorkspace?: boolean
     promptDisabled?: boolean
+    placement?: 'center' | 'bottom'
     onPromptKeydown: (event: KeyboardEvent) => void
     onStartChat: () => void
   }
@@ -34,12 +35,13 @@
     clientTypeOptions,
     fixedWorkspace = false,
     promptDisabled = false,
+    placement = 'center',
     onPromptKeydown,
     onStartChat,
   }: Props = $props()
 </script>
 
-<div data-testid="new-chat-centered-panel" class="flex min-h-0 flex-1 flex-col justify-center">
+<div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class="flex min-h-0 flex-1 flex-col">
   <div class="mx-auto w-full max-w-4xl space-y-4">
     <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1 text-sm text-muted-foreground sm:text-base">
       <span>Start a new agent session {fixedWorkspace ? 'in' : 'from'}</span>
