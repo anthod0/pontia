@@ -2,7 +2,10 @@ use std::path::{Path, PathBuf};
 
 use sqlx::SqlitePool;
 
-use pontia_core::{error::Result, ids::new_workspace_id};
+use pontia_core::{
+    error::{Error, Result},
+    ids::new_workspace_id,
+};
 use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
 use super::WorkspaceRecord;
@@ -46,20 +49,45 @@ pub(crate) async fn upsert_canonical_workspace(
     }
 
     let workspace_id = new_workspace_id().to_string();
-    repository
+    let insert_result = repository
         .insert_workspace(
             &workspace_id,
             canonical_path,
             &display_path,
             name.as_deref(),
         )
-        .await?;
+        .await;
+    if let Err(error) = insert_result {
+        if !is_unique_violation(&error) {
+            return Err(error);
+        }
+        let row = repository
+            .get_workspace_record_by_canonical_path(canonical_path)
+            .await?
+            .ok_or(error)?;
+        repository
+            .reactivate_workspace(&row.workspace_id, &display_path, name.as_deref())
+            .await?;
+        return Ok(WorkspaceRecord {
+            workspace_id: row.workspace_id,
+            canonical_path: canonical_path.to_string(),
+            name,
+        });
+    }
 
     Ok(WorkspaceRecord {
         workspace_id,
         canonical_path: canonical_path.to_string(),
         name,
     })
+}
+
+fn is_unique_violation(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::Database(sqlx::Error::Database(database_error))
+            if database_error.is_unique_violation()
+    )
 }
 
 pub async fn get_workspace_record(

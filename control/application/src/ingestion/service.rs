@@ -18,7 +18,9 @@ use pontia_storage_sqlite::repositories::{
 };
 
 use super::EventIngestResult;
-use crate::{InboxCommandService, row_to_event, row_to_session, row_to_turn};
+use crate::{
+    InboxCommandService, UpsertAgentBindingRequest, row_to_event, row_to_session, row_to_turn,
+};
 
 #[derive(Clone)]
 pub struct EventIngestService {
@@ -31,10 +33,22 @@ impl EventIngestService {
     }
 
     pub async fn ingest_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
-        self.ingest_domain_event(event.into()).await
+        self.ingest_domain_event(event.into(), None).await
     }
 
-    async fn ingest_domain_event(&self, mut event: DomainEvent) -> Result<EventIngestResult> {
+    pub(crate) async fn ingest_event_with_agent_binding(
+        &self,
+        event: ReportedEvent,
+        binding: UpsertAgentBindingRequest,
+    ) -> Result<EventIngestResult> {
+        self.ingest_domain_event(event.into(), Some(binding)).await
+    }
+
+    async fn ingest_domain_event(
+        &self,
+        mut event: DomainEvent,
+        initial_agent_binding: Option<UpsertAgentBindingRequest>,
+    ) -> Result<EventIngestResult> {
         if event.event_type.is_turn_event() && event.turn_id.is_none() {
             return Err(Error::Domain(format!(
                 "{} must carry turn_id",
@@ -137,6 +151,10 @@ impl EventIngestService {
                 )
                 .await?;
             }
+        }
+
+        if let Some(binding) = initial_agent_binding {
+            crate::agent_bindings::upsert_agent_binding_in_tx(&mut tx, binding).await?;
         }
 
         crate::agent_bindings::register_agent_binding_for_ready_event_in_tx(&mut tx, &event)
@@ -382,20 +400,15 @@ impl EventIngestService {
         if let Some(runtime_metadata) = SqliteRuntimeBindingRepository::new(self.pool.clone())
             .metadata(&event.session_id)
             .await?
+            && crate::agent_bindings::runtime_binding_identity_disagrees(
+                &runtime_metadata,
+                client_session_key,
+            )?
         {
-            let runtime_metadata: Value = serde_json::from_str(&runtime_metadata)?;
-            if let Some(runtime_client_session_key) = runtime_metadata
-                .get("client_session_key")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                && runtime_client_session_key != client_session_key
-            {
-                return Err(Error::Domain(format!(
-                    "session.ready client identity does not match session {} Runtime binding",
-                    event.session_id
-                )));
-            }
+            return Err(Error::Domain(format!(
+                "session.ready client identity does not match session {} Runtime binding",
+                event.session_id
+            )));
         }
 
         Ok(())

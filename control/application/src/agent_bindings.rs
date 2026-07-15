@@ -178,14 +178,7 @@ impl AgentBindingService {
         else {
             return Ok(());
         };
-        let runtime_metadata: Value = serde_json::from_str(&runtime_metadata)?;
-        if let Some(runtime_client_session_key) = runtime_metadata
-            .get("client_session_key")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            && runtime_client_session_key != binding.client_session_key
-        {
+        if runtime_binding_identity_disagrees(&runtime_metadata, &binding.client_session_key)? {
             return Err(Error::StateConflict(format!(
                 "Session {} Runtime binding client identity does not match its Agent binding",
                 binding.session_id
@@ -193,6 +186,19 @@ impl AgentBindingService {
         }
         Ok(())
     }
+}
+
+pub(crate) fn runtime_binding_identity_disagrees(
+    runtime_metadata: &str,
+    client_session_key: &str,
+) -> Result<bool> {
+    let runtime_metadata: Value = serde_json::from_str(runtime_metadata)?;
+    Ok(runtime_metadata
+        .get("client_session_key")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some_and(|runtime_client_session_key| runtime_client_session_key != client_session_key))
 }
 
 pub(crate) async fn register_agent_binding_for_ready_event_in_tx(
@@ -252,7 +258,7 @@ pub(crate) async fn register_agent_binding_for_ready_event_in_tx(
     Ok(Some(binding))
 }
 
-async fn upsert_agent_binding_in_tx(
+pub(crate) async fn upsert_agent_binding_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     request: UpsertAgentBindingRequest,
 ) -> Result<AgentBinding> {

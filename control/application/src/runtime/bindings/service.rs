@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use tokio::sync::Mutex;
 
 use pontia_agent_clients as agent_clients;
 use pontia_core::{
@@ -27,6 +28,8 @@ use crate::{
     WorkspaceRecord, upsert_workspace,
 };
 
+static RUNTIME_BINDING_UPSERT_LOCK: Mutex<()> = Mutex::const_new(());
+
 #[derive(Clone)]
 pub struct RuntimeBindingUpsertService {
     pool: SqlitePool,
@@ -38,6 +41,7 @@ impl RuntimeBindingUpsertService {
     }
 
     pub async fn upsert(&self, request: RuntimeBindingUpsertRequest) -> Result<Value> {
+        let _upsert_guard = RUNTIME_BINDING_UPSERT_LOCK.lock().await;
         validate_required("client_type", &request.client_type)?;
         validate_required("client_session_key", &request.client_session_key)?;
         validate_required("runtime_instance_id", &request.runtime_instance_id)?;
@@ -351,21 +355,30 @@ impl RuntimeBindingUpsertService {
         let session_id = new_session_id().to_string();
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
-                session_id.clone(),
-                None,
-                EventSource::AgentClient,
-                request.client_type.clone(),
-                EventType::SessionCreated,
-                json!({
-                    "workspace": workspace.canonical_path,
-                    "metadata": {
-                        "created_by": "runtime_binding_upsert",
-                        "client_session_key": request.client_session_key,
-                    }
-                }),
-            ))
+            .ingest_event_with_agent_binding(
+                ReportedEvent::new(
+                    new_event_id().to_string(),
+                    session_id.clone(),
+                    None,
+                    EventSource::AgentClient,
+                    request.client_type.clone(),
+                    EventType::SessionCreated,
+                    json!({
+                        "workspace": workspace.canonical_path,
+                        "metadata": {
+                            "created_by": "runtime_binding_upsert",
+                            "client_session_key": request.client_session_key,
+                        }
+                    }),
+                ),
+                UpsertAgentBindingRequest {
+                    session_id: session_id.clone(),
+                    client_type: request.client_type.clone(),
+                    launch_cwd: workspace.canonical_path.clone(),
+                    client_session_key: request.client_session_key.clone(),
+                    metadata: agent_binding_metadata(request),
+                },
+            )
             .await?;
         ingest
             .ingest_event(ReportedEvent::new(

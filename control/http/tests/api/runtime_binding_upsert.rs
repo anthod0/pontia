@@ -572,6 +572,42 @@ async fn upsert_creates_a_new_session_for_a_new_pi_session_key() {
 }
 
 #[tokio::test]
+async fn concurrent_first_upserts_for_one_pi_session_key_reuse_one_session() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+    let first_request = upsert_body(&workspace, None);
+    let mut second_request = upsert_body(&workspace, None);
+    second_request["runtime_instance_id"] = json!("rtinst_concurrent_second");
+
+    let (first, second) = tokio::join!(
+        post_upsert(state.clone(), first_request),
+        post_upsert(state.clone(), second_request)
+    );
+
+    assert_eq!(first.0, StatusCode::OK, "{:?}", first.1);
+    assert_eq!(second.0, StatusCode::OK, "{:?}", second.1);
+    assert_eq!(
+        first.1["session"]["session_id"],
+        second.1["session"]["session_id"]
+    );
+    let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+        .fetch_one(&state.db())
+        .await
+        .expect("session count");
+    let binding_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings")
+        .fetch_one(&state.db())
+        .await
+        .expect("binding count");
+    assert_eq!(session_count, 1);
+    assert_eq!(binding_count, 1);
+}
+
+#[tokio::test]
 async fn upsert_rejects_a_runtime_binding_that_disagrees_with_the_agent_binding() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
