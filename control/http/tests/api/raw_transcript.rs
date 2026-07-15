@@ -525,6 +525,93 @@ async fn insert_sealed_turn(
 }
 
 #[tokio::test]
+async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let state = test_state().await;
+    let session_id = "sess_delayed_first_timeline";
+    let session_key = "delayed-first-timeline";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    let binding = AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+
+    post_pi_turn_event(
+        state.clone(),
+        session_id,
+        "turn_delayed_first",
+        "evt_delayed_first_started",
+        "turn.started",
+        json!({ "previous_leaf_id": "previous" }),
+    )
+    .await;
+    let started_turn = EventIngestService::new(state.db())
+        .get_turn("turn_delayed_first")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        started_turn.head_cursor.as_deref(),
+        Some(format!("pi-jsonl-v2:{}:0:after:previous", binding.id).as_str())
+    );
+
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    fs::write(
+        session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl")),
+        concat!(
+            "{\"type\":\"session\",\"id\":\"native-session\"}\n",
+            "{\"type\":\"model_change\",\"id\":\"previous\",\"parentId\":null}\n",
+            "{\"type\":\"message\",\"id\":\"user\",\"parentId\":\"previous\",\"message\":{\"role\":\"user\",\"content\":\"first question\"}}\n",
+            "{\"type\":\"message\",\"id\":\"answer\",\"parentId\":\"user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"first answer\"}]}}\n",
+        ),
+    )
+    .unwrap();
+    let (active_status, active_body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+    assert_eq!(active_status, StatusCode::OK, "{active_body:?}");
+    assert_eq!(active_body["data"]["items"].as_array().unwrap().len(), 2);
+
+    post_pi_turn_event(
+        state.clone(),
+        session_id,
+        "turn_delayed_first",
+        "evt_delayed_first_completed",
+        "turn.completed",
+        json!({ "terminal_leaf_id": "answer" }),
+    )
+    .await;
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(
+        body["data"]["items"][0]["content_preview"],
+        "first question"
+    );
+    assert_eq!(body["data"]["items"][1]["content_preview"], "first answer");
+}
+
+#[tokio::test]
 async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_index() {
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
@@ -1117,6 +1204,30 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
     let state = test_state().await;
     let session_id = "sess_pi_boundary_missing";
     seed_session(&state, session_id).await;
+    EventIngestService::new(state.db())
+        .ingest_event(ReportedEvent::new(
+            "evt_existing_created".to_string(),
+            session_id.to_string(),
+            Some("turn_existing".to_string()),
+            EventSource::ExternalApi,
+            "pi".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    EventIngestService::new(state.db())
+        .ingest_event(ReportedEvent::new(
+            "evt_existing_completed".to_string(),
+            session_id.to_string(),
+            Some("turn_existing".to_string()),
+            EventSource::ExternalApi,
+            "pi".to_string(),
+            EventType::TurnCompleted,
+            json!({}),
+        ))
+        .await
+        .unwrap();
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),

@@ -121,6 +121,23 @@ impl TimelineBoundaryCapturer for PiTimelineAdapter {
             cursor,
         })
     }
+
+    fn capture_source_origin_head(
+        &self,
+        binding_id: &str,
+        native_entry_anchor: Option<String>,
+    ) -> Result<CapturedTimelineBoundary> {
+        Ok(CapturedTimelineBoundary {
+            kind: TimelineBoundaryCaptureKind::Head,
+            cursor: PiJsonlV2Cursor {
+                binding_id: binding_id.to_string(),
+                byte_offset: 0,
+                native_entry_anchor,
+                relation: TimelineBoundaryRelation::After,
+            }
+            .encode(),
+        })
+    }
 }
 
 struct ParsedEntry {
@@ -179,7 +196,24 @@ impl TurnTimelineReader for PiTimelineAdapter {
             }
 
             let bytes = read_range_from_source(&request.source, head.byte_offset, tail_offset)?;
-            let (parsed, record_count) = parse_window(&range.turn_id, &bytes, head.byte_offset)?;
+            let (mut parsed, mut record_count) =
+                parse_window(&range.turn_id, &bytes, head.byte_offset)?;
+            if head.byte_offset == 0
+                && let Some(head_anchor) = head.native_entry_anchor.as_deref()
+            {
+                let Some(anchor_end) = parsed
+                    .iter()
+                    .find_map(|(entry_id, entry)| (entry_id == head_anchor).then_some(entry.end))
+                else {
+                    return invalid_range(
+                        &range.turn_id,
+                        "native entry parent chain does not reach the head anchor",
+                    );
+                };
+                let relative_anchor_end = anchor_end - head.byte_offset;
+                (parsed, record_count) =
+                    parse_window(&range.turn_id, &bytes[relative_anchor_end..], anchor_end)?;
+            }
             if is_active && record_count == 0 {
                 continue;
             }
@@ -290,6 +324,7 @@ fn parse_window(
             let parent_id = match value.get("parentId") {
                 Some(Value::String(parent_id)) => Some(parent_id.clone()),
                 Some(Value::Null) => None,
+                None if value.get("type").and_then(Value::as_str) == Some("session") => None,
                 _ => return invalid_range(turn_id, "native entry has an invalid parentId"),
             };
             parsed.push((

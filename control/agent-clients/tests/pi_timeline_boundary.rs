@@ -65,6 +65,16 @@ fn pi_v2_boundary_capture_combines_binding_eof_anchor_and_relation() {
 }
 
 #[test]
+fn pi_source_origin_head_does_not_require_the_jsonl_file_to_exist() {
+    let boundary = PiTimelineAdapter::new()
+        .capture_source_origin_head("binding_1", Some("previous".to_string()))
+        .unwrap();
+
+    assert_eq!(boundary.kind, TimelineBoundaryCaptureKind::Head);
+    assert_eq!(boundary.cursor, "pi-jsonl-v2:binding_1:0:after:previous");
+}
+
+#[test]
 fn pi_v2_cursor_rejects_v1_and_binding_scope_mismatches() {
     let v1 = PiJsonlV2Cursor::decode("pi-jsonl-v1:binding_1:18:0", "binding_1")
         .unwrap_err()

@@ -235,25 +235,6 @@ impl EventIngestService {
             warn_timeline_capture_failure(event, turn_id, Some(&binding.id), "adapter_unavailable");
             return;
         };
-        let source = match backend.resolver.resolve(&AgentBindingResolveRequest {
-            id: binding.id.clone(),
-            session_id: binding.session_id.clone(),
-            client_type: binding.client_type.clone(),
-            launch_cwd: PathBuf::from(&binding.launch_cwd),
-            client_session_key: binding.client_session_key.clone(),
-        }) {
-            Ok(source) => source,
-            Err(error) => {
-                warn_timeline_capture_failure(
-                    event,
-                    turn_id,
-                    Some(&binding.id),
-                    &safe_timeline_adapter_error(&error),
-                );
-                return;
-            }
-        };
-
         let native_entry_anchor = match kind {
             TimelineBoundaryCaptureKind::Head => {
                 event.payload.pointer("/timeline_anchor/previous_leaf_id")
@@ -266,7 +247,7 @@ impl EventIngestService {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string);
-        let allow_missing_native_entry_anchor = if kind == TimelineBoundaryCaptureKind::Head {
+        let is_first_session_turn = if kind == TimelineBoundaryCaptureKind::Head {
             match sqlx::query_scalar::<_, i64>(
                 "SELECT COUNT(*) FROM turns WHERE session_id = ? AND turn_id <> ?",
             )
@@ -281,6 +262,37 @@ impl EventIngestService {
         } else {
             false
         };
+        let source = match backend.resolver.resolve(&AgentBindingResolveRequest {
+            id: binding.id.clone(),
+            session_id: binding.session_id.clone(),
+            client_type: binding.client_type.clone(),
+            launch_cwd: PathBuf::from(&binding.launch_cwd),
+            client_session_key: binding.client_session_key.clone(),
+        }) {
+            Ok(source) => source,
+            Err(error) => {
+                let adapter_error = safe_timeline_adapter_error(&error);
+                if is_first_session_turn && adapter_error == "source_unavailable" {
+                    match backend
+                        .capturer
+                        .capture_source_origin_head(&binding.id, native_entry_anchor.clone())
+                    {
+                        Ok(boundary) => {
+                            event.timeline_boundary = Some(TimelineBoundary::head(boundary.cursor));
+                        }
+                        Err(error) => warn_timeline_capture_failure(
+                            event,
+                            turn_id,
+                            Some(&binding.id),
+                            &safe_timeline_adapter_error(&error),
+                        ),
+                    }
+                    return;
+                }
+                warn_timeline_capture_failure(event, turn_id, Some(&binding.id), &adapter_error);
+                return;
+            }
+        };
 
         match backend
             .capturer
@@ -288,7 +300,7 @@ impl EventIngestService {
                 source,
                 kind,
                 native_entry_anchor,
-                allow_missing_native_entry_anchor,
+                allow_missing_native_entry_anchor: is_first_session_turn,
             }) {
             Ok(boundary) => {
                 event.timeline_boundary = Some(match boundary.kind {

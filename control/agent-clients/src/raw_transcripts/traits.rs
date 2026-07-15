@@ -30,6 +30,11 @@ pub trait TimelineBoundaryCapturer {
         &self,
         request: TimelineBoundaryCaptureRequest,
     ) -> Result<CapturedTimelineBoundary>;
+    fn capture_source_origin_head(
+        &self,
+        binding_id: &str,
+        native_entry_anchor: Option<String>,
+    ) -> Result<CapturedTimelineBoundary>;
 }
 
 pub trait TurnTimelineReader {
