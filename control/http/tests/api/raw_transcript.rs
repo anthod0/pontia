@@ -7,7 +7,7 @@ use std::{
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode, header},
+    http::{HeaderMap, Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
 use pontia_application::{
@@ -64,6 +64,11 @@ async fn test_state() -> AppState {
 }
 
 async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
+    let (status, _, body) = get_response(state, uri).await;
+    (status, body)
+}
+
+async fn get_response(state: AppState, uri: &str) -> (StatusCode, HeaderMap, Value) {
     let response = http::router(state)
         .oneshot(
             Request::builder()
@@ -77,6 +82,7 @@ async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
         .expect("response");
 
     let status = response.status();
+    let headers = response.headers().clone();
     let body = response
         .into_body()
         .collect()
@@ -84,7 +90,7 @@ async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
         .expect("body")
         .to_bytes();
     let json = serde_json::from_slice(&body).expect("json body");
-    (status, json)
+    (status, headers, json)
 }
 
 async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
@@ -137,6 +143,467 @@ async fn seed_session_for_client(state: &AppState, session_id: &str, client_type
 
 async fn seed_session(state: &AppState, session_id: &str) {
     seed_session_for_client(state, session_id, "pi").await;
+}
+
+#[tokio::test]
+async fn turn_timeline_returns_empty_for_a_session_without_turns_or_binding() {
+    let state = test_state().await;
+    let session_id = "sess_empty_turn_timeline";
+    seed_session(&state, session_id).await;
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(
+        body["data"],
+        json!({
+            "session_id": session_id,
+            "direction": "backward",
+            "items": [],
+            "next_turn_id": null,
+        })
+    );
+}
+
+#[tokio::test]
+async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
+    let state = test_state().await;
+    let session_id = "sess_turn_timeline_errors";
+    seed_session(&state, session_id).await;
+
+    for query in [
+        "",
+        "?direction=sideways",
+        "?direction=forward&limit=0",
+        "?direction=backward&limit=101",
+        "?direction=forward&limit=abc",
+    ] {
+        let (status, body) = get_json(
+            state.clone(),
+            &format!("/external/v1/sessions/{session_id}/turns/timeline{query}"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+        assert_eq!(body["error"]["code"], "invalid_timeline_query");
+    }
+
+    let (status, body) = get_json(
+        state.clone(),
+        "/external/v1/sessions/missing/turns/timeline?direction=forward",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body:?}");
+    assert_eq!(body["error"]["code"], "session_not_found");
+
+    EventIngestService::new(state.db())
+        .ingest_event(ReportedEvent::new(
+            "evt_unsealed_turn".to_string(),
+            session_id.to_string(),
+            Some("turn_unsealed".to_string()),
+            EventSource::ExternalApi,
+            "pi".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    let (status, body) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=missing"
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body:?}");
+    assert_eq!(body["error"]["code"], "turn_not_found");
+
+    let other_session_id = "sess_turn_timeline_other";
+    seed_session(&state, other_session_id).await;
+    EventIngestService::new(state.db())
+        .ingest_event(ReportedEvent::new(
+            "evt_other_session_turn".to_string(),
+            other_session_id.to_string(),
+            Some("turn_other_session".to_string()),
+            EventSource::ExternalApi,
+            "pi".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    let (status, body) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=turn_other_session"
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body:?}");
+    assert_eq!(body["error"]["code"], "turn_not_found");
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "turn_timeline_unavailable");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("turn_unsealed")
+    );
+}
+
+#[tokio::test]
+async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
+    let state = test_state().await;
+    let generic_session = "sess_turn_timeline_generic";
+    seed_session_for_client(&state, generic_session, "generic").await;
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: generic_session.to_string(),
+            client_type: "generic".to_string(),
+            launch_cwd: "/unused".to_string(),
+            client_session_key: "generic-timeline".to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    insert_sealed_turn(&state, generic_session, "turn_generic", "head", "tail").await;
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{generic_session}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body:?}");
+    assert_eq!(body["error"]["code"], "timeline_capability_unavailable");
+
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let pi_session = "sess_turn_timeline_invalid";
+    seed_session(&state, pi_session).await;
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let source_path = session_dir.join("2026-07-15T00-00-00-000Z_invalid-cursor.jsonl");
+    fs::write(&source_path, b"{\"id\":\"entry\",\"parentId\":null}\n").unwrap();
+    let binding = AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: pi_session.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: "invalid-cursor".to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    insert_sealed_turn(
+        &state,
+        pi_session,
+        "turn_invalid_cursor",
+        &format!("pi-jsonl-v1:{}:0:0", binding.id),
+        &format!("pi-jsonl-v2:{}:39:after:entry", binding.id),
+    )
+    .await;
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{pi_session}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "turn_timeline_invalid");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("turn_invalid_cursor")
+    );
+
+    let malformed = b"{not json}\n";
+    fs::write(&source_path, malformed).unwrap();
+    update_turn_cursors(
+        &state,
+        "turn_invalid_cursor",
+        &format!("pi-jsonl-v2:{}:0:after:", binding.id),
+        &format!(
+            "pi-jsonl-v2:{}:{}:after:terminal",
+            binding.id,
+            malformed.len()
+        ),
+    )
+    .await;
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{pi_session}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "turn_timeline_invalid");
+
+    let broken = b"{\"id\":\"terminal\",\"parentId\":\"missing\"}\n";
+    fs::write(&source_path, broken).unwrap();
+    update_turn_cursors(
+        &state,
+        "turn_invalid_cursor",
+        &format!("pi-jsonl-v2:{}:0:after:root", binding.id),
+        &format!("pi-jsonl-v2:{}:{}:after:terminal", binding.id, broken.len()),
+    )
+    .await;
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{pi_session}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "turn_timeline_invalid");
+
+    fs::remove_dir_all(&session_dir).unwrap();
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{pi_session}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body:?}");
+    assert_eq!(body["error"]["code"], "timeline_source_unavailable");
+    assert!(
+        !body
+            .to_string()
+            .contains(&temp.path().display().to_string())
+    );
+}
+
+async fn update_turn_cursors(
+    state: &AppState,
+    turn_id: &str,
+    head_cursor: &str,
+    tail_cursor: &str,
+) {
+    sqlx::query("UPDATE turns SET head_cursor = ?, tail_cursor = ? WHERE turn_id = ?")
+        .bind(head_cursor)
+        .bind(tail_cursor)
+        .bind(turn_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+}
+
+async fn insert_sealed_turn(
+    state: &AppState,
+    session_id: &str,
+    turn_id: &str,
+    head_cursor: &str,
+    tail_cursor: &str,
+) {
+    sqlx::query(
+        "INSERT INTO turns (turn_id, session_id, turn_index, head_cursor, tail_cursor, state) VALUES (?, ?, 1, ?, ?, 'completed')",
+    )
+    .bind(turn_id)
+    .bind(session_id)
+    .bind(head_cursor)
+    .bind(tail_cursor)
+    .execute(&state.db())
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_index() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let state = test_state().await;
+    let session_id = "sess_projected_timeline";
+    let session_key = "projected-timeline";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(
+        &transcript,
+        b"{\"type\":\"message\",\"id\":\"root\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"before\"}}\n",
+    )
+    .unwrap();
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+
+    post_pi_turn_event(
+        state.clone(),
+        session_id,
+        "turn_one",
+        "evt_turn_one_started",
+        "turn.started",
+        json!({ "previous_leaf_id": "root" }),
+    )
+    .await;
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            concat!(
+                "{\"type\":\"message\",\"id\":\"u1\",\"parentId\":\"root\",\"timestamp\":\"2026-07-15T00:00:01Z\",\"message\":{\"role\":\"user\",\"content\":\"question one\"}}\n",
+                "{\"type\":\"message\",\"id\":\"a1\",\"parentId\":\"u1\",\"timestamp\":\"2026-07-15T00:00:02Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"answer one\"},{\"type\":\"toolCall\",\"name\":\"read\",\"arguments\":{\"path\":\"README.md\"}}]}}\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    post_pi_turn_event(
+        state.clone(),
+        session_id,
+        "turn_one",
+        "evt_turn_one_completed",
+        "turn.completed",
+        json!({ "terminal_leaf_id": "a1" }),
+    )
+    .await;
+
+    post_pi_turn_event(
+        state.clone(),
+        session_id,
+        "turn_two",
+        "evt_turn_two_started",
+        "turn.started",
+        json!({ "previous_leaf_id": "a1" }),
+    )
+    .await;
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            concat!(
+                "{\"type\":\"message\",\"id\":\"u2\",\"parentId\":\"a1\",\"timestamp\":\"2026-07-15T00:00:03Z\",\"message\":{\"role\":\"user\",\"content\":\"question two\"}}\n",
+                "{\"type\":\"message\",\"id\":\"a2\",\"parentId\":\"u2\",\"timestamp\":\"2026-07-15T00:00:04Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"answer two\"}]}}\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    post_pi_turn_event(
+        state.clone(),
+        session_id,
+        "turn_two",
+        "evt_turn_two_completed",
+        "turn.completed",
+        json!({ "terminal_leaf_id": "a2" }),
+    )
+    .await;
+
+    let (status, recent) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward&limit=1"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{recent:?}");
+    assert_eq!(recent["data"]["next_turn_id"], "turn_one");
+    assert_eq!(recent["data"]["items"].as_array().unwrap().len(), 2);
+    assert!(
+        recent["data"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["turn_id"] == "turn_two")
+    );
+
+    let (status, older) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/turns/timeline?direction=backward&turn_id=turn_one&limit=1"
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{older:?}");
+    assert!(older["data"]["next_turn_id"].is_null());
+    assert_eq!(older["data"]["items"][0]["content_preview"], "question one");
+    assert_eq!(
+        older["data"]["items"][2]["managed_tool_use"]["tool_name"],
+        "read"
+    );
+
+    let (status, all) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{all:?}");
+    let turn_ids = all["data"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["turn_id"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        turn_ids,
+        vec!["turn_one", "turn_one", "turn_one", "turn_two", "turn_two"]
+    );
+    let content_ref = all["data"]["items"][0]["content_ref"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(content_ref.starts_with("pi-jsonl-ref-v1:"));
+    let (status, detail) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/timeline/detail?ref={content_ref}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{detail:?}");
+    assert!(
+        detail["data"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("question one")
+    );
+}
+
+async fn post_pi_turn_event(
+    state: AppState,
+    session_id: &str,
+    turn_id: &str,
+    event_id: &str,
+    event_type: &str,
+    timeline_anchor: Value,
+) {
+    let (status, body) = post_internal_event(
+        state,
+        json!({
+            "event_id": event_id,
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "source": "agent_adapter",
+            "client_type": "pi",
+            "type": event_type,
+            "time": "2026-07-15T00:00:00Z",
+            "seq": null,
+            "payload": {
+                "runtime_instance_id": "rtinst_projected_timeline",
+                "timeline_anchor": timeline_anchor,
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
 }
 
 async fn seed_session_exited(state: &AppState, session_id: &str) {
@@ -481,13 +948,18 @@ async fn timeline_and_detail_external_api_read_pi_jsonl_fixture() {
         .await
         .unwrap();
 
-    let (status, body) = get_json(
+    let (status, response_headers, body) = get_response(
         state.clone(),
         &format!("/external/v1/sessions/{session_id}/timeline?limit=1"),
     )
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(response_headers["Deprecation"], "@1784073600");
+    assert_eq!(
+        response_headers[header::LINK],
+        format!("</external/v1/sessions/{session_id}/turns/timeline>; rel=\"successor-version\"")
+    );
     assert_eq!(body["data"]["session_id"], session_id);
     assert_eq!(body["data"]["items"].as_array().unwrap().len(), 2);
     assert_eq!(body["data"]["items"][0]["kind"], "user");

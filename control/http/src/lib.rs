@@ -239,6 +239,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             get(external::list_turns),
         )
         .route(
+            "/external/v1/sessions/{session_id}/turns/timeline",
+            get(external::get_turn_timeline),
+        )
+        .route(
             "/external/v1/sessions/{session_id}/timeline",
             get(external::get_session_timeline),
         )

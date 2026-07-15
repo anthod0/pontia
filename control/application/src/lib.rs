@@ -45,7 +45,8 @@ pub use raw_transcripts::{
     AgentBindingResolveRequest, AgentBindingResolver, RawTranscriptParser, RawTranscriptService,
     RawTranscriptServiceError, RawTranscriptTimelineErrorCode, ResolvedAgentBinding, TimelineItem,
     TimelineItemDetailPage, TimelineItemDetailRequest, TimelinePage, TimelinePageRequest,
-    resolve_and_parse_timeline_page,
+    TurnTimelineDirection, TurnTimelineItem, TurnTimelinePage, TurnTimelineService,
+    TurnTimelineServiceError, resolve_and_parse_timeline_page,
 };
 pub use runtime::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
 pub use runtime::{RuntimeObservationService, RuntimeReadinessService};

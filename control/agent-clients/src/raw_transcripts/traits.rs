@@ -5,7 +5,8 @@ use serde_json::Value;
 use super::{
     AgentBindingResolveRequest, CapturedTimelineBoundary, ManagedToolUse, ResolvedAgentBinding,
     TimelineBoundaryCaptureRequest, TimelineItemDetailPage, TimelineItemDetailRequest,
-    TimelinePage, TimelinePageRequest,
+    TimelinePage, TimelinePageRequest, TurnTimelineItem, TurnTimelineReadError,
+    TurnTimelineReadRequest,
 };
 
 pub trait AgentBindingResolver {
@@ -29,6 +30,14 @@ pub trait TimelineBoundaryCapturer {
         &self,
         request: TimelineBoundaryCaptureRequest,
     ) -> Result<CapturedTimelineBoundary>;
+}
+
+pub trait TurnTimelineReader {
+    fn client_type(&self) -> &'static str;
+    fn read_turn_ranges(
+        &self,
+        request: TurnTimelineReadRequest,
+    ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>;
 }
 
 pub trait ToolUseParser {

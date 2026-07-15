@@ -5,7 +5,7 @@ use pontia_agent_clients::pi::raw_transcripts::{
 };
 use pontia_agent_clients::raw_transcripts::{
     ResolvedAgentBinding, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
-    TimelineBoundaryCapturer,
+    TimelineBoundaryCapturer, TurnTimelineRange, TurnTimelineReadRequest, TurnTimelineReader,
 };
 use tempfile::tempdir;
 
@@ -23,6 +23,16 @@ fn source(contents: &[u8]) -> (tempfile::TempDir, ResolvedAgentBinding) {
             fingerprint: None,
         },
     )
+}
+
+fn cursor(offset: usize, anchor: Option<&str>) -> String {
+    PiJsonlV2Cursor {
+        binding_id: "binding_1".to_string(),
+        byte_offset: offset,
+        native_entry_anchor: anchor.map(ToString::to_string),
+        relation: TimelineBoundaryRelation::After,
+    }
+    .encode()
 }
 
 #[test]
@@ -98,4 +108,130 @@ fn pi_boundary_capture_only_allows_a_missing_anchor_for_session_start_heads() {
             .to_string();
         assert!(error.contains("native entry anchor is required"));
     }
+}
+
+#[test]
+fn pi_turn_reader_restores_parent_chain_and_filters_unrelated_physical_entries() {
+    let root = b"{\"type\":\"message\",\"id\":\"root\",\"parentId\":null}\n";
+    let window = concat!(
+        "{\"type\":\"message\",\"id\":\"user\",\"parentId\":\"root\",\"message\":{\"role\":\"user\",\"content\":\"hello\"}}\n",
+        "{\"type\":\"message\",\"id\":\"other\",\"parentId\":\"root\",\"message\":{\"role\":\"user\",\"content\":\"other branch\"}}\n",
+        "{\"type\":\"message\",\"id\":\"answer\",\"parentId\":\"user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"world\"}]}}\n"
+    )
+    .as_bytes();
+    let contents = [root.as_slice(), window].concat();
+    let (_dir, source) = source(&contents);
+
+    let items = PiTimelineAdapter::new()
+        .read_turn_ranges(TurnTimelineReadRequest {
+            source,
+            ranges: vec![TurnTimelineRange {
+                turn_id: "turn_1".to_string(),
+                turn_index: 1,
+                head_cursor: cursor(root.len(), Some("root")),
+                tail_cursor: cursor(contents.len(), Some("answer")),
+            }],
+        })
+        .unwrap();
+
+    assert_eq!(items.len(), 2);
+    assert!(items.iter().all(|item| item.turn_id == "turn_1"));
+    assert_eq!(items[0].item.content_preview, "hello");
+    assert_eq!(items[1].item.content_preview, "world");
+}
+
+#[test]
+fn pi_turn_reader_rejects_semantic_overlap_and_invalid_ranges() {
+    let contents = b"{\"type\":\"message\",\"id\":\"entry\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"hello\"}}\n";
+    let (_dir, resolved_source) = source(contents);
+    let range = TurnTimelineRange {
+        turn_id: "turn_1".to_string(),
+        turn_index: 1,
+        head_cursor: cursor(0, None),
+        tail_cursor: cursor(contents.len(), Some("entry")),
+    };
+    let overlap = PiTimelineAdapter::new()
+        .read_turn_ranges(TurnTimelineReadRequest {
+            source: resolved_source.clone(),
+            ranges: vec![
+                range.clone(),
+                TurnTimelineRange {
+                    turn_id: "turn_2".to_string(),
+                    turn_index: 1,
+                    ..range.clone()
+                },
+            ],
+        })
+        .unwrap_err()
+        .to_string();
+    assert!(overlap.contains("Turn turn_2"));
+    assert!(overlap.contains("semantic Turn ranges overlap"));
+
+    let null_later_head = PiTimelineAdapter::new()
+        .read_turn_ranges(TurnTimelineReadRequest {
+            source: resolved_source.clone(),
+            ranges: vec![TurnTimelineRange {
+                turn_id: "turn_later".to_string(),
+                turn_index: 2,
+                ..range.clone()
+            }],
+        })
+        .unwrap_err()
+        .to_string();
+    assert!(null_later_head.contains("only the first Session Turn"));
+
+    let cases = [
+        (
+            cursor(contents.len(), None),
+            cursor(0, Some("entry")),
+            "reversed or outside",
+        ),
+        (
+            cursor(0, None),
+            cursor(contents.len() + 1, Some("entry")),
+            "reversed or outside",
+        ),
+        (
+            cursor(0, None),
+            cursor(contents.len(), None),
+            "terminal native",
+        ),
+        (
+            cursor(0, Some("missing_parent")),
+            cursor(contents.len(), Some("entry")),
+            "does not reach the head anchor",
+        ),
+    ];
+    for (head_cursor, tail_cursor, expected) in cases {
+        let error = PiTimelineAdapter::new()
+            .read_turn_ranges(TurnTimelineReadRequest {
+                source: resolved_source.clone(),
+                ranges: vec![TurnTimelineRange {
+                    turn_id: "turn_invalid".to_string(),
+                    turn_index: 1,
+                    head_cursor,
+                    tail_cursor,
+                }],
+            })
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Turn turn_invalid"), "{error}");
+        assert!(error.contains(expected), "{error}");
+    }
+
+    let incomplete = b"{\"id\":\"entry\",\"parentId\":null}";
+    let (_dir, incomplete_source) = source(incomplete);
+    let error = PiTimelineAdapter::new()
+        .read_turn_ranges(TurnTimelineReadRequest {
+            source: incomplete_source,
+            ranges: vec![TurnTimelineRange {
+                turn_id: "turn_incomplete".to_string(),
+                turn_index: 1,
+                head_cursor: cursor(0, None),
+                tail_cursor: cursor(incomplete.len(), Some("entry")),
+            }],
+        })
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("incomplete JSONL"), "{error}");
 }

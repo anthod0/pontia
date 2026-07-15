@@ -7,7 +7,9 @@ mod types;
 pub use generic_test::{GenericTestClient, InProcessRecordedDispatchBehavior};
 pub use types::*;
 
-use raw_transcripts::{AgentBindingResolver, RawTranscriptParser, TimelineBoundaryCapturer};
+use raw_transcripts::{
+    AgentBindingResolver, RawTranscriptParser, TimelineBoundaryCapturer, TurnTimelineReader,
+};
 
 pub const AGENT_CLIENTS: &[AgentClientSpec] = &[generic_test::SPEC, pi::SPEC, claude::SPEC];
 
@@ -35,6 +37,11 @@ pub struct TimelineBoundaryBackend {
     pub capturer: Box<dyn TimelineBoundaryCapturer + Send + Sync>,
 }
 
+pub struct TurnTimelineBackend {
+    pub resolver: Box<dyn AgentBindingResolver + Send + Sync>,
+    pub reader: Box<dyn TurnTimelineReader + Send + Sync>,
+}
+
 pub fn raw_transcript_backend_for(client_type: &str) -> Option<RawTranscriptBackend> {
     let spec = get_client_spec(client_type)?;
     match spec.adapter.transcript {
@@ -53,6 +60,17 @@ pub fn timeline_boundary_backend_for(client_type: &str) -> Option<TimelineBounda
         TranscriptBehavior::PiJsonl => Some(TimelineBoundaryBackend {
             resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
             capturer: Box::new(pi::raw_transcripts::PiTimelineAdapter::new()),
+        }),
+    }
+}
+
+pub fn turn_timeline_backend_for(client_type: &str) -> Option<TurnTimelineBackend> {
+    let spec = get_client_spec(client_type)?;
+    match spec.adapter.transcript {
+        TranscriptBehavior::Unsupported => None,
+        TranscriptBehavior::PiJsonl => Some(TurnTimelineBackend {
+            resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
+            reader: Box::new(pi::raw_transcripts::PiTimelineAdapter::new()),
         }),
     }
 }
