@@ -1,17 +1,15 @@
-mod linear;
+mod source;
 mod traits;
 mod types;
 
-pub use linear::LinearJsonlTimelineParser;
-pub(crate) use linear::{read_range_from_source, source_len};
+pub(crate) use source::{read_range_from_source, source_len};
 pub use traits::{
-    AgentBindingResolver, RawTranscriptParser, TimelineBoundaryCapturer, ToolUseParser,
+    AgentBindingResolver, TimelineBoundaryCapturer, TimelineItemDetailReader, ToolUseParser,
     TurnTimelineReader,
 };
 pub use types::{
     AgentBindingResolveRequest, CapturedTimelineBoundary, ManagedToolUse, ManagedToolUseInput,
     ResolvedAgentBinding, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
-    TimelineItem, TimelineItemDetailPage, TimelineItemDetailRequest, TimelinePage,
-    TimelinePageRequest, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
-    TurnTimelineReadRequest,
+    TimelineItem, TimelineItemDetailPage, TimelineItemDetailReadRequest, TurnTimelineItem,
+    TurnTimelineRange, TurnTimelineReadError, TurnTimelineReadRequest,
 };

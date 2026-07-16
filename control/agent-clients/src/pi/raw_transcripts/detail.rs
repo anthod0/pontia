@@ -2,27 +2,22 @@ use serde_json::Value;
 
 use pontia_core::{Error, Result};
 
-use super::{mapping::pi_entry_to_items, refs::decode_pi_content_ref};
+use super::refs::decode_pi_content_ref;
 use crate::raw_transcripts::{
-    LinearJsonlTimelineParser, RawTranscriptParser, TimelineItemDetailPage,
-    TimelineItemDetailRequest, TimelinePage, TimelinePageRequest, read_range_from_source,
-    source_len,
+    TimelineItemDetailPage, TimelineItemDetailReadRequest, TimelineItemDetailReader,
+    read_range_from_source, source_len,
 };
 
 #[derive(Debug, Clone, Default)]
-pub struct PiJsonlParser;
+pub struct PiTimelineItemDetailReader;
 
-impl PiJsonlParser {
+impl PiTimelineItemDetailReader {
     pub fn new() -> Self {
         Self
     }
-
-    fn linear_parser(&self) -> LinearJsonlTimelineParser {
-        LinearJsonlTimelineParser::new("pi", "pi-jsonl", "pi-jsonl-v1", pi_entry_to_items)
-    }
 }
 
-impl RawTranscriptParser for PiJsonlParser {
+impl TimelineItemDetailReader for PiTimelineItemDetailReader {
     fn client_type(&self) -> &'static str {
         "pi"
     }
@@ -31,13 +26,9 @@ impl RawTranscriptParser for PiJsonlParser {
         "pi-jsonl"
     }
 
-    fn timeline_page(&self, request: TimelinePageRequest) -> Result<TimelinePage> {
-        self.linear_parser().timeline_page(request)
-    }
-
-    fn timeline_item_detail(
+    fn read_timeline_item_detail(
         &self,
-        request: TimelineItemDetailRequest,
+        request: TimelineItemDetailReadRequest,
     ) -> Result<TimelineItemDetailPage> {
         let detail_ref = decode_pi_content_ref(&request.content_ref, &request.source.id)?;
         let source_len = source_len(&request.source)?;

@@ -42,11 +42,11 @@ pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
-    AgentBindingResolveRequest, AgentBindingResolver, RawTranscriptParser, RawTranscriptService,
-    RawTranscriptServiceError, RawTranscriptTimelineErrorCode, ResolvedAgentBinding, TimelineItem,
-    TimelineItemDetailPage, TimelineItemDetailRequest, TimelinePage, TimelinePageRequest,
+    AgentBindingResolveRequest, AgentBindingResolver, ResolvedAgentBinding, TimelineItem,
+    TimelineItemDetailErrorCode, TimelineItemDetailPage, TimelineItemDetailReadRequest,
+    TimelineItemDetailReader, TimelineItemDetailService, TimelineItemDetailServiceError,
     TurnTimelineDirection, TurnTimelineItem, TurnTimelinePage, TurnTimelineService,
-    TurnTimelineServiceError, resolve_and_parse_timeline_page,
+    TurnTimelineServiceError,
 };
 pub use runtime::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
 pub use runtime::{RuntimeObservationService, RuntimeReadinessService};

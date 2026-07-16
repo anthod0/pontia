@@ -4,9 +4,8 @@ use serde_json::Value;
 
 use super::{
     AgentBindingResolveRequest, CapturedTimelineBoundary, ManagedToolUse, ResolvedAgentBinding,
-    TimelineBoundaryCaptureRequest, TimelineItemDetailPage, TimelineItemDetailRequest,
-    TimelinePage, TimelinePageRequest, TurnTimelineItem, TurnTimelineReadError,
-    TurnTimelineReadRequest,
+    TimelineBoundaryCaptureRequest, TimelineItemDetailPage, TimelineItemDetailReadRequest,
+    TurnTimelineItem, TurnTimelineReadError, TurnTimelineReadRequest,
 };
 
 pub trait AgentBindingResolver {
@@ -14,13 +13,12 @@ pub trait AgentBindingResolver {
     fn resolve(&self, request: &AgentBindingResolveRequest) -> Result<ResolvedAgentBinding>;
 }
 
-pub trait RawTranscriptParser {
+pub trait TimelineItemDetailReader {
     fn client_type(&self) -> &'static str;
     fn format(&self) -> &'static str;
-    fn timeline_page(&self, request: TimelinePageRequest) -> Result<TimelinePage>;
-    fn timeline_item_detail(
+    fn read_timeline_item_detail(
         &self,
-        request: TimelineItemDetailRequest,
+        request: TimelineItemDetailReadRequest,
     ) -> Result<TimelineItemDetailPage>;
 }
 

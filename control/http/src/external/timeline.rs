@@ -1,66 +1,23 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::{HeaderMap, HeaderValue, StatusCode, header},
-    response::IntoResponse,
+    http::{HeaderMap, StatusCode},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
 use pontia_application::{
-    AppState, RawTranscriptService, RawTranscriptServiceError, TurnTimelineDirection,
+    AppState, TimelineItemDetailService, TimelineItemDetailServiceError, TurnTimelineDirection,
     TurnTimelineService, TurnTimelineServiceError,
 };
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
 
 #[derive(Debug, Deserialize)]
-pub struct TimelineQuery {
-    before: Option<String>,
-    after: Option<String>,
-    limit: Option<usize>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct TimelineDetailQuery {
     #[serde(rename = "ref")]
     content_ref: String,
-}
-
-pub async fn get_session_timeline(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(session_id): Path<String>,
-    Query(query): Query<TimelineQuery>,
-) -> Result<impl IntoResponse, ExternalApiError> {
-    authenticate(&state, &headers)?;
-    let page = RawTranscriptService::new(state.db())
-        .timeline_page(session_id.clone(), query.before, query.after, query.limit)
-        .await
-        .map_err(timeline_service_error)?;
-
-    let mut response_headers = HeaderMap::new();
-    response_headers.insert("Deprecation", HeaderValue::from_static("@1784073600"));
-    response_headers.insert(
-        header::LINK,
-        HeaderValue::from_str(&format!(
-            "</external/v1/sessions/{session_id}/turns/timeline>; rel=\"successor-version\""
-        ))
-        .expect("session IDs accepted by Axum produce valid Link headers"),
-    );
-    Ok((
-        response_headers,
-        ok(json!({
-            "session_id": page.session_id,
-            "binding_id": page.binding_id,
-            "items": page.items,
-            "head_cursor": page.head_cursor,
-            "tail_cursor": page.tail_cursor,
-            "has_more": page.has_more,
-            "source_id": page.source_id,
-        })),
-    ))
 }
 
 pub async fn get_turn_timeline(
@@ -109,10 +66,10 @@ pub async fn get_session_timeline_detail(
     Query(query): Query<TimelineDetailQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let detail = RawTranscriptService::new(state.db())
-        .timeline_item_detail(session_id, query.content_ref)
+    let detail = TimelineItemDetailService::new(state.db())
+        .read(session_id, query.content_ref)
         .await
-        .map_err(timeline_service_error)?;
+        .map_err(timeline_item_detail_service_error)?;
 
     Ok(ok(json!({
         "binding_id": detail.binding_id,
@@ -123,13 +80,13 @@ pub async fn get_session_timeline_detail(
     })))
 }
 
-fn timeline_service_error(error: RawTranscriptServiceError) -> ExternalApiError {
+fn timeline_item_detail_service_error(error: TimelineItemDetailServiceError) -> ExternalApiError {
     match error {
-        RawTranscriptServiceError::NotFound(message) => ExternalApiError::not_found(message),
-        RawTranscriptServiceError::Timeline { code, message } => {
+        TimelineItemDetailServiceError::NotFound(message) => ExternalApiError::not_found(message),
+        TimelineItemDetailServiceError::Detail { code, message } => {
             timeline_error(code.as_str(), message)
         }
-        RawTranscriptServiceError::Inner(error) => ExternalApiError::from(error),
+        TimelineItemDetailServiceError::Inner(error) => ExternalApiError::from(error),
     }
 }
 
