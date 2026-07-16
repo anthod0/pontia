@@ -31,5 +31,7 @@ pub struct TurnProjectionRow {
     pub tail_cursor: Option<String>,
     pub state: String,
     pub state_version: i64,
+    pub input_summary: Option<String>,
+    pub output_summary: Option<String>,
     pub metadata: String,
 }

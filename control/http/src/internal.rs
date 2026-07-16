@@ -16,13 +16,12 @@ use pontia_application::{
     RuntimeBindingUpsertService,
 };
 use pontia_core::{
-    domain::{DomainEvent, EventSource, EventType, ReportedEvent},
+    domain::{DomainEvent, EventSource, EventType, MAX_TURN_OUTPUT_SUMMARY_CHARS, ReportedEvent},
     error::Error,
 };
 use pontia_dag::DagRunResultService;
 
 const MAX_EVENT_PAYLOAD_BYTES: usize = 64 * 1024;
-const MAX_TURN_OUTPUT_CHARS: usize = 200;
 
 #[derive(Debug, Deserialize)]
 pub struct InternalEventRequest {
@@ -256,10 +255,13 @@ fn truncate_turn_output(payload: &mut Value) {
     let Some(Value::String(summary)) = payload.pointer_mut("/output/summary") else {
         return;
     };
-    if summary.chars().count() <= MAX_TURN_OUTPUT_CHARS {
+    if summary.chars().count() <= MAX_TURN_OUTPUT_SUMMARY_CHARS {
         return;
     }
-    *summary = summary.chars().take(MAX_TURN_OUTPUT_CHARS).collect();
+    *summary = summary
+        .chars()
+        .take(MAX_TURN_OUTPUT_SUMMARY_CHARS)
+        .collect();
 }
 
 fn validate_context_usage_payload(payload: &Value) -> Result<(), ApiError> {

@@ -412,7 +412,7 @@ impl DagSchedulerService {
         let turn = TurnCommandService::new(self.pool.clone())
             .create_and_dispatch_turn(
                 session_id,
-                prompt.clone(),
+                prompt,
                 json!({
                     "task_id": work_item.task_id,
                     "work_item_id": work_item.work_item_id,
@@ -426,11 +426,6 @@ impl DagSchedulerService {
                     "dag scheduler dispatch requires an immediate backend turn".to_string(),
                 )
             })?;
-        sqlx::query("UPDATE turns SET input_summary = ? WHERE turn_id = ?")
-            .bind(&prompt)
-            .bind(&turn.turn_id)
-            .execute(&self.pool)
-            .await?;
         sqlx::query(
             r#"UPDATE work_item_runs
                SET session_id = ?, turn_id = ?, client_type = ?, started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),

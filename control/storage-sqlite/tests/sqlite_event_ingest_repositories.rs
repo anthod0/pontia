@@ -106,7 +106,9 @@ async fn sqlite_session_and_turn_repositories_support_projection_rows() {
             tail_cursor: None,
             state: "running".to_string(),
             state_version: 3,
-            metadata: json!({"input_summary": "do it"}).to_string(),
+            input_summary: Some("do it".to_string()),
+            output_summary: Some("done".to_string()),
+            metadata: json!({"source": "event projection"}).to_string(),
         },
     )
     .await
@@ -133,6 +135,8 @@ async fn sqlite_session_and_turn_repositories_support_projection_rows() {
     assert_eq!(turn_rows.len(), 1);
     assert_eq!(turn_rows[0].turn_id, "turn_projection");
     assert_eq!(turn_rows[0].state_version, 3);
+    assert_eq!(turn_rows[0].input_summary.as_deref(), Some("do it"));
+    assert_eq!(turn_rows[0].output_summary.as_deref(), Some("done"));
 
     let turn = turn_repository
         .get_projection("turn_projection")

@@ -87,6 +87,48 @@ async fn ingest_persists_events_and_updates_projections() {
 }
 
 #[tokio::test]
+async fn ingest_persists_turn_input_and_output_summaries() {
+    let service = service().await;
+    service
+        .ingest_event(event(
+            "evt_summary_session",
+            EventType::SessionCreated,
+            "sess_summary",
+            None,
+        ))
+        .await
+        .unwrap();
+    service
+        .ingest_event(ReportedEvent::new(
+            "evt_summary_input".to_string(),
+            "sess_summary".to_string(),
+            Some("turn_summary".to_string()),
+            EventSource::ExternalApi,
+            "generic".to_string(),
+            EventType::TurnCreated,
+            json!({ "input": { "summary": "inspect summaries" } }),
+        ))
+        .await
+        .unwrap();
+    service
+        .ingest_event(ReportedEvent::new(
+            "evt_summary_output".to_string(),
+            "sess_summary".to_string(),
+            Some("turn_summary".to_string()),
+            EventSource::ExternalApi,
+            "generic".to_string(),
+            EventType::TurnOutput,
+            json!({ "output": { "summary": "summaries persisted" } }),
+        ))
+        .await
+        .unwrap();
+
+    let turn = service.get_turn("turn_summary").await.unwrap().unwrap();
+    assert_eq!(turn.input_summary.as_deref(), Some("inspect summaries"));
+    assert_eq!(turn.output_summary.as_deref(), Some("summaries persisted"));
+}
+
+#[tokio::test]
 async fn session_started_keeps_projection_starting_until_ready() {
     let service = service().await;
 

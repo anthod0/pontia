@@ -161,6 +161,8 @@ impl EventIngestService {
                         tail_cursor: turn.tail_cursor.clone(),
                         state: turn.state.to_string(),
                         state_version: turn.state_version,
+                        input_summary: turn.input_summary.clone(),
+                        output_summary: turn.output_summary.clone(),
                         metadata,
                     },
                 )

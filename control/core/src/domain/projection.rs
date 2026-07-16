@@ -6,6 +6,9 @@ use serde_json::{Value, json};
 use super::{DomainEvent, EventType, SessionState, TimelineBoundary, TurnState};
 use crate::error::Error;
 
+pub const MAX_TURN_INPUT_SUMMARY_CHARS: usize = 1_000;
+pub const MAX_TURN_OUTPUT_SUMMARY_CHARS: usize = 200;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionProjection {
     pub session_id: String,
@@ -31,6 +34,8 @@ pub struct TurnProjection {
     pub tail_cursor: Option<String>,
     pub state: TurnState,
     pub state_version: i64,
+    pub input_summary: Option<String>,
+    pub output_summary: Option<String>,
     pub metadata: Value,
 }
 
@@ -340,6 +345,8 @@ impl ProjectionState {
                 tail_cursor: None,
                 state: TurnState::Queued,
                 state_version: 0,
+                input_summary: None,
+                output_summary: None,
                 metadata: Value::Object(Default::default()),
             });
 
@@ -354,6 +361,22 @@ impl ProjectionState {
         }
 
         turn.state = new_state;
+        if matches!(
+            event.event_type,
+            EventType::TurnCreated | EventType::TurnQueued | EventType::TurnStarted
+        ) && turn.input_summary.is_none()
+            && let Some(summary) = summary_from_payload(&event.payload, "input", "input_summary")
+        {
+            turn.input_summary = Some(truncate_chars(summary, MAX_TURN_INPUT_SUMMARY_CHARS));
+        }
+        if matches!(
+            event.event_type,
+            EventType::TurnOutput | EventType::TurnCompleted
+        ) && turn.output_summary.is_none()
+            && let Some(summary) = summary_from_payload(&event.payload, "output", "output_summary")
+        {
+            turn.output_summary = Some(truncate_chars(summary, MAX_TURN_OUTPUT_SUMMARY_CHARS));
+        }
         if event.event_type == EventType::TurnCreated
             && let Some(metadata) = event.payload.get("metadata")
         {
@@ -428,6 +451,22 @@ impl ProjectionState {
 
         Ok(())
     }
+}
+
+fn summary_from_payload<'a>(
+    payload: &'a Value,
+    nested_key: &str,
+    legacy_key: &str,
+) -> Option<&'a str> {
+    payload
+        .get(nested_key)
+        .and_then(|value| value.get("summary"))
+        .or_else(|| payload.get(legacy_key))
+        .and_then(Value::as_str)
+}
+
+fn truncate_chars(value: &str, max_chars: usize) -> String {
+    value.chars().take(max_chars).collect()
 }
 
 fn title_from_turn_input(payload: &Value) -> Option<String> {

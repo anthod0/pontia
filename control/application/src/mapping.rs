@@ -227,6 +227,8 @@ pub(crate) fn row_to_turn(row: TurnProjectionRow) -> Result<TurnProjection> {
         tail_cursor: row.tail_cursor,
         state: TurnState::from_str(&row.state)?,
         state_version: row.state_version,
+        input_summary: row.input_summary,
+        output_summary: row.output_summary,
         metadata: serde_json::from_str(&row.metadata)?,
     })
 }

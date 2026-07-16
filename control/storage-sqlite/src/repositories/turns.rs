@@ -4,7 +4,7 @@ use crate::models::turns::{TurnEventEnrichmentRow, TurnProjectionRow, TurnRow};
 
 use pontia_core::Result;
 
-const LOAD_TURN_PROJECTIONS_SQL: &str = "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, state, state_version, metadata FROM turns WHERE session_id = ?";
+const LOAD_TURN_PROJECTIONS_SQL: &str = "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, state, state_version, input_summary, output_summary, metadata FROM turns WHERE session_id = ?";
 
 #[derive(Debug, Clone)]
 pub struct TurnProjectionUpsertRecord {
@@ -15,6 +15,8 @@ pub struct TurnProjectionUpsertRecord {
     pub tail_cursor: Option<String>,
     pub state: String,
     pub state_version: i64,
+    pub input_summary: Option<String>,
+    pub output_summary: Option<String>,
     pub metadata: String,
 }
 
@@ -99,7 +101,7 @@ impl SqliteTurnRepository {
 
     pub async fn get_projection(&self, turn_id: &str) -> Result<Option<TurnProjectionRow>> {
         Ok(sqlx::query_as::<_, TurnProjectionRow>(
-            "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, state, state_version, metadata FROM turns WHERE turn_id = ?",
+            "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, state, state_version, input_summary, output_summary, metadata FROM turns WHERE turn_id = ?",
         )
         .bind(turn_id)
         .fetch_optional(&self.pool)
@@ -112,13 +114,16 @@ impl SqliteTurnRepository {
     ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO turns
-               (turn_id, session_id, turn_index, head_cursor, tail_cursor, state, state_version, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               (turn_id, session_id, turn_index, head_cursor, tail_cursor, state, state_version,
+                input_summary, output_summary, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(turn_id) DO UPDATE SET
                    head_cursor = excluded.head_cursor,
                    tail_cursor = excluded.tail_cursor,
                    state = excluded.state,
                    state_version = excluded.state_version,
+                   input_summary = excluded.input_summary,
+                   output_summary = excluded.output_summary,
                    metadata = excluded.metadata,
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"#,
         )
@@ -129,6 +134,8 @@ impl SqliteTurnRepository {
         .bind(turn.tail_cursor)
         .bind(turn.state)
         .bind(turn.state_version)
+        .bind(turn.input_summary)
+        .bind(turn.output_summary)
         .bind(turn.metadata)
         .execute(&mut **tx)
         .await?;
