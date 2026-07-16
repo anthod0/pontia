@@ -27,7 +27,6 @@ function item(turnId: string, itemId: string, preview: string): TurnTimelineItem
     status: null,
     occurred_at: '2026-07-15T00:00:00Z',
     content_preview: preview,
-    content_ref: `${itemId}-ref`,
     turn_id: turnId,
   };
 }

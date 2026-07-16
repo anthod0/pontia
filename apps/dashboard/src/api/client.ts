@@ -16,7 +16,6 @@ import type {
   RenameWorkspaceInput,
   SessionView,
   SubmitInboxMessageInput,
-  TimelineItemDetail,
   TurnTimelineDirection,
   TurnTimelinePage,
   UpsertAgentProfileInput,
@@ -350,17 +349,6 @@ export async function getTurnTimeline(
   return request<TurnTimelinePage>(
     `/sessions/${encodeURIComponent(sessionId)}/turns/timeline?${params.toString()}`,
     { signal: options.signal },
-  );
-}
-
-export async function getTimelineItemDetail(
-  sessionId: string,
-  contentRef: string,
-  options: ReadRequestOptions = {},
-): Promise<TimelineItemDetail> {
-  return request<TimelineItemDetail>(
-    `/sessions/${encodeURIComponent(sessionId)}/timeline/detail?ref=${encodeURIComponent(contentRef)}`,
-    options,
   );
 }
 

@@ -3,22 +3,14 @@ use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
 };
-use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
 use pontia_application::{
-    AppState, TimelineItemDetailService, TimelineItemDetailServiceError, TurnTimelineDirection,
-    TurnTimelineService, TurnTimelineServiceError,
+    AppState, TurnTimelineDirection, TurnTimelineService, TurnTimelineServiceError,
 };
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
-
-#[derive(Debug, Deserialize)]
-pub struct TimelineDetailQuery {
-    #[serde(rename = "ref")]
-    content_ref: String,
-}
 
 pub async fn get_turn_timeline(
     State(state): State<AppState>,
@@ -57,41 +49,6 @@ pub async fn get_turn_timeline(
         "items": page.items,
         "next_turn_id": page.next_turn_id,
     })))
-}
-
-pub async fn get_session_timeline_detail(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(session_id): Path<String>,
-    Query(query): Query<TimelineDetailQuery>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
-    authenticate(&state, &headers)?;
-    let detail = TimelineItemDetailService::new(state.db())
-        .read(session_id, query.content_ref)
-        .await
-        .map_err(timeline_item_detail_service_error)?;
-
-    Ok(ok(json!({
-        "binding_id": detail.binding_id,
-        "content_ref": detail.content_ref,
-        "content_type": detail.content_type,
-        "text": detail.text,
-        "size_bytes": detail.size_bytes,
-    })))
-}
-
-fn timeline_item_detail_service_error(error: TimelineItemDetailServiceError) -> ExternalApiError {
-    match error {
-        TimelineItemDetailServiceError::NotFound(message) => ExternalApiError::not_found(message),
-        TimelineItemDetailServiceError::Detail { code, message } => {
-            timeline_error(code.as_str(), message)
-        }
-        TimelineItemDetailServiceError::Inner(error) => ExternalApiError::from(error),
-    }
-}
-
-fn timeline_error(code: &'static str, message: impl Into<String>) -> ExternalApiError {
-    ExternalApiError::custom(StatusCode::UNPROCESSABLE_ENTITY, code, message)
 }
 
 fn invalid_timeline_query(message: impl Into<String>) -> ExternalApiError {

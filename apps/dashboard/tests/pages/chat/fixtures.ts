@@ -213,7 +213,6 @@ export function timelineItemsFromTurns(turns: TurnView[]): TimelineItem[] {
       status: null,
       occurred_at: item.created_at,
       content_preview: typeof item.input?.summary === 'string' ? item.input.summary : null,
-      content_ref: `${item.turn_id}:user-ref`,
       turn_id: item.turn_id,
     },
     {
@@ -225,7 +224,6 @@ export function timelineItemsFromTurns(turns: TurnView[]): TimelineItem[] {
       status: item.failure ? 'error' : null,
       occurred_at: item.completed_at ?? item.created_at,
       content_preview: item.output?.summary ?? (typeof item.failure?.message === 'string' ? item.failure.message : null),
-      content_ref: `${item.turn_id}:assistant-ref`,
       turn_id: item.turn_id,
     },
   ]);

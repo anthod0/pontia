@@ -7,9 +7,7 @@ mod types;
 pub use generic_test::{GenericTestClient, InProcessRecordedDispatchBehavior};
 pub use types::*;
 
-use raw_transcripts::{
-    AgentBindingResolver, TimelineBoundaryCapturer, TimelineItemDetailReader, TurnTimelineReader,
-};
+use raw_transcripts::{AgentBindingResolver, TimelineBoundaryCapturer, TurnTimelineReader};
 
 pub const AGENT_CLIENTS: &[AgentClientSpec] = &[generic_test::SPEC, pi::SPEC, claude::SPEC];
 
@@ -27,11 +25,6 @@ pub fn client_session_identity_required_on_ready(client_type: &str) -> bool {
     })
 }
 
-pub struct TimelineItemDetailBackend {
-    pub resolver: Box<dyn AgentBindingResolver + Send + Sync>,
-    pub reader: Box<dyn TimelineItemDetailReader + Send + Sync>,
-}
-
 pub struct TimelineBoundaryBackend {
     pub resolver: Box<dyn AgentBindingResolver + Send + Sync>,
     pub capturer: Box<dyn TimelineBoundaryCapturer + Send + Sync>,
@@ -40,17 +33,6 @@ pub struct TimelineBoundaryBackend {
 pub struct TurnTimelineBackend {
     pub resolver: Box<dyn AgentBindingResolver + Send + Sync>,
     pub reader: Box<dyn TurnTimelineReader + Send + Sync>,
-}
-
-pub fn timeline_item_detail_backend_for(client_type: &str) -> Option<TimelineItemDetailBackend> {
-    let spec = get_client_spec(client_type)?;
-    match spec.adapter.transcript {
-        TranscriptBehavior::Unsupported => None,
-        TranscriptBehavior::PiJsonl => Some(TimelineItemDetailBackend {
-            resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
-            reader: Box::new(pi::raw_transcripts::PiTimelineItemDetailReader::new()),
-        }),
-    }
 }
 
 pub fn timeline_boundary_backend_for(client_type: &str) -> Option<TimelineBoundaryBackend> {
@@ -194,10 +176,5 @@ mod tests {
         let hook_log = runtime.hook_log.expect("claude hook log configured");
         assert_eq!(hook_log.file_name, "claude-hook.log");
         assert_eq!(hook_log.metadata_key, "claude_hook_log");
-    }
-
-    #[test]
-    fn claude_timeline_item_detail_backend_is_unsupported_in_phase_2() {
-        assert!(timeline_item_detail_backend_for("claude").is_none());
     }
 }

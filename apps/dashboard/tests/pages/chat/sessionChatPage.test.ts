@@ -550,7 +550,6 @@ test('shows idle thought summary trigger above the final assistant response', as
         status: null,
         occurred_at: '2026-05-14T00:00:00Z',
         content_preview: 'hello',
-        content_ref: 'turn-1:user-ref',
         turn_id: 'turn-1',
       },
       {
@@ -562,7 +561,6 @@ test('shows idle thought summary trigger above the final assistant response', as
         status: null,
         occurred_at: '2026-05-14T00:00:01Z',
         content_preview: 'I should inspect the code.',
-        content_ref: 'turn-1:thinking-ref',
         turn_id: 'turn-1',
       },
       {
@@ -574,7 +572,6 @@ test('shows idle thought summary trigger above the final assistant response', as
         status: 'started',
         occurred_at: '2026-05-14T00:00:02Z',
         content_preview: 'read {"path":"src/app.ts"}',
-        content_ref: 'turn-1:tool-ref',
         turn_id: 'turn-1',
       },
       {
@@ -586,7 +583,6 @@ test('shows idle thought summary trigger above the final assistant response', as
         status: null,
         occurred_at: '2026-05-14T00:00:03Z',
         content_preview: 'Final answer',
-        content_ref: 'turn-1:assistant-ref',
         turn_id: 'turn-1',
       },
     ],

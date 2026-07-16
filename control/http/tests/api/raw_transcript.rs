@@ -8,7 +8,7 @@ use std::{
 
 use axum::{
     body::Body,
-    http::{HeaderMap, Request, StatusCode, header},
+    http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
 use pontia_application::{
@@ -65,11 +65,6 @@ async fn test_state() -> AppState {
 }
 
 async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
-    let (status, _, body) = get_response(state, uri).await;
-    (status, body)
-}
-
-async fn get_response(state: AppState, uri: &str) -> (StatusCode, HeaderMap, Value) {
     let response = http::router(state)
         .oneshot(
             Request::builder()
@@ -83,7 +78,6 @@ async fn get_response(state: AppState, uri: &str) -> (StatusCode, HeaderMap, Val
         .expect("response");
 
     let status = response.status();
-    let headers = response.headers().clone();
     let body = response
         .into_body()
         .collect()
@@ -91,25 +85,30 @@ async fn get_response(state: AppState, uri: &str) -> (StatusCode, HeaderMap, Val
         .expect("body")
         .to_bytes();
     let json = serde_json::from_slice(&body).expect("json body");
-    (status, headers, json)
+    (status, json)
 }
 
 #[tokio::test]
-async fn legacy_session_timeline_endpoint_is_removed() {
+async fn legacy_session_timeline_endpoints_are_removed() {
     let state = test_state().await;
-    let response = http::router(state)
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/external/v1/sessions/session-1/timeline")
-                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response");
+    for uri in [
+        "/external/v1/sessions/session-1/timeline",
+        "/external/v1/sessions/session-1/timeline/detail?ref=old-ref",
+    ] {
+        let response = http::router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(uri)
+                    .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
 
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+    }
 }
 
 async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
@@ -785,23 +784,6 @@ async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_index() {
     assert_eq!(
         turn_ids,
         vec!["turn_one", "turn_one", "turn_one", "turn_two", "turn_two"]
-    );
-    let content_ref = all["data"]["items"][0]["content_ref"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    assert!(content_ref.starts_with("pi-jsonl-ref-v1:"));
-    let (status, detail) = get_json(
-        state,
-        &format!("/external/v1/sessions/{session_id}/timeline/detail?ref={content_ref}"),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{detail:?}");
-    assert!(
-        detail["data"]["text"]
-            .as_str()
-            .unwrap()
-            .contains("question one")
     );
 }
 

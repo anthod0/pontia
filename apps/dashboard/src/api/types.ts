@@ -389,7 +389,6 @@ export interface TimelineItem {
   status: string | null;
   occurred_at: string | null;
   content_preview: string | null;
-  content_ref: string;
   turn_id?: string | null;
   managed_tool_use?: ManagedToolUse | null;
 }
@@ -403,14 +402,6 @@ export interface TurnTimelinePage {
   direction: TurnTimelineDirection;
   items: TurnTimelineItem[];
   next_turn_id: string | null;
-}
-
-export interface TimelineItemDetail {
-  binding_id: string;
-  content_ref: string;
-  content_type: string;
-  text: string;
-  size_bytes: number;
 }
 
 export type DashboardStreamEvent =

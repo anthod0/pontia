@@ -42,13 +42,6 @@ pub struct CapturedTimelineBoundary {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TimelineItemDetailReadRequest {
-    pub session_id: String,
-    pub source: ResolvedAgentBinding,
-    pub content_ref: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TurnTimelineRange {
     pub turn_id: String,
     pub turn_index: i64,
@@ -107,7 +100,6 @@ pub struct TimelineItem {
     pub status: Option<String>,
     pub occurred_at: Option<String>,
     pub content_preview: String,
-    pub content_ref: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub managed_tool_use: Option<ManagedToolUse>,
 }
@@ -140,13 +132,4 @@ pub enum ManagedToolUseInput {
         #[serde(skip_serializing_if = "Option::is_none")]
         timeout: Option<u64>,
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TimelineItemDetailPage {
-    pub binding_id: String,
-    pub content_ref: String,
-    pub content_type: String,
-    pub text: String,
-    pub size_bytes: usize,
 }

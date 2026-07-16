@@ -4,12 +4,11 @@ mod types;
 
 pub(crate) use source::{read_range_from_source, source_len};
 pub use traits::{
-    AgentBindingResolver, TimelineBoundaryCapturer, TimelineItemDetailReader, ToolUseParser,
-    TurnTimelineReader,
+    AgentBindingResolver, TimelineBoundaryCapturer, ToolUseParser, TurnTimelineReader,
 };
 pub use types::{
     AgentBindingResolveRequest, CapturedTimelineBoundary, ManagedToolUse, ManagedToolUseInput,
     ResolvedAgentBinding, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
-    TimelineItem, TimelineItemDetailPage, TimelineItemDetailReadRequest, TurnTimelineItem,
-    TurnTimelineRange, TurnTimelineReadError, TurnTimelineReadRequest,
+    TimelineItem, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
+    TurnTimelineReadRequest,
 };

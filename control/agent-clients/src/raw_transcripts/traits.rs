@@ -4,22 +4,13 @@ use serde_json::Value;
 
 use super::{
     AgentBindingResolveRequest, CapturedTimelineBoundary, ManagedToolUse, ResolvedAgentBinding,
-    TimelineBoundaryCaptureRequest, TimelineItemDetailPage, TimelineItemDetailReadRequest,
-    TurnTimelineItem, TurnTimelineReadError, TurnTimelineReadRequest,
+    TimelineBoundaryCaptureRequest, TurnTimelineItem, TurnTimelineReadError,
+    TurnTimelineReadRequest,
 };
 
 pub trait AgentBindingResolver {
     fn client_type(&self) -> &'static str;
     fn resolve(&self, request: &AgentBindingResolveRequest) -> Result<ResolvedAgentBinding>;
-}
-
-pub trait TimelineItemDetailReader {
-    fn client_type(&self) -> &'static str;
-    fn format(&self) -> &'static str;
-    fn read_timeline_item_detail(
-        &self,
-        request: TimelineItemDetailReadRequest,
-    ) -> Result<TimelineItemDetailPage>;
 }
 
 pub trait TimelineBoundaryCapturer {

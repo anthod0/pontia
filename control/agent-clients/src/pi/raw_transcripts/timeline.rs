@@ -274,7 +274,7 @@ impl TurnTimelineReader for PiTimelineAdapter {
                     return invalid_range(&range.turn_id, "semantic Turn ranges overlap");
                 }
                 items.extend(
-                    pi_entry_to_items(&entry.value, &request.source.id, entry.start, entry.end)
+                    pi_entry_to_items(&entry.value, entry.start)
                         .into_iter()
                         .map(|item| TurnTimelineItem {
                             turn_id: range.turn_id.clone(),

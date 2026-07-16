@@ -51,7 +51,6 @@ const timelineItem = (overrides) => ({
   status: null,
   occurred_at: '2026-01-01T00:00:00Z',
   content_preview: 'preview',
-  content_ref: 'ref-1',
   turn_id: null,
   ...overrides,
 });

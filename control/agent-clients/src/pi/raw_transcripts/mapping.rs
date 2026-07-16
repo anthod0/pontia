@@ -1,14 +1,9 @@
 use serde_json::Value;
 
-use super::{refs::encode_pi_content_ref, tool_use::PiToolUseParser};
+use super::tool_use::PiToolUseParser;
 use crate::raw_transcripts::{ManagedToolUse, TimelineItem, ToolUseParser};
 
-pub(super) fn pi_entry_to_items(
-    entry: &Value,
-    binding_id: &str,
-    start: usize,
-    end: usize,
-) -> Vec<TimelineItem> {
+pub(super) fn pi_entry_to_items(entry: &Value, start: usize) -> Vec<TimelineItem> {
     if entry.get("type").and_then(Value::as_str).is_some()
         && entry.get("id").and_then(Value::as_str).is_none()
     {
@@ -16,12 +11,9 @@ pub(super) fn pi_entry_to_items(
         return Vec::new();
     }
     match entry.get("type").and_then(Value::as_str) {
-        Some("message") => pi_message_entry_to_items(entry, binding_id, start, end),
+        Some("message") => pi_message_entry_to_items(entry),
         Some("model_change") => vec![timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             0,
             "model_change",
             "system",
@@ -34,21 +26,13 @@ pub(super) fn pi_entry_to_items(
     }
 }
 
-fn pi_message_entry_to_items(
-    entry: &Value,
-    binding_id: &str,
-    start: usize,
-    end: usize,
-) -> Vec<TimelineItem> {
+fn pi_message_entry_to_items(entry: &Value) -> Vec<TimelineItem> {
     let Some(message) = entry.get("message") else {
         return Vec::new();
     };
     match message.get("role").and_then(Value::as_str) {
         Some("user") => vec![timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             0,
             "user",
             "user",
@@ -65,16 +49,13 @@ fn pi_message_entry_to_items(
                     .iter()
                     .enumerate()
                     .filter_map(|(block_index, block)| {
-                        assistant_block_item(entry, binding_id, start, end, block_index, block)
+                        assistant_block_item(entry, block_index, block)
                     })
                     .collect()
             })
             .unwrap_or_default(),
         Some("toolResult") => vec![timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             0,
             "toolResult",
             "tool",
@@ -93,10 +74,7 @@ fn pi_message_entry_to_items(
             None,
         )],
         Some("bashExecution") => vec![timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             0,
             "bashExecution",
             "user",
@@ -113,10 +91,7 @@ fn pi_message_entry_to_items(
             None,
         )],
         Some("custom") => vec![timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             0,
             "custom",
             "system",
@@ -129,10 +104,7 @@ fn pi_message_entry_to_items(
             None,
         )],
         Some("branchSummary") => vec![timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             0,
             "branchSummary",
             "system",
@@ -146,10 +118,7 @@ fn pi_message_entry_to_items(
             None,
         )],
         Some("compactionSummary") => vec![timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             0,
             "compactionSummary",
             "system",
@@ -163,10 +132,7 @@ fn pi_message_entry_to_items(
             None,
         )],
         Some(raw_kind) => vec![timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             0,
             raw_kind,
             "system",
@@ -179,20 +145,10 @@ fn pi_message_entry_to_items(
     }
 }
 
-fn assistant_block_item(
-    entry: &Value,
-    binding_id: &str,
-    start: usize,
-    end: usize,
-    block_index: usize,
-    block: &Value,
-) -> Option<TimelineItem> {
+fn assistant_block_item(entry: &Value, block_index: usize, block: &Value) -> Option<TimelineItem> {
     match block.get("type").and_then(Value::as_str) {
         Some("text") => Some(timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             block_index,
             "text",
             "assistant",
@@ -206,10 +162,7 @@ fn assistant_block_item(
             None,
         )),
         Some("thinking") => Some(timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             block_index,
             "thinking",
             "assistant",
@@ -223,10 +176,7 @@ fn assistant_block_item(
             None,
         )),
         Some("toolCall") => Some(timeline_item(
-            binding_id,
             entry,
-            start,
-            end,
             block_index,
             "toolCall",
             "tool",
@@ -244,10 +194,7 @@ fn assistant_block_item(
 
 #[allow(clippy::too_many_arguments)]
 fn timeline_item(
-    binding_id: &str,
     entry: &Value,
-    start: usize,
-    end: usize,
     block_index: usize,
     raw_kind: &str,
     role: &str,
@@ -271,7 +218,6 @@ fn timeline_item(
             .and_then(Value::as_str)
             .map(ToString::to_string),
         content_preview: timeline_content_preview(kind, preview),
-        content_ref: encode_pi_content_ref(binding_id, start, end, block_index, kind),
         managed_tool_use,
     }
 }
