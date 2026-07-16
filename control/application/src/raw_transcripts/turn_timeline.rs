@@ -136,26 +136,59 @@ impl TurnTimelineService {
             });
         }
 
-        let binding = AgentBindingService::new(self.pool.clone())
+        let binding_service = AgentBindingService::new(self.pool.clone());
+        let binding = binding_service
             .binding_for_session(&session_id)
             .await?
             .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
+        let source_pending = !binding.discovered
+            && turns.len() == 1
+            && ranges.len() == 1
+            && ranges[0].tail_cursor.is_none();
         let backend = agent_clients::turn_timeline_backend_for(&binding.client_type)
             .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
-        let source = backend
-            .resolver
-            .resolve(&AgentBindingResolveRequest {
-                id: binding.id,
-                session_id: binding.session_id,
-                client_type: binding.client_type,
-                launch_cwd: binding.launch_cwd.into(),
-                client_session_key: binding.client_session_key,
-            })
-            .map_err(classify_adapter_error)?;
-        let items = backend
+        let source = match backend.resolver.resolve(&AgentBindingResolveRequest {
+            id: binding.id.clone(),
+            session_id: binding.session_id,
+            client_type: binding.client_type,
+            launch_cwd: binding.launch_cwd.into(),
+            client_session_key: binding.client_session_key,
+        }) {
+            Ok(source) => source,
+            Err(error) => {
+                let error = classify_adapter_error(error);
+                if source_pending && matches!(error, TurnTimelineServiceError::SourceUnavailable) {
+                    return Ok(TurnTimelinePage {
+                        session_id,
+                        direction,
+                        items: Vec::new(),
+                        next_turn_id,
+                    });
+                }
+                return Err(error);
+            }
+        };
+        let items = match backend
             .reader
             .read_turn_ranges(TurnTimelineReadRequest { source, ranges })
-            .map_err(classify_reader_error)?;
+        {
+            Ok(items) => items,
+            Err(error) => {
+                let error = classify_reader_error(error);
+                if source_pending && matches!(error, TurnTimelineServiceError::SourceUnavailable) {
+                    return Ok(TurnTimelinePage {
+                        session_id,
+                        direction,
+                        items: Vec::new(),
+                        next_turn_id,
+                    });
+                }
+                return Err(error);
+            }
+        };
+        if !binding.discovered {
+            binding_service.mark_discovered(&binding.id).await?;
+        }
 
         Ok(TurnTimelinePage {
             session_id,

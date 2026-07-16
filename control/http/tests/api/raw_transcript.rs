@@ -568,6 +568,15 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
         Some(format!("pi-jsonl-v2:{}:0:after:previous", binding.id).as_str())
     );
 
+    let (pending_status, pending_body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+    assert_eq!(pending_status, StatusCode::OK, "{pending_body:?}");
+    assert_eq!(pending_body["data"]["items"], json!([]));
+    assert!(pending_body["data"]["next_turn_id"].is_null());
+
     let session_dir = pi_session_dir(&agent_dir, &cwd);
     fs::create_dir_all(&session_dir).unwrap();
     fs::write(
@@ -587,6 +596,12 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     .await;
     assert_eq!(active_status, StatusCode::OK, "{active_body:?}");
     assert_eq!(active_body["data"]["items"].as_array().unwrap().len(), 2);
+    let discovered: bool = sqlx::query_scalar("SELECT discovered FROM agent_bindings WHERE id = ?")
+        .bind(&binding.id)
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    assert!(discovered);
 
     post_pi_turn_event(
         state.clone(),
