@@ -89,7 +89,7 @@ test('initial history loads chronological projected Turn items in the backward d
 
   expect(mocks.getTurnTimeline).toHaveBeenCalledWith('sess-1', {
     direction: 'backward',
-    limit: 3,
+    limit: 5,
   });
   expect(get(timelineState)).toMatchObject({
     sessionId: 'sess-1',
@@ -119,7 +119,7 @@ test('older history uses next_turn_id and prepends only previously unseen Turn g
   expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-1', {
     direction: 'backward',
     turnId: 'turn-1',
-    limit: 3,
+    limit: 5,
   });
   expect(get(timelineState).items.map(({ turn_id, item_id }) => [turn_id, item_id])).toEqual([
     ['turn-1', 'item-1'],

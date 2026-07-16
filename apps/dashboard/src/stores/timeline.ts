@@ -32,7 +32,7 @@ export interface TimelineState {
 
 type LoadMode = 'rebuild' | 'more';
 
-const DEFAULT_HISTORY_LIMIT = 3;
+const DEFAULT_HISTORY_LIMIT = 5;
 const FORWARD_LIMIT = 100;
 const TIMELINE_UPDATE_DEBOUNCE_MS = 100;
 
