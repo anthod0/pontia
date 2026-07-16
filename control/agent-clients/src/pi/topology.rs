@@ -88,12 +88,10 @@ impl TurnTopologyResolver for PiTopologyResolver {
             let Some(anchor) = cursor.native_entry_anchor else {
                 return unknown(TopologyDiagnostic::CandidateBoundaryMissing);
             };
-            match candidates_by_anchor.get(&anchor) {
-                Some((existing_index, _)) if *existing_index >= candidate.turn_index => {}
-                _ => {
-                    candidates_by_anchor.insert(anchor, (candidate.turn_index, candidate.turn_id));
-                }
+            if candidates_by_anchor.contains_key(&anchor) {
+                return unknown(TopologyDiagnostic::EvidenceInvalid);
             }
+            candidates_by_anchor.insert(anchor, (candidate.turn_index, candidate.turn_id));
         }
 
         for entry in evidence.entries.iter().rev() {
@@ -104,6 +102,9 @@ impl TurnTopologyResolver for PiTopologyResolver {
                     },
                     diagnostic: TopologyDiagnostic::ParentMatched,
                 };
+            }
+            if entry.kind == PiTopologyEntryKind::UserMessage {
+                return unknown(TopologyDiagnostic::ParentNotFound);
             }
         }
 

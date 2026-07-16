@@ -62,8 +62,16 @@ fn pi_context_links_to_nearest_earlier_tail_across_intermediate_entries() {
         Some(json!({"entries": [
             {"id": "user_1", "kind": "user_message"},
             {"id": "assistant_1", "kind": "assistant_message"},
+            {"id": "branch", "kind": "branch_summary"},
             {"id": "compact", "kind": "compaction"},
             {"id": "model", "kind": "model_change"},
+            {"id": "thinking", "kind": "thinking_level_change"},
+            {"id": "label", "kind": "label"},
+            {"id": "session", "kind": "session_info"},
+            {"id": "custom", "kind": "custom"},
+            {"id": "custom_message", "kind": "custom_message"},
+            {"id": "other_message", "kind": "other_message"},
+            {"id": "other", "kind": "other"},
             {"id": "tool", "kind": "tool_result_message"}
         ]})),
         vec![
@@ -86,6 +94,22 @@ fn uncorrelatable_conversation_context_remains_unknown() {
     let result = resolve(
         Some(json!({"entries": [
             {"id": "unknown_user", "kind": "user_message"}
+        ]})),
+        vec![candidate("turn_1", 1, Some("assistant_1"))],
+    );
+
+    assert_eq!(result.resolution, TopologyResolution::Unknown);
+    assert_eq!(result.diagnostic, TopologyDiagnostic::ParentNotFound);
+}
+
+#[test]
+fn uncorrelatable_user_entry_blocks_fallback_to_an_older_turn() {
+    let result = resolve(
+        Some(json!({"entries": [
+            {"id": "user_1", "kind": "user_message"},
+            {"id": "assistant_1", "kind": "assistant_message"},
+            {"id": "untracked_user", "kind": "user_message"},
+            {"id": "untracked_assistant", "kind": "assistant_message"}
         ]})),
         vec![candidate("turn_1", 1, Some("assistant_1"))],
     );
@@ -132,6 +156,22 @@ fn malformed_evidence_and_invalid_cursor_scope_are_safe_unknowns() {
         assert_eq!(result.resolution, TopologyResolution::Unknown);
         assert_eq!(result.diagnostic, diagnostic);
     }
+}
+
+#[test]
+fn duplicate_candidate_entry_identity_is_an_ambiguous_unknown() {
+    let result = resolve(
+        Some(json!({"entries": [
+            {"id": "shared_assistant", "kind": "assistant_message"}
+        ]})),
+        vec![
+            candidate("turn_1", 1, Some("shared_assistant")),
+            candidate("turn_2", 2, Some("shared_assistant")),
+        ],
+    );
+
+    assert_eq!(result.resolution, TopologyResolution::Unknown);
+    assert_eq!(result.diagnostic, TopologyDiagnostic::EvidenceInvalid);
 }
 
 #[test]

@@ -835,21 +835,26 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
         .write_all(
             concat!(
                 "{\"type\":\"message\",\"id\":\"user\",\"parentId\":\"root\",\"message\":{\"role\":\"user\",\"content\":\"question\"}}\n",
-                "{\"type\":\"message\",\"id\":\"answer\",\"parentId\":\"user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"partial answer\"}]}}\n"
+                "{\"type\":\"message\",\"id\":\"answer\",\"parentId\":\"user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"partial answer\"},{\"type\":\"toolCall\",\"id\":\"call_read\",\"name\":\"read\",\"arguments\":{\"path\":\"README.md\"}}]}}\n"
             )
             .as_bytes(),
         )
         .unwrap();
     let (status, growing) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=turn_active&limit=1"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{growing:?}");
-    assert_eq!(growing["data"]["items"].as_array().unwrap().len(), 2);
+    assert_eq!(growing["data"]["items"].as_array().unwrap().len(), 3);
     assert_eq!(
         growing["data"]["items"][1]["content_preview"],
         "partial answer"
+    );
+    assert_eq!(growing["data"]["items"][2]["kind"], "tool_call");
+    assert_eq!(
+        growing["data"]["items"][2]["managed_tool_use"]["tool_name"],
+        "read"
     );
 
     let active_turn = EventIngestService::new(state.db())
@@ -865,17 +870,21 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
         .open(&transcript)
         .unwrap()
         .write_all(
-            b"{\"type\":\"message\",\"id\":\"final\",\"parentId\":\"answer\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"final answer\"}]}}\n",
+            concat!(
+                "{\"type\":\"message\",\"id\":\"tool_result\",\"parentId\":\"answer\",\"message\":{\"role\":\"toolResult\",\"toolCallId\":\"call_read\",\"toolName\":\"read\",\"content\":[{\"type\":\"text\",\"text\":\"README contents\"}],\"isError\":false}}\n",
+                "{\"type\":\"message\",\"id\":\"final\",\"parentId\":\"tool_result\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"final answer\"}]}}\n"
+            ).as_bytes(),
         )
         .unwrap();
     let (status, grown) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=turn_active&limit=1"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{grown:?}");
-    assert_eq!(grown["data"]["items"].as_array().unwrap().len(), 3);
-    assert_eq!(grown["data"]["items"][2]["content_preview"], "final answer");
+    assert_eq!(grown["data"]["items"].as_array().unwrap().len(), 5);
+    assert_eq!(grown["data"]["items"][3]["kind"], "tool_result");
+    assert_eq!(grown["data"]["items"][4]["content_preview"], "final answer");
     assert!(
         EventIngestService::new(state.db())
             .get_turn("turn_active")
@@ -1004,6 +1013,31 @@ async fn post_pi_turn_event(
     assert_eq!(status, StatusCode::OK, "{body:?}");
 }
 
+fn pi_text_turn_entries(
+    user_id: &str,
+    parent_id: Option<&str>,
+    user_content: &str,
+    assistant_id: &str,
+    assistant_content: &str,
+) -> String {
+    let user = json!({
+        "type": "message",
+        "id": user_id,
+        "parentId": parent_id,
+        "message": { "role": "user", "content": user_content },
+    });
+    let assistant = json!({
+        "type": "message",
+        "id": assistant_id,
+        "parentId": user_id,
+        "message": {
+            "role": "assistant",
+            "content": [{ "type": "text", "text": assistant_content }],
+        },
+    });
+    format!("{user}\n{assistant}\n")
+}
+
 #[tokio::test]
 async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persisting_native_evidence()
  {
@@ -1093,11 +1127,17 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         fs::write(
             &transcript,
             (1..=index + 1)
-                .flat_map(|number| {
-                    [
-                        format!("{{\"type\":\"message\",\"id\":\"user_{number}\",\"parentId\":null}}\n"),
-                        format!("{{\"type\":\"message\",\"id\":\"assistant_{number}\",\"parentId\":\"user_{number}\"}}\n"),
-                    ]
+                .map(|number| {
+                    let user_id = format!("user_{number}");
+                    let assistant_id = format!("assistant_{number}");
+                    let parent_id = (number > 1).then(|| format!("assistant_{}", number - 1));
+                    pi_text_turn_entries(
+                        &user_id,
+                        parent_id.as_deref(),
+                        &format!("question {number}"),
+                        &assistant_id,
+                        &format!("answer {number}"),
+                    )
                 })
                 .collect::<String>(),
         )
@@ -1183,16 +1223,18 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
             .append(true)
             .open(&transcript)
             .unwrap();
-        writeln!(
-            transcript_file,
-            "{{\"type\":\"message\",\"id\":\"{user_id}\",\"parentId\":\"{native_parent_id}\"}}"
-        )
-        .unwrap();
-        writeln!(
-            transcript_file,
-            "{{\"type\":\"message\",\"id\":\"{assistant_id}\",\"parentId\":\"{user_id}\"}}"
-        )
-        .unwrap();
+        transcript_file
+            .write_all(
+                pi_text_turn_entries(
+                    user_id,
+                    Some(native_parent_id),
+                    &format!("question {user_id}"),
+                    assistant_id,
+                    &format!("answer {assistant_id}"),
+                )
+                .as_bytes(),
+            )
+            .unwrap();
         let completed = json!({
             "event_id": format!("{event_prefix}_completed"),
             "session_id": session_id,
@@ -1226,14 +1268,35 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
             "runtime_instance_id": "rtinst_pi_linear",
             "timeline_anchor": { "previous_leaf_id": "assistant_5" },
             "topology_context": { "entries": [
-                {"id": "duplicate", "kind": "user_message"},
-                {"id": "duplicate", "kind": "assistant_message"}
+                {"id": "native-secret-entry", "kind": "user_message"},
+                {"id": "native-secret-entry", "kind": "assistant_message"}
             ] },
         }
     });
-    let (malformed_status, malformed_body) =
-        post_internal_event(state.clone(), malformed_started).await;
+    let captured_logs = CapturedLogWriter::default();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .without_time()
+        .with_writer(captured_logs.clone())
+        .finish();
+    let (malformed_status, malformed_body) = post_internal_event(state.clone(), malformed_started)
+        .with_subscriber(subscriber)
+        .await;
     assert_eq!(malformed_status, StatusCode::OK, "{malformed_body:?}");
+    let log_text = captured_logs.text();
+    let warning = log_text
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|entry| entry["fields"]["code"] == "turn_topology_unresolved")
+        .expect("structured topology warning");
+    assert_eq!(warning["fields"]["diagnostic"], "evidence_invalid");
+    assert!(!log_text.contains("native-secret-entry"));
+    let turn_five = EventIngestService::new(state.db())
+        .get_turn("turn_pi_linear_5")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!log_text.contains(turn_five.tail_cursor.as_deref().unwrap()));
 
     let (status, body) = get_json(
         state.clone(),
@@ -1256,6 +1319,24 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     assert_eq!(projected[5]["turn_index"], 6);
     assert_eq!(projected[5]["topology_status"], "unknown");
     assert_eq!(projected[5]["state"], "running");
+
+    for (selected_turn_id, expected_preview) in [
+        ("turn_pi_linear_3", "question 3"),
+        ("turn_pi_linear_4", "question user_4"),
+    ] {
+        let (status, selected) = get_json(
+            state.clone(),
+            &format!(
+                "/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id={selected_turn_id}&limit=1"
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{selected:?}");
+        let items = selected["data"]["items"].as_array().unwrap();
+        assert!(!items.is_empty());
+        assert!(items.iter().all(|item| item["turn_id"] == selected_turn_id));
+        assert_eq!(items[0]["content_preview"], expected_preview);
+    }
 
     let events = EventIngestService::new(state.db())
         .list_events(session_id)
