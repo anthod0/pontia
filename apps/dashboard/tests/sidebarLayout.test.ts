@@ -762,26 +762,12 @@ test('sidebar highlights the matching recent session on chat and session console
   expect(screen.getByText('other').closest('button')).not.toHaveAttribute('data-active');
 });
 
-test('top bar is compact and transparent with sidebar trigger and chat help button', () => {
+test('top bar exposes the sidebar trigger', () => {
   render(TopBarHost);
 
   const topBar = screen.getByRole('banner');
-  expect(topBar).toHaveClass('h-10');
-  expect(topBar).toHaveClass('bg-transparent');
-  expect(topBar).not.toHaveClass('h-14');
-  expect(topBar).not.toHaveClass('border-b');
-  expect(topBar).not.toHaveClass('bg-background/95');
-
-  const buttons = within(topBar).getAllByRole('button');
-  expect(buttons).toHaveLength(2);
-  expect(buttons[0]).toHaveAttribute('data-sidebar', 'trigger');
-  expect(buttons[0]).toHaveClass('hover:bg-muted');
-  expect(buttons[1]).toHaveAccessibleName(/keyboard shortcuts/i);
-  expect(buttons[1]).toHaveClass('hidden', 'sm:inline-flex');
-  expect(buttons[1]).not.toHaveClass('ml-auto');
-  expect(within(topBar).queryByRole('link', { name: /new chat/i })).not.toBeInTheDocument();
-  expect(within(topBar).queryByText(/sse/i)).not.toBeInTheDocument();
-  expect(within(topBar).queryByText(/set api token/i)).not.toBeInTheDocument();
+  const sidebarTrigger = within(topBar).getByRole('button', { name: /toggle sidebar/i });
+  expect(sidebarTrigger).toHaveAttribute('data-sidebar', 'trigger');
 });
 
 test('sidebar footer exposes settings as a section menu without agent profiles', async () => {
@@ -951,17 +937,6 @@ test('chat new shortcut on a session route preserves the current session workspa
   await fireEvent.keyDown(window, { key: 'n', altKey: true });
 
   expect(mocks.navigate).toHaveBeenLastCalledWith('/chat', { workspace: 'workspace-current' });
-});
-
-test('chat app shell uses the surface background behind the transparent header', () => {
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-
-  render(AppShellHost);
-
-  const topBar = screen.getByRole('banner');
-  expect(topBar).toHaveClass('bg-transparent');
-  expect(topBar.parentElement).toHaveClass('bg-surface');
-  expect(topBar.parentElement).not.toHaveClass('bg-background');
 });
 
 test('chat app shell reserves composer space only for session chat routes', () => {

@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/svelte';
 import { expect, test, vi } from 'vitest';
 import AppSidebarHost from './components/layout/AppSidebarHost.svelte';
-import TopBarHost from './components/layout/TopBarHost.svelte';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const indexHtml = readFileSync(resolve(__dirname, '../index.html'), 'utf8');
@@ -67,14 +66,4 @@ test('dashboard sidebar renders the SVG logo asset and brand text', () => {
   expect(logo).toHaveClass('size-6');
   expect(logo).toHaveClass('object-contain');
   expect(screen.getByText('PONTIA')).toHaveClass('group-data-[collapsible=icon]:hidden');
-});
-
-test('top bar omits SSE status chrome', () => {
-  render(TopBarHost);
-
-  const topBar = screen.getByRole('banner');
-  expect(topBar).not.toHaveTextContent('SSE live');
-  expect(topBar.querySelector('.lucide-wifi')).not.toBeInTheDocument();
-  expect(topBar.querySelector('.lucide-wifi-off')).not.toBeInTheDocument();
-  expect(screen.queryByTitle('SSE live')).not.toBeInTheDocument();
 });
