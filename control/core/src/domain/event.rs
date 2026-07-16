@@ -4,6 +4,8 @@ use time::OffsetDateTime;
 
 use crate::{error::Error, time::utc_now};
 
+use super::TurnTopology;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventSource {
@@ -260,6 +262,7 @@ pub struct DomainEvent {
     pub payload: Value,
     pub turn_index: Option<i64>,
     pub timeline_boundary: Option<TimelineBoundary>,
+    pub topology: Option<TurnTopology>,
 }
 
 impl DomainEvent {
@@ -284,6 +287,7 @@ impl DomainEvent {
             payload,
             turn_index: None,
             timeline_boundary: None,
+            topology: None,
         }
     }
 
@@ -294,6 +298,11 @@ impl DomainEvent {
 
     pub fn with_timeline_boundary(mut self, boundary: TimelineBoundary) -> Self {
         self.timeline_boundary = Some(boundary);
+        self
+    }
+
+    pub fn with_topology(mut self, topology: TurnTopology) -> Self {
+        self.topology = Some(topology);
         self
     }
 }
@@ -312,6 +321,7 @@ impl From<ReportedEvent> for DomainEvent {
             payload: event.payload,
             turn_index: None,
             timeline_boundary: None,
+            topology: None,
         }
     }
 }

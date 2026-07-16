@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{DomainEvent, EventType, SessionState, TimelineBoundary, TurnState};
+use super::{DomainEvent, EventType, SessionState, TimelineBoundary, TurnState, TurnTopology};
 use crate::error::Error;
 
 pub const MAX_TURN_INPUT_SUMMARY_CHARS: usize = 1_000;
@@ -32,6 +32,7 @@ pub struct TurnProjection {
     pub turn_index: i64,
     pub head_cursor: Option<String>,
     pub tail_cursor: Option<String>,
+    pub topology: TurnTopology,
     pub state: TurnState,
     pub state_version: i64,
     pub input_summary: Option<String>,
@@ -105,6 +106,12 @@ impl ProjectionState {
                 )));
             }
         }
+        if event.topology.is_some() && event.event_type != EventType::TurnStarted {
+            return Err(Error::Domain(format!(
+                "event {} cannot carry Turn topology enrichment",
+                event.event_type
+            )));
+        }
 
         if let Some(session) = self.sessions.get(&event.session_id)
             && session.state.is_terminal()
@@ -113,6 +120,9 @@ impl ProjectionState {
             && event.event_type != EventType::SessionTitleUpdated
             && event.event_type != EventType::SessionContextUsageUpdated
         {
+            if event.topology.is_some() {
+                self.apply_topology_to_existing_turn(event)?;
+            }
             return Ok(());
         }
 
@@ -312,6 +322,8 @@ impl ProjectionState {
             ))
         })?;
 
+        self.validate_topology(event, turn_id, turn_index)?;
+
         if let Some(existing) = self.turns.get(turn_id) {
             if existing.session_id != event.session_id || existing.turn_index != turn_index {
                 return Err(Error::Domain(format!(
@@ -319,6 +331,9 @@ impl ProjectionState {
                 )));
             }
             if existing.state.is_terminal() {
+                if let Some(turn) = self.turns.get_mut(turn_id) {
+                    apply_resolved_topology(turn, event.topology.as_ref());
+                }
                 return Ok(());
             }
         }
@@ -343,6 +358,7 @@ impl ProjectionState {
                 turn_index,
                 head_cursor: None,
                 tail_cursor: None,
+                topology: TurnTopology::Unknown,
                 state: TurnState::Queued,
                 state_version: 0,
                 input_summary: None,
@@ -359,6 +375,7 @@ impl ProjectionState {
             }
             None => {}
         }
+        apply_resolved_topology(turn, event.topology.as_ref());
 
         turn.state = new_state;
         if matches!(
@@ -450,6 +467,85 @@ impl ProjectionState {
         }
 
         Ok(())
+    }
+
+    fn validate_topology(
+        &self,
+        event: &DomainEvent,
+        turn_id: &str,
+        turn_index: i64,
+    ) -> crate::error::Result<()> {
+        let Some(topology) = &event.topology else {
+            return Ok(());
+        };
+
+        if let Some(existing) = self.turns.get(turn_id) {
+            if existing.session_id != event.session_id || existing.turn_index != turn_index {
+                return Err(Error::Domain(format!(
+                    "turn {turn_id} identity does not match immutable session_id and turn_index"
+                )));
+            }
+            if existing.topology != TurnTopology::Unknown
+                && *topology != TurnTopology::Unknown
+                && existing.topology != *topology
+            {
+                return Err(Error::Domain(format!(
+                    "turn {turn_id} topology is already resolved as {}",
+                    existing.topology.status()
+                )));
+            }
+        }
+
+        let TurnTopology::Linked { parent_turn_id } = topology else {
+            return Ok(());
+        };
+        let parent = self.turns.get(parent_turn_id).ok_or_else(|| {
+            Error::Domain(format!(
+                "linked parent {parent_turn_id} does not identify an earlier Turn"
+            ))
+        })?;
+        if parent.session_id != event.session_id {
+            return Err(Error::Domain(format!(
+                "linked parent {parent_turn_id} belongs to a different Session"
+            )));
+        }
+        if parent.turn_index >= turn_index {
+            return Err(Error::Domain(format!(
+                "linked parent {parent_turn_id} must precede turn {turn_id}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn apply_topology_to_existing_turn(&mut self, event: &DomainEvent) -> crate::error::Result<()> {
+        let turn_id = event.turn_id.as_deref().expect("validated turn_id");
+        let turn_index = event.turn_index.ok_or_else(|| {
+            Error::Domain(format!(
+                "domain event {} for turn {turn_id} is missing Pontia-owned turn_index",
+                event.event_id
+            ))
+        })?;
+        if !self.turns.contains_key(turn_id) {
+            return Err(Error::Domain(format!(
+                "Turn topology enrichment cannot create missing turn {turn_id}"
+            )));
+        }
+        self.validate_topology(event, turn_id, turn_index)?;
+        apply_resolved_topology(
+            self.turns
+                .get_mut(turn_id)
+                .expect("validated existing Turn"),
+            event.topology.as_ref(),
+        );
+        Ok(())
+    }
+}
+
+fn apply_resolved_topology(turn: &mut TurnProjection, topology: Option<&TurnTopology>) {
+    if let Some(topology) = topology
+        && *topology != TurnTopology::Unknown
+    {
+        turn.topology = topology.clone();
     }
 }
 

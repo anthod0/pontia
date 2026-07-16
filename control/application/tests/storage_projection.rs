@@ -1,6 +1,6 @@
 use pontia_application::EventIngestService;
 use pontia_core::domain::{
-    EventSource, EventType, ProjectionState, ReportedEvent, SessionState, TurnState,
+    EventSource, EventType, ProjectionState, ReportedEvent, SessionState, TurnState, TurnTopology,
 };
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
@@ -316,6 +316,107 @@ async fn allocates_monotonic_indexes_and_reuses_them_for_later_events_and_replay
     }
     assert_eq!(replay.turn("turn_1").unwrap().turn_index, 1);
     assert_eq!(replay.turn("turn_2").unwrap().turn_index, 2);
+}
+
+#[tokio::test]
+async fn topology_enrichment_is_atomic_durable_and_replayable() {
+    let service = service().await;
+    service
+        .ingest_event(event(
+            "evt_topology_session",
+            EventType::SessionCreated,
+            "sess_topology",
+            None,
+        ))
+        .await
+        .unwrap();
+
+    service
+        .ingest_event_with_topology(
+            event(
+                "evt_topology_root",
+                EventType::TurnStarted,
+                "sess_topology",
+                Some("turn_root"),
+            ),
+            TurnTopology::Root,
+        )
+        .await
+        .unwrap();
+    service
+        .ingest_event(event(
+            "evt_topology_root_completed",
+            EventType::TurnCompleted,
+            "sess_topology",
+            Some("turn_root"),
+        ))
+        .await
+        .unwrap();
+    service
+        .ingest_event_with_topology(
+            event(
+                "evt_topology_child",
+                EventType::TurnStarted,
+                "sess_topology",
+                Some("turn_child"),
+            ),
+            TurnTopology::linked("turn_root"),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        service
+            .get_turn("turn_root")
+            .await
+            .unwrap()
+            .unwrap()
+            .topology,
+        TurnTopology::Root
+    );
+    assert_eq!(
+        service
+            .get_turn("turn_child")
+            .await
+            .unwrap()
+            .unwrap()
+            .topology,
+        TurnTopology::linked("turn_root")
+    );
+
+    let events = service.list_events("sess_topology").await.unwrap();
+    assert_eq!(events[1].topology, Some(TurnTopology::Root));
+    assert_eq!(events[3].topology, Some(TurnTopology::linked("turn_root")));
+    let mut replay = ProjectionState::default();
+    for event in &events {
+        replay.apply(event).unwrap();
+    }
+    assert_eq!(
+        replay.turn("turn_child").unwrap().topology,
+        TurnTopology::linked("turn_root")
+    );
+
+    let invalid = service
+        .ingest_event_with_topology(
+            event(
+                "evt_topology_invalid",
+                EventType::TurnStarted,
+                "sess_topology",
+                Some("turn_invalid"),
+            ),
+            TurnTopology::linked("turn_invalid"),
+        )
+        .await;
+    assert!(invalid.is_err());
+    assert!(service.get_turn("turn_invalid").await.unwrap().is_none());
+    assert!(
+        service
+            .list_events("sess_topology")
+            .await
+            .unwrap()
+            .iter()
+            .all(|event| event.event_id != "evt_topology_invalid")
+    );
 }
 
 #[tokio::test]

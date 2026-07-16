@@ -6,7 +6,7 @@ use sqlx::SqlitePool;
 use pontia_core::{
     domain::{
         DomainEvent, EventSource, EventType, ProjectionState, ReportedEvent, SessionProjection,
-        TimelineBoundary, TurnProjection,
+        TimelineBoundary, TurnProjection, TurnTopology,
     },
     error::{Error, Result},
 };
@@ -39,6 +39,16 @@ impl EventIngestService {
 
     pub async fn ingest_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into(), None).await
+    }
+
+    pub async fn ingest_event_with_topology(
+        &self,
+        event: ReportedEvent,
+        topology: TurnTopology,
+    ) -> Result<EventIngestResult> {
+        let mut event: DomainEvent = event.into();
+        event.topology = Some(topology);
+        self.ingest_domain_event(event, None).await
     }
 
     pub(crate) async fn ingest_event_with_agent_binding(
@@ -98,6 +108,11 @@ impl EventIngestService {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let turn_topology = event
+            .topology
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
         let occurred_at = event
             .occurred_at
             .format(&time::format_description::well_known::Rfc3339)
@@ -119,6 +134,7 @@ impl EventIngestService {
                 payload,
                 turn_index: event.turn_index,
                 timeline_boundary,
+                turn_topology,
             },
         )
         .await?;
@@ -159,6 +175,8 @@ impl EventIngestService {
                         turn_index: turn.turn_index,
                         head_cursor: turn.head_cursor.clone(),
                         tail_cursor: turn.tail_cursor.clone(),
+                        parent_turn_id: turn.topology.parent_turn_id().map(ToString::to_string),
+                        topology_status: turn.topology.status().to_string(),
                         state: turn.state.to_string(),
                         state_version: turn.state_version,
                         input_summary: turn.input_summary.clone(),

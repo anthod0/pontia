@@ -26,6 +26,7 @@ pub struct AgentClientCapabilities {
     pub stream_output: bool,
     pub heartbeat: bool,
     pub timeline: bool,
+    pub topology: bool,
     pub context_usage: ContextUsageCapability,
 }
 
@@ -39,6 +40,7 @@ impl AgentClientCapabilities {
             stream_output: false,
             heartbeat: false,
             timeline: false,
+            topology: false,
             context_usage: ContextUsageCapability::Unsupported,
         }
     }
@@ -52,6 +54,7 @@ impl AgentClientCapabilities {
             stream_output: true,
             heartbeat: false,
             timeline: true,
+            topology: false,
             context_usage: ContextUsageCapability::Estimated,
         }
     }

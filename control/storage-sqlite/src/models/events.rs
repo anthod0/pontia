@@ -44,4 +44,5 @@ pub struct DomainEventRow {
     pub payload: String,
     pub turn_index: Option<i64>,
     pub timeline_boundary: Option<String>,
+    pub turn_topology: Option<String>,
 }

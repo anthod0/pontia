@@ -134,8 +134,8 @@ pub(crate) fn turn_row_to_view(row: TurnRow) -> Result<TurnView> {
         turn_id: row.turn_id,
         session_id: row.session_id,
         turn_index: row.turn_index,
-        head_cursor: row.head_cursor,
-        tail_cursor: row.tail_cursor,
+        parent_turn_id: row.parent_turn_id,
+        topology_status: row.topology_status,
         state: row.state,
         input: TurnInputView {
             summary: row.input_summary,
@@ -219,12 +219,14 @@ pub(crate) fn row_to_session(row: SessionProjectionRow) -> Result<SessionProject
 }
 
 pub(crate) fn row_to_turn(row: TurnProjectionRow) -> Result<TurnProjection> {
+    let topology = TurnTopology::from_parts(&row.topology_status, row.parent_turn_id)?;
     Ok(TurnProjection {
         turn_id: row.turn_id,
         session_id: row.session_id,
         turn_index: row.turn_index,
         head_cursor: row.head_cursor,
         tail_cursor: row.tail_cursor,
+        topology,
         state: TurnState::from_str(&row.state)?,
         state_version: row.state_version,
         input_summary: row.input_summary,
@@ -254,6 +256,10 @@ pub(crate) fn row_to_event(row: DomainEventRow) -> Result<DomainEvent> {
         timeline_boundary: row
             .timeline_boundary
             .map(|boundary| serde_json::from_str(&boundary))
+            .transpose()?,
+        topology: row
+            .turn_topology
+            .map(|topology| serde_json::from_str(&topology))
             .transpose()?,
     })
 }

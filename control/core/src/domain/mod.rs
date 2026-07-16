@@ -11,4 +11,4 @@ pub use projection::{
     MAX_TURN_INPUT_SUMMARY_CHARS, MAX_TURN_OUTPUT_SUMMARY_CHARS, ProjectionState,
     SessionProjection, TurnProjection,
 };
-pub use state::{SessionState, TurnState};
+pub use state::{SessionState, TurnState, TurnTopology};

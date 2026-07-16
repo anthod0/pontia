@@ -3,6 +3,7 @@ export type JsonObject = Record<string, unknown>;
 export type SessionState = 'created' | 'starting' | 'idle' | 'busy' | 'interrupted' | 'exited' | 'error';
 export type TaskState = 'created' | 'routing' | 'needs_confirmation' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 export type TurnState = 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+export type TurnTopologyStatus = 'unknown' | 'root' | 'linked';
 export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now';
 export type InboxMessageState = 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed' | 'dismissed';
 
@@ -14,6 +15,7 @@ export interface SessionCapabilities {
   stream_output?: boolean;
   heartbeat?: boolean;
   timeline?: boolean;
+  topology?: boolean;
   context_usage?: ContextUsageCapability;
   [key: string]: unknown;
 }
@@ -331,8 +333,8 @@ export interface TurnView {
   turn_id: string;
   session_id: string;
   turn_index: number;
-  head_cursor: string | null;
-  tail_cursor: string | null;
+  parent_turn_id: string | null;
+  topology_status: TurnTopologyStatus;
   state: TurnState | string;
   input: { summary?: string; [key: string]: unknown } | null;
   output: { summary?: string; [key: string]: unknown } | null;

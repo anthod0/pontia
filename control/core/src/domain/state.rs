@@ -2,6 +2,56 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum TurnTopology {
+    #[default]
+    Unknown,
+    Root,
+    Linked {
+        parent_turn_id: String,
+    },
+}
+
+impl TurnTopology {
+    pub fn linked(parent_turn_id: impl Into<String>) -> Self {
+        Self::Linked {
+            parent_turn_id: parent_turn_id.into(),
+        }
+    }
+
+    pub fn status(&self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Root => "root",
+            Self::Linked { .. } => "linked",
+        }
+    }
+
+    pub fn parent_turn_id(&self) -> Option<&str> {
+        match self {
+            Self::Linked { parent_turn_id } => Some(parent_turn_id),
+            Self::Unknown | Self::Root => None,
+        }
+    }
+
+    pub fn from_parts(status: &str, parent_turn_id: Option<String>) -> Result<Self, Error> {
+        match (status, parent_turn_id) {
+            ("unknown", None) => Ok(Self::Unknown),
+            ("root", None) => Ok(Self::Root),
+            ("linked", Some(parent_turn_id)) if !parent_turn_id.trim().is_empty() => {
+                Ok(Self::Linked { parent_turn_id })
+            }
+            ("unknown" | "root" | "linked", _) => Err(Error::Domain(format!(
+                "invalid Turn topology status/parent combination for {status}"
+            ))),
+            _ => Err(Error::Domain(format!(
+                "unknown Turn topology status: {status}"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "TEXT", rename_all = "snake_case")]

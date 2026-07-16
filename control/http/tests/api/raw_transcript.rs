@@ -1091,8 +1091,8 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["data"]["turn"]["turn_index"], 1);
-    assert_eq!(body["data"]["turn"]["head_cursor"], expected_head);
-    assert_eq!(body["data"]["turn"]["tail_cursor"], expected_tail);
+    assert!(body["data"]["turn"].get("head_cursor").is_none());
+    assert!(body["data"]["turn"].get("tail_cursor").is_none());
 
     let events = EventIngestService::new(state.db())
         .list_events(session_id)

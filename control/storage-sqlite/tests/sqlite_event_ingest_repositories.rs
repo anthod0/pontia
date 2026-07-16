@@ -39,6 +39,7 @@ async fn sqlite_event_repository_supports_ingest_event_writes_and_reads() {
             payload: json!({"input_summary": "hello"}).to_string(),
             turn_index: Some(1),
             timeline_boundary: None,
+            turn_topology: Some(json!({"status": "root"}).to_string()),
         },
     )
     .await
@@ -104,6 +105,8 @@ async fn sqlite_session_and_turn_repositories_support_projection_rows() {
             turn_index: 1,
             head_cursor: None,
             tail_cursor: None,
+            parent_turn_id: None,
+            topology_status: "root".to_string(),
             state: "running".to_string(),
             state_version: 3,
             input_summary: Some("do it".to_string()),
@@ -137,6 +140,8 @@ async fn sqlite_session_and_turn_repositories_support_projection_rows() {
     assert_eq!(turn_rows[0].state_version, 3);
     assert_eq!(turn_rows[0].input_summary.as_deref(), Some("do it"));
     assert_eq!(turn_rows[0].output_summary.as_deref(), Some("done"));
+    assert_eq!(turn_rows[0].topology_status, "root");
+    assert_eq!(turn_rows[0].parent_turn_id, None);
 
     let turn = turn_repository
         .get_projection("turn_projection")

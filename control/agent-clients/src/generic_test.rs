@@ -18,6 +18,7 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     stream_output: false,
     heartbeat: false,
     timeline: false,
+    topology: false,
     context_usage: ContextUsageCapability::Unsupported,
 };
 

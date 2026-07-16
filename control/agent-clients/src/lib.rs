@@ -142,6 +142,7 @@ mod tests {
                 stream_output: false,
                 heartbeat: false,
                 timeline: false,
+                topology: false,
                 context_usage: ContextUsageCapability::Unsupported,
             }
         );
@@ -176,5 +177,18 @@ mod tests {
         let hook_log = runtime.hook_log.expect("claude hook log configured");
         assert_eq!(hook_log.file_name, "claude-hook.log");
         assert_eq!(hook_log.metadata_key, "claude_hook_log");
+    }
+
+    #[test]
+    fn topology_capability_is_disabled_until_an_adapter_exists() {
+        for client_type in ["generic", "pi", "claude"] {
+            assert!(
+                !get_client_spec(client_type)
+                    .expect("built-in client spec")
+                    .capabilities
+                    .topology,
+                "{client_type} must not advertise topology before its adapter exists"
+            );
+        }
     }
 }

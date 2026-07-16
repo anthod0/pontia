@@ -5,7 +5,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_application::{AppState, EventIngestService};
-use pontia_core::domain::{EventSource, EventType, ReportedEvent};
+use pontia_core::domain::{EventSource, EventType, ReportedEvent, TurnTopology};
 use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -84,13 +84,16 @@ async fn seed_session_turn(state: &AppState) {
         .await
         .unwrap();
     service
-        .ingest_event(event(
-            "evt_external_queries_3",
-            EventType::TurnStarted,
-            "sess_external_queries_1",
-            Some("turn_external_queries_1"),
-            json!({"input":{"summary":"do work"}}),
-        ))
+        .ingest_event_with_topology(
+            event(
+                "evt_external_queries_3",
+                EventType::TurnStarted,
+                "sess_external_queries_1",
+                Some("turn_external_queries_1"),
+                json!({"input":{"summary":"do work"}}),
+            ),
+            TurnTopology::Root,
+        )
         .await
         .unwrap();
     service
@@ -388,6 +391,10 @@ async fn external_api_lists_and_gets_turn_views() {
     );
     assert_eq!(list_body["data"]["turns"][0]["state"], "completed");
     assert_eq!(list_body["data"]["turns"][0]["turn_index"], 1);
+    assert_eq!(list_body["data"]["turns"][0]["topology_status"], "root");
+    assert_eq!(list_body["data"]["turns"][0]["parent_turn_id"], Value::Null);
+    assert!(list_body["data"]["turns"][0].get("head_cursor").is_none());
+    assert!(list_body["data"]["turns"][0].get("tail_cursor").is_none());
 
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(
@@ -399,11 +406,85 @@ async fn external_api_lists_and_gets_turn_views() {
         "sess_external_queries_1"
     );
     assert_eq!(get_body["data"]["turn"]["turn_index"], 1);
+    assert_eq!(get_body["data"]["turn"]["topology_status"], "root");
+    assert_eq!(get_body["data"]["turn"]["parent_turn_id"], Value::Null);
+    assert!(get_body["data"]["turn"].get("head_cursor").is_none());
+    assert!(get_body["data"]["turn"].get("tail_cursor").is_none());
     assert_eq!(get_body["data"]["turn"]["input"]["summary"], "do work");
     assert_eq!(get_body["data"]["turn"]["output"]["summary"], "done");
     assert_eq!(get_body["data"]["turn"]["failure"], Value::Null);
     assert!(get_body["data"]["turn"]["started_at"].is_string());
     assert!(get_body["data"]["turn"]["completed_at"].is_string());
+}
+
+#[tokio::test]
+async fn external_api_lists_linked_topology_in_turn_index_order() {
+    let state = test_state().await;
+    let service = EventIngestService::new(state.db());
+    service
+        .ingest_event(event(
+            "evt_topology_external_session",
+            EventType::SessionCreated,
+            "sess_topology_external",
+            None,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    service
+        .ingest_event_with_topology(
+            event(
+                "evt_topology_external_root",
+                EventType::TurnStarted,
+                "sess_topology_external",
+                Some("turn_root"),
+                json!({}),
+            ),
+            TurnTopology::Root,
+        )
+        .await
+        .unwrap();
+    service
+        .ingest_event(event(
+            "evt_topology_external_root_done",
+            EventType::TurnCompleted,
+            "sess_topology_external",
+            Some("turn_root"),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    service
+        .ingest_event_with_topology(
+            event(
+                "evt_topology_external_child",
+                EventType::TurnStarted,
+                "sess_topology_external",
+                Some("turn_child"),
+                json!({}),
+            ),
+            TurnTopology::linked("turn_root"),
+        )
+        .await
+        .unwrap();
+    bind_session_to_active_workspace(&state, "sess_topology_external").await;
+
+    let (status, body) = get(
+        state,
+        "/external/v1/sessions/sess_topology_external/turns",
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let turns = body["data"]["turns"].as_array().unwrap();
+    assert_eq!(turns.len(), 2);
+    assert_eq!(turns[0]["turn_id"], "turn_root");
+    assert_eq!(turns[0]["turn_index"], 1);
+    assert_eq!(turns[0]["topology_status"], "root");
+    assert_eq!(turns[1]["turn_id"], "turn_child");
+    assert_eq!(turns[1]["turn_index"], 2);
+    assert_eq!(turns[1]["topology_status"], "linked");
+    assert_eq!(turns[1]["parent_turn_id"], "turn_root");
 }
 
 #[tokio::test]
@@ -428,6 +509,10 @@ async fn external_api_lists_session_and_turn_events() {
     assert_eq!(session_body["data"]["events"].as_array().unwrap().len(), 6);
     assert_eq!(session_body["data"]["events"][0]["type"], "session.created");
     assert_eq!(session_body["data"]["events"][0]["source"], "agent_adapter");
+    for event in session_body["data"]["events"].as_array().unwrap() {
+        assert!(event.get("turn_topology").is_none());
+        assert!(event.get("timeline_boundary").is_none());
+    }
 
     assert_eq!(turn_status, StatusCode::OK);
     assert_eq!(turn_body["data"]["events"].as_array().unwrap().len(), 4);
