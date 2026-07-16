@@ -788,6 +788,68 @@ describe("pontia pi extension lifecycle", () => {
     expect(observations.indexOf("leaf:entry_after_turn")).toBeLessThan(observations.indexOf("report:turn.completed"));
   });
 
+  test("captures a content-free Pi context path before reporting turn.started", async () => {
+    const observations: string[] = [];
+    const report = vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
+      observations.push(`report:${event.type}`);
+      return true;
+    });
+    const { handlers } = install({ makeReporter: vi.fn(() => ({ report })) });
+    const hookContext = {
+      sessionManager: {
+        getLeafId: () => "assistant_1",
+        getBranch: () => {
+          observations.push("branch");
+          return [
+            {
+              type: "message",
+              id: "user_1",
+              parentId: null,
+              timestamp: "2026-07-16T00:00:00Z",
+              message: { role: "user", content: "secret prompt" },
+            },
+            {
+              type: "compaction",
+              id: "compact_1",
+              parentId: "user_1",
+              timestamp: "2026-07-16T00:00:01Z",
+              summary: "secret summary",
+              firstKeptEntryId: "user_1",
+              tokensBefore: 10,
+            },
+            {
+              type: "message",
+              id: "assistant_1",
+              parentId: "compact_1",
+              timestamp: "2026-07-16T00:00:02Z",
+              message: {
+                role: "assistant",
+                content: [{ type: "text", text: "secret answer" }],
+                toolCalls: [{ name: "secret-tool", arguments: { token: "secret" } }],
+              },
+            },
+          ];
+        },
+      },
+    };
+
+    await handlers.agent_start({}, hookContext);
+
+    expect(observations).toEqual(["branch", "report:turn.started"]);
+    expect(report.mock.calls[0]?.[1].payload).toMatchObject({
+      topology_context: {
+        entries: [
+          { id: "user_1", kind: "user_message" },
+          { id: "compact_1", kind: "compaction" },
+          { id: "assistant_1", kind: "assistant_message" },
+        ],
+      },
+    });
+    expect(JSON.stringify(report.mock.calls[0]?.[1].payload)).not.toMatch(
+      /secret prompt|secret summary|secret answer|secret-tool|token/,
+    );
+  });
+
   test("uses assistant message_end full text without TUI parsing", async () => {
     const { handlers, reported } = install();
 

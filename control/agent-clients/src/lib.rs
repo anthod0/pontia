@@ -2,9 +2,11 @@ pub mod claude;
 mod generic_test;
 pub mod pi;
 pub mod raw_transcripts;
+pub mod topology;
 mod types;
 
 pub use generic_test::{GenericTestClient, InProcessRecordedDispatchBehavior};
+pub use topology::*;
 pub use types::*;
 
 use raw_transcripts::{AgentBindingResolver, TimelineBoundaryCapturer, TurnTimelineReader};
@@ -33,6 +35,23 @@ pub struct TimelineBoundaryBackend {
 pub struct TurnTimelineBackend {
     pub resolver: Box<dyn AgentBindingResolver + Send + Sync>,
     pub reader: Box<dyn TurnTimelineReader + Send + Sync>,
+}
+
+pub struct TurnTopologyBackend {
+    pub resolver: Box<dyn TurnTopologyResolver + Send + Sync>,
+}
+
+pub fn topology_backend_for(client_type: &str) -> Option<TurnTopologyBackend> {
+    let spec = get_client_spec(client_type)?;
+    if !spec.capabilities.topology {
+        return None;
+    }
+    match client_type {
+        "pi" => Some(TurnTopologyBackend {
+            resolver: Box::new(pi::topology::PiTopologyResolver::new()),
+        }),
+        _ => None,
+    }
 }
 
 pub fn timeline_boundary_backend_for(client_type: &str) -> Option<TimelineBoundaryBackend> {
@@ -180,15 +199,23 @@ mod tests {
     }
 
     #[test]
-    fn topology_capability_is_disabled_until_an_adapter_exists() {
-        for client_type in ["generic", "pi", "claude"] {
+    fn topology_capability_is_enabled_only_for_clients_with_an_adapter() {
+        assert!(
+            get_client_spec("pi")
+                .expect("pi client spec")
+                .capabilities
+                .topology
+        );
+        assert!(topology_backend_for("pi").is_some());
+        for client_type in ["generic", "claude"] {
             assert!(
                 !get_client_spec(client_type)
                     .expect("built-in client spec")
                     .capabilities
                     .topology,
-                "{client_type} must not advertise topology before its adapter exists"
+                "{client_type} must remain independently degraded"
             );
+            assert!(topology_backend_for(client_type).is_none());
         }
     }
 }

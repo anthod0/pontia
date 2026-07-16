@@ -566,15 +566,28 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
         .await
         .unwrap();
 
-    post_pi_turn_event(
+    let (status, body) = post_internal_event(
         state.clone(),
-        session_id,
-        "turn_delayed_first",
-        "evt_delayed_first_started",
-        "turn.started",
-        json!({ "previous_leaf_id": "previous" }),
+        json!({
+            "event_id": "evt_delayed_first_started",
+            "session_id": session_id,
+            "turn_id": "turn_delayed_first",
+            "source": "agent_adapter",
+            "client_type": "pi",
+            "type": "turn.started",
+            "time": "2026-07-15T00:00:00Z",
+            "seq": null,
+            "payload": {
+                "runtime_instance_id": "rtinst_projected_timeline",
+                "timeline_anchor": { "previous_leaf_id": "previous" },
+                "topology_context": { "entries": [
+                    {"id": "previous", "kind": "model_change"}
+                ] }
+            }
+        }),
     )
     .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
     let started_turn = EventIngestService::new(state.db())
         .get_turn("turn_delayed_first")
         .await
@@ -583,6 +596,10 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     assert_eq!(
         started_turn.head_cursor.as_deref(),
         Some(format!("pi-jsonl-v2:{}:0:after:previous", binding.id).as_str())
+    );
+    assert_eq!(
+        started_turn.topology,
+        pontia_core::domain::TurnTopology::Root
     );
 
     let (pending_status, pending_body) = get_json(
@@ -988,6 +1005,297 @@ async fn post_pi_turn_event(
 }
 
 #[tokio::test]
+async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persisting_native_evidence()
+ {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+
+    let state = test_state().await;
+    let session_id = "sess_pi_linear_topology";
+    let session_key = "pi-linear-topology";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let transcript = session_dir.join(format!("2026-07-16T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(&transcript, b"").unwrap();
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+
+    let turns = [
+        (
+            "turn_pi_linear_1",
+            "evt_pi_linear_1",
+            Value::Array(vec![]),
+            None,
+        ),
+        (
+            "turn_pi_linear_2",
+            "evt_pi_linear_2",
+            json!([
+                {"id": "user_1", "kind": "user_message"},
+                {"id": "assistant_1", "kind": "assistant_message"}
+            ]),
+            Some("assistant_1"),
+        ),
+        (
+            "turn_pi_linear_3",
+            "evt_pi_linear_3",
+            json!([
+                {"id": "user_1", "kind": "user_message"},
+                {"id": "assistant_1", "kind": "assistant_message"},
+                {"id": "model_2", "kind": "model_change"},
+                {"id": "user_2", "kind": "user_message"},
+                {"id": "assistant_2", "kind": "assistant_message"}
+            ]),
+            Some("assistant_2"),
+        ),
+    ];
+
+    for (index, (turn_id, event_prefix, entries, previous_leaf_id)) in turns.iter().enumerate() {
+        let started = json!({
+            "event_id": format!("{event_prefix}_started"),
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "source": "agent_adapter",
+            "client_type": "pi",
+            "type": "turn.started",
+            "time": "2026-07-16T00:00:00Z",
+            "seq": null,
+            "payload": {
+                "runtime_instance_id": "rtinst_pi_linear",
+                "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
+                "topology_context": { "entries": entries },
+            }
+        });
+        let (status, body) = post_internal_event(state.clone(), started.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{body:?}");
+        if index == 0 {
+            let duplicate = post_internal_event(state.clone(), started).await;
+            assert_eq!(duplicate.0, StatusCode::OK, "{:?}", duplicate.1);
+            assert_eq!(duplicate.1["duplicate"], true);
+        }
+
+        let user_id = format!("user_{}", index + 1);
+        let assistant_id = format!("assistant_{}", index + 1);
+        fs::write(
+            &transcript,
+            (1..=index + 1)
+                .flat_map(|number| {
+                    [
+                        format!("{{\"type\":\"message\",\"id\":\"user_{number}\",\"parentId\":null}}\n"),
+                        format!("{{\"type\":\"message\",\"id\":\"assistant_{number}\",\"parentId\":\"user_{number}\"}}\n"),
+                    ]
+                })
+                .collect::<String>(),
+        )
+        .unwrap();
+        let completed = json!({
+            "event_id": format!("{event_prefix}_completed"),
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "source": "agent_adapter",
+            "client_type": "pi",
+            "type": "turn.completed",
+            "time": "2026-07-16T00:00:01Z",
+            "seq": null,
+            "payload": {
+                "runtime_instance_id": "rtinst_pi_linear",
+                "timeline_anchor": { "terminal_leaf_id": assistant_id },
+                "debug_content": user_id,
+            }
+        });
+        assert_eq!(
+            post_internal_event(state.clone(), completed).await.0,
+            StatusCode::OK
+        );
+    }
+
+    let branch_turns = [
+        (
+            "turn_pi_linear_4",
+            "evt_pi_linear_4",
+            json!([
+                {"id": "user_1", "kind": "user_message"},
+                {"id": "assistant_1", "kind": "assistant_message"}
+            ]),
+            "assistant_1",
+            "assistant_1",
+            "user_4",
+            "assistant_4",
+        ),
+        (
+            "turn_pi_linear_5",
+            "evt_pi_linear_5",
+            json!([
+                {"id": "user_1", "kind": "user_message"},
+                {"id": "assistant_1", "kind": "assistant_message"},
+                {"id": "user_4", "kind": "user_message"},
+                {"id": "assistant_4", "kind": "assistant_message"}
+            ]),
+            "assistant_4",
+            "assistant_4",
+            "user_5",
+            "assistant_5",
+        ),
+    ];
+    for (
+        turn_id,
+        event_prefix,
+        entries,
+        previous_leaf_id,
+        native_parent_id,
+        user_id,
+        assistant_id,
+    ) in branch_turns
+    {
+        let started = json!({
+            "event_id": format!("{event_prefix}_started"),
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "source": "agent_adapter",
+            "client_type": "pi",
+            "type": "turn.started",
+            "time": "2026-07-16T00:00:02Z",
+            "seq": null,
+            "payload": {
+                "runtime_instance_id": "rtinst_pi_linear",
+                "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
+                "topology_context": { "entries": entries },
+            }
+        });
+        let (status, body) = post_internal_event(state.clone(), started).await;
+        assert_eq!(status, StatusCode::OK, "{body:?}");
+
+        let mut transcript_file = fs::OpenOptions::new()
+            .append(true)
+            .open(&transcript)
+            .unwrap();
+        writeln!(
+            transcript_file,
+            "{{\"type\":\"message\",\"id\":\"{user_id}\",\"parentId\":\"{native_parent_id}\"}}"
+        )
+        .unwrap();
+        writeln!(
+            transcript_file,
+            "{{\"type\":\"message\",\"id\":\"{assistant_id}\",\"parentId\":\"{user_id}\"}}"
+        )
+        .unwrap();
+        let completed = json!({
+            "event_id": format!("{event_prefix}_completed"),
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "source": "agent_adapter",
+            "client_type": "pi",
+            "type": "turn.completed",
+            "time": "2026-07-16T00:00:03Z",
+            "seq": null,
+            "payload": {
+                "runtime_instance_id": "rtinst_pi_linear",
+                "timeline_anchor": { "terminal_leaf_id": assistant_id },
+            }
+        });
+        assert_eq!(
+            post_internal_event(state.clone(), completed).await.0,
+            StatusCode::OK
+        );
+    }
+
+    let malformed_started = json!({
+        "event_id": "evt_pi_linear_malformed_started",
+        "session_id": session_id,
+        "turn_id": "turn_pi_linear_malformed",
+        "source": "agent_adapter",
+        "client_type": "pi",
+        "type": "turn.started",
+        "time": "2026-07-16T00:00:02Z",
+        "seq": null,
+        "payload": {
+            "runtime_instance_id": "rtinst_pi_linear",
+            "timeline_anchor": { "previous_leaf_id": "assistant_5" },
+            "topology_context": { "entries": [
+                {"id": "duplicate", "kind": "user_message"},
+                {"id": "duplicate", "kind": "assistant_message"}
+            ] },
+        }
+    });
+    let (malformed_status, malformed_body) =
+        post_internal_event(state.clone(), malformed_started).await;
+    assert_eq!(malformed_status, StatusCode::OK, "{malformed_body:?}");
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let projected = body["data"]["turns"].as_array().unwrap();
+    assert_eq!(projected.len(), 6);
+    assert_eq!(projected[0]["turn_index"], 1);
+    assert_eq!(projected[0]["topology_status"], "root");
+    assert_eq!(projected[1]["turn_index"], 2);
+    assert_eq!(projected[1]["parent_turn_id"], "turn_pi_linear_1");
+    assert_eq!(projected[2]["turn_index"], 3);
+    assert_eq!(projected[2]["parent_turn_id"], "turn_pi_linear_2");
+    assert_eq!(projected[3]["turn_index"], 4);
+    assert_eq!(projected[3]["parent_turn_id"], "turn_pi_linear_1");
+    assert_eq!(projected[4]["turn_index"], 5);
+    assert_eq!(projected[4]["parent_turn_id"], "turn_pi_linear_4");
+    assert_eq!(projected[5]["turn_index"], 6);
+    assert_eq!(projected[5]["topology_status"], "unknown");
+    assert_eq!(projected[5]["state"], "running");
+
+    let events = EventIngestService::new(state.db())
+        .list_events(session_id)
+        .await
+        .unwrap();
+    let started_events: Vec<_> = events
+        .iter()
+        .filter(|event| event.event_type == EventType::TurnStarted)
+        .collect();
+    assert_eq!(started_events.len(), 6);
+    assert!(started_events.iter().all(|event| {
+        event.payload.get("topology_context").is_none()
+            && event.payload.get("timeline_anchor").is_none()
+    }));
+    assert!(started_events.iter().all(|event| event.topology.is_some()));
+
+    fs::remove_file(&transcript).unwrap();
+    let mut replay = ProjectionState::default();
+    for event in &events {
+        replay.apply(event).unwrap();
+    }
+    assert_eq!(
+        replay
+            .turn("turn_pi_linear_3")
+            .unwrap()
+            .topology
+            .parent_turn_id(),
+        Some("turn_pi_linear_2")
+    );
+    assert_eq!(
+        replay
+            .turn("turn_pi_linear_5")
+            .unwrap()
+            .topology
+            .parent_turn_id(),
+        Some("turn_pi_linear_4")
+    );
+}
+
+#[tokio::test]
 async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
@@ -1098,10 +1406,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
         .list_events(session_id)
         .await
         .unwrap();
-    assert_eq!(
-        events[1].payload["timeline_anchor"]["previous_leaf_id"],
-        "previous_leaf"
-    );
+    assert!(events[1].payload.get("timeline_anchor").is_none());
     assert_eq!(
         events[1].timeline_boundary,
         Some(TimelineBoundary::head(expected_head.clone()))

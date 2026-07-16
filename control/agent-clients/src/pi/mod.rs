@@ -1,4 +1,5 @@
 pub mod raw_transcripts;
+pub mod topology;
 
 use crate::{
     AgentClientCapabilities, ContextUsageCapability,
@@ -18,7 +19,7 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     stream_output: true,
     heartbeat: false,
     timeline: true,
-    topology: false,
+    topology: true,
     context_usage: ContextUsageCapability::Estimated,
 };
 

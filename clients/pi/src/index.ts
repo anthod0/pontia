@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, newPontiaTurnId, type InternalEvent, type SessionMessageUpdatedReason } from "./events.js";
+import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, newPontiaTurnId, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
 import { optionalString } from "./internal-api.js";
 import { assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
@@ -38,6 +38,55 @@ function leafIdFromHookContext(ctx: unknown): string | null {
   if (typeof getLeafId !== "function") return null;
   const leafId = getLeafId.call(sessionManager);
   return typeof leafId === "string" && leafId.length > 0 ? leafId : null;
+}
+
+const NON_MESSAGE_ENTRY_KINDS = new Set([
+  "thinking_level_change",
+  "model_change",
+  "compaction",
+  "branch_summary",
+  "custom",
+  "custom_message",
+  "label",
+  "session_info",
+]);
+
+function topologyEntryKind(entry: Record<string, unknown>): PiTopologyEntryKind {
+  if (entry.type !== "message") {
+    return typeof entry.type === "string" && NON_MESSAGE_ENTRY_KINDS.has(entry.type)
+      ? entry.type as PiTopologyEntryKind
+      : "other";
+  }
+  const message = entry.message;
+  const role = message && typeof message === "object"
+    ? (message as Record<string, unknown>).role
+    : undefined;
+  if (role === "user") return "user_message";
+  if (role === "assistant") return "assistant_message";
+  if (role === "toolResult") return "tool_result_message";
+  return "other_message";
+}
+
+function topologyContextFromHookContext(ctx: unknown): PiTopologyContext | undefined {
+  if (!ctx || typeof ctx !== "object") return undefined;
+  const sessionManager = (ctx as Record<string, unknown>).sessionManager;
+  if (!sessionManager || typeof sessionManager !== "object") return undefined;
+  const getBranch = (sessionManager as Record<string, unknown>).getBranch;
+  if (typeof getBranch !== "function") return undefined;
+  try {
+    const branch = getBranch.call(sessionManager);
+    if (!Array.isArray(branch)) return undefined;
+    const entries = branch.map((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+      const entry = value as Record<string, unknown>;
+      if (typeof entry.id !== "string" || entry.id.length === 0) return undefined;
+      return { id: entry.id, kind: topologyEntryKind(entry) };
+    });
+    if (entries.some((entry) => entry === undefined)) return undefined;
+    return { entries: entries as PiTopologyContext["entries"] };
+  } catch {
+    return undefined;
+  }
 }
 
 export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPiExtensionDependencies = {}): void {
@@ -196,6 +245,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("agent_start", async (_event, ctx) => {
+    const topologyContext = topologyContextFromHookContext(ctx);
     const previousLeafId = leafIdFromHookContext(ctx);
     if (pontiaDisabled) return;
     try {
@@ -264,7 +314,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         output: "",
         ended: false,
       };
-      await reporter.report(activeTurn.context, buildTurnStartedEvent(activeTurn.context, previousLeafId));
+      await reporter.report(activeTurn.context, buildTurnStartedEvent(activeTurn.context, previousLeafId, topologyContext));
     } catch (error) {
       pendingPrompt = undefined;
       activeTurn = undefined;

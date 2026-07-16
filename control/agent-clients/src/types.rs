@@ -46,17 +46,7 @@ impl AgentClientCapabilities {
     }
 
     pub fn pi_m0_default() -> Self {
-        Self {
-            accept_task: true,
-            report_turn_started: true,
-            report_turn_finished: true,
-            interrupt: true,
-            stream_output: true,
-            heartbeat: false,
-            timeline: true,
-            topology: false,
-            context_usage: ContextUsageCapability::Estimated,
-        }
+        crate::pi::CAPABILITIES
     }
 }
 

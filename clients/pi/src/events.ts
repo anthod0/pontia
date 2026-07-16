@@ -24,6 +24,30 @@ export interface ContextUsageObservation {
 
 export type SessionMessageUpdatedReason = "append" | "update" | "final";
 
+export type PiTopologyEntryKind =
+  | "user_message"
+  | "assistant_message"
+  | "tool_result_message"
+  | "other_message"
+  | "thinking_level_change"
+  | "model_change"
+  | "compaction"
+  | "branch_summary"
+  | "custom"
+  | "custom_message"
+  | "label"
+  | "session_info"
+  | "other";
+
+export interface PiTopologyContextEntry {
+  id: string;
+  kind: PiTopologyEntryKind;
+}
+
+export interface PiTopologyContext {
+  entries: PiTopologyContextEntry[];
+}
+
 interface BaseInternalEvent {
   event_id: string;
   session_id: string;
@@ -289,7 +313,11 @@ export function contextUsageFromPiHook(event: unknown, ctx?: unknown): ContextUs
   return mergeContextUsageObservations(contextUsageFromPiEvent(event), contextUsageFromPiContext(ctx));
 }
 
-export function buildTurnStartedEvent(context: ActiveTurnContext, previousLeafId: string | null = null): InternalEvent {
+export function buildTurnStartedEvent(
+  context: ActiveTurnContext,
+  previousLeafId: string | null = null,
+  topologyContext?: PiTopologyContext,
+): InternalEvent {
   const payload: Record<string, unknown> = {
     runtime_instance_id: context.runtimeInstanceId,
     input: context.input ? { summary: context.input } : {},
@@ -298,6 +326,7 @@ export function buildTurnStartedEvent(context: ActiveTurnContext, previousLeafId
   if (context.inboxMessageId) {
     payload.metadata = { inbox_message_id: context.inboxMessageId };
   }
+  if (topologyContext) payload.topology_context = topologyContext;
   return {
     ...baseAdapterTurnEvent(context, "turn.started"),
     payload,

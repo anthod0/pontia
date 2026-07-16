@@ -26,6 +26,9 @@ use crate::{
 use pontia_agent_clients::raw_transcripts::{
     AgentBindingResolveRequest, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
 };
+use pontia_agent_clients::{
+    TopologyDiagnostic, TopologyResolution, TopologyResolveRequest, TurnTopologyCandidate,
+};
 
 #[derive(Clone)]
 pub struct EventIngestService {
@@ -85,6 +88,17 @@ impl EventIngestService {
         }
 
         self.enrich_timeline_boundary(&mut event).await;
+        let topology_evidence = consume_transient_pi_native_evidence(&mut event);
+        let topology_binding_id = if should_resolve_pi_topology(&event) {
+            crate::AgentBindingService::new(self.pool.clone())
+                .binding_for_session(&event.session_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|binding| binding.id)
+        } else {
+            None
+        };
 
         let mut tx = self.pool.begin().await?;
         self.enrich_turn_index_in_tx(&mut tx, &mut event).await?;
@@ -99,6 +113,7 @@ impl EventIngestService {
             .into_iter()
             .map(row_to_turn)
             .collect::<Result<Vec<_>>>()?;
+        self.enrich_pi_topology(&mut event, topology_binding_id, topology_evidence, &turns);
         let mut projection = ProjectionState::with_existing(sessions, turns);
         projection.apply(&event)?;
 
@@ -219,6 +234,73 @@ impl EventIngestService {
             turn_id: event.turn_id,
             state_version,
         })
+    }
+
+    fn enrich_pi_topology(
+        &self,
+        event: &mut DomainEvent,
+        binding_id: Option<String>,
+        evidence: Option<Value>,
+        turns: &[TurnProjection],
+    ) {
+        if !should_resolve_pi_topology(event) {
+            return;
+        }
+        let Some(turn_id) = event.turn_id.clone() else {
+            return;
+        };
+        let Some(turn_index) = event.turn_index else {
+            return;
+        };
+        let Some(binding_id) = binding_id else {
+            event.topology = Some(TurnTopology::Unknown);
+            warn_topology_resolution(event, TopologyDiagnostic::BindingUnavailable);
+            return;
+        };
+        let Some(backend) = pontia_agent_clients::topology_backend_for(&event.client_type) else {
+            event.topology = Some(TurnTopology::Unknown);
+            warn_topology_resolution(event, TopologyDiagnostic::AdapterUnavailable);
+            return;
+        };
+        let earlier_turns = turns
+            .iter()
+            .filter(|turn| turn.turn_id != turn_id && turn.turn_index < turn_index)
+            .map(|turn| TurnTopologyCandidate {
+                turn_id: turn.turn_id.clone(),
+                turn_index: turn.turn_index,
+                tail_cursor: turn.tail_cursor.clone(),
+            })
+            .collect::<Vec<_>>();
+        let result = backend.resolver.resolve(TopologyResolveRequest {
+            binding_id,
+            current_turn_id: turn_id,
+            current_turn_index: turn_index,
+            earlier_turns,
+            evidence,
+        });
+        event.topology = Some(match result.resolution {
+            TopologyResolution::Unknown => TurnTopology::Unknown,
+            TopologyResolution::Root => TurnTopology::Root,
+            TopologyResolution::Linked { parent_turn_id }
+                if turns.iter().any(|candidate| {
+                    candidate.turn_id == parent_turn_id
+                        && candidate.session_id == event.session_id
+                        && candidate.turn_index < turn_index
+                }) =>
+            {
+                TurnTopology::linked(parent_turn_id)
+            }
+            TopologyResolution::Linked { .. } => {
+                warn_topology_resolution(event, TopologyDiagnostic::ParentNotFound);
+                TurnTopology::Unknown
+            }
+        });
+        if !matches!(
+            result.diagnostic,
+            TopologyDiagnostic::RootContext | TopologyDiagnostic::ParentMatched
+        ) {
+            warn_topology_resolution(event, result.diagnostic);
+        }
     }
 
     async fn enrich_timeline_boundary(&self, event: &mut DomainEvent) {
@@ -576,6 +658,34 @@ impl EventIngestService {
 
         rows.into_iter().map(row_to_session).collect()
     }
+}
+
+fn should_resolve_pi_topology(event: &DomainEvent) -> bool {
+    event.event_type == EventType::TurnStarted
+        && event.client_type == "pi"
+        && event.source == EventSource::AgentAdapter
+}
+
+fn consume_transient_pi_native_evidence(event: &mut DomainEvent) -> Option<Value> {
+    if event.client_type != "pi" || event.source != EventSource::AgentAdapter {
+        return None;
+    }
+    let payload = event.payload.as_object_mut()?;
+    let topology_evidence = payload.remove("topology_context");
+    payload.remove("timeline_anchor");
+    topology_evidence
+}
+
+fn warn_topology_resolution(event: &DomainEvent, diagnostic: TopologyDiagnostic) {
+    tracing::warn!(
+        code = "turn_topology_unresolved",
+        event_id = %event.event_id,
+        session_id = %event.session_id,
+        turn_id = ?event.turn_id,
+        client_type = %event.client_type,
+        diagnostic = diagnostic.as_str(),
+        "Turn topology evidence could not be resolved"
+    );
 }
 
 fn is_confirmed_runtime_source(source: EventSource) -> bool {
