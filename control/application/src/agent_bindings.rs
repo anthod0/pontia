@@ -30,6 +30,18 @@ pub struct UpsertAgentBindingRequest {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AgentBindingSessionContext {
+    pub session_id: String,
+    pub session_state: String,
+    pub client_type: String,
+    pub client_session_key: String,
+    pub runtime_instance_id: Option<String>,
+    pub internal_event_url: String,
+    pub binding_metadata: Value,
+    pub runtime_metadata: Value,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AgentBindingCurrentTurn {
     pub session_id: String,
     pub turn_id: String,
@@ -76,6 +88,47 @@ impl AgentBindingService {
         Ok(binding)
     }
 
+    pub async fn session_context_for_client_session(
+        &self,
+        client_type: &str,
+        client_session_key: &str,
+    ) -> Result<Option<AgentBindingSessionContext>> {
+        let Some(binding) = self
+            .binding_for_client_session(client_type, client_session_key)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let Some(row) = sqlx::query(
+            r#"SELECT s.state AS session_state,
+                      r.runtime_instance_id,
+                      r.metadata AS runtime_metadata
+               FROM sessions s
+               JOIN runtime_bindings r ON r.session_id = s.session_id
+               WHERE s.session_id = ?"#,
+        )
+        .bind(&binding.session_id)
+        .fetch_optional(&self.pool)
+        .await?
+        else {
+            return Ok(None);
+        };
+
+        let runtime_metadata = runtime_metadata_from_row(&row)?;
+        let internal_event_url = internal_event_url(&runtime_metadata);
+        Ok(Some(AgentBindingSessionContext {
+            session_id: binding.session_id,
+            session_state: row.try_get("session_state")?,
+            client_type: binding.client_type,
+            client_session_key: binding.client_session_key,
+            runtime_instance_id: row.try_get("runtime_instance_id")?,
+            internal_event_url,
+            binding_metadata: binding.metadata,
+            runtime_metadata,
+        }))
+    }
+
     pub async fn current_turn_for_client_session(
         &self,
         client_type: &str,
@@ -109,17 +162,8 @@ impl AgentBindingService {
         else {
             return Ok(None);
         };
-        let runtime_metadata = row
-            .try_get::<Option<String>, _>("runtime_metadata")?
-            .unwrap_or_else(|| "{}".to_string());
-        let runtime_metadata: Value = serde_json::from_str(&runtime_metadata)?;
-        let internal_event_url = runtime_metadata
-            .get("internal_event_url")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or("http://127.0.0.1:8080/internal/v1/events")
-            .to_string();
+        let runtime_metadata = runtime_metadata_from_row(&row)?;
+        let internal_event_url = internal_event_url(&runtime_metadata);
 
         Ok(Some(AgentBindingCurrentTurn {
             session_id: binding.session_id,
@@ -186,6 +230,23 @@ impl AgentBindingService {
         }
         Ok(())
     }
+}
+
+fn runtime_metadata_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Value> {
+    let runtime_metadata = row
+        .try_get::<Option<String>, _>("runtime_metadata")?
+        .unwrap_or_else(|| "{}".to_string());
+    Ok(serde_json::from_str(&runtime_metadata)?)
+}
+
+fn internal_event_url(runtime_metadata: &Value) -> String {
+    runtime_metadata
+        .get("internal_event_url")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("http://127.0.0.1:8080/internal/v1/events")
+        .to_string()
 }
 
 pub(crate) fn runtime_binding_identity_disagrees(

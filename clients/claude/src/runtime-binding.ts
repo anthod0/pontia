@@ -21,24 +21,6 @@ function tmuxBindingFromEnv(env: EnvLike): { socket_path: string; pane_id: strin
   return { socket_path: socketPath, pane_id: paneId };
 }
 
-function agentBindingLookupUrl(discoveredBindingUpsertUrl?: string): string | undefined {
-  return discoveredBindingUpsertUrl?.replace(/\/runtime-bindings\/upsert\/?$/, "/agent-bindings");
-}
-
-export async function hasExistingAgentBinding(env: EnvLike, fetchImpl: typeof fetch, details: ClaudeSessionDetails): Promise<boolean> {
-  if (!details.clientSessionKey) return false;
-  const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
-  const baseUrl = agentBindingLookupUrl(discovered?.bindingUpsertUrl);
-  if (!baseUrl) return false;
-  const url = new URL(baseUrl);
-  url.searchParams.set("client_type", "claude");
-  url.searchParams.set("client_session_key", details.clientSessionKey);
-  const response = await fetchImpl(url.toString());
-  if (response.status === 404) return false;
-  if (!response.ok) throw new Error(`agent binding lookup failed: ${response.status} ${response.statusText}`);
-  return true;
-}
-
 export async function bindManualSession(env: EnvLike, fetchImpl: typeof fetch, details: ClaudeSessionDetails): Promise<SessionContext | undefined> {
   if (optionalString(env.PONTIA_SESSION_ID)) return undefined;
   if (!details.clientSessionKey) return undefined;

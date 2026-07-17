@@ -53,12 +53,9 @@ function install(overrides: Partial<Parameters<typeof runClaudeHook>[1]> = {}) {
 }
 
 describe("pontia claude hook", () => {
-  test("SessionStart reports ready from managed runtime env after active workspace check", async () => {
+  test("SessionStart reports ready from managed runtime env without external workspace discovery", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
-      expect(url).toBe("http://localhost/external/v1/workspaces");
-      return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
-    });
+    const fetchImpl = vi.fn();
     const { deps, reported } = install({
       env: { PONTIA_HOME: defaultPontiaHome, PONTIA_SESSION_ID: "sess_ready", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1" },
       fetch: fetchImpl as any,
@@ -66,6 +63,7 @@ describe("pontia claude hook", () => {
 
     await runClaudeHook(baseInput({ cwd: workspace }), deps);
 
+    expect(fetchImpl).not.toHaveBeenCalled();
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_ready",
@@ -81,13 +79,40 @@ describe("pontia claude hook", () => {
     });
   });
 
-  test("SessionStart no-ops when workspace is not active", async () => {
+  test("manual SessionStart creates a binding in an active workspace and reports ready", async () => {
+    const workspace = await realpath(await tempDir());
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "http://localhost/external/v1/workspaces") {
+        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      }
+      if (url.startsWith("http://localhost/internal/v1/agent-bindings/session-context?")) {
+        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+      }
+      expect(url).toBe("http://localhost/internal/v1/runtime-bindings/upsert");
+      expect(init?.method).toBe("POST");
+      const request = JSON.parse(String(init?.body));
+      expect(request).toMatchObject({ client_type: "claude", client_session_key: "claude_session_1", client_cwd: workspace });
+      expect(request.runtime_instance_id).toMatch(/^rtinst_/);
+      return new Response(JSON.stringify({
+        session: { session_id: "sess_manual" },
+        runtime: { runtime_instance_id: request.runtime_instance_id, internal_event_url: "http://localhost/internal/v1/events" },
+      }), { status: 200 });
+    });
+    const { deps, reported } = install({ fetch: fetchImpl as any });
+
+    await runClaudeHook(baseInput({ cwd: workspace }), deps);
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_manual",
+      payload: { client_session_key: "claude_session_1", runtime_instance_id: expect.stringMatching(/^rtinst_/) },
+    });
+  });
+
+  test("manual SessionStart no-ops when workspace is not active", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { workspaces: [] } }), { status: 200 }));
-    const { deps, reported, diagnostics } = install({
-      env: { PONTIA_HOME: defaultPontiaHome, PONTIA_SESSION_ID: "sess_ready", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1" },
-      fetch: fetchImpl as any,
-    });
+    const { deps, reported, diagnostics } = install({ fetch: fetchImpl as any });
 
     await runClaudeHook(baseInput({ cwd: workspace }), deps);
 
@@ -199,16 +224,7 @@ describe("pontia claude hook", () => {
     });
   });
 
-  test("Stop falls back to latest transcript assistant text when last_assistant_message is missing", async () => {
-    const dir = await tempDir();
-    const transcriptPath = join(dir, "session.jsonl");
-    writeFileSync(transcriptPath, [
-      JSON.stringify({ type: "user", message: { role: "user", content: "hello" } }),
-      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "thinking", thinking: "plan" }] } }),
-      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Hi there" }] } }),
-      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "redacted_thinking", data: "opaque" }] } }),
-      "",
-    ].join("\n"));
+  test("Stop does not infer output from the transcript when last_assistant_message is missing", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { current_turn: {
       session_id: "sess_1",
       turn_id: "turn_1",
@@ -218,10 +234,9 @@ describe("pontia claude hook", () => {
     } } }), { status: 200 }));
     const { deps, reported } = install({ fetch: fetchImpl as any });
 
-    await runClaudeHook(baseInput({ hook_event_name: "Stop", transcript_path: transcriptPath }), deps);
+    await runClaudeHook(baseInput({ hook_event_name: "Stop", last_assistant_message: undefined }), deps);
 
-    expect(reported.map((event) => event.type)).toEqual(["turn.output", "turn.completed"]);
-    expect(reported[0]).toMatchObject({ payload: { output: { summary: "Hi there" } } });
+    expect(reported.map((event) => event.type)).toEqual(["turn.completed"]);
   });
 
   test("StopFailure resolves current turn and reports failed", async () => {
@@ -244,6 +259,32 @@ describe("pontia claude hook", () => {
     });
   });
 
+  test("manual UserPromptSubmit reuses the runtime context established by SessionStart", async () => {
+    const workspace = await realpath(await tempDir());
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url === "http://localhost/external/v1/workspaces") {
+        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      }
+      expect(url).toBe("http://localhost/internal/v1/agent-bindings/session-context?client_type=claude&client_session_key=claude_session_1");
+      return new Response(JSON.stringify({ data: { session_context: {
+        session_id: "sess_manual",
+        client_type: "claude",
+        client_session_key: "claude_session_1",
+        runtime_instance_id: "rtinst_stable",
+        internal_event_url: "http://localhost/internal/v1/events",
+      } } }), { status: 200 });
+    });
+    const { deps, reported } = install({ fetch: fetchImpl as any });
+
+    await runClaudeHook(baseInput({ hook_event_name: "UserPromptSubmit", prompt: "typed manually", cwd: workspace }), deps);
+
+    expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_manual",
+      payload: { runtime_instance_id: "rtinst_stable", input: { summary: "typed manually" } },
+    });
+  });
+
   test("SessionEnd reports exited using managed runtime env", async () => {
     const { deps, reported } = install({
       env: { PONTIA_HOME: defaultPontiaHome, PONTIA_SESSION_ID: "sess_1", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1" },
@@ -258,6 +299,28 @@ describe("pontia claude hook", () => {
       source: "agent_client",
       client_type: "claude",
       payload: { reason: "quit", runtime_instance_id: "rtinst_1" },
+    });
+  });
+
+  test("manual SessionEnd resolves its stable session context and reports exited", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(url).toBe("http://localhost/internal/v1/agent-bindings/session-context?client_type=claude&client_session_key=claude_session_1");
+      return new Response(JSON.stringify({ data: { session_context: {
+        session_id: "sess_manual",
+        client_type: "claude",
+        client_session_key: "claude_session_1",
+        runtime_instance_id: "rtinst_stable",
+        internal_event_url: "http://localhost/internal/v1/events",
+      } } }), { status: 200 });
+    });
+    const { deps, reported } = install({ fetch: fetchImpl as any });
+
+    await runClaudeHook(baseInput({ hook_event_name: "SessionEnd", reason: "prompt_input_exit" }), deps);
+
+    expect(reported.map((event) => event.type)).toEqual(["session.exited"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_manual",
+      payload: { runtime_instance_id: "rtinst_stable", reason: "prompt_input_exit" },
     });
   });
 

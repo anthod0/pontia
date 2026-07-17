@@ -76,6 +76,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             get(internal::get_agent_binding_current_turn),
         )
         .route(
+            "/internal/v1/agent-bindings/session-context",
+            get(internal::get_agent_binding_session_context),
+        )
+        .route(
             "/internal/v1/runtime-bindings/upsert",
             post(internal::upsert_runtime_binding),
         )

@@ -70,6 +70,24 @@ pub async fn get_agent_binding(
     Ok(Json(json!({ "data": { "binding": binding } })))
 }
 
+pub async fn get_agent_binding_session_context(
+    State(state): State<AppState>,
+    Query(query): Query<AgentBindingQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let client_type = required_query_param("client_type", &query.client_type)?;
+    let client_session_key = required_query_param("client_session_key", &query.client_session_key)?;
+    let session_context = AgentBindingService::new(state.db())
+        .session_context_for_client_session(client_type, client_session_key)
+        .await?
+        .ok_or_else(|| {
+            Error::NotFound("session context for agent binding not found".to_string())
+        })?;
+
+    Ok(Json(
+        json!({ "data": { "session_context": session_context } }),
+    ))
+}
+
 pub async fn get_agent_binding_current_turn(
     State(state): State<AppState>,
     Query(query): Query<AgentBindingQuery>,

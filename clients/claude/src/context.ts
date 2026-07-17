@@ -16,6 +16,7 @@ export interface TurnContext {
 
 export interface SessionContext {
   sessionId: string;
+  sessionState?: string;
   clientType: "claude";
   internalEventUrl: string;
   runtimeInstanceId: string;
@@ -50,10 +51,10 @@ function claimUrl(internalEventUrl: string, sessionId: string): string | undefin
   }
 }
 
-function currentTurnLookupUrl(internalEventUrl: string, clientSessionKey: string): string | undefined {
+function agentBindingContextUrl(internalEventUrl: string, path: string, clientSessionKey: string): string | undefined {
   try {
     const url = new URL(internalEventUrl);
-    url.pathname = url.pathname.replace(/\/events\/?$/, "/agent-bindings/current-turn");
+    url.pathname = url.pathname.replace(/\/events\/?$/, `/agent-bindings/${path}`);
     url.searchParams.set("client_type", "claude");
     url.searchParams.set("client_session_key", clientSessionKey);
     return url.toString();
@@ -129,11 +130,48 @@ export async function claimTurnContext(env: EnvLike, fetchImpl: typeof fetch): P
   }
 }
 
+export async function loadSessionByClientSession(env: EnvLike, fetchImpl: typeof fetch, clientSessionKey: string): Promise<LoadSessionContextResult> {
+  const logFile = defaultHookLogFile(env);
+  const connection = await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const internalEventUrl = connection?.internalEventUrl;
+  const url = internalEventUrl ? agentBindingContextUrl(internalEventUrl, "session-context", clientSessionKey) : undefined;
+  if (!url) return { ok: false, reason: "session context lookup unavailable", logFile };
+  try {
+    const response = await fetchImpl(url);
+    if (response.status === 404) return { ok: false, reason: "session context not found", logFile };
+    if (!response.ok) return { ok: false, reason: "session context lookup failed", logFile };
+    const body = await response.json() as unknown;
+    const record = asRecord(asRecord(asRecord(body)?.data)?.session_context);
+    const sessionId = optionalString(record?.session_id);
+    const sessionState = optionalString(record?.session_state);
+    const runtimeInstanceId = optionalString(record?.runtime_instance_id);
+    const clientType = optionalString(record?.client_type);
+    const resolvedInternalEventUrl = optionalString(record?.internal_event_url) ?? internalEventUrl;
+    if (!sessionId || !runtimeInstanceId || clientType !== "claude" || !resolvedInternalEventUrl) {
+      return { ok: false, reason: "invalid session context lookup response", logFile };
+    }
+    return {
+      ok: true,
+      logFile,
+      context: {
+        sessionId,
+        sessionState,
+        runtimeInstanceId,
+        clientType: "claude",
+        internalEventUrl: resolvedInternalEventUrl,
+        clientSessionKey,
+      },
+    };
+  } catch {
+    return { ok: false, reason: "session context lookup exception", logFile };
+  }
+}
+
 export async function loadCurrentTurnByClientSession(env: EnvLike, fetchImpl: typeof fetch, clientSessionKey: string): Promise<LoadTurnContextResult> {
   const logFile = defaultHookLogFile(env);
   const connection = await resolvePontiaConnection({ env, fetch: fetchImpl });
   const internalEventUrl = connection?.internalEventUrl;
-  const url = internalEventUrl ? currentTurnLookupUrl(internalEventUrl, clientSessionKey) : undefined;
+  const url = internalEventUrl ? agentBindingContextUrl(internalEventUrl, "current-turn", clientSessionKey) : undefined;
   if (!url) return { ok: false, reason: "current turn lookup unavailable", logFile, silent: true };
   try {
     const response = await fetchImpl(url);

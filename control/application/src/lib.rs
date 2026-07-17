@@ -33,7 +33,8 @@ pub mod views;
 pub mod workspaces;
 
 pub use agent_bindings::{
-    AgentBinding, AgentBindingCurrentTurn, AgentBindingService, UpsertAgentBindingRequest,
+    AgentBinding, AgentBindingCurrentTurn, AgentBindingService, AgentBindingSessionContext,
+    UpsertAgentBindingRequest,
 };
 pub use app::{AppState, initialize};
 pub(crate) use events::nested_string;
