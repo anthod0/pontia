@@ -7,7 +7,6 @@
   import * as Card from '$lib/components/ui/card/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
-  import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
   import { sessionChatTitle, titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
   import { workspaceTitle } from '../components/chat/sessionMetadata'
   import { rememberOptimisticInitialMessage } from '../stores/optimisticChat'
@@ -43,23 +42,6 @@
 
   async function refreshPage(): Promise<void> {
     await Promise.all([loadWorkspaces(), loadSessions({ includePinned: true, limit: 200 })])
-  }
-
-  function handlePromptKeydown(event: KeyboardEvent): void {
-    const isPlainEnter = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey
-    if (!isPlainEnter) return
-
-    const nextValue = promptValueAfterEnter(prompt)
-    if (nextValue !== null) {
-      event.preventDefault()
-      prompt = nextValue
-      const textarea = event.currentTarget instanceof HTMLTextAreaElement ? event.currentTarget : null
-      queueMicrotask(() => textarea?.setSelectionRange(nextValue.length, nextValue.length))
-      return
-    }
-
-    event.preventDefault()
-    void startWorkspaceChat()
   }
 
   async function startWorkspaceChat(): Promise<void> {
@@ -135,7 +117,6 @@
     clientTypeOptions={CLIENT_TYPE_OPTIONS}
     fixedWorkspace
     promptDisabled={!selectedWorkspace || creating}
-    onPromptKeydown={handlePromptKeydown}
     onStartChat={() => void startWorkspaceChat()}
   />
 

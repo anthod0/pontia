@@ -1,12 +1,12 @@
 import { render, screen } from '@testing-library/svelte';
 import { expect, test, vi } from 'vitest';
-import SessionMessageComposer from '../../src/lib/components/session-chat/SessionMessageComposer.svelte';
+import MessageComposer from '../../src/components/chat/MessageComposer.svelte';
 
 function renderComposer() {
-  return render(SessionMessageComposer, {
+  return render(MessageComposer, {
     props: {
       value: '',
-      onValueChange: vi.fn(),
+      fullscreen: true,
       onSubmit: vi.fn(),
     },
   });

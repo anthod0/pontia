@@ -605,7 +605,6 @@
           bind:input={$chatDraft}
           session={selectedSession}
           gitStatus={selectedSessionGitStatus}
-          gitStatusErrors={$workspaceGitStatusErrors}
           workspaces={$workspaces}
           metadataItems={selectedSessionMetadataItems}
           metadataSummary={selectedSessionMetadataSummary}

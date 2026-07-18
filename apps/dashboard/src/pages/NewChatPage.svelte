@@ -5,7 +5,6 @@
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
   import { isTransientNetworkError } from '../api/client'
   import { titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
-  import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import { rememberOptimisticInitialMessage } from '../stores/optimisticChat'
   import {
@@ -101,25 +100,6 @@
     createWorkspaceId = preferredCreateWorkspaceId()
   }
 
-  function handleNewChatKeydown(event: KeyboardEvent): void {
-    const isPlainEnter = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey
-    if (!isPlainEnter) return
-
-    const nextValue = promptValueAfterEnter($chatDraft)
-    if (nextValue !== null) {
-      event.preventDefault()
-      $chatDraft = nextValue
-      const textarea = event.currentTarget instanceof HTMLTextAreaElement ? event.currentTarget : null
-      queueMicrotask(() => {
-        textarea?.setSelectionRange(nextValue.length, nextValue.length)
-      })
-      return
-    }
-
-    event.preventDefault()
-    void startChat()
-  }
-
   async function startChat(): Promise<void> {
     if (!canCreate) return
     creating = true
@@ -159,7 +139,6 @@
     {selectedWorkspace}
     {clientTypeOptions}
     placement="bottom"
-    onPromptKeydown={handleNewChatKeydown}
     onStartChat={() => void startChat()}
   />
 </section>

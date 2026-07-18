@@ -3,7 +3,7 @@ import { Check, Loader, LogOut, Pause, TriangleAlert } from '@lucide/svelte';
 import { describe, expect, test, vi } from 'vitest';
 import SessionComposerDock from '../src/components/chat/SessionComposerDock.svelte';
 import GitStatusInline from '../src/components/chat/GitStatusInline.svelte';
-import SessionMetadataMobile from '../src/components/chat/SessionMetadataMobile.svelte';
+import SessionMetadata from '../src/components/chat/SessionMetadata.svelte';
 import {
   sessionMetadataItems,
   sessionMetadataSummary,
@@ -95,7 +95,6 @@ function metadataProps() {
   return {
     session: currentSession,
     gitStatus: currentGitStatus,
-    gitStatusErrors: {},
     workspaces,
     metadataItems,
     metadataSummary: sessionMetadataSummary(metadataItems),
@@ -191,8 +190,8 @@ describe('session metadata component boundaries', () => {
     expect(document.querySelectorAll('[data-slot="dropdown-menu-separator"]')).toHaveLength(2);
   });
 
-  test('mobile metadata details render as an accessible popover dialog', async () => {
-    render(SessionMetadataMobile, { props: metadataProps() });
+  test('session metadata details render as an accessible popover dialog', async () => {
+    render(SessionMetadata, { props: metadataProps() });
 
     await fireEvent.click(screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ }));
 
@@ -216,7 +215,7 @@ describe('session metadata component boundaries', () => {
   });
 
   test('session metadata trigger shows desktop-only icons inline with summary fields', () => {
-    render(SessionMetadataMobile, { props: metadataProps() });
+    render(SessionMetadata, { props: metadataProps() });
 
     const trigger = screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ });
     for (const iconClass of ['lucide-folder', 'lucide-git-branch', 'lucide-gauge', 'lucide-terminal', 'lucide-bot', 'lucide-at-sign']) {
