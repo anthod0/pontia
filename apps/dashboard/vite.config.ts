@@ -1,16 +1,11 @@
 import tailwindcss from '@tailwindcss/vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
-import path from 'node:path';
+import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/dashboard/',
-  plugins: [tailwindcss(), svelte()],
+  plugins: [tailwindcss(), sveltekit()],
   resolve: {
-    alias: {
-      $lib: path.resolve('./src/lib'),
-    },
     conditions: process.env.VITEST ? ['browser'] : undefined,
   },
   test: {

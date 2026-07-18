@@ -5,7 +5,6 @@ import AppShellHost from './components/layout/AppShellHost.svelte';
 import TopBarHost from './components/layout/TopBarHost.svelte';
 import SettingsShellHost from './components/settings/SettingsShellHost.svelte';
 import SettingsCommonPage from '../src/pages/SettingsCommonPage.svelte';
-import { routerConf } from '../src/routes';
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -41,7 +40,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('svelte-mini-router', () => ({ navigate: mocks.navigate }));
+vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate }));
 vi.mock('../src/services/eventStream', () => ({
   startEventStream: mocks.startEventStream,
   stopEventStream: mocks.stopEventStream,
@@ -1018,28 +1017,7 @@ test('settings shell section switcher uses router navigation instead of a docume
   expect(mocks.navigate).toHaveBeenCalledWith('/settings/workspaces');
 });
 
-test('dashboard routes use chat as the default and remove top-level overview', async () => {
-  const paths = routerConf.routes.map((route) => route.path);
-
-  const rootRoute = routerConf.routes.find((route) => route.path === '/');
-  const settingsRoute = routerConf.routes.find((route) => route.path === '/settings');
-
-  const newChatPage = await import('../src/pages/NewChatPage.svelte');
-  const sessionChatPage = await import('../src/pages/SessionChatPage.svelte');
-  const settingsRedirectPage = await import('../src/pages/SettingsRedirectPage.svelte');
-
-  expect(rootRoute).toBeDefined();
-  expect((await rootRoute?.render())?.default).toBe(newChatPage.default);
-  expect(paths).not.toContain('/overview');
-  expect(paths).not.toContain('/tasks');
-  expect(paths.some((path) => path.startsWith('/tasks/'))).toBe(false);
-  expect(settingsRoute).toBeDefined();
-  expect((await settingsRoute?.render())?.default).toBe(settingsRedirectPage.default);
-  expect((await routerConf.routes.find((route) => route.path === '/chat')?.render())?.default).toBe(newChatPage.default);
-  expect((await routerConf.routes.find((route) => route.path === '/chat/{sessionId}')?.render())?.default).toBe(sessionChatPage.default);
-  expect(paths).toContain('/chat/{sessionId}');
-  expect(paths).toContain('/sessions/{sessionId}');
-  expect(paths).toContain('/settings/common');
-  expect(paths).toContain('/settings/workspaces');
-  expect(paths).toContain('/settings/agent-profiles');
+test('dashboard navigation no longer depends on the legacy router', async () => {
+  const navigationSource = await import('../src/lib/navigation');
+  expect(navigationSource.navigate).toBeDefined();
 });

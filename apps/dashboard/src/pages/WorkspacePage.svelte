@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { getPathParams, navigate } from 'svelte-mini-router'
+  import { navigate, routeParam } from '$lib/navigation'
   import { CircleAlert, Folder } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -16,6 +16,8 @@
   import { loadWorkspaces, workspaces, workspacesError, workspacesLoading } from '../stores/workspaces'
   import type { SessionView } from '../api/types'
 
+  let { routeWorkspaceId = null }: { routeWorkspaceId?: string | null } = $props()
+
   const CLIENT_TYPE_OPTIONS = ['pi', 'claude']
 
   let prompt = $state('')
@@ -23,7 +25,7 @@
   let creating = $state(false)
   let actionError = $state<string | null>(null)
 
-  const workspaceId = $derived(getPathParams().workspaceId ?? '')
+  const workspaceId = $derived(routeWorkspaceId ?? routeParam('workspace') ?? '')
   const selectedWorkspace = $derived($workspaces.find((workspace) => workspace.workspace_id === workspaceId) ?? null)
   const workspaceSessions = $derived(sessionsForWorkspace($sessions, workspaceId))
   const errorMessage = $derived(actionError ?? $workspacesError ?? $sessionsError)

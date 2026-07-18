@@ -140,7 +140,7 @@ vi.mock('../../../src/services/eventStream', () => ({
   },
 }));
 
-vi.mock('svelte-mini-router', () => ({ navigate: mocks.navigate, getPathParams: () => mocks.pathParams }));
+vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate }));
 
 vi.mock('svelte-sonner', () => ({
   toast: { error: mocks.toastError },

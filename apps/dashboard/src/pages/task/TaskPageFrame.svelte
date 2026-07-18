@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, type Snippet } from 'svelte'
-  import { getPathParams, navigate } from 'svelte-mini-router'
+  import { dashboardRelativePath, navigate, routeParam } from '$lib/navigation'
   import { CircleAlert, RefreshCw } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -12,8 +12,8 @@
 
   let { title, description, children }: { title: string; description: string; children?: Snippet } = $props()
 
-  const { taskId = 'unknown' } = getPathParams()
-  let currentPath = $state(normalizePath(window.location.pathname))
+  const taskId = routeParam('tasks') ?? 'unknown'
+  let currentPath = $state(dashboardRelativePath())
   const tabs = [
     ['Overview', `/tasks/${taskId}/overview`],
     ['DAG', `/tasks/${taskId}/dag`],
@@ -21,10 +21,6 @@
     ['Sessions', `/tasks/${taskId}/sessions`],
     ['Activity', `/tasks/${taskId}/activity`],
   ] as const
-
-  function normalizePath(pathname: string) {
-    return pathname.replace(/^\/dashboard/, '') || '/'
-  }
 
   function go(path: string) {
     navigate(path)
@@ -37,7 +33,7 @@
   })
 </script>
 
-<svelte:window onpopstate={() => (currentPath = normalizePath(window.location.pathname))} />
+<svelte:window onpopstate={() => (currentPath = dashboardRelativePath())} />
 
 <section class="space-y-6">
   <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

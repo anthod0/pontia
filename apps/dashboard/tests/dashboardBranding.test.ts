@@ -6,7 +6,7 @@ import { expect, test, vi } from 'vitest';
 import AppSidebarHost from './components/layout/AppSidebarHost.svelte';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const indexHtml = readFileSync(resolve(__dirname, '../index.html'), 'utf8');
+const appHtml = readFileSync(resolve(__dirname, '../src/app.html'), 'utf8');
 
 const mocks = vi.hoisted(() => {
   function readableStore<T>(value: T) {
@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('svelte-mini-router', () => ({ navigate: mocks.navigate }));
+vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate }));
 vi.mock('../src/stores/sessions', () => ({
   sessions: mocks.sessions,
   sessionsLoading: mocks.sessionsLoading,
@@ -50,11 +50,11 @@ vi.mock('../src/stores/connection', () => ({
 }));
 
 test('dashboard head advertises packaged logo icons', () => {
-  expect(indexHtml).toContain('<link rel="icon" type="image/svg+xml" href="/dashboard/logo.svg" />');
-  expect(indexHtml).toContain('<link rel="icon" href="/dashboard/favicon.ico" sizes="any" />');
-  expect(indexHtml).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/dashboard/logo-32.png" />');
-  expect(indexHtml).toContain('<link rel="icon" type="image/png" sizes="192x192" href="/dashboard/logo-192.png" />');
-  expect(indexHtml).toContain('<link rel="apple-touch-icon" sizes="180x180" href="/dashboard/logo-180.png" />');
+  expect(appHtml).toContain('<link rel="icon" type="image/svg+xml" href="%sveltekit.assets%/logo.svg" />');
+  expect(appHtml).toContain('<link rel="icon" href="%sveltekit.assets%/favicon.ico" sizes="any" />');
+  expect(appHtml).toContain('<link rel="icon" type="image/png" sizes="32x32" href="%sveltekit.assets%/logo-32.png" />');
+  expect(appHtml).toContain('<link rel="icon" type="image/png" sizes="192x192" href="%sveltekit.assets%/logo-192.png" />');
+  expect(appHtml).toContain('<link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/logo-180.png" />');
 });
 
 test('dashboard sidebar renders the SVG logo asset and brand text', () => {

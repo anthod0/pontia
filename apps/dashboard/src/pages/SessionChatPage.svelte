@@ -3,7 +3,7 @@
   import { get } from 'svelte/store'
   import { toast } from 'svelte-sonner'
   import { ChevronDown } from '@lucide/svelte'
-  import { getPathParams, navigate } from 'svelte-mini-router'
+  import { navigate } from '$lib/navigation'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
@@ -59,6 +59,8 @@
   import InboxSheet from '../components/chat/InboxSheet.svelte'
   import RenameSessionDialog from '../components/chat/RenameSessionDialog.svelte'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
+
+  export let routeSessionId: string | null = null
 
   let selectedSessionId = ''
   let submitting = false
@@ -135,7 +137,6 @@
   }
 
   function requestedSessionIdFromLocation(): string {
-    const routeSessionId = getPathParams().sessionId
     if (routeSessionId) return routeSessionId
     const pathMatch = window.location.pathname.match(/\/chat\/([^/?#]+)$/)
     return pathMatch ? decodeURIComponent(pathMatch[1]) : ''

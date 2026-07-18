@@ -56,7 +56,7 @@ vi.mock('../src/stores/workspaces', () => ({
   loadWorkspaces: mocks.loadWorkspaces,
 }));
 
-vi.mock('svelte-mini-router', () => ({ navigate: mocks.navigate }));
+vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate }));
 
 const task = (overrides: Partial<TaskView> = {}): TaskView => ({
   task_id: 'task_abcdef123456',

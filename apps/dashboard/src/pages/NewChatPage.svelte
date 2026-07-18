@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { navigate } from 'svelte-mini-router'
+  import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
   import { isTransientNetworkError } from '../api/client'

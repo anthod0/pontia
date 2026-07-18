@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { navigate } from 'svelte-mini-router'
+  import { navigate } from '$lib/navigation'
   import { sessions } from '../../stores/sessions'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import * as Kbd from '$lib/components/ui/kbd/index.js'
@@ -40,7 +40,7 @@
   function openChat(path: string, options?: Record<string, string>): void {
     if (options) navigate(path, options)
     else navigate(path)
-    window.dispatchEvent(new PopStateEvent('popstate'))
+
   }
 
   function openNewChatFromCurrentRoute(): void {

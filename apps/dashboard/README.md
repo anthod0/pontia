@@ -1,6 +1,6 @@
 # pontia Dashboard
 
-Svelte + Vite + shadcn-svelte dashboard.
+SvelteKit SPA + adapter-static + Tailwind CSS + shadcn-svelte dashboard.
 
 ## Development
 
@@ -23,9 +23,9 @@ You can also run the script directly:
 ./scripts/dev-dashboard.sh
 ```
 
-This starts `cargo run` for the backend and the Vite dev server for the dashboard. Open <http://127.0.0.1:5173/dashboard/> during development for Vite HMR updates.
+This starts `cargo run` for the backend and the SvelteKit development server for the dashboard. Open <http://127.0.0.1:5173/dashboard/> during development for HMR updates.
 
-The Vite dev server proxies `/external/*` to `http://127.0.0.1:8080`.
+The development server proxies `/external/*` to `http://127.0.0.1:8080`.
 
 If you prefer separate terminals, run:
 

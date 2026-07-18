@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { navigate } from 'svelte-mini-router'
+  import { navigate } from '$lib/navigation'
 
   type Section = {
     label: string

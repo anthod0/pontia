@@ -104,7 +104,7 @@
   <Card.Root>
     <Card.Header>
       <Card.Title>Dashboard source</Card.Title>
-      <Card.Description>Use the new Vite build as the configured dashboard source.</Card.Description>
+      <Card.Description>Use the SvelteKit static SPA build as the configured dashboard source.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-2 text-sm text-muted-foreground">
       <p>Build this app with <code class="rounded bg-muted px-1 py-0.5">pnpm --dir=apps/dashboard run build</code>.</p>

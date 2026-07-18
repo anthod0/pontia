@@ -2,7 +2,6 @@ import { fireEvent, render, screen, within, waitFor } from '@testing-library/sve
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import WorkspacePage from '../../src/pages/WorkspacePage.svelte';
-import { routerConf } from '../../src/routes';
 import type { CreateSessionResult, SessionView, TurnView, WorkspaceView } from '../../src/api/types';
 
 const mocks = vi.hoisted(() => {
@@ -49,7 +48,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('svelte-mini-router', () => ({ navigate: mocks.navigate, getPathParams: () => mocks.pathParams }));
+vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate, routeParam: () => mocks.pathParams.workspaceId ?? null }));
 vi.mock('../../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
@@ -139,10 +138,6 @@ beforeEach(() => {
   mocks.loadSessionDetail.mockReset();
   mocks.loadSessionTimeline.mockReset();
   vi.clearAllMocks();
-});
-
-test('registers a workspace detail route', () => {
-  expect(routerConf.routes.some((route) => route.path === '/workspace/{workspaceId}')).toBe(true);
 });
 
 test('renders workspace title path and only sessions from that workspace without manual refresh chrome', async () => {

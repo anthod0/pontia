@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { writable } from 'svelte/store';
-import App from '../src/App.svelte';
+import AppLayoutHost from './components/AppLayoutHost.svelte';
 import { token } from '../src/stores/auth';
 
 const mocks = vi.hoisted(() => ({
@@ -61,7 +61,7 @@ function mockValidateToken(status: number): ReturnType<typeof vi.fn> {
 }
 
 test('blocks dashboard routes behind a token prompt when no token is saved', async () => {
-  render(App);
+  render(AppLayoutHost);
 
   expect(screen.getByRole('heading', { name: /enter external api token/i })).toBeInTheDocument();
   expect(screen.getByLabelText(/bearer token/i)).toBeInTheDocument();
@@ -75,7 +75,7 @@ test('blocks dashboard routes behind a token prompt when no token is saved', asy
 
 test('rejects an invalid entered token without opening the dashboard', async () => {
   const fetchMock = mockValidateToken(401);
-  render(App);
+  render(AppLayoutHost);
 
   await fireEvent.input(screen.getByLabelText(/bearer token/i), { target: { value: ' wrong-token ' } });
   await fireEvent.click(screen.getByRole('button', { name: /continue/i }));
@@ -94,7 +94,7 @@ test('rejects an invalid entered token without opening the dashboard', async () 
 
 test('saves the entered token and opens the requested dashboard route after validation succeeds', async () => {
   mockValidateToken(200);
-  render(App);
+  render(AppLayoutHost);
 
   await fireEvent.input(screen.getByLabelText(/bearer token/i), { target: { value: ' dev-token ' } });
   await fireEvent.click(screen.getByRole('button', { name: /continue/i }));
@@ -114,7 +114,7 @@ test('opens dashboard immediately when a saved token exists without startup vali
   token.set('saved-token');
   const fetchMock = mockValidateToken(401);
 
-  render(App);
+  render(AppLayoutHost);
 
   expect(screen.queryByRole('heading', { name: /enter external api token/i })).not.toBeInTheDocument();
   expect(screen.getByText('PONTIA')).toBeInTheDocument();

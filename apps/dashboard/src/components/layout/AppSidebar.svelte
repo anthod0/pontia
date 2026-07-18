@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Archive, ChevronDown, EllipsisVertical, Folder, FolderOpen, LogOut, Pencil, Pin, PinOff, Settings, SquarePen } from '@lucide/svelte'
-  import { navigate } from 'svelte-mini-router'
+  import { navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Kbd from '$lib/components/ui/kbd/index.js'

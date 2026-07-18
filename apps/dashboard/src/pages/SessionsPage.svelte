@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { CircleAlert, RefreshCw, TerminalSquare } from '@lucide/svelte'
-  import { navigate } from 'svelte-mini-router'
+  import { navigate } from '$lib/navigation'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'

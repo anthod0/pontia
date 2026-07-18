@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { CircleAlert, MessageCircle, RefreshCw, Send, TerminalSquare } from '@lucide/svelte'
-  import { getPathParams, navigate } from 'svelte-mini-router'
+  import { navigate } from '$lib/navigation'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -30,6 +30,8 @@
     submitInboxMessage,
     terminateSession,
   } from '../stores/sessions'
+
+  export let routeSessionId: string | null = null
 
   let selectedSessionId = ''
   let actionError: string | null = null
@@ -77,7 +79,9 @@
   }
 
   function requestedSessionIdFromLocation(): string {
-    return getPathParams().sessionId ?? new URLSearchParams(window.location.search).get('session') ?? ''
+    if (routeSessionId) return routeSessionId
+    const pathMatch = window.location.pathname.match(/\/sessions\/([^/?#]+)$/)
+    return (pathMatch ? decodeURIComponent(pathMatch[1]) : null) ?? new URLSearchParams(window.location.search).get('session') ?? ''
   }
 
   async function loadSelectedSession(): Promise<void> {

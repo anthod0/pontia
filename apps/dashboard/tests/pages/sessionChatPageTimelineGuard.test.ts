@@ -79,7 +79,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('svelte-mini-router', () => ({ navigate: mocks.navigate, getPathParams: () => mocks.pathParams }));
+vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate }));
 vi.mock('svelte-sonner', () => ({ toast: { error: vi.fn() } }));
 vi.mock('../../src/stores/sessions', () => ({
   sessions: mocks.sessions,
