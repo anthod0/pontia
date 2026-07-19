@@ -87,6 +87,7 @@
 
   onMount(async () => {
     selectedSessionId = requestedSessionIdFromLocation()
+    initialChatScrollPending = Boolean(selectedSessionId)
     await Promise.all([loadSessions(), loadWorkspaces()])
     if (selectedSessionId) {
       await loadSelectedSession(selectedSessionId)
@@ -553,31 +554,53 @@
       {:else}
         <div
           data-chat-initial-scroll-pending={initialChatScrollPending ? 'true' : 'false'}
-          class={initialChatScrollPending ? 'opacity-0' : ''}
+          class={initialChatScrollPending ? 'relative min-h-80' : 'relative'}
         >
-          {#if timelineUnavailable}
-            <Empty.Root data-timeline-status={$timelineState.status} class="min-h-80">
-              <Empty.Header>
-                <Empty.Title>Conversation history unavailable</Empty.Title>
-                <Empty.Description>{$timelineState.error}</Empty.Description>
-              </Empty.Header>
-            </Empty.Root>
-          {:else}
-            {#key selectedSessionId}
-              <SessionConversation
-                {messages}
-                sessionState={selectedSession.state}
-                loading={($sessionDetailLoading || $timelineState.loading) && !messages.length}
-                interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
-                interruptBusy={actionBusy}
-                hasMoreHistory={$timelineState.hasMore}
-                historyLoading={$timelineState.refreshKind === 'history'}
-                {historyObserverEnabled}
-                onInterrupt={() => void interruptSelectedSession()}
-                onLoadMoreHistory={loadEarlierMessages}
-              />
-            {/key}
+          {#if initialChatScrollPending}
+            <div
+              data-chat-conversation-skeleton
+              class="pointer-events-none absolute inset-x-0 top-0 z-10 space-y-8 py-4 sm:p-4"
+              role="status"
+              aria-label="Loading conversation"
+            >
+              <div class="flex justify-end"><Skeleton class="h-14 w-3/5 max-w-xl rounded-xl" /></div>
+              <div class="w-4/5 max-w-2xl space-y-3">
+                <Skeleton class="h-4 w-full" />
+                <Skeleton class="h-4 w-11/12" />
+                <Skeleton class="h-4 w-2/3" />
+              </div>
+              <div class="flex justify-end"><Skeleton class="h-10 w-2/5 max-w-md rounded-xl" /></div>
+              <div class="w-3/4 max-w-xl space-y-3">
+                <Skeleton class="h-4 w-full" />
+                <Skeleton class="h-4 w-4/5" />
+              </div>
+            </div>
           {/if}
+          <div class={initialChatScrollPending ? 'opacity-0' : ''}>
+            {#if timelineUnavailable}
+              <Empty.Root data-timeline-status={$timelineState.status} class="min-h-80">
+                <Empty.Header>
+                  <Empty.Title>Conversation history unavailable</Empty.Title>
+                  <Empty.Description>{$timelineState.error}</Empty.Description>
+                </Empty.Header>
+              </Empty.Root>
+            {:else}
+              {#key selectedSessionId}
+                <SessionConversation
+                  {messages}
+                  sessionState={selectedSession.state}
+                  loading={(initialChatScrollPending || $sessionDetailLoading || $timelineState.loading) && !messages.length}
+                  interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
+                  interruptBusy={actionBusy}
+                  hasMoreHistory={$timelineState.hasMore}
+                  historyLoading={$timelineState.refreshKind === 'history'}
+                  {historyObserverEnabled}
+                  onInterrupt={() => void interruptSelectedSession()}
+                  onLoadMoreHistory={loadEarlierMessages}
+                />
+              {/key}
+            {/if}
+          </div>
         </div>
         <div aria-hidden="true" class="h-px w-px" data-chat-bottom-sentinel use:observeBottomSentinel></div>
 

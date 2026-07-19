@@ -214,6 +214,31 @@ test('shows workspace git status in the selected chat composer summary', async (
 });
 
 
+test('does not show the empty conversation state while the selected chat is initializing', async () => {
+  let resolveSessions: (() => void) | null = null;
+  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.loadSessions.mockImplementationOnce(async () => {
+    await new Promise<void>((resolve) => (resolveSessions = resolve));
+    return [selected];
+  });
+
+  try {
+    render(SessionChatPage);
+
+    await screen.findByRole('button', { name: /advanced session controls/i });
+    expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-chat-conversation-skeleton]')).toBeInTheDocument();
+  } finally {
+    resolveSessions?.();
+  }
+});
+
+
 test('keeps the selected chat transcript hidden until the initial bottom scroll settles', async () => {
   let resolveTimeline: (() => void) | null = null;
   const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
