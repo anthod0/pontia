@@ -14,8 +14,19 @@ It aims to provide:
 
 - **Real agent TUI runtime** — use real agent TUIs as runtimes instead of short-lived subprocess prompts, allowing sessions to stay alive for a long time while preserving official client behavior.
 - **One long-lived session, control from anywhere** — start, continue, observe, or steer the same agent session from desktop, Web, mobile, or TUI surfaces.
+- **Observable long-running tasks** — let agents plan large tasks as DAGs, then expose each planning and implementation node so developers can understand, intervene, retry, and repair the work.
 
 In short: `pontia` keeps official agent work alive, visible, controllable, and fixable.
+
+### Agent-planned WorkItem DAGs
+
+Long tasks should not be opaque prompts that run for hours with no structure.
+
+`pontia` aims to model long-running work as a WorkItem DAG: an ordered dependency graph, similar to a structured todo list. A Planner creates and repairs the execution graph, while Worker agents execute work items along that graph.
+
+The goal is to concentrate intelligence in planning and replanning while keeping workers simple and predictable. Developers should be able to inspect the DAG, understand what happened, and intervene, retry, or repair the task at the node level.
+
+DAG orchestration is a product direction, not a capability of the current release. Its earlier implementation was removed and needs to be redesigned before it is reintroduced.
 
 ## Current status
 
@@ -35,7 +46,8 @@ Some workflows are incomplete, and configuration or data formats may change with
 - [x] Session creation, conversation, termination, and resume
 - [x] Reliable bidirectional control across supported interfaces
 - [ ] Human approval and review workflows
-- [ ] Improved support for long-running tasks
+- [ ] Reintroduce agent-planned WorkItem DAGs
+- [ ] Long-running DAG task scheduling, inspection, retry, and repair
 - [ ] Stable, versioned product documentation
 - [ ] More agent client integrations
 - [ ] Ready-to-use binaries and Docker images
