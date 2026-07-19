@@ -18,6 +18,32 @@ fn isolate_graph(
     state.with_graph(graph)
 }
 
+async fn post_internal(
+    state: pontia_application::AppState,
+    uri: &str,
+    body: Value,
+) -> (StatusCode, Value) {
+    let response = http::router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    (status, serde_json::from_slice(&bytes).expect("json"))
+}
+
 async fn get_external(state: pontia_application::AppState, uri: &str) -> (StatusCode, Value) {
     let response = http::router(state)
         .oneshot(
@@ -154,21 +180,77 @@ async fn apply_plan_applies_proposed_plan_and_starts_scheduler() {
     .await;
     let proposal_id = submit_body["result"]["proposal_id"].as_str().unwrap();
 
-    let (status, body) = post_tool(
+    let apply_state = state.clone();
+    let proposal_id_for_apply = proposal_id.to_string();
+    let apply = tokio::spawn(async move {
+        post_tool(
+            apply_state,
+            "applyPlan",
+            json!({
+                "session_id": "sess_apply_plan",
+                "turn_id": "turn_apply_plan",
+                "runtime_instance_id": "rt_apply_plan",
+                "input": {
+                    "proposal_id": proposal_id_for_apply,
+                    "approval_quote": "同意，开始执行"
+                }
+            }),
+        )
+        .await
+    });
+
+    let executor_session_id = loop {
+        if let Some(session_id) = sqlx::query_scalar::<_, String>(
+            "SELECT session_id FROM sessions WHERE session_id <> 'sess_apply_plan' AND client_type = 'pi' ORDER BY created_at DESC LIMIT 1",
+        )
+        .fetch_optional(&state.db())
+        .await
+        .expect("executor session query")
+        {
+            break session_id;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    };
+    let runtime_metadata: String =
+        sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+            .bind(&executor_session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("pending executor runtime");
+    let runtime_metadata: Value = serde_json::from_str(&runtime_metadata).unwrap();
+    let (binding_status, binding) = post_internal(
         state.clone(),
-        "applyPlan",
+        "/internal/v1/runtime-bindings/upsert",
         json!({
-            "session_id": "sess_apply_plan",
-            "turn_id": "turn_apply_plan",
-            "runtime_instance_id": "rt_apply_plan",
-            "input": {
-                "proposal_id": proposal_id,
-                "approval_quote": "同意，开始执行"
+            "session_id": executor_session_id,
+            "client_type": "pi",
+            "client_session_key": "pi_apply_plan_executor",
+            "client_cwd": runtime_metadata["workspace"],
+            "launch_cwd": runtime_metadata["workspace"],
+            "tmux": {
+                "socket_path": runtime_metadata["tmux_socket_path"],
+                "pane_id": runtime_metadata["tmux_pane_id"]
             }
         }),
     )
     .await;
+    assert_eq!(binding_status, StatusCode::OK, "{binding:#}");
+    let (ready_status, ready) = post_internal(
+        state.clone(),
+        "/internal/v1/events",
+        json!({
+            "session_id": executor_session_id,
+            "type": "session.ready",
+            "data": {
+                "runtime_instance_id": binding["runtime"]["runtime_instance_id"],
+                "client_session_key": "pi_apply_plan_executor"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(ready_status, StatusCode::OK, "{ready:#}");
 
+    let (status, body) = apply.await.expect("apply task");
     assert_eq!(status, StatusCode::OK, "{body:#}");
     let result = &body["result"];
     assert_eq!(result["proposal_id"], proposal_id);

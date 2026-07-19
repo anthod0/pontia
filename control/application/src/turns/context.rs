@@ -50,7 +50,7 @@ fn client_current_turn_context(
         .map(|spec| spec.current_turn_context_includes_turn_id())
         .unwrap_or(true);
     if include_turn_id {
-        context["turn_id"] = json!(input.turn_id);
+        context["turn_id"] = json!(input.dispatch_id);
     }
     if let Some(inbox_message_id) = turn_metadata
         .and_then(|metadata| metadata.get("inbox_message_id"))

@@ -32,11 +32,11 @@ For sessions started by pontia, configure the pi command in `$PONTIA_HOME/config
 tui_command = "pi -e /absolute/path/to/pontia/clients/pi"
 ```
 
-Pontia supplies the required session configuration when it starts pi.
+Pontia supplies a Session hint when it starts pi. After pi exposes its real native session identity, the extension always confirms the same runtime binding with Pontia; the backend then returns the canonical Runtime Instance ID.
 
-To connect a manually started pi session, start pi from an active workspace registered in pontia and submit a prompt. If pontia is unavailable or the workspace is not registered, the extension leaves the pi session running without pontia reporting.
+Regardless of where the start command came from, run pi in an active workspace registered in pontia. If pontia is unavailable or the workspace is not registered, the extension leaves the pi session running without pontia reporting.
 
-Web-based input is available for supported pontia-managed sessions. Other sessions may remain observable without accepting input from the Web Dashboard.
+Web-based input is available when the confirmed runtime includes a writable tmux pane. Other sessions may remain observable without accepting input from the Web Dashboard.
 
 ## Troubleshooting
 

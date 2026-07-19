@@ -445,14 +445,9 @@ async fn dashboard_event_stream_pushes_volatile_session_message_updated_after_cu
     let (status, body) = post_internal_event(
         state.clone(),
         json!({
-            "event_id": "evt_volatile_message_update",
             "session_id": "sess_stream_1",
             "turn_id": null,
-            "source": "agent_client",
-            "client_type": "generic",
             "type": "session.message_updated",
-            "time": "2026-05-04T00:00:00Z",
-            "seq": 3,
             "payload": {"binding_id":"bind_1","reason":"update"}
         }),
     )
@@ -469,7 +464,7 @@ async fn dashboard_event_stream_pushes_volatile_session_message_updated_after_cu
     })
     .await
     .expect("volatile message update should be pushed");
-    assert!(body.contains(r#""event_id":"evt_volatile_message_update""#));
+    assert!(body.contains(r#""type":"session.message_updated""#));
     assert!(body.contains(r#""binding_id":"bind_1""#));
 
     shutdown_tx.send(()).expect("send shutdown");
@@ -525,14 +520,9 @@ async fn session_event_stream_pushes_volatile_session_message_updated_after_curs
     let (status, body) = post_internal_event(
         state.clone(),
         json!({
-            "event_id": "evt_session_volatile_message_update",
             "session_id": "sess_stream_1",
             "turn_id": null,
-            "source": "agent_client",
-            "client_type": "generic",
             "type": "session.message_updated",
-            "time": "2026-05-04T00:00:00Z",
-            "seq": 3,
             "payload": {"binding_id":"bind_session","reason":"update"}
         }),
     )
@@ -549,7 +539,7 @@ async fn session_event_stream_pushes_volatile_session_message_updated_after_curs
     })
     .await
     .expect("volatile message update should be pushed to session stream");
-    assert!(body.contains("id: evt_session_volatile_message_update"));
+    assert!(body.contains(r#""type":"session.message_updated""#));
     assert!(body.contains(r#""binding_id":"bind_session""#));
 
     shutdown_tx.send(()).expect("send shutdown");

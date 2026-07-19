@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
 import type { SessionContext } from "./session.js";
 
@@ -48,75 +47,25 @@ export interface PiTopologyContext {
   entries: PiTopologyContextEntry[];
 }
 
-interface BaseInternalEvent {
-  event_id: string;
+export interface InternalEvent {
   session_id: string;
-  client_type: "pi";
+  turn_id?: string;
   type: InternalEventType;
-  time: string;
-  seq: null;
-  payload: Record<string, unknown>;
+  data: Record<string, unknown>;
+  [legacyField: string]: any;
 }
-
-export type InternalEvent =
-  | (BaseInternalEvent & {
-      turn_id: null;
-      source: "agent_client";
-      type: "session.ready";
-    })
-  | (BaseInternalEvent & {
-      turn_id: null;
-      source: "agent_client";
-      type: "session.message_updated";
-    })
-  | (BaseInternalEvent & {
-      turn_id: null;
-      source: "agent_client";
-      type: "session.exited";
-    })
-  | (BaseInternalEvent & {
-      turn_id: string | null;
-      source: "agent_client";
-      type: "session.context_usage_updated";
-    })
-  | (BaseInternalEvent & {
-      turn_id: string;
-      source: "agent_adapter";
-      type: "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
-    });
-
-type AdapterTurnInternalEvent = Extract<InternalEvent, { source: "agent_adapter" }>;
 
 type ActiveTurnContext = TurnContext & { turnId: string };
 
-export function newPontiaTurnId(): string {
-  return `turn_${randomUUID()}`;
-}
-
-function baseAdapterTurnEvent(context: ActiveTurnContext, type: AdapterTurnInternalEvent["type"]): Omit<AdapterTurnInternalEvent, "payload"> {
-  return {
-    event_id: `evt_${randomUUID()}`,
-    session_id: context.sessionId,
-    turn_id: context.turnId,
-    source: "agent_adapter",
-    client_type: "pi",
-    type,
-    time: new Date().toISOString(),
-    seq: null,
-  };
+function turnFact(context: ActiveTurnContext, type: InternalEventType, data: Record<string, unknown>): InternalEvent {
+  return { session_id: context.sessionId, turn_id: context.turnId, type, data };
 }
 
 export function buildSessionMessageUpdatedEvent(context: TurnContext, reason: SessionMessageUpdatedReason): InternalEvent {
   return {
-    event_id: `evt_${randomUUID()}`,
     session_id: context.sessionId,
-    turn_id: null,
-    source: "agent_client",
-    client_type: "pi",
     type: "session.message_updated",
-    time: new Date().toISOString(),
-    seq: null,
-    payload: { reason },
+    data: { reason },
   };
 }
 
@@ -128,15 +77,10 @@ export function buildSessionContextUsageUpdatedEvent(context: TurnContext, usage
   const payload: Record<string, unknown> = { context_usage: contextUsage };
   if (model !== undefined && model !== null) payload.model = model;
   return {
-    event_id: `evt_${randomUUID()}`,
     session_id: context.sessionId,
-    turn_id: context.turnId ?? null,
-    source: "agent_client",
-    client_type: "pi",
+    ...(context.turnId ? { turn_id: context.turnId } : {}),
     type: "session.context_usage_updated",
-    time: new Date().toISOString(),
-    seq: null,
-    payload,
+    data: payload,
   };
 }
 
@@ -314,51 +258,39 @@ export function contextUsageFromPiHook(event: unknown, ctx?: unknown): ContextUs
 }
 
 export function buildTurnStartedEvent(
-  context: ActiveTurnContext,
+  context: TurnContext,
   previousLeafId: string | null = null,
   topologyContext?: PiTopologyContext,
 ): InternalEvent {
-  const payload: Record<string, unknown> = {
+  const data: Record<string, unknown> = {
     runtime_instance_id: context.runtimeInstanceId,
-    input: context.input ? { summary: context.input } : {},
-    timeline_anchor: { previous_leaf_id: previousLeafId },
+    input_summary: context.input,
+    previous_leaf_id: previousLeafId,
   };
-  if (context.inboxMessageId) {
-    payload.metadata = { inbox_message_id: context.inboxMessageId };
-  }
-  if (topologyContext) payload.topology_context = topologyContext;
-  return {
-    ...baseAdapterTurnEvent(context, "turn.started"),
-    payload,
-  };
+  if (context.inboxMessageId) data.inbox_message_id = context.inboxMessageId;
+  if (topologyContext) data.topology_context = topologyContext;
+  return { session_id: context.sessionId, type: "turn.started", data };
 }
 
 export function buildTurnOutputEvent(context: ActiveTurnContext, output: string): InternalEvent {
-  return {
-    ...baseAdapterTurnEvent(context, "turn.output"),
-    payload: { output: { summary: Array.from(output).slice(0, MAX_TURN_OUTPUT_CHARS).join("") } },
-  };
+  return turnFact(context, "turn.output", {
+    output_summary: Array.from(output).slice(0, MAX_TURN_OUTPUT_CHARS).join(""),
+  });
 }
 
 export function buildTurnCompletedEvent(context: ActiveTurnContext, terminalLeafId: string | null = null): InternalEvent {
-  return {
-    ...baseAdapterTurnEvent(context, "turn.completed"),
-    payload: {
-      runtime_instance_id: context.runtimeInstanceId,
-      timeline_anchor: { terminal_leaf_id: terminalLeafId },
-    },
-  };
+  return turnFact(context, "turn.completed", {
+    runtime_instance_id: context.runtimeInstanceId,
+    terminal_leaf_id: terminalLeafId,
+  });
 }
 
 export function buildTurnFailedEvent(context: ActiveTurnContext, message: string, terminalLeafId: string | null = null): InternalEvent {
-  return {
-    ...baseAdapterTurnEvent(context, "turn.failed"),
-    payload: {
-      runtime_instance_id: context.runtimeInstanceId,
-      failure: { message },
-      timeline_anchor: { terminal_leaf_id: terminalLeafId },
-    },
-  };
+  return turnFact(context, "turn.failed", {
+    runtime_instance_id: context.runtimeInstanceId,
+    failure_message: message,
+    terminal_leaf_id: terminalLeafId,
+  });
 }
 
 export function buildSessionReadyEvent(context: SessionContext): InternalEvent {
@@ -371,29 +303,17 @@ export function buildSessionReadyEvent(context: SessionContext): InternalEvent {
   if (context.clientCwd) payload.client_cwd = context.clientCwd;
 
   return {
-    event_id: `evt_${randomUUID()}`,
     session_id: context.sessionId,
-    turn_id: null,
-    source: "agent_client",
-    client_type: "pi",
     type: "session.ready",
-    time: new Date().toISOString(),
-    seq: null,
-    payload,
+    data: payload,
   };
 }
 
 export function buildSessionExitedEvent(context: SessionContext, reason: string): InternalEvent {
   return {
-    event_id: `evt_${randomUUID()}`,
     session_id: context.sessionId,
-    turn_id: null,
-    source: "agent_client",
-    client_type: "pi",
     type: "session.exited",
-    time: new Date().toISOString(),
-    seq: null,
-    payload: {
+    data: {
       reason,
       runtime_instance_id: context.runtimeInstanceId,
     },

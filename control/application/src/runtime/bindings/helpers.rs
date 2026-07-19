@@ -65,10 +65,6 @@ pub(super) fn binding_metadata(
     insert_optional(&mut metadata, "client_cwd", &request.client_cwd);
     metadata.insert("launch_cwd".to_string(), json!(launch_cwd));
     metadata.insert("workspace".to_string(), json!(launch_cwd));
-    metadata.insert(
-        "runtime_instance_id".to_string(),
-        json!(request.runtime_instance_id),
-    );
     insert_optional(&mut metadata, "start_command", &request.start_command);
     insert_optional(&mut metadata, "start_kind", &request.start_kind);
     insert_optional(
@@ -137,13 +133,13 @@ mod tests {
     fn binding_metadata_uses_client_hook_log_metadata_key() {
         let metadata = binding_metadata(
             &RuntimeBindingUpsertRequest {
+                session_id: None,
                 client_type: "custom".to_string(),
                 client_session_key: "client-session".to_string(),
                 client_session_file: None,
                 client_session_dir: None,
                 client_cwd: None,
                 launch_cwd: None,
-                runtime_instance_id: "rtinst_custom".to_string(),
                 start_command: None,
                 start_kind: None,
                 parent_session_id: None,

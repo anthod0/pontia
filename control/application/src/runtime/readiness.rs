@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use pontia_storage_sqlite::repositories::events::SqliteEventRepository;
+use pontia_storage_sqlite::repositories::{
+    events::SqliteEventRepository, runtime_bindings::SqliteRuntimeBindingRepository,
+};
 use serde_json::Value;
 use sqlx::SqlitePool;
 use tokio::time::{Instant, sleep};
@@ -55,6 +57,33 @@ impl RuntimeReadinessService {
             }
         }
         Ok(false)
+    }
+
+    pub async fn wait_until_bound_and_ready(
+        &self,
+        session_id: &str,
+        client_type: &str,
+    ) -> Result<String> {
+        let deadline = Instant::now() + self.timeout;
+        loop {
+            if let Some(runtime_instance_id) =
+                SqliteRuntimeBindingRepository::new(self.pool.clone())
+                    .runtime_instance_id(session_id)
+                    .await?
+                && self
+                    .is_ready(session_id, client_type, &runtime_instance_id)
+                    .await?
+            {
+                return Ok(runtime_instance_id);
+            }
+            if Instant::now() >= deadline {
+                return Err(Error::Domain(
+                    "agent client did not confirm its runtime binding and report session.ready before timeout"
+                        .to_string(),
+                ));
+            }
+            sleep(self.poll_interval).await;
+        }
     }
 
     pub async fn wait_until_ready(

@@ -1,17 +1,21 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, newPontiaTurnId, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
+import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
 import { optionalString } from "./internal-api.js";
 import { assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
-import { EventReporter } from "./reporter.js";
-import { bindManualSession, hasExistingAgentBinding, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
+import { EventReporter, type EventReportResult } from "./reporter.js";
+import { bindManualSession, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
 import { loadSessionContext, type SessionContext } from "./session.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
 interface ReporterLike {
-  report(context: { internalEventUrl: string }, event: InternalEvent): Promise<boolean>;
+  report(context: { internalEventUrl: string }, event: InternalEvent): Promise<EventReportResult | boolean>;
+}
+
+function reportAccepted(result: EventReportResult | boolean): boolean {
+  return typeof result === "boolean" ? result : result.accepted;
 }
 
 export interface PontiaPiExtensionDependencies {
@@ -151,11 +155,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
       deferredManualSessionDetails = sessionDetails;
-      const loaded = await loadSessionContext(env);
-      const logFile = loaded.logFile;
+      const logFile = defaultHookLogFile(env);
       let context: SessionContext | undefined;
-
-      if (env.PONTIA_SESSION_ID && !loaded.ok) return;
 
       const workspaceActive = await isActiveRegisteredWorkspace(env, fetchImpl, sessionDetails.clientCwd);
       if (workspaceActive !== true) {
@@ -172,7 +173,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       }
 
       if (reason === "fork") {
-        const parentSessionId = boundSessionContext?.sessionId ?? (loaded.ok ? loaded.context.sessionId : undefined);
+        const parentSessionId = boundSessionContext?.sessionId ?? optionalString(env.PONTIA_SESSION_ID);
         if (!parentSessionId) {
           await logDiagnostic(logFile, {
             level: "error",
@@ -182,35 +183,15 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           return;
         }
         context = await bindManualSession(env, fetchImpl, sessionDetails, { startKind: "fork", parentSessionId });
-        if (!context) return;
         readyReported = false;
-      } else if (loaded.ok) {
-        if (!sessionDetails.clientSessionKey) {
-          await logDiagnostic(logFile, {
-            level: "error",
-            code: "missing_pi_client_session_key",
-            message: "ctx.sessionManager.getSessionId() is required to report pontia ready signal",
-          });
-          return;
-        }
-        context = { ...loaded.context, ...sessionDetails };
       } else {
-        if (await hasExistingAgentBinding(env, fetchImpl, sessionDetails)) {
-          context = await bindManualSession(env, fetchImpl, sessionDetails);
-          if (!context) return;
-          if (reason === "resume") readyReported = false;
-        } else {
-          await logDiagnostic(logFile, {
-            level: "info",
-            code: "manual_pi_binding_deferred",
-            message: "manual pi session binding deferred until first agent turn",
-          });
-          return;
-        }
+        context = await bindManualSession(env, fetchImpl, sessionDetails);
+        if (reason === "resume" || reason === "new") readyReported = false;
       }
+      if (!context) return;
 
       boundSessionContext = context;
-      readyReported = await makeReporter(logFile).report(context, buildSessionReadyEvent(context));
+      readyReported = reportAccepted(await makeReporter(logFile).report(context, buildSessionReadyEvent(context)));
     } catch (error) {
       const logFile = defaultHookLogFile(env);
       await logDiagnostic(logFile, {
@@ -249,7 +230,11 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const previousLeafId = leafIdFromHookContext(ctx);
     if (pontiaDisabled) return;
     try {
-      const loaded = await contextLoader(env);
+      const loaded = await contextLoader(boundSessionContext ? {
+        ...env,
+        PONTIA_SESSION_ID: boundSessionContext.sessionId,
+        PONTIA_RUNTIME_INSTANCE_ID: boundSessionContext.runtimeInstanceId,
+      } : env);
       let turnContext: TurnContext | undefined;
       let logFile: string;
       if (loaded.ok) {
@@ -282,7 +267,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           }
           boundSessionContext = await bindManualSession(env, fetchImpl, sessionDetails);
           if (boundSessionContext && !readyReported) {
-            readyReported = await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext));
+            readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
           }
         }
         if (boundSessionContext) {
@@ -307,14 +292,24 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       pendingPrompt = undefined;
       const reporter = makeReporter(logFile);
       lastContextUsageJson = undefined;
+      const started = await reporter.report(turnContext, buildTurnStartedEvent(turnContext, previousLeafId, topologyContext));
+      const canonicalTurnId = typeof started === "boolean" ? turnContext.turnId : started.turnId;
+      if (!reportAccepted(started) || !canonicalTurnId) {
+        activeTurn = undefined;
+        await logDiagnostic(logFile, {
+          level: "error",
+          code: "turn_start_not_normalized",
+          message: "pontia did not return a canonical turn_id for turn.started",
+        });
+        return;
+      }
       activeTurn = {
-        context: { ...turnContext, turnId: turnContext.turnId ?? newPontiaTurnId() },
+        context: { ...turnContext, turnId: canonicalTurnId },
         logFile,
         reporter,
         output: "",
         ended: false,
       };
-      await reporter.report(activeTurn.context, buildTurnStartedEvent(activeTurn.context, previousLeafId, topologyContext));
     } catch (error) {
       pendingPrompt = undefined;
       activeTurn = undefined;
@@ -380,8 +375,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
     const output = state.output.trim();
     if (output.length > 0) {
-      const outputOk = await state.reporter.report(state.context, buildTurnOutputEvent(state.context, output));
-      if (!outputOk) return;
+      const outputResult = await state.reporter.report(state.context, buildTurnOutputEvent(state.context, output));
+      if (!reportAccepted(outputResult)) return;
     }
 
     await state.reporter.report(state.context, buildTurnCompletedEvent(state.context, terminalLeafId));

@@ -14,7 +14,7 @@ impl SessionCommandService {
     ) -> Result<()> {
         let agent_input = AgentInput {
             session_id: session_id.to_string(),
-            turn_id: turn_id.to_string(),
+            dispatch_id: new_dispatch_id().to_string(),
             input: input.to_string(),
         };
         let behavior = agent_clients::in_process_recorded_dispatch_behavior(client_type)
@@ -48,38 +48,34 @@ impl SessionCommandService {
         input: &str,
         runtime: &RuntimeStartResult,
     ) -> Result<()> {
-        let runtime_instance_id = runtime.metadata["runtime_instance_id"]
-            .as_str()
-            .ok_or_else(|| {
-                Error::Domain(format!(
-                    "{client_type} runtime metadata missing runtime_instance_id"
-                ))
-            })?;
         let agent_input = AgentInput {
             session_id: session_id.to_string(),
-            turn_id: turn_id.to_string(),
+            dispatch_id: new_dispatch_id().to_string(),
             input: input.to_string(),
         };
         let turn_context = get_client_spec(client_type)
             .map(|spec| spec.adapter.turn_context)
             .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))?;
         let ingest = EventIngestService::new(self.pool.clone());
-        let dispatch_result = RuntimeReadinessService::new(self.pool.clone())
-            .wait_until_ready(session_id, client_type, runtime_instance_id)
+        let readiness = RuntimeReadinessService::new(self.pool.clone())
+            .wait_until_bound_and_ready(session_id, client_type)
             .await;
-        let dispatch_result = match dispatch_result {
-            Ok(()) if turn_context == TurnContextBehavior::InternalApiClaim => {
+        let dispatch_result = match readiness {
+            Ok(runtime_instance_id) if turn_context == TurnContextBehavior::InternalApiClaim => {
+                let mut metadata = runtime.metadata.clone();
+                metadata["runtime_instance_id"] = json!(runtime_instance_id);
                 store_client_current_turn_context(
                     self.pool.clone(),
                     session_id,
-                    &runtime.metadata,
+                    &metadata,
                     &agent_input,
                     client_type,
                     None,
                 )
                 .await
             }
-            other => other,
+            Ok(_) => Ok(()),
+            Err(error) => Err(error),
         }
         .and_then(|()| {
             let socket_path = runtime.tmux_socket_path().ok_or_else(|| {
@@ -114,6 +110,7 @@ impl SessionCommandService {
                         .await?;
                 }
             }
+            Err(error) if client_spec.owns_initial_tmux_turn() => return Err(error),
             Err(error) => {
                 ingest
                     .ingest_event(ReportedEvent::new(

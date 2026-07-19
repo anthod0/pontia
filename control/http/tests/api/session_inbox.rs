@@ -113,17 +113,12 @@ async fn submit_inbox_turn(state: AppState, session_id: &str, input: &str) -> St
         .to_string()
 }
 
-fn event_body(event_id: &str, event_type: &str, session_id: &str, turn_id: &str) -> Value {
+fn event_body(_event_id: &str, event_type: &str, session_id: &str, turn_id: &str) -> Value {
     json!({
-        "event_id": event_id,
         "session_id": session_id,
         "turn_id": turn_id,
-        "source": "agent_adapter",
-        "client_type": "generic",
         "type": event_type,
-        "time": "2026-05-09T12:00:00Z",
-        "seq": 10,
-        "payload": {}
+        "data": {}
     })
 }
 
@@ -140,7 +135,7 @@ async fn started_event_body(
             .await
             .expect("runtime instance id");
     let mut event = event_body(event_id, "turn.started", session_id, turn_id);
-    event["payload"] = json!({"runtime_instance_id": runtime_instance_id});
+    event["data"] = json!({"runtime_instance_id": runtime_instance_id});
     event
 }
 
@@ -388,15 +383,9 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
     post_internal_event(
         state.clone(),
         json!({
-            "event_id": "evt_priority_starting",
             "session_id": session_id,
-            "turn_id": null,
-            "source": "agent_adapter",
-            "client_type": "generic",
             "type": "session.starting",
-            "time": "2026-05-09T12:00:00Z",
-            "seq": 20,
-            "payload": {}
+            "data": {}
         }),
     )
     .await;

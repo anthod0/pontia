@@ -54,18 +54,12 @@ pub(super) fn write_ephemeral_launch_script(
     workspace: &Path,
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
-    runtime_instance_id: &str,
+    launch_id: &str,
 ) -> Result<PathBuf> {
     let launch_dir = pontia_home_path_for_export().join("state/launch");
     std::fs::create_dir_all(&launch_dir)?;
-    let path = launch_dir.join(format!("{runtime_instance_id}.sh"));
-    write_launch_script(
-        &path,
-        workspace,
-        runtime_paths,
-        request,
-        runtime_instance_id,
-    )?;
+    let path = launch_dir.join(format!("{launch_id}.sh"));
+    write_launch_script(&path, workspace, runtime_paths, request, launch_id)?;
     let mut permissions = std::fs::metadata(&path)?.permissions();
     permissions.set_mode(0o700);
     std::fs::set_permissions(&path, permissions)?;
@@ -77,7 +71,7 @@ pub(super) fn write_launch_script(
     workspace: &Path,
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
-    runtime_instance_id: &str,
+    launch_id: &str,
 ) -> Result<()> {
     let client_spec = agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
         Error::Domain(format!("unsupported client_type: {}", request.client_type))
@@ -89,8 +83,8 @@ pub(super) fn write_launch_script(
                 format!(
                     "echo {} >> \"$PONTIA_RUNTIME_LOG\"",
                     shell_quote(&format!(
-                        "session={} runtime_instance={} pontia runtime started",
-                        request.session_id, runtime_instance_id
+                        "session={} launch={} pontia runtime started",
+                        request.session_id, launch_id
                     ))
                 ),
                 format!("exec sh -lc {}\n", shell_quote(&command)),
@@ -101,8 +95,8 @@ pub(super) fn write_launch_script(
                 format!(
                     "exec >> \"$PONTIA_RUNTIME_LOG\" 2>&1\necho {}",
                     shell_quote(&format!(
-                        "session={} runtime_instance={} pontia runtime started",
-                        request.session_id, runtime_instance_id
+                        "session={} launch={} pontia runtime started",
+                        request.session_id, launch_id
                     ))
                 ),
                 "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
@@ -127,7 +121,6 @@ export PONTIA_CLIENT_TYPE={}
 export PONTIA_WORKSPACE={}
 export PONTIA_HOME={}
 export PONTIA_RUNTIME_LOG={}
-export PONTIA_RUNTIME_INSTANCE_ID={}
 PONTIA_LAUNCH_SCRIPT=${{0:-}}
 cleanup_pontia_launch_script() {{
   if [ -n "$PONTIA_LAUNCH_SCRIPT" ]; then
@@ -144,7 +137,6 @@ cleanup_pontia_launch_script
         shell_quote(&workspace.display().to_string()),
         shell_quote(&pontia_home_for_export()),
         shell_quote(&runtime_paths.log_path.display().to_string()),
-        shell_quote(runtime_instance_id),
         agent_kind_export,
         log_setup,
         runtime_body,
@@ -238,8 +230,9 @@ mod tests {
             "script was:\n{script}"
         );
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
+        assert!(!script.contains("PONTIA_RUNTIME_INSTANCE_ID"));
         assert!(
-            script.contains("session=sess_resume_1 runtime_instance=runtime_instance_1"),
+            script.contains("session=sess_resume_1 launch=runtime_instance_1"),
             "script was:\n{script}"
         );
     }

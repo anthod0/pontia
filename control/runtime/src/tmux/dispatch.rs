@@ -21,7 +21,7 @@ pub(crate) fn dispatch_tui_turn(
         )));
     }
 
-    let buffer_name = format!("pontia_{}", sanitize_tmux_identifier(&input.turn_id));
+    let buffer_name = format!("pontia_{}", sanitize_tmux_identifier(&input.dispatch_id));
     let mut child = Command::new("tmux")
         .args(["-S", socket_path, "load-buffer", "-b", &buffer_name, "-"])
         .stdin(Stdio::piped())

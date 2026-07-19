@@ -51,15 +51,34 @@ async function tempDir() {
 function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1]> = {}) {
   const { pi, handlers } = fakePi();
   const reported: InternalEvent[] = [];
+  let turnSequence = 0;
+  const env: Record<string, string | undefined> = { PONTIA_HOME: defaultPontiaHome, ...(overrides.env ?? {}) };
+  const suppliedFetch = overrides.fetch;
+  const fetchWithManagedBinding = suppliedFetch && env.PONTIA_SESSION_ID && env.PONTIA_RUNTIME_INSTANCE_ID
+    ? (async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).endsWith("/internal/v1/runtime-bindings/upsert") && !JSON.parse(String(init?.body ?? "{}")).start_kind) {
+          return new Response(JSON.stringify({
+            session: { session_id: env.PONTIA_SESSION_ID },
+            runtime: {
+              runtime_instance_id: env.PONTIA_RUNTIME_INSTANCE_ID,
+              internal_event_url: "http://localhost/internal/v1/events",
+            },
+          }), { status: 200 });
+        }
+        return suppliedFetch(url as any, init as any);
+      }) as typeof fetch
+    : suppliedFetch;
   createPontiaPiExtension(pi as any, {
     loadContext: vi.fn(async () => ({ ok: true as const, context, logFile: "hook.log" })),
     makeReporter: vi.fn(() => ({ report: vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
       reported.push(event);
-      return true;
+      turnSequence += event.type === "turn.started" ? 1 : 0;
+      return { accepted: true, eventId: `evt_server_${reported.length}`, turnId: event.type === "turn.started" ? `turn_server_${turnSequence}` : event.turn_id };
     }) })),
     logDiagnostic: vi.fn(async () => undefined),
     ...overrides,
-    env: { PONTIA_HOME: defaultPontiaHome, ...(overrides.env ?? {}) },
+    fetch: fetchWithManagedBinding,
+    env,
   });
   return { handlers, reported };
 }
@@ -91,10 +110,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_ready",
-      turn_id: null,
-      source: "agent_client",
-      client_type: "pi",
-      payload: {
+      data: {
         runtime_instance_id: "rtinst_1",
         client_session_key: "pi_session_1",
         client_session_file: "/tmp/pi/session.jsonl",
@@ -130,7 +146,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_new",
-      payload: {
+      data: {
         runtime_instance_id: "rtinst_new",
         client_session_key: "pi_session_new",
         client_session_file: "/tmp/pi/new-session.jsonl",
@@ -151,10 +167,8 @@ describe("pontia pi extension lifecycle", () => {
       }
       if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
         expect(JSON.parse(String(init?.body))).toMatchObject({
-          client_type: "pi",
           client_session_key: "pi_session_resumed",
           client_session_file: "/tmp/pi/resumed.jsonl",
-          runtime_instance_id: expect.stringMatching(/^rtinst_/),
           tmux: { socket_path: "/tmp/tmux-1000/default", pane_id: "%42" },
         });
         return new Response(JSON.stringify({
@@ -184,11 +198,11 @@ describe("pontia pi extension lifecycle", () => {
       },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_existing",
-      payload: {
+      data: {
         runtime_instance_id: "rtinst_reattached",
         client_session_key: "pi_session_resumed",
         client_session_file: "/tmp/pi/resumed.jsonl",
@@ -196,14 +210,17 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test("session_start without managed runtime env does not create a pontia session before first turn", async () => {
+  test("session_start without prebound session confirms the same runtime binding path", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async (url: string) => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_manual") {
-        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+      if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+        return new Response(JSON.stringify({
+          session: { session_id: "sess_manual" },
+          runtime: { runtime_instance_id: "rtinst_manual", internal_event_url: "http://localhost/internal/v1/events" },
+        }), { status: 200 });
       }
       return new Response("unexpected", { status: 500 });
     });
@@ -225,8 +242,7 @@ describe("pontia pi extension lifecycle", () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchImpl).not.toHaveBeenCalledWith("http://localhost/internal/v1/runtime-bindings/upsert", expect.anything());
-    expect(reported).toEqual([]);
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
   });
 
   test("session_start skips manual binding when current workspace is not active", async () => {
@@ -277,7 +293,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("session_start without pontia env reads pontia home config but defers binding until first turn", async () => {
+  test("session_start without pontia env discovers pontia and confirms binding", async () => {
     const root = await tempDir();
     const workspace = await realpath(await tempDir());
     const pontiaConfig = join(root, ".pontia", "config.toml");
@@ -288,8 +304,11 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://127.0.0.1:18080/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_discovered") {
-        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+      if (url === "http://127.0.0.1:18080/internal/v1/runtime-bindings/upsert") {
+        return new Response(JSON.stringify({
+          session: { session_id: "sess_discovered" },
+          runtime: { runtime_instance_id: "rtinst_discovered", internal_event_url: "http://127.0.0.1:18080/internal/v1/events" },
+        }), { status: 200 });
       }
       return new Response("unexpected", { status: 500 });
     });
@@ -300,10 +319,10 @@ describe("pontia pi extension lifecycle", () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(reported).toEqual([]);
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
   });
 
-  test("manual session binding on first turn omits tmux when pane identity is incomplete", async () => {
+  test("runtime binding confirmation omits tmux when pane identity is incomplete", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "http://localhost/external/v1/workspaces") {
@@ -342,7 +361,7 @@ describe("pontia pi extension lifecycle", () => {
       sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   test("agent_start consumes backend-delivered current-turn context after reporting started", async () => {
@@ -355,8 +374,8 @@ describe("pontia pi extension lifecycle", () => {
               session_id: "sess_consumed",
               input: "from web",
               inbox_message_id: "msg_consumed",
-              client_type: "pi",
               runtime_instance_id: "rtinst_consumed",
+              client_type: "pi",
               internal_event_url: "http://localhost/internal/v1/events",
             },
           },
@@ -381,7 +400,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_consumed",
-      payload: { metadata: { inbox_message_id: "msg_consumed" } },
+      data: { inbox_message_id: "msg_consumed" },
     });
   });
 
@@ -420,8 +439,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
     expect(reported[1]).toMatchObject({
       session_id: "sess_bound",
-      turn_id: expect.stringMatching(/^turn_/),
-      payload: { runtime_instance_id: "rtinst_bound", input: { summary: "typed in tui" } },
+      data: { runtime_instance_id: "rtinst_bound", input_summary: "typed in tui" },
     });
   });
 
@@ -434,13 +452,11 @@ describe("pontia pi extension lifecycle", () => {
       expect(url).toBe("http://localhost/internal/v1/runtime-bindings/upsert");
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
-        client_type: "pi",
-        client_session_key: "pi_child",
+          client_session_key: "pi_child",
         start_kind: "fork",
         parent_session_id: "sess_parent",
       });
-      expect(body.runtime_instance_id).toMatch(/^rtinst_/);
-      expect(body.runtime_instance_id).not.toBe("rtinst_parent");
+      expect(body).not.toHaveProperty("runtime_instance_id");
       return new Response(JSON.stringify({
         session: { session_id: "sess_child" },
         runtime: {
@@ -473,8 +489,8 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_start({}, {});
 
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "session.ready", "turn.started"]);
-    expect(reported[1]).toMatchObject({ session_id: "sess_child", payload: { runtime_instance_id: "rtinst_child" } });
-    expect(reported[2]).toMatchObject({ session_id: "sess_child", payload: { input: { summary: "fork prompt" } } });
+    expect(reported[1]).toMatchObject({ session_id: "sess_child", data: { runtime_instance_id: "rtinst_child" } });
+    expect(reported[2]).toMatchObject({ session_id: "sess_child", data: { input_summary: "fork prompt" } });
   });
 
   test("session_start resume immediately reattaches when switched client session has a pontia binding", async () => {
@@ -511,7 +527,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported[0]).toMatchObject({ session_id: "sess_resume" });
   });
 
-  test("session_start with partial managed runtime env does not attach or report ready", async () => {
+  test("session_start does not report ready when binding confirmation is unavailable", async () => {
     const home = await tempDir();
     const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 500 }));
     const { handlers, reported } = install({
@@ -523,7 +539,7 @@ describe("pontia pi extension lifecycle", () => {
       sessionManager: { getSessionId: () => "pi_session_partial", getCwd: () => "/workspace" },
     });
 
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(reported).toEqual([]);
   });
 
@@ -580,10 +596,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "session.exited"]);
     expect(reported[1]).toMatchObject({
       session_id: "sess_exit",
-      turn_id: null,
-      source: "agent_client",
-      client_type: "pi",
-      payload: { reason: "quit", runtime_instance_id: "rtinst_1" },
+      data: { reason: "quit", runtime_instance_id: "rtinst_1" },
     });
   });
 
@@ -606,10 +619,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "session.exited"]);
     expect(reported[1]).toMatchObject({
       session_id: "sess_exit",
-      turn_id: null,
-      source: "agent_client",
-      client_type: "pi",
-      payload: { reason: shutdownReason, runtime_instance_id: "rtinst_1" },
+      data: { reason: shutdownReason, runtime_instance_id: "rtinst_1" },
     });
   });
 
@@ -682,9 +692,8 @@ describe("pontia pi extension lifecycle", () => {
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "session.context_usage_updated"]);
     expect(reported[1]).toMatchObject({
-      source: "agent_client",
-      turn_id: "turn_1",
-      payload: {
+      turn_id: "turn_server_1",
+      data: {
         context_usage: {
           used_tokens: 2,
           max_tokens: 8,
@@ -706,7 +715,7 @@ describe("pontia pi extension lifecycle", () => {
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "session.context_usage_updated"]);
     expect(reported[1]).toMatchObject({
-      payload: {
+      data: {
         context_usage: {
           used_tokens: 6037,
           max_tokens: 128000,
@@ -738,13 +747,13 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_end({ messages: [] }, {});
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.output", "turn.completed", "session.message_updated"]);
-    expect(reported[0].payload).toEqual({
+    expect(reported[0].data).toEqual({
       runtime_instance_id: "rtinst_1",
-      input: {},
-      timeline_anchor: { previous_leaf_id: null },
+      input_summary: undefined,
+      previous_leaf_id: null,
     });
-    expect(reported[1].payload).toEqual({ output: { summary: "hello world" } });
-    expect(reported[3]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
+    expect(reported[1].data).toEqual({ output_summary: "hello world" });
+    expect(reported[3]).toMatchObject({ data: { reason: "final" } });
   });
 
   test("captures the previous and terminal Pi leaves at the lifecycle hook boundaries", async () => {
@@ -772,8 +781,8 @@ describe("pontia pi extension lifecycle", () => {
     const starting = handlers.agent_start({}, hookContext);
     await vi.waitFor(() => expect(report).toHaveBeenCalledTimes(1));
     expect(observations).toEqual(["leaf:entry_before_turn", "report:turn.started"]);
-    expect(report.mock.calls[0]?.[1].payload).toMatchObject({
-      timeline_anchor: { previous_leaf_id: "entry_before_turn" },
+    expect(report.mock.calls[0]?.[1].data).toMatchObject({
+      previous_leaf_id: "entry_before_turn",
     });
     releaseStarted();
     await starting;
@@ -782,8 +791,8 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_end({ messages: [] }, hookContext);
 
     const completed = report.mock.calls.find(([, event]) => event.type === "turn.completed")?.[1];
-    expect(completed?.payload).toMatchObject({
-      timeline_anchor: { terminal_leaf_id: "entry_after_turn" },
+    expect(completed?.data).toMatchObject({
+      terminal_leaf_id: "entry_after_turn",
     });
     expect(observations.indexOf("leaf:entry_after_turn")).toBeLessThan(observations.indexOf("report:turn.completed"));
   });
@@ -836,7 +845,7 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_start({}, hookContext);
 
     expect(observations).toEqual(["branch", "report:turn.started"]);
-    expect(report.mock.calls[0]?.[1].payload).toMatchObject({
+    expect(report.mock.calls[0]?.[1].data).toMatchObject({
       topology_context: {
         entries: [
           { id: "user_1", kind: "user_message" },
@@ -845,7 +854,7 @@ describe("pontia pi extension lifecycle", () => {
         ],
       },
     });
-    expect(JSON.stringify(report.mock.calls[0]?.[1].payload)).not.toMatch(
+    expect(JSON.stringify(report.mock.calls[0]?.[1].data)).not.toMatch(
       /secret prompt|secret summary|secret answer|secret-tool|token/,
     );
   });
@@ -858,9 +867,9 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_end({ messages: [] }, {});
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "session.message_updated", "turn.output", "turn.completed", "session.message_updated"]);
-    expect(reported[1]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "append" } });
-    expect(reported[2].payload).toEqual({ output: { summary: "final answer" } });
-    expect(reported[4]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
+    expect(reported[1]).toMatchObject({ data: { reason: "append" } });
+    expect(reported[2].data).toEqual({ output_summary: "final answer" });
+    expect(reported[4]).toMatchObject({ data: { reason: "final" } });
   });
 
   test("reports transcript refresh hints for structured assistant stream boundaries but not text deltas", async () => {
@@ -883,7 +892,7 @@ describe("pontia pi extension lifecycle", () => {
       "session.message_updated",
       "session.message_updated",
     ]);
-    expect(reported.slice(1).map((event) => event.payload)).toEqual([
+    expect(reported.slice(1).map((event) => event.data)).toEqual([
       { reason: "update" },
       { reason: "update" },
       { reason: "update" },
@@ -901,7 +910,7 @@ describe("pontia pi extension lifecycle", () => {
       "turn.completed",
       "session.message_updated",
     ]);
-    expect(reported[7]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
+    expect(reported[7]).toMatchObject({ data: { reason: "final" } });
   });
 
   test("reports transcript refresh hints when tool calls start and finish successfully or with errors", async () => {
@@ -923,7 +932,7 @@ describe("pontia pi extension lifecycle", () => {
       "session.message_updated",
       "session.message_updated",
     ]);
-    expect(reported.slice(1).map((event) => event.payload)).toEqual([
+    expect(reported.slice(1).map((event) => event.data)).toEqual([
       { reason: "update" },
       { reason: "update" },
       { reason: "update" },
@@ -932,7 +941,7 @@ describe("pontia pi extension lifecycle", () => {
     ]);
   });
 
-  test("generates a fresh pontia turn id for each real pi agent_start", async () => {
+  test("uses a fresh backend-provided canonical turn id for each real pi agent_start", async () => {
     const { handlers, reported } = install({
       loadContext: vi.fn(async () => ({
         ok: true as const,
@@ -951,12 +960,10 @@ describe("pontia pi extension lifecycle", () => {
 
     const started = reported.filter((event) => event.type === "turn.started");
     expect(started).toHaveLength(2);
-    expect(started[0].turn_id).toMatch(/^turn_/);
-    expect(started[1].turn_id).toMatch(/^turn_/);
-    expect(started[1].turn_id).not.toBe(started[0].turn_id);
+    expect(started.every((event) => event.turn_id === undefined)).toBe(true);
     expect(reported.filter((event) => event.type === "turn.output").map((event) => event.turn_id)).toEqual([
-      started[0].turn_id,
-      started[1].turn_id,
+      "turn_server_1",
+      "turn_server_2",
     ]);
     expect(reported.map((event) => event.type)).not.toContain("turn.created");
   });
@@ -1008,11 +1015,11 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_end({ error: new Error("model failed"), messages: [] }, {});
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.failed", "session.message_updated"]);
-    expect(reported[1].payload).toEqual({
+    expect(reported[1].data).toEqual({
       runtime_instance_id: "rtinst_1",
-      failure: { message: "model failed" },
-      timeline_anchor: { terminal_leaf_id: null },
+      failure_message: "model failed",
+      terminal_leaf_id: null,
     });
-    expect(reported[2]).toMatchObject({ source: "agent_client", turn_id: null, payload: { reason: "final" } });
+    expect(reported[2]).toMatchObject({ data: { reason: "final" } });
   });
 });

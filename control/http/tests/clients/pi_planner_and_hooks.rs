@@ -151,21 +151,36 @@ async fn create_pi_session(state: AppState, workspace: &Path) -> String {
 
 async fn report_ready(state: AppState, session_id: &str) {
     let metadata = binding_metadata(&state, session_id).await;
+    let (status, binding) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/runtime-bindings/upsert",
+        Some(json!({
+            "session_id": session_id,
+            "client_type": "pi",
+            "client_session_key": session_id,
+            "client_session_file": metadata["log_dir"].as_str().map(|dir| format!("{dir}/pi-session.jsonl")),
+            "client_session_dir": metadata["log_dir"],
+            "client_cwd": metadata["workspace"],
+            "launch_cwd": metadata["workspace"],
+            "tmux": {
+                "socket_path": metadata["tmux_socket_path"],
+                "pane_id": metadata["tmux_pane_id"]
+            }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{binding:?}");
+
     let (status, body) = request_json(
         state,
         "POST",
         "/internal/v1/events",
         Some(json!({
-            "event_id": format!("evt_ready_{session_id}"),
             "session_id": session_id,
-            "turn_id": null,
-            "source": "agent_client",
-            "client_type": "pi",
             "type": "session.ready",
-            "time": "2026-05-08T12:00:00Z",
-            "seq": 1,
-            "payload": {
-                "runtime_instance_id": metadata["runtime_instance_id"],
+            "data": {
+                "runtime_instance_id": binding["runtime"]["runtime_instance_id"],
                 "client_session_key": session_id,
                 "client_session_file": metadata["log_dir"].as_str().map(|dir| format!("{dir}/pi-session.jsonl")),
                 "client_session_dir": metadata["log_dir"],

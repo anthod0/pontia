@@ -2,14 +2,15 @@ use serde::Deserialize;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeBindingUpsertRequest {
+    pub session_id: Option<String>,
     pub client_type: String,
     pub client_session_key: String,
     pub client_session_file: Option<String>,
     pub client_session_dir: Option<String>,
     pub client_cwd: Option<String>,
     pub launch_cwd: Option<String>,
-    pub runtime_instance_id: String,
     pub start_command: Option<String>,
     pub start_kind: Option<String>,
     pub parent_session_id: Option<String>,

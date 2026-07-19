@@ -6,35 +6,30 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
-
 use pontia_application::{
     AgentBindingService, AppState, CurrentTurnClaimRequest, CurrentTurnClaimService,
-    EventIngestService, InternalEventValidationService, RuntimeBindingUpsertRequest,
-    RuntimeBindingUpsertService,
+    EventIngestService, EventReportNormalizer, InternalEventValidationService, ReportedFact,
+    RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
 };
 use pontia_core::{
-    domain::{DomainEvent, EventSource, EventType, MAX_TURN_OUTPUT_SUMMARY_CHARS, ReportedEvent},
+    domain::{DomainEvent, EventType, MAX_TURN_OUTPUT_SUMMARY_CHARS},
     error::Error,
 };
 use pontia_dag::DagRunResultService;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 
 const MAX_EVENT_PAYLOAD_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InternalEventRequest {
-    event_id: String,
     session_id: String,
     turn_id: Option<String>,
-    source: String,
-    client_type: String,
     #[serde(rename = "type")]
-    event_type: String,
-    time: String,
-    seq: Option<i64>,
-    payload: Value,
+    fact_type: String,
+    #[serde(alias = "payload")]
+    data: Value,
     turn_index: Option<Value>,
     timeline_boundary: Option<Value>,
 }
@@ -130,7 +125,25 @@ pub async fn post_event(
     request: Result<Json<InternalEventRequest>, JsonRejection>,
 ) -> Result<Json<InternalEventResponse>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let reported_event = request.into_reported_event()?;
+    let fact = request.into_reported_fact()?;
+    let mut reported_event = EventReportNormalizer::new(state.db())
+        .normalize(fact)
+        .await
+        .map_err(|error| ApiError::invalid_request(error.to_string()))?;
+    if reported_event.event_type == EventType::TurnOutput {
+        truncate_turn_output(&mut reported_event.payload);
+    }
+    if reported_event.event_type == EventType::SessionContextUsageUpdated {
+        validate_context_usage_payload(&reported_event.payload)?;
+    }
+    let payload_size = serde_json::to_vec(&reported_event.payload)
+        .map_err(Error::from)?
+        .len();
+    if payload_size > MAX_EVENT_PAYLOAD_BYTES {
+        return Err(ApiError::invalid_request(format!(
+            "payload exceeds maximum size of {MAX_EVENT_PAYLOAD_BYTES} bytes"
+        )));
+    }
     let event = DomainEvent::from(reported_event.clone());
     InternalEventValidationService::new()
         .validate(&event)
@@ -157,7 +170,7 @@ pub async fn post_event(
         }));
     }
 
-    let warnings = service.sequence_warnings(&event).await?;
+    let warnings = Vec::new();
     let result = service.ingest_event(reported_event).await?;
     if !result.duplicate {
         DagRunResultService::with_graph(state.db(), state.graph())
@@ -211,17 +224,9 @@ fn domain_error_as_invalid_request(error: Error) -> ApiError {
 }
 
 impl InternalEventRequest {
-    fn into_reported_event(self) -> Result<ReportedEvent, ApiError> {
-        let source = EventSource::from_str(&self.source)
+    fn into_reported_fact(self) -> Result<ReportedFact, ApiError> {
+        let fact_type = EventType::from_str(&self.fact_type)
             .map_err(|err| ApiError::invalid_request(err.to_string()))?;
-        let event_type = EventType::from_str(&self.event_type)
-            .map_err(|err| ApiError::invalid_request(err.to_string()))?;
-
-        if event_type.requires_turn_id() && self.turn_id.is_none() {
-            return Err(ApiError::invalid_request(format!(
-                "event {event_type} requires turn_id"
-            )));
-        }
         if self.turn_index.is_some() {
             return Err(ApiError::invalid_request(
                 "turn_index is Pontia-owned and cannot be reported",
@@ -232,39 +237,14 @@ impl InternalEventRequest {
                 "timeline_boundary is Pontia-owned and cannot be reported",
             ));
         }
-
-        if !self.payload.is_object() {
-            return Err(ApiError::invalid_request("payload must be a JSON object"));
+        if !self.data.is_object() {
+            return Err(ApiError::invalid_request("data must be a JSON object"));
         }
-
-        let mut payload = self.payload;
-        if event_type == EventType::TurnOutput {
-            truncate_turn_output(&mut payload);
-        }
-        if event_type == EventType::SessionContextUsageUpdated {
-            validate_context_usage_payload(&payload)?;
-        }
-
-        let payload_size = serde_json::to_vec(&payload).map_err(Error::from)?.len();
-        if payload_size > MAX_EVENT_PAYLOAD_BYTES {
-            return Err(ApiError::invalid_request(format!(
-                "payload exceeds maximum size of {MAX_EVENT_PAYLOAD_BYTES} bytes"
-            )));
-        }
-
-        let occurred_at = OffsetDateTime::parse(&self.time, &Rfc3339)
-            .map_err(|err| ApiError::invalid_request(format!("invalid time: {err}")))?;
-
-        Ok(ReportedEvent {
-            event_id: self.event_id,
+        Ok(ReportedFact {
             session_id: self.session_id,
             turn_id: self.turn_id,
-            source,
-            client_type: self.client_type,
-            event_type,
-            occurred_at,
-            seq: self.seq,
-            payload,
+            fact_type,
+            data: self.data,
         })
     }
 }

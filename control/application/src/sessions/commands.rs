@@ -149,17 +149,21 @@ impl SessionCommandService {
         }
 
         let initial_dispatch = if let Some(initial_task) = request.initial_task {
-            let turn_id = new_turn_id().to_string();
             let client_spec = get_client_spec(&request.client_type).ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", request.client_type))
             })?;
             let plugin_owns_turn = client_spec.owns_initial_tmux_turn();
+            let dispatch_identity = if plugin_owns_turn {
+                new_dispatch_id().to_string()
+            } else {
+                new_turn_id().to_string()
+            };
             if !plugin_owns_turn {
                 ingest
                     .ingest_event(ReportedEvent::new(
                         new_event_id().to_string(),
                         session_id.clone(),
-                        Some(turn_id.clone()),
+                        Some(dispatch_identity.clone()),
                         EventSource::ExternalApi,
                         request.client_type.clone(),
                         EventType::TurnCreated,
@@ -173,7 +177,7 @@ impl SessionCommandService {
                     .ingest_event(ReportedEvent::new(
                         new_event_id().to_string(),
                         session_id.clone(),
-                        Some(turn_id.clone()),
+                        Some(dispatch_identity.clone()),
                         EventSource::ExternalApi,
                         request.client_type.clone(),
                         EventType::TurnQueued,
@@ -182,14 +186,10 @@ impl SessionCommandService {
                     .await?;
             }
             Some((
-                turn_id.clone(),
+                dispatch_identity.clone(),
                 initial_task.input,
                 client_dispatch_mode(&request.client_type)?,
-                if plugin_owns_turn {
-                    None
-                } else {
-                    Some(turn_id)
-                },
+                (!plugin_owns_turn).then_some(dispatch_identity),
             ))
         } else {
             None

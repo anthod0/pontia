@@ -8,7 +8,7 @@ use pontia_core::{
         TurnProjection, TurnState, TurnTopology,
     },
     error::{Error, Result},
-    ids::{new_event_id, new_message_id, new_session_id, new_turn_id},
+    ids::{new_dispatch_id, new_event_id, new_message_id, new_session_id, new_turn_id},
 };
 use pontia_runtime::{AgentInput, GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
 use serde::{Deserialize, Serialize};
@@ -41,6 +41,7 @@ pub(crate) use events::nested_string;
 pub use events::{EventIngestResult, EventIngestService, InternalEventValidationService};
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
+pub use ingestion::{EventReportNormalizer, ReportedFact};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
     TurnTimelineDirection, TurnTimelineItem, TurnTimelinePage, TurnTimelineService,

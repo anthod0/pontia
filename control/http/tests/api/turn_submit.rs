@@ -112,17 +112,12 @@ async fn submit_inbox_message(state: AppState, session_id: &str, input: &str) ->
         .to_string()
 }
 
-fn event_body(event_id: &str, event_type: &str, session_id: &str, turn_id: &str) -> Value {
+fn event_body(_event_id: &str, event_type: &str, session_id: &str, turn_id: &str) -> Value {
     json!({
-        "event_id": event_id,
         "session_id": session_id,
         "turn_id": turn_id,
-        "source": "agent_adapter",
-        "client_type": "generic",
         "type": event_type,
-        "time": "2026-04-25T12:00:00Z",
-        "seq": 10,
-        "payload": {}
+        "data": {}
     })
 }
 
@@ -205,7 +200,7 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
         &session_id,
         &turn_id,
     );
-    started_event["payload"] = json!({"runtime_instance_id": runtime_instance_id});
+    started_event["data"] = json!({"runtime_instance_id": runtime_instance_id});
     let (started_status, _) = post_internal_event(state.clone(), started_event).await;
     assert_eq!(started_status, StatusCode::OK);
     let (busy_status, busy_body) = request(

@@ -26,68 +26,48 @@ const context = {
 } as const;
 
 describe("event builders", () => {
-  test("builds turn.started payload shape", () => {
+  test("builds a turn.started observation without Pontia-owned identity", () => {
     const event = buildTurnStartedEvent({ ...context, input: "from web", inboxMessageId: "msg_1" });
 
-    expect(event.event_id).toMatch(/^evt_/);
-    expect(event).toMatchObject({
+    expect(event).toEqual({
       session_id: "sess_1",
-      turn_id: "turn_1",
-      source: "agent_adapter",
-      client_type: "pi",
       type: "turn.started",
-      seq: null,
-      payload: {
+      data: {
         runtime_instance_id: "rtinst_1",
-        input: { summary: "from web" },
-        metadata: { inbox_message_id: "msg_1" },
+        input_summary: "from web",
+        previous_leaf_id: null,
+        inbox_message_id: "msg_1",
       },
     });
-    expect(new Date(event.time).toISOString()).toBe(event.time);
+    for (const field of ["event_id", "turn_id", "source", "client_type", "time"]) {
+      expect(event).not.toHaveProperty(field);
+    }
   });
 
-  test("builds turn.output payload shape", () => {
-    const event = buildTurnOutputEvent(context, "hello");
-
-    expect(event.event_id).toMatch(/^evt_/);
-    expect(event).toMatchObject({
+  test("builds turn output and terminal observations using the canonical turn id", () => {
+    expect(buildTurnOutputEvent(context, "hello")).toEqual({
       session_id: "sess_1",
       turn_id: "turn_1",
-      source: "agent_adapter",
-      client_type: "pi",
       type: "turn.output",
-      seq: null,
-      payload: { output: { summary: "hello" } },
+      data: { output_summary: "hello" },
     });
-    expect(new Date(event.time).toISOString()).toBe(event.time);
+    expect(buildTurnCompletedEvent(context)).toMatchObject({
+      turn_id: "turn_1",
+      type: "turn.completed",
+      data: { runtime_instance_id: "rtinst_1", terminal_leaf_id: null },
+    });
+    expect(buildTurnFailedEvent(context, "boom")).toMatchObject({
+      type: "turn.failed",
+      data: { failure_message: "boom" },
+    });
   });
 
   test("truncates turn.output summaries to 200 Unicode characters", () => {
     const event = buildTurnOutputEvent(context, "界".repeat(201));
-
-    expect(event.payload).toEqual({ output: { summary: "界".repeat(200) } });
+    expect(event.data).toEqual({ output_summary: "界".repeat(200) });
   });
 
-  test("builds turn.completed payload shape", () => {
-    expect(buildTurnCompletedEvent(context)).toMatchObject({
-      session_id: "sess_1",
-      turn_id: "turn_1",
-      source: "agent_adapter",
-      client_type: "pi",
-      type: "turn.completed",
-      seq: null,
-      payload: {},
-    });
-  });
-
-  test("builds turn.failed payload shape", () => {
-    expect(buildTurnFailedEvent(context, "boom")).toMatchObject({
-      type: "turn.failed",
-      payload: { failure: { message: "boom" } },
-    });
-  });
-
-  test("builds session.context_usage_updated payload without null usage fields", () => {
+  test("builds session.context_usage_updated observation without null usage fields", () => {
     const event = buildSessionContextUsageUpdatedEvent(context, {
       used_tokens: 42,
       max_tokens: null,
@@ -102,11 +82,8 @@ describe("event builders", () => {
     expect(event).toMatchObject({
       session_id: "sess_1",
       turn_id: "turn_1",
-      source: "agent_client",
-      client_type: "pi",
       type: "session.context_usage_updated",
-      seq: null,
-      payload: {
+      data: {
         context_usage: {
           used_tokens: 42,
           input_tokens: 40,
@@ -117,9 +94,9 @@ describe("event builders", () => {
         model: "example-model",
       },
     });
-    expect(event.payload.context_usage).not.toHaveProperty("max_tokens");
-    expect(event.payload.context_usage).not.toHaveProperty("remaining_tokens");
-    expect(event.payload.context_usage).not.toHaveProperty("usage_ratio");
+    expect(event.data.context_usage).not.toHaveProperty("max_tokens");
+    expect(event.data.context_usage).not.toHaveProperty("remaining_tokens");
+    expect(event.data.context_usage).not.toHaveProperty("usage_ratio");
   });
 
   test("does not extract context usage from unsupported or empty pi hook payloads", () => {
@@ -230,12 +207,13 @@ describe("event builders", () => {
 
 describe("EventReporter", () => {
   test("posts event JSON to the Internal Event API", async () => {
-    const fetch = vi.fn(async () => new Response(JSON.stringify({ accepted: true }), { status: 202 }));
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ accepted: true, event_id: "evt_server", turn_id: "turn_server" }), { status: 202 }));
     const reporter = new EventReporter({ fetch, logFile: await tempLogFile() });
     const event = buildTurnCompletedEvent(context);
 
-    await reporter.report(context, event);
+    const result = await reporter.report(context, event);
 
+    expect(result).toEqual({ accepted: true, eventId: "evt_server", turnId: "turn_server" });
     expect(fetch).toHaveBeenCalledWith(context.internalEventUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -248,9 +226,9 @@ describe("EventReporter", () => {
     const fetch = vi.fn(async () => new Response("nope", { status: 500, statusText: "Server Error" }));
     const reporter = new EventReporter({ fetch, logFile });
 
-    const ok = await reporter.report(context, buildTurnCompletedEvent(context));
+    const result = await reporter.report(context, buildTurnCompletedEvent(context));
 
-    expect(ok).toBe(false);
+    expect(result).toEqual({ accepted: false });
     const log = await readFile(logFile, "utf8");
     expect(log).toContain("internal_event_post_failed");
     expect(log).toContain("500");
@@ -263,9 +241,9 @@ describe("EventReporter", () => {
     });
     const reporter = new EventReporter({ fetch, logFile });
 
-    const ok = await reporter.report(context, buildTurnCompletedEvent(context));
+    const result = await reporter.report(context, buildTurnCompletedEvent(context));
 
-    expect(ok).toBe(false);
+    expect(result).toEqual({ accepted: false });
     const log = await readFile(logFile, "utf8");
     expect(log).toContain("internal_event_post_exception");
     expect(log).toContain("network down");

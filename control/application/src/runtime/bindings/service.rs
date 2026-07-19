@@ -7,7 +7,7 @@ use pontia_agent_clients as agent_clients;
 use pontia_core::{
     domain::{EventSource, EventType, ReportedEvent},
     error::{Error, Result},
-    ids::{new_event_id, new_session_id},
+    ids::{new_event_id, new_runtime_instance_id, new_session_id},
 };
 use pontia_runtime::{GenericRuntimeManager, configured_internal_event_url, pontia_log_paths};
 use pontia_storage_sqlite::repositories::{
@@ -44,7 +44,6 @@ impl RuntimeBindingUpsertService {
         let _upsert_guard = RUNTIME_BINDING_UPSERT_LOCK.lock().await;
         validate_required("client_type", &request.client_type)?;
         validate_required("client_session_key", &request.client_session_key)?;
-        validate_required("runtime_instance_id", &request.runtime_instance_id)?;
         let client_spec =
             agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", request.client_type))
@@ -65,9 +64,14 @@ impl RuntimeBindingUpsertService {
             .ok_or_else(|| Error::Domain("launch_cwd or client_cwd is required".to_string()))?;
         let workspace = upsert_workspace(&self.pool, launch_cwd).await?;
 
-        let existing_session_id = self
-            .session_id_for_client_session(&request.client_type, &request.client_session_key)
-            .await?;
+        let existing_session_id = if let Some(session_id) = non_empty(request.session_id.as_deref())
+        {
+            self.ensure_requested_session(&session_id, &request).await?;
+            Some(session_id)
+        } else {
+            self.session_id_for_client_session(&request.client_type, &request.client_session_key)
+                .await?
+        };
         let session_id = match existing_session_id {
             Some(session_id) => {
                 self.ensure_existing_binding_agrees(&session_id, &request)
@@ -130,7 +134,11 @@ impl RuntimeBindingUpsertService {
         let hook_log_metadata_display = hook_log_metadata
             .as_ref()
             .map(|(metadata_key, path)| (*metadata_key, path.display().to_string()));
-        let metadata = binding_metadata(
+        let runtime_instance_id = SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .runtime_instance_id(&session_id)
+            .await?
+            .unwrap_or_else(|| new_runtime_instance_id().to_string());
+        let mut confirmed_metadata = binding_metadata(
             &request,
             &workspace.canonical_path,
             &internal_event_url,
@@ -141,12 +149,27 @@ impl RuntimeBindingUpsertService {
                 .map(|(metadata_key, path)| (*metadata_key, path.as_str())),
             &capabilities,
         );
+        confirmed_metadata["runtime_instance_id"] = json!(runtime_instance_id);
+        confirmed_metadata["binding_confirmed"] = json!(true);
+        let mut metadata = SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .metadata(&session_id)
+            .await?
+            .map(|metadata| serde_json::from_str::<Value>(&metadata))
+            .transpose()?
+            .unwrap_or_else(|| json!({}));
+        if let (Some(existing), Some(confirmed)) =
+            (metadata.as_object_mut(), confirmed_metadata.as_object())
+        {
+            existing.extend(confirmed.clone());
+        } else {
+            metadata = confirmed_metadata;
+        }
 
         SqliteRuntimeBindingRepository::new(self.pool.clone())
             .upsert_binding(RuntimeBindingUpsertRecord {
                 session_id: session_id.clone(),
                 runtime_kind: runtime_kind.to_string(),
-                runtime_instance_id: Some(request.runtime_instance_id.clone()),
+                runtime_instance_id: Some(runtime_instance_id.clone()),
                 start_command: non_empty(request.start_command.as_deref()),
                 launch_cwd: Some(workspace.canonical_path.clone()),
                 last_seen_at: Some(last_seen_at.clone()),
@@ -163,7 +186,7 @@ impl RuntimeBindingUpsertService {
                 socket_path,
                 pane_id,
                 &session_id,
-                &request.runtime_instance_id,
+                &runtime_instance_id,
             );
         }
 
@@ -187,7 +210,7 @@ impl RuntimeBindingUpsertService {
         Ok(json!({
             "session": session,
             "runtime": {
-                "runtime_instance_id": request.runtime_instance_id,
+                "runtime_instance_id": runtime_instance_id,
                 "internal_event_url": internal_event_url,
                 "capabilities": capabilities,
             }
@@ -204,20 +227,44 @@ impl RuntimeBindingUpsertService {
             .await
     }
 
+    async fn ensure_requested_session(
+        &self,
+        session_id: &str,
+        request: &RuntimeBindingUpsertRequest,
+    ) -> Result<()> {
+        let session = SqliteSessionRepository::new(self.pool.clone())
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        if session.client_type != request.client_type {
+            return Err(Error::StateConflict(format!(
+                "session {session_id} uses client_type {}, not {}",
+                session.client_type, request.client_type
+            )));
+        }
+        if let Some(owner) = AgentBindingService::new(self.pool.clone())
+            .binding_for_client_session(&request.client_type, &request.client_session_key)
+            .await?
+            && owner.session_id != session_id
+        {
+            return Err(Error::StateConflict(format!(
+                "client session identity is already bound to session {}",
+                owner.session_id
+            )));
+        }
+        Ok(())
+    }
+
     async fn ensure_existing_binding_agrees(
         &self,
         session_id: &str,
         request: &RuntimeBindingUpsertRequest,
     ) -> Result<()> {
-        let binding = AgentBindingService::new(self.pool.clone())
+        if let Some(binding) = AgentBindingService::new(self.pool.clone())
             .binding_for_client_session(&request.client_type, &request.client_session_key)
             .await?
-            .ok_or_else(|| {
-                Error::StateConflict(format!(
-                    "session {session_id} has no Agent binding for runtime binding update"
-                ))
-            })?;
-        if binding.session_id != session_id {
+            && binding.session_id != session_id
+        {
             return Err(Error::StateConflict(format!(
                 "runtime binding update does not match session {session_id} Agent binding"
             )));

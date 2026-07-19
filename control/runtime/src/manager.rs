@@ -4,7 +4,7 @@ use time::format_description::well_known::Rfc3339;
 use pontia_agent_clients::{self as agent_clients, InterruptBehavior, RuntimeBehavior};
 use pontia_core::{
     error::{Error, Result},
-    ids::new_runtime_instance_id,
+    ids::new_event_id,
     time::utc_now,
 };
 
@@ -66,7 +66,7 @@ impl GenericRuntimeManager {
         std::fs::create_dir_all(&log_paths.log_dir)?;
         let log_path = log_paths.runtime_log.clone();
         let internal_event_url = script::internal_event_url();
-        let runtime_instance_id = new_runtime_instance_id().to_string();
+        let launch_id = format!("launch_{}", new_event_id());
         std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -78,7 +78,7 @@ impl GenericRuntimeManager {
             &workspace,
             &runtime_paths,
             &request,
-            &runtime_instance_id,
+            &launch_id,
         )?;
         let quoted_launch_script_path = script::shell_quote_path(&launch_script_path);
         let launch_command =
@@ -100,14 +100,6 @@ impl GenericRuntimeManager {
             }
             tmux::pane_binding(&tmux_session)
         };
-        if let Some(binding) = pane_binding.as_ref() {
-            tmux::mark_pontia_pane(
-                &binding.socket_path,
-                &binding.pane_id,
-                &request.session_id,
-                &runtime_instance_id,
-            )?;
-        }
         let started_at = utc_now()
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
@@ -142,7 +134,8 @@ impl GenericRuntimeManager {
             "role": request.role,
             "started_at": started_at,
             "restart_count": restart_count,
-            "runtime_instance_id": runtime_instance_id,
+            "launch_id": launch_id,
+            "binding_confirmed": false,
             "start_command": start_command,
         });
         if let Some(binding) = pane_binding

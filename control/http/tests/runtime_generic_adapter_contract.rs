@@ -203,14 +203,14 @@ async fn generic_initial_task_dispatches_in_process() {
 
     let session_id = body["data"]["session"]["session_id"].as_str().unwrap();
     let turn = &body["data"]["initial_turn"];
-    let turn_id = turn["turn_id"].as_str().unwrap();
+    let _turn_id = turn["turn_id"].as_str().unwrap();
     assert_eq!(body["data"]["session"]["state"], "idle");
     assert_eq!(turn["state"], "queued");
 
     for _ in 0..20 {
         if GenericTestClient::recorded_inputs().iter().any(|input| {
             input.session_id == session_id
-                && input.turn_id == turn_id
+                && input.dispatch_id.starts_with("dispatch_")
                 && input.input == "boot generic"
         }) {
             return;
@@ -235,7 +235,7 @@ async fn turn_input_handoff_uses_control_plane_assigned_identity() {
     let inputs = GenericTestClient::recorded_inputs();
     assert!(inputs.iter().any(|input| {
         input.session_id == session_id
-            && input.turn_id == turn_id
+            && input.dispatch_id.starts_with("dispatch_")
             && input.input == "adapter contract task"
     }));
 }
@@ -248,7 +248,7 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "run to completion").await;
     let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
 
-    for (idx, event_type, payload) in [
+    for (_idx, event_type, payload) in [
         (1, "turn.started", json!({})),
         (2, "turn.output", json!({"output":{"summary":"working"}})),
         (3, "turn.completed", json!({"output":{"summary":"done"}})),
@@ -258,15 +258,10 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
             "/internal/v1/events",
             None,
             json!({
-                "event_id": format!("evt_generic_contract_return_{idx}"),
                 "session_id": session_id,
                 "turn_id": turn_id,
-                "source": "agent_adapter",
-                "client_type": "generic",
                 "type": event_type,
-                "time": "2026-04-25T12:00:00Z",
-                "seq": idx + 10,
-                "payload": runtime_payload(&runtime_instance_id, payload)
+                "data": runtime_payload(&runtime_instance_id, payload)
             }),
         )
         .await;
@@ -319,15 +314,10 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
         "/internal/v1/events",
         None,
         json!({
-            "event_id":"evt_generic_contract_started_for_interrupt",
             "session_id":session_id,
             "turn_id":turn_id,
-            "source":"agent_adapter",
-            "client_type":"generic",
             "type":"turn.started",
-            "time":"2026-04-25T12:00:00Z",
-            "seq":30,
-            "payload":{"runtime_instance_id":runtime_instance_id}
+            "data":{"runtime_instance_id":runtime_instance_id}
         }),
     )
     .await;

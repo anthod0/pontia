@@ -560,6 +560,12 @@ impl EventIngestService {
             .await?;
 
         let Some(expected_runtime_instance_id) = expected_runtime_instance_id else {
+            if event.event_type == EventType::SessionReady {
+                return Err(Error::Domain(format!(
+                    "{} from {} requires a confirmed Runtime binding for session {}",
+                    event.event_type, event.source, event.session_id
+                )));
+            }
             return Ok(());
         };
 

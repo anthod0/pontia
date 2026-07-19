@@ -31,6 +31,10 @@ pub fn new_event_id() -> ExternalId {
     prefixed_id("evt")
 }
 
+pub fn new_dispatch_id() -> ExternalId {
+    prefixed_id("dispatch")
+}
+
 pub fn new_runtime_instance_id() -> ExternalId {
     prefixed_id("rtinst")
 }

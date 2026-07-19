@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { EnvLike } from "./context.js";
 import { resolvePontiaConnection } from "./discovery.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
@@ -27,16 +26,8 @@ export function piSessionDetailsFromHookContext(ctx: unknown): PiSessionDetails 
   };
 }
 
-function hasPreboundSessionIntent(env: EnvLike): boolean {
-  return Boolean(optionalString(env.PONTIA_SESSION_ID));
-}
-
 function agentBindingLookupUrl(discoveredBindingUpsertUrl?: string): string | undefined {
   return discoveredBindingUpsertUrl?.replace(/\/runtime-bindings\/upsert\/?$/, "/agent-bindings");
-}
-
-function newRuntimeInstanceId(): string {
-  return `rtinst_${randomUUID()}`;
 }
 
 function tmuxBindingFromEnv(env: EnvLike): { socket_path: string; pane_id: string } | undefined {
@@ -53,27 +44,23 @@ export async function bindManualSession(
   sessionDetails: PiSessionDetails,
   options: { startKind?: "fork"; parentSessionId?: string } = {},
 ): Promise<SessionContext | undefined> {
-  if (hasPreboundSessionIntent(env) && options.startKind !== "fork") return undefined;
   if (!sessionDetails.clientSessionKey) return undefined;
   const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
   const url = discovered?.bindingUpsertUrl;
   if (!url) return undefined;
 
-  const runtimeInstanceId = options.startKind === "fork"
-    ? newRuntimeInstanceId()
-    : optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? newRuntimeInstanceId();
   const tmux = tmuxBindingFromEnv(env);
   const response = await fetchImpl(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      ...(options.startKind !== "fork" && optionalString(env.PONTIA_SESSION_ID) ? { session_id: optionalString(env.PONTIA_SESSION_ID) } : {}),
       client_type: "pi",
       client_session_key: sessionDetails.clientSessionKey,
       client_session_file: sessionDetails.clientSessionFile,
       client_session_dir: sessionDetails.clientSessionDir,
       client_cwd: sessionDetails.clientCwd,
       launch_cwd: sessionDetails.clientCwd,
-      runtime_instance_id: runtimeInstanceId,
       start_command: "pi",
       ...(options.startKind ? { start_kind: options.startKind } : {}),
       ...(options.parentSessionId ? { parent_session_id: options.parentSessionId } : {}),
@@ -87,9 +74,10 @@ export async function bindManualSession(
   const session = asRecord(record?.session);
   const runtime = asRecord(record?.runtime);
   const sessionId = optionalString(session?.session_id);
-  const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id) ?? runtimeInstanceId;
+  const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id);
   const internalEventUrl = optionalString(runtime?.internal_event_url) ?? discovered?.internalEventUrl;
   if (!sessionId) throw new Error("runtime binding upsert response missing session.session_id");
+  if (!resolvedRuntimeInstanceId) throw new Error("runtime binding upsert response missing runtime.runtime_instance_id");
   if (!internalEventUrl) throw new Error("runtime binding upsert response missing runtime.internal_event_url");
 
   return {

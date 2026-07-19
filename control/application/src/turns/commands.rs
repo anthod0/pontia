@@ -6,7 +6,7 @@ use pontia_agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get
 use pontia_core::{
     domain::{EventSource, EventType, ReportedEvent},
     error::{Error, Result},
-    ids::{new_event_id, new_turn_id},
+    ids::{new_dispatch_id, new_event_id, new_turn_id},
 };
 use pontia_runtime::{AgentInput, GenericRuntimeManager};
 use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
@@ -85,7 +85,7 @@ impl TurnCommandService {
                 .expect("tmux binding was validated before client dispatch");
             let agent_input = AgentInput {
                 session_id: session_id.to_string(),
-                turn_id: new_turn_id().to_string(),
+                dispatch_id: new_dispatch_id().to_string(),
                 input,
             };
             self.wait_for_tui_readiness_if_needed(
@@ -95,6 +95,12 @@ impl TurnCommandService {
                 &binding_metadata,
             )
             .await?;
+            let binding_metadata = self
+                .runtime_binding_metadata(session_id)
+                .await?
+                .ok_or_else(|| {
+                    Error::Domain(format!("{} runtime binding not found", session.client_type))
+                })?;
             match client_spec.adapter.turn_context {
                 TurnContextBehavior::InternalApiClaim => {
                     store_client_current_turn_context(
@@ -121,7 +127,7 @@ impl TurnCommandService {
         let turn_id = new_turn_id().to_string();
         let agent_input = AgentInput {
             session_id: session_id.to_string(),
-            turn_id: turn_id.clone(),
+            dispatch_id: new_dispatch_id().to_string(),
             input: input.clone(),
         };
 
@@ -281,14 +287,17 @@ impl TurnCommandService {
         if readiness_mode != ReadinessMode::AgentClientEvent {
             return Ok(());
         }
-        let runtime_instance_id = metadata["runtime_instance_id"].as_str().ok_or_else(|| {
-            Error::Domain(format!(
-                "{client_type} runtime metadata missing runtime_instance_id"
-            ))
-        })?;
-        RuntimeReadinessService::new(self.pool.clone())
-            .wait_until_ready(session_id, client_type, runtime_instance_id)
-            .await
+        let readiness = RuntimeReadinessService::new(self.pool.clone());
+        if let Some(runtime_instance_id) = metadata["runtime_instance_id"].as_str() {
+            readiness
+                .wait_until_ready(session_id, client_type, runtime_instance_id)
+                .await
+        } else {
+            readiness
+                .wait_until_bound_and_ready(session_id, client_type)
+                .await
+                .map(|_| ())
+        }
     }
 
     async fn runtime_binding_metadata(&self, session_id: &str) -> Result<Option<Value>> {

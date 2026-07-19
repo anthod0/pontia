@@ -12,7 +12,7 @@ pub enum ContextUsageCapability {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentInput {
     pub session_id: String,
-    pub turn_id: String,
+    pub dispatch_id: String,
     pub input: String,
 }
 

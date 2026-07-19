@@ -95,7 +95,7 @@ mod tests {
 
         let input = AgentInput {
             session_id: "session_pane".to_string(),
-            turn_id: "turn_pane".to_string(),
+            dispatch_id: "dispatch_pane".to_string(),
             input: "pane-bound input".to_string(),
         };
         let result = dispatch_tui_turn(&socket_path, &pane_id, "pi", &input);
@@ -321,7 +321,7 @@ while True:
             .to_string();
         let input = AgentInput {
             session_id: "session_multiline".to_string(),
-            turn_id: "turn_multiline".to_string(),
+            dispatch_id: "dispatch_multiline".to_string(),
             input: "line one\nline two".to_string(),
         };
         let result = dispatch_tui_turn(&socket_path, &pane_id, "pi", &input);

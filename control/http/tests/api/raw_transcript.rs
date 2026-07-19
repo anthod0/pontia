@@ -569,15 +569,10 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     let (status, body) = post_internal_event(
         state.clone(),
         json!({
-            "event_id": "evt_delayed_first_started",
             "session_id": session_id,
             "turn_id": "turn_delayed_first",
-            "source": "agent_adapter",
-            "client_type": "pi",
             "type": "turn.started",
-            "time": "2026-07-15T00:00:00Z",
-            "seq": null,
-            "payload": {
+            "data": {
                 "runtime_instance_id": "rtinst_projected_timeline",
                 "timeline_anchor": { "previous_leaf_id": "previous" },
                 "topology_context": { "entries": [
@@ -988,22 +983,17 @@ async fn post_pi_turn_event(
     state: AppState,
     session_id: &str,
     turn_id: &str,
-    event_id: &str,
+    _event_id: &str,
     event_type: &str,
     timeline_anchor: Value,
 ) {
     let (status, body) = post_internal_event(
         state,
         json!({
-            "event_id": event_id,
             "session_id": session_id,
             "turn_id": turn_id,
-            "source": "agent_adapter",
-            "client_type": "pi",
             "type": event_type,
-            "time": "2026-07-15T00:00:00Z",
-            "seq": null,
-            "payload": {
+            "data": {
                 "runtime_instance_id": "rtinst_projected_timeline",
                 "timeline_anchor": timeline_anchor,
             }
@@ -1098,17 +1088,12 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         ),
     ];
 
-    for (index, (turn_id, event_prefix, entries, previous_leaf_id)) in turns.iter().enumerate() {
+    for (index, (turn_id, _event_prefix, entries, previous_leaf_id)) in turns.iter().enumerate() {
         let started = json!({
-            "event_id": format!("{event_prefix}_started"),
             "session_id": session_id,
             "turn_id": turn_id,
-            "source": "agent_adapter",
-            "client_type": "pi",
             "type": "turn.started",
-            "time": "2026-07-16T00:00:00Z",
-            "seq": null,
-            "payload": {
+            "data": {
                 "runtime_instance_id": "rtinst_pi_linear",
                 "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
                 "topology_context": { "entries": entries },
@@ -1116,12 +1101,6 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         });
         let (status, body) = post_internal_event(state.clone(), started.clone()).await;
         assert_eq!(status, StatusCode::OK, "{body:?}");
-        if index == 0 {
-            let duplicate = post_internal_event(state.clone(), started).await;
-            assert_eq!(duplicate.0, StatusCode::OK, "{:?}", duplicate.1);
-            assert_eq!(duplicate.1["duplicate"], true);
-        }
-
         let user_id = format!("user_{}", index + 1);
         let assistant_id = format!("assistant_{}", index + 1);
         fs::write(
@@ -1143,15 +1122,10 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         )
         .unwrap();
         let completed = json!({
-            "event_id": format!("{event_prefix}_completed"),
             "session_id": session_id,
             "turn_id": turn_id,
-            "source": "agent_adapter",
-            "client_type": "pi",
             "type": "turn.completed",
-            "time": "2026-07-16T00:00:01Z",
-            "seq": null,
-            "payload": {
+            "data": {
                 "runtime_instance_id": "rtinst_pi_linear",
                 "timeline_anchor": { "terminal_leaf_id": assistant_id },
                 "debug_content": user_id,
@@ -1193,7 +1167,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     ];
     for (
         turn_id,
-        event_prefix,
+        _event_prefix,
         entries,
         previous_leaf_id,
         native_parent_id,
@@ -1202,15 +1176,10 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     ) in branch_turns
     {
         let started = json!({
-            "event_id": format!("{event_prefix}_started"),
             "session_id": session_id,
             "turn_id": turn_id,
-            "source": "agent_adapter",
-            "client_type": "pi",
             "type": "turn.started",
-            "time": "2026-07-16T00:00:02Z",
-            "seq": null,
-            "payload": {
+            "data": {
                 "runtime_instance_id": "rtinst_pi_linear",
                 "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
                 "topology_context": { "entries": entries },
@@ -1236,15 +1205,10 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
             )
             .unwrap();
         let completed = json!({
-            "event_id": format!("{event_prefix}_completed"),
             "session_id": session_id,
             "turn_id": turn_id,
-            "source": "agent_adapter",
-            "client_type": "pi",
             "type": "turn.completed",
-            "time": "2026-07-16T00:00:03Z",
-            "seq": null,
-            "payload": {
+            "data": {
                 "runtime_instance_id": "rtinst_pi_linear",
                 "timeline_anchor": { "terminal_leaf_id": assistant_id },
             }
@@ -1256,15 +1220,10 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     }
 
     let malformed_started = json!({
-        "event_id": "evt_pi_linear_malformed_started",
         "session_id": session_id,
         "turn_id": "turn_pi_linear_malformed",
-        "source": "agent_adapter",
-        "client_type": "pi",
         "type": "turn.started",
-        "time": "2026-07-16T00:00:02Z",
-        "seq": null,
-        "payload": {
+        "data": {
             "runtime_instance_id": "rtinst_pi_linear",
             "timeline_anchor": { "previous_leaf_id": "assistant_5" },
             "topology_context": { "entries": [
@@ -1414,15 +1373,10 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
         .unwrap();
 
     let started = json!({
-        "event_id": "evt_pi_boundary_started",
         "session_id": session_id,
         "turn_id": turn_id,
-        "source": "agent_adapter",
-        "client_type": "pi",
         "type": "turn.started",
-        "time": "2026-07-15T00:00:01Z",
-        "seq": null,
-        "payload": {
+        "data": {
             "runtime_instance_id": "rtinst_pi_boundary",
             "timeline_anchor": { "previous_leaf_id": "previous_leaf" }
         }
@@ -1447,15 +1401,10 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
     let tail_offset = fs::metadata(&transcript).unwrap().len();
 
     let completed = json!({
-        "event_id": "evt_pi_boundary_completed",
         "session_id": session_id,
         "turn_id": turn_id,
-        "source": "agent_adapter",
-        "client_type": "pi",
         "type": "turn.completed",
-        "time": "2026-07-15T00:00:02Z",
-        "seq": null,
-        "payload": {
+        "data": {
             "runtime_instance_id": "rtinst_pi_boundary",
             "timeline_anchor": { "terminal_leaf_id": "terminal_leaf" }
         }
@@ -1554,15 +1503,10 @@ async fn first_pi_turn_accepts_a_null_previous_leaf_when_that_turn_was_precreate
         .unwrap();
 
     let started = json!({
-        "event_id": "evt_pi_first_null_started",
         "session_id": session_id,
         "turn_id": turn_id,
-        "source": "agent_adapter",
-        "client_type": "pi",
         "type": "turn.started",
-        "time": "2026-07-15T00:00:01Z",
-        "seq": null,
-        "payload": {
+        "data": {
             "runtime_instance_id": "rtinst_pi_first_null",
             "timeline_anchor": { "previous_leaf_id": null }
         }
@@ -1625,15 +1569,10 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
         .await
         .unwrap();
     let started = json!({
-        "event_id": "evt_pi_boundary_missing_started",
         "session_id": session_id,
         "turn_id": "turn_pi_boundary_missing",
-        "source": "agent_adapter",
-        "client_type": "pi",
         "type": "turn.started",
-        "time": "2026-07-15T00:00:01Z",
-        "seq": null,
-        "payload": {
+        "data": {
             "runtime_instance_id": "rtinst_pi_boundary_missing",
             "timeline_anchor": { "previous_leaf_id": null }
         }
@@ -1662,9 +1601,10 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
         .find(|entry| entry["fields"]["code"] == "timeline_boundary_capture_failed")
         .expect("structured timeline capture warning");
     assert_eq!(warning["level"], "WARN");
-    assert_eq!(
-        warning["fields"]["event_id"],
-        "evt_pi_boundary_missing_started"
+    assert!(
+        warning["fields"]["event_id"]
+            .as_str()
+            .is_some_and(|event_id| event_id.starts_with("evt_"))
     );
     assert_eq!(warning["fields"]["session_id"], session_id);
     assert_eq!(warning["fields"]["turn_id"], "turn_pi_boundary_missing");

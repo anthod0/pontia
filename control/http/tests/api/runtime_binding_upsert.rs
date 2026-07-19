@@ -324,7 +324,6 @@ fn upsert_body_with_tmux(
         "client_session_dir": "/tmp/pi",
         "client_cwd": workspace,
         "launch_cwd": workspace,
-        "runtime_instance_id": "rtinst_first",
         "start_command": "pi --approve -e /repo/clients/pi",
         "tmux": tmux
     })
@@ -353,7 +352,6 @@ async fn fork_upsert_creates_independent_child_session_with_lineage() {
 
     let mut fork_body = upsert_body(&workspace, Some("%42"));
     fork_body["client_session_key"] = json!("pi_session_fork");
-    fork_body["runtime_instance_id"] = json!("rtinst_fork");
     fork_body["start_kind"] = json!("fork");
     fork_body["parent_session_id"] = json!(parent_session_id);
     fork_body["forked_from_turn_id"] = json!("turn_parent_1");
@@ -437,7 +435,10 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     let session_id = body["session"]["session_id"].as_str().expect("session_id");
     assert!(session_id.starts_with("sess_"));
-    assert_eq!(body["runtime"]["runtime_instance_id"], "rtinst_first");
+    let runtime_instance_id = body["runtime"]["runtime_instance_id"]
+        .as_str()
+        .expect("runtime_instance_id");
+    assert!(runtime_instance_id.starts_with("rtinst_"));
     assert!(
         body["runtime"]["internal_event_url"]
             .as_str()
@@ -465,7 +466,10 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     .await
     .expect("runtime binding");
     assert_eq!(row.get::<String, _>("runtime_kind"), "pi_tui");
-    assert_eq!(row.get::<String, _>("runtime_instance_id"), "rtinst_first");
+    assert_eq!(
+        row.get::<String, _>("runtime_instance_id"),
+        runtime_instance_id
+    );
     assert_eq!(
         row.get::<String, _>("start_command"),
         "pi --approve -e /repo/clients/pi"
@@ -542,7 +546,7 @@ async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
     assert_eq!(tmux_display(&pane_id, "#{@pontia_session_id}"), session_id);
     assert_eq!(
         tmux_display(&pane_id, "#{@pontia_runtime_instance_id}"),
-        "rtinst_first"
+        body["runtime"]["runtime_instance_id"].as_str().unwrap()
     );
 }
 
@@ -562,13 +566,15 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
     let first_session_id = first["session"]["session_id"].as_str().unwrap().to_string();
 
     let mut second_body = upsert_body(&workspace, Some("%99"));
-    second_body["runtime_instance_id"] = json!("rtinst_second");
     second_body["start_command"] = json!("pi --resume");
     let (second_status, second) = post_upsert(state.clone(), second_body).await;
 
     assert_eq!(second_status, StatusCode::OK, "{second:?}");
     assert_eq!(second["session"]["session_id"], first_session_id);
-    assert_eq!(second["runtime"]["runtime_instance_id"], "rtinst_second");
+    assert_eq!(
+        second["runtime"]["runtime_instance_id"],
+        first["runtime"]["runtime_instance_id"]
+    );
 
     let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
         .fetch_one(&state.db())
@@ -581,7 +587,10 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
         .fetch_one(&state.db())
         .await
         .expect("runtime binding");
-    assert_eq!(row.get::<String, _>("runtime_instance_id"), "rtinst_second");
+    assert_eq!(
+        row.get::<String, _>("runtime_instance_id"),
+        second["runtime"]["runtime_instance_id"].as_str().unwrap()
+    );
     assert_eq!(row.get::<String, _>("start_command"), "pi --resume");
     assert_eq!(row.get::<String, _>("tmux_pane_id"), "%99");
 
@@ -608,7 +617,6 @@ async fn upsert_creates_a_new_session_for_a_new_pi_session_key() {
 
     let mut second_request = upsert_body(&workspace, Some("%43"));
     second_request["client_session_key"] = json!("pi_session_456");
-    second_request["runtime_instance_id"] = json!("rtinst_second");
     let (second_status, second) = post_upsert(state.clone(), second_request).await;
 
     assert_eq!(second_status, StatusCode::OK, "{second:?}");
@@ -638,8 +646,7 @@ async fn concurrent_first_upserts_for_one_pi_session_key_reuse_one_session() {
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
     let first_request = upsert_body(&workspace, None);
-    let mut second_request = upsert_body(&workspace, None);
-    second_request["runtime_instance_id"] = json!("rtinst_concurrent_second");
+    let second_request = upsert_body(&workspace, None);
 
     let (first, second) = tokio::join!(
         post_upsert(state.clone(), first_request),
@@ -686,8 +693,7 @@ async fn upsert_rejects_a_runtime_binding_that_disagrees_with_the_agent_binding(
     .await
     .expect("corrupt runtime binding identity");
 
-    let mut retry = upsert_body(&workspace, Some("%99"));
-    retry["runtime_instance_id"] = json!("rtinst_rejected");
+    let retry = upsert_body(&workspace, Some("%99"));
     let (status, body) = post_upsert(state.clone(), retry).await;
 
     assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
@@ -704,7 +710,10 @@ async fn upsert_rejects_a_runtime_binding_that_disagrees_with_the_agent_binding(
             .fetch_one(&state.db())
             .await
             .expect("runtime binding");
-    assert_eq!(runtime_instance_id, "rtinst_first");
+    assert_eq!(
+        runtime_instance_id,
+        first["runtime"]["runtime_instance_id"].as_str().unwrap()
+    );
 }
 
 #[tokio::test]
@@ -727,22 +736,18 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
         "POST",
         "/internal/v1/events",
         Some(json!({
-            "event_id": "evt_upsert_existing_exit",
             "session_id": session_id,
-            "turn_id": null,
-            "source": "agent_client",
-            "client_type": "pi",
             "type": "session.exited",
-            "time": "2026-01-01T00:00:00Z",
-            "seq": null,
-            "payload": { "runtime_instance_id": "rtinst_first", "reason": "quit" }
+            "data": {
+                "runtime_instance_id": first["runtime"]["runtime_instance_id"],
+                "reason": "quit"
+            }
         })),
     )
     .await;
     assert_eq!(exit_status, StatusCode::OK, "{exit:?}");
 
-    let mut second_body = upsert_body(&workspace, Some("%99"));
-    second_body["runtime_instance_id"] = json!("rtinst_second");
+    let second_body = upsert_body(&workspace, Some("%99"));
     let (second_status, second) = post_upsert(state.clone(), second_body).await;
     assert_eq!(second_status, StatusCode::OK, "{second:?}");
     assert_eq!(second["session"]["session_id"], session_id);
@@ -825,15 +830,12 @@ async fn webui_resume_of_manually_bound_tui_appends_pi_session_id_to_start_comma
         "POST",
         "/internal/v1/events",
         Some(json!({
-            "event_id": "evt_manual_tui_exit_before_webui_resume",
             "session_id": session_id,
-            "turn_id": null,
-            "source": "agent_client",
-            "client_type": "pi",
             "type": "session.exited",
-            "time": "2026-01-01T00:00:00Z",
-            "seq": null,
-            "payload": { "runtime_instance_id": "rtinst_first", "reason": "quit" }
+            "data": {
+                "runtime_instance_id": upsert["runtime"]["runtime_instance_id"],
+                "reason": "quit"
+            }
         })),
     )
     .await;
