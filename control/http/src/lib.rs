@@ -18,7 +18,6 @@ pub mod dashboard;
 pub mod external;
 pub mod health;
 pub mod internal;
-pub mod internal_agent_tools;
 pub mod state;
 
 pub async fn serve_with_shutdown_timeout<F>(
@@ -87,10 +86,6 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             "/internal/v1/sessions/{session_id}/current-turn/claim",
             post(internal::claim_current_turn),
         )
-        .route(
-            "/internal/v1/agent-tools/{tool_name}",
-            post(internal_agent_tools::post_agent_tool),
-        )
         .route("/external/v1/auth/validate", get(external::validate_auth))
         .route(
             "/external/v1/sessions",
@@ -152,47 +147,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             "/external/v1/dashboard/events/stream",
             get(external::stream_dashboard_events),
         )
-        .route("/external/v1/dag-tasks", post(external::create_dag_task))
         .route("/external/v1/tasks/{task_id}", get(external::get_task))
         .route(
             "/external/v1/tasks/{task_id}/events",
             get(external::list_task_events),
-        )
-        .route(
-            "/external/v1/tasks/{task_id}/proposals",
-            get(external::list_task_proposals),
-        )
-        .route(
-            "/external/v1/tasks/{task_id}/dag",
-            get(external::get_task_dag),
-        )
-        .route(
-            "/external/v1/tasks/{task_id}/work-items",
-            get(external::list_task_work_items),
-        )
-        .route(
-            "/external/v1/tasks/{task_id}/work-item-runs",
-            get(external::list_task_work_item_runs),
-        )
-        .route(
-            "/external/v1/tasks/{task_id}/signals",
-            get(external::list_task_signals).post(external::create_human_signal),
-        )
-        .route(
-            "/external/v1/tasks/{task_id}/scheduler/tick",
-            post(external::scheduler_tick),
-        )
-        .route(
-            "/external/v1/tasks/{task_id}/provenance",
-            get(external::get_task_provenance),
-        )
-        .route(
-            "/external/v1/tasks/{task_id}/pause",
-            post(external::pause_task),
-        )
-        .route(
-            "/external/v1/tasks/{task_id}/resume",
-            post(external::resume_task),
         )
         .route(
             "/external/v1/tasks/{task_id}/interrupt",

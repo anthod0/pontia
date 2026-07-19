@@ -6,7 +6,6 @@ edition.workspace = true
 [dependencies]
 axum = "0.8"
 dotenvy = "0.15"
-lbug = { workspace = true, optional = true }
 pontia-agent-clients = { path = "../agent-clients" }
 pontia-application = { path = "../application" }
 pontia-config = { path = "../config" }
@@ -30,13 +29,3 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 http-body-util = "0.1"
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
-
-[features]
-default = ["lbug"]
-lbug = [
-    "dep:lbug",
-    "pontia-core/lbug",
-    "pontia-agent-clients/lbug",
-    "pontia-config/lbug",
-    "pontia-runtime/lbug",
-]

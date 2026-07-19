@@ -118,11 +118,6 @@ pub(super) fn write_launch_script(
             }
         },
     };
-    let agent_kind_export = request
-        .agent_kind
-        .as_ref()
-        .map(|agent_kind| format!("export PONTIA_AGENT_KIND={}\n", shell_quote(agent_kind)))
-        .unwrap_or_default();
     let content = format!(
         r#"#!/usr/bin/env sh
 export PONTIA_SESSION_ID={}
@@ -138,7 +133,7 @@ cleanup_pontia_launch_script() {{
   fi
 }}
 trap cleanup_pontia_launch_script EXIT HUP INT TERM
-{}{}
+{}
 cleanup_pontia_launch_script
 {}
 "#,
@@ -148,7 +143,6 @@ cleanup_pontia_launch_script
         shell_quote(&workspace.display().to_string()),
         shell_quote(&pontia_home_for_export()),
         shell_quote(&runtime_paths.log_path.display().to_string()),
-        agent_kind_export,
         log_setup,
         runtime_body,
     );
@@ -222,7 +216,6 @@ mod tests {
             workspace_name: None,
             handle: None,
             role: None,
-            agent_kind: None,
             start_command: None,
         };
 
@@ -262,7 +255,6 @@ mod tests {
             workspace_name: None,
             handle: None,
             role: None,
-            agent_kind: None,
             start_command: Some("pi --resume-user-command".to_string()),
         };
         let script_path = tempdir.path().join("launch.sh");

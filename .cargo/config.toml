@@ -1,11 +1,2 @@
 [build]
 jobs = 2
-rustflags = [
-  "-C", "link-arg=-Wl,-rpath,$ORIGIN/../../.cache/ladybug/lib",
-  "-C", "link-arg=-Wl,-rpath,$ORIGIN/../../../.cache/ladybug/lib",
-]
-
-[env]
-LBUG_SHARED = "1"
-LBUG_LIBRARY_DIR = { value = ".cache/ladybug/lib", relative = true }
-LBUG_INCLUDE_DIR = { value = ".cache/ladybug/include", relative = true }

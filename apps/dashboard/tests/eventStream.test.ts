@@ -39,8 +39,8 @@ test('reconnects the dashboard event stream with the saved cursor', async () => 
     event: {
       event_id: 'evt-1',
       task_id: 'task-new',
-      event_type: 'dag.approved',
-      payload: { proposal_id: 'proposal-1' },
+      event_type: 'task.updated',
+      payload: { source: 'test' },
       created_at: '2026-05-14T00:00:00Z',
     },
   };
@@ -86,8 +86,8 @@ test('notifies dashboard event subscribers when an SSE task event arrives', asyn
     event: {
       event_id: 'evt-1',
       task_id: 'task-new',
-      event_type: 'dag.approved',
-      payload: { proposal_id: 'proposal-1' },
+      event_type: 'task.updated',
+      payload: { source: 'test' },
       created_at: '2026-05-14T00:00:00Z',
     },
   };

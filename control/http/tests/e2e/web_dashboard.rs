@@ -104,7 +104,7 @@ async fn dashboard_spa_fallback_serves_entrypoint_for_nested_routes() {
     for path in [
         "/dashboard/",
         "/dashboard/overview",
-        "/dashboard/tasks/example/dag",
+        "/dashboard/sessions/example",
     ] {
         let response = http::router(
             test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await,

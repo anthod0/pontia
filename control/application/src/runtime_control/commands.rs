@@ -278,7 +278,6 @@ impl RuntimeControlService {
                     workspace_name: runtime_workspace_name,
                     handle: session.handle.clone(),
                     role: session.role.clone(),
-                    agent_kind: pontia_agent_kind(&session.metadata),
                     start_command: self
                         .resume_start_command(session_id, &session.client_type)
                         .await?,
@@ -408,7 +407,6 @@ impl RuntimeControlService {
                 workspace_name: runtime_workspace_name,
                 handle: session.handle.clone(),
                 role: session.role.clone(),
-                agent_kind: pontia_agent_kind(&session.metadata),
                 start_command: self.start_command(session_id).await?,
             },
             prior_restart_count + 1,

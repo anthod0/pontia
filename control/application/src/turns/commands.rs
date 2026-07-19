@@ -71,7 +71,7 @@ impl TurnCommandService {
             None
         };
 
-        let plugin_owns_turn = client_spec.owns_interactive_tmux_turn(&metadata);
+        let plugin_owns_turn = client_spec.owns_interactive_tmux_turn();
 
         if plugin_owns_turn {
             let binding_metadata = self

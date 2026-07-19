@@ -11,7 +11,6 @@ fn runtime_crate_exposes_manager_and_start_types() {
             workspace_name: None,
             handle: None,
             role: None,
-            agent_kind: None,
             start_command: None,
         })
         .expect("generic runtime starts");

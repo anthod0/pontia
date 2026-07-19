@@ -140,57 +140,6 @@ async fn started_event_body(
 }
 
 #[tokio::test]
-async fn dag_planner_inbox_turn_inherits_planning_context() {
-    let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
-    let session_id = create_session_with_body(
-        state.clone(),
-        json!({
-            "client_type": "generic",
-            "metadata": {
-                "dag_managed": true,
-                "dag_planning_role": "planner",
-                "task_id": "task_from_session",
-                "planning": { "phase": "initial" }
-            }
-        }),
-    )
-    .await;
-
-    let (status, body) = post_json(
-        state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
-        None,
-        json!({"input":"approve this plan","metadata":{"source":"dashboard_chat"}}),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::CREATED);
-    let turn_id = body["data"]["inbox_message"]["turn_id"]
-        .as_str()
-        .expect("turn id");
-
-    let (turns_status, turns_body) =
-        get_json(state, &format!("/external/v1/sessions/{session_id}/turns")).await;
-    assert_eq!(turns_status, StatusCode::OK);
-    let turn = turns_body["data"]["turns"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|turn| turn["turn_id"] == turn_id)
-        .expect("dispatched inbox turn");
-    assert_eq!(turn["metadata"]["dag_managed"], true);
-    assert_eq!(turn["metadata"]["dag_planning_role"], "planner");
-    assert_eq!(turn["metadata"]["task_id"], "task_from_session");
-    assert_eq!(turn["metadata"]["planning"]["phase"], "initial");
-    assert_eq!(turn["metadata"]["source"], "dashboard_chat");
-    assert_eq!(
-        turn["metadata"]["inbox_message_id"],
-        body["data"]["inbox_message"]["message_id"]
-    );
-}
-
-#[tokio::test]
 async fn idle_after_idle_inbox_message_dispatches_immediately() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;

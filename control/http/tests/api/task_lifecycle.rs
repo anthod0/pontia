@@ -16,7 +16,7 @@ async fn task_events_endpoint_returns_task_lifecycle_history() {
         "INSERT INTO task_events (event_id, task_id, event_type, payload) VALUES ('evt_test_task_history', ?, 'task.created', ?)",
     )
     .bind(&task_id)
-    .bind(json!({"mode":"dag"}).to_string())
+    .bind(json!({"source":"test"}).to_string())
     .execute(&state.db())
     .await
     .expect("insert task event");

@@ -3,17 +3,17 @@ import { buildAgentProfileInput, createAgentProfileDraft, createAgentProfileDraf
 import type { AgentProfileView } from '../src/api/types.ts';
 
 const profile: AgentProfileView = {
-  profile_id: 'planner',
+  profile_id: 'reviewer',
   version: 'v1',
-  name: 'Planner',
-  description: 'Plans work',
+  name: 'Reviewer',
+  description: 'Reviews work',
   supported_client_types: ['pi'],
-  agent_kind: 'planner',
+  agent_kind: 'executor',
   system_prompt_template: 'system',
   turn_prompt_template: 'turn',
-  default_session_role: 'planner',
-  default_session_description: 'planning session',
-  handle_prefix: 'plan',
+  default_session_role: 'reviewer',
+  default_session_description: 'review session',
+  handle_prefix: 'review',
   expected_output_schema: '{"type":"object"}',
   artifact_contract: { kind: 'patch' },
   default_execution_policy: { timeout: 60 },
@@ -29,11 +29,11 @@ const profile: AgentProfileView = {
 test('creates a version draft by copying the current profile and clearing only the version', () => {
   const draft = createAgentProfileDraftFromProfile(profile, { clearVersion: true });
 
-  expect(draft.profile_id).toBe('planner');
+  expect(draft.profile_id).toBe('reviewer');
   expect(draft.version).toBe('');
-  expect(draft.name).toBe('Planner');
+  expect(draft.name).toBe('Reviewer');
   expect(draft.supported_client_types_text).toBe('pi');
-  expect(draft.agent_kind).toBe('planner');
+  expect(draft.agent_kind).toBe('executor');
   expect(draft.artifact_contract_text).toMatch(/"kind": "patch"/);
 });
 

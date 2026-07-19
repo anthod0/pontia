@@ -324,7 +324,6 @@
             <Label for="profile-agent-kind">Agent kind</Label>
             <select id="profile-agent-kind" bind:value={draft.agent_kind} class="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs">
               <option value="executor">executor</option>
-              <option value="planner">planner</option>
             </select>
           </div>
           <div class="space-y-2">

@@ -20,11 +20,11 @@ const session = (overrides) => ({
 });
 
 test('uses handle and role as the primary session display title', () => {
-  expect(sessionDisplayTitle(session({ handle: '@planner', role: 'execution reviewer', session_id: 'sess_abcdef123456' }))).toBe('@planner · execution reviewer');
+  expect(sessionDisplayTitle(session({ handle: '@reviewer', role: 'execution reviewer', session_id: 'sess_abcdef123456' }))).toBe('@reviewer · execution reviewer');
 });
 
 test('falls back to handle, role, then an untitled client session label in display title', () => {
-  expect(sessionDisplayTitle(session({ handle: '@planner', role: null }))).toBe('@planner');
+  expect(sessionDisplayTitle(session({ handle: '@reviewer', role: null }))).toBe('@reviewer');
   expect(sessionDisplayTitle(session({ session_id: 'active-old', handle: null, role: 'reviewer' }))).toBe('reviewer · active-old');
   expect(sessionDisplayTitle(session({ session_id: 'active-old', client_type: 'pi', handle: null, role: null }))).toBe('Untitled pi session');
 });

@@ -33,8 +33,4 @@ pub enum Error {
 
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-
-    #[cfg(feature = "lbug")]
-    #[error("lbug graph database error: {0}")]
-    Lbug(#[from] lbug::Error),
 }

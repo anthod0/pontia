@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
 mod agent_bindings;
+mod agent_profiles;
 pub mod app;
 mod events;
 mod git_status;
@@ -35,6 +36,10 @@ pub mod workspaces;
 pub use agent_bindings::{
     AgentBinding, AgentBindingCurrentTurn, AgentBindingService, AgentBindingSessionContext,
     UpsertAgentBindingRequest,
+};
+pub use agent_profiles::{
+    AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView,
+    UpsertExecutionProfileRequest,
 };
 pub use app::{AppState, initialize};
 pub(crate) use events::nested_string;

@@ -35,7 +35,6 @@ mod tests {
             workspace_name: Some("Pontia App".to_string()),
             handle: Some("@main".to_string()),
             role: Some("coder".to_string()),
-            agent_kind: None,
             start_command: None,
         });
 
@@ -51,7 +50,6 @@ mod tests {
             workspace_name: None,
             handle: None,
             role: None,
-            agent_kind: None,
             start_command: None,
         });
 

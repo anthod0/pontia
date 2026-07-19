@@ -10,7 +10,7 @@ function taskEvent(taskId: string): DashboardStreamEvent {
     event: {
       event_id: `event-${taskId}`,
       task_id: taskId,
-      event_type: 'dag.work_item_completed',
+      event_type: 'task.updated',
       payload: {},
       created_at: '2026-05-14T00:00:00Z',
     },

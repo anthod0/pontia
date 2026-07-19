@@ -5,8 +5,6 @@ mod dispatch;
 mod persistence;
 mod validation;
 
-pub(crate) use validation::pontia_agent_kind;
-
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct CreateSessionRequest {
     #[serde(default = "default_client_type")]

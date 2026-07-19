@@ -14,7 +14,6 @@ It aims to provide:
 
 - **Real agent TUI runtime** — use real agent TUIs as runtimes instead of short-lived subprocess prompts, allowing sessions to stay alive for a long time while preserving official client behavior.
 - **One long-lived session, control from anywhere** — start, continue, observe, or steer the same agent session from desktop, Web, mobile, or TUI surfaces.
-- **Observable long-running tasks** — let agents plan large tasks as DAGs, then expose each planning and implementation node so developers can understand, intervene, retry, and repair the work.
 
 In short: `pontia` keeps official agent work alive, visible, controllable, and fixable.
 
@@ -25,7 +24,6 @@ Pontia is experimental and intended for local development use. The current relea
 - pi as the active agent client integration;
 - session creation, conversation, termination, and resume;
 - a Web Dashboard for viewing and controlling sessions;
-- basic structured task planning and execution;
 - tmux-backed sessions for Web-based input.
 
 Some workflows are incomplete, and configuration or data formats may change without notice.
@@ -35,7 +33,6 @@ Some workflows are incomplete, and configuration or data formats may change with
 - [x] pi client integration
 - [x] Basic Web Dashboard
 - [x] Session creation, conversation, termination, and resume
-- [x] Basic structured task planning and execution
 - [x] Reliable bidirectional control across supported interfaces
 - [ ] Human approval and review workflows
 - [ ] Improved support for long-running tasks
@@ -67,7 +64,7 @@ pnpm --dir=apps/dashboard run build
 
 `pontia` reads configuration only from `$PONTIA_HOME/config.toml` (default `~/.pontia/config.toml`) plus non-path environment variable overrides.
 
-Set `PONTIA_HOME` to move the whole pontia home root; the database, graph data, logs, and dashboard cache live under that root.
+Set `PONTIA_HOME` to move the whole pontia home root; the database, logs, and dashboard cache live under that root.
 
 Minimal example:
 

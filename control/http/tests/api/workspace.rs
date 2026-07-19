@@ -4,7 +4,6 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_application::{AppState, FilePickerConfig, WorkspaceBrowserConfig, WorkspaceRootConfig};
-use pontia_config::GraphRuntimeConfig;
 use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -24,7 +23,6 @@ async fn test_state_with_file_picker(
     TestApp::builder()
         .database_name("workspace_api.db")
         .external_api_token(Some(TOKEN.to_string()))
-        .graph(GraphRuntimeConfig::default())
         .workspace_browser(WorkspaceBrowserConfig { roots })
         .file_picker(file_picker)
         .build_state()

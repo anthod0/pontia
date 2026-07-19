@@ -13,7 +13,3 @@ time = { workspace = true, features = ["formatting"] }
 
 [dev-dependencies]
 tempfile = "3"
-
-[features]
-default = ["lbug"]
-lbug = ["pontia-core/lbug", "pontia-agent-clients/lbug", "pontia-config/lbug"]

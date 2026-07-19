@@ -11,27 +11,7 @@ const EXECUTION_PROFILE_COLUMNS: &str = r#"profile_id, version, name, descriptio
           created_at, updated_at"#;
 
 #[derive(Debug, Clone)]
-pub struct ExecutionProfileUpsertRecord {
-    pub profile_id: String,
-    pub version: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub supported_client_types: String,
-    pub agent_kind: String,
-    pub system_prompt_template: Option<String>,
-    pub turn_prompt_template: Option<String>,
-    pub default_session_role: Option<String>,
-    pub default_session_description: Option<String>,
-    pub handle_prefix: Option<String>,
-    pub expected_output_schema: Option<String>,
-    pub artifact_contract: String,
-    pub default_execution_policy: String,
-    pub default_review_policy: String,
-    pub metadata: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct ExecutionProfileUpdateRecord {
+pub struct ExecutionProfileWriteRecord {
     pub profile_id: String,
     pub version: String,
     pub name: String,
@@ -60,7 +40,7 @@ impl SqliteAgentProfileRepository {
         Self { pool }
     }
 
-    pub async fn insert_version(&self, record: ExecutionProfileUpsertRecord) -> Result<()> {
+    pub async fn insert_version(&self, record: ExecutionProfileWriteRecord) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO execution_profiles (
                     profile_id, version, name, description, supported_client_types, agent_kind,
@@ -91,7 +71,7 @@ impl SqliteAgentProfileRepository {
         Ok(())
     }
 
-    pub async fn update_version(&self, record: ExecutionProfileUpdateRecord) -> Result<()> {
+    pub async fn update_version(&self, record: ExecutionProfileWriteRecord) -> Result<()> {
         sqlx::query(
             r#"UPDATE execution_profiles
                SET name = ?, description = ?, supported_client_types = ?, agent_kind = ?,

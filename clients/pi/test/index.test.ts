@@ -556,10 +556,10 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("registers pi lifecycle handlers without DAG agent tools", () => {
+  test("registers pi lifecycle handlers without custom tools", () => {
     const { pi } = fakePi();
     createPontiaPiExtension(pi as any, {
-      env: { PONTIA_AGENT_KIND: "planner" },
+      env: {},
       loadContext: vi.fn(),
       makeReporter: vi.fn(),
       logDiagnostic: vi.fn(),
@@ -645,10 +645,10 @@ describe("pontia pi extension lifecycle", () => {
   test("appends profile system prompt from external API before agent starts", async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.endsWith("/external/v1/sessions/sess_1")) {
-        return new Response(JSON.stringify({ data: { session: { execution_profile_id: "planner", execution_profile_version: "1" } } }), { status: 200 });
+        return new Response(JSON.stringify({ data: { session: { execution_profile_id: "reviewer", execution_profile_version: "1" } } }), { status: 200 });
       }
-      if (url.endsWith("/external/v1/agent-profiles/planner/versions/1")) {
-        return new Response(JSON.stringify({ data: { agent_profile: { system_prompt_template: "Planner instructions" } } }), { status: 200 });
+      if (url.endsWith("/external/v1/agent-profiles/reviewer/versions/1")) {
+        return new Response(JSON.stringify({ data: { agent_profile: { system_prompt_template: "Reviewer instructions" } } }), { status: 200 });
       }
       return new Response("not found", { status: 404 });
     });
@@ -661,7 +661,7 @@ describe("pontia pi extension lifecycle", () => {
 
     const result = await handlers.before_agent_start({ systemPrompt: "Base prompt" }, {});
 
-    expect(result).toEqual({ systemPrompt: "Base prompt\n\nPlanner instructions" });
+    expect(result).toEqual({ systemPrompt: "Base prompt\n\nReviewer instructions" });
     expect(fetchImpl).toHaveBeenCalledWith("http://localhost/external/v1/sessions/sess_1", expect.objectContaining({ headers: { Authorization: "Bearer token" } }));
   });
 

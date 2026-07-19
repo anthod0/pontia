@@ -67,7 +67,6 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
             workspace_name: None,
             handle: None,
             role: None,
-            agent_kind: None,
             start_command: None,
         })
         .expect("start session");
@@ -127,7 +126,6 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
             workspace_name: None,
             handle: None,
             role: None,
-            agent_kind: None,
             start_command: None,
         })
         .expect("start session");

@@ -1,6 +1,5 @@
 pub mod agent_bindings;
 pub mod agent_profiles;
-pub mod dag;
 pub mod events;
 pub mod git_status;
 pub mod idempotency;

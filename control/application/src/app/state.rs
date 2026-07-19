@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use pontia_config::{AppConfig, FilePickerConfig, GraphRuntimeConfig};
+use pontia_config::{AppConfig, FilePickerConfig};
 use pontia_core::{domain::DomainEvent, error::Result};
 use pontia_runtime::{set_runtime_bind_addr, set_runtime_config};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
@@ -102,7 +102,6 @@ struct PersistenceState {
 
 struct AppRuntimeState {
     external_api_token: Option<String>,
-    graph: GraphRuntimeConfig,
     workspace_browser: WorkspaceBrowserConfig,
     file_picker: FilePickerConfig,
 }
@@ -122,7 +121,6 @@ struct IntegrationState {
 pub struct AppStateBuilder {
     db: sqlx::SqlitePool,
     external_api_token: Option<String>,
-    graph: GraphRuntimeConfig,
     workspace_browser: WorkspaceBrowserConfig,
     file_picker: FilePickerConfig,
     shutdown: ShutdownSignal,
@@ -135,7 +133,6 @@ impl AppState {
         AppStateBuilder {
             db,
             external_api_token: None,
-            graph: GraphRuntimeConfig::default(),
             workspace_browser: WorkspaceBrowserConfig::default(),
             file_picker: FilePickerConfig::default(),
             shutdown: ShutdownSignal::default(),
@@ -150,10 +147,6 @@ impl AppState {
 
     pub fn external_api_token(&self) -> Option<&str> {
         self.inner.config.external_api_token.as_deref()
-    }
-
-    pub fn graph(&self) -> GraphRuntimeConfig {
-        self.inner.config.graph.clone()
     }
 
     pub fn workspace_browser(&self) -> WorkspaceBrowserConfig {
@@ -176,10 +169,6 @@ impl AppState {
         self.inner.integrations.git_refresh.clone()
     }
 
-    pub fn with_graph(&self, graph: GraphRuntimeConfig) -> Self {
-        self.rebuild().graph(graph).build()
-    }
-
     pub fn with_external_api_token(&self, external_api_token: Option<String>) -> Self {
         self.rebuild()
             .external_api_token(external_api_token)
@@ -189,7 +178,6 @@ impl AppState {
     fn rebuild(&self) -> AppStateBuilder {
         AppState::builder(self.db())
             .external_api_token(self.inner.config.external_api_token.clone())
-            .graph(self.graph())
             .workspace_browser(self.workspace_browser())
             .file_picker(self.file_picker())
             .shutdown(self.shutdown())
@@ -201,11 +189,6 @@ impl AppState {
 impl AppStateBuilder {
     pub fn external_api_token(mut self, external_api_token: Option<String>) -> Self {
         self.external_api_token = external_api_token;
-        self
-    }
-
-    pub fn graph(mut self, graph: GraphRuntimeConfig) -> Self {
-        self.graph = graph;
         self
     }
 
@@ -240,7 +223,6 @@ impl AppStateBuilder {
                 persistence: PersistenceState { db: self.db },
                 config: AppRuntimeState {
                     external_api_token: self.external_api_token,
-                    graph: self.graph,
                     workspace_browser: self.workspace_browser,
                     file_picker: self.file_picker,
                 },
@@ -292,7 +274,6 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     set_runtime_bind_addr(config.bind_addr);
     Ok(AppState::builder(db)
         .external_api_token(config.external_api_token.clone())
-        .graph(config.graph.clone())
         .workspace_browser(config.workspace_browser.clone())
         .file_picker(config.file_picker.clone())
         .build())

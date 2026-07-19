@@ -4,13 +4,9 @@ import { ApiError } from './errors';
 import type {
   AgentProfileView,
   ApiEnvelope,
-  CreateDagTaskInput,
-  CreateDagTaskResult,
   CreateSessionInput,
   CreateSessionResult,
   EventView,
-  DagProposalView,
-  HumanSignalInput,
   InboxMessageView,
   RegisterWorkspaceInput,
   RenameWorkspaceInput,
@@ -19,10 +15,8 @@ import type {
   TurnTimelineDirection,
   TurnTimelinePage,
   UpsertAgentProfileInput,
-  TaskDagView,
   TaskEventView,
   TaskView,
-  DagSignalView,
   TurnView,
   UpdateSessionInput,
   WorkspaceDirectoryListingView,
@@ -249,36 +243,12 @@ export async function listTasks(): Promise<TaskView[]> {
   return (await request<{ tasks: TaskView[] }>('/tasks')).tasks;
 }
 
-export async function createDagTask(input: CreateDagTaskInput): Promise<CreateDagTaskResult> {
-  return request<CreateDagTaskResult>('/dag-tasks', { method: 'POST', body: input, mutating: true });
-}
-
 export async function getTask(taskId: string): Promise<TaskView> {
   return (await request<{ task: TaskView }>(`/tasks/${taskId}`)).task;
 }
 
 export async function listTaskEvents(taskId: string): Promise<TaskEventView[]> {
   return (await request<{ events: TaskEventView[] }>(`/tasks/${taskId}/events`)).events;
-}
-
-export async function listTaskProposals(taskId: string): Promise<DagProposalView[]> {
-  return (await request<{ proposals: DagProposalView[] }>(`/tasks/${taskId}/proposals`)).proposals;
-}
-
-export async function getTaskDag(taskId: string): Promise<TaskDagView> {
-  return (await request<{ dag: TaskDagView }>(`/tasks/${taskId}/dag`)).dag;
-}
-
-export async function pauseTask(taskId: string): Promise<TaskView> {
-  return (await request<{ task: TaskView }>(`/tasks/${taskId}/pause`, { method: 'POST', mutating: true })).task;
-}
-
-export async function resumeTask(taskId: string): Promise<{ task: TaskView; scheduler: unknown }> {
-  return request<{ task: TaskView; scheduler: unknown }>(`/tasks/${taskId}/resume`, { method: 'POST', mutating: true });
-}
-
-export async function createHumanSignal(taskId: string, input: HumanSignalInput): Promise<DagSignalView> {
-  return (await request<{ signal: DagSignalView }>(`/tasks/${taskId}/signals`, { method: 'POST', body: input, mutating: true })).signal;
 }
 
 export async function interruptTask(taskId: string): Promise<TaskView> {

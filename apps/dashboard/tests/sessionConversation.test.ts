@@ -516,39 +516,3 @@ test('conversation renders assistant loading placeholder when session is startin
   expect(screen.queryByText('Working')).not.toBeInTheDocument();
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });
-
-test('conversation lazy-loads the draft DAG renderer when the draft sheet is opened', async () => {
-  const loadDraftDagFlow = vi.fn(() => new Promise<never>(() => {}));
-
-  render(SessionConversation, {
-    props: {
-      messages,
-      plannerTaskId: 'task-1',
-      draftPlannerProposal: {
-        proposal_id: 'proposal-1',
-        task_id: 'task-1',
-        mode: 'draft',
-        state: 'pending_review',
-        summary: 'Draft plan summary.',
-        proposal_json: {
-          work_items: [{ id: 'item-1', title: 'Inspect repo' }],
-          edges: [],
-        },
-        validation_json: {},
-        created_by_session_id: 'session-1',
-        revision: 1,
-        supersedes_proposal_id: null,
-        created_at: '2026-06-11T00:00:00Z',
-        updated_at: '2026-06-11T00:00:00Z',
-      },
-      loadDraftDagFlow,
-    },
-  });
-
-  expect(loadDraftDagFlow).not.toHaveBeenCalled();
-
-  await fireEvent.click(screen.getByRole('button', { name: /view draft dag/i }));
-
-  expect(loadDraftDagFlow).toHaveBeenCalledTimes(1);
-  expect(await screen.findByText('Loading DAG renderer…')).toBeInTheDocument();
-});

@@ -56,7 +56,7 @@ impl GenericClientTestScope {
         sqlx::query(
             r#"UPDATE execution_profiles
                SET supported_client_types = '["generic"]'
-               WHERE profile_id IN ('default', 'planner', 'replanner', 'implementer', 'reviewer', 'tester', 'debugger')"#,
+               WHERE profile_id = 'default'"#,
         )
         .execute(&state.db())
         .await

@@ -103,7 +103,7 @@ function chatSession(session_id: string, state: string, updated_at: string, pinn
   };
 }
 
-test('sidebar shows session control items and hides overview and DAG task navigation', () => {
+test('sidebar shows session control items and hides obsolete task navigation', () => {
   render(AppSidebarHost);
 
   expect(screen.queryByText('Workflow')).not.toBeInTheDocument();
@@ -118,7 +118,7 @@ test('sidebar shows session control items and hides overview and DAG task naviga
   expect(newChat).not.toBeNull();
   expect(newChat?.querySelector('svg')).toHaveClass('lucide-square-pen');
   expect(workflowQueries.queryByText('Chat')).not.toBeInTheDocument();
-  expect(workflowQueries.queryByText('DAG Tasks')).not.toBeInTheDocument();
+  expect(workflowQueries.queryByText('Tasks')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Session Console')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Workspaces')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Agent Profiles')).not.toBeInTheDocument();

@@ -1,8 +1,6 @@
 use pontia_storage_sqlite::{
     connect_sqlite,
-    repositories::agent_profiles::{
-        ExecutionProfileUpdateRecord, ExecutionProfileUpsertRecord, SqliteAgentProfileRepository,
-    },
+    repositories::agent_profiles::{ExecutionProfileWriteRecord, SqliteAgentProfileRepository},
     run_migrations,
 };
 use serde_json::json;
@@ -17,8 +15,8 @@ async fn test_pool() -> sqlx::SqlitePool {
     pool
 }
 
-fn upsert_record(profile_id: &str, version: &str, name: &str) -> ExecutionProfileUpsertRecord {
-    ExecutionProfileUpsertRecord {
+fn upsert_record(profile_id: &str, version: &str, name: &str) -> ExecutionProfileWriteRecord {
+    ExecutionProfileWriteRecord {
         profile_id: profile_id.to_string(),
         version: version.to_string(),
         name: name.to_string(),
@@ -60,19 +58,19 @@ async fn inserts_updates_and_gets_execution_profile_versions() {
     assert!(inserted.active);
 
     repository
-        .update_version(ExecutionProfileUpdateRecord {
+        .update_version(ExecutionProfileWriteRecord {
             profile_id: "repo-profile".to_string(),
             version: "1".to_string(),
             name: "Repo Profile Edited".to_string(),
             description: None,
             supported_client_types: json!(["pi", "generic"]).to_string(),
-            agent_kind: "planner".to_string(),
+            agent_kind: "executor".to_string(),
             system_prompt_template: None,
             turn_prompt_template: Some("edited turn".to_string()),
             default_session_role: None,
             default_session_description: None,
-            handle_prefix: Some("plan".to_string()),
-            expected_output_schema: Some("dag_v1".to_string()),
+            handle_prefix: Some("review".to_string()),
+            expected_output_schema: Some("free_text".to_string()),
             artifact_contract: json!({}).to_string(),
             default_execution_policy: json!({"allow_file_writes": false}).to_string(),
             default_review_policy: json!({"requires_review": true}).to_string(),
@@ -88,7 +86,7 @@ async fn inserts_updates_and_gets_execution_profile_versions() {
         .expect("profile exists");
     assert_eq!(updated.name, "Repo Profile Edited");
     assert_eq!(updated.description, None);
-    assert_eq!(updated.agent_kind, "planner");
+    assert_eq!(updated.agent_kind, "executor");
     assert_eq!(updated.metadata, json!({"edited": true}).to_string());
 }
 

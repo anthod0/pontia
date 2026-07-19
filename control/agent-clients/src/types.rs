@@ -188,14 +188,9 @@ impl AgentClientSpec {
         self.adapter.tmux_runtime()
     }
 
-    pub fn owns_interactive_tmux_turn(&self, metadata: &serde_json::Value) -> bool {
+    pub fn owns_interactive_tmux_turn(&self) -> bool {
         self.adapter.dispatch == DispatchBehavior::TmuxPaste
             && self.adapter.turn_lifecycle == TurnLifecycleBehavior::ClientManagedForInteractiveTmux
-            && metadata
-                .get("dag_managed")
-                .and_then(serde_json::Value::as_bool)
-                != Some(true)
-            && metadata.get("dag_planning_role").is_none()
     }
 
     pub fn owns_initial_tmux_turn(&self) -> bool {

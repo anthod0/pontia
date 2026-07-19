@@ -105,7 +105,7 @@ async fn generic_runtime_handle_includes_handle_role_and_short_session_id() {
         json!({
             "client_type": "generic",
             "workspace": workspace.path().display().to_string(),
-            "handle": "@planner",
+            "handle": "@reviewer",
             "role": "execution reviewer"
         }),
     )
@@ -116,11 +116,11 @@ async fn generic_runtime_handle_includes_handle_role_and_short_session_id() {
     let short_id = id_body[id_body.len() - 8..].to_string();
 
     assert_eq!(metadata["backend"], "in_process");
-    assert_eq!(metadata["handle"], "@planner");
+    assert_eq!(metadata["handle"], "@reviewer");
     assert_eq!(metadata["role"], "execution reviewer");
     assert_eq!(
         runtime_handle,
-        format!("generic:planner:execution_reviewer:{short_id}")
+        format!("generic:reviewer:execution_reviewer:{short_id}")
     );
     assert!(scope.is_runtime_alive(&runtime_handle));
 }

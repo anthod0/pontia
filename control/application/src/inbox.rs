@@ -27,35 +27,6 @@ pub struct InboxCommandService {
     pool: SqlitePool,
 }
 
-fn inherit_dag_planning_context(turn_metadata: &mut Value, session_metadata: &Value) {
-    if session_metadata.get("dag_managed").and_then(Value::as_bool) != Some(true)
-        || session_metadata
-            .get("dag_planning_role")
-            .and_then(Value::as_str)
-            .is_none()
-    {
-        return;
-    }
-
-    if !turn_metadata.is_object() {
-        *turn_metadata = json!({});
-    }
-    if let Some(turn_object) = turn_metadata.as_object_mut() {
-        copy_dag_planning_context(turn_object, session_metadata);
-    }
-}
-
-fn copy_dag_planning_context(
-    turn_object: &mut serde_json::Map<String, Value>,
-    session_metadata: &Value,
-) {
-    for key in ["dag_managed", "dag_planning_role", "task_id", "planning"] {
-        if let Some(value) = session_metadata.get(key) {
-            turn_object.insert(key.to_string(), value.clone());
-        }
-    }
-}
-
 impl InboxCommandService {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
@@ -294,8 +265,6 @@ impl InboxCommandService {
                 Value::String(message_id.clone()),
             );
         }
-        inherit_dag_planning_context(&mut metadata, &session.metadata);
-
         let rows_affected = inbox_repository.mark_dispatching(&message_id).await?;
         if rows_affected == 0 {
             return Ok(());

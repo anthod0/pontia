@@ -1,8 +1,6 @@
 mod agent_profiles;
 mod auth;
 mod common;
-mod dag;
-mod dag_tasks;
 mod dashboard_events;
 mod events;
 mod git_status;
@@ -20,10 +18,6 @@ pub use agent_profiles::{
 };
 pub use auth::validate_auth;
 pub use common::{ApiResponse, ExternalApiError};
-pub use dag::{
-    get_task_dag, list_task_signals, list_task_work_item_runs, list_task_work_items, scheduler_tick,
-};
-pub use dag_tasks::create_dag_task;
 pub use dashboard_events::stream_dashboard_events;
 pub use events::{stream_session_events, stream_turn_events};
 pub use git_status::{get_workspace_git_status, refresh_workspace_git_status};
@@ -36,10 +30,7 @@ pub use sessions::{
     restart_session, resume_session, terminate_session, unarchive_session, unpin_session,
     update_session,
 };
-pub use tasks::{
-    cancel_task, create_human_signal, create_task, get_task, get_task_provenance, interrupt_task,
-    list_task_events, list_task_proposals, list_tasks, pause_task, resume_task,
-};
+pub use tasks::{cancel_task, create_task, get_task, interrupt_task, list_task_events, list_tasks};
 pub use timeline::get_turn_timeline;
 pub use turns::{get_turn, interrupt_turn, list_session_events, list_turn_events, list_turns};
 pub use workspaces::{

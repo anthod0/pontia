@@ -7,8 +7,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use pontia_application::AppState;
-use pontia_dag::profiles::{AgentProfileService, UpsertExecutionProfileRequest};
+use pontia_application::{AgentProfileService, AppState, UpsertExecutionProfileRequest};
 
 use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key, ok};
 

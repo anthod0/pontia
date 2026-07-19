@@ -68,7 +68,7 @@
       {#if $sessionsLoading}
         <div class="space-y-2"><Skeleton class="h-12 w-full" /><Skeleton class="h-12 w-full" /><Skeleton class="h-12 w-full" /></div>
       {:else if !$sessions.length}
-        <Empty.Root><Empty.Header><Empty.Title>No sessions</Empty.Title><Empty.Description>Start a DAG task or open chat to create a session.</Empty.Description></Empty.Header></Empty.Root>
+        <Empty.Root><Empty.Header><Empty.Title>No sessions</Empty.Title><Empty.Description>Open chat to create a session.</Empty.Description></Empty.Header></Empty.Root>
       {:else if !visibleSessions.length}
         <Empty.Root><Empty.Header><Empty.Title>No {sessionFilter} sessions</Empty.Title><Empty.Description>Switch tabs to inspect other session states.</Empty.Description></Empty.Header></Empty.Root>
       {:else}

@@ -62,7 +62,6 @@ mod tests {
                 workspace_name: None,
                 handle: None,
                 role: None,
-                agent_kind: None,
                 start_command: None,
             })
             .expect("generic runtime should start");
@@ -91,16 +90,15 @@ mod tests {
                 client_type: "generic".to_string(),
                 workspace: None,
                 workspace_name: None,
-                handle: Some("@planner".to_string()),
+                handle: Some("@reviewer".to_string()),
                 role: Some("execution reviewer".to_string()),
-                agent_kind: None,
                 start_command: None,
             })
             .expect("generic runtime should start");
 
         assert_eq!(
             runtime.runtime_handle,
-            "generic:planner:execution_reviewer:90abcdef"
+            "generic:reviewer:execution_reviewer:90abcdef"
         );
     }
 
@@ -114,7 +112,6 @@ mod tests {
             workspace_name: None,
             handle: None,
             role: None,
-            agent_kind: None,
             start_command: None,
         };
 
@@ -186,7 +183,6 @@ mod tests {
                     workspace_name: None,
                     handle: None,
                     role: None,
-                    agent_kind: None,
                     start_command: Some(format!("printf reused > {}", output.display())),
                 },
                 1,
@@ -206,37 +202,5 @@ mod tests {
             .stderr(Stdio::null())
             .status();
         assert_eq!(std::fs::read_to_string(output).expect("output"), "reused");
-    }
-
-    #[test]
-    fn runtime_script_exports_pontia_agent_kind_when_present() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let temp_path = dir.path();
-        let script_path = temp_path.join("launch.sh");
-        let paths = script::RuntimePaths {
-            log_path: &temp_path.join("runtime.log"),
-        };
-
-        script::write_launch_script(
-            &script_path,
-            temp_path,
-            &paths,
-            &RuntimeStartRequest {
-                session_id: "sess_planner".to_string(),
-                client_type: "pi".to_string(),
-                workspace: Some(temp_path.display().to_string()),
-                workspace_name: None,
-                handle: None,
-                role: None,
-                agent_kind: Some("planner".to_string()),
-                start_command: None,
-            },
-            "launch_1",
-            "rtinst_1",
-        )
-        .expect("write launch script");
-
-        let content = std::fs::read_to_string(script_path).expect("launch script");
-        assert!(content.contains("export PONTIA_AGENT_KIND='planner'"));
     }
 }

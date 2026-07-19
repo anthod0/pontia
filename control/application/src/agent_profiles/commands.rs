@@ -1,7 +1,7 @@
 use super::validation::{ensure_not_builtin, is_unique_constraint, validate_request};
 use super::*;
 use pontia_storage_sqlite::repositories::agent_profiles::{
-    ExecutionProfileUpdateRecord, ExecutionProfileUpsertRecord, SqliteAgentProfileRepository,
+    ExecutionProfileWriteRecord, SqliteAgentProfileRepository,
 };
 
 impl AgentProfileService {
@@ -68,7 +68,7 @@ impl AgentProfileService {
         }
 
         let result = SqliteAgentProfileRepository::new(self.pool.clone())
-            .insert_version(execution_profile_upsert_record(&request)?)
+            .insert_version(execution_profile_write_record(&request)?)
             .await;
 
         if let Err(error) = result {
@@ -127,7 +127,7 @@ impl AgentProfileService {
         ensure_not_builtin(&current)?;
 
         SqliteAgentProfileRepository::new(self.pool.clone())
-            .update_version(execution_profile_update_record(&request)?)
+            .update_version(execution_profile_write_record(&request)?)
             .await?;
 
         let profile = self
@@ -225,33 +225,10 @@ impl AgentProfileService {
     }
 }
 
-fn execution_profile_upsert_record(
+fn execution_profile_write_record(
     request: &UpsertExecutionProfileRequest,
-) -> Result<ExecutionProfileUpsertRecord> {
-    Ok(ExecutionProfileUpsertRecord {
-        profile_id: request.profile_id.clone(),
-        version: request.version.clone(),
-        name: request.name.clone(),
-        description: request.description.clone(),
-        supported_client_types: serde_json::to_string(&request.supported_client_types)?,
-        agent_kind: request.agent_kind.clone(),
-        system_prompt_template: request.system_prompt_template.clone(),
-        turn_prompt_template: request.turn_prompt_template.clone(),
-        default_session_role: request.default_session_role.clone(),
-        default_session_description: request.default_session_description.clone(),
-        handle_prefix: request.handle_prefix.clone(),
-        expected_output_schema: request.expected_output_schema.clone(),
-        artifact_contract: serde_json::to_string(&request.artifact_contract)?,
-        default_execution_policy: serde_json::to_string(&request.default_execution_policy)?,
-        default_review_policy: serde_json::to_string(&request.default_review_policy)?,
-        metadata: serde_json::to_string(&request.metadata)?,
-    })
-}
-
-fn execution_profile_update_record(
-    request: &UpsertExecutionProfileRequest,
-) -> Result<ExecutionProfileUpdateRecord> {
-    Ok(ExecutionProfileUpdateRecord {
+) -> Result<ExecutionProfileWriteRecord> {
+    Ok(ExecutionProfileWriteRecord {
         profile_id: request.profile_id.clone(),
         version: request.version.clone(),
         name: request.name.clone(),

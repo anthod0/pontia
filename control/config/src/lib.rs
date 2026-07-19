@@ -20,7 +20,6 @@ pub struct AppConfig {
     pub external_api_token: Option<String>,
     pub run_migrations: bool,
     pub default_client_type: String,
-    pub graph: GraphRuntimeConfig,
     pub workspace_browser: WorkspaceBrowserConfig,
     pub file_picker: FilePickerConfig,
     pub runtime: RuntimeConfig,
@@ -158,12 +157,6 @@ pub struct WorkspaceRootConfig {
     pub path: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct GraphRuntimeConfig {
-    pub enabled: bool,
-    pub db_dir: Option<String>,
-}
-
 fn apply_runtime_env_overrides(vars: &HashMap<String, String>, runtime: &mut RuntimeConfig) {
     for client in agent_clients::AGENT_CLIENTS {
         let Some(tmux_runtime) = client.tmux_runtime() else {
@@ -243,15 +236,6 @@ impl AppConfig {
             .to_string();
         validate_real_default_client_type("PONTIA_DEFAULT_CLIENT_TYPE", &default_client_type)?;
 
-        let graph_enabled = match get(vars, "PONTIA_GRAPH_ENABLED") {
-            Some(value) => parse_bool("PONTIA_GRAPH_ENABLED", value)?,
-            None => true,
-        };
-        let graph = GraphRuntimeConfig {
-            enabled: graph_enabled,
-            db_dir: graph_enabled.then(|| default_graph_db_dir(vars)),
-        };
-
         let workspace_browser = match get(vars, "PONTIA_WORKSPACE_ROOTS") {
             Some(value) => WorkspaceBrowserConfig {
                 roots: parse_workspace_roots(value)?,
@@ -282,7 +266,6 @@ impl AppConfig {
             external_api_token,
             run_migrations,
             default_client_type,
-            graph,
             workspace_browser,
             file_picker,
             runtime,
@@ -357,10 +340,6 @@ fn read_file_config(path: &Path) -> Result<FileConfig> {
         key: "PONTIA_HOME",
         message: format!("failed to parse {}: {err}", path.display()),
     })
-}
-
-fn default_graph_db_dir(vars: &HashMap<String, String>) -> String {
-    pontia_home_string(vars).trim_end_matches('/').to_string() + "/data/graph/lbug"
 }
 
 fn parse_workspace_roots(value: &str) -> Result<Vec<WorkspaceRootConfig>> {

@@ -37,7 +37,7 @@ async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_
            VALUES
            ('sess_b', 'pi', 'B', 'b', 'worker', 'desc b', 'profile', '1', 'ready', NULL,
             '/legacy-b', NULL, ?, '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z'),
-           ('sess_a', 'pi', 'A', 'a', 'planner', 'desc a', 'profile', '1', 'ready', NULL,
+           ('sess_a', 'pi', 'A', 'a', 'reviewer', 'desc a', 'profile', '1', 'ready', NULL,
             '/legacy-a', 'ws_1', ?, '2026-06-15T12:00:00Z', '2026-06-15T12:00:00Z')"#,
     )
     .bind(json!({"model": "grok"}).to_string())
@@ -134,8 +134,8 @@ async fn sqlite_session_repository_finds_active_session_handle_conflicts_only() 
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, handle, workspace_id, state, metadata)
            VALUES
-           ('sess_active', 'pi', 'planner', 'ws_1', 'ready', '{}'),
-           ('sess_exited', 'pi', 'planner', 'ws_2', 'exited', '{}')"#,
+           ('sess_active', 'pi', 'reviewer', 'ws_1', 'ready', '{}'),
+           ('sess_exited', 'pi', 'reviewer', 'ws_2', 'exited', '{}')"#,
     )
     .execute(&pool)
     .await
@@ -145,14 +145,14 @@ async fn sqlite_session_repository_finds_active_session_handle_conflicts_only() 
 
     assert_eq!(
         repository
-            .active_session_id_for_handle("ws_1", "planner")
+            .active_session_id_for_handle("ws_1", "reviewer")
             .await
             .expect("find active handle"),
         Some("sess_active".to_string())
     );
     assert_eq!(
         repository
-            .active_session_id_for_handle("ws_2", "planner")
+            .active_session_id_for_handle("ws_2", "reviewer")
             .await
             .expect("ignore terminal handle"),
         None

@@ -16,7 +16,6 @@ fn loads_config_from_key_value_source() {
         ),
         ("PONTIA_RUN_MIGRATIONS".to_string(), "false".to_string()),
         ("PONTIA_DEFAULT_CLIENT_TYPE".to_string(), "pi".to_string()),
-        ("PONTIA_GRAPH_ENABLED".to_string(), "true".to_string()),
         (
             "PONTIA_WORKSPACE_ROOTS".to_string(),
             "projects|Projects|/home/me/projects;tmp|Temporary|/tmp".to_string(),
@@ -34,11 +33,6 @@ fn loads_config_from_key_value_source() {
     );
     assert!(!config.run_migrations);
     assert_eq!(config.default_client_type, "pi");
-    assert!(config.graph.enabled);
-    assert_eq!(
-        config.graph.db_dir.as_deref(),
-        Some("~/.pontia/data/graph/lbug")
-    );
     assert_eq!(config.workspace_browser.roots.len(), 2);
     assert_eq!(config.workspace_browser.roots[0].root_id, "projects");
     assert_eq!(config.workspace_browser.roots[0].label, "Projects");
@@ -91,22 +85,6 @@ ignore_globs = []
     assert!(config.file_picker.respect_ignore_files);
     assert_eq!(config.file_picker.max_results, 100);
     assert!(config.file_picker.ignore_globs.is_empty());
-}
-
-#[test]
-fn graph_enabled_defaults_db_dir_under_pontia_home() {
-    let vars = HashMap::from([
-        ("PONTIA_HOME".to_string(), "/tmp/pontia".to_string()),
-        ("PONTIA_GRAPH_ENABLED".to_string(), "true".to_string()),
-    ]);
-
-    let config = AppConfig::from_vars(&vars).expect("config should load");
-
-    assert!(config.graph.enabled);
-    assert_eq!(
-        config.graph.db_dir.as_deref(),
-        Some("/tmp/pontia/data/graph/lbug")
-    );
 }
 
 #[test]
@@ -265,10 +243,6 @@ fn pontia_home_overrides_development_default_data_paths() {
         config.database_url,
         "sqlite:///tmp/custom-pontia/data/pontia.db"
     );
-    assert_eq!(
-        config.graph.db_dir.as_deref(),
-        Some("/tmp/custom-pontia/data/graph/lbug")
-    );
 }
 
 #[test]
@@ -321,10 +295,5 @@ fn provides_development_defaults_for_optional_values() {
     assert_eq!(config.dashboard.source, None);
     assert!(config.run_migrations);
     assert_eq!(config.default_client_type, "pi");
-    assert!(config.graph.enabled);
-    assert_eq!(
-        config.graph.db_dir.as_deref(),
-        Some("~/.pontia/data/graph/lbug")
-    );
     assert!(config.workspace_browser.roots.is_empty());
 }

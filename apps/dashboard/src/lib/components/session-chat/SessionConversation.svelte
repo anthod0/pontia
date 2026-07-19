@@ -1,38 +1,20 @@
 <script lang="ts">
-  import { onDestroy, tick, type Component } from 'svelte'
-  import { Bot, Check, Copy, GitBranch } from '@lucide/svelte'
+  import { onDestroy, tick } from 'svelte'
+  import { Bot, Check, Copy } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
-  import * as Sheet from '$lib/components/ui/sheet/index.js'
-  import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { copyText } from '$lib/copyText'
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
-  import type { DagProposalView, JsonObject } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
-
-  type DraftDagFlowProps = {
-    workItems: JsonObject[]
-    edges: JsonObject[]
-  }
-
-  type DraftDagFlowComponent = Component<DraftDagFlowProps>
-
-  const defaultLoadDraftDagFlow = async (): Promise<DraftDagFlowComponent> => {
-    const module = await import('../../../components/dag/DraftDagFlow.svelte')
-    return module.default
-  }
 
   interface Props {
     messages: SessionChatMessage[]
     sessionState?: string | null
     loading?: boolean
-    plannerTaskId?: string | null
-    draftPlannerProposal?: DagProposalView | null
-    draftPlannerProposalLoading?: boolean
     interruptEnabled?: boolean
     interruptBusy?: boolean
     hasMoreHistory?: boolean
@@ -40,16 +22,12 @@
     historyObserverEnabled?: boolean
     onInterrupt?: () => void
     onLoadMoreHistory?: () => void | Promise<void>
-    loadDraftDagFlow?: () => Promise<DraftDagFlowComponent>
   }
 
   let {
     messages,
     sessionState = null,
     loading = false,
-    plannerTaskId = null,
-    draftPlannerProposal = null,
-    draftPlannerProposalLoading = false,
     interruptEnabled: _interruptEnabled = false,
     interruptBusy: _interruptBusy = false,
     hasMoreHistory = false,
@@ -57,21 +35,14 @@
     historyObserverEnabled = false,
     onInterrupt: _onInterrupt,
     onLoadMoreHistory,
-    loadDraftDagFlow = defaultLoadDraftDagFlow,
   }: Props = $props()
   let scrollContainer = $state<HTMLDivElement | null>(null)
-  let draftDagSheetOpen = $state(false)
-  let DraftDagFlowComponent = $state<DraftDagFlowComponent | null>(null)
-  let draftDagFlowLoading = $state(false)
-  let draftDagFlowError = $state<string | null>(null)
-  let draftDagFlowLoadInFlight: Promise<void> | null = null
   let copiedMessageId = $state<string | null>(null)
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const displayMessages = $derived(messages)
   const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
   const displayGroups = $derived(conversationDisplayGroups(displayItems))
   const latestAssistantGroupId = $derived([...displayGroups].reverse().find((group) => group.kind === 'assistant_group')?.id ?? null)
-  const plannerDraftAnchorId = $derived(lastAssistantMessageId(displayMessages))
   const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
   let topHistoryLoadInFlight = false
   let topHistorySentinelVisible = $state(false)
@@ -83,55 +54,10 @@
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
   })
 
-  function lastAssistantMessageId(chatMessages: SessionChatMessage[]): string | null {
-    for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
-      if (chatMessages[index]?.role === 'assistant') return chatMessages[index].id
-    }
-    return null
-  }
-
   function lastEmptyPendingAssistantMessageId(chatMessages: SessionChatMessage[]): string | null {
     const message = chatMessages.at(-1)
     if (message?.role === 'assistant' && message.status === 'pending' && !message.content.trim()) return message.id
     return null
-  }
-
-  function proposalWorkItems(proposal: DagProposalView | null): JsonObject[] {
-    const workItems = proposal?.proposal_json.work_items
-    return Array.isArray(workItems) ? workItems.filter(isJsonObject) : []
-  }
-
-  function proposalEdges(proposal: DagProposalView | null): JsonObject[] {
-    const edges = proposal?.proposal_json.edges
-    return Array.isArray(edges) ? edges.filter(isJsonObject) : []
-  }
-
-  function isJsonObject(value: unknown): value is JsonObject {
-    return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-  }
-
-  function openDraftDagSheet(): void {
-    draftDagSheetOpen = true
-    void ensureDraftDagFlowLoaded()
-  }
-
-  async function ensureDraftDagFlowLoaded(): Promise<void> {
-    if (DraftDagFlowComponent || draftDagFlowLoadInFlight) return
-    draftDagFlowLoading = true
-    draftDagFlowError = null
-    const load = loadDraftDagFlow()
-      .then((component) => {
-        DraftDagFlowComponent = component
-      })
-      .catch((error) => {
-        draftDagFlowError = error instanceof Error ? error.message : 'Unable to load DAG renderer.'
-      })
-      .finally(() => {
-        if (draftDagFlowLoadInFlight === load) draftDagFlowLoadInFlight = null
-        draftDagFlowLoading = false
-      })
-    draftDagFlowLoadInFlight = load
-    await load
   }
 
   async function copyAssistantReply(message: SessionChatMessage): Promise<void> {
@@ -337,33 +263,6 @@
       </Message.Content>
     </Message.Root>
 
-    {#if plannerTaskId && chatMessage.id === plannerDraftAnchorId}
-    <section class="mx-auto w-full max-w-4xl px-4 pb-5" aria-label="Planner draft DAG action">
-      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3">
-        <div class="min-w-0">
-          <p class="text-sm font-medium">Planner draft DAG</p>
-          <p class="truncate text-xs text-muted-foreground">Task {plannerTaskId}</p>
-        </div>
-        {#if draftPlannerProposalLoading}
-          <span class="text-sm text-muted-foreground">Loading proposal…</span>
-        {:else if draftPlannerProposal}
-          {@const draftWorkItems = proposalWorkItems(draftPlannerProposal)}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-label={`View draft DAG for turn ${chatMessage.turnId}`}
-            onclick={openDraftDagSheet}
-          >
-            <GitBranch class="size-4" /> View draft DAG
-            <Badge variant="secondary" class="ml-1">{draftWorkItems.length} items</Badge>
-          </Button>
-        {:else}
-          <span class="text-sm text-muted-foreground">Waiting for proposal…</span>
-        {/if}
-      </div>
-    </section>
-    {/if}
   {/if}
 {/snippet}
 
@@ -404,45 +303,6 @@
     </Conversation.Content>
   {/if}
 </Conversation.Root>
-
-<Sheet.Root bind:open={draftDagSheetOpen}>
-  {#if draftPlannerProposal}
-    {@const draftWorkItems = proposalWorkItems(draftPlannerProposal)}
-    {@const draftEdges = proposalEdges(draftPlannerProposal)}
-    <Sheet.Content class="w-[92vw] gap-0 overflow-hidden p-0 sm:max-w-4xl">
-      <Sheet.Header class="border-b px-6 py-4">
-        <div class="flex flex-wrap items-start justify-between gap-3 pr-10">
-          <div>
-            <Sheet.Title>Planner draft DAG</Sheet.Title>
-            <Sheet.Description>Task {plannerTaskId} · revision {draftPlannerProposal.revision} · {draftPlannerProposal.state}</Sheet.Description>
-          </div>
-          <Badge variant="secondary">{draftPlannerProposal.state}</Badge>
-        </div>
-      </Sheet.Header>
-      <div class="min-h-0 flex-1 overflow-auto px-6 py-4">
-        <p class="text-sm leading-6">{draftPlannerProposal.summary}</p>
-        <div class="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span class="rounded-full bg-muted px-2.5 py-1">{draftWorkItems.length} work items</span>
-          <span class="rounded-full bg-muted px-2.5 py-1">{draftEdges.length} dependencies</span>
-        </div>
-
-        {#if draftWorkItems.length}
-          <div class="mt-4">
-            {#if DraftDagFlowComponent}
-              <DraftDagFlowComponent workItems={draftWorkItems} edges={draftEdges} />
-            {:else if draftDagFlowError}
-              <p class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{draftDagFlowError}</p>
-            {:else if draftDagFlowLoading}
-              <p class="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">Loading DAG renderer…</p>
-            {/if}
-          </div>
-        {:else}
-          <p class="mt-3 text-sm text-muted-foreground">This draft proposal does not include work items.</p>
-        {/if}
-      </div>
-    </Sheet.Content>
-  {/if}
-</Sheet.Root>
 
 <style>
   :global(.chat-turn-tail-space) {

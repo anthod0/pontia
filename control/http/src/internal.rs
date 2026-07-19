@@ -15,7 +15,6 @@ use pontia_core::{
     domain::{DomainEvent, EventType, MAX_TURN_OUTPUT_SUMMARY_CHARS},
     error::Error,
 };
-use pontia_dag::DagRunResultService;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -172,11 +171,6 @@ pub async fn post_event(
 
     let warnings = Vec::new();
     let result = service.ingest_confirmed_event(reported_event).await?;
-    if !result.duplicate {
-        DagRunResultService::with_graph(state.db(), state.graph())
-            .sync_from_turn_event(&event)
-            .await?;
-    }
     let warnings = if result.duplicate {
         Vec::new()
     } else {

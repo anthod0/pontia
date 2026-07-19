@@ -7,7 +7,7 @@ use std::{
 };
 
 use pontia_application::AppState;
-use pontia_config::{FilePickerConfig, GraphRuntimeConfig, WorkspaceBrowserConfig};
+use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use sqlx::SqlitePool;
 
@@ -50,7 +50,6 @@ impl TestApp {
 #[derive(Default)]
 pub struct TestAppBuilder {
     external_api_token: Option<Option<String>>,
-    graph: Option<GraphRuntimeConfig>,
     workspace_browser: Option<WorkspaceBrowserConfig>,
     file_picker: Option<FilePickerConfig>,
     in_memory_db: bool,
@@ -61,11 +60,6 @@ pub struct TestAppBuilder {
 impl TestAppBuilder {
     pub fn external_api_token(mut self, token: Option<String>) -> Self {
         self.external_api_token = Some(token);
-        self
-    }
-
-    pub fn graph(mut self, graph: GraphRuntimeConfig) -> Self {
-        self.graph = Some(graph);
         self
     }
 
@@ -149,9 +143,6 @@ impl TestAppBuilder {
             self.external_api_token
                 .unwrap_or_else(|| Some("test-token".to_string())),
         );
-        if let Some(graph) = self.graph {
-            builder = builder.graph(graph);
-        }
         if let Some(workspace_browser) = self.workspace_browser {
             builder = builder.workspace_browser(workspace_browser);
         }

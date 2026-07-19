@@ -116,9 +116,9 @@ fn custom_profile_body(profile_id: &str, version: &str) -> Value {
         "supported_client_types": ["pi"],
         "agent_kind": "executor",
         "system_prompt_template": "You review API changes.",
-        "turn_prompt_template": "Review {{work_item_id}}: {{title}}",
+        "turn_prompt_template": "Review {{input}}",
         "default_session_role": "API reviewer",
-        "default_session_description": "Reviews backend API WorkItems.",
+        "default_session_description": "Reviews backend API changes.",
         "handle_prefix": "api-review",
         "expected_output_schema": "review_result_v1",
         "artifact_contract": { "produces": ["review"] },
@@ -136,43 +136,17 @@ async fn list_agent_profiles_includes_builtin_latest_profiles() {
 
     assert_eq!(status, StatusCode::OK, "{body}");
     let profiles = body["data"]["agent_profiles"].as_array().unwrap();
-    for expected in ["default", "planner", "replanner", "implementer", "reviewer"] {
-        assert!(
-            profiles
-                .iter()
-                .any(|profile| profile["profile_id"] == expected),
-            "missing {expected}: {profiles:?}"
-        );
-    }
-    for removed in ["tester", "debugger"] {
-        assert!(
-            profiles
-                .iter()
-                .all(|profile| profile["profile_id"] != removed),
-            "removed builtin profile {removed} should not be present: {profiles:?}"
-        );
-    }
+    assert_eq!(
+        profiles.len(),
+        1,
+        "unexpected builtin profiles: {profiles:?}"
+    );
     let default = profiles
         .iter()
         .find(|profile| profile["profile_id"] == "default")
         .unwrap();
-    let planner = profiles
-        .iter()
-        .find(|profile| profile["profile_id"] == "planner")
-        .unwrap();
-    let replanner = profiles
-        .iter()
-        .find(|profile| profile["profile_id"] == "replanner")
-        .unwrap();
-    let implementer = profiles
-        .iter()
-        .find(|profile| profile["profile_id"] == "implementer")
-        .unwrap();
     assert_eq!(default["version"], "1");
     assert_eq!(default["agent_kind"], "executor");
-    assert_eq!(planner["agent_kind"], "planner");
-    assert_eq!(replanner["agent_kind"], "planner");
-    assert_eq!(implementer["agent_kind"], "executor");
     assert!(
         default.get("session_reuse_policy").is_none(),
         "session reuse policy must not be exposed: {default:?}"
@@ -183,13 +157,13 @@ async fn list_agent_profiles_includes_builtin_latest_profiles() {
 async fn get_agent_profile_returns_latest_version() {
     let state = test_state().await;
 
-    let (status, body) = get_json(state, "/external/v1/agent-profiles/replanner").await;
+    let (status, body) = get_json(state, "/external/v1/agent-profiles/default").await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
     let profile = &body["data"]["agent_profile"];
-    assert_eq!(profile["profile_id"], "replanner");
-    assert_eq!(profile["agent_kind"], "planner");
-    assert_eq!(profile["expected_output_schema"], "dag_patch_v1");
+    assert_eq!(profile["profile_id"], "default");
+    assert_eq!(profile["agent_kind"], "executor");
+    assert_eq!(profile["expected_output_schema"], "free_text");
     assert!(
         profile.get("session_reuse_policy").is_none(),
         "session reuse policy must not be exposed: {profile:?}"
@@ -231,10 +205,10 @@ async fn create_agent_profile_persists_and_is_idempotent() {
 }
 
 #[tokio::test]
-async fn create_agent_profile_rejects_unknown_agent_kind() {
+async fn create_agent_profile_rejects_unsupported_agent_kind() {
     let state = test_state().await;
     let mut body = custom_profile_body("invalid-kind", "1");
-    body["agent_kind"] = json!("plannerish");
+    body["agent_kind"] = json!("unsupported");
 
     let (status, response) = post_json(state, "/external/v1/agent-profiles", body, None).await;
 
@@ -442,19 +416,19 @@ async fn deleting_profile_archives_custom_versions_and_hides_latest() {
 #[tokio::test]
 async fn builtin_agent_profiles_cannot_be_updated_or_deleted() {
     let state = test_state().await;
-    let mut body = custom_profile_body("planner", "1");
-    body["name"] = json!("Custom Planner");
+    let mut body = custom_profile_body("default", "1");
+    body["name"] = json!("Custom Default");
 
     let (status, updated) = put_json(
         state.clone(),
-        "/external/v1/agent-profiles/planner/versions/1",
+        "/external/v1/agent-profiles/default/versions/1",
         body,
         None,
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{updated}");
 
-    let (status, deleted) = delete_json(state, "/external/v1/agent-profiles/planner", None).await;
+    let (status, deleted) = delete_json(state, "/external/v1/agent-profiles/default", None).await;
     assert_eq!(status, StatusCode::CONFLICT, "{deleted}");
 }
 

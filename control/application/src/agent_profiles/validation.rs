@@ -11,7 +11,7 @@ pub(super) fn validate_request(request: &UpsertExecutionProfileRequest) -> Resul
             )));
         }
     }
-    if !matches!(request.agent_kind.as_str(), "planner" | "executor") {
+    if request.agent_kind != "executor" {
         return Err(Error::Domain(format!(
             "unsupported agent_kind: {}",
             request.agent_kind

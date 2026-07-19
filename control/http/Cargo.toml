@@ -9,7 +9,6 @@ flate2 = "1"
 pontia-application = { path = "../application", default-features = false }
 pontia-config = { path = "../config", default-features = false }
 pontia-core = { path = "../core", default-features = false }
-pontia-dag = { path = "../dag", default-features = false }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -24,7 +23,6 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 http-body-util = "0.1"
 pontia-agent-clients = { path = "../agent-clients" }
 pontia-application = { path = "../application" }
-pontia-dag = { path = "../dag" }
 pontia-runtime = { path = "../runtime" }
 pontia-storage-sqlite = { path = "../storage-sqlite" }
 sqlx.workspace = true

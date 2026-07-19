@@ -11,7 +11,6 @@ pub struct RuntimeStartRequest {
     pub workspace_name: Option<String>,
     pub handle: Option<String>,
     pub role: Option<String>,
-    pub agent_kind: Option<String>,
     pub start_command: Option<String>,
 }
 

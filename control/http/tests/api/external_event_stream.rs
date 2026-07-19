@@ -59,7 +59,7 @@ async fn seed_task_event(state: &AppState) {
     .expect("insert task");
     sqlx::query(
         r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
-           VALUES ('task_evt_stream_1', 'task_stream_1', 'dag.work_item_completed', '{"work_item_id":"wi_1"}')"#,
+           VALUES ('task_evt_stream_1', 'task_stream_1', 'task.updated', '{"source":"test"}')"#,
     )
     .execute(&state.db())
     .await
@@ -244,7 +244,7 @@ async fn dashboard_event_stream_emits_task_events_after_explicit_zero_cursor() {
     assert!(body.contains("event: dashboard_event"));
     assert!(body.contains(r#""kind":"task_event""#));
     assert!(body.contains(r#""event_id":"task_evt_stream_1""#));
-    assert!(body.contains(r#""event_type":"dag.work_item_completed""#));
+    assert!(body.contains(r#""event_type":"task.updated""#));
 }
 
 #[tokio::test]

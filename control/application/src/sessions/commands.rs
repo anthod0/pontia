@@ -116,7 +116,6 @@ impl SessionCommandService {
             workspace_name: runtime_workspace_name,
             handle: request.handle.clone(),
             role: request.role.clone(),
-            agent_kind: pontia_agent_kind(&request.metadata),
             start_command: None,
         })?;
         self.upsert_runtime_binding(&session_id, &runtime).await?;
