@@ -45,7 +45,7 @@ async fn connects_to_sqlite_and_runs_migrations() {
         .await
         .expect("query migrations");
 
-    assert!(migration_count >= 1);
+    assert_eq!(migration_count, 1);
 
     let ingest_warnings_table_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ingest_warnings'",

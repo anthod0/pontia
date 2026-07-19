@@ -1,24 +1,4 @@
-use std::borrow::Cow;
-
-use pontia_storage_sqlite::connect_sqlite;
-use sqlx::migrate::Migrator;
-
-static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
-
-fn migrator_through(version: i64) -> Migrator {
-    Migrator {
-        migrations: Cow::Owned(
-            MIGRATOR
-                .iter()
-                .filter(|migration| migration.version <= version)
-                .cloned()
-                .collect(),
-        ),
-        ignore_missing: false,
-        locking: true,
-        no_tx: false,
-    }
-}
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 async fn pool() -> sqlx::SqlitePool {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -30,12 +10,9 @@ async fn pool() -> sqlx::SqlitePool {
 }
 
 #[tokio::test]
-async fn migration_leaves_existing_turns_explicitly_unknown_without_backfill() {
+async fn turns_without_topology_are_explicitly_unknown() {
     let pool = pool().await;
-    migrator_through(40)
-        .run(&pool)
-        .await
-        .expect("migrate through 0040");
+    run_migrations(&pool).await.expect("migrate");
 
     sqlx::query(
         "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_old', 'pi', 'idle')",
@@ -56,8 +33,6 @@ async fn migration_leaves_existing_turns_explicitly_unknown_without_backfill() {
     .await
     .unwrap();
 
-    MIGRATOR.run(&pool).await.expect("finish migrations");
-
     let row: (String, Option<String>) = sqlx::query_as(
         "SELECT topology_status, parent_turn_id FROM turns WHERE turn_id = 'turn_old'",
     )
@@ -76,7 +51,7 @@ async fn migration_leaves_existing_turns_explicitly_unknown_without_backfill() {
 #[tokio::test]
 async fn sqlite_enforces_turn_topology_invariants_and_write_once_resolution() {
     let pool = pool().await;
-    MIGRATOR.run(&pool).await.expect("migrate");
+    run_migrations(&pool).await.expect("migrate");
     for session_id in ["sess_a", "sess_b"] {
         sqlx::query(
             "INSERT INTO sessions (session_id, client_type, state) VALUES (?, 'generic', 'idle')",
