@@ -279,6 +279,51 @@ async fn restart_non_terminal_session_runs_new_start_cycle_and_is_idempotent() {
 }
 
 #[tokio::test]
+async fn restart_rejects_replacing_the_runtime_while_a_turn_is_active() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session_id = create_session(state.clone()).await;
+    let turn_id = submit_turn(state.clone(), &session_id).await;
+    let original_runtime_instance_id: String =
+        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+            .bind(&session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("runtime binding");
+
+    let (status, body) = request(
+        state.clone(),
+        "POST",
+        &format!("/external/v1/sessions/{session_id}/restart"),
+        Some(TOKEN),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "state_conflict");
+
+    let persisted_runtime_instance_id: String =
+        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+            .bind(&session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("runtime binding");
+    assert_eq!(persisted_runtime_instance_id, original_runtime_instance_id);
+    let (turn_status, turn_body) = request(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        Some(TOKEN),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(turn_status, StatusCode::OK, "{turn_body:?}");
+    assert_eq!(turn_body["data"]["turn"]["state"], "queued");
+}
+
+#[tokio::test]
 async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;

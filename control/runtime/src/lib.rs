@@ -231,6 +231,7 @@ mod tests {
                 agent_kind: Some("planner".to_string()),
                 start_command: None,
             },
+            "launch_1",
             "rtinst_1",
         )
         .expect("write launch script");

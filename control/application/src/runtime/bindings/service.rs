@@ -134,10 +134,7 @@ impl RuntimeBindingUpsertService {
         let hook_log_metadata_display = hook_log_metadata
             .as_ref()
             .map(|(metadata_key, path)| (*metadata_key, path.display().to_string()));
-        let runtime_instance_id = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .runtime_instance_id(&session_id)
-            .await?
-            .unwrap_or_else(|| new_runtime_instance_id().to_string());
+        let requested_runtime_instance_id = non_empty(request.runtime_instance_id.as_deref());
         let mut confirmed_metadata = binding_metadata(
             &request,
             &workspace.canonical_path,
@@ -149,10 +146,23 @@ impl RuntimeBindingUpsertService {
                 .map(|(metadata_key, path)| (*metadata_key, path.as_str())),
             &capabilities,
         );
+        let mut tx = self.pool.begin().await?;
+        pontia_storage_sqlite::repositories::turns::SqliteTurnRepository::serialize_session_turn_writes_in_tx(
+            &mut tx,
+            &session_id,
+        )
+        .await?;
+        SqliteRuntimeBindingRepository::ensure_runtime_owner_may_write_in_tx(
+            &mut tx,
+            &session_id,
+            requested_runtime_instance_id.as_deref(),
+        )
+        .await?;
+        let runtime_instance_id =
+            requested_runtime_instance_id.unwrap_or_else(|| new_runtime_instance_id().to_string());
         confirmed_metadata["runtime_instance_id"] = json!(runtime_instance_id);
         confirmed_metadata["binding_confirmed"] = json!(true);
-        let mut metadata = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .metadata(&session_id)
+        let mut metadata = SqliteRuntimeBindingRepository::metadata_in_tx(&mut tx, &session_id)
             .await?
             .map(|metadata| serde_json::from_str::<Value>(&metadata))
             .transpose()?
@@ -165,8 +175,9 @@ impl RuntimeBindingUpsertService {
             metadata = confirmed_metadata;
         }
 
-        SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .upsert_binding(RuntimeBindingUpsertRecord {
+        SqliteRuntimeBindingRepository::upsert_binding_in_tx(
+            &mut tx,
+            RuntimeBindingUpsertRecord {
                 session_id: session_id.clone(),
                 runtime_kind: runtime_kind.to_string(),
                 runtime_instance_id: Some(runtime_instance_id.clone()),
@@ -176,8 +187,10 @@ impl RuntimeBindingUpsertService {
                 tmux_socket_path: tmux_socket_path.clone(),
                 tmux_pane_id: tmux_pane_id.clone(),
                 metadata: serde_json::to_string(&metadata)?,
-            })
-            .await?;
+            },
+        )
+        .await?;
+        tx.commit().await?;
 
         if let (Some(socket_path), Some(pane_id)) =
             (tmux_socket_path.as_deref(), tmux_pane_id.as_deref())

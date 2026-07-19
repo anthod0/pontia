@@ -1,5 +1,8 @@
 use super::*;
 use pontia_agent_clients::{ReadinessMode, TerminateBehavior, get_client_spec};
+use pontia_storage_sqlite::repositories::{
+    sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
+};
 
 impl RuntimeControlService {
     pub async fn interrupt_current_turn(
@@ -359,6 +362,20 @@ impl RuntimeControlService {
             .ok_or_else(|| {
                 Error::Domain(format!("unsupported client_type: {}", session.client_type))
             })?;
+        let mut runtime_replacement_tx = self.pool.begin().await?;
+        SqliteTurnRepository::serialize_session_turn_writes_in_tx(
+            &mut runtime_replacement_tx,
+            session_id,
+        )
+        .await?;
+        if SqliteSessionRepository::current_turn_id_in_tx(&mut runtime_replacement_tx, session_id)
+            .await?
+            .is_some()
+        {
+            return Err(Error::StateConflict(format!(
+                "session {session_id} has an active Turn and its runtime cannot be replaced"
+            )));
+        }
         match terminate_behavior {
             TerminateBehavior::TmuxSendKeys(_) => {
                 let tmux_binding = self.tmux_pane_binding(session_id).await?.ok_or_else(|| {
@@ -376,18 +393,6 @@ impl RuntimeControlService {
             }
         }
 
-        let ingest = EventIngestService::new(self.pool.clone());
-        ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
-                session_id.to_string(),
-                None,
-                EventSource::ExternalApi,
-                session.client_type.clone(),
-                EventType::SessionStarting,
-                json!({}),
-            ))
-            .await?;
         let runtime_workspace_name = if let Some(workspace_id) = session.workspace_id.as_deref() {
             get_workspace_record(&self.pool, workspace_id)
                 .await?
@@ -408,7 +413,21 @@ impl RuntimeControlService {
             },
             prior_restart_count + 1,
         )?;
-        self.upsert_runtime_binding(session_id, &runtime).await?;
+        self.upsert_runtime_binding_in_tx(&mut runtime_replacement_tx, session_id, &runtime)
+            .await?;
+        runtime_replacement_tx.commit().await?;
+        let ingest = EventIngestService::new(self.pool.clone());
+        ingest
+            .ingest_event(ReportedEvent::new(
+                new_event_id().to_string(),
+                session_id.to_string(),
+                None,
+                EventSource::ExternalApi,
+                session.client_type.clone(),
+                EventType::SessionStarting,
+                json!({}),
+            ))
+            .await?;
         ingest
             .ingest_event(ReportedEvent::new(
                 new_event_id().to_string(),

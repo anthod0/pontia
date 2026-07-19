@@ -112,13 +112,14 @@ pub enum TurnState {
     Failed,
     Interrupted,
     Cancelled,
+    Abandoned,
 }
 
 impl TurnState {
     pub fn is_terminal(self) -> bool {
         matches!(
             self,
-            Self::Completed | Self::Failed | Self::Interrupted | Self::Cancelled
+            Self::Completed | Self::Failed | Self::Interrupted | Self::Cancelled | Self::Abandoned
         )
     }
 
@@ -136,6 +137,7 @@ impl std::fmt::Display for TurnState {
             Self::Failed => "failed",
             Self::Interrupted => "interrupted",
             Self::Cancelled => "cancelled",
+            Self::Abandoned => "abandoned",
         })
     }
 }
@@ -151,6 +153,7 @@ impl std::str::FromStr for TurnState {
             "failed" => Ok(Self::Failed),
             "interrupted" => Ok(Self::Interrupted),
             "cancelled" => Ok(Self::Cancelled),
+            "abandoned" => Ok(Self::Abandoned),
             _ => Err(Error::Domain(format!("unknown turn state: {value}"))),
         }
     }

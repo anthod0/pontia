@@ -110,7 +110,6 @@ fn normalize_payload(client_type: &str, event_type: EventType, data: Value) -> R
             }
         }),
         EventType::TurnCompleted => json!({
-            "runtime_instance_id": object.get("runtime_instance_id").cloned().unwrap_or(Value::Null),
             "timeline_anchor": {
                 "terminal_leaf_id": object
                     .get("terminal_leaf_id")
@@ -120,7 +119,6 @@ fn normalize_payload(client_type: &str, event_type: EventType, data: Value) -> R
             }
         }),
         EventType::TurnFailed => json!({
-            "runtime_instance_id": object.get("runtime_instance_id").cloned().unwrap_or(Value::Null),
             "failure": {
                 "message": object
                     .get("failure_message")

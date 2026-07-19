@@ -41,7 +41,11 @@ impl EventIngestService {
     }
 
     pub async fn ingest_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
-        self.ingest_domain_event(event.into(), None).await
+        self.ingest_domain_event(event.into(), None, false).await
+    }
+
+    pub async fn ingest_confirmed_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
+        self.ingest_domain_event(event.into(), None, true).await
     }
 
     pub async fn ingest_event_with_topology(
@@ -51,7 +55,7 @@ impl EventIngestService {
     ) -> Result<EventIngestResult> {
         let mut event: DomainEvent = event.into();
         event.topology = Some(topology);
-        self.ingest_domain_event(event, None).await
+        self.ingest_domain_event(event, None, false).await
     }
 
     pub(crate) async fn ingest_event_with_agent_binding(
@@ -59,13 +63,15 @@ impl EventIngestService {
         event: ReportedEvent,
         binding: UpsertAgentBindingRequest,
     ) -> Result<EventIngestResult> {
-        self.ingest_domain_event(event.into(), Some(binding)).await
+        self.ingest_domain_event(event.into(), Some(binding), false)
+            .await
     }
 
     async fn ingest_domain_event(
         &self,
         mut event: DomainEvent,
         initial_agent_binding: Option<UpsertAgentBindingRequest>,
+        enforce_runtime_fence: bool,
     ) -> Result<EventIngestResult> {
         if event.event_type.is_turn_event() && event.turn_id.is_none() {
             return Err(Error::Domain(format!(
@@ -101,7 +107,22 @@ impl EventIngestService {
         };
 
         let mut tx = self.pool.begin().await?;
-        self.enrich_turn_index_in_tx(&mut tx, &mut event).await?;
+        if event.event_type != EventType::SessionCreated {
+            let session_exists =
+                SqliteSessionRepository::session_exists_in_tx(&mut tx, &event.session_id).await?;
+            if session_exists || event.event_type.is_turn_event() || enforce_runtime_fence {
+                SqliteTurnRepository::serialize_session_turn_writes_in_tx(
+                    &mut tx,
+                    &event.session_id,
+                )
+                .await?;
+                if enforce_runtime_fence {
+                    self.ensure_runtime_fence_in_tx(&mut tx, &event).await?;
+                }
+            }
+        }
+        self.enrich_turn_index_in_tx(&mut tx, &mut event, enforce_runtime_fence)
+            .await?;
         let sessions =
             SqliteSessionRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
                 .await?
@@ -423,6 +444,7 @@ impl EventIngestService {
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         event: &mut DomainEvent,
+        require_existing_followup: bool,
     ) -> Result<()> {
         if !event.event_type.is_turn_event() {
             if event.turn_index.is_some() {
@@ -434,14 +456,71 @@ impl EventIngestService {
         }
         let turn_id = event.turn_id.as_deref().expect("validated turn_id");
 
-        SqliteTurnRepository::serialize_session_turn_writes_in_tx(tx, &event.session_id).await?;
-        let persisted =
-            SqliteTurnRepository::turn_index_in_tx(tx, &event.session_id, turn_id).await?;
+        let persisted = SqliteTurnRepository::turn_identity_in_tx(tx, turn_id).await?;
         let turn_index = match persisted {
-            Some(turn_index) => turn_index,
-            None => SqliteTurnRepository::allocate_turn_index_in_tx(tx, &event.session_id).await?,
+            Some(identity) => {
+                if identity.session_id != event.session_id {
+                    return Err(Error::Domain(format!(
+                        "turn {turn_id} belongs to session {}, not {}",
+                        identity.session_id, event.session_id
+                    )));
+                }
+                identity.turn_index
+            }
+            None if event_type_can_create_turn(event.event_type) || !require_existing_followup => {
+                SqliteTurnRepository::allocate_turn_index_in_tx(tx, &event.session_id).await?
+            }
+            None => {
+                return Err(Error::Domain(format!(
+                    "{} references unknown turn {turn_id} in session {}",
+                    event.event_type, event.session_id
+                )));
+            }
         };
         event.turn_index = Some(turn_index);
+        Ok(())
+    }
+
+    async fn ensure_runtime_fence_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        event: &DomainEvent,
+    ) -> Result<()> {
+        if !is_confirmed_runtime_source(event.source)
+            || !runtime_instance_id_required_for_event(event.event_type)
+        {
+            return Ok(());
+        }
+        let expected_runtime_instance_id =
+            SqliteRuntimeBindingRepository::runtime_instance_id_in_tx(tx, &event.session_id)
+                .await?;
+        let Some(expected_runtime_instance_id) = expected_runtime_instance_id else {
+            if event.event_type == EventType::SessionReady {
+                return Err(Error::Domain(format!(
+                    "{} from {} requires a confirmed Runtime binding for session {}",
+                    event.event_type, event.source, event.session_id
+                )));
+            }
+            return Ok(());
+        };
+        let provided_runtime_instance_id = event
+            .payload
+            .get("runtime_instance_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                Error::Domain(format!(
+                    "{} from {} requires payload.runtime_instance_id for runtime-bound session {}",
+                    event.event_type, event.source, event.session_id
+                ))
+            })?;
+        if provided_runtime_instance_id != expected_runtime_instance_id {
+            return Err(Error::Domain(format!(
+                "payload.runtime_instance_id does not match session {} runtime binding",
+                event.session_id
+            )));
+        }
         Ok(())
     }
 
@@ -576,9 +655,7 @@ impl EventIngestService {
             .map(str::trim)
             .filter(|value| !value.is_empty());
 
-        if runtime_instance_id_required_for_event(event.event_type)
-            || event.payload.get("runtime_instance_id").is_some()
-        {
+        if runtime_instance_id_required_for_event(event.event_type) {
             let Some(provided_runtime_instance_id) = provided_runtime_instance_id else {
                 return Err(Error::Domain(format!(
                     "{} from {} requires payload.runtime_instance_id for runtime-bound session {}",
@@ -702,6 +779,13 @@ fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {
     matches!(
         event_type,
         EventType::SessionReady | EventType::SessionExited | EventType::TurnStarted
+    )
+}
+
+fn event_type_can_create_turn(event_type: EventType) -> bool {
+    matches!(
+        event_type,
+        EventType::TurnCreated | EventType::TurnQueued | EventType::TurnStarted
     )
 }
 

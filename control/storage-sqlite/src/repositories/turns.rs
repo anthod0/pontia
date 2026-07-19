@@ -22,6 +22,12 @@ pub struct TurnProjectionUpsertRecord {
     pub metadata: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TurnIdentity {
+    pub session_id: String,
+    pub turn_index: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct SqliteTurnRepository {
     pool: SqlitePool,
@@ -84,6 +90,22 @@ impl SqliteTurnRepository {
                 .fetch_optional(&mut **tx)
                 .await?,
         )
+    }
+
+    pub async fn turn_identity_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        turn_id: &str,
+    ) -> Result<Option<TurnIdentity>> {
+        Ok(sqlx::query_as::<_, (String, i64)>(
+            "SELECT session_id, turn_index FROM turns WHERE turn_id = ?",
+        )
+        .bind(turn_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .map(|(session_id, turn_index)| TurnIdentity {
+            session_id,
+            turn_index,
+        }))
     }
 
     pub async fn allocate_turn_index_in_tx(

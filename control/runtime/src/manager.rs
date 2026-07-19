@@ -4,7 +4,7 @@ use time::format_description::well_known::Rfc3339;
 use pontia_agent_clients::{self as agent_clients, InterruptBehavior, RuntimeBehavior};
 use pontia_core::{
     error::{Error, Result},
-    ids::new_event_id,
+    ids::{new_event_id, new_runtime_instance_id},
     time::utc_now,
 };
 
@@ -67,6 +67,7 @@ impl GenericRuntimeManager {
         let log_path = log_paths.runtime_log.clone();
         let internal_event_url = script::internal_event_url();
         let launch_id = format!("launch_{}", new_event_id());
+        let runtime_instance_id = new_runtime_instance_id().to_string();
         std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -79,6 +80,7 @@ impl GenericRuntimeManager {
             &runtime_paths,
             &request,
             &launch_id,
+            &runtime_instance_id,
         )?;
         let quoted_launch_script_path = script::shell_quote_path(&launch_script_path);
         let launch_command =
@@ -135,6 +137,7 @@ impl GenericRuntimeManager {
             "started_at": started_at,
             "restart_count": restart_count,
             "launch_id": launch_id,
+            "runtime_instance_id": runtime_instance_id,
             "binding_confirmed": false,
             "start_command": start_command,
         });

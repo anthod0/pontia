@@ -1,4 +1,4 @@
-use pontia_core::Result;
+use pontia_core::{Error, Result};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 #[derive(Debug, Clone)]
@@ -31,6 +31,16 @@ impl SqliteRuntimeBindingRepository {
     }
 
     pub async fn upsert_binding(&self, binding: RuntimeBindingUpsertRecord) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        Self::upsert_binding_in_tx(&mut tx, binding).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn upsert_binding_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        binding: RuntimeBindingUpsertRecord,
+    ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO runtime_bindings (
                    session_id,
@@ -64,8 +74,51 @@ impl SqliteRuntimeBindingRepository {
         .bind(binding.tmux_socket_path)
         .bind(binding.tmux_pane_id)
         .bind(binding.metadata)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
+        Ok(())
+    }
+
+    pub async fn upsert_binding_guarded(&self, binding: RuntimeBindingUpsertRecord) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        crate::repositories::turns::SqliteTurnRepository::serialize_session_turn_writes_in_tx(
+            &mut tx,
+            &binding.session_id,
+        )
+        .await?;
+        Self::ensure_runtime_owner_may_write_in_tx(
+            &mut tx,
+            &binding.session_id,
+            binding.runtime_instance_id.as_deref(),
+        )
+        .await?;
+        Self::upsert_binding_in_tx(&mut tx, binding).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn ensure_runtime_owner_may_write_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        session_id: &str,
+        incoming_runtime_instance_id: Option<&str>,
+    ) -> Result<()> {
+        let active_turn_id =
+            crate::repositories::sessions::SqliteSessionRepository::current_turn_id_in_tx(
+                tx, session_id,
+            )
+            .await?;
+        if active_turn_id.is_none() {
+            return Ok(());
+        }
+        let existing_runtime_instance_id = Self::runtime_instance_id_in_tx(tx, session_id).await?;
+        let same_runtime_owner = incoming_runtime_instance_id
+            .zip(existing_runtime_instance_id.as_deref())
+            .is_some_and(|(incoming, existing)| incoming == existing);
+        if !same_runtime_owner {
+            return Err(Error::StateConflict(format!(
+                "session {session_id} has an active Turn and is owned by another runtime"
+            )));
+        }
         Ok(())
     }
 
@@ -107,6 +160,19 @@ impl SqliteRuntimeBindingRepository {
         )
         .bind(session_id)
         .fetch_optional(&self.pool)
+        .await?
+        .flatten())
+    }
+
+    pub async fn runtime_instance_id_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        session_id: &str,
+    ) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar::<_, Option<String>>(
+            "SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?",
+        )
+        .bind(session_id)
+        .fetch_optional(&mut **tx)
         .await?
         .flatten())
     }

@@ -656,6 +656,127 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
 }
 
 #[tokio::test]
+async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let state = test_state().await;
+    let session_id = "sess_delayed_terminal";
+    let session_key = "delayed-terminal";
+    let turn_id = "turn_delayed_terminal";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata) VALUES (?, 'pi_tui', 'rtinst_a', '{}')",
+    )
+    .bind(session_id)
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(
+        &transcript,
+        b"{\"type\":\"model_change\",\"id\":\"previous\",\"parentId\":null}\n",
+    )
+    .unwrap();
+
+    let (started_status, started_body) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.started",
+            "data": {
+                "runtime_instance_id": "rtinst_a",
+                "previous_leaf_id": "previous",
+                "topology_context": { "entries": [
+                    {"id": "previous", "kind": "model_change"}
+                ] }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(started_status, StatusCode::OK, "{started_body:?}");
+
+    fs::write(
+        &transcript,
+        concat!(
+            "{\"type\":\"model_change\",\"id\":\"previous\",\"parentId\":null}\n",
+            "{\"type\":\"message\",\"id\":\"user\",\"parentId\":\"previous\",\"message\":{\"role\":\"user\",\"content\":\"question\"}}\n",
+            "{\"type\":\"message\",\"id\":\"answer\",\"parentId\":\"user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"answer\"}]}}\n",
+        ),
+    )
+    .unwrap();
+    sqlx::query(
+        "UPDATE runtime_bindings SET runtime_instance_id = 'rtinst_b' WHERE session_id = ?",
+    )
+    .bind(session_id)
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let (output_status, output_body) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.output",
+            "data": { "output_summary": "answer" }
+        }),
+    )
+    .await;
+    assert_eq!(output_status, StatusCode::OK, "{output_body:?}");
+
+    let (completed_status, completed_body) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.completed",
+            "data": {
+                "runtime_instance_id": "rtinst_a",
+                "terminal_leaf_id": "answer"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(completed_status, StatusCode::OK, "{completed_body:?}");
+
+    let (timeline_status, timeline_body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+    assert_eq!(timeline_status, StatusCode::OK, "{timeline_body:?}");
+    assert_eq!(timeline_body["data"]["items"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        timeline_body["data"]["items"][0]["content_preview"],
+        "question"
+    );
+    assert_eq!(
+        timeline_body["data"]["items"][1]["content_preview"],
+        "answer"
+    );
+}
+
+#[tokio::test]
 async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_index() {
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();

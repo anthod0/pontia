@@ -55,11 +55,19 @@ pub(super) fn write_ephemeral_launch_script(
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
+    runtime_instance_id: &str,
 ) -> Result<PathBuf> {
     let launch_dir = pontia_home_path_for_export().join("state/launch");
     std::fs::create_dir_all(&launch_dir)?;
     let path = launch_dir.join(format!("{launch_id}.sh"));
-    write_launch_script(&path, workspace, runtime_paths, request, launch_id)?;
+    write_launch_script(
+        &path,
+        workspace,
+        runtime_paths,
+        request,
+        launch_id,
+        runtime_instance_id,
+    )?;
     let mut permissions = std::fs::metadata(&path)?.permissions();
     permissions.set_mode(0o700);
     std::fs::set_permissions(&path, permissions)?;
@@ -72,6 +80,7 @@ pub(super) fn write_launch_script(
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
+    runtime_instance_id: &str,
 ) -> Result<()> {
     let client_spec = agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
         Error::Domain(format!("unsupported client_type: {}", request.client_type))
@@ -118,6 +127,7 @@ pub(super) fn write_launch_script(
         r#"#!/usr/bin/env sh
 export PONTIA_SESSION_ID={}
 export PONTIA_CLIENT_TYPE={}
+export PONTIA_RUNTIME_INSTANCE_ID={}
 export PONTIA_WORKSPACE={}
 export PONTIA_HOME={}
 export PONTIA_RUNTIME_LOG={}
@@ -134,6 +144,7 @@ cleanup_pontia_launch_script
 "#,
         shell_quote(&request.session_id),
         shell_quote(&request.client_type),
+        shell_quote(runtime_instance_id),
         shell_quote(&workspace.display().to_string()),
         shell_quote(&pontia_home_for_export()),
         shell_quote(&runtime_paths.log_path.display().to_string()),
@@ -220,6 +231,7 @@ mod tests {
             tempdir.path(),
             &paths,
             &request,
+            "launch_1",
             "runtime_instance_1",
         )
         .expect("write script");
@@ -230,9 +242,9 @@ mod tests {
             "script was:\n{script}"
         );
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
-        assert!(!script.contains("PONTIA_RUNTIME_INSTANCE_ID"));
+        assert!(script.contains("export PONTIA_RUNTIME_INSTANCE_ID='runtime_instance_1'"));
         assert!(
-            script.contains("session=sess_resume_1 launch=runtime_instance_1"),
+            script.contains("session=sess_resume_1 launch=launch_1"),
             "script was:\n{script}"
         );
     }
@@ -260,6 +272,7 @@ mod tests {
             tempdir.path(),
             &paths,
             &request,
+            "launch_explicit",
             "rtinst_explicit",
         )
         .expect("write launch script");

@@ -566,6 +566,7 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
     let first_session_id = first["session"]["session_id"].as_str().unwrap().to_string();
 
     let mut second_body = upsert_body(&workspace, Some("%99"));
+    second_body["runtime_instance_id"] = first["runtime"]["runtime_instance_id"].clone();
     second_body["start_command"] = json!("pi --resume");
     let (second_status, second) = post_upsert(state.clone(), second_body).await;
 
@@ -599,6 +600,272 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
         .await
         .expect("agent binding count");
     assert_eq!(binding_count, 1);
+}
+
+#[tokio::test]
+async fn upsert_rejects_a_different_runtime_owner_while_a_turn_is_active() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let (first_status, first) =
+        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    assert_eq!(first_status, StatusCode::OK, "{first:?}");
+    let session_id = first["session"]["session_id"].as_str().unwrap();
+    let runtime_instance_id = first["runtime"]["runtime_instance_id"].as_str().unwrap();
+    let (started_status, started) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "type": "turn.started",
+            "data": { "runtime_instance_id": runtime_instance_id }
+        })),
+    )
+    .await;
+    assert_eq!(started_status, StatusCode::OK, "{started:?}");
+
+    let mut replacement = upsert_body(&workspace, Some("%99"));
+    replacement["session_id"] = json!(session_id);
+    let (replacement_status, replacement_body) = post_upsert(state.clone(), replacement).await;
+
+    assert_eq!(
+        replacement_status,
+        StatusCode::CONFLICT,
+        "{replacement_body:?}"
+    );
+    assert_eq!(replacement_body["error"]["code"], "state_conflict");
+    let row = sqlx::query(
+        "SELECT runtime_instance_id, tmux_pane_id FROM runtime_bindings WHERE session_id = ?",
+    )
+    .bind(session_id)
+    .fetch_one(&state.db())
+    .await
+    .expect("runtime binding");
+    assert_eq!(
+        row.get::<String, _>("runtime_instance_id"),
+        runtime_instance_id
+    );
+    assert_eq!(row.get::<String, _>("tmux_pane_id"), "%42");
+
+    let mut same_owner_refresh = upsert_body(&workspace, Some("%77"));
+    same_owner_refresh["session_id"] = json!(session_id);
+    same_owner_refresh["runtime_instance_id"] = json!(runtime_instance_id);
+    let (refresh_status, refresh_body) = post_upsert(state.clone(), same_owner_refresh).await;
+    assert_eq!(refresh_status, StatusCode::OK, "{refresh_body:?}");
+    assert_eq!(
+        refresh_body["runtime"]["runtime_instance_id"],
+        runtime_instance_id
+    );
+}
+
+#[tokio::test]
+async fn current_runtime_exit_abandons_its_active_turn() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let (upsert_status, upsert) =
+        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
+    let session_id = upsert["session"]["session_id"].as_str().unwrap();
+    let runtime_instance_id = upsert["runtime"]["runtime_instance_id"].as_str().unwrap();
+    let (started_status, started) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "type": "turn.started",
+            "data": { "runtime_instance_id": runtime_instance_id }
+        })),
+    )
+    .await;
+    assert_eq!(started_status, StatusCode::OK, "{started:?}");
+    let turn_id = started["turn_id"].as_str().unwrap();
+
+    let (exit_status, exit) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "type": "session.exited",
+            "data": {
+                "runtime_instance_id": runtime_instance_id,
+                "reason": "process_exit"
+            }
+        })),
+    )
+    .await;
+    assert_eq!(exit_status, StatusCode::OK, "{exit:?}");
+
+    let (turn_status, turn_body) = request_json(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(turn_status, StatusCode::OK, "{turn_body:?}");
+    assert_eq!(turn_body["data"]["turn"]["state"], "abandoned");
+    assert_eq!(
+        turn_body["data"]["turn"]["metadata"]["terminal_provenance"]["reason"],
+        "session_exited_without_terminal_fact"
+    );
+    assert_eq!(
+        turn_body["data"]["turn"]["metadata"]["terminal_provenance"]["event_type"],
+        "session.exited"
+    );
+}
+
+#[tokio::test]
+async fn stale_runtime_exit_cannot_exit_the_current_runtime_session() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let (first_status, first) =
+        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    assert_eq!(first_status, StatusCode::OK, "{first:?}");
+    let session_id = first["session"]["session_id"].as_str().unwrap();
+    let runtime_a = first["runtime"]["runtime_instance_id"].as_str().unwrap();
+
+    let mut replacement = upsert_body(&workspace, Some("%99"));
+    replacement["session_id"] = json!(session_id);
+    let (second_status, second) = post_upsert(state.clone(), replacement).await;
+    assert_eq!(second_status, StatusCode::OK, "{second:?}");
+    let runtime_b = second["runtime"]["runtime_instance_id"].as_str().unwrap();
+    assert_ne!(runtime_b, runtime_a);
+
+    let (stale_status, stale_body) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "type": "session.exited",
+            "data": { "runtime_instance_id": runtime_a, "reason": "stale_exit" }
+        })),
+    )
+    .await;
+    assert_eq!(stale_status, StatusCode::BAD_REQUEST, "{stale_body:?}");
+
+    let (session_status, session_body) = request_json(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{session_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(session_status, StatusCode::OK, "{session_body:?}");
+    assert_ne!(session_body["data"]["session"]["state"], "exited");
+}
+
+#[tokio::test]
+async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+    let (upsert_status, upsert) =
+        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
+    let session_id = upsert["session"]["session_id"].as_str().unwrap();
+    let runtime_instance_id = upsert["runtime"]["runtime_instance_id"].as_str().unwrap();
+
+    let (first_started_status, first_started) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "type": "turn.started",
+            "data": { "runtime_instance_id": runtime_instance_id }
+        })),
+    )
+    .await;
+    assert_eq!(first_started_status, StatusCode::OK, "{first_started:?}");
+    let first_turn_id = first_started["turn_id"].as_str().unwrap();
+    let (completed_status, completed) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "turn_id": first_turn_id,
+            "type": "turn.completed",
+            "data": {}
+        })),
+    )
+    .await;
+    assert_eq!(completed_status, StatusCode::OK, "{completed:?}");
+
+    let (second_started_status, second_started) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "type": "turn.started",
+            "data": { "runtime_instance_id": runtime_instance_id }
+        })),
+    )
+    .await;
+    assert_eq!(second_started_status, StatusCode::OK, "{second_started:?}");
+    let second_turn_id = second_started["turn_id"].as_str().unwrap();
+
+    let (retry_status, retry) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "turn_id": first_turn_id,
+            "type": "turn.completed",
+            "data": {}
+        })),
+    )
+    .await;
+    assert_eq!(retry_status, StatusCode::OK, "{retry:?}");
+
+    let (session_status, session_body) = request_json(
+        state.clone(),
+        "GET",
+        &format!("/external/v1/sessions/{session_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(session_status, StatusCode::OK, "{session_body:?}");
+    assert_eq!(
+        session_body["data"]["session"]["current_turn_id"],
+        second_turn_id
+    );
+    let (turn_status, turn_body) = request_json(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/turns/{second_turn_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(turn_status, StatusCode::OK, "{turn_body:?}");
+    assert_eq!(turn_body["data"]["turn"]["state"], "running");
 }
 
 #[tokio::test]

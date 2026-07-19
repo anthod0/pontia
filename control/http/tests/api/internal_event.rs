@@ -218,6 +218,54 @@ async fn internal_event_api_rejects_unknown_sessions_and_missing_followup_turn_i
 }
 
 #[tokio::test]
+async fn internal_event_api_rejects_followups_for_unknown_or_other_session_turns() {
+    let state = test_state().await;
+    create_session(&state, "sess_turn_owner", "pi").await;
+    create_session(&state, "sess_turn_intruder", "pi").await;
+    bind_runtime(&state, "sess_turn_owner", "rtinst_owner").await;
+    bind_runtime(&state, "sess_turn_intruder", "rtinst_intruder").await;
+
+    let (unknown_status, unknown_body) = post_event(
+        state.clone(),
+        json!({
+            "session_id": "sess_turn_owner",
+            "turn_id": "turn_missing",
+            "type": "turn.completed",
+            "data": {}
+        }),
+    )
+    .await;
+    assert_eq!(unknown_status, StatusCode::CONFLICT, "{unknown_body:?}");
+
+    let (started_status, started) = post_event(
+        state.clone(),
+        json!({
+            "session_id": "sess_turn_owner",
+            "type": "turn.started",
+            "data": { "runtime_instance_id": "rtinst_owner" }
+        }),
+    )
+    .await;
+    assert_eq!(started_status, StatusCode::OK, "{started:?}");
+    let turn_id = started["turn_id"].as_str().unwrap();
+    let (cross_session_status, cross_session_body) = post_event(
+        state,
+        json!({
+            "session_id": "sess_turn_intruder",
+            "turn_id": turn_id,
+            "type": "turn.output",
+            "data": { "output_summary": "not mine" }
+        }),
+    )
+    .await;
+    assert_eq!(
+        cross_session_status,
+        StatusCode::CONFLICT,
+        "{cross_session_body:?}"
+    );
+}
+
+#[tokio::test]
 async fn internal_event_api_rejects_client_owned_domain_fields() {
     let state = test_state().await;
     create_session(&state, "sess_owned_fields", "generic").await;

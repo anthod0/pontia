@@ -5,6 +5,7 @@ use serde_json::Value;
 #[serde(deny_unknown_fields)]
 pub struct RuntimeBindingUpsertRequest {
     pub session_id: Option<String>,
+    pub runtime_instance_id: Option<String>,
     pub client_type: String,
     pub client_session_key: String,
     pub client_session_file: Option<String>,

@@ -63,6 +63,31 @@ impl SqliteSessionRepository {
         )
     }
 
+    pub async fn current_turn_id_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        session_id: &str,
+    ) -> Result<Option<String>> {
+        Ok(
+            sqlx::query_scalar("SELECT current_turn_id FROM sessions WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_one(&mut **tx)
+                .await?,
+        )
+    }
+
+    pub async fn session_exists_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        session_id: &str,
+    ) -> Result<bool> {
+        Ok(sqlx::query_scalar::<_, i64>(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?)",
+        )
+        .bind(session_id)
+        .fetch_one(&mut **tx)
+        .await?
+            != 0)
+    }
+
     pub async fn upsert_projection_in_tx(
         tx: &mut Transaction<'_, Sqlite>,
         session: SessionProjectionUpsertRecord,

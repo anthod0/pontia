@@ -171,7 +171,7 @@ pub async fn post_event(
     }
 
     let warnings = Vec::new();
-    let result = service.ingest_event(reported_event).await?;
+    let result = service.ingest_confirmed_event(reported_event).await?;
     if !result.duplicate {
         DagRunResultService::with_graph(state.db(), state.graph())
             .sync_from_turn_event(&event)

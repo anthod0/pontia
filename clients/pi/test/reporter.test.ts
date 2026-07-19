@@ -54,12 +54,14 @@ describe("event builders", () => {
     expect(buildTurnCompletedEvent(context)).toMatchObject({
       turn_id: "turn_1",
       type: "turn.completed",
-      data: { runtime_instance_id: "rtinst_1", terminal_leaf_id: null },
+      data: { terminal_leaf_id: null },
     });
+    expect(buildTurnCompletedEvent(context).data).not.toHaveProperty("runtime_instance_id");
     expect(buildTurnFailedEvent(context, "boom")).toMatchObject({
       type: "turn.failed",
       data: { failure_message: "boom" },
     });
+    expect(buildTurnFailedEvent(context, "boom").data).not.toHaveProperty("runtime_instance_id");
   });
 
   test("truncates turn.output summaries to 200 Unicode characters", () => {

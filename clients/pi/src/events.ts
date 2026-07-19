@@ -280,14 +280,12 @@ export function buildTurnOutputEvent(context: ActiveTurnContext, output: string)
 
 export function buildTurnCompletedEvent(context: ActiveTurnContext, terminalLeafId: string | null = null): InternalEvent {
   return turnFact(context, "turn.completed", {
-    runtime_instance_id: context.runtimeInstanceId,
     terminal_leaf_id: terminalLeafId,
   });
 }
 
 export function buildTurnFailedEvent(context: ActiveTurnContext, message: string, terminalLeafId: string | null = null): InternalEvent {
   return turnFact(context, "turn.failed", {
-    runtime_instance_id: context.runtimeInstanceId,
     failure_message: message,
     terminal_leaf_id: terminalLeafId,
   });

@@ -1016,7 +1016,6 @@ describe("pontia pi extension lifecycle", () => {
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.failed", "session.message_updated"]);
     expect(reported[1].data).toEqual({
-      runtime_instance_id: "rtinst_1",
       failure_message: "model failed",
       terminal_leaf_id: null,
     });

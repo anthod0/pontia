@@ -53,8 +53,8 @@ impl SessionCommandService {
         session_id: &str,
         runtime: &RuntimeStartResult,
     ) -> Result<()> {
-        SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .upsert_binding(RuntimeBindingUpsertRecord {
+        let result = SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .upsert_binding_guarded(RuntimeBindingUpsertRecord {
                 session_id: session_id.to_string(),
                 runtime_kind: runtime.runtime_kind.clone(),
                 runtime_instance_id: runtime.runtime_instance_id().map(ToString::to_string),
@@ -67,7 +67,11 @@ impl SessionCommandService {
                 tmux_pane_id: runtime.tmux_pane_id().map(ToString::to_string),
                 metadata: serde_json::to_string(&runtime.binding_metadata())?,
             })
-            .await
+            .await;
+        if result.is_err() {
+            let _ = self.runtime.terminate_session(&runtime.runtime_handle);
+        }
+        result
     }
 
     pub(super) async fn update_session_workspace(

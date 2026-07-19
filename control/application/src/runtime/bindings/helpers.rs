@@ -134,6 +134,7 @@ mod tests {
         let metadata = binding_metadata(
             &RuntimeBindingUpsertRequest {
                 session_id: None,
+                runtime_instance_id: None,
                 client_type: "custom".to_string(),
                 client_session_key: "client-session".to_string(),
                 client_session_file: None,

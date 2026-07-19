@@ -55,6 +55,9 @@ export async function bindManualSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       ...(options.startKind !== "fork" && optionalString(env.PONTIA_SESSION_ID) ? { session_id: optionalString(env.PONTIA_SESSION_ID) } : {}),
+      ...(options.startKind !== "fork" && optionalString(env.PONTIA_SESSION_ID) && optionalString(env.PONTIA_RUNTIME_INSTANCE_ID)
+        ? { runtime_instance_id: optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) }
+        : {}),
       client_type: "pi",
       client_session_key: sessionDetails.clientSessionKey,
       client_session_file: sessionDetails.clientSessionFile,

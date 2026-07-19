@@ -133,7 +133,10 @@ impl ProjectionState {
             }
             EventType::SessionStarted => self.apply_session(event, SessionState::Starting),
             EventType::SessionReady => self.apply_session(event, SessionState::Idle),
-            EventType::SessionExited => self.apply_session(event, SessionState::Exited),
+            EventType::SessionExited => {
+                self.abandon_active_turn_for_session_exit(event);
+                self.apply_session(event, SessionState::Exited)
+            }
             EventType::SessionError => self.apply_session(event, SessionState::Error),
             EventType::SessionTitleUpdated => self.apply_session(
                 event,
@@ -234,6 +237,39 @@ impl ProjectionState {
         }
         session.state_version += 1;
         Ok(())
+    }
+
+    fn abandon_active_turn_for_session_exit(&mut self, event: &DomainEvent) {
+        let Some(turn_id) = self
+            .sessions
+            .get(&event.session_id)
+            .and_then(|session| session.current_turn_id.clone())
+        else {
+            return;
+        };
+        let Some(turn) = self.turns.get_mut(&turn_id) else {
+            return;
+        };
+        if !turn.state.is_active() {
+            return;
+        }
+
+        turn.state = TurnState::Abandoned;
+        turn.state_version += 1;
+        if !turn.metadata.is_object() {
+            turn.metadata = json!({});
+        }
+        if let Some(metadata) = turn.metadata.as_object_mut() {
+            metadata.insert(
+                "terminal_provenance".to_string(),
+                json!({
+                    "event_id": event.event_id,
+                    "event_type": event.event_type.to_string(),
+                    "reason": "session_exited_without_terminal_fact",
+                    "source": "pontia_projection",
+                }),
+            );
+        }
     }
 
     fn apply_context_usage(&mut self, event: &DomainEvent) -> crate::error::Result<()> {
@@ -448,7 +484,10 @@ impl ProjectionState {
                     session.state_version += 1;
                 }
             }
-            TurnState::Completed | TurnState::Failed | TurnState::Cancelled => {
+            TurnState::Completed
+            | TurnState::Failed
+            | TurnState::Cancelled
+            | TurnState::Abandoned => {
                 if session.current_turn_id.as_deref() == Some(turn_id) {
                     session.current_turn_id = None;
                 }
