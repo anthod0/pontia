@@ -1,9 +1,9 @@
 import { stdin as processStdin } from "node:process";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { claimTurnContext, defaultHookLogFile, loadCurrentTurnByClientSession, loadSessionByClientSession, loadSessionContext, type EnvLike, type SessionContext, type TurnContext } from "./context.js";
-import { buildSessionExitedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, newPontiaTurnId, type InternalEvent } from "./events.js";
+import { buildSessionExitedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, type InternalEvent } from "./events.js";
 import { optionalString } from "./internal-api.js";
-import { EventReporter } from "./reporter.js";
+import { EventReporter, type EventReportResult } from "./reporter.js";
 import { bindManualSession, type ClaudeSessionDetails } from "./runtime-binding.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
@@ -21,7 +21,7 @@ export interface ClaudeHookInput {
 }
 
 interface ReporterLike {
-  report(context: { internalEventUrl: string }, event: InternalEvent): Promise<boolean>;
+  report(context: { internalEventUrl: string }, event: InternalEvent): Promise<EventReportResult>;
 }
 
 export interface ClaudeHookDependencies {
@@ -39,8 +39,8 @@ function sessionDetailsFromHook(input: ClaudeHookInput): ClaudeSessionDetails {
   };
 }
 
-function activeTurnContext(context: TurnContext): TurnContext & { turnId: string } {
-  return { ...context, turnId: context.turnId ?? newPontiaTurnId() };
+function activeTurnContext(context: TurnContext): (TurnContext & { turnId: string }) | undefined {
+  return context.turnId ? { ...context, turnId: context.turnId } : undefined;
 }
 
 function failureMessage(input: ClaudeHookInput): string {
@@ -161,8 +161,14 @@ async function handleUserPromptSubmit(input: ClaudeHookInput, deps: RequiredDeps
     }
   }
   if (!context) return;
-  const active = activeTurnContext(context);
-  await deps.makeReporter(logFile).report(active, buildTurnStartedEvent(active));
+  const result = await deps.makeReporter(logFile).report(context, buildTurnStartedEvent(context));
+  if (result.accepted && !result.turnId) {
+    await deps.logDiagnostic(logFile, {
+      level: "error",
+      code: "turn_start_not_normalized",
+      message: "pontia did not return a canonical turn_id for turn.started",
+    });
+  }
 }
 
 async function handleStop(input: ClaudeHookInput, deps: RequiredDeps): Promise<void> {
@@ -174,11 +180,19 @@ async function handleStop(input: ClaudeHookInput, deps: RequiredDeps): Promise<v
     return;
   }
   const context = activeTurnContext(loaded.context);
+  if (!context) {
+    await deps.logDiagnostic(loaded.logFile, {
+      level: "error",
+      code: "current_turn_missing_turn_id",
+      message: "pontia current-turn lookup did not return a canonical turn_id",
+    });
+    return;
+  }
   const reporter = deps.makeReporter(loaded.logFile);
   const output = optionalString(input.last_assistant_message);
   if (output) {
-    const ok = await reporter.report(context, buildTurnOutputEvent(context, output));
-    if (!ok) return;
+    const result = await reporter.report(context, buildTurnOutputEvent(context, output));
+    if (!result.accepted) return;
   }
   await reporter.report(context, buildTurnCompletedEvent(context));
 }
@@ -189,6 +203,14 @@ async function handleStopFailure(input: ClaudeHookInput, deps: RequiredDeps): Pr
   const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey);
   if (!loaded.ok) return;
   const context = activeTurnContext(loaded.context);
+  if (!context) {
+    await deps.logDiagnostic(loaded.logFile, {
+      level: "error",
+      code: "current_turn_missing_turn_id",
+      message: "pontia current-turn lookup did not return a canonical turn_id",
+    });
+    return;
+  }
   await deps.makeReporter(loaded.logFile).report(context, buildTurnFailedEvent(context, failureMessage(input)));
 }
 

@@ -42,7 +42,10 @@ function install(overrides: Partial<Parameters<typeof runClaudeHook>[1]> = {}) {
       env: { PONTIA_HOME: defaultPontiaHome, ...(overrides.env ?? {}) },
       makeReporter: vi.fn(() => ({ report: vi.fn(async (_ctx: unknown, event: InternalEvent) => {
         reported.push(event);
-        return true;
+        return {
+          accepted: true,
+          turnId: event.type === "turn.started" ? "turn_canonical" : event.turn_id,
+        };
       }) })),
       logDiagnostic: vi.fn(async (_logFile: string, entry: unknown) => {
         diagnostics.push(entry);
@@ -65,12 +68,10 @@ describe("pontia claude hook", () => {
 
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
-    expect(reported[0]).toMatchObject({
+    expect(reported[0]).toEqual({
       session_id: "sess_ready",
-      turn_id: null,
-      source: "agent_client",
-      client_type: "claude",
-      payload: {
+      type: "session.ready",
+      data: {
         runtime_instance_id: "rtinst_1",
         client_session_key: "claude_session_1",
         transcript_path: "/tmp/claude/session.jsonl",
@@ -105,7 +106,7 @@ describe("pontia claude hook", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_manual",
-      payload: { client_session_key: "claude_session_1", runtime_instance_id: expect.stringMatching(/^rtinst_/) },
+      data: { client_session_key: "claude_session_1", runtime_instance_id: expect.stringMatching(/^rtinst_/) },
     });
   });
 
@@ -140,16 +141,14 @@ describe("pontia claude hook", () => {
     await runClaudeHook(baseInput({ hook_event_name: "UserPromptSubmit", prompt: "build it" }), deps);
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
-    expect(reported[0]).toMatchObject({
+    expect(reported[0]).toEqual({
       session_id: "sess_1",
-      turn_id: "turn_1",
-      source: "agent_adapter",
-      client_type: "claude",
-      payload: { runtime_instance_id: "rtinst_1", input: { summary: "build it" } },
+      type: "turn.started",
+      data: { runtime_instance_id: "rtinst_1", input: { summary: "build it" } },
     });
   });
 
-  test("UserPromptSubmit accepts managed pending turn without backend turn_id and reports generated turn.started", async () => {
+  test("UserPromptSubmit lets pontia assign the canonical turn_id when the pending context omits it", async () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe("http://localhost/internal/v1/sessions/sess_1/current-turn/claim");
       expect(JSON.parse(String(init?.body))).toMatchObject({ runtime_instance_id: "rtinst_1", client_type: "claude" });
@@ -168,13 +167,11 @@ describe("pontia claude hook", () => {
     await runClaudeHook(baseInput({ hook_event_name: "UserPromptSubmit", prompt: "build it" }), deps);
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
-    expect(reported[0]).toMatchObject({
+    expect(reported[0]).toEqual({
       session_id: "sess_1",
-      source: "agent_adapter",
-      client_type: "claude",
-      payload: { runtime_instance_id: "rtinst_1", input: { summary: "build it" } },
+      type: "turn.started",
+      data: { runtime_instance_id: "rtinst_1", input: { summary: "build it" } },
     });
-    expect(reported[0]?.turn_id).toMatch(/^turn_/);
   });
 
   test("UserPromptSubmit reports managed TUI prompt when no pending backend turn exists", async () => {
@@ -191,13 +188,11 @@ describe("pontia claude hook", () => {
     await runClaudeHook(baseInput({ hook_event_name: "UserPromptSubmit", prompt: "typed in tui" }), deps);
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
-    expect(reported[0]).toMatchObject({
+    expect(reported[0]).toEqual({
       session_id: "sess_1",
-      source: "agent_adapter",
-      client_type: "claude",
-      payload: { runtime_instance_id: "rtinst_1", input: { summary: "typed in tui" } },
+      type: "turn.started",
+      data: { runtime_instance_id: "rtinst_1", input: { summary: "typed in tui" } },
     });
-    expect(reported[0]?.turn_id).toMatch(/^turn_/);
   });
 
   test("Stop resolves current turn by Claude session id, reports final output then completed", async () => {
@@ -220,7 +215,7 @@ describe("pontia claude hook", () => {
     expect(reported[0]).toMatchObject({
       session_id: "sess_1",
       turn_id: "turn_1",
-      payload: { output: { summary: "done" } },
+      data: { output: { summary: "done" } },
     });
   });
 
@@ -255,7 +250,7 @@ describe("pontia claude hook", () => {
     expect(reported[0]).toMatchObject({
       session_id: "sess_1",
       turn_id: "turn_1",
-      payload: { failure: { message: "rate_limited: try later" } },
+      data: { failure: { message: "rate_limited: try later" } },
     });
   });
 
@@ -281,7 +276,7 @@ describe("pontia claude hook", () => {
     expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_manual",
-      payload: { runtime_instance_id: "rtinst_stable", input: { summary: "typed manually" } },
+      data: { runtime_instance_id: "rtinst_stable", input: { summary: "typed manually" } },
     });
   });
 
@@ -293,12 +288,10 @@ describe("pontia claude hook", () => {
     await runClaudeHook(baseInput({ hook_event_name: "SessionEnd", reason: "quit" }), deps);
 
     expect(reported.map((event) => event.type)).toEqual(["session.exited"]);
-    expect(reported[0]).toMatchObject({
+    expect(reported[0]).toEqual({
       session_id: "sess_1",
-      turn_id: null,
-      source: "agent_client",
-      client_type: "claude",
-      payload: { reason: "quit", runtime_instance_id: "rtinst_1" },
+      type: "session.exited",
+      data: { reason: "quit", runtime_instance_id: "rtinst_1" },
     });
   });
 
@@ -320,7 +313,7 @@ describe("pontia claude hook", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.exited"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_manual",
-      payload: { runtime_instance_id: "rtinst_stable", reason: "prompt_input_exit" },
+      data: { runtime_instance_id: "rtinst_stable", reason: "prompt_input_exit" },
     });
   });
 
