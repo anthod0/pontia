@@ -8,33 +8,20 @@ impl AgentProfileService {
     pub async fn create_profile(
         &self,
         request: UpsertExecutionProfileRequest,
-        idempotency_key: Option<&str>,
     ) -> Result<AgentProfileCommandOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(response) = self
-                .idempotency_response("create_agent_profile", key)
-                .await?
-        {
-            return Ok(AgentProfileCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
         if self.profile_exists(&request.profile_id).await? {
             return Err(Error::StateConflict(format!(
                 "execution profile {} already exists; create a new version instead",
                 request.profile_id
             )));
         }
-        self.create_version("create_agent_profile", request, idempotency_key)
-            .await
+        self.create_version(request).await
     }
 
     pub async fn create_profile_version(
         &self,
         profile_id: &str,
         request: UpsertExecutionProfileRequest,
-        idempotency_key: Option<&str>,
     ) -> Result<AgentProfileCommandOutcome> {
         if profile_id != request.profile_id {
             return Err(Error::Domain(format!(
@@ -42,30 +29,14 @@ impl AgentProfileService {
                 request.profile_id
             )));
         }
-        self.create_version(
-            &format!("create_agent_profile_version:{profile_id}"),
-            request,
-            idempotency_key,
-        )
-        .await
+        self.create_version(request).await
     }
 
     pub(super) async fn create_version(
         &self,
-        operation: &str,
         request: UpsertExecutionProfileRequest,
-        idempotency_key: Option<&str>,
     ) -> Result<AgentProfileCommandOutcome> {
         validate_request(&request)?;
-
-        if let Some(key) = idempotency_key
-            && let Some(response) = self.idempotency_response(operation, key).await?
-        {
-            return Ok(AgentProfileCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
 
         let result = SqliteAgentProfileRepository::new(self.pool.clone())
             .insert_version(execution_profile_write_record(&request)?)
@@ -86,10 +57,6 @@ impl AgentProfileService {
             .await?
             .ok_or_else(|| Error::Domain("created execution profile missing".to_string()))?;
         let data = json!({ "agent_profile": profile });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(operation, key, &data)
-                .await?;
-        }
         Ok(AgentProfileCommandOutcome {
             data,
             duplicate: false,
@@ -101,7 +68,6 @@ impl AgentProfileService {
         profile_id: &str,
         version: &str,
         request: UpsertExecutionProfileRequest,
-        idempotency_key: Option<&str>,
     ) -> Result<AgentProfileCommandOutcome> {
         if profile_id != request.profile_id || version != request.version {
             return Err(Error::Domain(
@@ -109,15 +75,6 @@ impl AgentProfileService {
             ));
         }
         validate_request(&request)?;
-        let operation = format!("update_agent_profile_version:{profile_id}:{version}");
-        if let Some(key) = idempotency_key
-            && let Some(response) = self.idempotency_response(&operation, key).await?
-        {
-            return Ok(AgentProfileCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
         let current = self
             .get_version(profile_id, version)
             .await?
@@ -135,10 +92,6 @@ impl AgentProfileService {
             .await?
             .ok_or_else(|| Error::Domain("updated execution profile missing".to_string()))?;
         let data = json!({ "agent_profile": profile });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(&operation, key, &data)
-                .await?;
-        }
         Ok(AgentProfileCommandOutcome {
             data,
             duplicate: false,
@@ -149,17 +102,7 @@ impl AgentProfileService {
         &self,
         profile_id: &str,
         version: &str,
-        idempotency_key: Option<&str>,
     ) -> Result<AgentProfileCommandOutcome> {
-        let operation = format!("archive_agent_profile_version:{profile_id}:{version}");
-        if let Some(key) = idempotency_key
-            && let Some(response) = self.idempotency_response(&operation, key).await?
-        {
-            return Ok(AgentProfileCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
         let current = self
             .get_version(profile_id, version)
             .await?
@@ -177,30 +120,13 @@ impl AgentProfileService {
             .await?
             .ok_or_else(|| Error::Domain("archived execution profile missing".to_string()))?;
         let data = json!({ "agent_profile": profile });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(&operation, key, &data)
-                .await?;
-        }
         Ok(AgentProfileCommandOutcome {
             data,
             duplicate: false,
         })
     }
 
-    pub async fn archive_profile(
-        &self,
-        profile_id: &str,
-        idempotency_key: Option<&str>,
-    ) -> Result<AgentProfileCommandOutcome> {
-        let operation = format!("archive_agent_profile:{profile_id}");
-        if let Some(key) = idempotency_key
-            && let Some(response) = self.idempotency_response(&operation, key).await?
-        {
-            return Ok(AgentProfileCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
+    pub async fn archive_profile(&self, profile_id: &str) -> Result<AgentProfileCommandOutcome> {
         let versions = self.list_versions(profile_id, true).await?;
         if versions.is_empty() {
             return Err(Error::NotFound(format!(
@@ -214,10 +140,6 @@ impl AgentProfileService {
             .archive_active_versions(profile_id)
             .await?;
         let data = json!({ "profile_id": profile_id, "archived_versions": archived_versions });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(&operation, key, &data)
-                .await?;
-        }
         Ok(AgentProfileCommandOutcome {
             data,
             duplicate: false,

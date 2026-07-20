@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use pontia_application::{AppState, InboxCommandService, SubmitInboxMessageRequest};
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key, ok};
+use super::common::{ApiResponse, ExternalApiError, authenticate, idempotent, ok};
 
 pub async fn submit_inbox_message(
     State(state): State<AppState>,
@@ -17,17 +17,38 @@ pub async fn submit_inbox_message(
     Json(request): Json<SubmitInboxMessageRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
     let service = InboxCommandService::new(state.db());
-    let outcome = service
-        .submit_message(&session_id, request, idempotency_key)
-        .await?;
+    let operation = format!("submit_inbox_message:{session_id}");
+    let action_session_id = session_id.clone();
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service
+            .submit_message(&action_session_id, request)
+            .await?
+            .data)
+    })
+    .await?;
     let status = if outcome.duplicate {
         StatusCode::OK
     } else {
         StatusCode::CREATED
     };
-    Ok((status, ok(outcome.data)).into_response())
+    let data = if outcome.duplicate {
+        let message_id = outcome.data["inbox_message"]["message_id"]
+            .as_str()
+            .map(str::to_owned);
+        if let Some(message_id) = message_id {
+            let service = InboxCommandService::new(state.db());
+            match service.get_message(&session_id, &message_id).await? {
+                Some(message) => json!({ "inbox_message": message }),
+                None => outcome.data,
+            }
+        } else {
+            outcome.data
+        }
+    } else {
+        outcome.data
+    };
+    Ok((status, ok(data)).into_response())
 }
 
 pub async fn list_inbox_messages(

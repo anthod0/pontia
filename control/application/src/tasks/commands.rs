@@ -2,22 +2,7 @@ use super::*;
 use pontia_storage_sqlite::repositories::tasks::SqliteTaskRepository;
 
 impl TaskCommandService {
-    pub async fn interrupt_task(
-        &self,
-        task_id: &str,
-        idempotency_key: Option<&str>,
-    ) -> Result<CreateTaskOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(response) = self
-                .idempotency_response(&format!("interrupt_task:{task_id}"), key)
-                .await?
-        {
-            return Ok(CreateTaskOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
-
+    pub async fn interrupt_task(&self, task_id: &str) -> Result<CreateTaskOutcome> {
         let task = ExternalQueryService::new(self.pool.clone())
             .get_task(task_id)
             .await?
@@ -35,39 +20,20 @@ impl TaskCommandService {
         })?;
 
         RuntimeControlService::new(self.pool.clone())
-            .interrupt_turn(&session_id, &turn_id, idempotency_key)
+            .interrupt_turn(&session_id, &turn_id)
             .await?;
         let task = ExternalQueryService::new(self.pool.clone())
             .get_task(task_id)
             .await?
             .ok_or_else(|| Error::Domain("interrupted task missing".to_string()))?;
         let data = json!({ "task": task });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(&format!("interrupt_task:{task_id}"), key, &data)
-                .await?;
-        }
         Ok(CreateTaskOutcome {
             data,
             duplicate: false,
         })
     }
 
-    pub async fn cancel_task(
-        &self,
-        task_id: &str,
-        idempotency_key: Option<&str>,
-    ) -> Result<CreateTaskOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(response) = self
-                .idempotency_response(&format!("cancel_task:{task_id}"), key)
-                .await?
-        {
-            return Ok(CreateTaskOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
-
+    pub async fn cancel_task(&self, task_id: &str) -> Result<CreateTaskOutcome> {
         let task = ExternalQueryService::new(self.pool.clone())
             .get_task(task_id)
             .await?
@@ -79,7 +45,7 @@ impl TaskCommandService {
         }
 
         if task.turn_id.is_some() {
-            return self.interrupt_task(task_id, idempotency_key).await;
+            return self.interrupt_task(task_id).await;
         }
 
         SqliteTaskRepository::new(self.pool.clone())
@@ -96,10 +62,6 @@ impl TaskCommandService {
             .await?
             .ok_or_else(|| Error::Domain("cancelled task missing".to_string()))?;
         let data = json!({ "task": task });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(&format!("cancel_task:{task_id}"), key, &data)
-                .await?;
-        }
         Ok(CreateTaskOutcome {
             data,
             duplicate: false,

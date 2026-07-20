@@ -1,7 +1,6 @@
 use super::*;
 
 mod commands;
-mod idempotency;
 mod models;
 mod queries;
 mod rows;

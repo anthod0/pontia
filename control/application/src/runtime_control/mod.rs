@@ -2,7 +2,6 @@ use super::*;
 use pontia_agent_clients::ReadinessMode;
 
 mod commands;
-mod idempotency;
 mod persistence;
 mod validation;
 

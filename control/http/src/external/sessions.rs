@@ -12,7 +12,7 @@ use pontia_application::{
     SessionCommandService, UpdateSessionRequest,
 };
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key, ok};
+use super::common::{ApiResponse, ExternalApiError, authenticate, idempotent, ok};
 
 pub async fn create_session(
     State(state): State<AppState>,
@@ -20,9 +20,11 @@ pub async fn create_session(
     Json(request): Json<CreateSessionRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
     let service = SessionCommandService::new(state.db());
-    let outcome = service.create_session(request, idempotency_key).await?;
+    let outcome = idempotent(&state, &headers, "create_session", || async move {
+        Ok(service.create_session(request).await?.data)
+    })
+    .await?;
     let status = if outcome.duplicate {
         StatusCode::OK
     } else {
@@ -129,11 +131,12 @@ pub async fn interrupt_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
     let service = RuntimeControlService::new(state.db());
-    let outcome = service
-        .interrupt_current_turn(&session_id, idempotency_key)
-        .await?;
+    let operation = format!("interrupt_current:{session_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service.interrupt_current_turn(&session_id).await?.data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
@@ -143,11 +146,12 @@ pub async fn terminate_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
     let service = RuntimeControlService::new(state.db());
-    let outcome = service
-        .terminate_session(&session_id, idempotency_key)
-        .await?;
+    let operation = format!("terminate_session:{session_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service.terminate_session(&session_id).await?.data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
@@ -157,11 +161,12 @@ pub async fn restart_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
     let service = RuntimeControlService::new(state.db());
-    let outcome = service
-        .restart_session(&session_id, idempotency_key)
-        .await?;
+    let operation = format!("restart_session:{session_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service.restart_session(&session_id).await?.data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
@@ -171,8 +176,11 @@ pub async fn resume_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
     let service = RuntimeControlService::new(state.db());
-    let outcome = service.resume_session(&session_id, idempotency_key).await?;
+    let operation = format!("resume_session:{session_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service.resume_session(&session_id).await?.data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }

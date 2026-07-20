@@ -2,7 +2,6 @@ pub mod agent_bindings;
 pub mod agent_profiles;
 pub mod events;
 pub mod git_status;
-pub mod idempotency;
 pub mod inbox;
 pub mod runtime_bindings;
 pub mod sessions;

@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use pontia_application::{AppState, ExternalQueryService, RuntimeControlService};
 
 use super::common::{
-    ApiResponse, ExternalApiError, authenticate, ensure_session_exists, idempotency_key, ok,
+    ApiResponse, ExternalApiError, authenticate, ensure_session_exists, idempotent, ok,
 };
 
 pub async fn interrupt_turn(
@@ -18,11 +18,12 @@ pub async fn interrupt_turn(
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
     let service = RuntimeControlService::new(state.db());
-    let outcome = service
-        .interrupt_turn(&session_id, &turn_id, idempotency_key)
-        .await?;
+    let operation = format!("interrupt_turn:{session_id}:{turn_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service.interrupt_turn(&session_id, &turn_id).await?.data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 

@@ -13,7 +13,7 @@ use pontia_runtime::{set_runtime_bind_addr, set_runtime_config};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 use super::set_default_client_type;
-use crate::{GitRefreshCoordinator, WorkspaceBrowserConfig};
+use crate::{GitRefreshCoordinator, IdempotencyCoordinator, WorkspaceBrowserConfig};
 
 const SESSION_MESSAGE_UPDATED_DEBOUNCE_MS: u64 = 100;
 
@@ -116,6 +116,7 @@ struct LifecycleState {
 
 struct IntegrationState {
     git_refresh: GitRefreshCoordinator,
+    idempotency: IdempotencyCoordinator,
 }
 
 pub struct AppStateBuilder {
@@ -126,6 +127,7 @@ pub struct AppStateBuilder {
     shutdown: ShutdownSignal,
     volatile_events: VolatileEventBroker,
     git_refresh: GitRefreshCoordinator,
+    idempotency: IdempotencyCoordinator,
 }
 
 impl AppState {
@@ -138,6 +140,7 @@ impl AppState {
             shutdown: ShutdownSignal::default(),
             volatile_events: VolatileEventBroker::default(),
             git_refresh: GitRefreshCoordinator::default(),
+            idempotency: IdempotencyCoordinator::default(),
         }
     }
 
@@ -169,6 +172,10 @@ impl AppState {
         self.inner.integrations.git_refresh.clone()
     }
 
+    pub fn idempotency(&self) -> IdempotencyCoordinator {
+        self.inner.integrations.idempotency.clone()
+    }
+
     pub fn with_external_api_token(&self, external_api_token: Option<String>) -> Self {
         self.rebuild()
             .external_api_token(external_api_token)
@@ -183,6 +190,7 @@ impl AppState {
             .shutdown(self.shutdown())
             .volatile_events(self.volatile_events())
             .git_refresh(self.git_refresh())
+            .idempotency(self.idempotency())
     }
 }
 
@@ -217,6 +225,11 @@ impl AppStateBuilder {
         self
     }
 
+    pub fn idempotency(mut self, idempotency: IdempotencyCoordinator) -> Self {
+        self.idempotency = idempotency;
+        self
+    }
+
     pub fn build(self) -> AppState {
         AppState {
             inner: Arc::new(AppStateInner {
@@ -234,6 +247,7 @@ impl AppStateBuilder {
                 },
                 integrations: IntegrationState {
                     git_refresh: self.git_refresh,
+                    idempotency: self.idempotency,
                 },
             }),
         }

@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use axum::{
     Json,
     http::{HeaderMap, StatusCode, header},
@@ -6,7 +8,7 @@ use axum::{
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use pontia_application::{AppState, ExternalQueryService};
+use pontia_application::{AppState, ExternalQueryService, IdempotencyOutcome};
 use pontia_core::error::Error;
 
 #[derive(Debug, Serialize)]
@@ -59,6 +61,23 @@ pub(super) fn idempotency_key(headers: &HeaderMap) -> Option<&str> {
     headers
         .get("Idempotency-Key")
         .and_then(|value| value.to_str().ok())
+}
+
+pub(super) async fn idempotent<F, Fut>(
+    state: &AppState,
+    headers: &HeaderMap,
+    operation: impl Into<String>,
+    action: F,
+) -> Result<IdempotencyOutcome, ExternalApiError>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<Value, Error>>,
+{
+    state
+        .idempotency()
+        .run(operation, idempotency_key(headers), action)
+        .await
+        .map_err(Into::into)
 }
 
 pub(super) fn ok(data: Value) -> Json<ApiResponse<Value>> {

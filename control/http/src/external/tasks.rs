@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use pontia_application::{AppState, ExternalQueryService, TaskCommandService};
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key, ok};
+use super::common::{ApiResponse, ExternalApiError, authenticate, idempotent, ok};
 
 pub async fn create_task(
     State(state): State<AppState>,
@@ -36,9 +36,12 @@ pub async fn interrupt_task(
     Path(task_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
     let service = TaskCommandService::new(state.db());
-    let outcome = service.interrupt_task(&task_id, idempotency_key).await?;
+    let operation = format!("interrupt_task:{task_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service.interrupt_task(&task_id).await?.data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
@@ -48,9 +51,12 @@ pub async fn cancel_task(
     Path(task_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let idempotency_key = idempotency_key(&headers);
     let service = TaskCommandService::new(state.db());
-    let outcome = service.cancel_task(&task_id, idempotency_key).await?;
+    let operation = format!("cancel_task:{task_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service.cancel_task(&task_id).await?.data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 

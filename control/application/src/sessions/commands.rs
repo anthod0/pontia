@@ -14,22 +14,12 @@ impl SessionCommandService {
     pub async fn create_session(
         &self,
         request: CreateSessionRequest,
-        idempotency_key: Option<&str>,
     ) -> Result<CreateSessionOutcome> {
         if !is_supported_client_type(&request.client_type) {
             return Err(pontia_core::error::Error::Domain(format!(
                 "unsupported client_type: {}",
                 request.client_type
             )));
-        }
-
-        if let Some(key) = idempotency_key
-            && let Some(response) = self.idempotency_response("create_session", key).await?
-        {
-            return Ok(CreateSessionOutcome {
-                data: response,
-                duplicate: true,
-            });
         }
 
         let handle = request.handle.as_deref();
@@ -207,11 +197,6 @@ impl SessionCommandService {
             None
         };
         let data = json!({ "session": session, "initial_turn": initial_turn });
-
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response("create_session", key, &data)
-                .await?;
-        }
 
         if let Some((turn_id, input, dispatch_mode, _)) = initial_dispatch {
             let service = self.clone();

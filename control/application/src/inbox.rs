@@ -1,7 +1,5 @@
 use super::*;
-use pontia_storage_sqlite::repositories::{
-    idempotency::SqliteIdempotencyRepository, inbox::SqliteInboxRepository,
-};
+use pontia_storage_sqlite::repositories::inbox::SqliteInboxRepository;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct SubmitInboxMessageRequest {
@@ -36,25 +34,7 @@ impl InboxCommandService {
         &self,
         session_id: &str,
         request: SubmitInboxMessageRequest,
-        idempotency_key: Option<&str>,
     ) -> Result<InboxCommandOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(message_id) = self
-                .idempotency_message_id(&format!("submit_inbox_message:{session_id}"), key)
-                .await?
-        {
-            let message = self
-                .get_message(session_id, &message_id)
-                .await?
-                .ok_or_else(|| {
-                    Error::Domain(format!("idempotent inbox message {message_id} missing"))
-                })?;
-            return Ok(InboxCommandOutcome {
-                data: json!({ "inbox_message": message }),
-                duplicate: true,
-            });
-        }
-
         if !matches!(
             request.delivery_policy.as_str(),
             "after_idle" | "interrupt_now"
@@ -106,7 +86,7 @@ impl InboxCommandService {
                 )
                 .await?;
             } else if let Err(error) = RuntimeControlService::new(self.pool.clone())
-                .interrupt_current_turn(session_id, None)
+                .interrupt_current_turn(session_id)
                 .await
             {
                 self.mark_failed(&message_id, error.to_string()).await?;
@@ -114,15 +94,6 @@ impl InboxCommandService {
         }
 
         self.drain_inbox(session_id).await?;
-
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_message_id(
-                &format!("submit_inbox_message:{session_id}"),
-                key,
-                &message_id,
-            )
-            .await?;
-        }
 
         let message = self
             .get_message(session_id, &message_id)
@@ -323,23 +294,5 @@ impl InboxCommandService {
             ))
             .await?;
         Ok(())
-    }
-
-    async fn idempotency_message_id(&self, operation: &str, key: &str) -> Result<Option<String>> {
-        Ok(SqliteIdempotencyRepository::new(self.pool.clone())
-            .get_response(operation, key)
-            .await?
-            .and_then(|value| value["message_id"].as_str().map(ToString::to_string)))
-    }
-
-    async fn store_idempotency_message_id(
-        &self,
-        operation: &str,
-        key: &str,
-        message_id: &str,
-    ) -> Result<()> {
-        SqliteIdempotencyRepository::new(self.pool.clone())
-            .store_response(operation, key, &json!({ "message_id": message_id }))
-            .await
     }
 }

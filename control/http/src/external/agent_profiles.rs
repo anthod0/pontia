@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use pontia_application::{AgentProfileService, AppState, UpsertExecutionProfileRequest};
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, idempotency_key, ok};
+use super::common::{ApiResponse, ExternalApiError, authenticate, idempotent, ok};
 
 #[derive(Debug, Deserialize)]
 pub struct AgentProfilesQuery {
@@ -58,9 +58,10 @@ pub async fn create_agent_profile(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db());
-    let outcome = service
-        .create_profile(request, idempotency_key(&headers))
-        .await?;
+    let outcome = idempotent(&state, &headers, "create_agent_profile", || async move {
+        Ok(service.create_profile(request).await?.data)
+    })
+    .await?;
     let status = if outcome.duplicate {
         StatusCode::OK
     } else {
@@ -76,9 +77,11 @@ pub async fn delete_agent_profile(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db());
-    let outcome = service
-        .archive_profile(&profile_id, idempotency_key(&headers))
-        .await?;
+    let operation = format!("archive_agent_profile:{profile_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service.archive_profile(&profile_id).await?.data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
@@ -109,9 +112,14 @@ pub async fn create_agent_profile_version(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db());
-    let outcome = service
-        .create_profile_version(&profile_id, request, idempotency_key(&headers))
-        .await?;
+    let operation = format!("create_agent_profile_version:{profile_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service
+            .create_profile_version(&profile_id, request)
+            .await?
+            .data)
+    })
+    .await?;
     let status = if outcome.duplicate {
         StatusCode::OK
     } else {
@@ -144,9 +152,14 @@ pub async fn update_agent_profile_version(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db());
-    let outcome = service
-        .update_version(&profile_id, &version, request, idempotency_key(&headers))
-        .await?;
+    let operation = format!("update_agent_profile_version:{profile_id}:{version}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service
+            .update_version(&profile_id, &version, request)
+            .await?
+            .data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
@@ -157,8 +170,10 @@ pub async fn delete_agent_profile_version(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db());
-    let outcome = service
-        .archive_version(&profile_id, &version, idempotency_key(&headers))
-        .await?;
+    let operation = format!("archive_agent_profile_version:{profile_id}:{version}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        Ok(service.archive_version(&profile_id, &version).await?.data)
+    })
+    .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }

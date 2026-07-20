@@ -5,22 +5,7 @@ use pontia_storage_sqlite::repositories::{
 };
 
 impl RuntimeControlService {
-    pub async fn interrupt_current_turn(
-        &self,
-        session_id: &str,
-        idempotency_key: Option<&str>,
-    ) -> Result<ControlCommandOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(response) = self
-                .idempotency_response(&format!("interrupt_current:{session_id}"), key)
-                .await?
-        {
-            return Ok(ControlCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
-
+    pub async fn interrupt_current_turn(&self, session_id: &str) -> Result<ControlCommandOutcome> {
         let query = ExternalQueryService::new(self.pool.clone());
         let session = query
             .get_session(session_id)
@@ -31,35 +16,14 @@ impl RuntimeControlService {
                 "session {session_id} has no active turn to interrupt"
             ))
         })?;
-        let outcome = self.interrupt_turn(session_id, &turn_id, None).await?;
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(
-                &format!("interrupt_current:{session_id}"),
-                key,
-                &outcome.data,
-            )
-            .await?;
-        }
-        Ok(outcome)
+        self.interrupt_turn(session_id, &turn_id).await
     }
 
     pub async fn interrupt_turn(
         &self,
         session_id: &str,
         turn_id: &str,
-        idempotency_key: Option<&str>,
     ) -> Result<ControlCommandOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(response) = self
-                .idempotency_response(&format!("interrupt_turn:{session_id}:{turn_id}"), key)
-                .await?
-        {
-            return Ok(ControlCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
-
         let query = ExternalQueryService::new(self.pool.clone());
         let session = query
             .get_session(session_id)
@@ -133,36 +97,13 @@ impl RuntimeControlService {
             .await?
             .ok_or_else(|| Error::Domain("interrupted turn missing".to_string()))?;
         let data = json!({ "turn": turn });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(
-                &format!("interrupt_turn:{session_id}:{turn_id}"),
-                key,
-                &data,
-            )
-            .await?;
-        }
         Ok(ControlCommandOutcome {
             data,
             duplicate: false,
         })
     }
 
-    pub async fn terminate_session(
-        &self,
-        session_id: &str,
-        idempotency_key: Option<&str>,
-    ) -> Result<ControlCommandOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(response) = self
-                .idempotency_response(&format!("terminate_session:{session_id}"), key)
-                .await?
-        {
-            return Ok(ControlCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
-
+    pub async fn terminate_session(&self, session_id: &str) -> Result<ControlCommandOutcome> {
         let query = ExternalQueryService::new(self.pool.clone());
         let session = query
             .get_session(session_id)
@@ -209,32 +150,13 @@ impl RuntimeControlService {
             .await?
             .ok_or_else(|| Error::Domain("terminated session missing".to_string()))?;
         let data = json!({ "session": session });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(&format!("terminate_session:{session_id}"), key, &data)
-                .await?;
-        }
         Ok(ControlCommandOutcome {
             data,
             duplicate: false,
         })
     }
 
-    pub async fn resume_session(
-        &self,
-        session_id: &str,
-        idempotency_key: Option<&str>,
-    ) -> Result<ControlCommandOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(response) = self
-                .idempotency_response(&format!("resume_session:{session_id}"), key)
-                .await?
-        {
-            return Ok(ControlCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
-
+    pub async fn resume_session(&self, session_id: &str) -> Result<ControlCommandOutcome> {
         let query = ExternalQueryService::new(self.pool.clone());
         let session = query
             .get_session(session_id)
@@ -318,32 +240,13 @@ impl RuntimeControlService {
             .await?
             .ok_or_else(|| Error::Domain("resumed session missing".to_string()))?;
         let data = json!({ "session": session });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(&format!("resume_session:{session_id}"), key, &data)
-                .await?;
-        }
         Ok(ControlCommandOutcome {
             data,
             duplicate: false,
         })
     }
 
-    pub async fn restart_session(
-        &self,
-        session_id: &str,
-        idempotency_key: Option<&str>,
-    ) -> Result<ControlCommandOutcome> {
-        if let Some(key) = idempotency_key
-            && let Some(response) = self
-                .idempotency_response(&format!("restart_session:{session_id}"), key)
-                .await?
-        {
-            return Ok(ControlCommandOutcome {
-                data: response,
-                duplicate: true,
-            });
-        }
-
+    pub async fn restart_session(&self, session_id: &str) -> Result<ControlCommandOutcome> {
         let query = ExternalQueryService::new(self.pool.clone());
         let session = query
             .get_session(session_id)
@@ -456,10 +359,6 @@ impl RuntimeControlService {
             .await?
             .ok_or_else(|| Error::Domain("restarted session missing".to_string()))?;
         let data = json!({ "session": session });
-        if let Some(key) = idempotency_key {
-            self.store_idempotency_response(&format!("restart_session:{session_id}"), key, &data)
-                .await?;
-        }
         Ok(ControlCommandOutcome {
             data,
             duplicate: false,
