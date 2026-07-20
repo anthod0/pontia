@@ -62,16 +62,20 @@ impl TurnTimelineService {
         anchor_turn_id: Option<String>,
         limit: usize,
     ) -> Result<TurnTimelinePage, TurnTimelineServiceError> {
-        let Some(session) = ExternalQueryService::new(self.pool.clone())
+        if ExternalQueryService::new(self.pool.clone())
             .get_session(&session_id)
             .await?
-        else {
+            .is_none()
+        {
             return Err(TurnTimelineServiceError::SessionNotFound);
-        };
+        }
 
-        let turns = SqliteTurnRepository::new(self.pool.clone())
-            .list_turns(&session_id)
-            .await?;
+        let turn_repository = SqliteTurnRepository::new(self.pool.clone());
+        let active_turn_id = turn_repository
+            .active_turn(&session_id)
+            .await?
+            .map(|turn| turn.turn_id);
+        let turns = turn_repository.list_turns(&session_id).await?;
         if turns.is_empty() {
             return Ok(TurnTimelinePage {
                 session_id,
@@ -116,7 +120,7 @@ impl TurnTimelineService {
             };
             let tail_cursor = match turn.tail_cursor.clone() {
                 Some(tail_cursor) => Some(tail_cursor),
-                None if session.current_turn_id.as_deref() == Some(turn.turn_id.as_str())
+                None if active_turn_id.as_deref() == Some(turn.turn_id.as_str())
                     && newest_turn_id == Some(turn.turn_id.as_str())
                     && turn_state.is_active() =>
                 {

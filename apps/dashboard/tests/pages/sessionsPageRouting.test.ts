@@ -168,6 +168,27 @@ test('session detail page groups session metadata and message workflow into focu
   expect(screen.getByText('Capabilities')).toBeVisible();
 });
 
+test('session detail does not treat a terminal branch leaf as an interruptible turn', async () => {
+  const idleWithLeaf = session({
+    current_turn_id: 'turn-completed',
+    state: 'idle',
+    capabilities: { interrupt: true, context_usage: 'unsupported' },
+  });
+  mocks.loadedSessions = [idleWithLeaf];
+  mocks.sessions.set([idleWithLeaf]);
+  window.history.pushState({}, '', '/dashboard/sessions/session-1');
+  mocks.pathParams = { sessionId: 'session-1' };
+
+  render(SessionDetailPage);
+
+  await fireEvent.click(await screen.findByRole('tab', { name: /details/i }));
+  const interrupt = screen.getByRole('button', { name: /^interrupt$/i });
+  expect(interrupt).toBeDisabled();
+  expect(interrupt).toHaveAttribute('title', 'Selected session has no running turn to interrupt.');
+  expect(screen.getByText('Current branch turn')).toBeVisible();
+  expect(screen.getByText('turn-completed')).toBeVisible();
+});
+
 test('session detail page renders populated context usage', async () => {
   const withUsage = session({
     session_id: 'session-usage',

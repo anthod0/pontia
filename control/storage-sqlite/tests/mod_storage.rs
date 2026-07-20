@@ -45,7 +45,7 @@ async fn connects_to_sqlite_and_runs_migrations() {
         .await
         .expect("query migrations");
 
-    assert_eq!(migration_count, 2);
+    assert_eq!(migration_count, 3);
 
     let idempotency_table_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'idempotency_keys'",

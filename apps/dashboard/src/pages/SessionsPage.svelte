@@ -81,7 +81,7 @@
                 <Table.Head>Client</Table.Head>
                 <Table.Head>Workspace</Table.Head>
                 <Table.Head>Profile</Table.Head>
-                <Table.Head>Current turn</Table.Head>
+                <Table.Head>Current branch turn</Table.Head>
                 <Table.Head>Updated</Table.Head>
               </Table.Row>
             </Table.Header>

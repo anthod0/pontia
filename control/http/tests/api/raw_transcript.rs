@@ -337,7 +337,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
 }
 
 #[tokio::test]
-async fn turn_timeline_only_allows_the_session_current_globally_newest_open_turn() {
+async fn turn_timeline_only_allows_the_globally_newest_active_turn() {
     let state = test_state().await;
     let session_id = "sess_open_turn_qualification";
     seed_session(&state, session_id).await;
@@ -349,19 +349,6 @@ async fn turn_timeline_only_allows_the_session_current_globally_newest_open_turn
     .await
     .unwrap();
 
-    let (status, body) = get_json(
-        state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
-    assert_eq!(body["error"]["code"], "turn_timeline_unavailable");
-
-    sqlx::query("UPDATE sessions SET current_turn_id = 'turn_open' WHERE session_id = ?")
-        .bind(session_id)
-        .execute(&state.db())
-        .await
-        .unwrap();
     sqlx::query(
         "INSERT INTO turns (turn_id, session_id, turn_index, head_cursor, tail_cursor, state) VALUES ('turn_newer', ?, 2, 'head', 'tail', 'completed')",
     )

@@ -5,6 +5,7 @@ use pontia_storage_sqlite::{
         agent_bindings::{AgentBindingUpsertRecord, SqliteAgentBindingRepository},
         runtime_bindings::SqliteRuntimeBindingRepository,
         sessions::SqliteSessionRepository,
+        turns::SqliteTurnRepository,
     },
 };
 use sqlx::Row;
@@ -142,12 +143,10 @@ impl AgentBindingService {
         };
 
         let Some(row) = sqlx::query(
-            r#"SELECT s.current_turn_id,
-                      r.runtime_instance_id,
+            r#"SELECT r.runtime_instance_id,
                       r.metadata AS runtime_metadata
-               FROM sessions s
-               JOIN runtime_bindings r ON r.session_id = s.session_id
-               WHERE s.session_id = ?"#,
+               FROM runtime_bindings r
+               WHERE r.session_id = ?"#,
         )
         .bind(&binding.session_id)
         .fetch_optional(&self.pool)
@@ -156,12 +155,13 @@ impl AgentBindingService {
             return Ok(None);
         };
 
-        let Some(turn_id) = row
-            .try_get::<Option<String>, _>("current_turn_id")?
-            .filter(|turn_id| !turn_id.trim().is_empty())
+        let Some(active_turn) = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(&binding.session_id)
+            .await?
         else {
             return Ok(None);
         };
+        let turn_id = active_turn.turn_id;
         let runtime_metadata = runtime_metadata_from_row(&row)?;
         let internal_event_url = internal_event_url(&runtime_metadata);
 

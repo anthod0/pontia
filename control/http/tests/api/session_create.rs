@@ -673,7 +673,7 @@ async fn create_session_with_initial_task_creates_queued_initial_turn() {
     assert_eq!(initial_turn["session_id"], session_id);
     assert_eq!(initial_turn["state"], "queued");
     assert_eq!(initial_turn["input"]["summary"], "do the first thing");
-    assert_eq!(body["data"]["session"]["current_turn_id"], turn_id);
+    assert_eq!(body["data"]["session"]["current_turn_id"], Value::Null);
 
     let (turn_status, turn_body) = get(
         state.clone(),

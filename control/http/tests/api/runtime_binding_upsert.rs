@@ -254,15 +254,22 @@ async fn internal_agent_binding_current_turn_returns_active_turn_context_by_clie
 }
 
 #[tokio::test]
-async fn internal_agent_binding_current_turn_returns_not_found_without_active_turn() {
+async fn internal_agent_binding_current_turn_ignores_a_terminal_sticky_branch_leaf() {
     let state = test_state().await;
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, state, current_turn_id, metadata)
-           VALUES ('sess_idle', 'claude', 'idle', NULL, '{}')"#,
+           VALUES ('sess_idle', 'claude', 'idle', 'turn_completed', '{}')"#,
     )
     .execute(&state.db())
     .await
     .expect("insert session");
+    sqlx::query(
+        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
+           VALUES ('turn_completed', 'sess_idle', 1, 'completed', '{}')"#,
+    )
+    .execute(&state.db())
+    .await
+    .expect("insert terminal branch leaf");
     sqlx::query(
         r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata)
            VALUES ('sess_idle', 'claude_tui', 'rtinst_idle', '{}')"#,

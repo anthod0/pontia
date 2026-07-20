@@ -215,10 +215,23 @@ async fn terminate_session_requests_runtime_shutdown_emits_one_exit_event_and_is
 }
 
 #[tokio::test]
-async fn restart_non_terminal_session_runs_new_start_cycle_and_is_idempotent() {
+async fn restart_idle_session_with_a_sticky_branch_leaf_runs_a_new_start_cycle() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
+    sqlx::query(
+        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
+           VALUES ('turn_completed_leaf', ?, 1, 'completed', '{}')"#,
+    )
+    .bind(&session_id)
+    .execute(&state.db())
+    .await
+    .expect("insert completed branch leaf");
+    sqlx::query("UPDATE sessions SET current_turn_id = 'turn_completed_leaf' WHERE session_id = ?")
+        .bind(&session_id)
+        .execute(&state.db())
+        .await
+        .expect("make completed Turn the current branch leaf");
 
     let first = request(
         state.clone(),
@@ -243,6 +256,10 @@ async fn restart_non_terminal_session_runs_new_start_cycle_and_is_idempotent() {
     assert_eq!(second.0, StatusCode::OK);
     assert_eq!(second.1["data"], first.1["data"]);
     assert_eq!(first.1["data"]["session"]["state"], "idle");
+    assert_eq!(
+        first.1["data"]["session"]["current_turn_id"],
+        "turn_completed_leaf"
+    );
     assert_eq!(
         first.1["data"]["session"]["capabilities"]["interrupt"],
         false

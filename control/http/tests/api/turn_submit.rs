@@ -244,8 +244,5 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
     .await;
     assert_eq!(session_status, StatusCode::OK);
     assert_eq!(session_body["data"]["session"]["state"], "idle");
-    assert_eq!(
-        session_body["data"]["session"]["current_turn_id"],
-        Value::Null
-    );
+    assert_eq!(session_body["data"]["session"]["current_turn_id"], turn_id);
 }

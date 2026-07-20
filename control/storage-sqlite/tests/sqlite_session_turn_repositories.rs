@@ -194,6 +194,65 @@ async fn sqlite_session_repository_updates_workspace_binding() {
 }
 
 #[tokio::test]
+async fn sqlite_turn_repository_resolves_the_unique_active_turn() {
+    let pool = test_pool().await;
+    sqlx::query(
+        r#"INSERT INTO sessions (session_id, client_type, state, metadata)
+           VALUES ('sess_active_turn', 'pi', 'idle', '{}')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert session");
+    sqlx::query(
+        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
+           VALUES
+           ('turn_completed', 'sess_active_turn', 1, 'completed', '{}'),
+           ('turn_running', 'sess_active_turn', 2, 'running', '{}')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert turns");
+
+    let repository = SqliteTurnRepository::new(pool);
+    let active = repository
+        .active_turn("sess_active_turn")
+        .await
+        .expect("resolve active turn")
+        .expect("active turn exists");
+
+    assert_eq!(active.turn_id, "turn_running");
+    assert_eq!(active.state, "running");
+}
+
+#[tokio::test]
+async fn sqlite_turn_repository_rejects_multiple_active_turns() {
+    let pool = test_pool().await;
+    sqlx::query(
+        r#"INSERT INTO sessions (session_id, client_type, state, metadata)
+           VALUES ('sess_invalid_active_turns', 'pi', 'busy', '{}')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert session");
+    sqlx::query(
+        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
+           VALUES
+           ('turn_queued', 'sess_invalid_active_turns', 1, 'queued', '{}'),
+           ('turn_running', 'sess_invalid_active_turns', 2, 'running', '{}')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert turns");
+
+    let error = SqliteTurnRepository::new(pool)
+        .active_turn("sess_invalid_active_turns")
+        .await
+        .expect_err("multiple active turns must violate the invariant");
+
+    assert!(error.to_string().contains("multiple active Turns"));
+}
+
+#[tokio::test]
 async fn sqlite_turn_repository_lists_turns_and_event_rows_with_existing_order() {
     let pool = test_pool().await;
     sqlx::query(

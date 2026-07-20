@@ -5,6 +5,7 @@ use crate::models::turns::{TurnEventEnrichmentRow, TurnProjectionRow, TurnRow};
 use pontia_core::Result;
 
 const LOAD_TURN_PROJECTIONS_SQL: &str = "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version, input_summary, output_summary, metadata FROM turns WHERE session_id = ?";
+const LOAD_ACTIVE_TURNS_SQL: &str = "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version, input_summary, output_summary, metadata FROM turns WHERE session_id = ? AND state IN ('queued', 'running') ORDER BY turn_index LIMIT 2";
 
 #[derive(Debug, Clone)]
 pub struct TurnProjectionUpsertRecord {
@@ -57,6 +58,25 @@ impl SqliteTurnRepository {
                 .fetch_all(&mut **tx)
                 .await?,
         )
+    }
+
+    pub async fn active_turn(&self, session_id: &str) -> Result<Option<TurnProjectionRow>> {
+        let rows = sqlx::query_as::<_, TurnProjectionRow>(LOAD_ACTIVE_TURNS_SQL)
+            .bind(session_id)
+            .fetch_all(&self.pool)
+            .await?;
+        unique_active_turn(session_id, rows)
+    }
+
+    pub async fn active_turn_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        session_id: &str,
+    ) -> Result<Option<TurnProjectionRow>> {
+        let rows = sqlx::query_as::<_, TurnProjectionRow>(LOAD_ACTIVE_TURNS_SQL)
+            .bind(session_id)
+            .fetch_all(&mut **tx)
+            .await?;
+        unique_active_turn(session_id, rows)
     }
 
     pub async fn serialize_session_turn_writes_in_tx(
@@ -208,4 +228,16 @@ impl SqliteTurnRepository {
         .fetch_all(&self.pool)
         .await?)
     }
+}
+
+fn unique_active_turn(
+    session_id: &str,
+    mut rows: Vec<TurnProjectionRow>,
+) -> Result<Option<TurnProjectionRow>> {
+    if rows.len() > 1 {
+        return Err(pontia_core::Error::Domain(format!(
+            "session {session_id} has multiple active Turns"
+        )));
+    }
+    Ok(rows.pop())
 }

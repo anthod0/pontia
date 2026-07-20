@@ -1,5 +1,7 @@
 use super::*;
-use pontia_storage_sqlite::repositories::inbox::SqliteInboxRepository;
+use pontia_storage_sqlite::repositories::{
+    inbox::SqliteInboxRepository, turns::SqliteTurnRepository,
+};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct SubmitInboxMessageRequest {
@@ -78,7 +80,10 @@ impl InboxCommandService {
         )
         .await?;
 
-        if request.delivery_policy == "interrupt_now" && session.current_turn_id.is_some() {
+        let active_turn = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
+            .await?;
+        if request.delivery_policy == "interrupt_now" && active_turn.is_some() {
             if !session.capabilities.interrupt {
                 self.mark_failed(
                     &message_id,
@@ -214,7 +219,10 @@ impl InboxCommandService {
             None => return Ok(()),
         };
         if !matches!(session.state.as_str(), "idle" | "interrupted")
-            || session.current_turn_id.is_some()
+            || SqliteTurnRepository::new(self.pool.clone())
+                .active_turn(session_id)
+                .await?
+                .is_some()
         {
             return Ok(());
         }

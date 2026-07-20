@@ -8,7 +8,9 @@ use pontia_core::{
     ids::new_event_id,
 };
 use pontia_runtime::GenericRuntimeManager;
-use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
+use pontia_storage_sqlite::repositories::{
+    runtime_bindings::SqliteRuntimeBindingRepository, turns::SqliteTurnRepository,
+};
 
 use crate::{EventIngestService, ExternalQueryService};
 
@@ -87,12 +89,15 @@ impl RuntimeObservationService {
         }
 
         let ingest = EventIngestService::new(self.pool.clone());
-        if let Some(turn_id) = session.current_turn_id.clone() {
+        if let Some(active_turn) = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
+            .await?
+        {
             ingest
                 .ingest_event(ReportedEvent::new(
                     new_event_id().to_string(),
                     session_id.to_string(),
-                    Some(turn_id),
+                    Some(active_turn.turn_id),
                     EventSource::RuntimeManager,
                     session.client_type.clone(),
                     EventType::TurnFailed,

@@ -102,12 +102,10 @@ impl SqliteRuntimeBindingRepository {
         session_id: &str,
         incoming_runtime_instance_id: Option<&str>,
     ) -> Result<()> {
-        let active_turn_id =
-            crate::repositories::sessions::SqliteSessionRepository::current_turn_id_in_tx(
-                tx, session_id,
-            )
-            .await?;
-        if active_turn_id.is_none() {
+        let active_turn =
+            crate::repositories::turns::SqliteTurnRepository::active_turn_in_tx(tx, session_id)
+                .await?;
+        if active_turn.is_none() {
             return Ok(());
         }
         let existing_runtime_instance_id = Self::runtime_instance_id_in_tx(tx, session_id).await?;

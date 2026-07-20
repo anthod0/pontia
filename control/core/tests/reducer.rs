@@ -67,10 +67,164 @@ fn reducer_projects_session_lifecycle_and_turn_busy_idle() {
         projection.session("sess_1").unwrap().state,
         SessionState::Idle
     );
-    assert_eq!(projection.session("sess_1").unwrap().current_turn_id, None);
+    assert_eq!(
+        projection
+            .session("sess_1")
+            .unwrap()
+            .current_turn_id
+            .as_deref(),
+        Some("turn_1")
+    );
     assert_eq!(
         projection.turn("turn_1").unwrap().state,
         TurnState::Completed
+    );
+}
+
+#[test]
+fn reducer_keeps_current_branch_leaf_across_terminal_turn_and_session_events() {
+    for terminal_event in [
+        EventType::TurnCompleted,
+        EventType::TurnFailed,
+        EventType::TurnInterrupted,
+        EventType::TurnCancelled,
+    ] {
+        let mut projection = ProjectionState::default();
+        projection
+            .apply(&event(EventType::SessionCreated, "sess_1", None))
+            .unwrap();
+        projection
+            .apply(&event(EventType::SessionReady, "sess_1", None))
+            .unwrap();
+        projection
+            .apply(&event(EventType::TurnStarted, "sess_1", Some("turn_1")))
+            .unwrap();
+        projection
+            .apply(&event(terminal_event, "sess_1", Some("turn_1")))
+            .unwrap();
+
+        assert_eq!(
+            projection
+                .session("sess_1")
+                .unwrap()
+                .current_turn_id
+                .as_deref(),
+            Some("turn_1")
+        );
+    }
+
+    let mut projection = ProjectionState::default();
+    projection
+        .apply(&event(EventType::SessionCreated, "sess_1", None))
+        .unwrap();
+    projection
+        .apply(&event(EventType::SessionReady, "sess_1", None))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnStarted, "sess_1", Some("turn_1")))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnCompleted, "sess_1", Some("turn_1")))
+        .unwrap();
+    projection
+        .apply(&event(EventType::SessionError, "sess_1", None))
+        .unwrap();
+
+    assert_eq!(
+        projection
+            .session("sess_1")
+            .unwrap()
+            .current_turn_id
+            .as_deref(),
+        Some("turn_1")
+    );
+}
+
+#[test]
+fn reducer_keeps_the_latest_started_turn_as_the_current_branch_leaf() {
+    let mut projection = ProjectionState::default();
+    projection
+        .apply(&event(EventType::SessionCreated, "sess_1", None))
+        .unwrap();
+    projection
+        .apply(&event(EventType::SessionReady, "sess_1", None))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnStarted, "sess_1", Some("turn_1")))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnCompleted, "sess_1", Some("turn_1")))
+        .unwrap();
+
+    projection
+        .apply(&event(EventType::TurnCreated, "sess_1", Some("turn_2")))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnQueued, "sess_1", Some("turn_2")))
+        .unwrap();
+    assert_eq!(
+        projection
+            .session("sess_1")
+            .unwrap()
+            .current_turn_id
+            .as_deref(),
+        Some("turn_1")
+    );
+
+    projection
+        .apply(&event(EventType::TurnStarted, "sess_1", Some("turn_2")))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnCompleted, "sess_1", Some("turn_2")))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnFailed, "sess_1", Some("turn_1")))
+        .unwrap();
+
+    assert_eq!(
+        projection
+            .session("sess_1")
+            .unwrap()
+            .current_turn_id
+            .as_deref(),
+        Some("turn_2")
+    );
+}
+
+#[test]
+fn reducer_session_exit_abandons_execution_without_replacing_the_branch_leaf() {
+    let mut projection = ProjectionState::default();
+    projection
+        .apply(&event(EventType::SessionCreated, "sess_1", None))
+        .unwrap();
+    projection
+        .apply(&event(EventType::SessionReady, "sess_1", None))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnStarted, "sess_1", Some("turn_1")))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnCompleted, "sess_1", Some("turn_1")))
+        .unwrap();
+    projection
+        .apply(&event(EventType::TurnQueued, "sess_1", Some("turn_2")))
+        .unwrap();
+
+    projection
+        .apply(&event(EventType::SessionExited, "sess_1", None))
+        .unwrap();
+
+    assert_eq!(
+        projection.turn("turn_2").unwrap().state,
+        TurnState::Abandoned
+    );
+    assert_eq!(
+        projection
+            .session("sess_1")
+            .unwrap()
+            .current_turn_id
+            .as_deref(),
+        Some("turn_1")
     );
 }
 

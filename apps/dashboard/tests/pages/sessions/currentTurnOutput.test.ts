@@ -15,17 +15,17 @@ const turn = (overrides) => ({
   ...overrides,
 });
 
-test('selects the session current turn even when it is not the newest turn', () => {
+test('selects the current branch leaf even when it is terminal and not the newest turn', () => {
   const selected = selectCurrentTurnOutput(
     { current_turn_id: 'turn-current' },
     [
-      turn({ turn_id: 'turn-current', state: 'running', output: { summary: 'current output' }, created_at: '2026-01-01T00:00:00Z' }),
+      turn({ turn_id: 'turn-current', state: 'completed', output: { summary: 'current output' }, created_at: '2026-01-01T00:00:00Z' }),
       turn({ turn_id: 'turn-newer', output: { summary: 'newer completed output' }, created_at: '2026-01-01T00:05:00Z' }),
     ],
   );
 
   expect(selected?.turn.turn_id).toBe('turn-current');
-  expect(selected?.title).toBe('Current turn output');
+  expect(selected?.title).toBe('Current branch turn output');
   expect(selected?.outputSummary).toBe('current output');
 });
 

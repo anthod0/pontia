@@ -231,7 +231,10 @@ async fn external_api_lists_and_gets_session_views() {
         get_body["data"]["session"]["session_id"],
         "sess_external_queries_1"
     );
-    assert_eq!(get_body["data"]["session"]["current_turn_id"], Value::Null);
+    assert_eq!(
+        get_body["data"]["session"]["current_turn_id"],
+        "turn_external_queries_1"
+    );
     assert_eq!(get_body["data"]["session"]["context_usage"], Value::Null);
 }
 

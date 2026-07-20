@@ -1,22 +1,22 @@
 use super::*;
 use pontia_agent_clients::{ReadinessMode, TerminateBehavior, get_client_spec};
-use pontia_storage_sqlite::repositories::{
-    sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
-};
+use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 
 impl RuntimeControlService {
     pub async fn interrupt_current_turn(&self, session_id: &str) -> Result<ControlCommandOutcome> {
         let query = ExternalQueryService::new(self.pool.clone());
-        let session = query
-            .get_session(session_id)
+        if query.get_session(session_id).await?.is_none() {
+            return Err(Error::NotFound(format!("session {session_id} not found")));
+        }
+        let active_turn = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
             .await?
-            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let turn_id = session.current_turn_id.clone().ok_or_else(|| {
-            Error::StateConflict(format!(
-                "session {session_id} has no active turn to interrupt"
-            ))
-        })?;
-        self.interrupt_turn(session_id, &turn_id).await
+            .ok_or_else(|| {
+                Error::StateConflict(format!(
+                    "session {session_id} has no active turn to interrupt"
+                ))
+            })?;
+        self.interrupt_turn(session_id, &active_turn.turn_id).await
     }
 
     pub async fn interrupt_turn(
@@ -42,7 +42,13 @@ impl RuntimeControlService {
                 "turn {turn_id} is already terminal"
             )));
         }
-        if session.current_turn_id.as_deref() != Some(turn_id) {
+        if SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
+            .await?
+            .as_ref()
+            .map(|turn| turn.turn_id.as_str())
+            != Some(turn_id)
+        {
             return Err(Error::StateConflict(format!(
                 "turn {turn_id} is not the active turn for session {session_id}"
             )));
@@ -270,7 +276,7 @@ impl RuntimeControlService {
             session_id,
         )
         .await?;
-        if SqliteSessionRepository::current_turn_id_in_tx(&mut runtime_replacement_tx, session_id)
+        if SqliteTurnRepository::active_turn_in_tx(&mut runtime_replacement_tx, session_id)
             .await?
             .is_some()
         {

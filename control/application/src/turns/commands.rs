@@ -9,7 +9,9 @@ use pontia_core::{
     ids::{new_dispatch_id, new_event_id, new_turn_id},
 };
 use pontia_runtime::{AgentInput, GenericRuntimeManager};
-use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
+use pontia_storage_sqlite::repositories::{
+    runtime_bindings::SqliteRuntimeBindingRepository, turns::SqliteTurnRepository,
+};
 
 use super::{context::store_client_current_turn_context, tmux::TmuxPaneBinding};
 use crate::{EventIngestService, ExternalQueryService, RuntimeReadinessService, TurnView};
@@ -54,9 +56,13 @@ impl TurnCommandService {
             )));
         }
 
-        if let Some(active_turn_id) = &session.current_turn_id {
+        if let Some(active_turn) = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
+            .await?
+        {
             return Err(Error::StateConflict(format!(
-                "session {session_id} already has active turn {active_turn_id}"
+                "session {session_id} already has active turn {}",
+                active_turn.turn_id
             )));
         }
 

@@ -193,6 +193,49 @@ async fn observe_missing_generic_runtime_projects_session_error() {
 }
 
 #[tokio::test]
+async fn observe_missing_generic_runtime_does_not_fail_a_terminal_branch_leaf() {
+    let scope = GenericClientTestScope::new().await;
+    let state = test_state("generic_observe_terminal_leaf").await;
+    let session_id =
+        create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
+    sqlx::query(
+        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
+           VALUES ('turn_terminal_leaf', ?, 1, 'completed', '{}')"#,
+    )
+    .bind(&session_id)
+    .execute(&state.db())
+    .await
+    .expect("insert terminal branch leaf");
+    sqlx::query("UPDATE sessions SET current_turn_id = 'turn_terminal_leaf' WHERE session_id = ?")
+        .bind(&session_id)
+        .execute(&state.db())
+        .await
+        .expect("set current branch leaf");
+    scope.reset_runtime_registry();
+
+    RuntimeObservationService::new(state.db())
+        .observe_session(&session_id)
+        .await
+        .expect("observe runtime");
+
+    let (status, body) = request(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/events"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert!(
+        body["data"]["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|event| event["type"] != "turn.failed")
+    );
+}
+
+#[tokio::test]
 async fn observe_missing_generic_runtime_fails_active_turn() {
     let scope = GenericClientTestScope::new()
         .await

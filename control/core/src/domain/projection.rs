@@ -134,7 +134,7 @@ impl ProjectionState {
             EventType::SessionStarted => self.apply_session(event, SessionState::Starting),
             EventType::SessionReady => self.apply_session(event, SessionState::Idle),
             EventType::SessionExited => {
-                self.abandon_active_turn_for_session_exit(event);
+                self.abandon_active_turn_for_session_exit(event)?;
                 self.apply_session(event, SessionState::Exited)
             }
             EventType::SessionError => self.apply_session(event, SessionState::Error),
@@ -232,27 +232,20 @@ impl ProjectionState {
                 .and_then(Value::as_str)
                 .map(ToString::to_string);
         }
-        if state.is_terminal() {
-            session.current_turn_id = None;
-        }
         session.state_version += 1;
         Ok(())
     }
 
-    fn abandon_active_turn_for_session_exit(&mut self, event: &DomainEvent) {
-        let Some(turn_id) = self
-            .sessions
-            .get(&event.session_id)
-            .and_then(|session| session.current_turn_id.clone())
-        else {
-            return;
+    fn abandon_active_turn_for_session_exit(
+        &mut self,
+        event: &DomainEvent,
+    ) -> crate::error::Result<()> {
+        let Some(turn_id) = self.active_turn_id(&event.session_id)?.map(str::to_string) else {
+            return Ok(());
         };
         let Some(turn) = self.turns.get_mut(&turn_id) else {
-            return;
+            return Ok(());
         };
-        if !turn.state.is_active() {
-            return;
-        }
 
         turn.state = TurnState::Abandoned;
         turn.state_version += 1;
@@ -270,6 +263,21 @@ impl ProjectionState {
                 }),
             );
         }
+        Ok(())
+    }
+
+    fn active_turn_id(&self, session_id: &str) -> crate::error::Result<Option<&str>> {
+        let mut active_turns = self
+            .turns
+            .values()
+            .filter(|turn| turn.session_id == session_id && turn.state.is_active());
+        let active_turn_id = active_turns.next().map(|turn| turn.turn_id.as_str());
+        if active_turns.next().is_some() {
+            return Err(Error::Domain(format!(
+                "session {session_id} has multiple active Turns"
+            )));
+        }
+        Ok(active_turn_id)
     }
 
     fn apply_context_usage(&mut self, event: &DomainEvent) -> crate::error::Result<()> {
@@ -375,8 +383,7 @@ impl ProjectionState {
         }
 
         if new_state.is_active()
-            && let Some(session) = self.sessions.get(&event.session_id)
-            && let Some(active_turn_id) = &session.current_turn_id
+            && let Some(active_turn_id) = self.active_turn_id(&event.session_id)?
             && active_turn_id != turn_id
         {
             return Err(Error::Domain(format!(
@@ -477,29 +484,24 @@ impl ProjectionState {
         }
 
         match new_state {
-            TurnState::Queued | TurnState::Running => {
-                session.current_turn_id = Some(turn_id.to_string());
-                if new_state == TurnState::Running {
-                    session.state = SessionState::Busy;
-                    session.state_version += 1;
+            TurnState::Queued => {}
+            TurnState::Running => {
+                if event.event_type == EventType::TurnStarted {
+                    session.current_turn_id = Some(turn_id.to_string());
                 }
+                session.state = SessionState::Busy;
+                session.state_version += 1;
             }
             TurnState::Completed
             | TurnState::Failed
             | TurnState::Cancelled
             | TurnState::Abandoned => {
-                if session.current_turn_id.as_deref() == Some(turn_id) {
-                    session.current_turn_id = None;
-                }
                 if session.state == SessionState::Busy {
                     session.state = SessionState::Idle;
                     session.state_version += 1;
                 }
             }
             TurnState::Interrupted => {
-                if session.current_turn_id.as_deref() == Some(turn_id) {
-                    session.current_turn_id = None;
-                }
                 session.state = SessionState::Interrupted;
                 session.state_version += 1;
             }

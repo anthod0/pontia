@@ -80,7 +80,7 @@ async fn ingest_persists_events_and_updates_projections() {
     let events = service.list_events("sess_1").await.unwrap();
 
     assert_eq!(session.state, SessionState::Idle);
-    assert_eq!(session.current_turn_id, None);
+    assert_eq!(session.current_turn_id.as_deref(), Some("turn_1"));
     assert_eq!(session.state_version, 5);
     assert_eq!(turn.state, TurnState::Completed);
     assert_eq!(events.len(), 5);

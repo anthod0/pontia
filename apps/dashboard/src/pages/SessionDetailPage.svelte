@@ -74,7 +74,7 @@
   function interruptUnsupportedReason(session: SessionView | null): string | null {
     if (!session) return 'Select a session first.'
     if (!session.capabilities?.interrupt) return 'Selected session runtime does not advertise interrupt capability.'
-    if (!session.current_turn_id) return 'Selected session has no active turn to interrupt.'
+    if (session.state !== 'busy') return 'Selected session has no running turn to interrupt.'
     return null
   }
 
@@ -202,7 +202,7 @@
               ['State', $sessionDetail.session.state],
               ['Workspace', $sessionDetail.session.workspace_id ?? $sessionDetail.session.workspace ?? '—'],
               ['Profile', $sessionDetail.session.execution_profile_id ?? '—'],
-              ['Current turn', $sessionDetail.session.current_turn_id ?? '—'],
+              ['Current branch turn', $sessionDetail.session.current_turn_id ?? '—'],
             ] as [label, value]}
               <div class="rounded-lg border p-3"><div class="text-xs uppercase tracking-wide text-muted-foreground">{label}</div><div class="mt-1 break-words font-medium">{value}</div></div>
             {/each}

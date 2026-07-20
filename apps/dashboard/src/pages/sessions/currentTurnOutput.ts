@@ -2,7 +2,7 @@ import type { SessionView, TurnView } from '../../api/types';
 
 export interface CurrentTurnOutputSelection {
   turn: TurnView;
-  title: 'Current turn output' | 'Latest turn output';
+  title: 'Current branch turn output' | 'Latest turn output';
   outputSummary: string | null;
 }
 
@@ -21,7 +21,7 @@ export function selectCurrentTurnOutput(
     if (currentTurn) {
       return {
         turn: currentTurn,
-        title: 'Current turn output',
+        title: 'Current branch turn output',
         outputSummary: currentTurn.output?.summary ?? null,
       };
     }
