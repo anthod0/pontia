@@ -154,7 +154,7 @@ async fn active_pi_timeline_fixture(
     session_id: &'static str,
     session_key: &str,
     turn_id: &str,
-    started_event_id: &str,
+    _started_event_id: &str,
 ) -> ActivePiTimelineFixture {
     let temp = tempdir().unwrap();
     let agent_dir = temp.path().join("agent");
@@ -183,15 +183,21 @@ async fn active_pi_timeline_fixture(
         })
         .await
         .unwrap();
-    post_pi_turn_event(
+    let (status, body) = post_internal_event(
         state.clone(),
-        session_id,
-        turn_id,
-        started_event_id,
-        "turn.started",
-        json!({ "previous_leaf_id": "root" }),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.started",
+            "data": {
+                "runtime_instance_id": "rtinst_projected_timeline",
+                "timeline_anchor": { "previous_leaf_id": "root" },
+                "topology_context": { "entries": [] },
+            }
+        }),
     )
     .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
 
     ActivePiTimelineFixture {
         _temp: temp,
@@ -228,7 +234,7 @@ async fn turn_timeline_returns_empty_for_a_session_without_turns_or_binding() {
     seed_session(&state, session_id).await;
 
     let (status, body) = get_json(
-        state,
+        state.clone(),
         &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
     )
     .await;
@@ -241,6 +247,37 @@ async fn turn_timeline_returns_empty_for_a_session_without_turns_or_binding() {
             "direction": "backward",
             "items": [],
             "next_turn_id": null,
+        })
+    );
+
+    let (status, history) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/tree/history"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{history:?}");
+    assert_eq!(
+        history["data"],
+        json!({
+            "session_id": session_id,
+            "groups": [],
+            "next_from_turn_id": null,
+        })
+    );
+
+    let (status, updates) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/turns/tree/updates"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updates:?}");
+    assert_eq!(
+        updates["data"],
+        json!({
+            "session_id": session_id,
+            "current_turn_id": null,
+            "retain_through_turn_id": null,
+            "groups": [],
         })
     );
 }
@@ -959,6 +996,20 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
         growing["data"]["items"][2]["managed_tool_use"]["tool_name"],
         "read"
     );
+    let (status, growing_tree) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_active"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{growing_tree:?}");
+    assert_eq!(growing_tree["data"]["groups"][0]["turn_id"], "turn_active");
+    assert_eq!(
+        growing_tree["data"]["groups"][0]["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
 
     let active_turn = EventIngestService::new(state.db())
         .get_turn("turn_active")
@@ -988,6 +1039,23 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
     assert_eq!(grown["data"]["items"].as_array().unwrap().len(), 5);
     assert_eq!(grown["data"]["items"][3]["kind"], "tool_result");
     assert_eq!(grown["data"]["items"][4]["content_preview"], "final answer");
+    let (status, grown_tree) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_active"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{grown_tree:?}");
+    assert_eq!(
+        grown_tree["data"]["groups"][0]["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        5
+    );
+    assert_eq!(
+        grown_tree["data"]["groups"][0]["items"][4]["content_preview"],
+        "final answer"
+    );
     assert!(
         EventIngestService::new(state.db())
             .get_turn("turn_active")
@@ -1327,13 +1395,168 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         );
     }
 
+    let (status, initial_history) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/tree/history?limit=5"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{initial_history:?}");
+    assert_eq!(
+        initial_history["data"]["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|group| group["turn_id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["turn_pi_linear_1", "turn_pi_linear_4", "turn_pi_linear_5"]
+    );
+
+    let (status, history) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/turns/tree/history?from_turn_id=turn_pi_linear_5&limit=2"
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{history:?}");
+    assert_eq!(
+        history["data"]["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|group| group["turn_id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["turn_pi_linear_4", "turn_pi_linear_5"]
+    );
+    assert_eq!(history["data"]["next_from_turn_id"], "turn_pi_linear_1");
+
+    let (status, older_history) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/turns/tree/history?from_turn_id=turn_pi_linear_1&limit=2"
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{older_history:?}");
+    assert_eq!(
+        older_history["data"]["groups"][0]["turn_id"],
+        "turn_pi_linear_1"
+    );
+    assert!(older_history["data"]["next_from_turn_id"].is_null());
+
+    let (status, updates) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_3"
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updates:?}");
+    assert_eq!(updates["data"]["current_turn_id"], "turn_pi_linear_5");
+    assert_eq!(
+        updates["data"]["retain_through_turn_id"],
+        "turn_pi_linear_1"
+    );
+    assert_eq!(
+        updates["data"]["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|group| group["turn_id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["turn_pi_linear_4", "turn_pi_linear_5"]
+    );
+
+    let (status, inclusive_updates) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_4"
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{inclusive_updates:?}");
+    assert_eq!(
+        inclusive_updates["data"]["retain_through_turn_id"],
+        "turn_pi_linear_4"
+    );
+    assert_eq!(
+        inclusive_updates["data"]["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|group| group["turn_id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["turn_pi_linear_4", "turn_pi_linear_5"]
+    );
+
+    let disconnected_started = json!({
+        "session_id": session_id,
+        "turn_id": "turn_pi_linear_6",
+        "type": "turn.started",
+        "data": {
+            "runtime_instance_id": "rtinst_pi_linear",
+            "timeline_anchor": { "previous_leaf_id": "assistant_5" },
+            "topology_context": { "entries": [] },
+        }
+    });
+    assert_eq!(
+        post_internal_event(state.clone(), disconnected_started)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            pi_text_turn_entries(
+                "user_6",
+                Some("assistant_5"),
+                "disconnected question",
+                "assistant_6",
+                "disconnected answer",
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let disconnected_completed = json!({
+        "session_id": session_id,
+        "turn_id": "turn_pi_linear_6",
+        "type": "turn.completed",
+        "data": {
+            "runtime_instance_id": "rtinst_pi_linear",
+            "timeline_anchor": { "terminal_leaf_id": "assistant_6" },
+        }
+    });
+    assert_eq!(
+        post_internal_event(state.clone(), disconnected_completed)
+            .await
+            .0,
+        StatusCode::OK
+    );
+
+    let (status, disconnected_updates) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_5"
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{disconnected_updates:?}");
+    assert!(disconnected_updates["data"]["retain_through_turn_id"].is_null());
+    assert_eq!(
+        disconnected_updates["data"]["groups"][0]["turn_id"],
+        "turn_pi_linear_6"
+    );
+
     let malformed_started = json!({
         "session_id": session_id,
         "turn_id": "turn_pi_linear_malformed",
         "type": "turn.started",
         "data": {
             "runtime_instance_id": "rtinst_pi_linear",
-            "timeline_anchor": { "previous_leaf_id": "assistant_5" },
+            "timeline_anchor": { "previous_leaf_id": "assistant_6" },
             "topology_context": { "entries": [
                 {"id": "native-secret-entry", "kind": "user_message"},
                 {"id": "native-secret-entry", "kind": "assistant_message"}
@@ -1372,7 +1595,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
     let projected = body["data"]["turns"].as_array().unwrap();
-    assert_eq!(projected.len(), 6);
+    assert_eq!(projected.len(), 7);
     assert_eq!(projected[0]["turn_index"], 1);
     assert_eq!(projected[0]["topology_status"], "root");
     assert_eq!(projected[1]["turn_index"], 2);
@@ -1384,8 +1607,20 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     assert_eq!(projected[4]["turn_index"], 5);
     assert_eq!(projected[4]["parent_turn_id"], "turn_pi_linear_4");
     assert_eq!(projected[5]["turn_index"], 6);
-    assert_eq!(projected[5]["topology_status"], "unknown");
-    assert_eq!(projected[5]["state"], "running");
+    assert_eq!(projected[5]["topology_status"], "root");
+    assert_eq!(projected[6]["turn_index"], 7);
+    assert_eq!(projected[6]["topology_status"], "unknown");
+    assert_eq!(projected[6]["state"], "running");
+
+    let (status, unknown_updates) = get_json(
+        state.clone(),
+        &format!(
+            "/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_5"
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{unknown_updates:?}");
+    assert_eq!(unknown_updates["error"]["code"], "turn_topology_unknown");
 
     for (selected_turn_id, expected_preview) in [
         ("turn_pi_linear_3", "question 3"),
@@ -1413,7 +1648,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         .iter()
         .filter(|event| event.event_type == EventType::TurnStarted)
         .collect();
-    assert_eq!(started_events.len(), 6);
+    assert_eq!(started_events.len(), 7);
     assert!(started_events.iter().all(|event| {
         event.payload.get("topology_context").is_none()
             && event.payload.get("timeline_anchor").is_none()

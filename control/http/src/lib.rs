@@ -205,6 +205,14 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             get(external::get_turn_timeline),
         )
         .route(
+            "/external/v1/sessions/{session_id}/turns/tree/history",
+            get(external::get_turn_tree_history),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/turns/tree/updates",
+            get(external::get_turn_tree_updates),
+        )
+        .route(
             "/external/v1/sessions/{session_id}/inbox/messages",
             get(external::list_inbox_messages).post(external::submit_inbox_message),
         )

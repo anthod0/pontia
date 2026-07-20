@@ -114,7 +114,9 @@
   $: selectedSessionGitStatus = selectedSession ? $workspaceGitStatuses[selectedSession.workspace_id ?? ''] : undefined
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, $workspaces, selectedSessionGitStatus, $workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
-  $: timelineMessages = $timelineState.sessionId === selectedSessionId ? timelineItemsToChatMessages($timelineState.items) : []
+  $: timelineMessages = $timelineState.sessionId === selectedSessionId
+    ? timelineItemsToChatMessages($timelineState.items, $timelineState.mode === 'tree')
+    : []
   $: messages = chatMessagesWithOptimistic(selectedSessionId, timelineMessages, $optimisticInitialMessages)
   $: timelineUnavailable = $timelineState.sessionId === selectedSessionId && Boolean($timelineState.error)
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
@@ -286,9 +288,15 @@
 
     const currentTimeline = get(timelineState)
     const latestTurnId = latestProjectedTurnId()
-    const timelineRefresh = hasTimelineSnapshot(currentTimeline, sessionId)
+    const topology = currentSelectedSession()?.capabilities.topology === true
+    const expectedMode = topology ? 'tree' : 'linear'
+    const timelineRefresh = hasTimelineSnapshot(currentTimeline, sessionId) && currentTimeline.mode === expectedMode
       ? refreshSessionTimeline(sessionId, latestTurnId)
-      : loadSessionTimeline(sessionId, { mode: 'rebuild', latestTurnId })
+      : loadSessionTimeline(sessionId, {
+          mode: 'rebuild',
+          latestTurnId,
+          ...(topology ? { topology: true } : {}),
+        })
 
     foregroundRefreshInFlight = Promise.all([
       loadSessionDetail(sessionId, { showLoading: false }),
@@ -411,10 +419,17 @@
 
       const currentTimeline = get(timelineState)
       const latestTurnId = latestProjectedTurnId()
+      const topology = loadedSession?.capabilities.topology === true
+      const expectedMode = topology ? 'tree' : 'linear'
       const hasLoadedTimeline = hasTimelineSnapshot(currentTimeline, sessionId)
+        && currentTimeline.mode === expectedMode
       if (!hasLoadedTimeline) resetTimelineState(sessionId)
       if (hasLoadedTimeline) await refreshSessionTimeline(sessionId, latestTurnId)
-      else await loadSessionTimeline(sessionId, { mode: 'rebuild', latestTurnId })
+      else await loadSessionTimeline(sessionId, {
+        mode: 'rebuild',
+        latestTurnId,
+        ...(topology ? { topology: true } : {}),
+      })
       await scrollChatToBottomAfterLayout()
       if (!destroyed && selectedSessionId === sessionId) {
         initialChatScrollPending = false
@@ -430,7 +445,10 @@
     if (!selectedSessionId || !$timelineState.hasMore || $timelineState.refreshing) return
     actionError = null
     try {
-      await loadSessionTimeline(selectedSessionId, { mode: 'more' })
+      await loadSessionTimeline(selectedSessionId, {
+        mode: 'more',
+        ...(selectedSession?.capabilities.topology === true ? { topology: true } : {}),
+      })
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     }

@@ -64,7 +64,13 @@
       prompt = ''
       resetTimelineState(result.session.session_id)
       navigate(`/chat/${result.session.session_id}`)
-      await Promise.all([loadSessionDetail(result.session.session_id), loadSessionTimeline(result.session.session_id, { mode: 'rebuild' })])
+      await Promise.all([
+        loadSessionDetail(result.session.session_id),
+        loadSessionTimeline(result.session.session_id, {
+          mode: 'rebuild',
+          ...(result.session.capabilities.topology === true ? { topology: true } : {}),
+        }),
+      ])
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {

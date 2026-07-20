@@ -14,6 +14,8 @@ import type {
   SubmitInboxMessageInput,
   TurnTimelineDirection,
   TurnTimelinePage,
+  TurnTreeHistoryPage,
+  TurnTreeUpdatesPage,
   UpsertAgentProfileInput,
   TaskEventView,
   TaskView,
@@ -318,6 +320,33 @@ export async function getTurnTimeline(
   if (options.limit !== undefined) params.set('limit', String(options.limit));
   return request<TurnTimelinePage>(
     `/sessions/${encodeURIComponent(sessionId)}/turns/timeline?${params.toString()}`,
+    { signal: options.signal },
+  );
+}
+
+export async function getTurnTreeHistory(
+  sessionId: string,
+  options: { fromTurnId?: string | null; limit?: number; signal?: AbortSignal } = {},
+): Promise<TurnTreeHistoryPage> {
+  const params = new URLSearchParams();
+  if (options.fromTurnId) params.set('from_turn_id', options.fromTurnId);
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  const query = params.size ? `?${params.toString()}` : '';
+  return request<TurnTreeHistoryPage>(
+    `/sessions/${encodeURIComponent(sessionId)}/turns/tree/history${query}`,
+    { signal: options.signal },
+  );
+}
+
+export async function getTurnTreeUpdates(
+  sessionId: string,
+  options: { fromTurnId?: string | null; signal?: AbortSignal } = {},
+): Promise<TurnTreeUpdatesPage> {
+  const params = new URLSearchParams();
+  if (options.fromTurnId) params.set('from_turn_id', options.fromTurnId);
+  const query = params.size ? `?${params.toString()}` : '';
+  return request<TurnTreeUpdatesPage>(
+    `/sessions/${encodeURIComponent(sessionId)}/turns/tree/updates${query}`,
     { signal: options.signal },
   );
 }

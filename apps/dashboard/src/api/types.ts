@@ -286,6 +286,27 @@ export interface TurnTimelinePage {
   next_turn_id: string | null;
 }
 
+export interface TurnTimelineGroup {
+  turn_id: string;
+  turn_index: number;
+  parent_turn_id: string | null;
+  state: TurnState | string;
+  items: TurnTimelineItem[];
+}
+
+export interface TurnTreeHistoryPage {
+  session_id: string;
+  groups: TurnTimelineGroup[];
+  next_from_turn_id: string | null;
+}
+
+export interface TurnTreeUpdatesPage {
+  session_id: string;
+  current_turn_id: string | null;
+  retain_through_turn_id: string | null;
+  groups: TurnTimelineGroup[];
+}
+
 export type DashboardStreamEvent =
   | { kind: 'session_event'; id: string; occurred_at: string; event: EventView }
   | { kind: 'task_event'; id: string; occurred_at: string; event: TaskEventView };

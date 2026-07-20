@@ -85,6 +85,33 @@ test('shows busy agent status with an interrupt action when supported', async ()
 });
 
 
+test('selects tree timeline loading when the Session advertises timeline and topology', async () => {
+  const selected = session({
+    session_id: 'session-tree',
+    current_turn_id: 'turn-5',
+    capabilities: { timeline: true, topology: true },
+  });
+  window.history.pushState({}, '', '/dashboard/chat/session-tree');
+  mocks.pathParams = { sessionId: 'session-tree' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ turn_id: 'turn-5', session_id: 'session-tree', turn_index: 5 })],
+    inboxMessages: [],
+    events: [],
+  });
+
+  render(SessionChatPage);
+
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-tree', {
+    mode: 'rebuild',
+    latestTurnId: 'turn-5',
+    topology: true,
+  }));
+});
+
+
 test('renames the selected chat session from advanced controls', async () => {
   const user = userEvent.setup();
   const selected = session({ session_id: 'session-2', title: 'Old title' });

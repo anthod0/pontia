@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { getTurnTimeline, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
+import { getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
 import { token } from '../src/stores/auth';
 
 beforeEach(() => {
@@ -70,6 +70,25 @@ test('loads projected Turn timeline ranges without exposing client-native cursor
 
   expect(fetchMock).toHaveBeenCalledWith(
     '/external/v1/sessions/session-1/turns/timeline?direction=backward&turn_id=turn-latest&limit=3',
+    expect.any(Object),
+  );
+});
+
+test('loads topology-aware Turn history and updates with generic Turn identifiers', async () => {
+  const fetchMock = vi.fn(async () => jsonResponse({ session_id: 'session-1', groups: [] }));
+  vi.stubGlobal('fetch', fetchMock);
+
+  await getTurnTreeHistory('session-1', { fromTurnId: 'turn-5', limit: 3 });
+  await getTurnTreeUpdates('session-1', { fromTurnId: 'turn-3' });
+
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    1,
+    '/external/v1/sessions/session-1/turns/tree/history?from_turn_id=turn-5&limit=3',
+    expect.any(Object),
+  );
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    2,
+    '/external/v1/sessions/session-1/turns/tree/updates?from_turn_id=turn-3',
     expect.any(Object),
   );
 });

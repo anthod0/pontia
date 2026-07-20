@@ -61,6 +61,8 @@ const mocks = vi.hoisted(() => {
     refreshWorkspaceGitStatus: vi.fn(async () => undefined),
     timelineState: writableStore({
       sessionId: '',
+      mode: null,
+      groups: [],
       items: [],
       nextOlderTurnId: null,
       latestTurnId: null,

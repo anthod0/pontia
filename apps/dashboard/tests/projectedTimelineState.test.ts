@@ -1,14 +1,18 @@
 import { get } from 'svelte/store';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../src/api/errors';
-import type { TurnTimelineItem, TurnTimelinePage } from '../src/api/types';
+import type { TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage, TurnTreeHistoryPage, TurnTreeUpdatesPage } from '../src/api/types';
 
 const mocks = vi.hoisted(() => ({
   getTurnTimeline: vi.fn(),
+  getTurnTreeHistory: vi.fn(),
+  getTurnTreeUpdates: vi.fn(),
 }));
 
 vi.mock('../src/api/client', () => ({
   getTurnTimeline: mocks.getTurnTimeline,
+  getTurnTreeHistory: mocks.getTurnTreeHistory,
+  getTurnTreeUpdates: mocks.getTurnTreeUpdates,
 }));
 
 const {
@@ -31,6 +35,35 @@ function item(turnId: string, itemId: string, preview: string): TurnTimelineItem
   };
 }
 
+function group(turnId: string, turnIndex: number, preview = turnId, parentTurnId: string | null = null): TurnTimelineGroup {
+  return {
+    turn_id: turnId,
+    turn_index: turnIndex,
+    parent_turn_id: parentTurnId,
+    state: 'completed',
+    items: [item(turnId, `item-${turnId}`, preview)],
+  };
+}
+
+function historyPage(overrides: Partial<TurnTreeHistoryPage> = {}): TurnTreeHistoryPage {
+  return {
+    session_id: 'sess-1',
+    groups: [group('turn-4', 4, 'branch four', 'turn-1'), group('turn-5', 5, 'branch five', 'turn-4')],
+    next_from_turn_id: 'turn-1',
+    ...overrides,
+  };
+}
+
+function updatesPage(overrides: Partial<TurnTreeUpdatesPage> = {}): TurnTreeUpdatesPage {
+  return {
+    session_id: 'sess-1',
+    current_turn_id: 'turn-5',
+    retain_through_turn_id: 'turn-1',
+    groups: [group('turn-4', 4, 'branch four', 'turn-1'), group('turn-5', 5, 'branch five', 'turn-4')],
+    ...overrides,
+  };
+}
+
 function page(overrides: Partial<TurnTimelinePage> = {}): TurnTimelinePage {
   return {
     session_id: 'sess-1',
@@ -45,7 +78,65 @@ beforeEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
   mocks.getTurnTimeline.mockReset();
+  mocks.getTurnTreeHistory.mockReset();
+  mocks.getTurnTreeUpdates.mockReset();
   resetTimelineState();
+});
+
+test('tree history follows backend groups and paginates without a duplicate boundary Turn', async () => {
+  mocks.getTurnTreeHistory
+    .mockResolvedValueOnce(historyPage())
+    .mockResolvedValueOnce(historyPage({
+      groups: [group('turn-1', 1, 'root')],
+      next_from_turn_id: null,
+    }));
+
+  await loadSessionTimeline('sess-1', { mode: 'rebuild', topology: true });
+  await loadSessionTimeline('sess-1', { mode: 'more', topology: true });
+
+  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(1, 'sess-1', { limit: 5 });
+  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(2, 'sess-1', {
+    fromTurnId: 'turn-1',
+    limit: 5,
+  });
+  expect(get(timelineState).groups.map((entry) => entry.turn_id)).toEqual([
+    'turn-1',
+    'turn-4',
+    'turn-5',
+  ]);
+  expect(get(timelineState)).toMatchObject({
+    mode: 'tree',
+    latestTurnId: 'turn-5',
+    nextOlderTurnId: null,
+    hasMore: false,
+  });
+});
+
+test('tree updates discard a divergent suffix after the LCA and append the replacement branch', async () => {
+  mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage({
+    groups: [
+      group('turn-1', 1, 'root'),
+      group('turn-2', 2, 'old two', 'turn-1'),
+      group('turn-3', 3, 'old three', 'turn-2'),
+    ],
+    next_from_turn_id: null,
+  }));
+  mocks.getTurnTreeUpdates.mockResolvedValueOnce(updatesPage());
+
+  await loadSessionTimeline('sess-1', { mode: 'rebuild', topology: true });
+  await refreshSessionTimeline('sess-1');
+
+  expect(mocks.getTurnTreeUpdates).toHaveBeenCalledWith('sess-1', { fromTurnId: 'turn-3' });
+  expect(get(timelineState).groups.map((entry) => entry.turn_id)).toEqual([
+    'turn-1',
+    'turn-4',
+    'turn-5',
+  ]);
+  expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual([
+    'root',
+    'branch four',
+    'branch five',
+  ]);
 });
 
 test('realtime refresh uses an inclusive forward Turn anchor and atomically replaces returned groups', async () => {

@@ -116,6 +116,29 @@ test('maps each turn into user and assistant chat messages in chronological orde
   ]);
 });
 
+test('preserves topology group order at the presentation seam instead of globally sorting timestamps', () => {
+  const messages = timelineItemsToChatMessages([
+    timelineItem({
+      item_id: 'branch-root',
+      kind: 'user',
+      role: 'user',
+      turn_id: 'turn-root',
+      content_preview: 'root',
+      occurred_at: '2026-01-01T00:10:00Z',
+    }),
+    timelineItem({
+      item_id: 'branch-leaf',
+      kind: 'user',
+      role: 'user',
+      turn_id: 'turn-leaf',
+      content_preview: 'leaf',
+      occurred_at: '2026-01-01T00:00:00Z',
+    }),
+  ], true);
+
+  expect(messages.map((message) => message.content)).toEqual(['root', 'leaf']);
+});
+
 test('maps timeline items into primary chat messages with assistant thought steps', () => {
   const messages = timelineItemsToChatMessages([
     timelineItem({ item_id: '1', kind: 'user', role: 'user', content_preview: 'Build the feature', occurred_at: '2026-01-01T00:00:00Z' }),

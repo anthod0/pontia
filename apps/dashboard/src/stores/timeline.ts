@@ -1,7 +1,7 @@
 import { get, writable } from 'svelte/store';
-import { getTurnTimeline } from '../api/client';
+import { getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates } from '../api/client';
 import { ApiError } from '../api/errors';
-import type { TurnTimelineItem, TurnTimelinePage } from '../api/types';
+import type { TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage, TurnTreeHistoryPage } from '../api/types';
 
 export type TimelineRefreshKind = 'history' | 'tail' | null;
 export type TimelineStatus =
@@ -14,10 +14,13 @@ export type TimelineStatus =
   | 'range_unavailable'
   | 'range_invalid'
   | 'source_unavailable'
+  | 'topology_unavailable'
   | 'error';
 
 export interface TimelineState {
   sessionId: string;
+  mode: 'linear' | 'tree' | null;
+  groups: TurnTimelineGroup[];
   items: TurnTimelineItem[];
   nextOlderTurnId: string | null;
   latestTurnId: string | null;
@@ -39,6 +42,8 @@ const TIMELINE_UPDATE_DEBOUNCE_MS = 100;
 function emptyState(sessionId = ''): TimelineState {
   return {
     sessionId,
+    mode: null,
+    groups: [],
     items: [],
     nextOlderTurnId: null,
     latestTurnId: null,
@@ -117,6 +122,34 @@ function replaceReturnedTurnGroups(
   ];
 }
 
+function flattenTurnGroups(groups: TurnTimelineGroup[]): TurnTimelineItem[] {
+  return groups.flatMap((group) => uniqueTimelineItems(group.items));
+}
+
+function prependUnseenGroups(
+  currentGroups: TurnTimelineGroup[],
+  previousGroups: TurnTimelineGroup[],
+): TurnTimelineGroup[] {
+  const currentTurnIds = new Set(currentGroups.map((group) => group.turn_id));
+  return [
+    ...previousGroups.filter((group) => !currentTurnIds.has(group.turn_id)),
+    ...currentGroups,
+  ];
+}
+
+function applyTreeUpdates(
+  currentGroups: TurnTimelineGroup[],
+  retainThroughTurnId: string | null,
+  returnedGroups: TurnTimelineGroup[],
+): TurnTimelineGroup[] {
+  if (retainThroughTurnId === null) return returnedGroups;
+  const retainIndex = currentGroups.findIndex((group) => group.turn_id === retainThroughTurnId);
+  if (retainIndex < 0) return returnedGroups;
+  const retained = currentGroups.slice(0, retainIndex + 1);
+  if (returnedGroups[0]?.turn_id === retainThroughTurnId) retained.pop();
+  return [...retained, ...returnedGroups];
+}
+
 function statusForItems(items: TurnTimelineItem[]): TimelineStatus {
   return items.length ? 'ready' : 'empty';
 }
@@ -133,6 +166,8 @@ function errorStatus(error: unknown): TimelineStatus {
     case 'turn_timeline_unavailable': return 'range_unavailable';
     case 'turn_timeline_invalid': return 'range_invalid';
     case 'timeline_source_unavailable': return 'source_unavailable';
+    case 'turn_topology_unknown':
+    case 'turn_topology_invalid': return 'topology_unavailable';
     default: return 'error';
   }
 }
@@ -148,8 +183,8 @@ function applyTimelineError(sessionId: string, error: unknown): void {
 
 export async function loadSessionTimeline(
   sessionId: string,
-  options: { mode?: LoadMode; limit?: number; latestTurnId?: string | null } = {},
-): Promise<TurnTimelinePage | null> {
+  options: { mode?: LoadMode; limit?: number; latestTurnId?: string | null; topology?: boolean } = {},
+): Promise<TurnTimelinePage | TurnTreeHistoryPage | null> {
   if (!sessionId) {
     resetTimelineState();
     return null;
@@ -158,6 +193,7 @@ export async function loadSessionTimeline(
   const mode = options.mode ?? 'rebuild';
   const current = get(timelineState);
   const sameSession = current.sessionId === sessionId;
+  const topology = options.topology ?? (sameSession && current.mode === 'tree');
   const turnId = mode === 'more' && sameSession ? current.nextOlderTurnId : null;
   if (mode === 'more' && !turnId) return null;
 
@@ -165,7 +201,8 @@ export async function loadSessionTimeline(
     const scoped = state.sessionId === sessionId ? state : emptyState(sessionId);
     return {
       ...scoped,
-      latestTurnId: options.latestTurnId ?? scoped.latestTurnId,
+      mode: topology ? 'tree' : 'linear',
+      latestTurnId: topology ? scoped.latestTurnId : options.latestTurnId ?? scoped.latestTurnId,
       loading: mode === 'rebuild',
       refreshing: mode === 'more',
       refreshKind: mode === 'more' ? 'history' : null,
@@ -176,6 +213,35 @@ export async function loadSessionTimeline(
   });
 
   try {
+    if (topology) {
+      const page = await getTurnTreeHistory(sessionId, {
+        ...(turnId ? { fromTurnId: turnId } : {}),
+        limit: options.limit ?? DEFAULT_HISTORY_LIMIT,
+      });
+      timelineState.update((state) => {
+        if (state.sessionId !== sessionId) return state;
+        const groups = mode === 'more'
+          ? prependUnseenGroups(state.groups, page.groups)
+          : page.groups;
+        const items = flattenTurnGroups(groups);
+        return {
+          ...state,
+          groups,
+          items,
+          nextOlderTurnId: page.next_from_turn_id,
+          latestTurnId: groups.at(-1)?.turn_id ?? null,
+          hasMore: page.next_from_turn_id !== null,
+          loading: false,
+          refreshing: false,
+          refreshKind: null,
+          status: statusForItems(items),
+          errorCode: null,
+          error: null,
+        };
+      });
+      return page;
+    }
+
     const page = await getTurnTimeline(sessionId, {
       direction: 'backward',
       ...(turnId ? { turnId } : {}),
@@ -188,6 +254,7 @@ export async function loadSessionTimeline(
         : uniqueTimelineItems(page.items);
       return {
         ...state,
+        groups: [],
         items,
         nextOlderTurnId: page.next_turn_id,
         latestTurnId: mode === 'rebuild' && options.latestTurnId
@@ -247,6 +314,44 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
         ...state,
         items,
         latestTurnId: items.at(-1)?.turn_id ?? latestTurnId,
+        loading: false,
+        refreshing: false,
+        refreshKind: null,
+        status: statusForItems(items),
+        errorCode: null,
+        error: null,
+      };
+    });
+  } catch (error) {
+    applyTimelineError(sessionId, error);
+  }
+}
+
+async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string): Promise<void> {
+  timelineState.update((state) => ({
+    ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
+    mode: 'tree',
+    refreshing: true,
+    refreshKind: 'tail',
+    errorCode: null,
+    error: null,
+  }));
+
+  try {
+    const updates = await getTurnTreeUpdates(sessionId, { fromTurnId: latestTurnId });
+    timelineState.update((state) => {
+      if (state.sessionId !== sessionId) return state;
+      const groups = applyTreeUpdates(
+        state.groups,
+        updates.retain_through_turn_id,
+        updates.groups,
+      );
+      const items = flattenTurnGroups(groups);
+      return {
+        ...state,
+        groups,
+        items,
+        latestTurnId: updates.current_turn_id,
         loading: false,
         refreshing: false,
         refreshKind: null,
@@ -327,6 +432,15 @@ function clearTimelineUpdateQueue(sessionId: string): void {
 async function refreshSessionTimelineNow(sessionId: string, turnId: string | null): Promise<void> {
   const current = get(timelineState);
   if (current.sessionId && current.sessionId !== sessionId) return;
+
+  if (current.mode === 'tree') {
+    if (!current.latestTurnId) {
+      await loadSessionTimeline(sessionId, { mode: 'rebuild', topology: true });
+      return;
+    }
+    await refreshSessionTreeUpdates(sessionId, current.latestTurnId);
+    return;
+  }
 
   const forwardAnchorTurnId = turnId ?? current.latestTurnId;
   if (!forwardAnchorTurnId) {

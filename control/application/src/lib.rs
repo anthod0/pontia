@@ -51,8 +51,8 @@ pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequ
 pub use ingestion::{EventReportNormalizer, ReportedFact};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
-    TurnTimelineDirection, TurnTimelineItem, TurnTimelinePage, TurnTimelineService,
-    TurnTimelineServiceError,
+    TurnTimelineDirection, TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage,
+    TurnTimelineService, TurnTimelineServiceError, TurnTreeHistoryPage, TurnTreeUpdatesPage,
 };
 pub use runtime::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
 pub use runtime::{RuntimeObservationService, RuntimeReadinessService};

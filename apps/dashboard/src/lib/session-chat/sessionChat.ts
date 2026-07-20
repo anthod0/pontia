@@ -99,7 +99,10 @@ export function turnsToChatMessages(turns: TurnView[]): SessionChatMessage[] {
     });
 }
 
-export function timelineItemsToChatMessages(items: TimelineItem[]): SessionChatMessage[] {
+export function timelineItemsToChatMessages(
+  items: TimelineItem[],
+  preserveTurnOrder = false,
+): SessionChatMessage[] {
   const messages: SessionChatMessage[] = [];
   let pendingThoughtSteps: SessionChatThoughtStep[] = [];
   let pendingThoughtTurnId: string | null = null;
@@ -127,7 +130,10 @@ export function timelineItemsToChatMessages(items: TimelineItem[]): SessionChatM
     pendingThoughtOccurredAt = null;
   };
 
-  for (const item of items.slice().sort((a, b) => timelineTimestamp(a).localeCompare(timelineTimestamp(b)))) {
+  const orderedItems = preserveTurnOrder
+    ? items
+    : items.slice().sort((a, b) => timelineTimestamp(a).localeCompare(timelineTimestamp(b)));
+  for (const item of orderedItems) {
     if (item.kind === 'user') {
       flushPendingWorkingMessage();
       messages.push({

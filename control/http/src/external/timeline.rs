@@ -51,6 +51,45 @@ pub async fn get_turn_timeline(
     })))
 }
 
+pub async fn get_turn_tree_history(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let limit = query
+        .get("limit")
+        .map(|value| value.parse::<usize>())
+        .transpose()
+        .map_err(|_| invalid_timeline_query("limit must be an integer from 1 through 100"))?
+        .unwrap_or(100);
+    if !(1..=100).contains(&limit) {
+        return Err(invalid_timeline_query(
+            "limit must be an integer from 1 through 100",
+        ));
+    }
+    let page = TurnTimelineService::new(state.db())
+        .tree_history(session_id, query.get("from_turn_id").cloned(), limit)
+        .await
+        .map_err(turn_timeline_service_error)?;
+    Ok(ok(json!(page)))
+}
+
+pub async fn get_turn_tree_updates(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let page = TurnTimelineService::new(state.db())
+        .tree_updates(session_id, query.get("from_turn_id").cloned())
+        .await
+        .map_err(turn_timeline_service_error)?;
+    Ok(ok(json!(page)))
+}
+
 fn invalid_timeline_query(message: impl Into<String>) -> ExternalApiError {
     ExternalApiError::custom(StatusCode::BAD_REQUEST, "invalid_timeline_query", message)
 }
@@ -81,6 +120,16 @@ fn turn_timeline_service_error(error: TurnTimelineServiceError) -> ExternalApiEr
             StatusCode::CONFLICT,
             "turn_timeline_invalid",
             format!("Turn {turn_id} has an invalid timeline range"),
+        ),
+        TurnTimelineServiceError::TopologyUnknown { turn_id } => ExternalApiError::custom(
+            StatusCode::CONFLICT,
+            "turn_topology_unknown",
+            format!("Turn {turn_id} has unresolved topology"),
+        ),
+        TurnTimelineServiceError::TopologyInvalid { turn_id } => ExternalApiError::custom(
+            StatusCode::CONFLICT,
+            "turn_topology_invalid",
+            format!("Turn {turn_id} has invalid topology"),
         ),
         TurnTimelineServiceError::SourceUnavailable => ExternalApiError::custom(
             StatusCode::SERVICE_UNAVAILABLE,

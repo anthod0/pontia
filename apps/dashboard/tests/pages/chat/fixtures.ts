@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => {
 
   const timelineStateValue = (overrides: Partial<TimelineState> = {}): TimelineState => ({
     sessionId: '',
+    mode: 'linear',
+    groups: [],
     items: [],
     nextOlderTurnId: null,
     latestTurnId: null,
