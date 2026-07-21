@@ -199,8 +199,8 @@ async fn observe_missing_generic_runtime_does_not_fail_a_terminal_branch_leaf() 
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
     sqlx::query(
-        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
-           VALUES ('turn_terminal_leaf', ?, 1, 'completed', '{}')"#,
+        r#"INSERT INTO turns (turn_id, session_id, state, metadata)
+           VALUES ('turn_terminal_leaf', ?, 'completed', '{}')"#,
     )
     .bind(&session_id)
     .execute(&state.db())

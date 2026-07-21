@@ -204,10 +204,10 @@ async fn sqlite_turn_repository_resolves_the_unique_active_turn() {
     .await
     .expect("insert session");
     sqlx::query(
-        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
+        r#"INSERT INTO turns (turn_id, session_id, state, metadata)
            VALUES
-           ('turn_completed', 'sess_active_turn', 1, 'completed', '{}'),
-           ('turn_running', 'sess_active_turn', 2, 'running', '{}')"#,
+           ('turn_completed', 'sess_active_turn', 'completed', '{}'),
+           ('turn_running', 'sess_active_turn', 'running', '{}')"#,
     )
     .execute(&pool)
     .await
@@ -235,10 +235,10 @@ async fn sqlite_turn_repository_rejects_multiple_active_turns() {
     .await
     .expect("insert session");
     sqlx::query(
-        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
+        r#"INSERT INTO turns (turn_id, session_id, state, metadata)
            VALUES
-           ('turn_queued', 'sess_invalid_active_turns', 1, 'queued', '{}'),
-           ('turn_running', 'sess_invalid_active_turns', 2, 'running', '{}')"#,
+           ('turn_queued', 'sess_invalid_active_turns', 'queued', '{}'),
+           ('turn_running', 'sess_invalid_active_turns', 'running', '{}')"#,
     )
     .execute(&pool)
     .await
@@ -264,12 +264,12 @@ async fn sqlite_turn_repository_lists_turns_and_event_rows_with_existing_order()
     .expect("insert session");
     sqlx::query(
         r#"INSERT INTO turns
-           (turn_id, session_id, turn_index, state, input_summary, output_summary, failure_message,
+           (turn_id, session_id, state, input_summary, output_summary, failure_message,
             metadata, created_at, updated_at)
            VALUES
-           ('turn_b', 'sess_turns', 2, 'queued', 'input b', NULL, NULL, ?,
+           ('turn_b', 'sess_turns', 'queued', 'input b', NULL, NULL, ?,
             '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z'),
-           ('turn_a', 'sess_turns', 1, 'completed', 'input a', 'output a', NULL, ?,
+           ('turn_a', 'sess_turns', 'completed', 'input a', 'output a', NULL, ?,
             '2026-06-15T12:00:00Z', '2026-06-15T12:00:00Z')"#,
     )
     .bind(json!({"note": "b"}).to_string())
@@ -279,10 +279,10 @@ async fn sqlite_turn_repository_lists_turns_and_event_rows_with_existing_order()
     .expect("insert turns");
     sqlx::query(
         r#"INSERT INTO events
-           (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload, turn_index)
+           (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload)
            VALUES
-           ('evt_b', 'sess_turns', 'turn_a', 'client', 'pi', 'turn.output', '2026-06-15T12:00:00Z', ?, 1),
-           ('evt_a', 'sess_turns', 'turn_a', 'client', 'pi', 'turn.started', '2026-06-15T12:00:00Z', ?, 1)"#,
+           ('evt_b', 'sess_turns', 'turn_a', 'client', 'pi', 'turn.output', '2026-06-15T12:00:00Z', ?),
+           ('evt_a', 'sess_turns', 'turn_a', 'client', 'pi', 'turn.started', '2026-06-15T12:00:00Z', ?)"#,
     )
     .bind(json!({"output_summary": "from event"}).to_string())
     .bind(json!({"input_summary": "from event"}).to_string())

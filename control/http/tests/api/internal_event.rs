@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use pontia_application::{AppState, EventIngestService};
 use pontia_core::{
     domain::{EventSource, EventType, ReportedEvent},
-    ids::new_event_id,
+    ids::{new_event_id, new_turn_id},
 };
 use pontia_http as http;
 use pontia_storage_sqlite::repositories::runtime_bindings::{
@@ -109,6 +109,13 @@ async fn internal_event_api_normalizes_started_fact_into_a_domain_event() {
     let turn_id = body["turn_id"].as_str().expect("turn id");
     assert!(event_id.starts_with("evt_"));
     assert!(turn_id.starts_with("turn_"));
+    assert_eq!(
+        turn_id[5..]
+            .split('-')
+            .nth(2)
+            .and_then(|part| part.chars().next()),
+        Some('7')
+    );
 
     let events = EventIngestService::new(state.db())
         .list_events("sess_normalized")
@@ -121,6 +128,93 @@ async fn internal_event_api_normalizes_started_fact_into_a_domain_event() {
     assert_eq!(started.client_type, "pi");
     assert_eq!(started.payload["input"]["summary"], "hello");
     assert_eq!(started.payload["metadata"]["inbox_message_id"], "msg_1");
+}
+
+#[tokio::test]
+async fn internal_event_api_rejects_supplied_unknown_turn_id_for_started_fact() {
+    let state = test_state().await;
+    create_session(&state, "sess_unknown_started_turn", "pi").await;
+    bind_runtime(
+        &state,
+        "sess_unknown_started_turn",
+        "rtinst_unknown_started_turn",
+    )
+    .await;
+
+    let (status, body) = post_event(
+        state,
+        json!({
+            "session_id": "sess_unknown_started_turn",
+            "turn_id": "turn_client_chosen",
+            "type": "turn.started",
+            "data": { "runtime_instance_id": "rtinst_unknown_started_turn" }
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"]["code"], "invalid_request");
+}
+
+#[tokio::test]
+async fn internal_event_api_allows_started_fact_to_reference_an_existing_turn() {
+    let state = test_state().await;
+    create_session(&state, "sess_existing_started_turn", "pi").await;
+    bind_runtime(
+        &state,
+        "sess_existing_started_turn",
+        "rtinst_existing_started_turn",
+    )
+    .await;
+
+    let turn_id = new_turn_id().to_string();
+    EventIngestService::new(state.db())
+        .ingest_event(ReportedEvent::new(
+            new_event_id().to_string(),
+            "sess_existing_started_turn".to_string(),
+            Some(turn_id.clone()),
+            EventSource::ExternalApi,
+            "pi".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .expect("create Pontia-owned turn");
+
+    let (referenced_status, referenced) = post_event(
+        state,
+        json!({
+            "session_id": "sess_existing_started_turn",
+            "turn_id": turn_id,
+            "type": "turn.started",
+            "data": { "runtime_instance_id": "rtinst_existing_started_turn" }
+        }),
+    )
+    .await;
+
+    assert_eq!(referenced_status, StatusCode::OK, "{referenced:?}");
+    assert_eq!(referenced["turn_id"], turn_id);
+}
+
+#[tokio::test]
+async fn internal_event_api_rejects_other_creation_facts_with_unknown_supplied_turn_ids() {
+    let state = test_state().await;
+    create_session(&state, "sess_unknown_created_turn", "generic").await;
+
+    for fact_type in ["turn.created", "turn.queued"] {
+        let (status, body) = post_event(
+            state.clone(),
+            json!({
+                "session_id": "sess_unknown_created_turn",
+                "turn_id": format!("turn_client_chosen_{fact_type}"),
+                "type": fact_type,
+                "data": {}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+        assert_eq!(body["error"]["code"], "invalid_request");
+    }
 }
 
 #[tokio::test]

@@ -109,19 +109,23 @@ impl EventIngestService {
         let mut tx = self.pool.begin().await?;
         if event.event_type != EventType::SessionCreated {
             let session_exists =
-                SqliteSessionRepository::session_exists_in_tx(&mut tx, &event.session_id).await?;
-            if session_exists || event.event_type.is_turn_event() || enforce_runtime_fence {
+                SqliteTurnRepository::serialize_session_turn_writes_if_exists_in_tx(
+                    &mut tx,
+                    &event.session_id,
+                )
+                .await?;
+            if !session_exists && (event.event_type.is_turn_event() || enforce_runtime_fence) {
                 SqliteTurnRepository::serialize_session_turn_writes_in_tx(
                     &mut tx,
                     &event.session_id,
                 )
                 .await?;
-                if enforce_runtime_fence {
-                    self.ensure_runtime_fence_in_tx(&mut tx, &event).await?;
-                }
+            }
+            if enforce_runtime_fence {
+                self.ensure_runtime_fence_in_tx(&mut tx, &event).await?;
             }
         }
-        self.enrich_turn_index_in_tx(&mut tx, &mut event, enforce_runtime_fence)
+        self.validate_turn_identity_in_tx(&mut tx, &event, enforce_runtime_fence)
             .await?;
         let sessions =
             SqliteSessionRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
@@ -168,7 +172,6 @@ impl EventIngestService {
                 occurred_at,
                 seq: event.seq,
                 payload,
-                turn_index: event.turn_index,
                 timeline_boundary,
                 turn_topology,
             },
@@ -208,7 +211,6 @@ impl EventIngestService {
                     TurnProjectionUpsertRecord {
                         turn_id: turn.turn_id.clone(),
                         session_id: turn.session_id.clone(),
-                        turn_index: turn.turn_index,
                         head_cursor: turn.head_cursor.clone(),
                         tail_cursor: turn.tail_cursor.clone(),
                         parent_turn_id: turn.topology.parent_turn_id().map(ToString::to_string),
@@ -270,9 +272,6 @@ impl EventIngestService {
         let Some(turn_id) = event.turn_id.clone() else {
             return;
         };
-        let Some(turn_index) = event.turn_index else {
-            return;
-        };
         let Some(binding_id) = binding_id else {
             event.topology = Some(TurnTopology::Unknown);
             warn_topology_resolution(event, TopologyDiagnostic::BindingUnavailable);
@@ -285,17 +284,15 @@ impl EventIngestService {
         };
         let earlier_turns = turns
             .iter()
-            .filter(|turn| turn.turn_id != turn_id && turn.turn_index < turn_index)
+            .filter(|turn| turn.turn_id.as_str() < turn_id.as_str())
             .map(|turn| TurnTopologyCandidate {
                 turn_id: turn.turn_id.clone(),
-                turn_index: turn.turn_index,
                 tail_cursor: turn.tail_cursor.clone(),
             })
             .collect::<Vec<_>>();
         let result = backend.resolver.resolve(TopologyResolveRequest {
             binding_id,
-            current_turn_id: turn_id,
-            current_turn_index: turn_index,
+            current_turn_id: turn_id.clone(),
             earlier_turns,
             evidence,
         });
@@ -306,7 +303,7 @@ impl EventIngestService {
                 if turns.iter().any(|candidate| {
                     candidate.turn_id == parent_turn_id
                         && candidate.session_id == event.session_id
-                        && candidate.turn_index < turn_index
+                        && candidate.turn_id.as_str() < turn_id.as_str()
                 }) =>
             {
                 TurnTopology::linked(parent_turn_id)
@@ -440,45 +437,31 @@ impl EventIngestService {
         }
     }
 
-    async fn enrich_turn_index_in_tx(
+    async fn validate_turn_identity_in_tx(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        event: &mut DomainEvent,
+        event: &DomainEvent,
         require_existing_followup: bool,
     ) -> Result<()> {
         if !event.event_type.is_turn_event() {
-            if event.turn_index.is_some() {
-                return Err(Error::Domain(
-                    "session event cannot carry Pontia-owned turn_index".to_string(),
-                ));
-            }
             return Ok(());
         }
         let turn_id = event.turn_id.as_deref().expect("validated turn_id");
 
-        let persisted = SqliteTurnRepository::turn_identity_in_tx(tx, turn_id).await?;
-        let turn_index = match persisted {
-            Some(identity) => {
-                if identity.session_id != event.session_id {
-                    return Err(Error::Domain(format!(
-                        "turn {turn_id} belongs to session {}, not {}",
-                        identity.session_id, event.session_id
-                    )));
-                }
-                identity.turn_index
-            }
+        match SqliteTurnRepository::turn_session_id_in_tx(tx, turn_id).await? {
+            Some(session_id) if session_id != event.session_id => Err(Error::Domain(format!(
+                "turn {turn_id} belongs to session {session_id}, not {}",
+                event.session_id
+            ))),
+            Some(_) => Ok(()),
             None if event_type_can_create_turn(event.event_type) || !require_existing_followup => {
-                SqliteTurnRepository::allocate_turn_index_in_tx(tx, &event.session_id).await?
+                Ok(())
             }
-            None => {
-                return Err(Error::Domain(format!(
-                    "{} references unknown turn {turn_id} in session {}",
-                    event.event_type, event.session_id
-                )));
-            }
-        };
-        event.turn_index = Some(turn_index);
-        Ok(())
+            None => Err(Error::Domain(format!(
+                "{} references unknown turn {turn_id} in session {}",
+                event.event_type, event.session_id
+            ))),
+        }
     }
 
     async fn ensure_runtime_fence_in_tx(

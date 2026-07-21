@@ -173,7 +173,6 @@ export const session = (overrides: Partial<SessionView> = {}): SessionView => ({
 export const turn = (overrides: Partial<TurnView> = {}): TurnView => ({
   turn_id: 'turn-1',
   session_id: 'session-1',
-  turn_index: 1,
   parent_turn_id: null,
   topology_status: 'unknown',
   state: 'completed',

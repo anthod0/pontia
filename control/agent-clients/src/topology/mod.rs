@@ -3,7 +3,6 @@ use serde_json::Value;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TurnTopologyCandidate {
     pub turn_id: String,
-    pub turn_index: i64,
     pub tail_cursor: Option<String>,
 }
 
@@ -11,7 +10,6 @@ pub struct TurnTopologyCandidate {
 pub struct TopologyResolveRequest {
     pub binding_id: String,
     pub current_turn_id: String,
-    pub current_turn_index: i64,
     pub earlier_turns: Vec<TurnTopologyCandidate>,
     pub evidence: Option<Value>,
 }

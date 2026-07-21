@@ -393,7 +393,7 @@ async fn external_api_lists_and_gets_turn_views() {
         "turn_external_queries_1"
     );
     assert_eq!(list_body["data"]["turns"][0]["state"], "completed");
-    assert_eq!(list_body["data"]["turns"][0]["turn_index"], 1);
+    assert!(list_body["data"]["turns"][0].get("turn_index").is_none());
     assert_eq!(list_body["data"]["turns"][0]["topology_status"], "root");
     assert_eq!(list_body["data"]["turns"][0]["parent_turn_id"], Value::Null);
     assert!(list_body["data"]["turns"][0].get("head_cursor").is_none());
@@ -408,7 +408,7 @@ async fn external_api_lists_and_gets_turn_views() {
         get_body["data"]["turn"]["session_id"],
         "sess_external_queries_1"
     );
-    assert_eq!(get_body["data"]["turn"]["turn_index"], 1);
+    assert!(get_body["data"]["turn"].get("turn_index").is_none());
     assert_eq!(get_body["data"]["turn"]["topology_status"], "root");
     assert_eq!(get_body["data"]["turn"]["parent_turn_id"], Value::Null);
     assert!(get_body["data"]["turn"].get("head_cursor").is_none());
@@ -421,7 +421,7 @@ async fn external_api_lists_and_gets_turn_views() {
 }
 
 #[tokio::test]
-async fn external_api_lists_linked_topology_in_turn_index_order() {
+async fn external_api_lists_linked_topology_in_turn_id_order() {
     let state = test_state().await;
     let service = EventIngestService::new(state.db());
     service
@@ -440,7 +440,7 @@ async fn external_api_lists_linked_topology_in_turn_index_order() {
                 "evt_topology_external_root",
                 EventType::TurnStarted,
                 "sess_topology_external",
-                Some("turn_root"),
+                Some("turn_01900000-0000-7000-8000-000000000001"),
                 json!({}),
             ),
             TurnTopology::Root,
@@ -452,7 +452,7 @@ async fn external_api_lists_linked_topology_in_turn_index_order() {
             "evt_topology_external_root_done",
             EventType::TurnCompleted,
             "sess_topology_external",
-            Some("turn_root"),
+            Some("turn_01900000-0000-7000-8000-000000000001"),
             json!({}),
         ))
         .await
@@ -463,10 +463,10 @@ async fn external_api_lists_linked_topology_in_turn_index_order() {
                 "evt_topology_external_child",
                 EventType::TurnStarted,
                 "sess_topology_external",
-                Some("turn_child"),
+                Some("turn_01900000-0000-7000-8000-000000000002"),
                 json!({}),
             ),
-            TurnTopology::linked("turn_root"),
+            TurnTopology::linked("turn_01900000-0000-7000-8000-000000000001"),
         )
         .await
         .unwrap();
@@ -481,13 +481,67 @@ async fn external_api_lists_linked_topology_in_turn_index_order() {
     assert_eq!(status, StatusCode::OK);
     let turns = body["data"]["turns"].as_array().unwrap();
     assert_eq!(turns.len(), 2);
-    assert_eq!(turns[0]["turn_id"], "turn_root");
-    assert_eq!(turns[0]["turn_index"], 1);
+    assert_eq!(
+        turns[0]["turn_id"],
+        "turn_01900000-0000-7000-8000-000000000001"
+    );
+    assert!(turns[0].get("turn_index").is_none());
     assert_eq!(turns[0]["topology_status"], "root");
-    assert_eq!(turns[1]["turn_id"], "turn_child");
-    assert_eq!(turns[1]["turn_index"], 2);
+    assert_eq!(
+        turns[1]["turn_id"],
+        "turn_01900000-0000-7000-8000-000000000002"
+    );
+    assert!(turns[1].get("turn_index").is_none());
     assert_eq!(turns[1]["topology_status"], "linked");
-    assert_eq!(turns[1]["parent_turn_id"], "turn_root");
+    assert_eq!(
+        turns[1]["parent_turn_id"],
+        "turn_01900000-0000-7000-8000-000000000001"
+    );
+}
+
+#[tokio::test]
+async fn external_api_orders_turns_by_uuid_v7_id() {
+    let state = test_state().await;
+    EventIngestService::new(state.db())
+        .ingest_event(event(
+            "evt_uuid_order_session",
+            EventType::SessionCreated,
+            "sess_uuid_order",
+            None,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO turns (turn_id, session_id, state) VALUES
+           ('turn_01900000-0000-7000-8000-000000000002', 'sess_uuid_order', 'completed'),
+           ('turn_01900000-0000-7000-8000-000000000001', 'sess_uuid_order', 'completed')"#,
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let (status, body) = get(
+        state,
+        "/external/v1/sessions/sess_uuid_order/turns",
+        Some(TOKEN),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let turn_ids = body["data"]["turns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|turn| turn["turn_id"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        turn_ids,
+        vec![
+            "turn_01900000-0000-7000-8000-000000000001",
+            "turn_01900000-0000-7000-8000-000000000002"
+        ]
+    );
 }
 
 #[tokio::test]

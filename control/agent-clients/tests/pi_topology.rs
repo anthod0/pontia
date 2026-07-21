@@ -15,10 +15,9 @@ fn cursor(binding_id: &str, anchor: &str) -> String {
     .encode()
 }
 
-fn candidate(turn_id: &str, turn_index: i64, anchor: Option<&str>) -> TurnTopologyCandidate {
+fn candidate(turn_id: &str, _candidate_order: i64, anchor: Option<&str>) -> TurnTopologyCandidate {
     TurnTopologyCandidate {
         turn_id: turn_id.to_string(),
-        turn_index,
         tail_cursor: anchor.map(|anchor| cursor("binding_1", anchor)),
     }
 }
@@ -33,7 +32,6 @@ fn resolve(
         .resolve(TopologyResolveRequest {
             binding_id: "binding_1".to_string(),
             current_turn_id: "turn_current".to_string(),
-            current_turn_index: 4,
             earlier_turns,
             evidence,
         })
@@ -133,7 +131,6 @@ fn malformed_evidence_and_invalid_cursor_scope_are_safe_unknowns() {
             Some(json!({"entries": [{"id": "assistant_1", "kind": "assistant_message"}]})),
             vec![TurnTopologyCandidate {
                 turn_id: "turn_1".to_string(),
-                turn_index: 1,
                 tail_cursor: Some(cursor("other_binding", "assistant_1")),
             }],
             TopologyDiagnostic::CursorInvalid,

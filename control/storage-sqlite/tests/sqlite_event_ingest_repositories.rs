@@ -37,7 +37,6 @@ async fn sqlite_event_repository_supports_ingest_event_writes_and_reads() {
             occurred_at: "2026-06-15T12:00:00Z".to_string(),
             seq: Some(2),
             payload: json!({"input_summary": "hello"}).to_string(),
-            turn_index: Some(1),
             timeline_boundary: None,
             turn_topology: Some(json!({"status": "root"}).to_string()),
         },
@@ -102,7 +101,6 @@ async fn sqlite_session_and_turn_repositories_support_projection_rows() {
         TurnProjectionUpsertRecord {
             turn_id: "turn_projection".to_string(),
             session_id: "sess_projection".to_string(),
-            turn_index: 1,
             head_cursor: None,
             tail_cursor: None,
             parent_turn_id: None,

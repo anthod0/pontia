@@ -211,8 +211,8 @@ async fn internal_agent_binding_current_turn_returns_active_turn_context_by_clie
     .await
     .expect("insert session");
     sqlx::query(
-        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, input_summary, metadata)
-           VALUES ('turn_current', 'sess_current', 1, 'running', 'work', '{}')"#,
+        r#"INSERT INTO turns (turn_id, session_id, state, input_summary, metadata)
+           VALUES ('turn_current', 'sess_current', 'running', 'work', '{}')"#,
     )
     .execute(&state.db())
     .await
@@ -264,8 +264,8 @@ async fn internal_agent_binding_current_turn_ignores_a_terminal_sticky_branch_le
     .await
     .expect("insert session");
     sqlx::query(
-        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
-           VALUES ('turn_completed', 'sess_idle', 1, 'completed', '{}')"#,
+        r#"INSERT INTO turns (turn_id, session_id, state, metadata)
+           VALUES ('turn_completed', 'sess_idle', 'completed', '{}')"#,
     )
     .execute(&state.db())
     .await

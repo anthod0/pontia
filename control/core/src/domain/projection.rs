@@ -29,7 +29,6 @@ pub struct SessionProjection {
 pub struct TurnProjection {
     pub turn_id: String,
     pub session_id: String,
-    pub turn_index: i64,
     pub head_cursor: Option<String>,
     pub tail_cursor: Option<String>,
     pub topology: TurnTopology,
@@ -359,19 +358,13 @@ impl ProjectionState {
         new_state: TurnState,
     ) -> crate::error::Result<()> {
         let turn_id = event.turn_id.as_deref().expect("validated turn_id");
-        let turn_index = event.turn_index.ok_or_else(|| {
-            Error::Domain(format!(
-                "domain event {} for turn {turn_id} is missing Pontia-owned turn_index",
-                event.event_id
-            ))
-        })?;
 
-        self.validate_topology(event, turn_id, turn_index)?;
+        self.validate_topology(event, turn_id)?;
 
         if let Some(existing) = self.turns.get(turn_id) {
-            if existing.session_id != event.session_id || existing.turn_index != turn_index {
+            if existing.session_id != event.session_id {
                 return Err(Error::Domain(format!(
-                    "turn {turn_id} identity does not match immutable session_id and turn_index"
+                    "turn {turn_id} identity does not match immutable session_id"
                 )));
             }
             if existing.state.is_terminal() {
@@ -398,7 +391,6 @@ impl ProjectionState {
             .or_insert_with(|| TurnProjection {
                 turn_id: turn_id.to_string(),
                 session_id: event.session_id.clone(),
-                turn_index,
                 head_cursor: None,
                 tail_cursor: None,
                 topology: TurnTopology::Unknown,
@@ -510,20 +502,15 @@ impl ProjectionState {
         Ok(())
     }
 
-    fn validate_topology(
-        &self,
-        event: &DomainEvent,
-        turn_id: &str,
-        turn_index: i64,
-    ) -> crate::error::Result<()> {
+    fn validate_topology(&self, event: &DomainEvent, turn_id: &str) -> crate::error::Result<()> {
         let Some(topology) = &event.topology else {
             return Ok(());
         };
 
         if let Some(existing) = self.turns.get(turn_id) {
-            if existing.session_id != event.session_id || existing.turn_index != turn_index {
+            if existing.session_id != event.session_id {
                 return Err(Error::Domain(format!(
-                    "turn {turn_id} identity does not match immutable session_id and turn_index"
+                    "turn {turn_id} identity does not match immutable session_id"
                 )));
             }
             if existing.topology != TurnTopology::Unknown
@@ -550,7 +537,7 @@ impl ProjectionState {
                 "linked parent {parent_turn_id} belongs to a different Session"
             )));
         }
-        if parent.turn_index >= turn_index {
+        if parent.turn_id.as_str() >= turn_id {
             return Err(Error::Domain(format!(
                 "linked parent {parent_turn_id} must precede turn {turn_id}"
             )));
@@ -560,18 +547,12 @@ impl ProjectionState {
 
     fn apply_topology_to_existing_turn(&mut self, event: &DomainEvent) -> crate::error::Result<()> {
         let turn_id = event.turn_id.as_deref().expect("validated turn_id");
-        let turn_index = event.turn_index.ok_or_else(|| {
-            Error::Domain(format!(
-                "domain event {} for turn {turn_id} is missing Pontia-owned turn_index",
-                event.event_id
-            ))
-        })?;
         if !self.turns.contains_key(turn_id) {
             return Err(Error::Domain(format!(
                 "Turn topology enrichment cannot create missing turn {turn_id}"
             )));
         }
-        self.validate_topology(event, turn_id, turn_index)?;
+        self.validate_topology(event, turn_id)?;
         apply_resolved_topology(
             self.turns
                 .get_mut(turn_id)

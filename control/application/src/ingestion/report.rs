@@ -6,7 +6,9 @@ use pontia_core::{
     error::{Error, Result},
     ids::{new_event_id, new_turn_id},
 };
-use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
+use pontia_storage_sqlite::repositories::{
+    sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
+};
 
 /// A client-observed fact at the Internal Event API boundary.
 ///
@@ -36,6 +38,26 @@ impl EventReportNormalizer {
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {} not found", fact.session_id)))?;
 
+        if event_type_can_create_turn(fact.fact_type)
+            && let Some(turn_id) = fact.turn_id.as_deref()
+        {
+            let owning_session_id = SqliteTurnRepository::new(self.pool.clone())
+                .turn_session_id(turn_id)
+                .await?
+                .ok_or_else(|| {
+                    Error::Domain(format!(
+                        "event {} cannot create client-supplied turn {turn_id}",
+                        fact.fact_type
+                    ))
+                })?;
+            if owning_session_id != fact.session_id {
+                return Err(Error::Domain(format!(
+                    "turn {turn_id} belongs to session {owning_session_id}, not {}",
+                    fact.session_id
+                )));
+            }
+        }
+
         let turn_id = match (fact.fact_type, fact.turn_id) {
             (EventType::TurnStarted, None) => Some(new_turn_id().to_string()),
             (event_type, None) if event_type.requires_turn_id() => {
@@ -62,6 +84,13 @@ impl EventReportNormalizer {
             payload,
         ))
     }
+}
+
+fn event_type_can_create_turn(event_type: EventType) -> bool {
+    matches!(
+        event_type,
+        EventType::TurnCreated | EventType::TurnQueued | EventType::TurnStarted
+    )
 }
 
 fn normalize_payload(client_type: &str, event_type: EventType, data: Value) -> Result<Value> {

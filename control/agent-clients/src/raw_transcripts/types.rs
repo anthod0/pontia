@@ -44,7 +44,7 @@ pub struct CapturedTimelineBoundary {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TurnTimelineRange {
     pub turn_id: String,
-    pub turn_index: i64,
+    pub is_first_session_turn: bool,
     pub head_cursor: String,
     pub tail_cursor: Option<String>,
 }

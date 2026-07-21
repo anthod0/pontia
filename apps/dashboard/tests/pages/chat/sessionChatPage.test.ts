@@ -97,7 +97,7 @@ test('selects tree timeline loading when the Session advertises timeline and top
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({
     session: selected,
-    turns: [turn({ turn_id: 'turn-5', session_id: 'session-tree', turn_index: 5 })],
+    turns: [turn({ turn_id: 'turn-5', session_id: 'session-tree' })],
     inboxMessages: [],
     events: [],
   });

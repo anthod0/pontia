@@ -183,6 +183,7 @@ async fn active_pi_timeline_fixture(
         })
         .await
         .unwrap();
+    precreate_turn_if_missing(&state, session_id, turn_id).await;
     let (status, body) = post_internal_event(
         state.clone(),
         json!({
@@ -225,6 +226,25 @@ async fn seed_session_for_client(state: &AppState, session_id: &str, client_type
 
 async fn seed_session(state: &AppState, session_id: &str) {
     seed_session_for_client(state, session_id, "pi").await;
+}
+
+async fn precreate_turn_if_missing(state: &AppState, session_id: &str, turn_id: &str) {
+    let service = EventIngestService::new(state.db());
+    if service.get_turn(turn_id).await.unwrap().is_some() {
+        return;
+    }
+    service
+        .ingest_event(ReportedEvent::new(
+            format!("evt_precreate_{turn_id}"),
+            session_id.to_string(),
+            Some(turn_id.to_string()),
+            EventSource::ExternalApi,
+            "pi".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -379,7 +399,7 @@ async fn turn_timeline_only_allows_the_globally_newest_active_turn() {
     let session_id = "sess_open_turn_qualification";
     seed_session(&state, session_id).await;
     sqlx::query(
-        "INSERT INTO turns (turn_id, session_id, turn_index, head_cursor, state) VALUES ('turn_open', ?, 1, 'head', 'running')",
+        "INSERT INTO turns (turn_id, session_id, head_cursor, state) VALUES ('turn_01900000-0000-7000-8000-000000000001', ?, 'head', 'running')",
     )
     .bind(session_id)
     .execute(&state.db())
@@ -387,7 +407,7 @@ async fn turn_timeline_only_allows_the_globally_newest_active_turn() {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO turns (turn_id, session_id, turn_index, head_cursor, tail_cursor, state) VALUES ('turn_newer', ?, 2, 'head', 'tail', 'completed')",
+        "INSERT INTO turns (turn_id, session_id, head_cursor, tail_cursor, state) VALUES ('turn_01900000-0000-7000-8000-000000000002', ?, 'head', 'tail', 'completed')",
     )
     .bind(session_id)
     .execute(&state.db())
@@ -405,7 +425,7 @@ async fn turn_timeline_only_allows_the_globally_newest_active_turn() {
         body["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("turn_open")
+            .contains("turn_01900000-0000-7000-8000-000000000001")
     );
 }
 
@@ -554,7 +574,7 @@ async fn insert_sealed_turn(
     tail_cursor: &str,
 ) {
     sqlx::query(
-        "INSERT INTO turns (turn_id, session_id, turn_index, head_cursor, tail_cursor, state) VALUES (?, ?, 1, ?, ?, 'completed')",
+        "INSERT INTO turns (turn_id, session_id, head_cursor, tail_cursor, state) VALUES (?, ?, ?, ?, 'completed')",
     )
     .bind(turn_id)
     .bind(session_id)
@@ -590,6 +610,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
         .await
         .unwrap();
 
+    precreate_turn_if_missing(&state, session_id, "turn_delayed_first").await;
     let (status, body) = post_internal_event(
         state.clone(),
         json!({
@@ -721,6 +742,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
     )
     .unwrap();
 
+    precreate_turn_if_missing(&state, session_id, turn_id).await;
     let (started_status, started_body) = post_internal_event(
         state.clone(),
         json!({
@@ -801,7 +823,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
 }
 
 #[tokio::test]
-async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_index() {
+async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
     let agent_dir = temp.path().join("agent");
@@ -1163,6 +1185,9 @@ async fn post_pi_turn_event(
     event_type: &str,
     timeline_anchor: Value,
 ) {
+    if event_type == "turn.started" {
+        precreate_turn_if_missing(&state, session_id, turn_id).await;
+    }
     let (status, body) = post_internal_event(
         state,
         json!({
@@ -1265,6 +1290,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     ];
 
     for (index, (turn_id, _event_prefix, entries, previous_leaf_id)) in turns.iter().enumerate() {
+        precreate_turn_if_missing(&state, session_id, turn_id).await;
         let started = json!({
             "session_id": session_id,
             "turn_id": turn_id,
@@ -1351,6 +1377,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         assistant_id,
     ) in branch_turns
     {
+        precreate_turn_if_missing(&state, session_id, turn_id).await;
         let started = json!({
             "session_id": session_id,
             "turn_id": turn_id,
@@ -1489,6 +1516,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         vec!["turn_pi_linear_4", "turn_pi_linear_5"]
     );
 
+    precreate_turn_if_missing(&state, session_id, "turn_pi_linear_6").await;
     let disconnected_started = json!({
         "session_id": session_id,
         "turn_id": "turn_pi_linear_6",
@@ -1550,6 +1578,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         "turn_pi_linear_6"
     );
 
+    precreate_turn_if_missing(&state, session_id, "turn_pi_linear_malformed").await;
     let malformed_started = json!({
         "session_id": session_id,
         "turn_id": "turn_pi_linear_malformed",
@@ -1596,19 +1625,17 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     assert_eq!(status, StatusCode::OK, "{body:?}");
     let projected = body["data"]["turns"].as_array().unwrap();
     assert_eq!(projected.len(), 7);
-    assert_eq!(projected[0]["turn_index"], 1);
+    assert!(
+        projected
+            .iter()
+            .all(|turn| turn.get("turn_index").is_none())
+    );
     assert_eq!(projected[0]["topology_status"], "root");
-    assert_eq!(projected[1]["turn_index"], 2);
     assert_eq!(projected[1]["parent_turn_id"], "turn_pi_linear_1");
-    assert_eq!(projected[2]["turn_index"], 3);
     assert_eq!(projected[2]["parent_turn_id"], "turn_pi_linear_2");
-    assert_eq!(projected[3]["turn_index"], 4);
     assert_eq!(projected[3]["parent_turn_id"], "turn_pi_linear_1");
-    assert_eq!(projected[4]["turn_index"], 5);
     assert_eq!(projected[4]["parent_turn_id"], "turn_pi_linear_4");
-    assert_eq!(projected[5]["turn_index"], 6);
     assert_eq!(projected[5]["topology_status"], "root");
-    assert_eq!(projected[6]["turn_index"], 7);
     assert_eq!(projected[6]["topology_status"], "unknown");
     assert_eq!(projected[6]["state"], "running");
 
@@ -1715,6 +1742,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
         .await
         .unwrap();
 
+    precreate_turn_if_missing(&state, session_id, turn_id).await;
     let started = json!({
         "session_id": session_id,
         "turn_id": turn_id,
@@ -1771,7 +1799,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(body["data"]["turn"]["turn_index"], 1);
+    assert!(body["data"]["turn"].get("turn_index").is_none());
     assert!(body["data"]["turn"].get("head_cursor").is_none());
     assert!(body["data"]["turn"].get("tail_cursor").is_none());
 
@@ -1779,12 +1807,16 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
         .list_events(session_id)
         .await
         .unwrap();
-    assert!(events[1].payload.get("timeline_anchor").is_none());
+    let started_event = events
+        .iter()
+        .find(|event| event.event_type == EventType::TurnStarted)
+        .expect("started event");
+    assert!(started_event.payload.get("timeline_anchor").is_none());
     assert_eq!(
-        events[1].timeline_boundary,
+        started_event.timeline_boundary,
         Some(TimelineBoundary::head(expected_head.clone()))
     );
-    assert!(events[1].payload.get("timeline_boundary").is_none());
+    assert!(started_event.payload.get("timeline_boundary").is_none());
     let mut replay = ProjectionState::default();
     for event in &events {
         replay.apply(event).unwrap();
@@ -1845,6 +1877,7 @@ async fn first_pi_turn_accepts_a_null_previous_leaf_when_that_turn_was_precreate
         .await
         .unwrap();
 
+    precreate_turn_if_missing(&state, session_id, turn_id).await;
     let started = json!({
         "session_id": session_id,
         "turn_id": turn_id,
@@ -1911,6 +1944,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
         })
         .await
         .unwrap();
+    precreate_turn_if_missing(&state, session_id, "turn_pi_boundary_missing").await;
     let started = json!({
         "session_id": session_id,
         "turn_id": "turn_pi_boundary_missing",

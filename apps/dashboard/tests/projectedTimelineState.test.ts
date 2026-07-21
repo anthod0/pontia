@@ -35,10 +35,9 @@ function item(turnId: string, itemId: string, preview: string): TurnTimelineItem
   };
 }
 
-function group(turnId: string, turnIndex: number, preview = turnId, parentTurnId: string | null = null): TurnTimelineGroup {
+function group(turnId: string, preview = turnId, parentTurnId: string | null = null): TurnTimelineGroup {
   return {
     turn_id: turnId,
-    turn_index: turnIndex,
     parent_turn_id: parentTurnId,
     state: 'completed',
     items: [item(turnId, `item-${turnId}`, preview)],
@@ -48,7 +47,7 @@ function group(turnId: string, turnIndex: number, preview = turnId, parentTurnId
 function historyPage(overrides: Partial<TurnTreeHistoryPage> = {}): TurnTreeHistoryPage {
   return {
     session_id: 'sess-1',
-    groups: [group('turn-4', 4, 'branch four', 'turn-1'), group('turn-5', 5, 'branch five', 'turn-4')],
+    groups: [group('turn-4', 'branch four', 'turn-1'), group('turn-5', 'branch five', 'turn-4')],
     next_from_turn_id: 'turn-1',
     ...overrides,
   };
@@ -59,7 +58,7 @@ function updatesPage(overrides: Partial<TurnTreeUpdatesPage> = {}): TurnTreeUpda
     session_id: 'sess-1',
     current_turn_id: 'turn-5',
     retain_through_turn_id: 'turn-1',
-    groups: [group('turn-4', 4, 'branch four', 'turn-1'), group('turn-5', 5, 'branch five', 'turn-4')],
+    groups: [group('turn-4', 'branch four', 'turn-1'), group('turn-5', 'branch five', 'turn-4')],
     ...overrides,
   };
 }
@@ -87,7 +86,7 @@ test('tree history follows backend groups and paginates without a duplicate boun
   mocks.getTurnTreeHistory
     .mockResolvedValueOnce(historyPage())
     .mockResolvedValueOnce(historyPage({
-      groups: [group('turn-1', 1, 'root')],
+      groups: [group('turn-1', 'root')],
       next_from_turn_id: null,
     }));
 
@@ -115,9 +114,9 @@ test('tree history follows backend groups and paginates without a duplicate boun
 test('tree updates discard a divergent suffix after the LCA and append the replacement branch', async () => {
   mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage({
     groups: [
-      group('turn-1', 1, 'root'),
-      group('turn-2', 2, 'old two', 'turn-1'),
-      group('turn-3', 3, 'old three', 'turn-2'),
+      group('turn-1', 'root'),
+      group('turn-2', 'old two', 'turn-1'),
+      group('turn-3', 'old three', 'turn-2'),
     ],
     next_from_turn_id: null,
   }));

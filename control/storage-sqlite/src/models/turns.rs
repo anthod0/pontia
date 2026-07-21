@@ -2,7 +2,6 @@
 pub struct TurnRow {
     pub turn_id: String,
     pub session_id: String,
-    pub turn_index: i64,
     pub head_cursor: Option<String>,
     pub tail_cursor: Option<String>,
     pub parent_turn_id: Option<String>,
@@ -28,7 +27,6 @@ pub struct TurnEventEnrichmentRow {
 pub struct TurnProjectionRow {
     pub turn_id: String,
     pub session_id: String,
-    pub turn_index: i64,
     pub head_cursor: Option<String>,
     pub tail_cursor: Option<String>,
     pub parent_turn_id: Option<String>,

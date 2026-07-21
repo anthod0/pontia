@@ -220,8 +220,8 @@ async fn restart_idle_session_with_a_sticky_branch_leaf_runs_a_new_start_cycle()
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
     sqlx::query(
-        r#"INSERT INTO turns (turn_id, session_id, turn_index, state, metadata)
-           VALUES ('turn_completed_leaf', ?, 1, 'completed', '{}')"#,
+        r#"INSERT INTO turns (turn_id, session_id, state, metadata)
+           VALUES ('turn_completed_leaf', ?, 'completed', '{}')"#,
     )
     .bind(&session_id)
     .execute(&state.db())

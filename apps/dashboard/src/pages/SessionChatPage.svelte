@@ -336,12 +336,12 @@
 
   function latestProjectedTurnId(): string | null {
     if (!$sessionDetail || $sessionDetail.session.session_id !== selectedSessionId) return null
-    return $sessionDetail.turns.reduce<{ turnId: string | null; turnIndex: number }>(
-      (latest, turn) => turn.turn_index > latest.turnIndex
-        ? { turnId: turn.turn_id, turnIndex: turn.turn_index }
-        : latest,
-      { turnId: null, turnIndex: -1 },
-    ).turnId
+    return $sessionDetail.turns.reduce<string | null>(
+      (latestTurnId, turn) => latestTurnId === null || turn.turn_id > latestTurnId
+        ? turn.turn_id
+        : latestTurnId,
+      null,
+    )
   }
 
   function openRenameSelectedSessionDialog(): void {

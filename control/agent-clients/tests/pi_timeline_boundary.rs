@@ -137,7 +137,7 @@ fn pi_turn_reader_restores_parent_chain_and_filters_unrelated_physical_entries()
             source,
             ranges: vec![TurnTimelineRange {
                 turn_id: "turn_1".to_string(),
-                turn_index: 1,
+                is_first_session_turn: true,
                 head_cursor: cursor(root.len(), Some("root")),
                 tail_cursor: Some(cursor(contents.len(), Some("answer"))),
             }],
@@ -156,7 +156,7 @@ fn pi_turn_reader_rejects_semantic_overlap_and_invalid_ranges() {
     let (_dir, resolved_source) = source(contents);
     let range = TurnTimelineRange {
         turn_id: "turn_1".to_string(),
-        turn_index: 1,
+        is_first_session_turn: true,
         head_cursor: cursor(0, None),
         tail_cursor: Some(cursor(contents.len(), Some("entry"))),
     };
@@ -167,7 +167,7 @@ fn pi_turn_reader_rejects_semantic_overlap_and_invalid_ranges() {
                 range.clone(),
                 TurnTimelineRange {
                     turn_id: "turn_2".to_string(),
-                    turn_index: 1,
+                    is_first_session_turn: true,
                     ..range.clone()
                 },
             ],
@@ -182,7 +182,7 @@ fn pi_turn_reader_rejects_semantic_overlap_and_invalid_ranges() {
             source: resolved_source.clone(),
             ranges: vec![TurnTimelineRange {
                 turn_id: "turn_later".to_string(),
-                turn_index: 2,
+                is_first_session_turn: false,
                 ..range.clone()
             }],
         })
@@ -218,7 +218,7 @@ fn pi_turn_reader_rejects_semantic_overlap_and_invalid_ranges() {
                 source: resolved_source.clone(),
                 ranges: vec![TurnTimelineRange {
                     turn_id: "turn_invalid".to_string(),
-                    turn_index: 1,
+                    is_first_session_turn: true,
                     head_cursor,
                     tail_cursor: Some(tail_cursor),
                 }],
@@ -236,7 +236,7 @@ fn pi_turn_reader_rejects_semantic_overlap_and_invalid_ranges() {
             source: incomplete_source,
             ranges: vec![TurnTimelineRange {
                 turn_id: "turn_incomplete".to_string(),
-                turn_index: 1,
+                is_first_session_turn: true,
                 head_cursor: cursor(0, None),
                 tail_cursor: Some(cursor(incomplete.len(), Some("entry"))),
             }],

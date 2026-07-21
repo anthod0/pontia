@@ -4,14 +4,13 @@ use crate::models::turns::{TurnEventEnrichmentRow, TurnProjectionRow, TurnRow};
 
 use pontia_core::Result;
 
-const LOAD_TURN_PROJECTIONS_SQL: &str = "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version, input_summary, output_summary, metadata FROM turns WHERE session_id = ?";
-const LOAD_ACTIVE_TURNS_SQL: &str = "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version, input_summary, output_summary, metadata FROM turns WHERE session_id = ? AND state IN ('queued', 'running') ORDER BY turn_index LIMIT 2";
+const LOAD_TURN_PROJECTIONS_SQL: &str = "SELECT turn_id, session_id, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version, input_summary, output_summary, metadata FROM turns WHERE session_id = ?";
+const LOAD_ACTIVE_TURNS_SQL: &str = "SELECT turn_id, session_id, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version, input_summary, output_summary, metadata FROM turns WHERE session_id = ? AND state IN ('queued', 'running') ORDER BY turn_id LIMIT 2";
 
 #[derive(Debug, Clone)]
 pub struct TurnProjectionUpsertRecord {
     pub turn_id: String,
     pub session_id: String,
-    pub turn_index: i64,
     pub head_cursor: Option<String>,
     pub tail_cursor: Option<String>,
     pub parent_turn_id: Option<String>,
@@ -21,12 +20,6 @@ pub struct TurnProjectionUpsertRecord {
     pub input_summary: Option<String>,
     pub output_summary: Option<String>,
     pub metadata: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TurnIdentity {
-    pub session_id: String,
-    pub turn_index: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -83,69 +76,52 @@ impl SqliteTurnRepository {
         tx: &mut Transaction<'_, Sqlite>,
         session_id: &str,
     ) -> Result<()> {
-        let updated = sqlx::query(
-            "UPDATE sessions SET next_turn_index = next_turn_index WHERE session_id = ?",
-        )
-        .bind(session_id)
-        .execute(&mut **tx)
-        .await?
-        .rows_affected();
-        if updated != 1 {
+        if !Self::serialize_session_turn_writes_if_exists_in_tx(tx, session_id).await? {
             return Err(pontia_core::Error::Domain(format!(
-                "cannot allocate turn_index for unknown session {session_id}"
+                "cannot serialize Turn writes for unknown session {session_id}"
             )));
         }
         Ok(())
     }
 
-    pub async fn turn_index_in_tx(
+    pub async fn serialize_session_turn_writes_if_exists_in_tx(
         tx: &mut Transaction<'_, Sqlite>,
         session_id: &str,
-        turn_id: &str,
-    ) -> Result<Option<i64>> {
+    ) -> Result<bool> {
         Ok(
-            sqlx::query_scalar("SELECT turn_index FROM turns WHERE session_id = ? AND turn_id = ?")
+            sqlx::query("UPDATE sessions SET session_id = session_id WHERE session_id = ?")
                 .bind(session_id)
+                .execute(&mut **tx)
+                .await?
+                .rows_affected()
+                == 1,
+        )
+    }
+
+    pub async fn turn_session_id(&self, turn_id: &str) -> Result<Option<String>> {
+        Ok(
+            sqlx::query_scalar("SELECT session_id FROM turns WHERE turn_id = ?")
+                .bind(turn_id)
+                .fetch_optional(&self.pool)
+                .await?,
+        )
+    }
+
+    pub async fn turn_session_id_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        turn_id: &str,
+    ) -> Result<Option<String>> {
+        Ok(
+            sqlx::query_scalar("SELECT session_id FROM turns WHERE turn_id = ?")
                 .bind(turn_id)
                 .fetch_optional(&mut **tx)
                 .await?,
         )
     }
 
-    pub async fn turn_identity_in_tx(
-        tx: &mut Transaction<'_, Sqlite>,
-        turn_id: &str,
-    ) -> Result<Option<TurnIdentity>> {
-        Ok(sqlx::query_as::<_, (String, i64)>(
-            "SELECT session_id, turn_index FROM turns WHERE turn_id = ?",
-        )
-        .bind(turn_id)
-        .fetch_optional(&mut **tx)
-        .await?
-        .map(|(session_id, turn_index)| TurnIdentity {
-            session_id,
-            turn_index,
-        }))
-    }
-
-    pub async fn allocate_turn_index_in_tx(
-        tx: &mut Transaction<'_, Sqlite>,
-        session_id: &str,
-    ) -> Result<i64> {
-        Ok(sqlx::query_scalar(
-            r#"UPDATE sessions
-               SET next_turn_index = next_turn_index + 1
-               WHERE session_id = ?
-               RETURNING next_turn_index - 1"#,
-        )
-        .bind(session_id)
-        .fetch_one(&mut **tx)
-        .await?)
-    }
-
     pub async fn get_projection(&self, turn_id: &str) -> Result<Option<TurnProjectionRow>> {
         Ok(sqlx::query_as::<_, TurnProjectionRow>(
-            "SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version, input_summary, output_summary, metadata FROM turns WHERE turn_id = ?",
+            "SELECT turn_id, session_id, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version, input_summary, output_summary, metadata FROM turns WHERE turn_id = ?",
         )
         .bind(turn_id)
         .fetch_optional(&self.pool)
@@ -158,9 +134,9 @@ impl SqliteTurnRepository {
     ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO turns
-               (turn_id, session_id, turn_index, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version,
+               (turn_id, session_id, head_cursor, tail_cursor, parent_turn_id, topology_status, state, state_version,
                 input_summary, output_summary, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(turn_id) DO UPDATE SET
                    head_cursor = excluded.head_cursor,
                    tail_cursor = excluded.tail_cursor,
@@ -175,7 +151,6 @@ impl SqliteTurnRepository {
         )
         .bind(turn.turn_id)
         .bind(turn.session_id)
-        .bind(turn.turn_index)
         .bind(turn.head_cursor)
         .bind(turn.tail_cursor)
         .bind(turn.parent_turn_id)
@@ -193,9 +168,9 @@ impl SqliteTurnRepository {
 
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnRow>> {
         Ok(sqlx::query_as::<_, TurnRow>(
-            r#"SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, parent_turn_id, topology_status, state, input_summary, output_summary,
+            r#"SELECT turn_id, session_id, head_cursor, tail_cursor, parent_turn_id, topology_status, state, input_summary, output_summary,
                       failure_message, metadata, created_at, updated_at
-               FROM turns WHERE session_id = ? ORDER BY turn_index"#,
+               FROM turns WHERE session_id = ? ORDER BY turn_id"#,
         )
         .bind(session_id)
         .fetch_all(&self.pool)
@@ -204,7 +179,7 @@ impl SqliteTurnRepository {
 
     pub async fn get_turn(&self, session_id: &str, turn_id: &str) -> Result<Option<TurnRow>> {
         Ok(sqlx::query_as::<_, TurnRow>(
-            r#"SELECT turn_id, session_id, turn_index, head_cursor, tail_cursor, parent_turn_id, topology_status, state, input_summary, output_summary,
+            r#"SELECT turn_id, session_id, head_cursor, tail_cursor, parent_turn_id, topology_status, state, input_summary, output_summary,
                       failure_message, metadata, created_at, updated_at
                FROM turns WHERE session_id = ? AND turn_id = ?"#,
         )

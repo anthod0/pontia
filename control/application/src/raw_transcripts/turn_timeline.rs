@@ -33,7 +33,6 @@ pub struct TurnTimelinePage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TurnTimelineGroup {
     pub turn_id: String,
-    pub turn_index: i64,
     pub parent_turn_id: Option<String>,
     pub state: String,
     pub items: Vec<TurnTimelineItem>,
@@ -131,7 +130,7 @@ impl TurnTimelineService {
         };
         let next_turn_id = directional.get(limit).map(|turn| turn.turn_id.clone());
         let mut selected = directional.into_iter().take(limit).collect::<Vec<_>>();
-        selected.sort_by_key(|turn| turn.turn_index);
+        selected.sort_by(|left, right| left.turn_id.cmp(&right.turn_id));
         let items = self
             .read_selected_turns(&session_id, &turns, &selected)
             .await?;
@@ -165,7 +164,7 @@ impl TurnTimelineService {
         let turns = SqliteTurnRepository::new(self.pool.clone())
             .list_turns(&session_id)
             .await?;
-        let by_id = turn_index(&turns);
+        let by_id = turns_by_id(&turns);
         let mut selected = Vec::with_capacity(limit);
         let mut current_id = anchor_turn_id.as_str();
         let mut visited = HashSet::new();
@@ -222,7 +221,7 @@ impl TurnTimelineService {
         let turns = SqliteTurnRepository::new(self.pool.clone())
             .list_turns(&session_id)
             .await?;
-        let by_id = turn_index(&turns);
+        let by_id = turns_by_id(&turns);
         let current_chain = ancestor_chain(&current_turn_id, &by_id)?;
 
         let (retain_through_turn_id, selected) = match from_turn_id {
@@ -286,7 +285,6 @@ impl TurnTimelineService {
             .iter()
             .map(|turn| TurnTimelineGroup {
                 turn_id: turn.turn_id.clone(),
-                turn_index: turn.turn_index,
                 parent_turn_id: turn.parent_turn_id.clone(),
                 state: turn.state.clone(),
                 items: items_by_turn.remove(&turn.turn_id).unwrap_or_default(),
@@ -333,7 +331,8 @@ impl TurnTimelineService {
             };
             ranges.push(TurnTimelineRange {
                 turn_id: turn.turn_id.clone(),
-                turn_index: turn.turn_index,
+                is_first_session_turn: all_turns.first().map(|first| first.turn_id.as_str())
+                    == Some(turn.turn_id.as_str()),
                 head_cursor,
                 tail_cursor,
             });
@@ -386,7 +385,7 @@ impl TurnTimelineService {
     }
 }
 
-fn turn_index(turns: &[TurnRow]) -> HashMap<&str, &TurnRow> {
+fn turns_by_id(turns: &[TurnRow]) -> HashMap<&str, &TurnRow> {
     turns
         .iter()
         .map(|turn| (turn.turn_id.as_str(), turn))
@@ -408,7 +407,7 @@ fn topology_parent<'a>(
         ("linked", Some(parent_id))
             if by_id
                 .get(parent_id)
-                .is_some_and(|parent| parent.turn_index < turn.turn_index) =>
+                .is_some_and(|parent| parent.turn_id.as_str() < turn.turn_id.as_str()) =>
         {
             Ok(Some(parent_id))
         }

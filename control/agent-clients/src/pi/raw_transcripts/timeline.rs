@@ -168,7 +168,7 @@ impl TurnTimelineReader for PiTimelineAdapter {
         let mut items = Vec::new();
         for range in request.ranges {
             let head = decode_range_cursor(&range.turn_id, &range.head_cursor, &request.source.id)?;
-            if head.native_entry_anchor.is_none() && range.turn_index != 1 {
+            if head.native_entry_anchor.is_none() && !range.is_first_session_turn {
                 return invalid_range(
                     &range.turn_id,
                     "only the first Session Turn may have a null head anchor",

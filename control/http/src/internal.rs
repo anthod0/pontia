@@ -29,7 +29,6 @@ pub struct InternalEventRequest {
     fact_type: String,
     #[serde(alias = "payload")]
     data: Value,
-    turn_index: Option<Value>,
     timeline_boundary: Option<Value>,
 }
 
@@ -221,11 +220,6 @@ impl InternalEventRequest {
     fn into_reported_fact(self) -> Result<ReportedFact, ApiError> {
         let fact_type = EventType::from_str(&self.fact_type)
             .map_err(|err| ApiError::invalid_request(err.to_string()))?;
-        if self.turn_index.is_some() {
-            return Err(ApiError::invalid_request(
-                "turn_index is Pontia-owned and cannot be reported",
-            ));
-        }
         if self.timeline_boundary.is_some() {
             return Err(ApiError::invalid_request(
                 "timeline_boundary is Pontia-owned and cannot be reported",

@@ -6,7 +6,7 @@ use pontia_core::domain::{
 use serde_json::json;
 
 fn event(event_type: EventType, session_id: &str, turn_id: Option<&str>) -> DomainEvent {
-    let event = DomainEvent::new(
+    DomainEvent::new(
         format!("evt_{:?}_{:?}", event_type, turn_id).replace(['.', '"', ' '], "_"),
         session_id.to_string(),
         turn_id.map(str::to_string),
@@ -14,12 +14,7 @@ fn event(event_type: EventType, session_id: &str, turn_id: Option<&str>) -> Doma
         "generic".to_string(),
         event_type,
         json!({}),
-    );
-    match turn_id {
-        Some("turn_2") => event.with_turn_index(2),
-        Some(_) => event.with_turn_index(1),
-        None => event,
-    }
+    )
 }
 
 #[test]
@@ -276,18 +271,15 @@ fn reducer_derives_missing_session_title_from_first_turn_input() {
         .apply(&event(EventType::SessionCreated, "sess_1", None))
         .unwrap();
     projection
-        .apply(
-            &DomainEvent::new(
-                "evt_turn_started_title".to_string(),
-                "sess_1".to_string(),
-                Some("turn_1".to_string()),
-                EventSource::AgentAdapter,
-                "pi".to_string(),
-                EventType::TurnStarted,
-                json!({ "input": { "summary": "  inspect TUI-created task titles\nwith details" } }),
-            )
-            .with_turn_index(1),
-        )
+        .apply(&DomainEvent::new(
+            "evt_turn_started_title".to_string(),
+            "sess_1".to_string(),
+            Some("turn_1".to_string()),
+            EventSource::AgentAdapter,
+            "pi".to_string(),
+            EventType::TurnStarted,
+            json!({ "input": { "summary": "  inspect TUI-created task titles\nwith details" } }),
+        ))
         .unwrap();
 
     assert_eq!(
@@ -312,8 +304,7 @@ fn reducer_projects_first_turn_summaries_and_truncates_by_character_count() {
         "pi".to_string(),
         EventType::TurnCreated,
         json!({ "input": { "summary": input } }),
-    )
-    .with_turn_index(1);
+    );
     projection.apply(&created).unwrap();
 
     let started = DomainEvent::new(
@@ -324,8 +315,7 @@ fn reducer_projects_first_turn_summaries_and_truncates_by_character_count() {
         "pi".to_string(),
         EventType::TurnStarted,
         json!({ "input_summary": "later input" }),
-    )
-    .with_turn_index(1);
+    );
     projection.apply(&started).unwrap();
 
     let output = "界".repeat(MAX_TURN_OUTPUT_SUMMARY_CHARS + 1);
@@ -337,8 +327,7 @@ fn reducer_projects_first_turn_summaries_and_truncates_by_character_count() {
         "pi".to_string(),
         EventType::TurnOutput,
         json!({ "output_summary": output }),
-    )
-    .with_turn_index(1);
+    );
     projection.apply(&output_event).unwrap();
 
     let later_output = DomainEvent::new(
@@ -349,8 +338,7 @@ fn reducer_projects_first_turn_summaries_and_truncates_by_character_count() {
         "pi".to_string(),
         EventType::TurnOutput,
         json!({ "output": { "summary": "later output" } }),
-    )
-    .with_turn_index(1);
+    );
     projection.apply(&later_output).unwrap();
 
     let turn = projection.turn("turn_1").unwrap();
@@ -404,7 +392,7 @@ fn reducer_rejects_second_active_turn_in_same_session() {
 }
 
 #[test]
-fn reducer_rejects_a_changed_turn_index_during_replay() {
+fn reducer_rejects_a_changed_session_during_replay() {
     let mut projection = ProjectionState::default();
     projection
         .apply(&event(EventType::SessionCreated, "sess_1", None))
@@ -414,23 +402,18 @@ fn reducer_rejects_a_changed_turn_index_during_replay() {
         .unwrap();
 
     let changed = DomainEvent::new(
-        "evt_changed_index".to_string(),
-        "sess_1".to_string(),
+        "evt_changed_session".to_string(),
+        "sess_2".to_string(),
         Some("turn_1".to_string()),
         EventSource::ExternalApi,
         "generic".to_string(),
         EventType::TurnOutput,
         json!({}),
-    )
-    .with_turn_index(2);
+    );
     let error = projection
         .apply(&changed)
-        .expect_err("turn index must be immutable during replay");
-    assert!(
-        error
-            .to_string()
-            .contains("immutable session_id and turn_index")
-    );
+        .expect_err("Turn session must be immutable during replay");
+    assert!(error.to_string().contains("immutable session_id"));
 }
 
 #[test]
@@ -506,7 +489,6 @@ fn reducer_projects_unknown_root_and_linked_turn_topology() {
         EventType::TurnStarted,
         json!({}),
     )
-    .with_turn_index(3)
     .with_topology(TurnTopology::linked("turn_1"));
     projection.apply(&linked).unwrap();
 
@@ -526,9 +508,9 @@ fn reducer_projects_unknown_root_and_linked_turn_topology() {
 
 #[test]
 fn reducer_rejects_invalid_and_conflicting_resolved_topology() {
-    fn started(turn_id: &str, session_id: &str, turn_index: i64) -> DomainEvent {
+    fn started(turn_id: &str, session_id: &str) -> DomainEvent {
         DomainEvent::new(
-            format!("evt_{turn_id}_{session_id}_{turn_index}"),
+            format!("evt_{turn_id}_{session_id}"),
             session_id.to_string(),
             Some(turn_id.to_string()),
             EventSource::AgentAdapter,
@@ -536,7 +518,6 @@ fn reducer_rejects_invalid_and_conflicting_resolved_topology() {
             EventType::TurnStarted,
             json!({}),
         )
-        .with_turn_index(turn_index)
     }
 
     let mut projection = ProjectionState::default();
@@ -546,12 +527,12 @@ fn reducer_rejects_invalid_and_conflicting_resolved_topology() {
     projection
         .apply(&event(EventType::SessionCreated, "sess_2", None))
         .unwrap();
-    projection.apply(&started("other", "sess_2", 1)).unwrap();
+    projection.apply(&started("other", "sess_2")).unwrap();
     projection
         .apply(&event(EventType::TurnCompleted, "sess_2", Some("other")))
         .unwrap();
     projection
-        .apply(&started("turn_1", "sess_1", 1).with_topology(TurnTopology::Root))
+        .apply(&started("turn_1", "sess_1").with_topology(TurnTopology::Root))
         .unwrap();
     projection
         .apply(&event(EventType::TurnCompleted, "sess_1", Some("turn_1")))
@@ -560,27 +541,27 @@ fn reducer_rejects_invalid_and_conflicting_resolved_topology() {
     for (label, invalid) in [
         (
             "self parent",
-            started("turn_2", "sess_1", 2).with_topology(TurnTopology::linked("turn_2")),
+            started("turn_2", "sess_1").with_topology(TurnTopology::linked("turn_2")),
         ),
         (
             "forward parent",
-            started("turn_0", "sess_1", 0).with_topology(TurnTopology::linked("turn_1")),
+            started("turn_0", "sess_1").with_topology(TurnTopology::linked("turn_1")),
         ),
         (
             "cross-session parent",
-            started("turn_2", "sess_1", 2).with_topology(TurnTopology::linked("other")),
+            started("turn_2", "sess_1").with_topology(TurnTopology::linked("other")),
         ),
         (
             "missing parent",
-            started("turn_2", "sess_1", 2).with_topology(TurnTopology::linked("missing")),
+            started("turn_2", "sess_1").with_topology(TurnTopology::linked("missing")),
         ),
     ] {
         assert!(projection.apply(&invalid).is_err(), "{label}");
     }
 
-    let identical = started("turn_1", "sess_1", 1).with_topology(TurnTopology::Root);
+    let identical = started("turn_1", "sess_1").with_topology(TurnTopology::Root);
     projection.apply(&identical).unwrap();
-    let conflict = started("turn_1", "sess_1", 1).with_topology(TurnTopology::linked("turn_1"));
+    let conflict = started("turn_1", "sess_1").with_topology(TurnTopology::linked("turn_1"));
     assert!(projection.apply(&conflict).is_err());
     assert_eq!(
         projection.turn("turn_1").unwrap().topology,
@@ -633,7 +614,6 @@ fn topology_enrichment_only_applies_to_started_events_and_never_changes_lifecycl
         EventType::TurnStarted,
         json!({}),
     )
-    .with_turn_index(2)
     .with_topology(TurnTopology::Root);
     assert!(projection.apply(&missing).is_err());
     assert!(projection.turn("turn_missing").is_none());

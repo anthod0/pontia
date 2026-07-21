@@ -212,7 +212,6 @@ export interface TaskEventView {
 export interface TurnView {
   turn_id: string;
   session_id: string;
-  turn_index: number;
   parent_turn_id: string | null;
   topology_status: TurnTopologyStatus;
   state: TurnState | string;
@@ -288,7 +287,6 @@ export interface TurnTimelinePage {
 
 export interface TurnTimelineGroup {
   turn_id: string;
-  turn_index: number;
   parent_turn_id: string | null;
   state: TurnState | string;
   items: TurnTimelineItem[];

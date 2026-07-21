@@ -1,5 +1,10 @@
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
+const ROOT_A: &str = "turn_01900000-0000-7000-8000-000000000001";
+const CHILD_A: &str = "turn_01900000-0000-7000-8000-000000000002";
+const FUTURE_A: &str = "turn_01900000-0000-7000-8000-000000000003";
+const ROOT_B: &str = "turn_01900000-0000-7000-8000-000000000004";
+
 async fn pool() -> sqlx::SqlitePool {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("turn_topology_migration.db");
@@ -21,24 +26,26 @@ async fn turns_without_topology_are_explicitly_unknown() {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO events (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload, turn_index) VALUES ('evt_old', 'sess_old', 'turn_old', 'agent_adapter', 'pi', 'turn.started', '2026-07-16T00:00:00Z', '{}', 1)",
+        "INSERT INTO events (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload) VALUES ('evt_old', 'sess_old', ?, 'agent_adapter', 'pi', 'turn.started', '2026-07-16T00:00:00Z', '{}')",
     )
+    .bind(ROOT_A)
     .execute(&pool)
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO turns (turn_id, session_id, turn_index, state) VALUES ('turn_old', 'sess_old', 1, 'completed')",
+        "INSERT INTO turns (turn_id, session_id, state) VALUES (?, 'sess_old', 'completed')",
     )
+    .bind(ROOT_A)
     .execute(&pool)
     .await
     .unwrap();
 
-    let row: (String, Option<String>) = sqlx::query_as(
-        "SELECT topology_status, parent_turn_id FROM turns WHERE turn_id = 'turn_old'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let row: (String, Option<String>) =
+        sqlx::query_as("SELECT topology_status, parent_turn_id FROM turns WHERE turn_id = ?")
+            .bind(ROOT_A)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(row, ("unknown".to_string(), None));
     let event_topology: Option<String> =
         sqlx::query_scalar("SELECT turn_topology FROM events WHERE event_id = 'evt_old'")
@@ -62,44 +69,94 @@ async fn sqlite_enforces_turn_topology_invariants_and_write_once_resolution() {
         .unwrap();
     }
 
-    sqlx::query("INSERT INTO turns (turn_id, session_id, turn_index, state, topology_status) VALUES ('root_a', 'sess_a', 1, 'completed', 'root')")
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO turns (turn_id, session_id, turn_index, state, topology_status) VALUES ('root_b', 'sess_b', 1, 'completed', 'root')")
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO turns (turn_id, session_id, turn_index, state, topology_status) VALUES ('future_a', 'sess_a', 3, 'completed', 'unknown')")
-        .execute(&pool)
-        .await
-        .unwrap();
-
-    for statement in [
-        "INSERT INTO turns (turn_id, session_id, turn_index, state, topology_status, parent_turn_id) VALUES ('bad_missing', 'sess_a', 2, 'running', 'linked', NULL)",
-        "INSERT INTO turns (turn_id, session_id, turn_index, state, topology_status, parent_turn_id) VALUES ('bad_self', 'sess_a', 2, 'running', 'linked', 'bad_self')",
-        "INSERT INTO turns (turn_id, session_id, turn_index, state, topology_status, parent_turn_id) VALUES ('bad_forward', 'sess_a', 2, 'running', 'linked', 'future_a')",
-        "INSERT INTO turns (turn_id, session_id, turn_index, state, topology_status, parent_turn_id) VALUES ('bad_cross', 'sess_a', 2, 'running', 'linked', 'root_b')",
-        "INSERT INTO turns (turn_id, session_id, turn_index, state, topology_status, parent_turn_id) VALUES ('bad_root', 'sess_a', 2, 'running', 'root', 'root_a')",
+    for (turn_id, session_id, topology) in [
+        (ROOT_A, "sess_a", "root"),
+        (ROOT_B, "sess_b", "root"),
+        (FUTURE_A, "sess_a", "unknown"),
     ] {
-        assert!(
-            sqlx::query(statement).execute(&pool).await.is_err(),
-            "{statement}"
-        );
+        sqlx::query(
+            "INSERT INTO turns (turn_id, session_id, state, topology_status) VALUES (?, ?, 'completed', ?)",
+        )
+        .bind(turn_id)
+        .bind(session_id)
+        .bind(topology)
+        .execute(&pool)
+        .await
+        .unwrap();
     }
 
-    sqlx::query("INSERT INTO turns (turn_id, session_id, turn_index, state, topology_status, parent_turn_id) VALUES ('child_a', 'sess_a', 2, 'running', 'linked', 'root_a')")
+    for (label, topology, parent) in [
+        ("missing", "linked", None),
+        ("self", "linked", Some(CHILD_A)),
+        ("forward", "linked", Some(FUTURE_A)),
+        ("cross-session", "linked", Some(ROOT_B)),
+        ("root-with-parent", "root", Some(ROOT_A)),
+    ] {
+        let result = sqlx::query(
+            "INSERT INTO turns (turn_id, session_id, state, topology_status, parent_turn_id) VALUES (?, 'sess_a', 'running', ?, ?)",
+        )
+        .bind(CHILD_A)
+        .bind(topology)
+        .bind(parent)
         .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE turns SET topology_status = 'linked', parent_turn_id = 'root_a' WHERE turn_id = 'child_a'")
+        .await;
+        assert!(result.is_err(), "{label}");
+    }
+
+    for (label, parent_turn_id) in [("forward", FUTURE_A), ("cross-session", ROOT_B)] {
+        let topology = serde_json::json!({
+            "status": "linked",
+            "parent_turn_id": parent_turn_id,
+        })
+        .to_string();
+        let result = sqlx::query(
+            "INSERT INTO events (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, turn_topology) VALUES (?, 'sess_a', ?, 'agent_adapter', 'pi', 'turn.started', '2026-07-16T00:00:00Z', ?)",
+        )
+        .bind(format!("evt_invalid_{label}"))
+        .bind(CHILD_A)
+        .bind(topology)
         .execute(&pool)
-        .await
-        .expect("identical topology write is idempotent");
+        .await;
+        assert!(result.is_err(), "{label} event parent must be rejected");
+    }
+
+    let linked_topology = serde_json::json!({
+        "status": "linked",
+        "parent_turn_id": ROOT_A,
+    })
+    .to_string();
+    sqlx::query(
+        "INSERT INTO events (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, turn_topology) VALUES ('evt_child', 'sess_a', ?, 'agent_adapter', 'pi', 'turn.started', '2026-07-16T00:00:00Z', ?)",
+    )
+    .bind(CHILD_A)
+    .bind(linked_topology)
+    .execute(&pool)
+    .await
+    .expect("linked event parent precedes child by UUIDv7 Turn ID");
+
+    sqlx::query(
+        "INSERT INTO turns (turn_id, session_id, state, topology_status, parent_turn_id) VALUES (?, 'sess_a', 'running', 'linked', ?)",
+    )
+    .bind(CHILD_A)
+    .bind(ROOT_A)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE turns SET topology_status = 'linked', parent_turn_id = ? WHERE turn_id = ?",
+    )
+    .bind(ROOT_A)
+    .bind(CHILD_A)
+    .execute(&pool)
+    .await
+    .expect("identical topology write is idempotent");
     assert!(
-        sqlx::query("UPDATE turns SET topology_status = 'root', parent_turn_id = NULL WHERE turn_id = 'child_a'")
-            .execute(&pool)
-            .await
-            .is_err()
+        sqlx::query(
+            "UPDATE turns SET topology_status = 'root', parent_turn_id = NULL WHERE turn_id = ?",
+        )
+        .bind(CHILD_A)
+        .execute(&pool)
+        .await
+        .is_err()
     );
 }

@@ -260,7 +260,6 @@ pub struct DomainEvent {
     pub occurred_at: OffsetDateTime,
     pub seq: Option<i64>,
     pub payload: Value,
-    pub turn_index: Option<i64>,
     pub timeline_boundary: Option<TimelineBoundary>,
     pub topology: Option<TurnTopology>,
 }
@@ -285,15 +284,9 @@ impl DomainEvent {
             occurred_at: utc_now(),
             seq: None,
             payload,
-            turn_index: None,
             timeline_boundary: None,
             topology: None,
         }
-    }
-
-    pub fn with_turn_index(mut self, turn_index: i64) -> Self {
-        self.turn_index = Some(turn_index);
-        self
     }
 
     pub fn with_timeline_boundary(mut self, boundary: TimelineBoundary) -> Self {
@@ -319,7 +312,6 @@ impl From<ReportedEvent> for DomainEvent {
             occurred_at: event.occurred_at,
             seq: event.seq,
             payload: event.payload,
-            turn_index: None,
             timeline_boundary: None,
             topology: None,
         }

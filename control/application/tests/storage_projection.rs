@@ -215,7 +215,7 @@ async fn storage_rejects_second_active_turn() {
 }
 
 #[tokio::test]
-async fn session_event_turn_context_does_not_allocate_a_turn_index() {
+async fn session_event_turn_context_does_not_create_a_turn() {
     let service = service().await;
     service
         .ingest_event(event(
@@ -235,31 +235,14 @@ async fn session_event_turn_context_does_not_allocate_a_turn_index() {
         ))
         .await
         .unwrap();
-    service
-        .ingest_event(event(
-            "evt_turn",
-            EventType::TurnCompleted,
-            "sess_1",
-            Some("turn_1"),
-        ))
-        .await
-        .unwrap();
 
+    assert!(service.get_turn("turn_context").await.unwrap().is_none());
     let events = service.list_events("sess_1").await.unwrap();
-    assert_eq!(events[1].turn_index, None);
-    assert_eq!(
-        service
-            .get_turn("turn_1")
-            .await
-            .unwrap()
-            .unwrap()
-            .turn_index,
-        1
-    );
+    assert_eq!(events[1].turn_id.as_deref(), Some("turn_context"));
 }
 
 #[tokio::test]
-async fn allocates_monotonic_indexes_and_reuses_them_for_later_events_and_replay() {
+async fn replay_preserves_turn_identity_and_state_without_ordinals() {
     let service = service().await;
     service
         .ingest_event(event(
@@ -283,39 +266,15 @@ async fn allocates_monotonic_indexes_and_reuses_them_for_later_events_and_replay
             .unwrap();
     }
 
-    assert_eq!(
-        service
-            .get_turn("turn_1")
-            .await
-            .unwrap()
-            .unwrap()
-            .turn_index,
-        1
-    );
-    assert_eq!(
-        service
-            .get_turn("turn_2")
-            .await
-            .unwrap()
-            .unwrap()
-            .turn_index,
-        2
-    );
-
     let events = service.list_events("sess_1").await.unwrap();
-    let turn_one_indexes: Vec<_> = events
-        .iter()
-        .filter(|event| event.turn_id.as_deref() == Some("turn_1"))
-        .map(|event| event.turn_index)
-        .collect();
-    assert_eq!(turn_one_indexes, vec![Some(1), Some(1)]);
-
     let mut replay = ProjectionState::default();
     for event in &events {
         replay.apply(event).unwrap();
     }
-    assert_eq!(replay.turn("turn_1").unwrap().turn_index, 1);
-    assert_eq!(replay.turn("turn_2").unwrap().turn_index, 2);
+    assert_eq!(replay.turn("turn_1").unwrap().state, TurnState::Completed);
+    assert_eq!(replay.turn("turn_2").unwrap().state, TurnState::Completed);
+    assert_eq!(replay.turn("turn_1").unwrap().session_id, "sess_1");
+    assert_eq!(replay.turn("turn_2").unwrap().session_id, "sess_1");
 }
 
 #[tokio::test]
@@ -337,7 +296,7 @@ async fn topology_enrichment_is_atomic_durable_and_replayable() {
                 "evt_topology_root",
                 EventType::TurnStarted,
                 "sess_topology",
-                Some("turn_root"),
+                Some("turn_01900000-0000-7000-8000-000000000001"),
             ),
             TurnTopology::Root,
         )
@@ -348,7 +307,7 @@ async fn topology_enrichment_is_atomic_durable_and_replayable() {
             "evt_topology_root_completed",
             EventType::TurnCompleted,
             "sess_topology",
-            Some("turn_root"),
+            Some("turn_01900000-0000-7000-8000-000000000001"),
         ))
         .await
         .unwrap();
@@ -358,16 +317,16 @@ async fn topology_enrichment_is_atomic_durable_and_replayable() {
                 "evt_topology_child",
                 EventType::TurnStarted,
                 "sess_topology",
-                Some("turn_child"),
+                Some("turn_01900000-0000-7000-8000-000000000002"),
             ),
-            TurnTopology::linked("turn_root"),
+            TurnTopology::linked("turn_01900000-0000-7000-8000-000000000001"),
         )
         .await
         .unwrap();
 
     assert_eq!(
         service
-            .get_turn("turn_root")
+            .get_turn("turn_01900000-0000-7000-8000-000000000001")
             .await
             .unwrap()
             .unwrap()
@@ -376,24 +335,32 @@ async fn topology_enrichment_is_atomic_durable_and_replayable() {
     );
     assert_eq!(
         service
-            .get_turn("turn_child")
+            .get_turn("turn_01900000-0000-7000-8000-000000000002")
             .await
             .unwrap()
             .unwrap()
             .topology,
-        TurnTopology::linked("turn_root")
+        TurnTopology::linked("turn_01900000-0000-7000-8000-000000000001")
     );
 
     let events = service.list_events("sess_topology").await.unwrap();
     assert_eq!(events[1].topology, Some(TurnTopology::Root));
-    assert_eq!(events[3].topology, Some(TurnTopology::linked("turn_root")));
+    assert_eq!(
+        events[3].topology,
+        Some(TurnTopology::linked(
+            "turn_01900000-0000-7000-8000-000000000001"
+        ))
+    );
     let mut replay = ProjectionState::default();
     for event in &events {
         replay.apply(event).unwrap();
     }
     assert_eq!(
-        replay.turn("turn_child").unwrap().topology,
-        TurnTopology::linked("turn_root")
+        replay
+            .turn("turn_01900000-0000-7000-8000-000000000002")
+            .unwrap()
+            .topology,
+        TurnTopology::linked("turn_01900000-0000-7000-8000-000000000001")
     );
 
     let invalid = service
@@ -402,13 +369,19 @@ async fn topology_enrichment_is_atomic_durable_and_replayable() {
                 "evt_topology_invalid",
                 EventType::TurnStarted,
                 "sess_topology",
-                Some("turn_invalid"),
+                Some("turn_01900000-0000-7000-8000-000000000003"),
             ),
-            TurnTopology::linked("turn_invalid"),
+            TurnTopology::linked("turn_01900000-0000-7000-8000-000000000003"),
         )
         .await;
     assert!(invalid.is_err());
-    assert!(service.get_turn("turn_invalid").await.unwrap().is_none());
+    assert!(
+        service
+            .get_turn("turn_01900000-0000-7000-8000-000000000003")
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert!(
         service
             .list_events("sess_topology")
@@ -420,7 +393,7 @@ async fn topology_enrichment_is_atomic_durable_and_replayable() {
 }
 
 #[tokio::test]
-async fn concurrent_first_events_receive_distinct_session_local_indexes() {
+async fn concurrent_first_events_preserve_distinct_turn_ids() {
     let service = service().await;
     service
         .ingest_event(event(
@@ -451,20 +424,6 @@ async fn concurrent_first_events_receive_distinct_session_local_indexes() {
     left_result.unwrap();
     right_result.unwrap();
 
-    let mut indexes = vec![
-        service
-            .get_turn("turn_left")
-            .await
-            .unwrap()
-            .unwrap()
-            .turn_index,
-        service
-            .get_turn("turn_right")
-            .await
-            .unwrap()
-            .unwrap()
-            .turn_index,
-    ];
-    indexes.sort_unstable();
-    assert_eq!(indexes, vec![1, 2]);
+    assert!(service.get_turn("turn_left").await.unwrap().is_some());
+    assert!(service.get_turn("turn_right").await.unwrap().is_some());
 }

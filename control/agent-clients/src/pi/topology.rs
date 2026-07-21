@@ -77,7 +77,7 @@ impl TurnTopologyResolver for PiTopologyResolver {
             };
         }
 
-        let mut candidates_by_anchor: HashMap<String, (i64, String)> = HashMap::new();
+        let mut candidates_by_anchor: HashMap<String, String> = HashMap::new();
         for candidate in request.earlier_turns {
             let Some(tail_cursor) = candidate.tail_cursor else {
                 return unknown(TopologyDiagnostic::CandidateBoundaryMissing);
@@ -91,11 +91,11 @@ impl TurnTopologyResolver for PiTopologyResolver {
             if candidates_by_anchor.contains_key(&anchor) {
                 return unknown(TopologyDiagnostic::EvidenceInvalid);
             }
-            candidates_by_anchor.insert(anchor, (candidate.turn_index, candidate.turn_id));
+            candidates_by_anchor.insert(anchor, candidate.turn_id);
         }
 
         for entry in evidence.entries.iter().rev() {
-            if let Some((_, parent_turn_id)) = candidates_by_anchor.get(&entry.id) {
+            if let Some(parent_turn_id) = candidates_by_anchor.get(&entry.id) {
                 return TopologyResolveResult {
                     resolution: TopologyResolution::Linked {
                         parent_turn_id: parent_turn_id.clone(),
