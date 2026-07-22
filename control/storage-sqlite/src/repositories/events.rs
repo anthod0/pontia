@@ -13,7 +13,6 @@ pub struct EventInsertRecord {
     pub client_type: String,
     pub event_type: String,
     pub occurred_at: String,
-    pub seq: Option<i64>,
     pub payload: String,
     pub timeline_boundary: Option<String>,
     pub turn_topology: Option<String>,
@@ -35,8 +34,8 @@ impl SqliteEventRepository {
     ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO events
-               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload, timeline_boundary, turn_topology)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload, timeline_boundary, turn_topology)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(event.event_id)
         .bind(event.session_id)
@@ -45,7 +44,6 @@ impl SqliteEventRepository {
         .bind(event.client_type)
         .bind(event.event_type)
         .bind(event.occurred_at)
-        .bind(event.seq)
         .bind(event.payload)
         .bind(event.timeline_boundary)
         .bind(event.turn_topology)
@@ -100,20 +98,11 @@ impl SqliteEventRepository {
 
     pub async fn list_domain_event_rows(&self, session_id: &str) -> Result<Vec<DomainEventRow>> {
         Ok(sqlx::query_as::<_, DomainEventRow>(
-            r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, seq, payload, timeline_boundary, turn_topology
+            r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload, timeline_boundary, turn_topology
                FROM events WHERE session_id = ? ORDER BY rowid"#,
         )
         .bind(session_id)
         .fetch_all(&self.pool)
-        .await?)
-    }
-
-    pub async fn max_seq(&self, session_id: &str) -> Result<Option<i64>> {
-        Ok(sqlx::query_scalar(
-            "SELECT MAX(seq) FROM events WHERE session_id = ? AND seq IS NOT NULL",
-        )
-        .bind(session_id)
-        .fetch_one(&self.pool)
         .await?)
     }
 

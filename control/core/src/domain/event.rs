@@ -194,7 +194,6 @@ pub struct ReportedEvent {
     pub client_type: String,
     pub event_type: EventType,
     pub occurred_at: OffsetDateTime,
-    pub seq: Option<i64>,
     pub payload: Value,
 }
 
@@ -216,7 +215,6 @@ impl ReportedEvent {
             client_type,
             event_type,
             occurred_at: utc_now(),
-            seq: None,
             payload,
         }
     }
@@ -258,7 +256,6 @@ pub struct DomainEvent {
     pub client_type: String,
     pub event_type: EventType,
     pub occurred_at: OffsetDateTime,
-    pub seq: Option<i64>,
     pub payload: Value,
     pub timeline_boundary: Option<TimelineBoundary>,
     pub topology: Option<TurnTopology>,
@@ -282,7 +279,6 @@ impl DomainEvent {
             client_type,
             event_type,
             occurred_at: utc_now(),
-            seq: None,
             payload,
             timeline_boundary: None,
             topology: None,
@@ -310,7 +306,6 @@ impl From<ReportedEvent> for DomainEvent {
             client_type: event.client_type,
             event_type: event.event_type,
             occurred_at: event.occurred_at,
-            seq: event.seq,
             payload: event.payload,
             timeline_boundary: None,
             topology: None,

@@ -45,7 +45,16 @@ async fn connects_to_sqlite_and_runs_migrations() {
         .await
         .expect("query migrations");
 
-    assert_eq!(migration_count, 5);
+    assert_eq!(migration_count, 6);
+
+    let event_columns = sqlx::query("PRAGMA table_info(events)")
+        .fetch_all(&pool)
+        .await
+        .expect("events columns")
+        .into_iter()
+        .map(|row| row.get::<String, _>("name"))
+        .collect::<Vec<_>>();
+    assert!(!event_columns.contains(&"seq".to_string()));
 
     let idempotency_table_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'idempotency_keys'",

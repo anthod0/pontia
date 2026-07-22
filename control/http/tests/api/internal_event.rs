@@ -372,7 +372,6 @@ async fn internal_event_api_rejects_client_owned_domain_fields() {
             "client_type": "generic",
             "type": "session.message_updated",
             "time": "2026-01-01T00:00:00Z",
-            "seq": 1,
             "data": {}
         }),
     )

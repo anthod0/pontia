@@ -35,7 +35,6 @@ async fn sqlite_event_repository_supports_ingest_event_writes_and_reads() {
             client_type: "pi".to_string(),
             event_type: "turn.started".to_string(),
             occurred_at: "2026-06-15T12:00:00Z".to_string(),
-            seq: Some(2),
             payload: json!({"input_summary": "hello"}).to_string(),
             timeline_boundary: None,
             turn_topology: Some(json!({"status": "root"}).to_string()),
@@ -52,11 +51,6 @@ async fn sqlite_event_repository_supports_ingest_event_writes_and_reads() {
             .expect("state version"),
         Some(1)
     );
-    assert_eq!(
-        repository.max_seq("sess_1").await.expect("max seq"),
-        Some(2)
-    );
-
     let rows = repository
         .list_domain_event_rows("sess_1")
         .await
@@ -64,7 +58,6 @@ async fn sqlite_event_repository_supports_ingest_event_writes_and_reads() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].event_id, "evt_1");
     assert_eq!(rows[0].client_type, "pi");
-    assert_eq!(rows[0].seq, Some(2));
     assert_eq!(
         rows[0].payload,
         json!({"input_summary": "hello"}).to_string()

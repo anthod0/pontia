@@ -168,25 +168,7 @@ pub async fn post_event(
         }));
     }
 
-    let warnings = Vec::new();
     let result = service.ingest_confirmed_event(reported_event).await?;
-    let warnings = if result.duplicate {
-        Vec::new()
-    } else {
-        warnings
-    };
-
-    for warning in &warnings {
-        tracing::warn!(
-            code = "event_ingest_sequence_anomaly",
-            event_id = %event.event_id,
-            session_id = %event.session_id,
-            turn_id = ?event.turn_id,
-            seq = event.seq,
-            warning,
-            "event ingest sequence anomaly"
-        );
-    }
 
     Ok(Json(InternalEventResponse {
         accepted: result.accepted,
@@ -195,7 +177,7 @@ pub async fn post_event(
         session_id: result.session_id,
         turn_id: result.turn_id,
         state_version: result.state_version,
-        warnings,
+        warnings: Vec::new(),
     }))
 }
 

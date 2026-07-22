@@ -170,7 +170,6 @@ impl EventIngestService {
                 client_type: event.client_type.clone(),
                 event_type: event.event_type.to_string(),
                 occurred_at,
-                seq: event.seq,
                 payload,
                 timeline_boundary,
                 turn_topology,
@@ -547,34 +546,6 @@ impl EventIngestService {
             .await?;
 
         rows.into_iter().map(row_to_event).collect()
-    }
-
-    pub async fn sequence_warnings(&self, event: &DomainEvent) -> Result<Vec<String>> {
-        let Some(seq) = event.seq else {
-            return Ok(Vec::new());
-        };
-
-        let max_seq = SqliteEventRepository::new(self.pool.clone())
-            .max_seq(&event.session_id)
-            .await?;
-
-        let Some(max_seq) = max_seq else {
-            return Ok(Vec::new());
-        };
-
-        let warning = if seq <= max_seq {
-            Some(format!(
-                "non-monotonic sequence: received seq {seq} after max seq {max_seq}"
-            ))
-        } else if seq > max_seq + 1 {
-            Some(format!(
-                "sequence gap: received seq {seq} after max seq {max_seq}"
-            ))
-        } else {
-            None
-        };
-
-        Ok(warning.into_iter().collect())
     }
 
     pub async fn volatile_state_version(&self, session_id: &str) -> Result<i64> {

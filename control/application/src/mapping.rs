@@ -248,7 +248,6 @@ pub(crate) fn row_to_event(row: DomainEventRow) -> Result<DomainEvent> {
         .map_err(|err| {
             pontia_core::error::Error::Domain(format!("invalid event timestamp: {err}"))
         })?,
-        seq: row.seq,
         payload: serde_json::from_str(&row.payload)?,
         timeline_boundary: row
             .timeline_boundary

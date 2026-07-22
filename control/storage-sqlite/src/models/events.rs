@@ -40,7 +40,6 @@ pub struct DomainEventRow {
     pub client_type: String,
     pub event_type: String,
     pub occurred_at: String,
-    pub seq: Option<i64>,
     pub payload: String,
     pub timeline_boundary: Option<String>,
     pub turn_topology: Option<String>,
