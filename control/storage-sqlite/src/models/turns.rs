@@ -9,7 +9,6 @@ pub struct TurnRow {
     pub state: String,
     pub input_summary: Option<String>,
     pub output_summary: Option<String>,
-    pub failure_message: Option<String>,
     pub metadata: String,
     pub created_at: String,
     pub updated_at: String,

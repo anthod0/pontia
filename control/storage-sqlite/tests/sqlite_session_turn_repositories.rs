@@ -264,12 +264,12 @@ async fn sqlite_turn_repository_lists_turns_and_event_rows_with_existing_order()
     .expect("insert session");
     sqlx::query(
         r#"INSERT INTO turns
-           (turn_id, session_id, state, input_summary, output_summary, failure_message,
+           (turn_id, session_id, state, input_summary, output_summary,
             metadata, created_at, updated_at)
            VALUES
-           ('turn_b', 'sess_turns', 'queued', 'input b', NULL, NULL, ?,
+           ('turn_b', 'sess_turns', 'queued', 'input b', NULL, ?,
             '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z'),
-           ('turn_a', 'sess_turns', 'completed', 'input a', 'output a', NULL, ?,
+           ('turn_a', 'sess_turns', 'completed', 'input a', 'output a', ?,
             '2026-06-15T12:00:00Z', '2026-06-15T12:00:00Z')"#,
     )
     .bind(json!({"note": "b"}).to_string())

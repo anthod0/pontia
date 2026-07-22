@@ -169,7 +169,7 @@ impl SqliteTurnRepository {
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnRow>> {
         Ok(sqlx::query_as::<_, TurnRow>(
             r#"SELECT turn_id, session_id, head_cursor, tail_cursor, parent_turn_id, topology_status, state, input_summary, output_summary,
-                      failure_message, metadata, created_at, updated_at
+                      metadata, created_at, updated_at
                FROM turns WHERE session_id = ? ORDER BY turn_id"#,
         )
         .bind(session_id)
@@ -180,7 +180,7 @@ impl SqliteTurnRepository {
     pub async fn get_turn(&self, session_id: &str, turn_id: &str) -> Result<Option<TurnRow>> {
         Ok(sqlx::query_as::<_, TurnRow>(
             r#"SELECT turn_id, session_id, head_cursor, tail_cursor, parent_turn_id, topology_status, state, input_summary, output_summary,
-                      failure_message, metadata, created_at, updated_at
+                      metadata, created_at, updated_at
                FROM turns WHERE session_id = ? AND turn_id = ?"#,
         )
         .bind(session_id)

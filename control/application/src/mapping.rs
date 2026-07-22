@@ -142,7 +142,7 @@ pub(crate) fn turn_row_to_view(row: TurnRow) -> Result<TurnView> {
         output: TurnOutputView {
             summary: row.output_summary,
         },
-        failure: row.failure_message,
+        failure: None,
         created_at: row.created_at,
         started_at: None,
         completed_at: None,
