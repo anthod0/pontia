@@ -4,8 +4,8 @@ use pontia_agent_clients as agent_clients;
 pub use pontia_config::FilePickerConfig;
 use pontia_core::{
     domain::{
-        DomainEvent, EventSource, EventType, ReportedEvent, SessionProjection, SessionState,
-        TurnProjection, TurnState, TurnTopology,
+        DomainEvent, EventSource, EventType, SessionProjection, SessionState, TurnProjection,
+        TurnState, TurnTopology,
     },
     error::{Error, Result},
     ids::{new_dispatch_id, new_event_id, new_message_id, new_session_id, new_turn_id},
@@ -48,7 +48,9 @@ pub use events::{EventIngestResult, EventIngestService, InternalEventValidationS
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use idempotency::{IdempotencyCoordinator, IdempotencyOutcome};
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
-pub use ingestion::{EventReportNormalizer, ReportedFact};
+pub use ingestion::{
+    EventReportNormalizer, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
+};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
     TurnTimelineDirection, TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage,

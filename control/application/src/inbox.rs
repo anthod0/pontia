@@ -75,7 +75,7 @@ impl InboxCommandService {
         self.audit(
             session_id,
             &session.client_type,
-            EventType::InboxMessageQueued,
+            PontiaEventType::InboxMessageQueued,
             json!({ "message_id": message_id, "delivery_policy": request.delivery_policy }),
         )
         .await?;
@@ -160,7 +160,7 @@ impl InboxCommandService {
             self.audit(
                 session_id,
                 &session.client_type,
-                EventType::InboxMessageCancelled,
+                PontiaEventType::InboxMessageCancelled,
                 json!({ "message_id": message_id }),
             )
             .await?;
@@ -200,7 +200,7 @@ impl InboxCommandService {
             self.audit(
                 session_id,
                 &session.client_type,
-                EventType::InboxMessageDismissed,
+                PontiaEventType::InboxMessageDismissed,
                 json!({ "message_id": message_id }),
             )
             .await?;
@@ -265,7 +265,7 @@ impl InboxCommandService {
                 self.audit(
                     session_id,
                     &session.client_type,
-                    EventType::InboxMessageDispatched,
+                    PontiaEventType::InboxMessageDispatched,
                     payload,
                 )
                 .await?;
@@ -287,16 +287,15 @@ impl InboxCommandService {
         &self,
         session_id: &str,
         client_type: &str,
-        event_type: EventType,
+        event_type: PontiaEventType,
         payload: Value,
     ) -> Result<()> {
         EventIngestService::new(self.pool.clone())
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
-                session_id.to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
+                session_id,
                 None,
-                EventSource::ExternalApi,
-                client_type.to_string(),
+                PontiaEventSource::ExternalApi,
+                client_type,
                 event_type,
                 payload,
             ))

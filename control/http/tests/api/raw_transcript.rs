@@ -211,7 +211,7 @@ async fn active_pi_timeline_fixture(
 async fn seed_session_for_client(state: &AppState, session_id: &str, client_type: &str) {
     let service = EventIngestService::new(state.db());
     service
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             format!("evt_{session_id}_created"),
             session_id.to_string(),
             None,
@@ -234,7 +234,7 @@ async fn precreate_turn_if_missing(state: &AppState, session_id: &str, turn_id: 
         return;
     }
     service
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             format!("evt_precreate_{turn_id}"),
             session_id.to_string(),
             Some(turn_id.to_string()),
@@ -333,7 +333,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
     assert_eq!(body["error"]["code"], "session_not_found");
 
     EventIngestService::new(state.db())
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             "evt_unsealed_turn".to_string(),
             session_id.to_string(),
             Some("turn_unsealed".to_string()),
@@ -357,7 +357,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
     let other_session_id = "sess_turn_timeline_other";
     seed_session(&state, other_session_id).await;
     EventIngestService::new(state.db())
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             "evt_other_session_turn".to_string(),
             other_session_id.to_string(),
             Some("turn_other_session".to_string()),
@@ -1865,7 +1865,7 @@ async fn first_pi_turn_accepts_a_null_previous_leaf_when_that_turn_was_precreate
         .await
         .unwrap();
     EventIngestService::new(state.db())
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             "evt_pi_first_null_created".to_string(),
             session_id.to_string(),
             Some(turn_id.to_string()),
@@ -1911,7 +1911,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
     let session_id = "sess_pi_boundary_missing";
     seed_session(&state, session_id).await;
     EventIngestService::new(state.db())
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             "evt_existing_created".to_string(),
             session_id.to_string(),
             Some("turn_existing".to_string()),
@@ -1923,7 +1923,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
         .await
         .unwrap();
     EventIngestService::new(state.db())
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             "evt_existing_completed".to_string(),
             session_id.to_string(),
             Some("turn_existing".to_string()),

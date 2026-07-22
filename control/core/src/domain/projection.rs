@@ -95,6 +95,8 @@ impl ProjectionState {
                 Some(TimelineBoundary::Tail { .. }),
                 EventType::TurnCompleted
                 | EventType::TurnFailed
+                | EventType::TurnDispatchFailed
+                | EventType::TurnAbandoned
                 | EventType::TurnInterrupted
                 | EventType::TurnCancelled,
             ) => {}
@@ -153,7 +155,9 @@ impl ProjectionState {
                 self.apply_turn(event, TurnState::Running)
             }
             EventType::TurnCompleted => self.apply_turn(event, TurnState::Completed),
-            EventType::TurnFailed => self.apply_turn(event, TurnState::Failed),
+            EventType::TurnFailed | EventType::TurnDispatchFailed | EventType::TurnAbandoned => {
+                self.apply_turn(event, TurnState::Failed)
+            }
             EventType::TurnInterrupted => self.apply_turn(event, TurnState::Interrupted),
             EventType::TurnCancelled => self.apply_turn(event, TurnState::Cancelled),
             EventType::InboxMessageQueued

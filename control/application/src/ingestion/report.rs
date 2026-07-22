@@ -33,6 +33,13 @@ impl EventReportNormalizer {
     }
 
     pub async fn normalize(&self, fact: ReportedFact) -> Result<ReportedEvent> {
+        if !fact.fact_type.is_client_reportable() {
+            return Err(Error::Domain(format!(
+                "{} is owned by the Pontia control plane and cannot be reported by an agent client",
+                fact.fact_type
+            )));
+        }
+
         let session = SqliteSessionRepository::new(self.pool.clone())
             .get_session(&fact.session_id)
             .await?

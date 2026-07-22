@@ -76,24 +76,22 @@ impl RuntimeControlService {
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 Some(turn_id.to_string()),
-                EventSource::ExternalApi,
+                PontiaEventSource::ExternalApi,
                 session.client_type.clone(),
-                EventType::TurnInterruptRequested,
+                PontiaEventType::TurnInterruptRequested,
                 json!({}),
             ))
             .await?;
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 Some(turn_id.to_string()),
-                EventSource::RuntimeManager,
+                PontiaEventSource::RuntimeManager,
                 session.client_type,
-                EventType::TurnInterrupted,
+                PontiaEventType::TurnInterrupted,
                 json!({}),
             ))
             .await?;
@@ -139,13 +137,12 @@ impl RuntimeControlService {
                 }
             }
             EventIngestService::new(self.pool.clone())
-                .ingest_event(ReportedEvent::new(
-                    new_event_id().to_string(),
+                .ingest_pontia_event(PontiaEvent::new(
                     session_id.to_string(),
                     None,
-                    EventSource::ExternalApi,
+                    PontiaEventSource::ExternalApi,
                     session.client_type.clone(),
-                    EventType::SessionExited,
+                    PontiaEventType::SessionExited,
                     json!({ "reason": "terminate_requested" }),
                 ))
                 .await?;
@@ -178,13 +175,12 @@ impl RuntimeControlService {
         let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,
-                EventSource::ExternalApi,
+                PontiaEventSource::ExternalApi,
                 session.client_type.clone(),
-                EventType::SessionResuming,
+                PontiaEventType::SessionResuming,
                 json!({}),
             ))
             .await?;
@@ -217,25 +213,23 @@ impl RuntimeControlService {
             )?;
         self.upsert_runtime_binding(session_id, &runtime).await?;
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,
-                EventSource::RuntimeManager,
+                PontiaEventSource::RuntimeManager,
                 session.client_type.clone(),
-                EventType::SessionStarted,
+                PontiaEventType::SessionStarted,
                 json!({}),
             ))
             .await?;
         if client_readiness_mode(&session.client_type)? == ReadinessMode::RuntimeManagerImmediate {
             ingest
-                .ingest_event(ReportedEvent::new(
-                    new_event_id().to_string(),
+                .ingest_pontia_event(PontiaEvent::new(
                     session_id.to_string(),
                     None,
-                    EventSource::RuntimeManager,
+                    PontiaEventSource::RuntimeManager,
                     session.client_type,
-                    EventType::SessionReady,
+                    PontiaEventType::SessionReady,
                     json!({}),
                 ))
                 .await?;
@@ -325,36 +319,33 @@ impl RuntimeControlService {
         runtime_replacement_tx.commit().await?;
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,
-                EventSource::ExternalApi,
+                PontiaEventSource::ExternalApi,
                 session.client_type.clone(),
-                EventType::SessionStarting,
+                PontiaEventType::SessionStarting,
                 json!({}),
             ))
             .await?;
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,
-                EventSource::RuntimeManager,
+                PontiaEventSource::RuntimeManager,
                 session.client_type.clone(),
-                EventType::SessionStarted,
+                PontiaEventType::SessionStarted,
                 json!({}),
             ))
             .await?;
         if client_readiness_mode(&session.client_type)? == ReadinessMode::RuntimeManagerImmediate {
             ingest
-                .ingest_event(ReportedEvent::new(
-                    new_event_id().to_string(),
+                .ingest_pontia_event(PontiaEvent::new(
                     session_id.to_string(),
                     None,
-                    EventSource::RuntimeManager,
+                    PontiaEventSource::RuntimeManager,
                     session.client_type,
-                    EventType::SessionReady,
+                    PontiaEventType::SessionReady,
                     json!({}),
                 ))
                 .await?;

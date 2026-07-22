@@ -236,11 +236,10 @@ async fn observe_missing_generic_runtime_does_not_fail_a_terminal_branch_leaf() 
 }
 
 #[tokio::test]
-async fn observe_missing_generic_runtime_fails_active_turn() {
+async fn observe_missing_generic_runtime_abandons_active_turn_without_forging_agent_failure() {
     let scope = GenericClientTestScope::new()
         .await
-        .with_capabilities(AgentClientCapabilities::pi_m0_default())
-        .auto_start_turn();
+        .with_capabilities(AgentClientCapabilities::pi_m0_default());
     let state = test_state("generic_observe_turn_failed").await;
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
@@ -254,7 +253,7 @@ async fn observe_missing_generic_runtime_fails_active_turn() {
         .expect("observe runtime");
 
     let (status, body) = request(
-        state,
+        state.clone(),
         "GET",
         &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
         None,
@@ -262,4 +261,21 @@ async fn observe_missing_generic_runtime_fails_active_turn() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["data"]["turn"]["state"], "failed");
+
+    let (status, body) = request(
+        state,
+        "GET",
+        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let event_types = body["data"]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| event["type"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(event_types.contains(&"turn.abandoned"));
+    assert!(!event_types.contains(&"turn.failed"));
 }

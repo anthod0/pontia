@@ -62,7 +62,7 @@ mod tests {
         payload: Value,
     ) {
         service
-            .ingest_event(ReportedEvent::new(
+            .ingest_reported_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,

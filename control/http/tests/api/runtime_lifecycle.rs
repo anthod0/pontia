@@ -437,7 +437,7 @@ async fn resume_rejects_error_session() {
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
     pontia_application::EventIngestService::new(state.db())
-        .ingest_event(pontia_core::domain::ReportedEvent::new(
+        .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
             pontia_core::ids::new_event_id().to_string(),
             session_id.clone(),
             None,

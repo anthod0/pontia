@@ -137,7 +137,7 @@ mod tests {
         let pool = pool().await;
         let service = EventIngestService::new(pool.clone());
         service
-            .ingest_event(ReportedEvent::new(
+            .ingest_reported_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 "sess_ready".to_string(),
                 None,
@@ -149,7 +149,7 @@ mod tests {
             .await
             .unwrap();
         service
-            .ingest_event(ReportedEvent::new(
+            .ingest_reported_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 "sess_ready".to_string(),
                 None,

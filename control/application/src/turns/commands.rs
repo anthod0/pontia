@@ -1,12 +1,10 @@
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
-use pontia_agent_clients as agent_clients;
 use pontia_agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec};
 use pontia_core::{
-    domain::{EventSource, EventType, ReportedEvent},
     error::{Error, Result},
-    ids::{new_dispatch_id, new_event_id, new_turn_id},
+    ids::{new_dispatch_id, new_turn_id},
 };
 use pontia_runtime::{AgentInput, GenericRuntimeManager};
 use pontia_storage_sqlite::repositories::{
@@ -14,7 +12,10 @@ use pontia_storage_sqlite::repositories::{
 };
 
 use super::{context::store_client_current_turn_context, tmux::TmuxPaneBinding};
-use crate::{EventIngestService, ExternalQueryService, RuntimeReadinessService, TurnView};
+use crate::{
+    EventIngestService, ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType,
+    RuntimeReadinessService, TurnView,
+};
 
 #[derive(Clone)]
 pub struct TurnCommandService {
@@ -139,13 +140,12 @@ impl TurnCommandService {
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 Some(turn_id.clone()),
-                EventSource::ExternalApi,
+                PontiaEventSource::ExternalApi,
                 session.client_type.clone(),
-                EventType::TurnCreated,
+                PontiaEventType::TurnCreated,
                 json!({
                     "input": { "summary": input },
                     "metadata": metadata,
@@ -153,41 +153,19 @@ impl TurnCommandService {
             ))
             .await?;
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 Some(turn_id.clone()),
-                EventSource::ExternalApi,
+                PontiaEventSource::ExternalApi,
                 session.client_type.clone(),
-                EventType::TurnQueued,
+                PontiaEventType::TurnQueued,
                 json!({}),
             ))
             .await?;
 
         if dispatch_mode == DispatchMode::InProcessRecorded {
-            let behavior =
-                agent_clients::in_process_recorded_dispatch_behavior(&session.client_type)
-                    .ok_or_else(|| {
-                        Error::Domain(format!(
-                            "{} does not support in-process recorded dispatch",
-                            session.client_type
-                        ))
-                    })?;
             self.runtime
                 .submit_input(&session.client_type, agent_input.clone())?;
-            if behavior.auto_start_turn {
-                ingest
-                    .ingest_event(ReportedEvent::new(
-                        new_event_id().to_string(),
-                        session_id.to_string(),
-                        Some(turn_id.clone()),
-                        EventSource::AgentAdapter,
-                        session.client_type.clone(),
-                        EventType::TurnStarted,
-                        json!({}),
-                    ))
-                    .await?;
-            }
         }
 
         if dispatch_mode == DispatchMode::TmuxPaste {
@@ -231,28 +209,15 @@ impl TurnCommandService {
                                 &agent_input,
                             )
                         }) {
-                        Ok(()) => {
-                            ingest
-                                .ingest_event(ReportedEvent::new(
-                                    new_event_id().to_string(),
-                                    session_id.to_string(),
-                                    Some(turn_id.clone()),
-                                    EventSource::AgentAdapter,
-                                    session.client_type.clone(),
-                                    EventType::TurnStarted,
-                                    json!({}),
-                                ))
-                                .await?;
-                        }
+                        Ok(()) => {}
                         Err(error) => {
                             ingest
-                                .ingest_event(ReportedEvent::new(
-                                    new_event_id().to_string(),
+                                .ingest_pontia_event(PontiaEvent::new(
                                     session_id.to_string(),
                                     Some(turn_id.clone()),
-                                    EventSource::RuntimeManager,
+                                    PontiaEventSource::RuntimeManager,
                                     session.client_type.clone(),
-                                    EventType::TurnFailed,
+                                    PontiaEventType::TurnDispatchFailed,
                                     json!({ "failure": { "message": error.to_string() } }),
                                 ))
                                 .await?;
@@ -260,15 +225,15 @@ impl TurnCommandService {
                     }
                 }
                 None => {
+                    let message = format!("{} runtime binding not found", session.client_type);
                     ingest
-                        .ingest_event(ReportedEvent::new(
-                            new_event_id().to_string(),
+                        .ingest_pontia_event(PontiaEvent::new(
                             session_id.to_string(),
                             Some(turn_id.clone()),
-                            EventSource::RuntimeManager,
+                            PontiaEventSource::RuntimeManager,
                             session.client_type.clone(),
-                            EventType::TurnFailed,
-                            json!({ "failure": { "message": format!("{} runtime binding not found", session.client_type) } }),
+                            PontiaEventType::TurnDispatchFailed,
+                            json!({ "failure": { "message": message } }),
                         ))
                         .await?;
                 }

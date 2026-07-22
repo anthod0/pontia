@@ -31,7 +31,11 @@ fn event(
         event_id.to_string(),
         session_id.to_string(),
         turn_id.map(str::to_string),
-        EventSource::AgentAdapter,
+        if event_type == EventType::SessionReady {
+            EventSource::RuntimeManager
+        } else {
+            EventSource::AgentAdapter
+        },
         "generic".to_string(),
         event_type,
         payload,
@@ -64,7 +68,7 @@ async fn bind_session_to_active_workspace(state: &AppState, session_id: &str) {
 async fn seed_session_turn(state: &AppState) {
     let service = EventIngestService::new(state.db());
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_external_queries_1",
             EventType::SessionCreated,
             "sess_external_queries_1",
@@ -74,7 +78,7 @@ async fn seed_session_turn(state: &AppState) {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_external_queries_2",
             EventType::SessionReady,
             "sess_external_queries_1",
@@ -97,7 +101,7 @@ async fn seed_session_turn(state: &AppState) {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_external_queries_4",
             EventType::TurnCompleted,
             "sess_external_queries_1",
@@ -107,7 +111,7 @@ async fn seed_session_turn(state: &AppState) {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_external_queries_5",
             EventType::TurnFailed,
             "sess_external_queries_1",
@@ -117,7 +121,7 @@ async fn seed_session_turn(state: &AppState) {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_external_queries_0",
             EventType::TurnCompleted,
             "sess_external_queries_1",
@@ -243,7 +247,7 @@ async fn external_api_falls_back_to_tmux_binding_capabilities_when_metadata_is_l
     let state = test_state().await;
     let service = EventIngestService::new(state.db());
     service
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             "evt_external_queries_legacy_cap_created".to_string(),
             "sess_external_queries_legacy_cap".to_string(),
             None,
@@ -255,11 +259,11 @@ async fn external_api_falls_back_to_tmux_binding_capabilities_when_metadata_is_l
         .await
         .unwrap();
     service
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             "evt_external_queries_legacy_cap_ready".to_string(),
             "sess_external_queries_legacy_cap".to_string(),
             None,
-            EventSource::AgentAdapter,
+            EventSource::RuntimeManager,
             "pi".to_string(),
             EventType::SessionReady,
             json!({}),
@@ -303,7 +307,7 @@ async fn external_api_exposes_projected_session_context_usage() {
     let state = test_state().await;
     let service = EventIngestService::new(state.db());
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_external_queries_context_created",
             EventType::SessionCreated,
             "sess_external_queries_context",
@@ -313,7 +317,7 @@ async fn external_api_exposes_projected_session_context_usage() {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_external_queries_context_usage",
             EventType::SessionContextUsageUpdated,
             "sess_external_queries_context",
@@ -425,7 +429,7 @@ async fn external_api_lists_linked_topology_in_turn_id_order() {
     let state = test_state().await;
     let service = EventIngestService::new(state.db());
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_topology_external_session",
             EventType::SessionCreated,
             "sess_topology_external",
@@ -448,7 +452,7 @@ async fn external_api_lists_linked_topology_in_turn_id_order() {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_topology_external_root_done",
             EventType::TurnCompleted,
             "sess_topology_external",
@@ -503,7 +507,7 @@ async fn external_api_lists_linked_topology_in_turn_id_order() {
 async fn external_api_orders_turns_by_uuid_v7_id() {
     let state = test_state().await;
     EventIngestService::new(state.db())
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_uuid_order_session",
             EventType::SessionCreated,
             "sess_uuid_order",

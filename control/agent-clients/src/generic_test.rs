@@ -42,11 +42,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     },
 };
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct InProcessRecordedDispatchBehavior {
-    pub auto_start_turn: bool,
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct GenericTestClient;
 
@@ -58,20 +53,10 @@ impl GenericTestClient {
             .clear();
         *test_capabilities().lock().expect("test capabilities lock") =
             AgentClientCapabilities::generic_default();
-        *test_behavior().lock().expect("test behavior lock") =
-            InProcessRecordedDispatchBehavior::default();
     }
 
     pub fn set_capabilities(capabilities: AgentClientCapabilities) {
         *test_capabilities().lock().expect("test capabilities lock") = capabilities;
-    }
-
-    pub fn set_behavior(behavior: InProcessRecordedDispatchBehavior) {
-        *test_behavior().lock().expect("test behavior lock") = behavior;
-    }
-
-    pub fn behavior() -> InProcessRecordedDispatchBehavior {
-        test_behavior().lock().expect("test behavior lock").clone()
     }
 
     pub fn recorded_inputs() -> Vec<AgentInput> {
@@ -107,9 +92,4 @@ fn recorded_inputs() -> &'static Mutex<Vec<AgentInput>> {
 fn test_capabilities() -> &'static Mutex<AgentClientCapabilities> {
     static TEST_CAPABILITIES: OnceLock<Mutex<AgentClientCapabilities>> = OnceLock::new();
     TEST_CAPABILITIES.get_or_init(|| Mutex::new(AgentClientCapabilities::generic_default()))
-}
-
-fn test_behavior() -> &'static Mutex<InProcessRecordedDispatchBehavior> {
-    static TEST_BEHAVIOR: OnceLock<Mutex<InProcessRecordedDispatchBehavior>> = OnceLock::new();
-    TEST_BEHAVIOR.get_or_init(|| Mutex::new(InProcessRecordedDispatchBehavior::default()))
 }

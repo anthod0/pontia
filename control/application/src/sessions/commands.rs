@@ -68,13 +68,12 @@ impl SessionCommandService {
         let ingest = EventIngestService::new(self.pool.clone());
 
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.clone(),
                 None,
-                EventSource::ExternalApi,
+                PontiaEventSource::ExternalApi,
                 request.client_type.clone(),
-                EventType::SessionCreated,
+                PontiaEventType::SessionCreated,
                 json!({
                     "workspace": runtime_workspace,
                     "title": request.title,
@@ -88,13 +87,12 @@ impl SessionCommandService {
             ))
             .await?;
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.clone(),
                 None,
-                EventSource::ExternalApi,
+                PontiaEventSource::ExternalApi,
                 request.client_type.clone(),
-                EventType::SessionStarting,
+                PontiaEventType::SessionStarting,
                 json!({}),
             ))
             .await?;
@@ -113,25 +111,23 @@ impl SessionCommandService {
             .await?;
 
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.clone(),
                 None,
-                EventSource::RuntimeManager,
+                PontiaEventSource::RuntimeManager,
                 request.client_type.clone(),
-                EventType::SessionStarted,
+                PontiaEventType::SessionStarted,
                 json!({}),
             ))
             .await?;
         if client_readiness_mode(&request.client_type)? == ReadinessMode::RuntimeManagerImmediate {
             ingest
-                .ingest_event(ReportedEvent::new(
-                    new_event_id().to_string(),
+                .ingest_pontia_event(PontiaEvent::new(
                     session_id.clone(),
                     None,
-                    EventSource::RuntimeManager,
+                    PontiaEventSource::RuntimeManager,
                     request.client_type.clone(),
-                    EventType::SessionReady,
+                    PontiaEventType::SessionReady,
                     json!({}),
                 ))
                 .await?;
@@ -149,13 +145,12 @@ impl SessionCommandService {
             };
             if !plugin_owns_turn {
                 ingest
-                    .ingest_event(ReportedEvent::new(
-                        new_event_id().to_string(),
+                    .ingest_pontia_event(PontiaEvent::new(
                         session_id.clone(),
                         Some(dispatch_identity.clone()),
-                        EventSource::ExternalApi,
+                        PontiaEventSource::ExternalApi,
                         request.client_type.clone(),
-                        EventType::TurnCreated,
+                        PontiaEventType::TurnCreated,
                         json!({
                             "input": { "summary": initial_task.input },
                             "metadata": initial_task.metadata,
@@ -163,13 +158,12 @@ impl SessionCommandService {
                     ))
                     .await?;
                 ingest
-                    .ingest_event(ReportedEvent::new(
-                        new_event_id().to_string(),
+                    .ingest_pontia_event(PontiaEvent::new(
                         session_id.clone(),
                         Some(dispatch_identity.clone()),
-                        EventSource::ExternalApi,
+                        PontiaEventSource::ExternalApi,
                         request.client_type.clone(),
-                        EventType::TurnQueued,
+                        PontiaEventType::TurnQueued,
                         json!({}),
                     ))
                     .await?;
@@ -226,7 +220,6 @@ impl SessionCommandService {
                             service
                                 .dispatch_initial_generic_turn(
                                     &dispatch_session_id,
-                                    &turn_id,
                                     &dispatch_client_type,
                                     &input,
                                 )
@@ -326,13 +319,12 @@ impl SessionCommandService {
             .map(ToString::to_string);
 
         EventIngestService::new(self.pool.clone())
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,
-                EventSource::ExternalApi,
+                PontiaEventSource::ExternalApi,
                 existing.client_type,
-                EventType::SessionTitleUpdated,
+                PontiaEventType::SessionTitleUpdated,
                 json!({ "title": title }),
             ))
             .await?;

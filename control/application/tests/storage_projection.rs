@@ -37,15 +37,15 @@ async fn ingest_persists_events_and_updates_projections() {
     let service = service().await;
 
     service
-        .ingest_event(event("evt_1", EventType::SessionCreated, "sess_1", None))
+        .ingest_reported_event(event("evt_1", EventType::SessionCreated, "sess_1", None))
         .await
         .unwrap();
     service
-        .ingest_event(event("evt_2", EventType::SessionReady, "sess_1", None))
+        .ingest_reported_event(event("evt_2", EventType::SessionReady, "sess_1", None))
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_3",
             EventType::TurnCreated,
             "sess_1",
@@ -54,7 +54,7 @@ async fn ingest_persists_events_and_updates_projections() {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_4",
             EventType::TurnStarted,
             "sess_1",
@@ -63,7 +63,7 @@ async fn ingest_persists_events_and_updates_projections() {
         .await
         .unwrap();
     let result = service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_5",
             EventType::TurnCompleted,
             "sess_1",
@@ -90,7 +90,7 @@ async fn ingest_persists_events_and_updates_projections() {
 async fn ingest_persists_turn_input_and_output_summaries() {
     let service = service().await;
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_summary_session",
             EventType::SessionCreated,
             "sess_summary",
@@ -99,7 +99,7 @@ async fn ingest_persists_turn_input_and_output_summaries() {
         .await
         .unwrap();
     service
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             "evt_summary_input".to_string(),
             "sess_summary".to_string(),
             Some("turn_summary".to_string()),
@@ -111,7 +111,7 @@ async fn ingest_persists_turn_input_and_output_summaries() {
         .await
         .unwrap();
     service
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             "evt_summary_output".to_string(),
             "sess_summary".to_string(),
             Some("turn_summary".to_string()),
@@ -133,7 +133,7 @@ async fn session_started_keeps_projection_starting_until_ready() {
     let service = service().await;
 
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_started_created",
             EventType::SessionCreated,
             "sess_started",
@@ -142,7 +142,7 @@ async fn session_started_keeps_projection_starting_until_ready() {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_started",
             EventType::SessionStarted,
             "sess_started",
@@ -160,8 +160,8 @@ async fn duplicate_event_id_is_idempotent() {
     let service = service().await;
     let first = event("evt_same", EventType::SessionCreated, "sess_1", None);
 
-    let first_result = service.ingest_event(first.clone()).await.unwrap();
-    let second_result = service.ingest_event(first).await.unwrap();
+    let first_result = service.ingest_reported_event(first.clone()).await.unwrap();
+    let second_result = service.ingest_reported_event(first).await.unwrap();
 
     assert!(!first_result.duplicate);
     assert!(second_result.duplicate);
@@ -174,15 +174,15 @@ async fn storage_rejects_second_active_turn() {
     let service = service().await;
 
     service
-        .ingest_event(event("evt_1", EventType::SessionCreated, "sess_1", None))
+        .ingest_reported_event(event("evt_1", EventType::SessionCreated, "sess_1", None))
         .await
         .unwrap();
     service
-        .ingest_event(event("evt_2", EventType::SessionReady, "sess_1", None))
+        .ingest_reported_event(event("evt_2", EventType::SessionReady, "sess_1", None))
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_3",
             EventType::TurnStarted,
             "sess_1",
@@ -192,7 +192,7 @@ async fn storage_rejects_second_active_turn() {
         .unwrap();
 
     let result = service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_4",
             EventType::TurnStarted,
             "sess_1",
@@ -218,7 +218,7 @@ async fn storage_rejects_second_active_turn() {
 async fn session_event_turn_context_does_not_create_a_turn() {
     let service = service().await;
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_session",
             EventType::SessionCreated,
             "sess_1",
@@ -227,7 +227,7 @@ async fn session_event_turn_context_does_not_create_a_turn() {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_session_context",
             EventType::SessionTitleUpdated,
             "sess_1",
@@ -245,7 +245,7 @@ async fn session_event_turn_context_does_not_create_a_turn() {
 async fn replay_preserves_turn_identity_and_state_without_ordinals() {
     let service = service().await;
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_session",
             EventType::SessionCreated,
             "sess_1",
@@ -261,7 +261,7 @@ async fn replay_preserves_turn_identity_and_state_without_ordinals() {
         ("evt_4", EventType::TurnCompleted, "turn_2"),
     ] {
         service
-            .ingest_event(event(event_id, event_type, "sess_1", Some(turn_id)))
+            .ingest_reported_event(event(event_id, event_type, "sess_1", Some(turn_id)))
             .await
             .unwrap();
     }
@@ -281,7 +281,7 @@ async fn replay_preserves_turn_identity_and_state_without_ordinals() {
 async fn topology_enrichment_is_atomic_durable_and_replayable() {
     let service = service().await;
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_topology_session",
             EventType::SessionCreated,
             "sess_topology",
@@ -303,7 +303,7 @@ async fn topology_enrichment_is_atomic_durable_and_replayable() {
         .await
         .unwrap();
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_topology_root_completed",
             EventType::TurnCompleted,
             "sess_topology",
@@ -396,7 +396,7 @@ async fn topology_enrichment_is_atomic_durable_and_replayable() {
 async fn concurrent_first_events_preserve_distinct_turn_ids() {
     let service = service().await;
     service
-        .ingest_event(event(
+        .ingest_reported_event(event(
             "evt_session",
             EventType::SessionCreated,
             "sess_1",
@@ -408,13 +408,13 @@ async fn concurrent_first_events_preserve_distinct_turn_ids() {
     let left = service.clone();
     let right = service.clone();
     let (left_result, right_result) = tokio::join!(
-        left.ingest_event(event(
+        left.ingest_reported_event(event(
             "evt_left",
             EventType::TurnCompleted,
             "sess_1",
             Some("turn_left"),
         )),
-        right.ingest_event(event(
+        right.ingest_reported_event(event(
             "evt_right",
             EventType::TurnCompleted,
             "sess_1",

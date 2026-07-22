@@ -35,7 +35,11 @@ fn event(
         event_id.to_string(),
         session_id.to_string(),
         turn_id.map(str::to_string),
-        EventSource::AgentAdapter,
+        if event_type == EventType::SessionReady {
+            EventSource::RuntimeManager
+        } else {
+            EventSource::AgentAdapter
+        },
         "generic".to_string(),
         event_type,
         payload,
@@ -44,7 +48,7 @@ fn event(
 
 async fn ingest(state: &AppState, event: ReportedEvent) {
     EventIngestService::new(state.db())
-        .ingest_event(event)
+        .ingest_reported_event(event)
         .await
         .expect("ingest event");
 }

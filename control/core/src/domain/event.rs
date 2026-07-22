@@ -77,6 +77,10 @@ pub enum EventType {
     TurnCompleted,
     #[serde(rename = "turn.failed")]
     TurnFailed,
+    #[serde(rename = "turn.dispatch_failed")]
+    TurnDispatchFailed,
+    #[serde(rename = "turn.abandoned")]
+    TurnAbandoned,
     #[serde(rename = "turn.interrupt_requested")]
     TurnInterruptRequested,
     #[serde(rename = "turn.interrupted")]
@@ -107,6 +111,8 @@ impl EventType {
                 | Self::TurnOutput
                 | Self::TurnCompleted
                 | Self::TurnFailed
+                | Self::TurnDispatchFailed
+                | Self::TurnAbandoned
                 | Self::TurnInterruptRequested
                 | Self::TurnInterrupted
                 | Self::TurnCancelled
@@ -115,6 +121,22 @@ impl EventType {
 
     pub fn requires_turn_id(self) -> bool {
         self.is_turn_event()
+    }
+
+    pub fn is_client_reportable(self) -> bool {
+        matches!(
+            self,
+            Self::SessionReady
+                | Self::SessionExited
+                | Self::SessionMessageUpdated
+                | Self::SessionContextUsageUpdated
+                | Self::TurnStarted
+                | Self::TurnOutput
+                | Self::TurnCompleted
+                | Self::TurnFailed
+                | Self::TurnInterrupted
+                | Self::TurnCancelled
+        )
     }
 }
 
@@ -137,6 +159,8 @@ impl std::fmt::Display for EventType {
             Self::TurnOutput => "turn.output",
             Self::TurnCompleted => "turn.completed",
             Self::TurnFailed => "turn.failed",
+            Self::TurnDispatchFailed => "turn.dispatch_failed",
+            Self::TurnAbandoned => "turn.abandoned",
             Self::TurnInterruptRequested => "turn.interrupt_requested",
             Self::TurnInterrupted => "turn.interrupted",
             Self::TurnCancelled => "turn.cancelled",
@@ -171,6 +195,8 @@ impl std::str::FromStr for EventType {
             "turn.output" => Ok(Self::TurnOutput),
             "turn.completed" => Ok(Self::TurnCompleted),
             "turn.failed" => Ok(Self::TurnFailed),
+            "turn.dispatch_failed" => Ok(Self::TurnDispatchFailed),
+            "turn.abandoned" => Ok(Self::TurnAbandoned),
             "turn.interrupt_requested" => Ok(Self::TurnInterruptRequested),
             "turn.interrupted" => Ok(Self::TurnInterrupted),
             "turn.cancelled" => Ok(Self::TurnCancelled),

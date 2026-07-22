@@ -26,7 +26,7 @@ async fn test_state() -> AppState {
 
 async fn create_session(state: &AppState, session_id: &str, client_type: &str) {
     EventIngestService::new(state.db())
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             new_event_id().to_string(),
             session_id.to_string(),
             None,
@@ -81,6 +81,33 @@ async fn post_event(state: AppState, body: Value) -> (StatusCode, Value) {
         .expect("body")
         .to_bytes();
     (status, serde_json::from_slice(&bytes).expect("json body"))
+}
+
+#[tokio::test]
+async fn internal_event_api_rejects_pontia_owned_event_types() {
+    let state = test_state().await;
+    create_session(&state, "sess_owned_event", "generic").await;
+
+    for fact_type in ["session.created", "turn.dispatch_failed", "turn.abandoned"] {
+        let (status, body) = post_event(
+            state.clone(),
+            json!({
+                "session_id": "sess_owned_event",
+                "turn_id": "turn_owned_event",
+                "type": fact_type,
+                "data": {}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("owned by the Pontia control plane"),
+            "{body:?}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -194,7 +221,7 @@ async fn internal_event_api_allows_started_fact_to_reference_an_existing_turn() 
 
     let turn_id = new_turn_id().to_string();
     EventIngestService::new(state.db())
-        .ingest_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             new_event_id().to_string(),
             "sess_existing_started_turn".to_string(),
             Some(turn_id.clone()),

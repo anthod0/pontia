@@ -25,13 +25,6 @@ impl GenericClientTestScope {
         self
     }
 
-    pub fn auto_start_turn(self) -> Self {
-        let mut behavior = GenericTestClient::behavior();
-        behavior.auto_start_turn = true;
-        GenericTestClient::set_behavior(behavior);
-        self
-    }
-
     pub fn recorded_inputs(&self) -> Vec<AgentInput> {
         GenericTestClient::recorded_inputs()
     }

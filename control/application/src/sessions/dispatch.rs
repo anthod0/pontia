@@ -1,5 +1,4 @@
 use super::*;
-use pontia_agent_clients as agent_clients;
 use pontia_agent_clients::{TurnContextBehavior, get_client_spec};
 
 use crate::turns::store_client_current_turn_context;
@@ -8,7 +7,6 @@ impl SessionCommandService {
     pub(super) async fn dispatch_initial_generic_turn(
         &self,
         session_id: &str,
-        turn_id: &str,
         client_type: &str,
         input: &str,
     ) -> Result<()> {
@@ -17,26 +15,7 @@ impl SessionCommandService {
             dispatch_id: new_dispatch_id().to_string(),
             input: input.to_string(),
         };
-        let behavior = agent_clients::in_process_recorded_dispatch_behavior(client_type)
-            .ok_or_else(|| {
-                Error::Domain(format!(
-                    "{client_type} does not support in-process recorded dispatch"
-                ))
-            })?;
         self.runtime.submit_input(client_type, agent_input)?;
-        if behavior.auto_start_turn {
-            EventIngestService::new(self.pool.clone())
-                .ingest_event(ReportedEvent::new(
-                    new_event_id().to_string(),
-                    session_id.to_string(),
-                    Some(turn_id.to_string()),
-                    EventSource::AgentAdapter,
-                    client_type.to_string(),
-                    EventType::TurnStarted,
-                    json!({}),
-                ))
-                .await?;
-        }
         Ok(())
     }
 
@@ -95,31 +74,16 @@ impl SessionCommandService {
         let client_spec = get_client_spec(client_type)
             .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client_type}")))?;
         match dispatch_result {
-            Ok(()) => {
-                if !client_spec.owns_initial_tmux_turn() {
-                    ingest
-                        .ingest_event(ReportedEvent::new(
-                            new_event_id().to_string(),
-                            session_id.to_string(),
-                            Some(turn_id.to_string()),
-                            EventSource::AgentAdapter,
-                            client_type.to_string(),
-                            EventType::TurnStarted,
-                            json!({}),
-                        ))
-                        .await?;
-                }
-            }
+            Ok(()) => {}
             Err(error) if client_spec.owns_initial_tmux_turn() => return Err(error),
             Err(error) => {
                 ingest
-                    .ingest_event(ReportedEvent::new(
-                        new_event_id().to_string(),
+                    .ingest_pontia_event(PontiaEvent::new(
                         session_id.to_string(),
                         Some(turn_id.to_string()),
-                        EventSource::RuntimeManager,
+                        PontiaEventSource::RuntimeManager,
                         client_type.to_string(),
-                        EventType::TurnFailed,
+                        PontiaEventType::TurnDispatchFailed,
                         json!({ "failure": { "message": error.to_string() } }),
                     ))
                     .await?;

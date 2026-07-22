@@ -19,7 +19,7 @@ use pontia_storage_sqlite::repositories::{
     turns::{SqliteTurnRepository, TurnProjectionUpsertRecord},
 };
 
-use super::EventIngestResult;
+use super::{EventIngestResult, PontiaEvent};
 use crate::{
     InboxCommandService, UpsertAgentBindingRequest, row_to_event, row_to_session, row_to_turn,
 };
@@ -40,7 +40,17 @@ impl EventIngestService {
         Self { pool }
     }
 
-    pub async fn ingest_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
+    pub async fn ingest_pontia_event(&self, event: PontiaEvent) -> Result<EventIngestResult> {
+        self.ingest_domain_event(event.into_reported_event().into(), None, false)
+            .await
+    }
+
+    /// Ingests a fact supplied by an explicit agent-client adapter.
+    ///
+    /// This path preserves adapter and replay behavior that predates runtime
+    /// fencing. HTTP reports must use [`Self::ingest_confirmed_event`], while
+    /// Pontia-owned callers must use [`Self::ingest_pontia_event`].
+    pub async fn ingest_reported_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into(), None, false).await
     }
 
@@ -241,6 +251,8 @@ impl EventIngestService {
             EventType::SessionReady
                 | EventType::TurnCompleted
                 | EventType::TurnFailed
+                | EventType::TurnDispatchFailed
+                | EventType::TurnAbandoned
                 | EventType::TurnInterrupted
                 | EventType::TurnCancelled
         ) {

@@ -383,7 +383,7 @@ impl RuntimeBindingUpsertService {
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event(ReportedEvent::new(
+            .ingest_reported_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,
@@ -394,7 +394,7 @@ impl RuntimeBindingUpsertService {
             ))
             .await?;
         ingest
-            .ingest_event(ReportedEvent::new(
+            .ingest_reported_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.to_string(),
                 None,
@@ -441,7 +441,7 @@ impl RuntimeBindingUpsertService {
             )
             .await?;
         ingest
-            .ingest_event(ReportedEvent::new(
+            .ingest_reported_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.clone(),
                 None,
@@ -452,7 +452,7 @@ impl RuntimeBindingUpsertService {
             ))
             .await?;
         ingest
-            .ingest_event(ReportedEvent::new(
+            .ingest_reported_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 session_id.clone(),
                 None,

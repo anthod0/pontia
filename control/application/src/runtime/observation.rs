@@ -2,17 +2,15 @@ use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
 use pontia_agent_clients::{RuntimeBehavior, get_client_spec};
-use pontia_core::{
-    domain::{EventSource, EventType, ReportedEvent},
-    error::{Error, Result},
-    ids::new_event_id,
-};
+use pontia_core::error::{Error, Result};
 use pontia_runtime::GenericRuntimeManager;
 use pontia_storage_sqlite::repositories::{
     runtime_bindings::SqliteRuntimeBindingRepository, turns::SqliteTurnRepository,
 };
 
-use crate::{EventIngestService, ExternalQueryService};
+use crate::{
+    EventIngestService, ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType,
+};
 
 fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
     metadata["in_process"]["runtime_handle"]
@@ -94,25 +92,23 @@ impl RuntimeObservationService {
             .await?
         {
             ingest
-                .ingest_event(ReportedEvent::new(
-                    new_event_id().to_string(),
+                .ingest_pontia_event(PontiaEvent::new(
                     session_id.to_string(),
                     Some(active_turn.turn_id),
-                    EventSource::RuntimeManager,
+                    PontiaEventSource::RuntimeManager,
                     session.client_type.clone(),
-                    EventType::TurnFailed,
+                    PontiaEventType::TurnAbandoned,
                     json!({ "failure": { "message": "runtime tmux session is not alive" } }),
                 ))
                 .await?;
         }
         ingest
-            .ingest_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,
-                EventSource::RuntimeManager,
+                PontiaEventSource::RuntimeManager,
                 session.client_type,
-                EventType::SessionError,
+                PontiaEventType::SessionError,
                 json!({ "failure": { "message": "runtime tmux session is not alive" } }),
             ))
             .await?;

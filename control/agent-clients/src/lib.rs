@@ -5,7 +5,7 @@ pub mod raw_transcripts;
 pub mod topology;
 mod types;
 
-pub use generic_test::{GenericTestClient, InProcessRecordedDispatchBehavior};
+pub use generic_test::GenericTestClient;
 pub use topology::*;
 pub use types::*;
 
@@ -79,15 +79,6 @@ pub fn turn_timeline_backend_for(client_type: &str) -> Option<TurnTimelineBacken
 pub fn in_process_capabilities(client_type: &str) -> Option<AgentClientCapabilities> {
     match client_type {
         "generic" => Some(GenericTestClient.capabilities()),
-        _ => None,
-    }
-}
-
-pub fn in_process_recorded_dispatch_behavior(
-    client_type: &str,
-) -> Option<InProcessRecordedDispatchBehavior> {
-    match client_type {
-        "generic" => Some(GenericTestClient::behavior()),
         _ => None,
     }
 }

@@ -4,7 +4,9 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_application::AppState;
+use pontia_application::{
+    AppState, EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType,
+};
 use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -329,15 +331,17 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    post_internal_event(
-        state.clone(),
-        json!({
-            "session_id": session_id,
-            "type": "session.starting",
-            "data": {}
-        }),
-    )
-    .await;
+    EventIngestService::new(state.db())
+        .ingest_pontia_event(PontiaEvent::new(
+            session_id.clone(),
+            None,
+            PontiaEventSource::ExternalApi,
+            "generic",
+            PontiaEventType::SessionStarting,
+            json!({}),
+        ))
+        .await
+        .expect("mark session as starting");
 
     let (_, older_interrupt) = post_json(
         state.clone(),

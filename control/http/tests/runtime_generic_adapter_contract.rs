@@ -193,7 +193,6 @@ async fn capability_model_declares_default_generic_adapter_capabilities() {
 async fn generic_initial_task_dispatches_in_process() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state("generic_contract_in_process_initial_task").await;
-    let _scope = _scope.auto_start_turn();
 
     let body = create_session_with_body(
         state.clone(),
