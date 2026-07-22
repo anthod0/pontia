@@ -29,7 +29,6 @@ pub struct InternalEventRequest {
     fact_type: String,
     #[serde(alias = "payload")]
     data: Value,
-    timeline_boundary: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -202,11 +201,6 @@ impl InternalEventRequest {
     fn into_reported_fact(self) -> Result<ReportedFact, ApiError> {
         let fact_type = EventType::from_str(&self.fact_type)
             .map_err(|err| ApiError::invalid_request(err.to_string()))?;
-        if self.timeline_boundary.is_some() {
-            return Err(ApiError::invalid_request(
-                "timeline_boundary is Pontia-owned and cannot be reported",
-            ));
-        }
         if !self.data.is_object() {
             return Err(ApiError::invalid_request("data must be a JSON object"));
         }

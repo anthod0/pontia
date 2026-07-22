@@ -84,6 +84,31 @@ async fn post_event(state: AppState, body: Value) -> (StatusCode, Value) {
 }
 
 #[tokio::test]
+async fn internal_event_api_rejects_timeline_boundary_as_an_unknown_field() {
+    let state = test_state().await;
+
+    let (status, body) = post_event(
+        state,
+        json!({
+            "session_id": "sess_unknown_field",
+            "type": "session.ready",
+            "data": {},
+            "timeline_boundary": null
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("unknown field `timeline_boundary`")),
+        "{body:?}"
+    );
+}
+
+#[tokio::test]
 async fn internal_event_api_normalizes_started_fact_into_a_domain_event() {
     let state = test_state().await;
     create_session(&state, "sess_normalized", "pi").await;
