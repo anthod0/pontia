@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
-use pontia_agent_clients::{DispatchMode, ReadinessMode, TurnContextBehavior, get_client_spec};
+use pontia_agent_clients::{DispatchMode, TurnContextBehavior, get_client_spec};
 use pontia_core::{
     error::{Error, Result},
     ids::{new_dispatch_id, new_turn_id},
@@ -47,7 +47,6 @@ impl TurnCommandService {
             Error::Domain(format!("unsupported client_type: {}", session.client_type))
         })?;
         let dispatch_mode = client_spec.adapter.dispatch;
-        let readiness_mode = client_spec.adapter.readiness;
         let can_accept_turn = matches!(session.state.as_str(), "idle" | "interrupted")
             || (session.state == "starting" && dispatch_mode == DispatchMode::TmuxPaste);
         if !can_accept_turn {
@@ -95,13 +94,8 @@ impl TurnCommandService {
                 dispatch_id: new_dispatch_id().to_string(),
                 input,
             };
-            self.wait_for_tui_readiness_if_needed(
-                &session.client_type,
-                readiness_mode,
-                session_id,
-                &binding_metadata,
-            )
-            .await?;
+            self.wait_for_tui_readiness(&session.client_type, session_id, &binding_metadata)
+                .await?;
             let binding_metadata = self
                 .runtime_binding_metadata(session_id)
                 .await?
@@ -186,12 +180,7 @@ impl TurnCommandService {
                         .as_ref()
                         .expect("tmux binding was validated before turn creation");
                     match self
-                        .wait_for_tui_readiness_if_needed(
-                            &session.client_type,
-                            readiness_mode,
-                            session_id,
-                            &binding_metadata,
-                        )
+                        .wait_for_tui_readiness(&session.client_type, session_id, &binding_metadata)
                         .await
                         .map(|()| {
                             match client_spec.adapter.turn_context {
@@ -248,16 +237,12 @@ impl TurnCommandService {
         Ok(Some(turn))
     }
 
-    async fn wait_for_tui_readiness_if_needed(
+    async fn wait_for_tui_readiness(
         &self,
         client_type: &str,
-        readiness_mode: ReadinessMode,
         session_id: &str,
         metadata: &Value,
     ) -> Result<()> {
-        if readiness_mode != ReadinessMode::AgentClientEvent {
-            return Ok(());
-        }
         let readiness = RuntimeReadinessService::new(self.pool.clone());
         if let Some(runtime_instance_id) = metadata["runtime_instance_id"].as_str() {
             readiness

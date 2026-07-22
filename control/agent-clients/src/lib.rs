@@ -83,6 +83,20 @@ pub fn in_process_capabilities(client_type: &str) -> Option<AgentClientCapabilit
     }
 }
 
+pub fn in_process_ready_event(
+    client_type: &str,
+    session_id: &str,
+    runtime_instance_id: &str,
+) -> Option<pontia_core::domain::ReportedEvent> {
+    match client_type {
+        "generic" => Some(GenericTestClient::ready_event(
+            session_id,
+            runtime_instance_id,
+        )),
+        _ => None,
+    }
+}
+
 pub fn accept_in_process_input(client_type: &str, input: AgentInput) -> pontia_core::Result<()> {
     match client_type {
         "generic" => GenericTestClient.accept_input(input),
@@ -157,7 +171,6 @@ mod tests {
             }
         );
         assert_eq!(spec.adapter.dispatch, DispatchBehavior::TmuxPaste);
-        assert_eq!(spec.adapter.readiness, ReadinessBehavior::AgentClientEvent);
         assert_eq!(
             spec.adapter.client_session_identity,
             ClientSessionIdentityBehavior::RequiredOnReady

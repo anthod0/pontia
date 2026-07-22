@@ -1,5 +1,5 @@
 use super::*;
-use pontia_agent_clients::{ReadinessMode, TerminateBehavior, get_client_spec};
+use pontia_agent_clients::{TerminateBehavior, get_client_spec};
 use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 
 impl RuntimeControlService {
@@ -34,10 +34,7 @@ impl RuntimeControlService {
             .await?
             .ok_or_else(|| Error::NotFound(format!("turn {turn_id} not found")))?;
 
-        if matches!(
-            turn.state.as_str(),
-            "completed" | "failed" | "interrupted" | "cancelled"
-        ) {
+        if matches!(turn.state.as_str(), "completed" | "failed" | "interrupted") {
             return Err(Error::StateConflict(format!(
                 "turn {turn_id} is already terminal"
             )));
@@ -85,17 +82,6 @@ impl RuntimeControlService {
                 json!({}),
             ))
             .await?;
-        ingest
-            .ingest_pontia_event(PontiaEvent::new(
-                session_id.to_string(),
-                Some(turn_id.to_string()),
-                PontiaEventSource::RuntimeManager,
-                session.client_type,
-                PontiaEventType::TurnInterrupted,
-                json!({}),
-            ))
-            .await?;
-
         let turn = query
             .get_turn(session_id, turn_id)
             .await?
@@ -222,18 +208,13 @@ impl RuntimeControlService {
                 json!({}),
             ))
             .await?;
-        if client_readiness_mode(&session.client_type)? == ReadinessMode::RuntimeManagerImmediate {
-            ingest
-                .ingest_pontia_event(PontiaEvent::new(
-                    session_id.to_string(),
-                    None,
-                    PontiaEventSource::RuntimeManager,
-                    session.client_type,
-                    PontiaEventType::SessionReady,
-                    json!({}),
-                ))
-                .await?;
-        }
+        ingest
+            .ingest_in_process_ready_event(
+                &session.client_type,
+                session_id,
+                runtime.runtime_instance_id(),
+            )
+            .await?;
 
         let session = query
             .get_session(session_id)
@@ -338,18 +319,13 @@ impl RuntimeControlService {
                 json!({}),
             ))
             .await?;
-        if client_readiness_mode(&session.client_type)? == ReadinessMode::RuntimeManagerImmediate {
-            ingest
-                .ingest_pontia_event(PontiaEvent::new(
-                    session_id.to_string(),
-                    None,
-                    PontiaEventSource::RuntimeManager,
-                    session.client_type,
-                    PontiaEventType::SessionReady,
-                    json!({}),
-                ))
-                .await?;
-        }
+        ingest
+            .ingest_in_process_ready_event(
+                &session.client_type,
+                session_id,
+                runtime.runtime_instance_id(),
+            )
+            .await?;
 
         let session = query
             .get_session(session_id)

@@ -1,9 +1,9 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
+import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
 import { optionalString } from "./internal-api.js";
-import { assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
+import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
 import { bindManualSession, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
@@ -361,6 +361,12 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
     const state = activeTurn;
     const terminalLeafId = leafIdFromHookContext(ctx);
+    if (agentEndWasInterrupted(event)) {
+      await state.reporter.report(state.context, buildTurnInterruptedEvent(state.context, terminalLeafId));
+      await reportFinalMessageRefresh(state);
+      return;
+    }
+
     const failureMessage = errorMessageFromAgentEnd(event);
     if (failureMessage) {
       await state.reporter.report(state.context, buildTurnFailedEvent(state.context, failureMessage, terminalLeafId));

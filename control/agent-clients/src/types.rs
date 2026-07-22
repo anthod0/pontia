@@ -60,14 +60,6 @@ pub enum DispatchBehavior {
 pub type DispatchMode = DispatchBehavior;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReadinessBehavior {
-    RuntimeManagerImmediate,
-    AgentClientEvent,
-}
-
-pub type ReadinessMode = ReadinessBehavior;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClientSessionIdentityBehavior {
     RequiredOnReady,
     OptionalOnReady,
@@ -157,7 +149,6 @@ pub enum TranscriptBehavior {
 pub struct AgentClientAdapter {
     pub runtime: RuntimeBehavior,
     pub dispatch: DispatchBehavior,
-    pub readiness: ReadinessBehavior,
     pub client_session_identity: ClientSessionIdentityBehavior,
     pub interrupt: InterruptBehavior,
     pub terminate: TerminateBehavior,

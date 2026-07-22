@@ -317,7 +317,6 @@
       || eventType === 'turn.completed'
       || eventType === 'turn.failed'
       || eventType === 'turn.interrupted'
-      || eventType === 'turn.cancelled'
   }
 
   function handleDashboardEvent(streamEvent: DashboardStreamEvent): void {

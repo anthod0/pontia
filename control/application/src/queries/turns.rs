@@ -62,7 +62,7 @@ impl ExternalQueryService {
                         break;
                     }
                 }
-                "turn.failed" | "turn.interrupted" | "turn.cancelled" => {
+                "turn.failed" | "turn.interrupted" => {
                     let expected_state = event_type.strip_prefix("turn.").unwrap_or_default();
                     if turn.state != expected_state {
                         continue;

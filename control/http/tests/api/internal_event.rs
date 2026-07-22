@@ -316,6 +316,44 @@ async fn internal_event_api_uses_returned_turn_id_for_followup_facts() {
 }
 
 #[tokio::test]
+async fn internal_event_api_accepts_agent_client_reported_turn_interrupted() {
+    let state = test_state().await;
+    create_session(&state, "sess_interrupted", "pi").await;
+    bind_runtime(&state, "sess_interrupted", "rtinst_interrupted").await;
+
+    let (started_status, started) = post_event(
+        state.clone(),
+        json!({
+            "session_id": "sess_interrupted",
+            "type": "turn.started",
+            "data": { "runtime_instance_id": "rtinst_interrupted" }
+        }),
+    )
+    .await;
+    assert_eq!(started_status, StatusCode::OK, "{started:?}");
+    let turn_id = started["turn_id"].as_str().expect("turn id");
+
+    let (status, body) = post_event(
+        state.clone(),
+        json!({
+            "session_id": "sess_interrupted",
+            "turn_id": turn_id,
+            "type": "turn.interrupted",
+            "data": { "runtime_instance_id": "rtinst_interrupted" }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    let turn = EventIngestService::new(state.db())
+        .get_turn(turn_id)
+        .await
+        .expect("turn query")
+        .expect("turn");
+    assert_eq!(turn.state.to_string(), "interrupted");
+}
+
+#[tokio::test]
 async fn internal_event_api_derives_client_type_and_source_from_session_and_fact() {
     let state = test_state().await;
     create_session(&state, "sess_ready", "pi").await;

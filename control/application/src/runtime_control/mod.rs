@@ -1,11 +1,6 @@
 use super::*;
-use pontia_agent_clients::ReadinessMode;
-
 mod commands;
 mod persistence;
-mod validation;
-
-use validation::client_readiness_mode;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ControlCommandOutcome {

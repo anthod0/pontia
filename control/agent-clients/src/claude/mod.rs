@@ -2,7 +2,7 @@ use crate::{
     AgentClientCapabilities, ContextUsageCapability,
     types::{
         AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
-        DispatchBehavior, HookLogBehavior, InterruptBehavior, ReadinessBehavior, RuntimeBehavior,
+        DispatchBehavior, HookLogBehavior, InterruptBehavior, RuntimeBehavior,
         RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
         TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
     },
@@ -36,7 +36,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             runtime_config_key: Some("claude"),
         }),
         dispatch: DispatchBehavior::TmuxPaste,
-        readiness: ReadinessBehavior::AgentClientEvent,
         client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
         interrupt: InterruptBehavior::TmuxInterrupt,
         terminate: TerminateBehavior::TmuxSendKeys(&["C-c", "C-c"]),

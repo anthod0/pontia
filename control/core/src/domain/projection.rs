@@ -97,8 +97,7 @@ impl ProjectionState {
                 | EventType::TurnFailed
                 | EventType::TurnDispatchFailed
                 | EventType::TurnAbandoned
-                | EventType::TurnInterrupted
-                | EventType::TurnCancelled,
+                | EventType::TurnInterrupted,
             ) => {}
             _ => {
                 return Err(Error::Domain(format!(
@@ -159,7 +158,6 @@ impl ProjectionState {
                 self.apply_turn(event, TurnState::Failed)
             }
             EventType::TurnInterrupted => self.apply_turn(event, TurnState::Interrupted),
-            EventType::TurnCancelled => self.apply_turn(event, TurnState::Cancelled),
             EventType::InboxMessageQueued
             | EventType::InboxMessageDispatched
             | EventType::InboxMessageCancelled
@@ -488,10 +486,7 @@ impl ProjectionState {
                 session.state = SessionState::Busy;
                 session.state_version += 1;
             }
-            TurnState::Completed
-            | TurnState::Failed
-            | TurnState::Cancelled
-            | TurnState::Abandoned => {
+            TurnState::Completed | TurnState::Failed | TurnState::Abandoned => {
                 if session.state == SessionState::Busy {
                     session.state = SessionState::Idle;
                     session.state_version += 1;

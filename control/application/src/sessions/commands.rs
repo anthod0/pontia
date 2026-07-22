@@ -1,6 +1,6 @@
-use super::validation::{client_dispatch_mode, client_readiness_mode, validate_handle};
+use super::validation::{client_dispatch_mode, validate_handle};
 use super::*;
-use pontia_agent_clients::{DispatchMode, ReadinessMode, get_client_spec};
+use pontia_agent_clients::{DispatchMode, get_client_spec};
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
 
 enum SessionManagementAction {
@@ -120,18 +120,13 @@ impl SessionCommandService {
                 json!({}),
             ))
             .await?;
-        if client_readiness_mode(&request.client_type)? == ReadinessMode::RuntimeManagerImmediate {
-            ingest
-                .ingest_pontia_event(PontiaEvent::new(
-                    session_id.clone(),
-                    None,
-                    PontiaEventSource::RuntimeManager,
-                    request.client_type.clone(),
-                    PontiaEventType::SessionReady,
-                    json!({}),
-                ))
-                .await?;
-        }
+        ingest
+            .ingest_in_process_ready_event(
+                &request.client_type,
+                &session_id,
+                runtime.runtime_instance_id(),
+            )
+            .await?;
 
         let initial_dispatch = if let Some(initial_task) = request.initial_task {
             let client_spec = get_client_spec(&request.client_type).ok_or_else(|| {

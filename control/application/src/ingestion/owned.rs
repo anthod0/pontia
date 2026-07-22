@@ -8,13 +8,16 @@ use pontia_core::{
 /// A fact whose authority belongs to the Pontia control plane.
 ///
 /// This type deliberately excludes agent-client lifecycle observations such as
-/// `turn.started`, `turn.output`, `turn.completed`, and `turn.failed`. Those
-/// facts must enter through the reported-fact ingestion path.
+/// `session.ready`, `turn.started`, `turn.output`, `turn.completed`,
+/// `turn.failed`, and `turn.interrupted`. Those facts must enter through the
+/// reported-fact ingestion path.
 ///
 /// ```compile_fail
 /// use pontia_application::PontiaEventType;
 ///
+/// let _ = PontiaEventType::SessionReady;
 /// let _ = PontiaEventType::TurnStarted;
+/// let _ = PontiaEventType::TurnInterrupted;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PontiaEventType {
@@ -22,7 +25,6 @@ pub enum PontiaEventType {
     SessionStarting,
     SessionResuming,
     SessionStarted,
-    SessionReady,
     SessionExited,
     SessionError,
     SessionTitleUpdated,
@@ -31,14 +33,35 @@ pub enum PontiaEventType {
     TurnDispatchFailed,
     TurnAbandoned,
     TurnInterruptRequested,
-    TurnInterrupted,
-    TurnCancelled,
     InboxMessageQueued,
     InboxMessageDispatched,
     InboxMessageCancelled,
     InboxMessageSuperseded,
     InboxMessageFailed,
     InboxMessageDismissed,
+}
+
+impl PontiaEventType {
+    pub const ALL: &[Self] = &[
+        Self::SessionCreated,
+        Self::SessionStarting,
+        Self::SessionResuming,
+        Self::SessionStarted,
+        Self::SessionExited,
+        Self::SessionError,
+        Self::SessionTitleUpdated,
+        Self::TurnCreated,
+        Self::TurnQueued,
+        Self::TurnDispatchFailed,
+        Self::TurnAbandoned,
+        Self::TurnInterruptRequested,
+        Self::InboxMessageQueued,
+        Self::InboxMessageDispatched,
+        Self::InboxMessageCancelled,
+        Self::InboxMessageSuperseded,
+        Self::InboxMessageFailed,
+        Self::InboxMessageDismissed,
+    ];
 }
 
 impl From<PontiaEventType> for EventType {
@@ -48,7 +71,6 @@ impl From<PontiaEventType> for EventType {
             PontiaEventType::SessionStarting => Self::SessionStarting,
             PontiaEventType::SessionResuming => Self::SessionResuming,
             PontiaEventType::SessionStarted => Self::SessionStarted,
-            PontiaEventType::SessionReady => Self::SessionReady,
             PontiaEventType::SessionExited => Self::SessionExited,
             PontiaEventType::SessionError => Self::SessionError,
             PontiaEventType::SessionTitleUpdated => Self::SessionTitleUpdated,
@@ -57,8 +79,6 @@ impl From<PontiaEventType> for EventType {
             PontiaEventType::TurnDispatchFailed => Self::TurnDispatchFailed,
             PontiaEventType::TurnAbandoned => Self::TurnAbandoned,
             PontiaEventType::TurnInterruptRequested => Self::TurnInterruptRequested,
-            PontiaEventType::TurnInterrupted => Self::TurnInterrupted,
-            PontiaEventType::TurnCancelled => Self::TurnCancelled,
             PontiaEventType::InboxMessageQueued => Self::InboxMessageQueued,
             PontiaEventType::InboxMessageDispatched => Self::InboxMessageDispatched,
             PontiaEventType::InboxMessageCancelled => Self::InboxMessageCancelled,
@@ -111,5 +131,22 @@ impl PontiaEvent {
 
     pub(crate) fn into_reported_event(self) -> ReportedEvent {
         self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pontia_and_agent_client_ownership_intersect_only_at_session_exited() {
+        let intersection = PontiaEventType::ALL
+            .iter()
+            .copied()
+            .map(EventType::from)
+            .filter(|event_type| event_type.is_client_reportable())
+            .collect::<Vec<_>>();
+
+        assert_eq!(intersection, vec![EventType::SessionExited]);
     }
 }

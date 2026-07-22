@@ -54,6 +54,25 @@ impl EventIngestService {
         self.ingest_domain_event(event.into(), None, false).await
     }
 
+    pub(crate) async fn ingest_in_process_ready_event(
+        &self,
+        client_type: &str,
+        session_id: &str,
+        runtime_instance_id: Option<&str>,
+    ) -> Result<()> {
+        let Some(event) = runtime_instance_id.and_then(|runtime_instance_id| {
+            pontia_agent_clients::in_process_ready_event(
+                client_type,
+                session_id,
+                runtime_instance_id,
+            )
+        }) else {
+            return Ok(());
+        };
+        self.ingest_reported_event(event).await?;
+        Ok(())
+    }
+
     pub async fn ingest_confirmed_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into(), None, true).await
     }
@@ -68,12 +87,12 @@ impl EventIngestService {
         self.ingest_domain_event(event, None, false).await
     }
 
-    pub(crate) async fn ingest_event_with_agent_binding(
+    pub(crate) async fn ingest_pontia_event_with_agent_binding(
         &self,
-        event: ReportedEvent,
+        event: PontiaEvent,
         binding: UpsertAgentBindingRequest,
     ) -> Result<EventIngestResult> {
-        self.ingest_domain_event(event.into(), Some(binding), false)
+        self.ingest_domain_event(event.into_reported_event().into(), Some(binding), false)
             .await
     }
 
@@ -254,7 +273,6 @@ impl EventIngestService {
                 | EventType::TurnDispatchFailed
                 | EventType::TurnAbandoned
                 | EventType::TurnInterrupted
-                | EventType::TurnCancelled
         ) {
             Box::pin(InboxCommandService::new(self.pool.clone()).drain_inbox(&event.session_id))
                 .await?;
@@ -758,10 +776,9 @@ fn event_type_can_create_turn(event_type: EventType) -> bool {
 fn timeline_boundary_kind(event_type: EventType) -> Option<TimelineBoundaryCaptureKind> {
     match event_type {
         EventType::TurnStarted => Some(TimelineBoundaryCaptureKind::Head),
-        EventType::TurnCompleted
-        | EventType::TurnFailed
-        | EventType::TurnInterrupted
-        | EventType::TurnCancelled => Some(TimelineBoundaryCaptureKind::Tail),
+        EventType::TurnCompleted | EventType::TurnFailed | EventType::TurnInterrupted => {
+            Some(TimelineBoundaryCaptureKind::Tail)
+        }
         _ => None,
     }
 }

@@ -515,6 +515,24 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
         .await
         .expect("agent binding count");
     assert_eq!(binding_count, 1);
+
+    let lifecycle_sources: Vec<(String, String)> =
+        sqlx::query_as("SELECT event_type, source FROM events WHERE session_id = ? ORDER BY rowid")
+            .bind(session_id)
+            .fetch_all(&state.db())
+            .await
+            .expect("lifecycle event sources");
+    assert_eq!(
+        lifecycle_sources,
+        vec![
+            ("session.created".to_string(), "runtime_manager".to_string()),
+            (
+                "session.starting".to_string(),
+                "runtime_manager".to_string()
+            ),
+            ("session.started".to_string(), "runtime_manager".to_string()),
+        ]
+    );
 }
 
 #[tokio::test]
@@ -1034,14 +1052,23 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
             .expect("session state");
     assert_eq!(state_after_upsert, "starting");
 
-    let event_types: Vec<String> = sqlx::query_scalar(
-        "SELECT event_type FROM events WHERE session_id = ? ORDER BY rowid DESC LIMIT 2",
+    let lifecycle_events: Vec<(String, String)> = sqlx::query_as(
+        "SELECT event_type, source FROM events WHERE session_id = ? ORDER BY rowid DESC LIMIT 2",
     )
     .bind(&session_id)
     .fetch_all(&state.db())
     .await
-    .expect("event types");
-    assert_eq!(event_types, vec!["session.started", "session.resuming"]);
+    .expect("lifecycle events");
+    assert_eq!(
+        lifecycle_events,
+        vec![
+            ("session.started".to_string(), "runtime_manager".to_string()),
+            (
+                "session.resuming".to_string(),
+                "runtime_manager".to_string()
+            ),
+        ]
+    );
 }
 
 #[tokio::test]

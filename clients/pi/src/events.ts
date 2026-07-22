@@ -3,7 +3,7 @@ import type { SessionContext } from "./session.js";
 
 const MAX_TURN_OUTPUT_CHARS = 200;
 
-export type InternalEventType = "session.ready" | "session.exited" | "session.message_updated" | "session.context_usage_updated" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed";
+export type InternalEventType = "session.ready" | "session.exited" | "session.message_updated" | "session.context_usage_updated" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed" | "turn.interrupted";
 
 export interface ContextUsagePayload {
   used_tokens: number | null;
@@ -287,6 +287,12 @@ export function buildTurnCompletedEvent(context: ActiveTurnContext, terminalLeaf
 export function buildTurnFailedEvent(context: ActiveTurnContext, message: string, terminalLeafId: string | null = null): InternalEvent {
   return turnFact(context, "turn.failed", {
     failure_message: message,
+    terminal_leaf_id: terminalLeafId,
+  });
+}
+
+export function buildTurnInterruptedEvent(context: ActiveTurnContext, terminalLeafId: string | null = null): InternalEvent {
+  return turnFact(context, "turn.interrupted", {
     terminal_leaf_id: terminalLeafId,
   });
 }

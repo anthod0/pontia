@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  agentEndWasInterrupted,
   assistantDeltaFromEvent,
   assistantTextFromMessage,
   errorMessageFromAgentEnd,
@@ -27,13 +28,20 @@ describe("pi message helpers", () => {
     expect(isTranscriptBoundaryMessageUpdate({ assistantMessageEvent: { type: "text_delta" } })).toBe(false);
   });
 
-  test("extracts final text and agent end errors", () => {
+  test("extracts final text and Pi agent end status", () => {
     expect(lastAssistantTextFromMessages([
       { role: "assistant", content: "first" },
       { role: "user", content: "ignore" },
       { role: "assistant", content: [{ type: "text", text: "last" }] },
     ])).toBe("last");
-    expect(errorMessageFromAgentEnd({ error: "boom" })).toBe("boom");
-    expect(errorMessageFromAgentEnd({ isError: true })).toBe("pi agent reported an error");
+    expect(errorMessageFromAgentEnd({
+      messages: [{ role: "assistant", stopReason: "error", errorMessage: "boom" }],
+    })).toBe("boom");
+    expect(errorMessageFromAgentEnd({
+      messages: [{ role: "assistant", stopReason: "error" }],
+    })).toBe("pi agent reported an error");
+    expect(agentEndWasInterrupted({
+      messages: [{ role: "assistant", stopReason: "aborted" }],
+    })).toBe(true);
   });
 });

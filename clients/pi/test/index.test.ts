@@ -1008,11 +1008,36 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.output", "turn.completed", "session.message_updated"]);
   });
 
-  test("reports turn.failed for explicit agent_end error", async () => {
+  test("reports turn.interrupted when Pi ends with an aborted assistant message", async () => {
     const { handlers, reported } = install();
 
     await handlers.agent_start({}, {});
-    await handlers.agent_end({ error: new Error("model failed"), messages: [] }, {});
+    await handlers.agent_end({
+      messages: [{
+        role: "assistant",
+        content: [],
+        stopReason: "aborted",
+        errorMessage: "Request was aborted",
+      }],
+    }, {});
+
+    expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.interrupted", "session.message_updated"]);
+    expect(reported[1].data).toEqual({ terminal_leaf_id: null });
+    expect(reported[2]).toMatchObject({ data: { reason: "final" } });
+  });
+
+  test("reports turn.failed when Pi ends with an errored assistant message", async () => {
+    const { handlers, reported } = install();
+
+    await handlers.agent_start({}, {});
+    await handlers.agent_end({
+      messages: [{
+        role: "assistant",
+        content: [],
+        stopReason: "error",
+        errorMessage: "model failed",
+      }],
+    }, {});
 
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.failed", "session.message_updated"]);
     expect(reported[1].data).toEqual({

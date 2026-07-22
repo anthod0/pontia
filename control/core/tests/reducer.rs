@@ -82,7 +82,6 @@ fn reducer_keeps_current_branch_leaf_across_terminal_turn_and_session_events() {
         EventType::TurnCompleted,
         EventType::TurnFailed,
         EventType::TurnInterrupted,
-        EventType::TurnCancelled,
     ] {
         let mut projection = ProjectionState::default();
         projection

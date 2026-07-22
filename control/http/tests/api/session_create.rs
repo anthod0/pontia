@@ -200,6 +200,21 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
             "session.ready"
         ]
     );
+    let sources: Vec<&str> = events_body["data"]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| event["source"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        sources,
+        vec![
+            "external_api",
+            "external_api",
+            "runtime_manager",
+            "agent_client"
+        ]
+    );
 
     let (get_status, get_body) = get(state, &format!("/external/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);

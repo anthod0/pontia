@@ -51,14 +51,30 @@ export function isTranscriptBoundaryMessageUpdate(event: unknown): boolean {
   return typeof type === "string" && transcriptBoundaryStreamEventTypes.has(type);
 }
 
-export function errorMessageFromAgentEnd(event: unknown): string | undefined {
-  if (!event || typeof event !== "object") return undefined;
-  const record = event as Record<string, unknown>;
-  const error = record.error;
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string" && error.length > 0) return error;
-  if (record.isError === true) return "pi agent reported an error";
+interface PiAgentEndEventLike {
+  messages: unknown[];
+}
+
+function lastAssistantMessageFromAgentEnd(event: PiAgentEndEventLike): Record<string, unknown> | undefined {
+  for (let index = event.messages.length - 1; index >= 0; index -= 1) {
+    const message = event.messages[index];
+    if (message && typeof message === "object" && (message as Record<string, unknown>).role === "assistant") {
+      return message as Record<string, unknown>;
+    }
+  }
   return undefined;
+}
+
+export function agentEndWasInterrupted(event: PiAgentEndEventLike): boolean {
+  return lastAssistantMessageFromAgentEnd(event)?.stopReason === "aborted";
+}
+
+export function errorMessageFromAgentEnd(event: PiAgentEndEventLike): string | undefined {
+  const assistant = lastAssistantMessageFromAgentEnd(event);
+  if (assistant?.stopReason !== "error") return undefined;
+  return typeof assistant.errorMessage === "string" && assistant.errorMessage.length > 0
+    ? assistant.errorMessage
+    : "pi agent reported an error";
 }
 
 export function lastAssistantTextFromMessages(messages: unknown): string | undefined {

@@ -5,9 +5,8 @@ use tokio::sync::Mutex;
 
 use pontia_agent_clients as agent_clients;
 use pontia_core::{
-    domain::{EventSource, EventType, ReportedEvent},
     error::{Error, Result},
-    ids::{new_event_id, new_runtime_instance_id, new_session_id},
+    ids::{new_runtime_instance_id, new_session_id},
 };
 use pontia_runtime::{GenericRuntimeManager, configured_internal_event_url, pontia_log_paths};
 use pontia_storage_sqlite::repositories::{
@@ -24,8 +23,8 @@ use super::{
     },
 };
 use crate::{
-    AgentBindingService, EventIngestService, ExternalQueryService, UpsertAgentBindingRequest,
-    WorkspaceRecord, upsert_workspace,
+    AgentBindingService, EventIngestService, ExternalQueryService, PontiaEvent, PontiaEventSource,
+    PontiaEventType, UpsertAgentBindingRequest, WorkspaceRecord, upsert_workspace,
 };
 
 static RUNTIME_BINDING_UPSERT_LOCK: Mutex<()> = Mutex::const_new(());
@@ -383,24 +382,22 @@ impl RuntimeBindingUpsertService {
 
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_reported_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,
-                EventSource::AgentClient,
+                PontiaEventSource::RuntimeManager,
                 request.client_type.clone(),
-                EventType::SessionResuming,
+                PontiaEventType::SessionResuming,
                 json!({}),
             ))
             .await?;
         ingest
-            .ingest_reported_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,
-                EventSource::AgentClient,
+                PontiaEventSource::RuntimeManager,
                 request.client_type.clone(),
-                EventType::SessionStarted,
+                PontiaEventType::SessionStarted,
                 json!({}),
             ))
             .await?;
@@ -415,14 +412,13 @@ impl RuntimeBindingUpsertService {
         let session_id = new_session_id().to_string();
         let ingest = EventIngestService::new(self.pool.clone());
         ingest
-            .ingest_event_with_agent_binding(
-                ReportedEvent::new(
-                    new_event_id().to_string(),
+            .ingest_pontia_event_with_agent_binding(
+                PontiaEvent::new(
                     session_id.clone(),
                     None,
-                    EventSource::AgentClient,
+                    PontiaEventSource::RuntimeManager,
                     request.client_type.clone(),
-                    EventType::SessionCreated,
+                    PontiaEventType::SessionCreated,
                     json!({
                         "workspace": workspace.canonical_path,
                         "metadata": {
@@ -441,24 +437,22 @@ impl RuntimeBindingUpsertService {
             )
             .await?;
         ingest
-            .ingest_reported_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.clone(),
                 None,
-                EventSource::AgentClient,
+                PontiaEventSource::RuntimeManager,
                 request.client_type.clone(),
-                EventType::SessionStarting,
+                PontiaEventType::SessionStarting,
                 json!({}),
             ))
             .await?;
         ingest
-            .ingest_reported_event(ReportedEvent::new(
-                new_event_id().to_string(),
+            .ingest_pontia_event(PontiaEvent::new(
                 session_id.clone(),
                 None,
-                EventSource::AgentClient,
+                PontiaEventSource::RuntimeManager,
                 request.client_type.clone(),
-                EventType::SessionStarted,
+                PontiaEventType::SessionStarted,
                 json!({}),
             ))
             .await?;

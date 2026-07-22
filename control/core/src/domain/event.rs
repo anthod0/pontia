@@ -85,8 +85,6 @@ pub enum EventType {
     TurnInterruptRequested,
     #[serde(rename = "turn.interrupted")]
     TurnInterrupted,
-    #[serde(rename = "turn.cancelled")]
-    TurnCancelled,
     #[serde(rename = "inbox.message_queued")]
     InboxMessageQueued,
     #[serde(rename = "inbox.message_dispatched")]
@@ -115,7 +113,6 @@ impl EventType {
                 | Self::TurnAbandoned
                 | Self::TurnInterruptRequested
                 | Self::TurnInterrupted
-                | Self::TurnCancelled
         )
     }
 
@@ -135,7 +132,6 @@ impl EventType {
                 | Self::TurnCompleted
                 | Self::TurnFailed
                 | Self::TurnInterrupted
-                | Self::TurnCancelled
         )
     }
 }
@@ -163,7 +159,6 @@ impl std::fmt::Display for EventType {
             Self::TurnAbandoned => "turn.abandoned",
             Self::TurnInterruptRequested => "turn.interrupt_requested",
             Self::TurnInterrupted => "turn.interrupted",
-            Self::TurnCancelled => "turn.cancelled",
             Self::InboxMessageQueued => "inbox.message_queued",
             Self::InboxMessageDispatched => "inbox.message_dispatched",
             Self::InboxMessageCancelled => "inbox.message_cancelled",
@@ -199,7 +194,6 @@ impl std::str::FromStr for EventType {
             "turn.abandoned" => Ok(Self::TurnAbandoned),
             "turn.interrupt_requested" => Ok(Self::TurnInterruptRequested),
             "turn.interrupted" => Ok(Self::TurnInterrupted),
-            "turn.cancelled" => Ok(Self::TurnCancelled),
             "inbox.message_queued" => Ok(Self::InboxMessageQueued),
             "inbox.message_dispatched" => Ok(Self::InboxMessageDispatched),
             "inbox.message_cancelled" => Ok(Self::InboxMessageCancelled),

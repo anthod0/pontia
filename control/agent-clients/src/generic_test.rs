@@ -1,12 +1,19 @@
 use std::sync::{Mutex, OnceLock};
 
+use serde_json::json;
+
+use pontia_core::{
+    domain::{EventSource, EventType, ReportedEvent},
+    ids::new_event_id,
+};
+
 use crate::{
     AgentClientCapabilities, AgentInput, ContextUsageCapability,
     types::{
         AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
-        DispatchBehavior, InterruptBehavior, ReadinessBehavior, RuntimeBehavior,
-        RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
-        TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
+        DispatchBehavior, InterruptBehavior, RuntimeBehavior, RuntimeBindingBehavior,
+        SystemPromptInjectionBehavior, TerminateBehavior, TranscriptBehavior, TurnContextBehavior,
+        TurnLifecycleBehavior,
     },
 };
 
@@ -28,7 +35,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     adapter: AgentClientAdapter {
         runtime: RuntimeBehavior::InProcess,
         dispatch: DispatchBehavior::InProcessRecorded,
-        readiness: ReadinessBehavior::RuntimeManagerImmediate,
         client_session_identity: ClientSessionIdentityBehavior::Unsupported,
         interrupt: InterruptBehavior::Unsupported,
         terminate: TerminateBehavior::RuntimeManager,
@@ -64,6 +70,18 @@ impl GenericTestClient {
             .lock()
             .expect("recorded inputs lock")
             .clone()
+    }
+
+    pub fn ready_event(session_id: &str, runtime_instance_id: &str) -> ReportedEvent {
+        ReportedEvent::new(
+            new_event_id().to_string(),
+            session_id.to_string(),
+            None,
+            EventSource::AgentClient,
+            SPEC.client_type.to_string(),
+            EventType::SessionReady,
+            json!({ "runtime_instance_id": runtime_instance_id }),
+        )
     }
 }
 
