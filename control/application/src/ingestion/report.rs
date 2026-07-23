@@ -145,7 +145,7 @@ fn normalize_payload(client_type: &str, event_type: EventType, data: Value) -> R
                     .unwrap_or(Value::Null),
             }
         }),
-        EventType::TurnCompleted => json!({
+        EventType::TurnCompleted | EventType::TurnInterrupted => json!({
             "timeline_anchor": {
                 "terminal_leaf_id": object
                     .get("terminal_leaf_id")

@@ -1833,6 +1833,127 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
 }
 
 #[tokio::test]
+async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readable() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+
+    let state = test_state().await;
+    let session_id = "sess_pi_interrupted_boundary";
+    let turn_id = "turn_pi_interrupted_boundary";
+    let session_key = "pi-interrupted-boundary";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(
+        &transcript,
+        b"{\"type\":\"message\",\"id\":\"previous_leaf\",\"parentId\":null}\n",
+    )
+    .unwrap();
+    let head_offset = fs::metadata(&transcript).unwrap().len();
+
+    let binding = AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+
+    precreate_turn_if_missing(&state, session_id, turn_id).await;
+    let (status, body) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.started",
+            "data": {
+                "runtime_instance_id": "rtinst_pi_interrupted_boundary",
+                "previous_leaf_id": "previous_leaf"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            concat!(
+                "{\"type\":\"message\",\"id\":\"user_leaf\",\"parentId\":\"previous_leaf\",\"message\":{\"role\":\"user\",\"content\":\"question\"}}\n",
+                "{\"type\":\"message\",\"id\":\"terminal_leaf\",\"parentId\":\"user_leaf\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"partial answer\"}],\"stopReason\":\"aborted\"}}\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let tail_offset = fs::metadata(&transcript).unwrap().len();
+
+    let (status, body) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.interrupted",
+            "data": {
+                "runtime_instance_id": "rtinst_pi_interrupted_boundary",
+                "terminal_leaf_id": "terminal_leaf"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["data"]["items"].as_array().unwrap().len(), 2);
+
+    let expected_head = format!(
+        "pi-jsonl-v2:{}:{head_offset}:after:previous_leaf",
+        binding.id
+    );
+    let expected_tail = format!(
+        "pi-jsonl-v2:{}:{tail_offset}:after:terminal_leaf",
+        binding.id
+    );
+    let turn = EventIngestService::new(state.db())
+        .get_turn(turn_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(turn.head_cursor.as_deref(), Some(expected_head.as_str()));
+    assert_eq!(turn.tail_cursor.as_deref(), Some(expected_tail.as_str()));
+
+    let events = EventIngestService::new(state.db())
+        .list_events(session_id)
+        .await
+        .unwrap();
+    let interrupted = events
+        .iter()
+        .find(|event| event.event_type == EventType::TurnInterrupted)
+        .expect("interrupted event");
+    assert_eq!(
+        interrupted.timeline_boundary,
+        Some(TimelineBoundary::tail(expected_tail))
+    );
+    assert!(interrupted.payload.get("timeline_anchor").is_none());
+}
+
+#[tokio::test]
 async fn first_pi_turn_accepts_a_null_previous_leaf_when_that_turn_was_precreated() {
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
