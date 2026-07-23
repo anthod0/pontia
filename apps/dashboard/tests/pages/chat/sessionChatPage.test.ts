@@ -1319,7 +1319,7 @@ test('does not scroll to the document bottom after retrying an inbox message', a
 });
 
 
-test('does not render inline chat error alerts', async () => {
+test('does not toast passive chat errors', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -1331,9 +1331,7 @@ test('does not render inline chat error alerts', async () => {
   render(SessionChatPage);
 
   await screen.findByPlaceholderText('Send a follow-up message…');
-  await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith('Chat error', { description: 'Could not load session detail' }));
-  expect(screen.queryByText('Chat error')).not.toBeInTheDocument();
-  expect(screen.queryByText('Could not load session detail')).not.toBeInTheDocument();
+  expect(mocks.toastError).not.toHaveBeenCalled();
 });
 
 test('renders an explicit degraded state instead of projected or partial history when timeline loading fails', async () => {
@@ -1364,6 +1362,7 @@ test('renders an explicit degraded state instead of projected or partial history
 
   expect(await screen.findByText('Conversation history unavailable')).toBeInTheDocument();
   expect(screen.getByText('Turn turn-1 has an invalid timeline range')).toBeInTheDocument();
+  expect(mocks.toastError).not.toHaveBeenCalled();
   expect(screen.queryByText('hi there')).not.toBeInTheDocument();
   expect(document.querySelector('[data-timeline-status="range_invalid"]')).toBeInTheDocument();
 });

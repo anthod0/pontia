@@ -1,14 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
-  import { toast } from 'svelte-sonner'
   import { ChevronDown } from '@lucide/svelte'
   import { navigate } from '$lib/navigation'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
-  import { isTransientNetworkError } from '../api/client'
   import type { DashboardStreamEvent, InboxMessageView, SessionView } from '../api/types'
   import {
     canSendSessionMessage,
@@ -27,7 +25,6 @@
     workspaceGitStatuses,
     workspaceGitStatusErrors,
     workspaces,
-    workspacesError,
   } from '../stores/workspaces'
   import {
     cancelInboxMessage,
@@ -38,10 +35,8 @@
     restartSession,
     resumeSession,
     sessionDetail,
-    sessionDetailError,
     sessionDetailLoading,
     sessions,
-    sessionsError,
     submitInboxMessage,
     terminateSession,
     updateSessionTitle,
@@ -67,7 +62,6 @@
   let actionBusy = false
   let inboxActionMessageId: string | null = null
   let actionError: string | null = null
-  let lastToastedError: string | null = null
   let inboxSheetOpen = false
   let renameSessionDialogOpen = false
   let unsubscribeDashboardEvents: (() => void) | null = null
@@ -123,16 +117,6 @@
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
   $: inboxActionableCount = visibleInboxMessages.filter((message) => message.state === 'pending' || message.state === 'failed').length
   $: canSend = canSendSessionMessage(selectedSession, $chatDraft) && !submitting
-  $: rawPassiveErrorMessage = $sessionDetailError ?? $timelineState.error ?? $sessionsError ?? $workspacesError
-  $: passiveErrorMessage = rawPassiveErrorMessage && !isTransientNetworkError(rawPassiveErrorMessage) ? rawPassiveErrorMessage : null
-  $: errorMessage = actionError ?? passiveErrorMessage
-  $: {
-    if (errorMessage && errorMessage !== lastToastedError) {
-      toast.error('Chat error', { description: errorMessage })
-      lastToastedError = errorMessage
-    }
-    if (!errorMessage) lastToastedError = null
-  }
   $: currentMessagesRenderKey = chatMessagesRenderKey(messages)
   $: if (promptInputScrollBaselineKey !== null && currentMessagesRenderKey !== promptInputScrollBaselineKey) {
     promptInputScrollBaselineKey = null
