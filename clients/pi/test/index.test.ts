@@ -198,7 +198,7 @@ describe("pontia pi extension lifecycle", () => {
       },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_existing",
@@ -210,11 +210,14 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test("session_start without prebound session confirms the same runtime binding path", async () => {
+  test("manual new session is not persisted until its first prompt starts", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async (url: string) => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      }
+      if (url === "http://localhost/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_manual") {
+        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
       }
       if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
         return new Response(JSON.stringify({
@@ -230,6 +233,12 @@ describe("pontia pi extension lifecycle", () => {
         TMUX_PANE: "%42",
       },
       fetch: fetchImpl as any,
+      loadContext: vi.fn(async () => ({
+        ok: false as const,
+        reason: "current turn claim unavailable",
+        logFile: "fallback/pi-hook.log",
+        silent: true,
+      })),
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -242,7 +251,24 @@ describe("pontia pi extension lifecycle", () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(fetchImpl).not.toHaveBeenCalledWith("http://localhost/internal/v1/runtime-bindings/upsert", expect.anything());
+    expect(reported).toEqual([]);
+
+    await handlers.before_agent_start({ prompt: "first message", systemPrompt: "Base prompt" }, {});
+    await handlers.agent_start({}, {
+      sessionManager: {
+        getSessionId: () => "pi_session_manual",
+        getSessionFile: () => "/tmp/pi/session.jsonl",
+        getSessionDir: () => "/tmp/pi",
+        getCwd: () => workspace,
+      },
+    });
+
+    expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
+    expect(reported[1]).toMatchObject({
+      session_id: "sess_manual",
+      data: { input_summary: "first message" },
+    });
   });
 
   test("session_start skips manual binding when current workspace is not active", async () => {
@@ -304,6 +330,9 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
+      if (url === "http://127.0.0.1:18080/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_discovered") {
+        return new Response(JSON.stringify({ data: { binding: { session_id: "sess_discovered" } } }), { status: 200 });
+      }
       if (url === "http://127.0.0.1:18080/internal/v1/runtime-bindings/upsert") {
         return new Response(JSON.stringify({
           session: { session_id: "sess_discovered" },
@@ -318,7 +347,7 @@ describe("pontia pi extension lifecycle", () => {
       sessionManager: { getSessionId: () => "pi_session_discovered", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
   });
 
@@ -361,7 +390,7 @@ describe("pontia pi extension lifecycle", () => {
       sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
   test("agent_start consumes backend-delivered current-turn context after reporting started", async () => {

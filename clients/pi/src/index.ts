@@ -6,7 +6,7 @@ import { optionalString } from "./internal-api.js";
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
-import { bindManualSession, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
+import { bindManualSession, hasExistingAgentBinding, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
 import { loadSessionContext, type SessionContext } from "./session.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
@@ -185,6 +185,16 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         context = await bindManualSession(env, fetchImpl, sessionDetails, { startKind: "fork", parentSessionId });
         readyReported = false;
       } else {
+        const managedSession = optionalString(env.PONTIA_SESSION_ID) !== undefined;
+        const existingManualSession = managedSession
+          ? false
+          : await hasExistingAgentBinding(env, fetchImpl, sessionDetails);
+        if (!managedSession && !existingManualSession) {
+          boundSessionContext = undefined;
+          readyReported = false;
+          return;
+        }
+
         context = await bindManualSession(env, fetchImpl, sessionDetails);
         if (reason === "resume" || reason === "new") readyReported = false;
       }
