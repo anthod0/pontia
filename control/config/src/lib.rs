@@ -302,7 +302,7 @@ fn default_config_path_if_exists(vars: &HashMap<String, String>) -> Option<PathB
 fn default_database_url(vars: &HashMap<String, String>) -> String {
     format!(
         "sqlite://{}",
-        pontia_home_string(vars).trim_end_matches('/').to_string() + "/data/pontia.db"
+        pontia_home_string(vars).trim_end_matches('/').to_string() + "/data/pontia-e1.db"
     )
 }
 

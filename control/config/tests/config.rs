@@ -25,7 +25,7 @@ fn loads_config_from_key_value_source() {
     let config = AppConfig::from_vars(&vars).expect("config should load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4000");
-    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia.db");
+    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia-e1.db");
     assert_eq!(config.external_api_token.as_deref(), Some("dev-token"));
     assert_eq!(
         config.dashboard.source.as_deref(),
@@ -120,7 +120,7 @@ roots = [
         .expect("config should load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4040");
-    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia.db");
+    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia-e1.db");
     assert_eq!(config.external_api_token.as_deref(), Some("file-token"));
     assert_eq!(
         config.dashboard.source.as_deref(),
@@ -241,7 +241,7 @@ fn pontia_home_overrides_development_default_data_paths() {
 
     assert_eq!(
         config.database_url,
-        "sqlite:///tmp/custom-pontia/data/pontia.db"
+        "sqlite:///tmp/custom-pontia/data/pontia-e1.db"
     );
 }
 
@@ -290,7 +290,7 @@ fn provides_development_defaults_for_optional_values() {
     let config = AppConfig::from_vars(&HashMap::<String, String>::new()).expect("defaults load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
-    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia.db");
+    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia-e1.db");
     assert_eq!(config.external_api_token, None);
     assert_eq!(config.dashboard.source, None);
     assert!(config.run_migrations);

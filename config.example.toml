@@ -1,5 +1,4 @@
 bind_addr = "127.0.0.1:8080"
-database_url = "sqlite://~/.pontia/data/pontia.db"
 external_api_token = "dev-token"
 run_migrations = true
 
