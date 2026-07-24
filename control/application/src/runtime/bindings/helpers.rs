@@ -32,7 +32,13 @@ pub(super) fn capabilities_for_tmux(
         non_empty(tmux.socket_path.as_deref()).is_some()
             && non_empty(tmux.pane_id.as_deref()).is_some()
     });
-    let mut capabilities: SessionCapabilities = client_spec.capabilities.clone();
+    writable_capabilities(client_spec.capabilities.clone(), writable)
+}
+
+pub(crate) fn writable_capabilities(
+    mut capabilities: SessionCapabilities,
+    writable: bool,
+) -> SessionCapabilities {
     capabilities.accept_task = writable;
     capabilities.interrupt = writable;
     capabilities.branch_control = capabilities.branch_control && writable;

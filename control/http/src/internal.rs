@@ -3,7 +3,7 @@ use std::str::FromStr;
 use axum::{
     Json,
     extract::{Path, Query, State, rejection::JsonRejection},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use pontia_application::{
@@ -120,13 +120,33 @@ pub async fn claim_current_turn(
 
 pub async fn resolve_branch_replay(
     State(state): State<AppState>,
+    headers: HeaderMap,
     request: Result<Json<ResolveBranchReplayRequest>, JsonRejection>,
 ) -> Result<Json<Value>, ApiError> {
+    authenticate_branch_replay(&state, &headers)?;
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let replay = BranchReplayService::new(state.db())
         .resolve_command(request)
         .await?;
     Ok(Json(json!({ "data": { "branch_replay": replay } })))
+}
+
+fn authenticate_branch_replay(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+    let expected = state.external_api_token().ok_or_else(|| {
+        ApiError::authentication_failed("Internal branch replay token is not configured")
+    })?;
+    let authorized = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .is_some_and(|token| token == expected);
+    if authorized {
+        Ok(())
+    } else {
+        Err(ApiError::authentication_failed(
+            "missing or invalid bearer token",
+        ))
+    }
 }
 
 pub async fn post_event(
@@ -318,6 +338,14 @@ impl ApiError {
         Self {
             status: StatusCode::BAD_REQUEST,
             code: "invalid_request",
+            message: message.into(),
+        }
+    }
+
+    fn authentication_failed(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            code: "authentication_failed",
             message: message.into(),
         }
     }

@@ -96,6 +96,10 @@ describe("pontia pi extension lifecycle", () => {
     const calls: string[] = [];
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       calls.push("resolve");
+      expect(init?.headers).toEqual({
+        Authorization: "Bearer token",
+        "Content-Type": "application/json",
+      });
       expect(JSON.parse(String(init?.body))).toEqual({
         inbox_message_id: "msg_replay",
         session_id: "sess_replay",

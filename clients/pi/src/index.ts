@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
+import { resolvePontiaConnection } from "./discovery.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
@@ -135,6 +136,15 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         return;
       }
       const commandContext = loaded.context;
+      const connection = await resolvePontiaConnection({ env });
+      if (!connection?.externalApiToken) {
+        await logDiagnostic(loaded.logFile, {
+          level: "error",
+          code: "branch_replay_stale_context",
+          message: "pontia-edit requires an authenticated Pontia connection",
+        });
+        return;
+      }
       const resolveUrl = commandContext.internalEventUrl.replace(
         /\/events\/?$/,
         "/inbox/branch-replay/resolve",
@@ -145,7 +155,10 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       try {
         const response = await fetchImpl(resolveUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            Authorization: `Bearer ${connection.externalApiToken}`,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             inbox_message_id: inboxMessageId,
             session_id: commandContext.sessionId,
