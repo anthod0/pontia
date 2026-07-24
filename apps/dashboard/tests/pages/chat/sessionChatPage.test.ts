@@ -93,7 +93,7 @@ test('opens new chat from a session menu with the current workspace query parame
 });
 
 
-test('shows busy agent status with an interrupt action when supported', async () => {
+test('replaces Send with Interrupt in the empty composer for a busy interruptible session', async () => {
   const busySession = session({ state: 'busy', current_turn_id: 'turn-1', capabilities: { interrupt: true, timeline: true } });
   mocks.loadedSessions = [busySession];
   mocks.sessions.set([busySession]);
@@ -103,9 +103,60 @@ test('shows busy agent status with an interrupt action when supported', async ()
 
   render(SessionChatPage);
 
-  expect(await screen.findByLabelText('Agent status: Agent working')).toBeInTheDocument();
-  await fireEvent.click(screen.getByRole('button', { name: /interrupt agent/i }));
+  const agentStatus = await screen.findByLabelText('Agent status: Agent working');
+  expect(within(agentStatus).queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
+  const composer = document.querySelector('[data-chat-composer-dock="fixed"]');
+  expect(composer).toBeInTheDocument();
+  const interruptButton = within(composer as HTMLElement).getByRole('button', { name: /interrupt agent/i });
+  expect(within(composer as HTMLElement).queryByRole('button', { name: /^send$/i })).not.toBeInTheDocument();
+
+  await fireEvent.click(interruptButton);
   await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith('session-1'));
+});
+
+test.each([
+  ['idle session', { state: 'idle', capabilities: { interrupt: true, timeline: true } }],
+  ['runtime without interrupt capability', { state: 'busy', capabilities: { interrupt: false, timeline: true } }],
+] as const)('keeps Send for an empty composer when the %s is not interruptible', async (_label, overrides) => {
+  const selected = session(overrides);
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.pathParams = { sessionId: 'session-1' };
+  window.history.pushState({}, '', '/dashboard/chat/session-1');
+
+  render(SessionChatPage);
+
+  await screen.findByPlaceholderText('Send a follow-up message…');
+  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^send$/i })).toBeInTheDocument();
+});
+
+test('keeps Send and queues inbox input while an interruptible session is busy', async () => {
+  const busySession = session({
+    state: 'busy',
+    current_turn_id: 'turn-1',
+    capabilities: { accept_task: true, interrupt: true, timeline: true },
+  });
+  mocks.loadedSessions = [busySession];
+  mocks.sessions.set([busySession]);
+  mocks.sessionDetail.set({ session: busySession, turns: [turn({ state: 'running', output: null, completed_at: null })], inboxMessages: [], events: [] });
+  mocks.pathParams = { sessionId: 'session-1' };
+  window.history.pushState({}, '', '/dashboard/chat/session-1');
+
+  render(SessionChatPage);
+
+  const input = await screen.findByPlaceholderText('Send a follow-up message…');
+  await userEvent.type(input, 'Queue this follow-up');
+
+  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /^send$/i }));
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-1', {
+    input: 'Queue this follow-up',
+    delivery_policy: 'after_idle',
+    metadata: { source: 'dashboard_chat' },
+  }));
+  expect(mocks.interruptSession).not.toHaveBeenCalled();
 });
 
 

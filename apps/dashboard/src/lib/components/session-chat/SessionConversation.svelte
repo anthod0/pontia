@@ -16,8 +16,6 @@
     messages: SessionChatMessage[]
     sessionState?: string | null
     loading?: boolean
-    interruptEnabled?: boolean
-    interruptBusy?: boolean
     hasMoreHistory?: boolean
     historyLoading?: boolean
     historyObserverEnabled?: boolean
@@ -25,7 +23,6 @@
     branchActionBusy?: boolean
     onBranchEdit?: (message: SessionChatMessage, replacementInput: string) => boolean | Promise<boolean>
     onBranchResend?: (message: SessionChatMessage) => void | Promise<void>
-    onInterrupt?: () => void
     onLoadMoreHistory?: () => void | Promise<void>
   }
 
@@ -33,8 +30,6 @@
     messages,
     sessionState = null,
     loading = false,
-    interruptEnabled: _interruptEnabled = false,
-    interruptBusy: _interruptBusy = false,
     hasMoreHistory = false,
     historyLoading = false,
     historyObserverEnabled = false,
@@ -42,7 +37,6 @@
     branchActionBusy = false,
     onBranchEdit,
     onBranchResend,
-    onInterrupt: _onInterrupt,
     onLoadMoreHistory,
   }: Props = $props()
   let scrollContainer = $state<HTMLDivElement | null>(null)
@@ -263,7 +257,7 @@
   {#if displayItem.kind === 'agent_status'}
     <Message.Root from="assistant" data-chat-agent-status>
       <Message.Content>
-        <AgentStatus state={sessionState} interruptEnabled={_interruptEnabled} interruptBusy={_interruptBusy} onInterrupt={_onInterrupt} />
+        <AgentStatus state={sessionState} />
       </Message.Content>
     </Message.Root>
   {:else if displayItem.kind === 'agent_bottom_status'}
@@ -273,7 +267,7 @@
     <Message.Root from={chatMessage.role} data-chat-message-id={chatMessage.id}>
       <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
         {#if displayItem.showAgentStatus}
-          <AgentStatus state={sessionState} interruptEnabled={_interruptEnabled} interruptBusy={_interruptBusy} onInterrupt={_onInterrupt} />
+          <AgentStatus state={sessionState} />
         {/if}
         {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
           <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />

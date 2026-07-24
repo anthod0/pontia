@@ -167,24 +167,11 @@ test('conversation hides the agent status component while the session is idle', 
   expect(screen.queryByText('Agent idle')).not.toBeInTheDocument();
 });
 
-test('conversation shows an interrupt button in the busy agent status', async () => {
-  const onInterrupt = vi.fn();
+test('conversation does not render an interrupt button in the busy agent status', () => {
+  render(SessionConversation, { props: { sessionState: 'busy', messages } });
 
-  render(SessionConversation, {
-    props: {
-      sessionState: 'busy',
-      messages,
-      interruptEnabled: true,
-      onInterrupt,
-    },
-  });
-
-  const interruptButton = screen.getByRole('button', { name: /interrupt agent/i });
-  expect(interruptButton).toHaveAttribute('title', 'Interrupt agent');
-  expect(interruptButton).toHaveTextContent('Interrupt');
-  await fireEvent.click(interruptButton);
-
-  expect(onInterrupt).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
 });
 
 test('conversation renders exited status as a left-aligned bottom status after the conversation', () => {
@@ -398,7 +385,6 @@ test('conversation shows agent working only once after an interrupted pending th
           createdAt: '2026-06-11T00:01:00Z',
         },
       ],
-      interruptEnabled: true,
     },
   });
 
@@ -435,7 +421,6 @@ test('conversation keeps non-trailing empty pending thought summaries idle while
           createdAt: '2026-06-11T00:01:00Z',
         },
       ],
-      interruptEnabled: true,
     },
   });
 
@@ -447,8 +432,6 @@ test('conversation keeps non-trailing empty pending thought summaries idle while
 });
 
 test('conversation renders agent status without an assistant loading placeholder after the latest user message', async () => {
-  const onInterrupt = vi.fn();
-
   render(SessionConversation, {
     props: {
       sessionState: 'busy',
@@ -461,17 +444,13 @@ test('conversation renders agent status without an assistant loading placeholder
           status: 'sent',
         },
       ],
-      interruptEnabled: true,
-      onInterrupt,
     },
   });
 
   expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
   expect(document.querySelector('[data-chat-message-id="busy:assistant-loading-placeholder"]')).not.toBeInTheDocument();
   expect(document.querySelector('[data-chat-agent-status]')).toHaveClass('is-assistant', 'items-start');
-  expect(screen.getByRole('button', { name: /interrupt agent/i })).toBeInTheDocument();
-
-  expect(onInterrupt).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
 });
 
 test('conversation renders the starting status as a bottom status after the latest assistant content', () => {

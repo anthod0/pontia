@@ -24,6 +24,7 @@
     onRename: () => void
     onRestart: () => void
     onSend: () => void
+    onInterrupt: () => void
     onFocus: () => void
   }
 
@@ -45,11 +46,13 @@
     onRename,
     onRestart,
     onSend,
+    onInterrupt,
     onFocus,
   }: Props = $props()
 
   let canAcceptWebInput = $derived(session.capabilities?.accept_task === true)
   let composerDisabled = $derived(!canAcceptWebInput || session.state === 'error' || submitting)
+  let interruptMode = $derived(session.state === 'busy' && session.capabilities?.interrupt === true && input.trim() === '')
 </script>
 
 <div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-surface px-2 pb-2 pt-1 sm:px-4 md:left-[var(--sidebar-width)] md:px-6 md:pb-3 transition-[left] duration-200 ease-linear group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]">
@@ -63,7 +66,7 @@
         <SessionActions {session} {inboxActionableCount} {actionBusy} {onOpenInbox} {onExit} {onOpenConsole} {onNewChat} {onRename} {onRestart} />
       </div>
     </div>
-    <MessageComposer bind:value={input} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen onSubmit={onSend} {onFocus} />
+    <MessageComposer bind:value={input} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus} />
     {#if !canAcceptWebInput}
       <p class="mt-2 text-xs text-muted-foreground">此 session 当前不可从 Web 写入</p>
     {:else if canSendSessionMessage(session, 'x') === false}

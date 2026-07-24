@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Maximize2, Minimize2 } from '@lucide/svelte'
+  import { Maximize2, Minimize2, Square } from '@lucide/svelte'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import FileMentionTextarea from '$lib/components/file-picker/FileMentionTextarea.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -16,7 +16,10 @@
     inputId?: string
     fullscreen?: boolean
     submitLabel?: string
+    interruptMode?: boolean
+    interruptBusy?: boolean
     onSubmit: () => void
+    onInterrupt?: () => void
     onFocus?: () => void
   }
 
@@ -30,7 +33,10 @@
     inputId,
     fullscreen = false,
     submitLabel,
+    interruptMode = false,
+    interruptBusy = false,
     onSubmit,
+    onInterrupt,
     onFocus,
   }: Props = $props()
 
@@ -45,6 +51,12 @@
     if (disabled || submitDisabled || busy) return
     fullscreenOpen = false
     onSubmit()
+  }
+
+  function interrupt(closeFullscreen = false): void {
+    if (interruptBusy || !onInterrupt) return
+    if (closeFullscreen) fullscreenOpen = false
+    onInterrupt()
   }
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -77,7 +89,13 @@
     </div>
   </PromptInput.Body>
   <PromptInput.Toolbar class="justify-end pt-0">
-    <PromptInput.Submit disabled={disabled || submitDisabled} {busy} aria-label={submitLabel} />
+    {#if interruptMode}
+      <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
+        <Square class="size-4" />
+      </Button>
+    {:else}
+      <PromptInput.Submit disabled={disabled || submitDisabled} {busy} aria-label={submitLabel} />
+    {/if}
   </PromptInput.Toolbar>
 </PromptInput.Root>
 
@@ -99,7 +117,13 @@
           <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} shortcutFocusTarget onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
         </PromptInput.Body>
         <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
-          <PromptInput.Submit disabled={disabled || submitDisabled} {busy} aria-label={submitLabel} />
+          {#if interruptMode}
+            <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt(true)}>
+              <Square class="size-4" />
+            </Button>
+          {:else}
+            <PromptInput.Submit disabled={disabled || submitDisabled} {busy} aria-label={submitLabel} />
+          {/if}
         </PromptInput.Toolbar>
       </PromptInput.Root>
     </Dialog.Content>

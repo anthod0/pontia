@@ -136,6 +136,7 @@ describe('session metadata component boundaries', () => {
         onRename: vi.fn(),
         onRestart: vi.fn(),
         onSend: vi.fn(),
+        onInterrupt: vi.fn(),
         onFocus: vi.fn(),
       },
     });

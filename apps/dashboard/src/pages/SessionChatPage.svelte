@@ -665,8 +665,6 @@
                   {messages}
                   sessionState={selectedSession.state}
                   loading={(initialChatScrollPending || $sessionDetailLoading || $timelineState.loading) && !messages.length}
-                  interruptEnabled={selectedSession.state === 'busy' && selectedSession.capabilities.interrupt === true}
-                  interruptBusy={actionBusy}
                   hasMoreHistory={$timelineState.hasMore}
                   historyLoading={$timelineState.refreshKind === 'history'}
                   {historyObserverEnabled}
@@ -674,7 +672,6 @@
                   branchActionBusy={branchActionSubmitting}
                   onBranchEdit={editHistoricalMessage}
                   onBranchResend={resendHistoricalMessage}
-                  onInterrupt={() => void interruptSelectedSession()}
                   onLoadMoreHistory={loadEarlierMessages}
                 />
               {/key}
@@ -729,6 +726,7 @@
           onRename={openRenameSelectedSessionDialog}
           onRestart={() => void runSessionLifecycle('restart')}
           onSend={() => void sendMessage()}
+          onInterrupt={() => void interruptSelectedSession()}
           onFocus={() => void refreshCurrentSessionGitStatus()}
         />
       {/if}
