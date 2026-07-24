@@ -14,6 +14,7 @@ function fakePi() {
         handlers[event] = handler;
       }),
       registerTool: vi.fn(),
+      registerCommand: vi.fn(),
     },
   };
 }

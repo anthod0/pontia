@@ -9,6 +9,8 @@ pub struct SubmitInboxMessageRequest {
     #[serde(default = "default_delivery_policy")]
     pub delivery_policy: String,
     #[serde(default)]
+    pub branch_target_turn_id: Option<String>,
+    #[serde(default)]
     pub metadata: Value,
 }
 
@@ -37,6 +39,11 @@ impl InboxCommandService {
         session_id: &str,
         request: SubmitInboxMessageRequest,
     ) -> Result<InboxCommandOutcome> {
+        if request.input.trim().is_empty() {
+            return Err(Error::Domain(
+                "inbox message input must not be blank".to_string(),
+            ));
+        }
         if !matches!(
             request.delivery_policy.as_str(),
             "after_idle" | "interrupt_now"
@@ -52,6 +59,27 @@ impl InboxCommandService {
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        if request.branch_target_turn_id.is_some() {
+            if request.delivery_policy != "after_idle" {
+                return Err(Error::Domain(
+                    "branch submissions require after_idle delivery".to_string(),
+                ));
+            }
+            if !session.capabilities.branch_control {
+                return Err(Error::CapabilityUnavailable(format!(
+                    "session {session_id} does not support branch control"
+                )));
+            }
+            BranchReplayService::new(self.pool.clone())
+                .validate_submission(
+                    session_id,
+                    request
+                        .branch_target_turn_id
+                        .as_deref()
+                        .expect("branch target was checked above"),
+                )
+                .await?;
+        }
 
         let message_id = new_message_id().to_string();
         let metadata = serde_json::to_string(&request.metadata)?;
@@ -69,6 +97,7 @@ impl InboxCommandService {
                 &request.delivery_policy,
                 &request.input,
                 &metadata,
+                request.branch_target_turn_id.as_deref(),
             )
             .await?;
 
@@ -233,6 +262,7 @@ impl InboxCommandService {
         };
         let message_id = row.message_id;
         let input = row.input_summary;
+        let branch_target_turn_id = row.branch_target_turn_id;
         let metadata = row.metadata;
         let mut metadata: Value = serde_json::from_str(&metadata)?;
         if !metadata.is_object() {
@@ -249,10 +279,17 @@ impl InboxCommandService {
             return Ok(());
         }
 
-        match TurnCommandService::new(self.pool.clone())
-            .create_and_dispatch_turn(session_id, input, metadata)
-            .await
-        {
+        let delivery = if branch_target_turn_id.is_some() {
+            TurnCommandService::new(self.pool.clone())
+                .dispatch_tui_command(session_id, format!("/pontia-edit {message_id}"))
+                .await
+                .map(|()| None)
+        } else {
+            TurnCommandService::new(self.pool.clone())
+                .create_and_dispatch_turn(session_id, input, metadata)
+                .await
+        };
+        match delivery {
             Ok(turn) => {
                 let turn_id = turn.as_ref().map(|turn| turn.turn_id.as_str());
                 inbox_repository

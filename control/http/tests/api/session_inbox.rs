@@ -277,6 +277,90 @@ async fn idempotent_inbox_retry_returns_current_message_state_without_duplicate_
 }
 
 #[tokio::test]
+async fn inbox_submission_rejects_whitespace_only_input() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session_id = create_session(state.clone()).await;
+
+    let (status, body) = post_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        None,
+        json!({"input":" \n\t "}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "invalid_request");
+}
+
+#[tokio::test]
+async fn branch_submission_rejects_interrupt_delivery() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session_id = create_session(state.clone()).await;
+
+    let (status, body) = post_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        None,
+        json!({
+            "input":"replacement",
+            "delivery_policy":"interrupt_now",
+            "branch_target_turn_id":"turn_missing"
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("after_idle")
+    );
+}
+
+#[tokio::test]
+async fn branch_submission_rejects_an_unsupported_session_before_persisting() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session_id = create_session(state.clone()).await;
+
+    let (status, body) = post_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        None,
+        json!({
+            "input":"replacement",
+            "branch_target_turn_id":"turn_missing"
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "capability_unavailable");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("branch control")
+    );
+    let (_, list) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+    )
+    .await;
+    assert!(
+        list["data"]["inbox_messages"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn cancel_pending_message_prevents_later_dispatch() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;

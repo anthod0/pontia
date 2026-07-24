@@ -95,6 +95,7 @@ fn legacy_binding_capabilities(client_type: &str, metadata: &Value) -> Option<Se
             && non_empty_json_string(metadata, "tmux_pane_id").is_some();
         capabilities.accept_task = writable;
         capabilities.interrupt = writable;
+        capabilities.branch_control = capabilities.branch_control && writable;
     }
     Some(capabilities)
 }

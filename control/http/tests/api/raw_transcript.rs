@@ -3,6 +3,7 @@ use std::{
     fs,
     io::Write,
     path::PathBuf,
+    process::{Command, Stdio},
     sync::{Arc, Mutex as StdMutex},
 };
 
@@ -11,6 +12,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
+use pontia_agent_clients::pi::raw_transcripts::{PiJsonlV2Cursor, TimelineBoundaryRelation};
 use pontia_application::{
     AgentBindingService, AppState, EventIngestService, UpsertAgentBindingRequest,
 };
@@ -112,11 +114,15 @@ async fn legacy_session_timeline_endpoints_are_removed() {
 }
 
 async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
+    post_internal_json(state, "/internal/v1/events", body).await
+}
+
+async fn post_internal_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Value) {
     let response = http::router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/internal/v1/events")
+                .uri(uri)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(body.to_string()))
                 .expect("request"),
@@ -131,6 +137,345 @@ async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value
         .expect("body")
         .to_bytes();
     (status, serde_json::from_slice(&body).expect("json body"))
+}
+
+async fn post_external_json(
+    state: AppState,
+    uri: &str,
+    idempotency_key: Option<&str>,
+    body: Value,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(key) = idempotency_key {
+        builder = builder.header("Idempotency-Key", key);
+    }
+    let response = http::router(state)
+        .oneshot(builder.body(Body::from(body.to_string())).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    (status, serde_json::from_slice(&body).expect("json body"))
+}
+
+#[tokio::test]
+async fn branch_replay_resolution_returns_only_bound_pi_command_details_without_mutation() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let state = test_state().await;
+    let session_id = "sess_branch_resolve";
+    let target_turn_id = "turn_branch_target";
+    let message_id = "msg_branch_resolve";
+    let runtime_instance_id = "rtinst_branch_resolve";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+    sqlx::query("UPDATE sessions SET state = 'idle' WHERE session_id = ?")
+        .bind(session_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+
+    let session_key = "branch-resolve";
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let transcript = concat!(
+        "{\"type\":\"message\",\"id\":\"native-user\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"original\"}}\n",
+        "{\"type\":\"message\",\"id\":\"native-answer\",\"parentId\":\"native-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"answer\"}]}}\n"
+    );
+    fs::write(
+        session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl")),
+        transcript,
+    )
+    .unwrap();
+    let binding = AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.display().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    let cursor = |offset, anchor: Option<&str>| {
+        PiJsonlV2Cursor {
+            binding_id: binding.id.clone(),
+            byte_offset: offset,
+            native_entry_anchor: anchor.map(ToString::to_string),
+            relation: TimelineBoundaryRelation::After,
+        }
+        .encode()
+    };
+    sqlx::query(
+        r#"INSERT INTO turns
+           (turn_id, session_id, head_cursor, tail_cursor, topology_status, state, input_summary)
+           VALUES (?, ?, ?, ?, 'root', 'completed', 'original')"#,
+    )
+    .bind(target_turn_id)
+    .bind(session_id)
+    .bind(cursor(0, None))
+    .bind(cursor(transcript.len(), Some("native-answer")))
+    .execute(&state.db())
+    .await
+    .unwrap();
+    let capabilities = pontia_agent_clients::AgentClientCapabilities::pi_m0_default();
+    sqlx::query(
+        r#"INSERT INTO runtime_bindings
+           (session_id, runtime_kind, runtime_instance_id, metadata)
+           VALUES (?, 'pi_tui', ?, ?)"#,
+    )
+    .bind(session_id)
+    .bind(runtime_instance_id)
+    .bind(json!({"capabilities": capabilities}).to_string())
+    .execute(&state.db())
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO inbox_messages
+           (message_id, session_id, state, delivery_policy, input_summary, branch_target_turn_id)
+           VALUES (?, ?, 'dispatching', 'after_idle', 'replacement', ?)"#,
+    )
+    .bind(message_id)
+    .bind(session_id)
+    .bind(target_turn_id)
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let before: (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM turns), (SELECT COUNT(*) FROM events), (SELECT COUNT(*) FROM inbox_messages WHERE state = 'dispatching')",
+    )
+    .fetch_one(&state.db())
+    .await
+    .unwrap();
+    let (status, body) = post_internal_json(
+        state.clone(),
+        "/internal/v1/inbox/branch-replay/resolve",
+        json!({
+            "inbox_message_id": message_id,
+            "session_id": session_id,
+            "runtime_instance_id": runtime_instance_id,
+            "client_type": "pi"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(
+        body["data"]["branch_replay"],
+        json!({
+            "inbox_message_id": message_id,
+            "session_id": session_id,
+            "runtime_instance_id": runtime_instance_id,
+            "client_type": "pi",
+            "replacement_input": "replacement",
+            "target_entry_id": "native-user"
+        })
+    );
+    let after: (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM turns), (SELECT COUNT(*) FROM events), (SELECT COUNT(*) FROM inbox_messages WHERE state = 'dispatching')",
+    )
+    .fetch_one(&state.db())
+    .await
+    .unwrap();
+    assert_eq!(after, before);
+
+    let (stale_status, _) = post_internal_json(
+        state,
+        "/internal/v1/inbox/branch-replay/resolve",
+        json!({
+            "inbox_message_id": message_id,
+            "session_id": session_id,
+            "runtime_instance_id": "rtinst_stale",
+            "client_type": "pi"
+        }),
+    )
+    .await;
+    assert_eq!(stale_status, StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_turn() {
+    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let state = test_state().await;
+    let session_id = "sess_branch_dispatch";
+    let target_turn_id = "turn_branch_dispatch_target";
+    let runtime_instance_id = "rtinst_branch_dispatch";
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+    sqlx::query("UPDATE sessions SET state = 'idle' WHERE session_id = ?")
+        .bind(session_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+
+    let session_key = "branch-dispatch";
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let transcript = concat!(
+        "{\"type\":\"message\",\"id\":\"dispatch-user\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"original\"}}\n",
+        "{\"type\":\"message\",\"id\":\"dispatch-answer\",\"parentId\":\"dispatch-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"answer\"}]}}\n"
+    );
+    fs::write(
+        session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl")),
+        transcript,
+    )
+    .unwrap();
+    let binding = AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.display().to_string(),
+            client_session_key: session_key.to_string(),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    let cursor = |offset, anchor: Option<&str>| {
+        PiJsonlV2Cursor {
+            binding_id: binding.id.clone(),
+            byte_offset: offset,
+            native_entry_anchor: anchor.map(ToString::to_string),
+            relation: TimelineBoundaryRelation::After,
+        }
+        .encode()
+    };
+    sqlx::query(
+        r#"INSERT INTO turns
+           (turn_id, session_id, head_cursor, tail_cursor, topology_status, state, input_summary)
+           VALUES (?, ?, ?, ?, 'root', 'completed', 'original')"#,
+    )
+    .bind(target_turn_id)
+    .bind(session_id)
+    .bind(cursor(0, None))
+    .bind(cursor(transcript.len(), Some("dispatch-answer")))
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let tmux_session = format!("pontia_branch_dispatch_{}", std::process::id());
+    let capture = temp.path().join("tmux-input.log");
+    let command = format!("cat > {}", capture.display());
+    let status = Command::new("tmux")
+        .args(["new-session", "-d", "-s", &tmux_session, &command])
+        .stderr(Stdio::null())
+        .status()
+        .expect("spawn tmux");
+    assert!(status.success());
+    let tmux_value = |format: &str| {
+        String::from_utf8(
+            Command::new("tmux")
+                .args(["display-message", "-p", "-t", &tmux_session, format])
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+        .trim()
+        .to_string()
+    };
+    let socket_path = tmux_value("#{socket_path}");
+    let pane_id = tmux_value("#{pane_id}");
+    let capabilities = pontia_agent_clients::AgentClientCapabilities::pi_m0_default();
+    sqlx::query(
+        r#"INSERT INTO runtime_bindings
+           (session_id, runtime_kind, runtime_instance_id, tmux_socket_path, tmux_pane_id, metadata)
+           VALUES (?, 'pi_tui', ?, ?, ?, ?)"#,
+    )
+    .bind(session_id)
+    .bind(runtime_instance_id)
+    .bind(&socket_path)
+    .bind(&pane_id)
+    .bind(
+        json!({
+            "runtime_instance_id": runtime_instance_id,
+            "tmux_socket_path": socket_path,
+            "tmux_pane_id": pane_id,
+            "capabilities": capabilities
+        })
+        .to_string(),
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO events
+           (event_id, session_id, source, client_type, event_type, occurred_at, payload)
+           VALUES ('evt_branch_dispatch_ready', ?, 'agent_client', 'pi', 'session.ready',
+                   '2026-07-24T00:00:00Z', ?)"#,
+    )
+    .bind(session_id)
+    .bind(json!({"runtime_instance_id": runtime_instance_id}).to_string())
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let uri = format!("/external/v1/sessions/{session_id}/inbox/messages");
+    let request = json!({
+        "input": "secret replacement content",
+        "branch_target_turn_id": target_turn_id
+    });
+    let first = post_external_json(
+        state.clone(),
+        &uri,
+        Some("branch-dispatch-once"),
+        request.clone(),
+    )
+    .await;
+    let second =
+        post_external_json(state.clone(), &uri, Some("branch-dispatch-once"), request).await;
+    assert_eq!(first.0, StatusCode::CREATED, "{:?}", first.1);
+    assert_eq!(second.0, StatusCode::OK);
+    assert_eq!(first.1["data"], second.1["data"]);
+    let message = &first.1["data"]["inbox_message"];
+    let message_id = message["message_id"].as_str().unwrap();
+    assert_eq!(message["state"], "dispatched");
+    assert_eq!(message["branch_target_turn_id"], target_turn_id);
+    assert_eq!(message["turn_id"], Value::Null);
+
+    let expected = format!("/pontia-edit {message_id}\n");
+    for _ in 0..20 {
+        if fs::read_to_string(&capture).unwrap_or_default() == expected {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    let captured = fs::read_to_string(&capture).unwrap_or_default();
+    assert_eq!(captured, expected);
+    assert!(!captured.contains("secret replacement content"));
+    let turn_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id = ?")
+        .bind(session_id)
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    assert_eq!(turn_count, 1);
+    let current_turn_id: Option<String> =
+        sqlx::query_scalar("SELECT current_turn_id FROM sessions WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    assert_eq!(current_turn_id, None);
+    let _ = Command::new("tmux")
+        .args(["kill-session", "-t", &tmux_session])
+        .status();
 }
 
 fn pi_session_dir(agent_dir: &std::path::Path, cwd: &std::path::Path) -> std::path::PathBuf {

@@ -7,8 +7,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use pontia_application::{
-    AgentBindingService, AppState, CurrentTurnClaimRequest, CurrentTurnClaimService,
-    EventIngestService, EventReportNormalizer, InternalEventValidationService, ReportedFact,
+    AgentBindingService, AppState, BranchReplayService, CurrentTurnClaimRequest,
+    CurrentTurnClaimService, EventIngestService, EventReportNormalizer,
+    InternalEventValidationService, ReportedFact, ResolveBranchReplayRequest,
     RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
 };
 use pontia_core::{
@@ -115,6 +116,17 @@ pub async fn claim_current_turn(
         .claim(&session_id, request)
         .await?;
     Ok(Json(json!({ "data": { "current_turn": current_turn } })))
+}
+
+pub async fn resolve_branch_replay(
+    State(state): State<AppState>,
+    request: Result<Json<ResolveBranchReplayRequest>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
+    let replay = BranchReplayService::new(state.db())
+        .resolve_command(request)
+        .await?;
+    Ok(Json(json!({ "data": { "branch_replay": replay } })))
 }
 
 pub async fn post_event(
@@ -322,6 +334,11 @@ impl From<Error> for ApiError {
             Error::NotFound(message) => Self {
                 status: StatusCode::NOT_FOUND,
                 code: "not_found",
+                message,
+            },
+            Error::CapabilityUnavailable(message) => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "capability_unavailable",
                 message,
             },
             other => Self {

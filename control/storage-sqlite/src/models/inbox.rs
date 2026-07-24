@@ -6,6 +6,7 @@ pub struct InboxMessageRow {
     pub delivery_policy: String,
     pub input_summary: String,
     pub metadata: String,
+    pub branch_target_turn_id: Option<String>,
     pub turn_id: Option<String>,
     pub superseded_by_message_id: Option<String>,
     pub failure_message: Option<String>,
@@ -20,4 +21,5 @@ pub struct PendingInboxMessageRow {
     pub message_id: String,
     pub input_summary: String,
     pub metadata: String,
+    pub branch_target_turn_id: Option<String>,
 }

@@ -27,6 +27,7 @@ pub struct AgentClientCapabilities {
     pub heartbeat: bool,
     pub timeline: bool,
     pub topology: bool,
+    pub branch_control: bool,
     pub context_usage: ContextUsageCapability,
 }
 
@@ -41,6 +42,7 @@ impl AgentClientCapabilities {
             heartbeat: false,
             timeline: false,
             topology: false,
+            branch_control: false,
             context_usage: ContextUsageCapability::Unsupported,
         }
     }

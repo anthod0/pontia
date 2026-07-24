@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
-import { optionalString } from "./internal-api.js";
+import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
@@ -107,6 +107,114 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let pontiaDisabled = false;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
+
+  pi.registerCommand("pontia-edit", {
+    description: "Replay a Pontia Inbox message from a historical Pi entry",
+    handler: async (args, ctx) => {
+      const inboxMessageId = args.trim();
+      const logFile = defaultHookLogFile(env);
+      if (!/^msg_[^\s]+$/.test(inboxMessageId)) {
+        await logDiagnostic(logFile, {
+          level: "error",
+          code: "branch_replay_invalid_command",
+          message: "pontia-edit requires exactly one Inbox Message identifier",
+        });
+        return;
+      }
+
+      const loaded = boundSessionContext
+        ? { ok: true as const, context: boundSessionContext, logFile }
+        : await loadSessionContext(env);
+      if (!loaded.ok) {
+        await logDiagnostic(loaded.logFile, {
+          level: "error",
+          code: "branch_replay_stale_context",
+          message: "pontia-edit requires a bound Pontia Session and Runtime",
+          details: loaded.reason,
+        });
+        return;
+      }
+      const commandContext = loaded.context;
+      const resolveUrl = commandContext.internalEventUrl.replace(
+        /\/events\/?$/,
+        "/inbox/branch-replay/resolve",
+      );
+
+      let replacementInput: string;
+      let targetEntryId: string;
+      try {
+        const response = await fetchImpl(resolveUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            inbox_message_id: inboxMessageId,
+            session_id: commandContext.sessionId,
+            runtime_instance_id: commandContext.runtimeInstanceId,
+            client_type: "pi",
+          }),
+        });
+        const body = await parseJsonResponse(response);
+        if (!response.ok) {
+          throw new Error(`${response.status} ${response.statusText}`);
+        }
+        const replay = asRecord(asRecord(asRecord(body)?.data)?.branch_replay);
+        replacementInput = optionalString(replay?.replacement_input) ?? "";
+        targetEntryId = optionalString(replay?.target_entry_id) ?? "";
+        if (
+          optionalString(replay?.inbox_message_id) !== inboxMessageId ||
+          optionalString(replay?.session_id) !== commandContext.sessionId ||
+          optionalString(replay?.runtime_instance_id) !== commandContext.runtimeInstanceId ||
+          optionalString(replay?.client_type) !== "pi" ||
+          !replacementInput ||
+          !targetEntryId
+        ) {
+          throw new Error("branch replay response does not match the bound command context");
+        }
+      } catch (error) {
+        await logDiagnostic(loaded.logFile, {
+          level: "error",
+          code: "branch_replay_resolve_failed",
+          message: "failed to resolve pontia-edit command",
+          details: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      try {
+        await ctx.waitForIdle();
+        const navigation = await ctx.navigateTree(targetEntryId, { summarize: false });
+        if (navigation.cancelled) {
+          await logDiagnostic(loaded.logFile, {
+            level: "warn",
+            code: "branch_replay_navigation_cancelled",
+            message: "pontia-edit tree navigation was cancelled",
+            details: { inbox_message_id: inboxMessageId },
+          });
+          return;
+        }
+      } catch (error) {
+        await logDiagnostic(loaded.logFile, {
+          level: "error",
+          code: "branch_replay_navigation_failed",
+          message: "pontia-edit tree navigation failed",
+          details: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      try {
+        ctx.ui.setEditorText("");
+        await pi.sendUserMessage(replacementInput);
+      } catch (error) {
+        await logDiagnostic(loaded.logFile, {
+          level: "error",
+          code: "branch_replay_submission_failed",
+          message: "pontia-edit replacement submission failed",
+          details: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+  });
 
   async function scheduleMessageRefresh(reason: SessionMessageUpdatedReason): Promise<void> {
     if (!activeTurn || activeTurn.ended) return;

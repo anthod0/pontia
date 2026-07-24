@@ -18,6 +18,7 @@ use sqlx::SqlitePool;
 mod agent_bindings;
 mod agent_profiles;
 pub mod app;
+mod branch_replay;
 mod events;
 mod git_status;
 mod idempotency;
@@ -43,6 +44,7 @@ pub use agent_profiles::{
     UpsertExecutionProfileRequest,
 };
 pub use app::{AppState, initialize};
+pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
 pub(crate) use events::nested_string;
 pub use events::{EventIngestResult, EventIngestService, InternalEventValidationService};
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};

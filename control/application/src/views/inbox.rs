@@ -14,6 +14,7 @@ pub struct InboxMessageView {
     pub delivery_policy: String,
     pub input: InboxInputView,
     pub metadata: Value,
+    pub branch_target_turn_id: Option<String>,
     pub turn_id: Option<String>,
     pub superseded_by_message_id: Option<String>,
     pub failure_message: Option<String>,

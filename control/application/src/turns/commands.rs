@@ -237,6 +237,40 @@ impl TurnCommandService {
         Ok(Some(turn))
     }
 
+    pub async fn dispatch_tui_command(&self, session_id: &str, input: String) -> Result<()> {
+        let session = ExternalQueryService::new(self.pool.clone())
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        let client_spec = get_client_spec(&session.client_type).ok_or_else(|| {
+            Error::Domain(format!("unsupported client_type: {}", session.client_type))
+        })?;
+        if client_spec.adapter.dispatch != DispatchMode::TmuxPaste {
+            return Err(Error::CapabilityUnavailable(format!(
+                "session {session_id} does not support TUI command delivery"
+            )));
+        }
+        let tmux_binding = self.required_tmux_pane_binding(session_id).await?;
+        let binding_metadata = self
+            .runtime_binding_metadata(session_id)
+            .await?
+            .ok_or_else(|| {
+                Error::Domain(format!("{} runtime binding not found", session.client_type))
+            })?;
+        self.wait_for_tui_readiness(&session.client_type, session_id, &binding_metadata)
+            .await?;
+        self.runtime.dispatch_tui_turn(
+            &tmux_binding.socket_path,
+            &tmux_binding.pane_id,
+            &session.client_type,
+            &AgentInput {
+                session_id: session_id.to_string(),
+                dispatch_id: new_dispatch_id().to_string(),
+                input,
+            },
+        )
+    }
+
     async fn wait_for_tui_readiness(
         &self,
         client_type: &str,

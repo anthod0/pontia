@@ -35,6 +35,7 @@ pub(super) fn capabilities_for_tmux(
     let mut capabilities: SessionCapabilities = client_spec.capabilities.clone();
     capabilities.accept_task = writable;
     capabilities.interrupt = writable;
+    capabilities.branch_control = capabilities.branch_control && writable;
     capabilities
 }
 

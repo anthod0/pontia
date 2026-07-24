@@ -38,17 +38,19 @@ impl SqliteInboxRepository {
         delivery_policy: &str,
         input_summary: &str,
         metadata: &str,
+        branch_target_turn_id: Option<&str>,
     ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO inbox_messages
-               (message_id, session_id, state, delivery_policy, input_summary, metadata)
-               VALUES (?, ?, 'pending', ?, ?, ?)"#,
+               (message_id, session_id, state, delivery_policy, input_summary, metadata, branch_target_turn_id)
+               VALUES (?, ?, 'pending', ?, ?, ?, ?)"#,
         )
         .bind(message_id)
         .bind(session_id)
         .bind(delivery_policy)
         .bind(input_summary)
         .bind(metadata)
+        .bind(branch_target_turn_id)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -109,7 +111,7 @@ impl SqliteInboxRepository {
         session_id: &str,
     ) -> Result<Option<PendingInboxMessageRow>> {
         Ok(sqlx::query_as::<_, PendingInboxMessageRow>(
-            r#"SELECT message_id, input_summary, metadata
+            r#"SELECT message_id, input_summary, metadata, branch_target_turn_id
                FROM inbox_messages
                WHERE session_id = ? AND state = 'pending'
                ORDER BY CASE WHEN delivery_policy = 'interrupt_now' THEN 0 ELSE 1 END,
@@ -183,12 +185,12 @@ impl SqliteInboxRepository {
     }
 }
 
-const SELECT_INBOX_MESSAGE_SQL_WITH_SESSION: &str = r#"SELECT message_id, session_id, state, delivery_policy, input_summary, metadata,
+const SELECT_INBOX_MESSAGE_SQL_WITH_SESSION: &str = r#"SELECT message_id, session_id, state, delivery_policy, input_summary, metadata, branch_target_turn_id,
           turn_id, superseded_by_message_id, failure_message, created_at, updated_at,
           dispatched_at, cancelled_at
    FROM inbox_messages WHERE session_id = ? ORDER BY created_at, message_id"#;
 
-const SELECT_INBOX_MESSAGE_SQL_WITH_SESSION_AND_MESSAGE: &str = r#"SELECT message_id, session_id, state, delivery_policy, input_summary, metadata,
+const SELECT_INBOX_MESSAGE_SQL_WITH_SESSION_AND_MESSAGE: &str = r#"SELECT message_id, session_id, state, delivery_policy, input_summary, metadata, branch_target_turn_id,
           turn_id, superseded_by_message_id, failure_message, created_at, updated_at,
           dispatched_at, cancelled_at
    FROM inbox_messages WHERE session_id = ? AND message_id = ?"#;
@@ -219,13 +221,13 @@ mod tests {
         .unwrap();
         let repo = SqliteInboxRepository::new(pool);
 
-        repo.insert_message("msg_1", "sess_1", "interrupt_now", "one", "{}")
+        repo.insert_message("msg_1", "sess_1", "interrupt_now", "one", "{}", None)
             .await
             .unwrap();
         repo.supersede_pending_interrupts("sess_1", "msg_2")
             .await
             .unwrap();
-        repo.insert_message("msg_2", "sess_1", "interrupt_now", "two", "{}")
+        repo.insert_message("msg_2", "sess_1", "interrupt_now", "two", "{}", None)
             .await
             .unwrap();
 
@@ -234,5 +236,50 @@ mod tests {
         assert_eq!(first.state, "superseded");
         assert_eq!(first.superseded_by_message_id.as_deref(), Some("msg_2"));
         assert_eq!(second.state, "pending");
+    }
+
+    #[tokio::test]
+    async fn round_trips_a_nullable_branch_target_turn() {
+        let pool = pool().await;
+        sqlx::query(
+            "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_1', 'pi', 'idle')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO turns (turn_id, session_id, state) VALUES ('turn_target', 'sess_1', 'completed')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let repo = SqliteInboxRepository::new(pool);
+
+        repo.insert_message(
+            "msg_branch",
+            "sess_1",
+            "after_idle",
+            "replacement",
+            "{}",
+            Some("turn_target"),
+        )
+        .await
+        .unwrap();
+        repo.insert_message("msg_plain", "sess_1", "after_idle", "ordinary", "{}", None)
+            .await
+            .unwrap();
+
+        let branch = repo
+            .get_message("sess_1", "msg_branch")
+            .await
+            .unwrap()
+            .unwrap();
+        let plain = repo
+            .get_message("sess_1", "msg_plain")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(branch.branch_target_turn_id.as_deref(), Some("turn_target"));
+        assert_eq!(plain.branch_target_turn_id, None);
     }
 }

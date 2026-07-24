@@ -160,6 +160,7 @@ pub(crate) fn row_to_inbox_message_view(row: InboxMessageRow) -> Result<InboxMes
             summary: row.input_summary,
         },
         metadata: serde_json::from_str(&row.metadata)?,
+        branch_target_turn_id: row.branch_target_turn_id,
         turn_id: row.turn_id,
         superseded_by_message_id: row.superseded_by_message_id,
         failure_message: row.failure_message,

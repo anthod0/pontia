@@ -20,6 +20,7 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     heartbeat: false,
     timeline: true,
     topology: true,
+    branch_control: true,
     context_usage: ContextUsageCapability::Estimated,
 };
 

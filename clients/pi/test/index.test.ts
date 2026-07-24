@@ -13,13 +13,21 @@ interface HandlerMap {
 
 function fakePi() {
   const handlers: HandlerMap = {};
+  const commands: Record<string, { handler: (args: string, ctx: any) => Promise<void> | void }> = {};
+  const sendUserMessage = vi.fn();
   return {
     handlers,
+    commands,
+    sendUserMessage,
     pi: {
       on: vi.fn((event: string, handler: HandlerMap[string]) => {
         handlers[event] = handler;
       }),
       registerTool: vi.fn(),
+      registerCommand: vi.fn((name: string, command: { handler: (args: string, ctx: any) => Promise<void> | void }) => {
+        commands[name] = command;
+      }),
+      sendUserMessage,
     },
   };
 }
@@ -49,7 +57,7 @@ async function tempDir() {
 }
 
 function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1]> = {}) {
-  const { pi, handlers } = fakePi();
+  const { pi, handlers, commands, sendUserMessage } = fakePi();
   const reported: InternalEvent[] = [];
   let turnSequence = 0;
   const env: Record<string, string | undefined> = { PONTIA_HOME: defaultPontiaHome, ...(overrides.env ?? {}) };
@@ -80,10 +88,156 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
     fetch: fetchWithManagedBinding,
     env,
   });
-  return { handlers, reported };
+  return { handlers, commands, sendUserMessage, reported };
 }
 
 describe("pontia pi extension lifecycle", () => {
+  test("pontia-edit resolves, navigates once without summarization, clears restored text, then submits replacement", async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      calls.push("resolve");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        inbox_message_id: "msg_replay",
+        session_id: "sess_replay",
+        runtime_instance_id: "rtinst_replay",
+        client_type: "pi",
+      });
+      return new Response(JSON.stringify({
+        data: {
+          branch_replay: {
+            inbox_message_id: "msg_replay",
+            session_id: "sess_replay",
+            runtime_instance_id: "rtinst_replay",
+            client_type: "pi",
+            replacement_input: "replacement prompt",
+            target_entry_id: "native-user",
+          },
+        },
+      }), { status: 200 });
+    });
+    const { commands, sendUserMessage } = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_replay",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
+      },
+      fetch: fetchImpl as any,
+    });
+    sendUserMessage.mockImplementation(() => calls.push("send"));
+    const commandContext = {
+      waitForIdle: vi.fn(async () => calls.push("idle")),
+      navigateTree: vi.fn(async () => {
+        calls.push("navigate");
+        return { cancelled: false };
+      }),
+      ui: { setEditorText: vi.fn(() => calls.push("clear")) },
+    };
+
+    await commands["pontia-edit"].handler("msg_replay", commandContext);
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("http://localhost/internal/v1/inbox/branch-replay/resolve");
+    expect(commandContext.waitForIdle).toHaveBeenCalledOnce();
+    expect(commandContext.navigateTree).toHaveBeenCalledOnce();
+    expect(commandContext.navigateTree).toHaveBeenCalledWith("native-user", { summarize: false });
+    expect(commandContext.ui.setEditorText).toHaveBeenCalledWith("");
+    expect(sendUserMessage).toHaveBeenCalledWith("replacement prompt");
+    expect(calls).toEqual(["resolve", "idle", "navigate", "clear", "send"]);
+  });
+
+  test.each([
+    ["cancelled navigation", { cancelled: true }, undefined, "branch_replay_navigation_cancelled"],
+    ["navigation failure", undefined, new Error("navigation failed"), "branch_replay_navigation_failed"],
+  ])("pontia-edit diagnoses %s and never submits replacement", async (_name, navigationResult, navigationError, code) => {
+    const logDiagnostic = vi.fn(async () => undefined);
+    const { commands, sendUserMessage } = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_replay",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
+      },
+      fetch: vi.fn(async () => new Response(JSON.stringify({
+        data: {
+          branch_replay: {
+            inbox_message_id: "msg_replay",
+            session_id: "sess_replay",
+            runtime_instance_id: "rtinst_replay",
+            client_type: "pi",
+            replacement_input: "replacement prompt",
+            target_entry_id: "native-user",
+          },
+        },
+      }), { status: 200 })) as any,
+      logDiagnostic,
+    });
+    const navigateTree = navigationError
+      ? vi.fn(async () => { throw navigationError; })
+      : vi.fn(async () => navigationResult);
+
+    await commands["pontia-edit"].handler("msg_replay", {
+      waitForIdle: vi.fn(async () => undefined),
+      navigateTree,
+      ui: { setEditorText: vi.fn() },
+    });
+
+    expect(sendUserMessage).not.toHaveBeenCalled();
+    expect(logDiagnostic).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ code }));
+  });
+
+  test("pontia-edit diagnoses resolution and submission failures without retrying navigation", async () => {
+    const resolveDiagnostic = vi.fn(async () => undefined);
+    const failedResolve = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_replay",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
+      },
+      fetch: vi.fn(async () => new Response("stale runtime", { status: 409, statusText: "Conflict" })) as any,
+      logDiagnostic: resolveDiagnostic,
+    });
+    const resolveNavigation = vi.fn();
+    await failedResolve.commands["pontia-edit"].handler("msg_replay", {
+      waitForIdle: vi.fn(),
+      navigateTree: resolveNavigation,
+      ui: { setEditorText: vi.fn() },
+    });
+    expect(resolveNavigation).not.toHaveBeenCalled();
+    expect(failedResolve.sendUserMessage).not.toHaveBeenCalled();
+    expect(resolveDiagnostic).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      code: "branch_replay_resolve_failed",
+    }));
+
+    const submitDiagnostic = vi.fn(async () => undefined);
+    const failedSubmit = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_replay",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
+      },
+      fetch: vi.fn(async () => new Response(JSON.stringify({
+        data: {
+          branch_replay: {
+            inbox_message_id: "msg_replay",
+            session_id: "sess_replay",
+            runtime_instance_id: "rtinst_replay",
+            client_type: "pi",
+            replacement_input: "replacement prompt",
+            target_entry_id: "native-user",
+          },
+        },
+      }), { status: 200 })) as any,
+      logDiagnostic: submitDiagnostic,
+    });
+    failedSubmit.sendUserMessage.mockImplementation(() => {
+      throw new Error("send failed");
+    });
+    const submitNavigation = vi.fn(async () => ({ cancelled: false }));
+    await failedSubmit.commands["pontia-edit"].handler("msg_replay", {
+      waitForIdle: vi.fn(async () => undefined),
+      navigateTree: submitNavigation,
+      ui: { setEditorText: vi.fn() },
+    });
+    expect(submitNavigation).toHaveBeenCalledOnce();
+    expect(submitDiagnostic).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      code: "branch_replay_submission_failed",
+    }));
+  });
+
   test("session_start startup reports one-time agent client ready from runtime env", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async (url: string) => {

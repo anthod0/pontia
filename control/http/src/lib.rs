@@ -86,6 +86,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             "/internal/v1/sessions/{session_id}/current-turn/claim",
             post(internal::claim_current_turn),
         )
+        .route(
+            "/internal/v1/inbox/branch-replay/resolve",
+            post(internal::resolve_branch_replay),
+        )
         .route("/external/v1/auth/validate", get(external::validate_auth))
         .route(
             "/external/v1/sessions",
