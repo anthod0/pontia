@@ -16,6 +16,7 @@ export interface SessionCapabilities {
   heartbeat?: boolean;
   timeline?: boolean;
   topology?: boolean;
+  branch_control?: boolean;
   context_usage?: ContextUsageCapability;
   [key: string]: unknown;
 }
@@ -231,6 +232,7 @@ export interface InboxMessageView {
   delivery_policy: InboxDeliveryPolicy | string;
   input: { summary: string; [key: string]: unknown };
   metadata: JsonObject;
+  branch_target_turn_id: string | null;
   turn_id: string | null;
   superseded_by_message_id: string | null;
   failure_message: string | null;
@@ -341,6 +343,7 @@ export interface SubmitInboxMessageInput {
   input: string;
   delivery_policy?: InboxDeliveryPolicy;
   metadata?: JsonObject;
+  branch_target_turn_id?: string | null;
 }
 
 export interface ApiEnvelope<T> {

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onDestroy, tick } from 'svelte'
-  import { Bot, Check, Copy } from '@lucide/svelte'
+  import { Bot, Check, Copy, Pencil, RefreshCw } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
+  import { Textarea } from '$lib/components/ui/textarea/index.js'
   import { copyText } from '$lib/copyText'
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
@@ -20,6 +21,10 @@
     hasMoreHistory?: boolean
     historyLoading?: boolean
     historyObserverEnabled?: boolean
+    branchActionInputs?: Record<string, string>
+    branchActionBusy?: boolean
+    onBranchEdit?: (message: SessionChatMessage, replacementInput: string) => boolean | Promise<boolean>
+    onBranchResend?: (message: SessionChatMessage) => void | Promise<void>
     onInterrupt?: () => void
     onLoadMoreHistory?: () => void | Promise<void>
   }
@@ -33,17 +38,24 @@
     hasMoreHistory = false,
     historyLoading = false,
     historyObserverEnabled = false,
+    branchActionInputs = {},
+    branchActionBusy = false,
+    onBranchEdit,
+    onBranchResend,
     onInterrupt: _onInterrupt,
     onLoadMoreHistory,
   }: Props = $props()
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let copiedMessageId = $state<string | null>(null)
+  let editingMessageId = $state<string | null>(null)
+  let editedInput = $state('')
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const displayMessages = $derived(messages)
   const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
   const displayGroups = $derived(conversationDisplayGroups(displayItems))
   const latestAssistantGroupId = $derived([...displayGroups].reverse().find((group) => group.kind === 'assistant_group')?.id ?? null)
   const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
+  const branchActionMessageIdSet = $derived(new Set(Object.keys(branchActionInputs)))
   let topHistoryLoadInFlight = false
   let topHistorySentinelVisible = $state(false)
   let topHistoryPullDistance = $state(0)
@@ -69,6 +81,34 @@
       copiedMessageId = null
       copiedMessageResetTimer = null
     }, 1600)
+  }
+
+  function beginEditing(message: SessionChatMessage): void {
+    editingMessageId = message.id
+    editedInput = branchActionInputs[message.id] ?? message.content
+  }
+
+  function cancelEditing(): void {
+    editingMessageId = null
+    editedInput = ''
+  }
+
+  async function submitEdit(message: SessionChatMessage): Promise<void> {
+    if (!editedInput.trim() || branchActionBusy) return
+    const submitted = await onBranchEdit?.(message, editedInput.trim())
+    if (submitted) cancelEditing()
+  }
+
+  function handleEditKeydown(event: KeyboardEvent, message: SessionChatMessage): void {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      cancelEditing()
+      return
+    }
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault()
+      void submitEdit(message)
+    }
   }
 
   function observeTopHistorySentinel(node: HTMLElement): { destroy: () => void } {
@@ -239,7 +279,35 @@
           <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
         {/if}
         {#if chatMessage.content.trim()}
-          <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
+          {#if chatMessage.role === 'user' && editingMessageId === chatMessage.id}
+            <div class="w-full min-w-[min(32rem,75vw)] space-y-3">
+              <Textarea
+                aria-label="Edit historical message"
+                bind:value={editedInput}
+                rows={4}
+                disabled={branchActionBusy}
+                onkeydown={(event) => handleEditKeydown(event, chatMessage)}
+              />
+              <p class="text-xs text-muted-foreground">
+                Editing restores conversational context, but does not rewind workspace files or external side effects.
+              </p>
+              <div class="flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" disabled={branchActionBusy} onclick={cancelEditing}>
+                  Cancel editing
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={branchActionBusy || !editedInput.trim()}
+                  onclick={() => void submitEdit(chatMessage)}
+                >
+                  Send edit
+                </Button>
+              </div>
+            </div>
+          {:else}
+            <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
+          {/if}
           {#if chatMessage.role === 'assistant'}
             {@const isCopied = copiedMessageId === chatMessage.id}
             <div class="mt-2 flex justify-start">
@@ -256,6 +324,29 @@
                 {:else}
                   <Copy class="size-3.5" /> Copy
                 {/if}
+              </Button>
+            </div>
+          {:else if branchActionMessageIdSet.has(chatMessage.id) && editingMessageId !== chatMessage.id}
+            <div class="mt-2 flex justify-end gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={branchActionBusy}
+                aria-label={`Edit message: ${chatMessage.content}`}
+                onclick={() => beginEditing(chatMessage)}
+              >
+                <Pencil class="size-3.5" /> Edit
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={branchActionBusy}
+                aria-label={`Resend message: ${chatMessage.content}`}
+                onclick={() => void onBranchResend?.(chatMessage)}
+              >
+                <RefreshCw class="size-3.5" /> Resend
               </Button>
             </div>
           {/if}

@@ -2,7 +2,8 @@ import { inboxMessage, mocks, session, timelineItemsFromTurns, timelineStateValu
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
-import type { CreateSessionResult } from '../../../src/api/types';
+import type { CreateSessionResult, SessionView, TurnView } from '../../../src/api/types';
+import { optimisticInitialMessages, rememberOptimisticMessage } from '../../../src/stores/optimisticChat';
 
 const NewChatPage = (await import('../../../src/pages/NewChatPage.svelte')).default;
 const SessionChatPage = (await import('../../../src/pages/SessionChatPage.svelte')).default;
@@ -45,6 +46,29 @@ function observedHistorySentinels(): Element[] {
   return TestIntersectionObserver.instances
     .map((instance) => instance.observedElement)
     .filter((element): element is Element => Boolean(element?.hasAttribute('data-chat-history-top-sentinel')));
+}
+
+function prepareBranchChat(
+  turns: TurnView[],
+  sessionOverrides: Partial<SessionView> = {},
+): SessionView {
+  const selected = session({
+    session_id: 'session-branch',
+    state: 'idle',
+    capabilities: { accept_task: true, timeline: true, topology: true, branch_control: true },
+    ...sessionOverrides,
+  });
+  window.history.pushState({}, '', '/dashboard/chat/session-branch');
+  mocks.pathParams = { sessionId: 'session-branch' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: turns.map((item) => ({ ...item, session_id: 'session-branch' })),
+    inboxMessages: [],
+    events: [],
+  });
+  return selected;
 }
 
 async function triggerLatestBottomIntersection(isIntersecting: boolean): Promise<void> {
@@ -109,6 +133,329 @@ test('selects tree timeline loading when the Session advertises timeline and top
     latestTurnId: 'turn-5',
     topology: true,
   }));
+});
+
+test('offers local Edit and Resend controls on eligible projected user messages', async () => {
+  const user = userEvent.setup();
+  const originalTurn = turn({
+    turn_id: 'turn-original',
+    input: { summary: 'Inspect the original implementation.' },
+    output: { summary: 'The original implementation is ready.' },
+  });
+  prepareBranchChat([originalTurn]);
+  rememberOptimisticMessage('session-branch', 'Optimistic follow-up');
+  optimisticInitialMessages.update((messages) => ({
+    ...messages,
+    'session-branch': [
+      ...(messages['session-branch'] ?? []),
+      {
+        id: 'failed-placeholder:user',
+        turnId: 'failed-placeholder',
+        role: 'user',
+        content: 'Failed follow-up',
+        status: 'failed',
+        createdAt: '2026-05-14T00:02:00Z',
+      },
+    ],
+  }));
+
+  render(SessionChatPage);
+
+  const editButton = await screen.findByRole('button', { name: 'Edit message: Inspect the original implementation.' });
+  expect(screen.getByRole('button', { name: 'Resend message: Inspect the original implementation.' })).toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: /^Edit message:/ })).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: /^Resend message:/ })).toHaveLength(1);
+  expect(screen.getByText('Optimistic follow-up')).toBeInTheDocument();
+  expect(screen.getByText('Failed follow-up')).toBeInTheDocument();
+
+  await user.click(editButton);
+
+  expect(screen.getByRole('textbox', { name: 'Edit historical message' })).toHaveValue('Inspect the original implementation.');
+  expect(screen.getByText(/does not rewind workspace files or external side effects/i)).toBeInTheDocument();
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('button', { name: 'Cancel editing' }));
+
+  expect(screen.queryByRole('textbox', { name: 'Edit historical message' })).not.toBeInTheDocument();
+  expect(screen.getByText('Inspect the original implementation.')).toBeInTheDocument();
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
+
+test('offers branch actions only on the primary user message represented by a projected Turn', async () => {
+  prepareBranchChat([turn({
+    turn_id: 'turn-original',
+    input: { summary: 'Primary user input with the complete historical text' },
+    output: { summary: 'Assistant output' },
+  })]);
+  mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
+    mocks.timelineState.set(timelineStateValue({
+      sessionId,
+      mode: 'tree',
+      status: 'ready',
+      latestTurnId: 'turn-original',
+      items: [
+        {
+          item_id: 'turn-original:user-primary',
+          kind: 'user',
+          role: 'user',
+          title: null,
+          status: null,
+          occurred_at: '2026-05-14T00:00:00Z',
+          content_preview: 'Primary user input…',
+          turn_id: 'turn-original',
+        },
+        {
+          item_id: 'turn-original:user-secondary',
+          kind: 'user',
+          role: 'user',
+          title: null,
+          status: null,
+          occurred_at: '2026-05-14T00:00:01Z',
+          content_preview: 'Secondary user activity',
+          turn_id: 'turn-original',
+        },
+        {
+          item_id: 'turn-original:assistant',
+          kind: 'assistant',
+          role: 'assistant',
+          title: null,
+          status: null,
+          occurred_at: '2026-05-14T00:00:02Z',
+          content_preview: 'Assistant output',
+          turn_id: 'turn-original',
+        },
+      ],
+    }));
+    return null;
+  });
+
+  render(SessionChatPage);
+
+  const editButton = await screen.findByRole('button', { name: 'Edit message: Primary user input…' });
+  expect(screen.queryByRole('button', { name: 'Edit message: Secondary user activity' })).not.toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: /^Edit message:/ })).toHaveLength(1);
+
+  await userEvent.click(editButton);
+  expect(screen.getByRole('textbox', { name: 'Edit historical message' }))
+    .toHaveValue('Primary user input with the complete historical text');
+});
+
+test('disables all branch actions when any projected Turn is active', async () => {
+  prepareBranchChat([
+    turn({ turn_id: 'turn-completed', input: { summary: 'Completed historical input' } }),
+    turn({
+      turn_id: 'turn-active',
+      parent_turn_id: 'turn-completed',
+      state: 'running',
+      input: { summary: 'Active input' },
+      output: null,
+      completed_at: null,
+      created_at: '2026-05-14T00:01:00Z',
+    }),
+  ]);
+
+  render(SessionChatPage);
+
+  await screen.findByText('Completed historical input');
+  expect(screen.queryByRole('button', { name: /^Edit message:/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Resend message:/ })).not.toBeInTheDocument();
+});
+
+test.each([
+  {
+    name: 'branch control is unsupported',
+    sessionOverrides: { capabilities: { accept_task: true, timeline: true, topology: true, branch_control: false } },
+    turnOverrides: {},
+  },
+  {
+    name: 'the Session is busy',
+    sessionOverrides: { state: 'busy', current_turn_id: 'turn-original' },
+    turnOverrides: { state: 'running', completed_at: null },
+  },
+  {
+    name: 'the projected Turn is active',
+    sessionOverrides: {},
+    turnOverrides: { state: 'running', completed_at: null },
+  },
+  {
+    name: 'the projected user message failed',
+    sessionOverrides: {},
+    turnOverrides: { failure: { message: 'Input was rejected' }, input: null },
+  },
+])('does not expose branch actions when $name', async ({ sessionOverrides, turnOverrides }) => {
+  prepareBranchChat([
+    turn({
+      turn_id: 'turn-original',
+      input: { summary: 'Historical input' },
+      output: { summary: 'Historical output' },
+      ...turnOverrides,
+    }),
+  ], sessionOverrides);
+
+  render(SessionChatPage);
+
+  await screen.findByText(turnOverrides.input === null ? 'No input was reported.' : 'Historical input');
+  expect(screen.queryByRole('button', { name: /^Edit message:/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Resend message:/ })).not.toBeInTheDocument();
+});
+
+test('submits Edit and Resend through the shared branch-targeted Inbox mutation without changing the visible suffix', async () => {
+  const user = userEvent.setup();
+  const originalTurn = turn({
+    turn_id: 'turn-original',
+    input: { summary: 'Original question' },
+    output: { summary: 'Original answer' },
+  });
+  const suffixTurn = turn({
+    turn_id: 'turn-suffix',
+    parent_turn_id: 'turn-original',
+    input: { summary: 'Current suffix question' },
+    output: { summary: 'Current suffix answer' },
+    created_at: '2026-05-14T00:01:00Z',
+    started_at: '2026-05-14T00:01:01Z',
+    completed_at: '2026-05-14T00:01:02Z',
+  });
+  prepareBranchChat([originalTurn, suffixTurn]);
+  mocks.submitInboxMessage.mockResolvedValue(inboxMessage({
+    message_id: 'message-edit',
+    session_id: 'session-branch',
+    input: { summary: 'Corrected question' },
+    branch_target_turn_id: 'turn-original',
+  }));
+
+  render(SessionChatPage);
+
+  await user.click(await screen.findByRole('button', { name: 'Edit message: Original question' }));
+  const editor = screen.getByRole('textbox', { name: 'Edit historical message' });
+  await user.clear(editor);
+  await user.type(editor, 'Corrected question');
+  await fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true });
+
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-branch', {
+    input: 'Corrected question',
+    delivery_policy: 'after_idle',
+    metadata: { source: 'dashboard_chat_branch_edit' },
+    branch_target_turn_id: 'turn-original',
+  }));
+  expect(screen.queryByRole('textbox', { name: 'Edit historical message' })).not.toBeInTheDocument();
+  expect(screen.getByText('Original question')).toBeInTheDocument();
+  expect(screen.getByText('Current suffix question')).toBeInTheDocument();
+  expect(screen.queryByText('Corrected question')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Resend message: Original question' }));
+
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenLastCalledWith('session-branch', {
+    input: 'Original question',
+    delivery_policy: 'after_idle',
+    metadata: { source: 'dashboard_chat_branch_resend' },
+    branch_target_turn_id: 'turn-original',
+  }));
+  expect(screen.getByText('Current suffix question')).toBeInTheDocument();
+});
+
+test('rejects a blank edit locally and disables competing branch actions while submitting', async () => {
+  const user = userEvent.setup();
+  const originalTurn = turn({ turn_id: 'turn-original', input: { summary: 'Original question' } });
+  const otherTurn = turn({
+    turn_id: 'turn-other',
+    parent_turn_id: 'turn-original',
+    input: { summary: 'Other question' },
+    created_at: '2026-05-14T00:01:00Z',
+  });
+  prepareBranchChat([originalTurn, otherTurn]);
+  let resolveSubmission: (() => void) | null = null;
+  mocks.submitInboxMessage.mockImplementation(() => new Promise((resolve) => {
+    resolveSubmission = () => resolve(inboxMessage({
+      session_id: 'session-branch',
+      input: { summary: 'Original question' },
+      branch_target_turn_id: 'turn-original',
+    }));
+  }));
+
+  render(SessionChatPage);
+
+  await user.click(await screen.findByRole('button', { name: 'Edit message: Original question' }));
+  const editor = screen.getByRole('textbox', { name: 'Edit historical message' });
+  await user.clear(editor);
+  await user.type(editor, '   ');
+  expect(screen.getByRole('button', { name: 'Send edit' })).toBeDisabled();
+  await fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true });
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('button', { name: 'Cancel editing' }));
+  await user.click(screen.getByRole('button', { name: 'Resend message: Original question' }));
+
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(1));
+  expect(screen.getByRole('button', { name: 'Edit message: Original question' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Resend message: Other question' })).toBeDisabled();
+  resolveSubmission?.();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Edit message: Original question' })).toBeEnabled());
+});
+
+test('presents branch submission errors and keeps editing available for correction', async () => {
+  const user = userEvent.setup();
+  prepareBranchChat([turn({ turn_id: 'turn-original', input: { summary: 'Original question' } })]);
+  mocks.submitInboxMessage.mockRejectedValue(new Error('Target Turn can no longer be resolved'));
+
+  render(SessionChatPage);
+
+  await user.click(await screen.findByRole('button', { name: 'Edit message: Original question' }));
+  await user.click(screen.getByRole('button', { name: 'Send edit' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Target Turn can no longer be resolved');
+  expect(screen.getByRole('textbox', { name: 'Edit historical message' })).toHaveValue('Original question');
+  expect(screen.getByRole('button', { name: 'Send edit' })).toBeEnabled();
+});
+
+test('keeps the divergent suffix until a projected tree update replaces it', async () => {
+  const user = userEvent.setup();
+  const rootTurn = turn({ turn_id: 'turn-root', input: { summary: 'Root question' }, output: { summary: 'Root answer' } });
+  const originalTurn = turn({
+    turn_id: 'turn-original',
+    parent_turn_id: 'turn-root',
+    input: { summary: 'Original middle question' },
+    output: { summary: 'Original middle answer' },
+    created_at: '2026-05-14T00:01:00Z',
+  });
+  const oldSuffix = turn({
+    turn_id: 'turn-old-suffix',
+    parent_turn_id: 'turn-original',
+    input: { summary: 'Abandoned suffix question' },
+    output: { summary: 'Abandoned suffix answer' },
+    created_at: '2026-05-14T00:02:00Z',
+  });
+  prepareBranchChat([rootTurn, originalTurn, oldSuffix]);
+  mocks.submitInboxMessage.mockResolvedValue(inboxMessage({
+    session_id: 'session-branch',
+    input: { summary: 'Replacement middle question' },
+    branch_target_turn_id: 'turn-original',
+  }));
+
+  render(SessionChatPage);
+
+  await user.click(await screen.findByRole('button', { name: 'Resend message: Original middle question' }));
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
+  expect(screen.getByText('Abandoned suffix question')).toBeInTheDocument();
+
+  const replacementTurn = turn({
+    turn_id: 'turn-replacement',
+    session_id: 'session-branch',
+    parent_turn_id: 'turn-root',
+    input: { summary: 'Replacement middle question' },
+    output: { summary: 'Replacement middle answer' },
+    created_at: '2026-05-14T00:03:00Z',
+  });
+  mocks.timelineState.set(timelineStateValue({
+    sessionId: 'session-branch',
+    mode: 'tree',
+    groups: [],
+    items: timelineItemsFromTurns([rootTurn, replacementTurn]),
+    latestTurnId: 'turn-replacement',
+    status: 'ready',
+  }));
+
+  expect(await screen.findByText('Replacement middle question')).toBeInTheDocument();
+  expect(screen.queryByText('Abandoned suffix question')).not.toBeInTheDocument();
 });
 
 
@@ -872,6 +1219,43 @@ test('supports cancelling pending inbox messages and retrying or removing failed
 
   await userEvent.click(await screen.findByRole('button', { name: /remove inbox message fix the failing dashboard test/i }));
   expect(mocks.dismissInboxMessage).toHaveBeenCalledWith('session-2', 'message-failed');
+});
+
+test('retries a failed branch delivery with its original target', async () => {
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [],
+    inboxMessages: [
+      inboxMessage({
+        message_id: 'message-branch-failed',
+        session_id: 'session-2',
+        state: 'failed',
+        input: { summary: 'Corrected historical input' },
+        metadata: { source: 'dashboard_chat_branch_edit' },
+        branch_target_turn_id: 'turn-original',
+        failure_message: 'Pi navigation failed',
+      }),
+    ],
+    events: [],
+  });
+
+  render(SessionChatPage);
+  await userEvent.click(await screen.findByRole('button', { name: /open inbox, 1 message/i }));
+
+  expect(screen.getByText('Pi navigation failed')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /retry inbox message corrected historical input/i }));
+
+  expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
+    input: 'Corrected historical input',
+    delivery_policy: 'after_idle',
+    metadata: { source: 'dashboard_chat_branch_edit' },
+    branch_target_turn_id: 'turn-original',
+  });
 });
 
 

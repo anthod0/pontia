@@ -1,13 +1,15 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
-  import { ChevronDown } from '@lucide/svelte'
+  import { ChevronDown, CircleAlert } from '@lucide/svelte'
   import { navigate } from '$lib/navigation'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
+  import * as Alert from '$lib/components/ui/alert/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import type { DashboardStreamEvent, InboxMessageView, SessionView } from '../api/types'
+  import type { SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
     canSendSessionMessage,
     timelineItemsToChatMessages,
@@ -59,6 +61,8 @@
 
   let selectedSessionId = ''
   let submitting = false
+  let branchActionSubmitting = false
+  let branchActionError: string | null = null
   let actionBusy = false
   let inboxActionMessageId: string | null = null
   let actionError: string | null = null
@@ -112,6 +116,8 @@
     ? timelineItemsToChatMessages($timelineState.items, $timelineState.mode === 'tree')
     : []
   $: messages = chatMessagesWithOptimistic(selectedSessionId, timelineMessages, $optimisticInitialMessages)
+  $: branchActionInputs = eligibleBranchActionInputs(selectedSession, messages)
+  $: branchActionMessageIds = Object.keys(branchActionInputs)
   $: timelineUnavailable = $timelineState.sessionId === selectedSessionId && Boolean($timelineState.error)
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
@@ -127,6 +133,31 @@
     if (routeSessionId) return routeSessionId
     const pathMatch = window.location.pathname.match(/\/chat\/([^/?#]+)$/)
     return pathMatch ? decodeURIComponent(pathMatch[1]) : ''
+  }
+
+  function eligibleBranchActionInputs(
+    session: SessionView | null,
+    chatMessages: typeof messages,
+  ): Record<string, string> {
+    if (!session?.capabilities.branch_control) return {}
+    if (!['idle', 'interrupted', 'exited'].includes(session.state)) return {}
+    if (session.current_turn_id) return {}
+    const turns = $sessionDetail?.session.session_id === session.session_id
+      ? new Map($sessionDetail.turns.map((turn) => [turn.turn_id, turn]))
+      : new Map()
+    if ([...turns.values()].some((turn) => turn.state === 'queued' || turn.state === 'running')) return {}
+    const seenTurnIds = new Set<string>()
+    const eligibleTurnStates = new Set(['completed', 'failed', 'interrupted', 'abandoned'])
+
+    return Object.fromEntries(chatMessages.flatMap((message) => {
+      if (message.role !== 'user' || message.status !== 'sent' || seenTurnIds.has(message.turnId)) return []
+      seenTurnIds.add(message.turnId)
+      const projectedTurn = turns.get(message.turnId)
+      if (!projectedTurn || !eligibleTurnStates.has(projectedTurn.state)) return []
+      const originalInput = projectedTurn.input?.summary?.trim()
+      if (!originalInput) return []
+      return [[message.id, originalInput]]
+    }))
   }
 
   function availableWorkspaceId(workspaceId: string | null): string | null {
@@ -184,6 +215,9 @@
         input: message.input.summary,
         delivery_policy: message.delivery_policy === 'interrupt_now' ? 'interrupt_now' : 'after_idle',
         metadata: message.metadata,
+        ...(message.branch_target_turn_id
+          ? { branch_target_turn_id: message.branch_target_turn_id }
+          : {}),
       })
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
@@ -207,6 +241,48 @@
 
   function chatMessagesRenderKey(chatMessages: typeof messages): string {
     return chatMessages.map((message) => [message.id, message.status, message.content].join('\u001f')).join('\u001e')
+  }
+
+  function projectedTurnForBranchMessage(message: SessionChatMessage) {
+    if (!branchActionMessageIds.includes(message.id)) return null
+    return $sessionDetail?.turns.find((turn) => turn.turn_id === message.turnId) ?? null
+  }
+
+  async function submitBranchAction(
+    message: SessionChatMessage,
+    input: string,
+    action: 'edit' | 'resend',
+  ): Promise<boolean> {
+    const projectedTurn = projectedTurnForBranchMessage(message)
+    const normalizedInput = input.trim()
+    if (!selectedSessionId || !projectedTurn || !normalizedInput || branchActionSubmitting) return false
+
+    branchActionSubmitting = true
+    branchActionError = null
+    try {
+      await submitInboxMessage(selectedSessionId, {
+        input: normalizedInput,
+        delivery_policy: 'after_idle',
+        metadata: { source: `dashboard_chat_branch_${action}` },
+        branch_target_turn_id: projectedTurn.turn_id,
+      })
+      return true
+    } catch (error) {
+      branchActionError = error instanceof Error ? error.message : String(error)
+      return false
+    } finally {
+      branchActionSubmitting = false
+    }
+  }
+
+  function editHistoricalMessage(message: SessionChatMessage, replacementInput: string): Promise<boolean> {
+    return submitBranchAction(message, replacementInput, 'edit')
+  }
+
+  async function resendHistoricalMessage(message: SessionChatMessage): Promise<void> {
+    const originalInput = projectedTurnForBranchMessage(message)?.input?.summary
+    if (typeof originalInput !== 'string') return
+    await submitBranchAction(message, originalInput, 'resend')
   }
 
 
@@ -596,6 +672,10 @@
                   hasMoreHistory={$timelineState.hasMore}
                   historyLoading={$timelineState.refreshKind === 'history'}
                   {historyObserverEnabled}
+                  {branchActionInputs}
+                  branchActionBusy={branchActionSubmitting}
+                  onBranchEdit={editHistoricalMessage}
+                  onBranchResend={resendHistoricalMessage}
                   onInterrupt={() => void interruptSelectedSession()}
                   onLoadMoreHistory={loadEarlierMessages}
                 />
@@ -603,6 +683,13 @@
             {/if}
           </div>
         </div>
+        {#if branchActionError}
+          <Alert.Root variant="destructive" role="alert" class="mx-4 mb-4">
+            <CircleAlert class="size-4" />
+            <Alert.Title>Branch action failed</Alert.Title>
+            <Alert.Description>{branchActionError}</Alert.Description>
+          </Alert.Root>
+        {/if}
         <div aria-hidden="true" class="h-px w-px" data-chat-bottom-sentinel use:observeBottomSentinel></div>
 
         {#if scrollDownButtonRendered}

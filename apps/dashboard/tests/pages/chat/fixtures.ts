@@ -193,6 +193,7 @@ export const inboxMessage = (overrides: Partial<InboxMessageView> = {}): InboxMe
   delivery_policy: 'after_idle',
   input: { summary: 'queued follow-up' },
   metadata: {},
+  branch_target_turn_id: null,
   turn_id: null,
   superseded_by_message_id: null,
   failure_message: null,
