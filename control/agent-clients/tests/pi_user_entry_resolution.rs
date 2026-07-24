@@ -252,14 +252,19 @@ fn rejects_ranges_with_no_primary_user_entry_or_multiple_user_entries() {
 }
 
 #[test]
-fn resolves_a_non_root_turn_from_its_semantic_chain_and_ignores_other_branches() {
+fn resolves_a_completed_middle_turn_without_reading_its_later_suffix() {
     let previous = "{\"type\":\"message\",\"id\":\"previous\",\"parentId\":null,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"previous\"}]}}\n";
     let target = concat!(
         "{\"type\":\"message\",\"id\":\"target-user\",\"parentId\":\"previous\",\"message\":{\"role\":\"user\",\"content\":\"target\"}}\n",
         "{\"type\":\"message\",\"id\":\"other-user\",\"parentId\":\"previous\",\"message\":{\"role\":\"user\",\"content\":\"other branch\"}}\n",
         "{\"type\":\"message\",\"id\":\"target-answer\",\"parentId\":\"target-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"answer\"}]}}\n"
     );
-    let contents = format!("{previous}{target}");
+    let later_suffix = concat!(
+        "{\"type\":\"message\",\"id\":\"later-user\",\"parentId\":\"target-answer\",\"message\":{\"role\":\"user\",\"content\":\"later\"}}\n",
+        "{\"type\":\"message\",\"id\":\"later-answer\",\"parentId\":\"later-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"later answer\"}]}}\n"
+    );
+    let target_end = previous.len() + target.len();
+    let contents = format!("{previous}{target}{later_suffix}");
     let dir = tempdir().unwrap();
     let path = dir.path().join("session.jsonl");
     fs::write(&path, &contents).unwrap();
@@ -275,18 +280,56 @@ fn resolves_a_non_root_turn_from_its_semantic_chain_and_ignores_other_branches()
             },
             session_id: "session-current".to_string(),
             turn_session_id: "session-current".to_string(),
-            turn_id: "turn-middle-or-abandoned".to_string(),
+            turn_id: "turn-middle".to_string(),
             is_first_session_turn: false,
             head_cursor: Some(cursor("binding-current", previous.len(), Some("previous"))),
-            tail_cursor: Some(cursor(
-                "binding-current",
-                contents.len(),
-                Some("target-answer"),
-            )),
+            tail_cursor: Some(cursor("binding-current", target_end, Some("target-answer"))),
         })
         .unwrap();
 
     assert_eq!(resolved.entry_id, "target-user");
+}
+
+#[test]
+fn resolves_a_previously_abandoned_turn_without_following_the_new_active_sibling() {
+    let previous = "{\"type\":\"message\",\"id\":\"previous\",\"parentId\":null,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"previous\"}]}}\n";
+    let abandoned = concat!(
+        "{\"type\":\"message\",\"id\":\"abandoned-user\",\"parentId\":\"previous\",\"message\":{\"role\":\"user\",\"content\":\"abandoned\"}}\n",
+        "{\"type\":\"message\",\"id\":\"abandoned-answer\",\"parentId\":\"abandoned-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"old answer\"}]}}\n"
+    );
+    let active_sibling = concat!(
+        "{\"type\":\"message\",\"id\":\"replacement-user\",\"parentId\":\"previous\",\"message\":{\"role\":\"user\",\"content\":\"replacement\"}}\n",
+        "{\"type\":\"message\",\"id\":\"replacement-answer\",\"parentId\":\"replacement-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"new answer\"}]}}\n"
+    );
+    let abandoned_end = previous.len() + abandoned.len();
+    let contents = format!("{previous}{abandoned}{active_sibling}");
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("session.jsonl");
+    fs::write(&path, &contents).unwrap();
+
+    let resolved = PiTimelineAdapter::new()
+        .resolve_user_entry(PiTurnUserEntryResolveRequest {
+            source: ResolvedAgentBinding {
+                id: "binding-current".to_string(),
+                client_type: "pi".to_string(),
+                format: "pi-jsonl".to_string(),
+                path,
+                fingerprint: None,
+            },
+            session_id: "session-current".to_string(),
+            turn_session_id: "session-current".to_string(),
+            turn_id: "turn-abandoned".to_string(),
+            is_first_session_turn: false,
+            head_cursor: Some(cursor("binding-current", previous.len(), Some("previous"))),
+            tail_cursor: Some(cursor(
+                "binding-current",
+                abandoned_end,
+                Some("abandoned-answer"),
+            )),
+        })
+        .unwrap();
+
+    assert_eq!(resolved.entry_id, "abandoned-user");
 }
 
 #[test]

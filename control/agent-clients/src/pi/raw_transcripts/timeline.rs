@@ -46,27 +46,34 @@ impl PiJsonlV2Cursor {
     }
 
     pub fn decode(cursor: &str, expected_binding_id: &str) -> Result<Self> {
+        Self::decode_classified(cursor, expected_binding_id).map_err(|error| {
+            let message = match error {
+                PiJsonlV2CursorDecodeError::FormatMismatch => "pi cursor format mismatch",
+                PiJsonlV2CursorDecodeError::ScopeMismatch => "pi cursor scope mismatch",
+                PiJsonlV2CursorDecodeError::InvalidByteOffset => "invalid byte offset",
+                PiJsonlV2CursorDecodeError::InvalidRelation => "invalid boundary relation",
+            };
+            Error::Domain(format!("cursor_invalid: {message}"))
+        })
+    }
+
+    pub(super) fn decode_classified(
+        cursor: &str,
+        expected_binding_id: &str,
+    ) -> std::result::Result<Self, PiJsonlV2CursorDecodeError> {
         let parts: Vec<_> = cursor.splitn(5, ':').collect();
         if parts.len() != 5 || parts[0] != CURSOR_PREFIX {
-            return Err(Error::Domain(
-                "cursor_invalid: pi cursor format mismatch".to_string(),
-            ));
+            return Err(PiJsonlV2CursorDecodeError::FormatMismatch);
         }
         if parts[1] != expected_binding_id {
-            return Err(Error::Domain(
-                "cursor_invalid: pi cursor scope mismatch".to_string(),
-            ));
+            return Err(PiJsonlV2CursorDecodeError::ScopeMismatch);
         }
         let byte_offset = parts[2]
             .parse()
-            .map_err(|_| Error::Domain("cursor_invalid: invalid byte offset".to_string()))?;
+            .map_err(|_| PiJsonlV2CursorDecodeError::InvalidByteOffset)?;
         let relation = match parts[3] {
             "after" => TimelineBoundaryRelation::After,
-            _ => {
-                return Err(Error::Domain(
-                    "cursor_invalid: invalid boundary relation".to_string(),
-                ));
-            }
+            _ => return Err(PiJsonlV2CursorDecodeError::InvalidRelation),
         };
         let native_entry_anchor = (!parts[4].is_empty()).then(|| parts[4].to_string());
         Ok(Self {
@@ -76,6 +83,14 @@ impl PiJsonlV2Cursor {
             relation,
         })
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum PiJsonlV2CursorDecodeError {
+    FormatMismatch,
+    ScopeMismatch,
+    InvalidByteOffset,
+    InvalidRelation,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -147,6 +162,140 @@ struct ParsedEntry {
     end: usize,
 }
 
+pub(super) struct PiNativeTurnEntry {
+    pub turn_id: String,
+    pub entry_id: String,
+    pub value: Value,
+    pub start: usize,
+}
+
+pub(super) fn read_native_turn_ranges(
+    request: TurnTimelineReadRequest,
+) -> std::result::Result<Vec<PiNativeTurnEntry>, TurnTimelineReadError> {
+    if request.source.client_type != "pi" || request.source.format != "pi-jsonl" {
+        return Err(Error::CapabilityUnavailable(
+            "timeline capability unavailable for source format".to_string(),
+        )
+        .into());
+    }
+
+    let source_length = source_len(&request.source)?;
+    let mut claimed_entry_ids = HashSet::new();
+    let mut entries = Vec::new();
+    for range in request.ranges {
+        let head = decode_range_cursor(&range.turn_id, &range.head_cursor, &request.source.id)?;
+        if head.native_entry_anchor.is_none() && !range.is_first_session_turn {
+            return invalid_range(
+                &range.turn_id,
+                "only the first Session Turn may have a null head anchor",
+            );
+        }
+        let (tail_offset, terminal_id, is_active) = match range.tail_cursor.as_deref() {
+            Some(tail_cursor) => {
+                let tail = decode_range_cursor(&range.turn_id, tail_cursor, &request.source.id)?;
+                let Some(terminal_id) = tail.native_entry_anchor else {
+                    return invalid_range(
+                        &range.turn_id,
+                        "terminal native entry anchor is missing",
+                    );
+                };
+                (tail.byte_offset, Some(terminal_id), false)
+            }
+            None => (source_length, None, true),
+        };
+        if head.byte_offset > tail_offset || tail_offset > source_length {
+            return invalid_range(
+                &range.turn_id,
+                "cursor offsets are reversed or outside the source",
+            );
+        }
+
+        let bytes = read_range_from_source(&request.source, head.byte_offset, tail_offset)?;
+        let (mut parsed, mut record_count) =
+            parse_window(&range.turn_id, &bytes, head.byte_offset)?;
+        if head.byte_offset == 0
+            && let Some(head_anchor) = head.native_entry_anchor.as_deref()
+        {
+            let Some(anchor_end) = parsed
+                .iter()
+                .find_map(|(entry_id, entry)| (entry_id == head_anchor).then_some(entry.end))
+            else {
+                return invalid_range(
+                    &range.turn_id,
+                    "native entry parent chain does not reach the head anchor",
+                );
+            };
+            let relative_anchor_end = anchor_end - head.byte_offset;
+            (parsed, record_count) =
+                parse_window(&range.turn_id, &bytes[relative_anchor_end..], anchor_end)?;
+        }
+        if is_active && record_count == 0 {
+            continue;
+        }
+        if is_active && parsed.len() != record_count {
+            return invalid_range(
+                &range.turn_id,
+                "active timeline contains an entry without a native id",
+            );
+        }
+        let mut by_id = HashMap::new();
+        for (index, (entry_id, _)) in parsed.iter().enumerate() {
+            if by_id.insert(entry_id.as_str(), index).is_some() {
+                return invalid_range(&range.turn_id, "duplicate native entry id in range");
+            }
+        }
+
+        let mut chain = Vec::new();
+        let terminal_id = terminal_id
+            .as_deref()
+            .or_else(|| parsed.last().map(|(entry_id, _)| entry_id.as_str()))
+            .expect("an active range with no parsed entries was handled above");
+        let mut current = terminal_id;
+        let mut visited = HashSet::new();
+        loop {
+            if !visited.insert(current.to_string()) {
+                return invalid_range(&range.turn_id, "native entry parent chain contains a cycle");
+            }
+            let Some(index) = by_id.get(current).copied() else {
+                return invalid_range(&range.turn_id, "native entry parent chain is broken");
+            };
+            chain.push(index);
+            let parent = parsed[index].1.parent_id.as_deref();
+            if parent == head.native_entry_anchor.as_deref() {
+                break;
+            }
+            let Some(parent) = parent else {
+                return invalid_range(
+                    &range.turn_id,
+                    "native entry parent chain does not reach the head anchor",
+                );
+            };
+            current = parent;
+        }
+        chain.reverse();
+        if is_active && chain.len() != parsed.len() {
+            return invalid_range(
+                &range.turn_id,
+                "active timeline entries do not form one consecutive parent chain",
+            );
+        }
+
+        for index in chain {
+            let (entry_id, entry) = &parsed[index];
+            if !claimed_entry_ids.insert(entry_id.clone()) {
+                return invalid_range(&range.turn_id, "semantic Turn ranges overlap");
+            }
+            entries.push(PiNativeTurnEntry {
+                turn_id: range.turn_id.clone(),
+                entry_id: entry_id.clone(),
+                value: entry.value.clone(),
+                start: entry.start,
+            });
+        }
+    }
+    Ok(entries)
+}
+
 impl TurnTimelineReader for PiTimelineAdapter {
     fn client_type(&self) -> &'static str {
         "pi"
@@ -156,134 +305,17 @@ impl TurnTimelineReader for PiTimelineAdapter {
         &self,
         request: TurnTimelineReadRequest,
     ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
-        if request.source.client_type != "pi" || request.source.format != "pi-jsonl" {
-            return Err(Error::CapabilityUnavailable(
-                "timeline capability unavailable for source format".to_string(),
-            )
-            .into());
-        }
-
-        let source_length = source_len(&request.source)?;
-        let mut claimed_entry_ids = HashSet::new();
-        let mut items = Vec::new();
-        for range in request.ranges {
-            let head = decode_range_cursor(&range.turn_id, &range.head_cursor, &request.source.id)?;
-            if head.native_entry_anchor.is_none() && !range.is_first_session_turn {
-                return invalid_range(
-                    &range.turn_id,
-                    "only the first Session Turn may have a null head anchor",
-                );
-            }
-            let (tail_offset, terminal_id, is_active) = match range.tail_cursor.as_deref() {
-                Some(tail_cursor) => {
-                    let tail =
-                        decode_range_cursor(&range.turn_id, tail_cursor, &request.source.id)?;
-                    let Some(terminal_id) = tail.native_entry_anchor else {
-                        return invalid_range(
-                            &range.turn_id,
-                            "terminal native entry anchor is missing",
-                        );
-                    };
-                    (tail.byte_offset, Some(terminal_id), false)
-                }
-                None => (source_length, None, true),
-            };
-            if head.byte_offset > tail_offset || tail_offset > source_length {
-                return invalid_range(
-                    &range.turn_id,
-                    "cursor offsets are reversed or outside the source",
-                );
-            }
-
-            let bytes = read_range_from_source(&request.source, head.byte_offset, tail_offset)?;
-            let (mut parsed, mut record_count) =
-                parse_window(&range.turn_id, &bytes, head.byte_offset)?;
-            if head.byte_offset == 0
-                && let Some(head_anchor) = head.native_entry_anchor.as_deref()
-            {
-                let Some(anchor_end) = parsed
-                    .iter()
-                    .find_map(|(entry_id, entry)| (entry_id == head_anchor).then_some(entry.end))
-                else {
-                    return invalid_range(
-                        &range.turn_id,
-                        "native entry parent chain does not reach the head anchor",
-                    );
-                };
-                let relative_anchor_end = anchor_end - head.byte_offset;
-                (parsed, record_count) =
-                    parse_window(&range.turn_id, &bytes[relative_anchor_end..], anchor_end)?;
-            }
-            if is_active && record_count == 0 {
-                continue;
-            }
-            if is_active && parsed.len() != record_count {
-                return invalid_range(
-                    &range.turn_id,
-                    "active timeline contains an entry without a native id",
-                );
-            }
-            let mut by_id = HashMap::new();
-            for (index, (entry_id, _)) in parsed.iter().enumerate() {
-                if by_id.insert(entry_id.as_str(), index).is_some() {
-                    return invalid_range(&range.turn_id, "duplicate native entry id in range");
-                }
-            }
-
-            let mut chain = Vec::new();
-            let terminal_id = terminal_id
-                .as_deref()
-                .or_else(|| parsed.last().map(|(entry_id, _)| entry_id.as_str()))
-                .expect("an active range with no parsed entries was handled above");
-            let mut current = terminal_id;
-            let mut visited = HashSet::new();
-            loop {
-                if !visited.insert(current.to_string()) {
-                    return invalid_range(
-                        &range.turn_id,
-                        "native entry parent chain contains a cycle",
-                    );
-                }
-                let Some(index) = by_id.get(current).copied() else {
-                    return invalid_range(&range.turn_id, "native entry parent chain is broken");
-                };
-                chain.push(index);
-                let parent = parsed[index].1.parent_id.as_deref();
-                if parent == head.native_entry_anchor.as_deref() {
-                    break;
-                }
-                let Some(parent) = parent else {
-                    return invalid_range(
-                        &range.turn_id,
-                        "native entry parent chain does not reach the head anchor",
-                    );
-                };
-                current = parent;
-            }
-            chain.reverse();
-            if is_active && chain.len() != parsed.len() {
-                return invalid_range(
-                    &range.turn_id,
-                    "active timeline entries do not form one consecutive parent chain",
-                );
-            }
-
-            for index in chain {
-                let (entry_id, entry) = &parsed[index];
-                if !claimed_entry_ids.insert(entry_id.clone()) {
-                    return invalid_range(&range.turn_id, "semantic Turn ranges overlap");
-                }
-                items.extend(
-                    pi_entry_to_items(&entry.value, entry.start)
-                        .into_iter()
-                        .map(|item| TurnTimelineItem {
-                            turn_id: range.turn_id.clone(),
-                            item,
-                        }),
-                );
-            }
-        }
-        Ok(items)
+        Ok(read_native_turn_ranges(request)?
+            .into_iter()
+            .flat_map(|entry| {
+                pi_entry_to_items(&entry.value, entry.start)
+                    .into_iter()
+                    .map(move |item| TurnTimelineItem {
+                        turn_id: entry.turn_id.clone(),
+                        item,
+                    })
+            })
+            .collect())
     }
 }
 

@@ -2,9 +2,9 @@ use pontia_core::Error;
 
 use crate::raw_transcripts::{
     ResolvedAgentBinding, TurnTimelineRange, TurnTimelineReadError, TurnTimelineReadRequest,
-    TurnTimelineReader,
 };
 
+use super::timeline::{PiJsonlV2CursorDecodeError, PiNativeTurnEntry, read_native_turn_ranges};
 use super::{PiJsonlV2Cursor, PiTimelineAdapter};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,35 +124,37 @@ impl PiTurnUserEntryResolver for PiTimelineAdapter {
         let turn_id = request.turn_id;
         validate_cursor(&head_cursor, &request.source.id, &turn_id)?;
         validate_cursor(&tail_cursor, &request.source.id, &turn_id)?;
-        let items = self
-            .read_turn_ranges(TurnTimelineReadRequest {
-                source: request.source,
-                ranges: vec![TurnTimelineRange {
-                    turn_id: turn_id.clone(),
-                    is_first_session_turn: request.is_first_session_turn,
-                    head_cursor,
-                    tail_cursor: Some(tail_cursor),
-                }],
-            })
-            .map_err(|error| classify_reader_error(error, &turn_id))?;
-        let mut user_entry_ids = items
-            .iter()
-            .filter(|item| item.item.role == "user" && item.item.kind == "user")
-            .filter_map(|item| {
-                item.item
-                    .item_id
-                    .strip_prefix("pi:entry:")
-                    .and_then(|rest| rest.strip_suffix(":block:0"))
-                    .map(ToString::to_string)
-            });
-        let Some(entry_id) = user_entry_ids.next() else {
+        let entries = read_native_turn_ranges(TurnTimelineReadRequest {
+            source: request.source,
+            ranges: vec![TurnTimelineRange {
+                turn_id: turn_id.clone(),
+                is_first_session_turn: request.is_first_session_turn,
+                head_cursor,
+                tail_cursor: Some(tail_cursor),
+            }],
+        })
+        .map_err(|error| classify_reader_error(error, &turn_id))?;
+        let mut user_entries = entries.into_iter().filter(is_primary_user_message);
+        let Some(entry) = user_entries.next() else {
             return Err(PiTurnUserEntryResolveError::UserEntryMissing { turn_id });
         };
-        if user_entry_ids.next().is_some() {
+        if user_entries.next().is_some() {
             return Err(PiTurnUserEntryResolveError::UserEntryAmbiguous { turn_id });
         }
-        Ok(ResolvedPiUserEntry { entry_id })
+        Ok(ResolvedPiUserEntry {
+            entry_id: entry.entry_id,
+        })
     }
+}
+
+fn is_primary_user_message(entry: &PiNativeTurnEntry) -> bool {
+    entry.value.get("type").and_then(serde_json::Value::as_str) == Some("message")
+        && entry
+            .value
+            .get("message")
+            .and_then(|message| message.get("role"))
+            .and_then(serde_json::Value::as_str)
+            == Some("user")
 }
 
 fn validate_cursor(
@@ -160,14 +162,17 @@ fn validate_cursor(
     binding_id: &str,
     turn_id: &str,
 ) -> Result<(), PiTurnUserEntryResolveError> {
-    PiJsonlV2Cursor::decode(cursor, binding_id)
+    PiJsonlV2Cursor::decode_classified(cursor, binding_id)
         .map(|_| ())
-        .map_err(|error| {
-            if error.to_string().contains("cursor scope mismatch") {
+        .map_err(|error| match error {
+            PiJsonlV2CursorDecodeError::ScopeMismatch => {
                 PiTurnUserEntryResolveError::BindingStale {
                     turn_id: turn_id.to_string(),
                 }
-            } else {
+            }
+            PiJsonlV2CursorDecodeError::FormatMismatch
+            | PiJsonlV2CursorDecodeError::InvalidByteOffset
+            | PiJsonlV2CursorDecodeError::InvalidRelation => {
                 PiTurnUserEntryResolveError::InvalidRange {
                     turn_id: turn_id.to_string(),
                 }
@@ -180,17 +185,10 @@ fn classify_reader_error(
     turn_id: &str,
 ) -> PiTurnUserEntryResolveError {
     match error {
-        TurnTimelineReadError::InvalidRange { message, .. } if message.contains("out-of-scope") => {
-            PiTurnUserEntryResolveError::BindingStale {
-                turn_id: turn_id.to_string(),
-            }
-        }
         TurnTimelineReadError::InvalidRange { .. } => PiTurnUserEntryResolveError::InvalidRange {
             turn_id: turn_id.to_string(),
         },
-        TurnTimelineReadError::Inner(Error::CapabilityUnavailable(message))
-            if message.contains("source_unavailable:") =>
-        {
+        TurnTimelineReadError::Inner(Error::CapabilityUnavailable(_)) => {
             PiTurnUserEntryResolveError::SourceUnavailable
         }
         TurnTimelineReadError::Inner(error) => PiTurnUserEntryResolveError::Inner(error),
