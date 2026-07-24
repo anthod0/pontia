@@ -1,7 +1,10 @@
 import { get } from 'svelte/store';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/svelte';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../src/api/errors';
 import type { TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage, TurnTreeHistoryPage, TurnTreeUpdatesPage } from '../src/api/types';
+import SessionConversation from '../src/lib/components/session-chat/SessionConversation.svelte';
+import { timelineItemsToChatMessages } from '../src/lib/session-chat/sessionChat';
 
 const mocks = vi.hoisted(() => ({
   getTurnTimeline: vi.fn(),
@@ -82,6 +85,10 @@ beforeEach(() => {
   resetTimelineState();
 });
 
+afterEach(() => {
+  cleanup();
+});
+
 test('tree history follows backend groups and paginates without a duplicate boundary Turn', async () => {
   mocks.getTurnTreeHistory
     .mockResolvedValueOnce(historyPage())
@@ -123,7 +130,16 @@ test('tree updates discard a divergent suffix after the LCA and append the repla
   mocks.getTurnTreeUpdates.mockResolvedValueOnce(updatesPage());
 
   await loadSessionTimeline('sess-1', { mode: 'rebuild', topology: true });
+  const conversation = render(SessionConversation, {
+    props: { messages: timelineItemsToChatMessages(get(timelineState).items, true) },
+  });
+  expect(screen.getByText('old two')).toBeInTheDocument();
+  expect(screen.getByText('old three')).toBeInTheDocument();
+
   await refreshSessionTimeline('sess-1');
+  await conversation.rerender({
+    messages: timelineItemsToChatMessages(get(timelineState).items, true),
+  });
 
   expect(mocks.getTurnTreeUpdates).toHaveBeenCalledWith('sess-1', { fromTurnId: 'turn-3' });
   expect(get(timelineState).groups.map((entry) => entry.turn_id)).toEqual([
@@ -136,6 +152,10 @@ test('tree updates discard a divergent suffix after the LCA and append the repla
     'branch four',
     'branch five',
   ]);
+  expect(screen.queryByText('old two')).not.toBeInTheDocument();
+  expect(screen.queryByText('old three')).not.toBeInTheDocument();
+  expect(screen.getByText('branch four')).toBeInTheDocument();
+  expect(screen.getByText('branch five')).toBeInTheDocument();
 });
 
 test('realtime refresh uses an inclusive forward Turn anchor and atomically replaces returned groups', async () => {

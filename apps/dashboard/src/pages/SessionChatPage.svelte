@@ -141,7 +141,6 @@
   ): Record<string, string> {
     if (!session?.capabilities.branch_control) return {}
     if (!['idle', 'interrupted', 'exited'].includes(session.state)) return {}
-    if (session.current_turn_id) return {}
     const turns = $sessionDetail?.session.session_id === session.session_id
       ? new Map($sessionDetail.turns.map((turn) => [turn.turn_id, turn]))
       : new Map()
@@ -154,9 +153,8 @@
       seenTurnIds.add(message.turnId)
       const projectedTurn = turns.get(message.turnId)
       if (!projectedTurn || !eligibleTurnStates.has(projectedTurn.state)) return []
-      const originalInput = projectedTurn.input?.summary?.trim()
-      if (!originalInput) return []
-      return [[message.id, originalInput]]
+      if (!projectedTurn.input?.summary?.trim() || !message.content.trim()) return []
+      return [[message.id, message.content]]
     }))
   }
 
@@ -254,14 +252,13 @@
     action: 'edit' | 'resend',
   ): Promise<boolean> {
     const projectedTurn = projectedTurnForBranchMessage(message)
-    const normalizedInput = input.trim()
-    if (!selectedSessionId || !projectedTurn || !normalizedInput || branchActionSubmitting) return false
+    if (!selectedSessionId || !projectedTurn || !input.trim() || branchActionSubmitting) return false
 
     branchActionSubmitting = true
     branchActionError = null
     try {
       await submitInboxMessage(selectedSessionId, {
-        input: normalizedInput,
+        input,
         delivery_policy: 'after_idle',
         metadata: { source: `dashboard_chat_branch_${action}` },
         branch_target_turn_id: projectedTurn.turn_id,
@@ -280,8 +277,8 @@
   }
 
   async function resendHistoricalMessage(message: SessionChatMessage): Promise<void> {
-    const originalInput = projectedTurnForBranchMessage(message)?.input?.summary
-    if (typeof originalInput !== 'string') return
+    const originalInput = branchActionInputs[message.id]
+    if (!originalInput) return
     await submitBranchAction(message, originalInput, 'resend')
   }
 
@@ -444,6 +441,7 @@
     if (nextSessionId === selectedSessionId) return
     selectedSessionId = nextSessionId
     actionError = null
+    branchActionError = null
     if (selectedSessionId) {
       await loadSelectedSession(selectedSessionId)
       await refreshSessionGitStatus(currentSelectedSession())

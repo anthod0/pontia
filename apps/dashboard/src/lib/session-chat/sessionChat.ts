@@ -136,11 +136,12 @@ export function timelineItemsToChatMessages(
   for (const item of orderedItems) {
     if (item.kind === 'user') {
       flushPendingWorkingMessage();
+      const content = item.content_preview ?? '';
       messages.push({
         id: item.item_id,
         turnId: item.turn_id ?? item.item_id,
         role: item.kind,
-        content: item.content_preview?.trim() || 'No input was reported.',
+        content: content.trim() ? content : 'No input was reported.',
         status: item.status === 'error' ? 'failed' : 'sent',
         createdAt: item.occurred_at ?? '',
       });

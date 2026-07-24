@@ -95,7 +95,7 @@
 
   async function submitEdit(message: SessionChatMessage): Promise<void> {
     if (!editedInput.trim() || branchActionBusy) return
-    const submitted = await onBranchEdit?.(message, editedInput.trim())
+    const submitted = await onBranchEdit?.(message, editedInput)
     if (submitted) cancelEditing()
   }
 

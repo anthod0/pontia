@@ -142,7 +142,7 @@ test('offers local Edit and Resend controls on eligible projected user messages'
     input: { summary: 'Inspect the original implementation.' },
     output: { summary: 'The original implementation is ready.' },
   });
-  prepareBranchChat([originalTurn]);
+  prepareBranchChat([originalTurn], { current_turn_id: 'turn-original' });
   rememberOptimisticMessage('session-branch', 'Optimistic follow-up');
   optimisticInitialMessages.update((messages) => ({
     ...messages,
@@ -174,6 +174,11 @@ test('offers local Edit and Resend controls on eligible projected user messages'
   expect(screen.getByText(/does not rewind workspace files or external side effects/i)).toBeInTheDocument();
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
+  await fireEvent.keyDown(screen.getByRole('textbox', { name: 'Edit historical message' }), { key: 'Escape' });
+  expect(screen.queryByRole('textbox', { name: 'Edit historical message' })).not.toBeInTheDocument();
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('button', { name: 'Edit message: Inspect the original implementation.' }));
   await user.click(screen.getByRole('button', { name: 'Cancel editing' }));
 
   expect(screen.queryByRole('textbox', { name: 'Edit historical message' })).not.toBeInTheDocument();
@@ -182,9 +187,10 @@ test('offers local Edit and Resend controls on eligible projected user messages'
 });
 
 test('offers branch actions only on the primary user message represented by a projected Turn', async () => {
+  const completeHistoricalInput = '  Primary user input with the complete historical text  ';
   prepareBranchChat([turn({
     turn_id: 'turn-original',
-    input: { summary: 'Primary user input with the complete historical text' },
+    input: { summary: 'Primary user input with the complete…' },
     output: { summary: 'Assistant output' },
   })]);
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
@@ -201,7 +207,7 @@ test('offers branch actions only on the primary user message represented by a pr
           title: null,
           status: null,
           occurred_at: '2026-05-14T00:00:00Z',
-          content_preview: 'Primary user input…',
+          content_preview: completeHistoricalInput,
           turn_id: 'turn-original',
         },
         {
@@ -231,13 +237,21 @@ test('offers branch actions only on the primary user message represented by a pr
 
   render(SessionChatPage);
 
-  const editButton = await screen.findByRole('button', { name: 'Edit message: Primary user input…' });
+  const editButton = await screen.findByRole('button', { name: /Edit message: Primary user input with the complete historical text/ });
   expect(screen.queryByRole('button', { name: 'Edit message: Secondary user activity' })).not.toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: /^Edit message:/ })).toHaveLength(1);
 
   await userEvent.click(editButton);
   expect(screen.getByRole('textbox', { name: 'Edit historical message' }))
-    .toHaveValue('Primary user input with the complete historical text');
+    .toHaveValue(completeHistoricalInput);
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel editing' }));
+  await userEvent.click(screen.getByRole('button', { name: /^Resend message: Primary user input/ }));
+  expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-branch', {
+    input: completeHistoricalInput,
+    delivery_policy: 'after_idle',
+    metadata: { source: 'dashboard_chat_branch_resend' },
+    branch_target_turn_id: 'turn-original',
+  });
 });
 
 test('disables all branch actions when any projected Turn is active', async () => {
