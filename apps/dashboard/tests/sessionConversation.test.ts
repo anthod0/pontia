@@ -208,7 +208,8 @@ test('conversation copies assistant reply content with the http-compatible fallb
 
   render(SessionConversation, { props: { messages } });
 
-  expect(screen.queryByRole('button', { name: /copy user message/i })).not.toBeInTheDocument();
+  const userCopyButton = screen.getByRole('button', { name: /copy user message/i });
+  expect(userCopyButton.closest('[data-user-message-actions]')?.previousElementSibling).toHaveTextContent('Please inspect the repo.');
   const copyButton = screen.getByRole('button', { name: /copy assistant reply/i });
   expect(copyButton.parentElement).toHaveClass('justify-start');
   expect(copyButton.parentElement).not.toHaveClass('justify-end');

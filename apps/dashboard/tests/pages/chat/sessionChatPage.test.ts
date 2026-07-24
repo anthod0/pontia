@@ -186,8 +186,10 @@ test('selects tree timeline loading when the Session advertises timeline and top
   }));
 });
 
-test('offers local Edit and Resend controls on eligible projected user messages', async () => {
+test('shows icon-only Edit and Copy controls outside eligible user message bubbles', async () => {
   const user = userEvent.setup();
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   const originalTurn = turn({
     turn_id: 'turn-original',
     input: { summary: 'Inspect the original implementation.' },
@@ -213,16 +215,31 @@ test('offers local Edit and Resend controls on eligible projected user messages'
   render(SessionChatPage);
 
   const editButton = await screen.findByRole('button', { name: 'Edit message: Inspect the original implementation.' });
-  expect(screen.getByRole('button', { name: 'Resend message: Inspect the original implementation.' })).toBeInTheDocument();
+  const copyButton = screen.getByRole('button', { name: 'Copy user message: Inspect the original implementation.' });
+  const messageActions = editButton.closest('[data-user-message-actions]');
+  const messageBubble = messageActions?.previousElementSibling;
   expect(screen.getAllByRole('button', { name: /^Edit message:/ })).toHaveLength(1);
-  expect(screen.getAllByRole('button', { name: /^Resend message:/ })).toHaveLength(1);
+  expect(editButton).toHaveTextContent('');
+  expect(copyButton).toHaveTextContent('');
+  expect(messageActions).toHaveClass('opacity-0', 'group-hover:opacity-100');
+  expect(messageBubble).toHaveTextContent('Inspect the original implementation.');
+  expect(messageBubble).not.toContainElement(editButton);
+  expect(screen.queryByRole('button', { name: /^Resend message:/ })).not.toBeInTheDocument();
+  await user.click(copyButton);
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith('Inspect the original implementation.'));
+  expect(screen.getByRole('button', { name: 'User message copied: Inspect the original implementation.' })).toBeInTheDocument();
   expect(screen.getByText('Optimistic follow-up')).toBeInTheDocument();
   expect(screen.getByText('Failed follow-up')).toBeInTheDocument();
 
   await user.click(editButton);
 
-  expect(screen.getByRole('textbox', { name: 'Edit historical message' })).toHaveValue('Inspect the original implementation.');
-  expect(screen.getByText(/does not rewind workspace files or external side effects/i)).toBeInTheDocument();
+  const editor = screen.getByRole('textbox', { name: 'Edit historical message' });
+  expect(editor).toHaveValue('Inspect the original implementation.');
+  expect(editor).toHaveClass('field-sizing-content', 'resize-none', 'border-0');
+  expect(editor).not.toHaveAttribute('rows');
+  expect(editor).not.toHaveClass('min-h-16');
+  expect(editor.closest('[data-chat-message-id]')).toHaveClass('w-full');
+  expect(editor.closest('[data-chat-message-id]')?.firstElementChild).toHaveClass('w-full');
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
   await fireEvent.keyDown(screen.getByRole('textbox', { name: 'Edit historical message' }), { key: 'Escape' });
@@ -230,7 +247,7 @@ test('offers local Edit and Resend controls on eligible projected user messages'
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
   await user.click(screen.getByRole('button', { name: 'Edit message: Inspect the original implementation.' }));
-  await user.click(screen.getByRole('button', { name: 'Cancel editing' }));
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
   expect(screen.queryByRole('textbox', { name: 'Edit historical message' })).not.toBeInTheDocument();
   expect(screen.getByText('Inspect the original implementation.')).toBeInTheDocument();
@@ -295,14 +312,8 @@ test('offers branch actions only on the primary user message represented by a pr
   await userEvent.click(editButton);
   expect(screen.getByRole('textbox', { name: 'Edit historical message' }))
     .toHaveValue(completeHistoricalInput);
-  await userEvent.click(screen.getByRole('button', { name: 'Cancel editing' }));
-  await userEvent.click(screen.getByRole('button', { name: /^Resend message: Primary user input/ }));
-  expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-branch', {
-    input: completeHistoricalInput,
-    delivery_policy: 'after_idle',
-    metadata: { source: 'dashboard_chat_branch_resend' },
-    branch_target_turn_id: 'turn-original',
-  });
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByRole('button', { name: /^Copy user message: Primary user input/ })).toBeInTheDocument();
 });
 
 test('disables all branch actions when any projected Turn is active', async () => {
@@ -364,7 +375,7 @@ test.each([
   expect(screen.queryByRole('button', { name: /^Resend message:/ })).not.toBeInTheDocument();
 });
 
-test('submits Edit and Resend through the shared branch-targeted Inbox mutation without changing the visible suffix', async () => {
+test('submits Edit through the branch-targeted Inbox mutation without changing the visible suffix', async () => {
   const user = userEvent.setup();
   const originalTurn = turn({
     turn_id: 'turn-original',
@@ -406,16 +417,6 @@ test('submits Edit and Resend through the shared branch-targeted Inbox mutation 
   expect(screen.getByText('Original question')).toBeInTheDocument();
   expect(screen.getByText('Current suffix question')).toBeInTheDocument();
   expect(screen.queryByText('Corrected question')).not.toBeInTheDocument();
-
-  await user.click(screen.getByRole('button', { name: 'Resend message: Original question' }));
-
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenLastCalledWith('session-branch', {
-    input: 'Original question',
-    delivery_policy: 'after_idle',
-    metadata: { source: 'dashboard_chat_branch_resend' },
-    branch_target_turn_id: 'turn-original',
-  }));
-  expect(screen.getByText('Current suffix question')).toBeInTheDocument();
 });
 
 test('rejects a blank edit locally and disables competing branch actions while submitting', async () => {
@@ -443,16 +444,17 @@ test('rejects a blank edit locally and disables competing branch actions while s
   const editor = screen.getByRole('textbox', { name: 'Edit historical message' });
   await user.clear(editor);
   await user.type(editor, '   ');
-  expect(screen.getByRole('button', { name: 'Send edit' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   await fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true });
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
-  await user.click(screen.getByRole('button', { name: 'Cancel editing' }));
-  await user.click(screen.getByRole('button', { name: 'Resend message: Original question' }));
+  await user.clear(editor);
+  await user.type(editor, 'Corrected question');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
 
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(1));
-  expect(screen.getByRole('button', { name: 'Edit message: Original question' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Resend message: Other question' })).toBeDisabled();
+  expect(editor).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Edit message: Other question' })).toBeDisabled();
   resolveSubmission?.();
   await waitFor(() => expect(screen.getByRole('button', { name: 'Edit message: Original question' })).toBeEnabled());
 });
@@ -465,11 +467,11 @@ test('presents branch submission errors and keeps editing available for correcti
   render(SessionChatPage);
 
   await user.click(await screen.findByRole('button', { name: 'Edit message: Original question' }));
-  await user.click(screen.getByRole('button', { name: 'Send edit' }));
+  await user.click(screen.getByRole('button', { name: 'Save' }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Target Turn can no longer be resolved');
   expect(screen.getByRole('textbox', { name: 'Edit historical message' })).toHaveValue('Original question');
-  expect(screen.getByRole('button', { name: 'Send edit' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
 });
 
 test('keeps the divergent suffix until a projected tree update replaces it', async () => {
@@ -498,7 +500,8 @@ test('keeps the divergent suffix until a projected tree update replaces it', asy
 
   render(SessionChatPage);
 
-  await user.click(await screen.findByRole('button', { name: 'Resend message: Original middle question' }));
+  await user.click(await screen.findByRole('button', { name: 'Edit message: Original middle question' }));
+  await user.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
   expect(screen.getByText('Abandoned suffix question')).toBeInTheDocument();
 

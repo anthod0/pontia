@@ -246,10 +246,9 @@
     return $sessionDetail?.turns.find((turn) => turn.turn_id === message.turnId) ?? null
   }
 
-  async function submitBranchAction(
+  async function submitBranchEdit(
     message: SessionChatMessage,
     input: string,
-    action: 'edit' | 'resend',
   ): Promise<boolean> {
     const projectedTurn = projectedTurnForBranchMessage(message)
     if (!selectedSessionId || !projectedTurn || !input.trim() || branchActionSubmitting) return false
@@ -260,7 +259,7 @@
       await submitInboxMessage(selectedSessionId, {
         input,
         delivery_policy: 'after_idle',
-        metadata: { source: `dashboard_chat_branch_${action}` },
+        metadata: { source: 'dashboard_chat_branch_edit' },
         branch_target_turn_id: projectedTurn.turn_id,
       })
       return true
@@ -273,13 +272,7 @@
   }
 
   function editHistoricalMessage(message: SessionChatMessage, replacementInput: string): Promise<boolean> {
-    return submitBranchAction(message, replacementInput, 'edit')
-  }
-
-  async function resendHistoricalMessage(message: SessionChatMessage): Promise<void> {
-    const originalInput = branchActionInputs[message.id]
-    if (!originalInput) return
-    await submitBranchAction(message, originalInput, 'resend')
+    return submitBranchEdit(message, replacementInput)
   }
 
 
@@ -671,7 +664,6 @@
                   {branchActionInputs}
                   branchActionBusy={branchActionSubmitting}
                   onBranchEdit={editHistoricalMessage}
-                  onBranchResend={resendHistoricalMessage}
                   onLoadMoreHistory={loadEarlierMessages}
                 />
               {/key}

@@ -1,11 +1,10 @@
 <script lang="ts">
   import { onDestroy, tick } from 'svelte'
-  import { Bot, Check, Copy, Pencil, RefreshCw } from '@lucide/svelte'
+  import { Bot, Check, Copy, Pencil } from '@lucide/svelte'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { Textarea } from '$lib/components/ui/textarea/index.js'
   import { copyText } from '$lib/copyText'
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
@@ -22,7 +21,6 @@
     branchActionInputs?: Record<string, string>
     branchActionBusy?: boolean
     onBranchEdit?: (message: SessionChatMessage, replacementInput: string) => boolean | Promise<boolean>
-    onBranchResend?: (message: SessionChatMessage) => void | Promise<void>
     onLoadMoreHistory?: () => void | Promise<void>
   }
 
@@ -36,7 +34,6 @@
     branchActionInputs = {},
     branchActionBusy = false,
     onBranchEdit,
-    onBranchResend,
     onLoadMoreHistory,
   }: Props = $props()
   let scrollContainer = $state<HTMLDivElement | null>(null)
@@ -66,7 +63,7 @@
     return null
   }
 
-  async function copyAssistantReply(message: SessionChatMessage): Promise<void> {
+  async function copyMessage(message: SessionChatMessage): Promise<void> {
     const copied = await copyText(message.content)
     if (!copied) return
     copiedMessageId = message.id
@@ -264,8 +261,12 @@
     <AgentBottomStatus state={sessionState} />
   {:else}
     {@const chatMessage = displayItem.message}
-    <Message.Root from={chatMessage.role} data-chat-message-id={chatMessage.id}>
-      <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
+    <Message.Root
+      from={chatMessage.role}
+      class={chatMessage.role === 'user' ? `relative ${editingMessageId === chatMessage.id ? 'w-full' : ''}` : undefined}
+      data-chat-message-id={chatMessage.id}
+    >
+      <Message.Content class={`${chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''} ${editingMessageId === chatMessage.id ? 'w-full' : ''}`}>
         {#if displayItem.showAgentStatus}
           <AgentStatus state={sessionState} />
         {/if}
@@ -274,20 +275,17 @@
         {/if}
         {#if chatMessage.content.trim()}
           {#if chatMessage.role === 'user' && editingMessageId === chatMessage.id}
-            <div class="w-full min-w-[min(32rem,75vw)] space-y-3">
-              <Textarea
+            <div class="w-full space-y-3">
+              <textarea
                 aria-label="Edit historical message"
                 bind:value={editedInput}
-                rows={4}
+                class="field-sizing-content block w-full resize-none border-0 bg-transparent p-0 text-base leading-relaxed outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={branchActionBusy}
                 onkeydown={(event) => handleEditKeydown(event, chatMessage)}
-              />
-              <p class="text-xs text-muted-foreground">
-                Editing restores conversational context, but does not rewind workspace files or external side effects.
-              </p>
+              ></textarea>
               <div class="flex justify-end gap-2">
                 <Button type="button" variant="ghost" size="sm" disabled={branchActionBusy} onclick={cancelEditing}>
-                  Cancel editing
+                  Cancel
                 </Button>
                 <Button
                   type="button"
@@ -295,7 +293,7 @@
                   disabled={branchActionBusy || !editedInput.trim()}
                   onclick={() => void submitEdit(chatMessage)}
                 >
-                  Send edit
+                  Save
                 </Button>
               </div>
             </div>
@@ -311,7 +309,7 @@
                 size="sm"
                 aria-label={isCopied ? 'Assistant reply copied' : 'Copy assistant reply'}
                 title={isCopied ? 'Copied' : 'Copy assistant reply'}
-                onclick={() => copyAssistantReply(chatMessage)}
+                onclick={() => copyMessage(chatMessage)}
               >
                 {#if isCopied}
                   <Check class="size-3.5" /> Copied
@@ -320,32 +318,44 @@
                 {/if}
               </Button>
             </div>
-          {:else if branchActionMessageIdSet.has(chatMessage.id) && editingMessageId !== chatMessage.id}
-            <div class="mt-2 flex justify-end gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={branchActionBusy}
-                aria-label={`Edit message: ${chatMessage.content}`}
-                onclick={() => beginEditing(chatMessage)}
-              >
-                <Pencil class="size-3.5" /> Edit
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={branchActionBusy}
-                aria-label={`Resend message: ${chatMessage.content}`}
-                onclick={() => void onBranchResend?.(chatMessage)}
-              >
-                <RefreshCw class="size-3.5" /> Resend
-              </Button>
-            </div>
           {/if}
         {/if}
       </Message.Content>
+      {#if chatMessage.role === 'user' && editingMessageId !== chatMessage.id}
+        {@const isCopied = copiedMessageId === chatMessage.id}
+        <div
+          class="pointer-events-none absolute right-0 top-full z-10 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          data-user-message-actions
+        >
+          {#if branchActionMessageIdSet.has(chatMessage.id)}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={branchActionBusy}
+              aria-label={`Edit message: ${chatMessage.content}`}
+              title="Edit message"
+              onclick={() => beginEditing(chatMessage)}
+            >
+              <Pencil class="size-3.5" />
+            </Button>
+          {/if}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={isCopied ? `User message copied: ${chatMessage.content}` : `Copy user message: ${chatMessage.content}`}
+            title={isCopied ? 'Copied' : 'Copy message'}
+            onclick={() => copyMessage(chatMessage)}
+          >
+            {#if isCopied}
+              <Check class="size-3.5" />
+            {:else}
+              <Copy class="size-3.5" />
+            {/if}
+          </Button>
+        </div>
+      {/if}
     </Message.Root>
 
   {/if}
