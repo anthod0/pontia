@@ -19,6 +19,7 @@
   import { capabilityRows, extraCapabilityRows } from './sessions/sessionCapabilities'
   import { sessionEventDetailRows, sessionEventSummary, sessionEventTurnLabel } from './sessions/sessionEvents'
   import { isTerminalSession, sessionDisplayTitle } from './sessions/sessionList'
+  import SessionTurnTree from '../components/sessions/SessionTurnTree.svelte'
   import {
     interruptSession,
     loadSessionDetail,
@@ -184,9 +185,31 @@
   <Tabs.Root value="messages" class="space-y-4">
     <Tabs.List>
       <Tabs.Trigger value="messages">Messages</Tabs.Trigger>
+      <Tabs.Trigger value="tree">Tree</Tabs.Trigger>
       <Tabs.Trigger value="details">Details</Tabs.Trigger>
       <Tabs.Trigger value="events">Events</Tabs.Trigger>
     </Tabs.List>
+
+    <Tabs.Content value="tree">
+      <Card.Root>
+        <Card.Header>
+          <Card.Title>Conversation tree</Card.Title>
+          <Card.Description>Reported Turn parentage, branches, and the current branch.</Card.Description>
+        </Card.Header>
+        <Card.Content>
+          {#if $sessionDetail.session.capabilities?.topology === true}
+            <SessionTurnTree turns={$sessionDetail.turns} currentTurnId={$sessionDetail.session.current_turn_id} />
+          {:else}
+            <Empty.Root>
+              <Empty.Header>
+                <Empty.Title>Turn topology unavailable</Empty.Title>
+                <Empty.Description>This agent client does not advertise topology support.</Empty.Description>
+              </Empty.Header>
+            </Empty.Root>
+          {/if}
+        </Card.Content>
+      </Card.Root>
+    </Tabs.Content>
 
     <Tabs.Content value="details" class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <Card.Root>

@@ -6,11 +6,15 @@ import { capabilityRows, extraCapabilityRows } from '../../src/pages/sessions/se
 const pageSource = readFileSync(join(process.cwd(), 'src/pages/SessionDetailPage.svelte'), 'utf8');
 
 describe('SessionDetailPage presentation', () => {
-  test('opens Messages as the first tab and renames overview to Details', () => {
+  test('opens Messages first and exposes the conversation Tree before Details', () => {
     expect(pageSource).toContain('<Tabs.Root value="messages"');
     expect(pageSource.indexOf('<Tabs.Trigger value="messages">Messages</Tabs.Trigger>')).toBeLessThan(
+      pageSource.indexOf('<Tabs.Trigger value="tree">Tree</Tabs.Trigger>'),
+    );
+    expect(pageSource.indexOf('<Tabs.Trigger value="tree">Tree</Tabs.Trigger>')).toBeLessThan(
       pageSource.indexOf('<Tabs.Trigger value="details">Details</Tabs.Trigger>'),
     );
+    expect(pageSource).toContain('<SessionTurnTree turns={$sessionDetail.turns} currentTurnId={$sessionDetail.session.current_turn_id} />');
     expect(pageSource).not.toContain('<Tabs.Trigger value="overview">Overview</Tabs.Trigger>');
   });
 
