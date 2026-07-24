@@ -84,7 +84,7 @@
 <button
   type="button"
   class={cn(
-    'not-prose w-full rounded-xl px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+    'not-prose w-full rounded-xl pr-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
     className,
   )}
   aria-label="View thought details"

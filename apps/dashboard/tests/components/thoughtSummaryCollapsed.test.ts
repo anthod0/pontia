@@ -30,6 +30,9 @@ test('collapsed thought summary shows only the latest tool call row without chro
 
   const button = screen.getByRole('button', { name: 'View thought details' });
   expect(button).toHaveClass('w-full');
+  expect(button).toHaveClass('pr-3');
+  expect(button).not.toHaveClass('pl-3');
+  expect(button).not.toHaveClass('px-3');
   expect(button).not.toHaveClass('bg-muted/20');
   expect(button).not.toHaveClass('hover:bg-muted/35');
   expect(button).not.toHaveClass('border');
