@@ -139,3 +139,7 @@ http://127.0.0.1:8080/dashboard
 ```
 
 Enter the configured External API token, for example `dev-token`.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

@@ -2,6 +2,7 @@
 name = "pontia-runtime"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 pontia-agent-clients = { path = "../agent-clients", default-features = false }

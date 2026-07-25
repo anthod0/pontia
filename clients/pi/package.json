@@ -2,6 +2,7 @@
   "name": "@pontia/pi-client-plugin",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "keywords": ["pi-package", "pontia-client-plugin"],
   "scripts": {
