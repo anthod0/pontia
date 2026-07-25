@@ -80,6 +80,7 @@
   let destroyed = false
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
+  const BRANCH_INTERRUPT_TIMEOUT_MS = 30_000
   const SCROLL_DOWN_BUTTON_ANIMATION_MS = 200
   const INITIAL_SCROLL_SETTLE_PASSES = 2
 
@@ -140,11 +141,12 @@
     chatMessages: typeof messages,
   ): Record<string, string> {
     if (!session?.capabilities.branch_control) return {}
-    if (!['idle', 'interrupted', 'exited'].includes(session.state)) return {}
+    const canEditInCurrentState = ['idle', 'interrupted', 'exited'].includes(session.state)
+      || (session.state === 'busy' && session.capabilities.interrupt === true)
+    if (!canEditInCurrentState) return {}
     const turns = $sessionDetail?.session.session_id === session.session_id
       ? new Map($sessionDetail.turns.map((turn) => [turn.turn_id, turn]))
       : new Map()
-    if ([...turns.values()].some((turn) => turn.state === 'queued' || turn.state === 'running')) return {}
     const seenTurnIds = new Set<string>()
     const eligibleTurnStates = new Set(['completed', 'failed', 'interrupted', 'abandoned'])
 
@@ -253,10 +255,19 @@
     const projectedTurn = projectedTurnForBranchMessage(message)
     if (!selectedSessionId || !projectedTurn || !input.trim() || branchActionSubmitting) return false
 
+    const sessionId = selectedSessionId
     branchActionSubmitting = true
     branchActionError = null
     try {
-      await submitInboxMessage(selectedSessionId, {
+      const session = currentSelectedSession()
+      if (session?.state === 'busy') {
+        if (session.capabilities.interrupt !== true) {
+          throw new Error('This Session cannot interrupt the active Turn before editing history.')
+        }
+        await interruptSession(sessionId)
+        await waitForBranchSubmissionReady(sessionId)
+      }
+      await submitInboxMessage(sessionId, {
         input,
         delivery_policy: 'after_idle',
         metadata: { source: 'dashboard_chat_branch_edit' },
@@ -537,6 +548,41 @@
     const detail = get(sessionDetail)
     if (detail?.session.session_id === sessionId) return detail.session.state
     return get(sessions).find((session) => session.session_id === sessionId)?.state ?? null
+  }
+
+  function branchSubmissionReadyFromStores(sessionId: string): boolean {
+    const detail = get(sessionDetail)
+    if (detail?.session.session_id !== sessionId) return false
+    if (!['idle', 'interrupted'].includes(detail.session.state)) return false
+    return !detail.turns.some((turn) => turn.state === 'queued' || turn.state === 'running')
+  }
+
+  function waitForBranchSubmissionReady(sessionId: string, timeoutMs = BRANCH_INTERRUPT_TIMEOUT_MS): Promise<void> {
+    if (branchSubmissionReadyFromStores(sessionId)) return Promise.resolve()
+
+    return new Promise((resolve, reject) => {
+      let done = false
+      let unsubscribe: (() => void) | null = null
+
+      const finish = (callback: () => void) => {
+        if (done) return
+        done = true
+        unsubscribe?.()
+        clearTimeout(timeout)
+        callback()
+      }
+      const check = () => {
+        if (branchSubmissionReadyFromStores(sessionId)) finish(resolve)
+      }
+      const timeout = setTimeout(() => {
+        finish(() => reject(new Error('Edit timed out waiting for the active Turn to be interrupted.')))
+      }, timeoutMs)
+
+      const stop = sessionDetail.subscribe(check)
+      unsubscribe = stop
+      if (done) stop()
+      else check()
+    })
   }
 
   function waitForSessionIdle(sessionId: string, timeoutMs = AUTO_RESUME_IDLE_TIMEOUT_MS): Promise<void> {

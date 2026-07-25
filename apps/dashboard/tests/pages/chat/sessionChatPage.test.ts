@@ -316,7 +316,67 @@ test('offers branch actions only on the primary user message represented by a pr
   expect(screen.getByRole('button', { name: /^Copy user message: Primary user input/ })).toBeInTheDocument();
 });
 
-test('disables all branch actions when any projected Turn is active', async () => {
+test('edits completed history while busy and interrupts only when the edit is saved', async () => {
+  const user = userEvent.setup();
+  const completedTurn = turn({
+    turn_id: 'turn-completed',
+    input: { summary: 'Completed historical input' },
+  });
+  const activeTurn = turn({
+    turn_id: 'turn-active',
+    parent_turn_id: 'turn-completed',
+    state: 'running',
+    input: { summary: 'Active input' },
+    output: null,
+    completed_at: null,
+    created_at: '2026-05-14T00:01:00Z',
+  });
+  const busySession = prepareBranchChat([completedTurn, activeTurn], {
+    state: 'busy',
+    current_turn_id: 'turn-active',
+    capabilities: {
+      accept_task: true,
+      interrupt: true,
+      timeline: true,
+      topology: true,
+      branch_control: true,
+    },
+  });
+
+  render(SessionChatPage);
+
+  await user.click(await screen.findByRole('button', { name: 'Edit message: Completed historical input' }));
+  expect(screen.queryByRole('button', { name: 'Edit message: Active input' })).not.toBeInTheDocument();
+  expect(mocks.interruptSession).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith('session-branch'));
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+
+  const interruptedSession = { ...busySession, state: 'interrupted', current_turn_id: null };
+  mocks.sessions.set([interruptedSession]);
+  mocks.sessionDetail.set({
+    session: interruptedSession,
+    turns: [
+      { ...completedTurn, session_id: 'session-branch' },
+      { ...activeTurn, session_id: 'session-branch', state: 'interrupted', completed_at: '2026-05-14T00:01:02Z' },
+    ],
+    inboxMessages: [],
+    events: [],
+  });
+
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-branch', {
+    input: 'Completed historical input',
+    delivery_policy: 'after_idle',
+    metadata: { source: 'dashboard_chat_branch_edit' },
+    branch_target_turn_id: 'turn-completed',
+  }));
+  expect(mocks.interruptSession.mock.invocationCallOrder[0])
+    .toBeLessThan(mocks.submitInboxMessage.mock.invocationCallOrder[0]);
+});
+
+test('keeps a busy edit open when interrupting the active Turn fails', async () => {
+  const user = userEvent.setup();
   prepareBranchChat([
     turn({ turn_id: 'turn-completed', input: { summary: 'Completed historical input' } }),
     turn({
@@ -328,13 +388,28 @@ test('disables all branch actions when any projected Turn is active', async () =
       completed_at: null,
       created_at: '2026-05-14T00:01:00Z',
     }),
-  ]);
+  ], {
+    state: 'busy',
+    current_turn_id: 'turn-active',
+    capabilities: {
+      accept_task: true,
+      interrupt: true,
+      timeline: true,
+      topology: true,
+      branch_control: true,
+    },
+  });
+  mocks.interruptSession.mockRejectedValue(new Error('Interrupt failed'));
 
   render(SessionChatPage);
 
-  await screen.findByText('Completed historical input');
-  expect(screen.queryByRole('button', { name: /^Edit message:/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /^Resend message:/ })).not.toBeInTheDocument();
+  await user.click(await screen.findByRole('button', { name: 'Edit message: Completed historical input' }));
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Interrupt failed');
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  expect(screen.getByRole('textbox', { name: 'Edit historical message' }))
+    .toHaveValue('Completed historical input');
 });
 
 test.each([
