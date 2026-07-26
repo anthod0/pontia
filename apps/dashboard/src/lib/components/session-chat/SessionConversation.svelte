@@ -96,10 +96,16 @@
       cancelEditing()
       return
     }
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault()
-      void submitEdit(message)
-    }
+
+    const isPlainEnter = event.key === 'Enter'
+      && !event.shiftKey
+      && !event.ctrlKey
+      && !event.metaKey
+      && !event.altKey
+    if (!isPlainEnter || event.isComposing) return
+
+    event.preventDefault()
+    void submitEdit(message)
   }
 
   function observeTopHistorySentinel(node: HTMLElement): { destroy: () => void } {

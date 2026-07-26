@@ -450,7 +450,7 @@ test.each([
   expect(screen.queryByRole('button', { name: /^Resend message:/ })).not.toBeInTheDocument();
 });
 
-test('submits Edit through the branch-targeted Inbox mutation without changing the visible suffix', async () => {
+test('submits Edit with Enter and keeps Shift+Enter for newlines', async () => {
   const user = userEvent.setup();
   const originalTurn = turn({
     turn_id: 'turn-original',
@@ -480,7 +480,14 @@ test('submits Edit through the branch-targeted Inbox mutation without changing t
   const editor = screen.getByRole('textbox', { name: 'Edit historical message' });
   await user.clear(editor);
   await user.type(editor, 'Corrected question');
-  await fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true });
+
+  const shiftEnterResult = await fireEvent.keyDown(editor, { key: 'Enter', shiftKey: true });
+  const submittedAfterShiftEnter = mocks.submitInboxMessage.mock.calls.length;
+  const plainEnterResult = await fireEvent.keyDown(editor, { key: 'Enter' });
+
+  expect(shiftEnterResult).toBe(true);
+  expect(submittedAfterShiftEnter).toBe(0);
+  expect(plainEnterResult).toBe(false);
 
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-branch', {
     input: 'Corrected question',
@@ -520,7 +527,7 @@ test('rejects a blank edit locally and disables competing branch actions while s
   await user.clear(editor);
   await user.type(editor, '   ');
   expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-  await fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true });
+  await fireEvent.keyDown(editor, { key: 'Enter' });
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
   await user.clear(editor);
