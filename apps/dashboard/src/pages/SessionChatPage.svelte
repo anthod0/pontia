@@ -16,10 +16,15 @@
   } from '$lib/session-chat/sessionChat'
   import {
     chatMessagesWithOptimistic,
-    discardOptimisticMessage,
     optimisticInitialMessages,
-    rememberOptimisticMessage,
+    reconcileOptimisticMessages,
   } from '../stores/optimisticChat'
+  import {
+    consumeInboxSubmission,
+    inboxSubmissionMessages,
+    optimisticInboxSubmissions,
+    reconcileInboxSubmissions,
+  } from '../stores/optimisticInbox'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import {
     loadWorkspaces,
@@ -116,7 +121,13 @@
   $: timelineMessages = $timelineState.sessionId === selectedSessionId
     ? timelineItemsToChatMessages($timelineState.items, $timelineState.mode === 'tree')
     : []
-  $: messages = chatMessagesWithOptimistic(selectedSessionId, timelineMessages, $optimisticInitialMessages)
+  $: reconcileOptimisticMessages(selectedSessionId, timelineMessages)
+  $: reconcileInboxSubmissions(selectedSessionId, timelineMessages)
+  $: messages = inboxSubmissionMessages(
+    selectedSessionId,
+    chatMessagesWithOptimistic(selectedSessionId, timelineMessages, $optimisticInitialMessages),
+    $optimisticInboxSubmissions,
+  )
   $: branchActionInputs = eligibleBranchActionInputs(selectedSession, messages)
   $: branchActionMessageIds = Object.keys(branchActionInputs)
   $: timelineUnavailable = $timelineState.sessionId === selectedSessionId && Boolean($timelineState.error)
@@ -383,6 +394,11 @@
   function handleDashboardEvent(streamEvent: DashboardStreamEvent): void {
     if (streamEvent.kind === 'session_event') {
       if (streamEvent.event.session_id !== selectedSessionId) return
+      const metadata = streamEvent.event.payload.metadata
+      if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+        const inboxMessageId = (metadata as Record<string, unknown>).inbox_message_id
+        if (typeof inboxMessageId === 'string') consumeInboxSubmission(inboxMessageId, streamEvent.event.session_id)
+      }
       if (isSessionIdleEvent(streamEvent.event.type)) {
         void refreshCurrentSessionGitStatus()
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
@@ -623,7 +639,6 @@
     actionError = null
     const message = $chatDraft.trim()
     promptInputScrollBaselineKey = chatMessagesRenderKey(messages)
-    const optimisticMessageId = rememberOptimisticMessage(selectedSessionId, message)
     const waitForResume = selectedSession?.state === 'exited'
     if (!waitForResume) clearChatDraft()
     try {
@@ -641,7 +656,6 @@
       scrollChatToBottom()
     } catch (error) {
       promptInputScrollBaselineKey = null
-      if (optimisticMessageId) discardOptimisticMessage(selectedSessionId, optimisticMessageId)
       if (!get(chatDraft).trim()) chatDraft.set(message)
       actionError = error instanceof Error ? error.message : String(error)
     } finally {

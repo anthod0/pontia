@@ -18,6 +18,12 @@ import {
   unpinSession as apiUnpinSession,
   updateSession as apiUpdateSession,
 } from '../api/client';
+import {
+  beginInboxSubmission,
+  confirmInboxSubmission,
+  failInboxSubmission,
+  syncInboxSubmissions,
+} from './optimisticInbox';
 import type {
   CreateSessionInput,
   CreateSessionResult,
@@ -86,6 +92,7 @@ export async function loadSessionDetail(sessionId: string, options: LoadOptions 
       listEvents(sessionId),
     ]);
     const detail = { session, turns, inboxMessages, events } satisfies SessionConsoleDetail;
+    syncInboxSubmissions(inboxMessages);
     sessionDetail.set(detail);
     sessions.update((items) => items.map((item) => item.session_id === session.session_id ? session : item));
     return detail;
@@ -141,7 +148,21 @@ export async function archiveSession(sessionId: string): Promise<SessionView> {
 }
 
 export async function submitInboxMessage(sessionId: string, input: SubmitInboxMessageInput): Promise<InboxMessageView> {
-  const message = await apiSubmitInboxMessage(sessionId, input);
+  const localSubmissionId = beginInboxSubmission(sessionId, input);
+  let message: InboxMessageView;
+  try {
+    message = await apiSubmitInboxMessage(sessionId, input);
+  } catch (error) {
+    failInboxSubmission(localSubmissionId);
+    throw error;
+  }
+
+  confirmInboxSubmission(localSubmissionId, message);
+  sessionDetail.update((detail) => {
+    if (detail?.session.session_id !== sessionId) return detail;
+    const inboxMessages = detail.inboxMessages.filter((item) => item.message_id !== message.message_id);
+    return { ...detail, inboxMessages: [...inboxMessages, message] };
+  });
   await loadSessions();
   await loadSessionDetail(sessionId);
   return message;

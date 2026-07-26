@@ -101,7 +101,11 @@ vi.mock('../../src/stores/sessions', () => ({
   updateSessionTitle: mocks.updateSessionTitle,
 }));
 vi.mock('../../src/stores/chatDraft', () => ({ chatDraft: mocks.chatDraft, clearChatDraft: vi.fn() }));
-vi.mock('../../src/stores/optimisticChat', () => ({ optimisticInitialMessages: mocks.optimisticInitialMessages, chatMessagesWithOptimistic: (_sessionId: string, loadedMessages: unknown[]) => loadedMessages }));
+vi.mock('../../src/stores/optimisticChat', () => ({
+  optimisticInitialMessages: mocks.optimisticInitialMessages,
+  chatMessagesWithOptimistic: (_sessionId: string, loadedMessages: unknown[]) => loadedMessages,
+  reconcileOptimisticMessages: vi.fn(),
+}));
 vi.mock('../../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
   workspacesError: mocks.workspacesError,

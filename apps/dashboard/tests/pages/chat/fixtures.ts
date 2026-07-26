@@ -4,6 +4,12 @@ import type { SessionConsoleDetail } from '../../../src/stores/sessions';
 import type { TimelineState } from '../../../src/stores/timeline';
 import type { CreateSessionResult, InboxMessageView, SessionView, TimelineItem, TurnView, WorkspaceView } from '../../../src/api/types';
 import { optimisticInitialMessages } from '../../../src/stores/optimisticChat';
+import {
+  beginInboxSubmission,
+  confirmInboxSubmission,
+  failInboxSubmission,
+  optimisticInboxSubmissions,
+} from '../../../src/stores/optimisticInbox';
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -106,7 +112,17 @@ vi.mock('../../../src/stores/sessions', () => ({
   sessionDetailError: mocks.sessionDetailError,
   loadSessions: mocks.loadSessions,
   loadSessionDetail: mocks.loadSessionDetail,
-  submitInboxMessage: mocks.submitInboxMessage,
+  submitInboxMessage: async (sessionId: string, input: Parameters<typeof beginInboxSubmission>[1]) => {
+    const localId = beginInboxSubmission(sessionId, input);
+    try {
+      const message = await mocks.submitInboxMessage(sessionId, input);
+      if (message) confirmInboxSubmission(localId, message);
+      return message;
+    } catch (error) {
+      failInboxSubmission(localId);
+      throw error;
+    }
+  },
   cancelInboxMessage: mocks.cancelInboxMessage,
   dismissInboxMessage: mocks.dismissInboxMessage,
   resumeSession: mocks.resumeSession,
@@ -270,6 +286,7 @@ beforeEach(() => {
   mocks.workspaceGitStatusErrors.set({});
   mocks.timelineState.set(mocks.timelineStateValue());
   optimisticInitialMessages.set({});
+  optimisticInboxSubmissions.set({});
   mocks.dashboardEventListeners.clear();
   mocks.pathParams = {};
   mocks.loadSessionDetail.mockReset().mockResolvedValue(null);

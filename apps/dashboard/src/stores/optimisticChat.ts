@@ -49,6 +49,19 @@ export function discardOptimisticMessage(sessionId: string, messageId: string): 
   });
 }
 
+export function reconcileOptimisticMessages(sessionId: string, loadedMessages: SessionChatMessage[]): void {
+  optimisticInitialMessages.update((messages) => {
+    const optimisticMessages = messages[sessionId] ?? [];
+    const matchedIds = matchedOptimisticMessageIds(optimisticMessages, loadedMessages);
+    if (!matchedIds.size) return messages;
+    const remaining = optimisticMessages.filter((message) => !matchedIds.has(message.id));
+    const next = { ...messages };
+    if (remaining.length) next[sessionId] = remaining;
+    else delete next[sessionId];
+    return next;
+  });
+}
+
 export function chatMessagesWithOptimistic(
   sessionId: string,
   loadedMessages: SessionChatMessage[],
@@ -56,17 +69,25 @@ export function chatMessagesWithOptimistic(
 ): SessionChatMessage[] {
   const optimisticMessages = messagesBySessionId[sessionId] ?? [];
   if (!optimisticMessages.length) return loadedMessages;
+  const matchedIds = matchedOptimisticMessageIds(optimisticMessages, loadedMessages);
+  return [...loadedMessages, ...optimisticMessages.filter((message) => !matchedIds.has(message.id))];
+}
 
+function matchedOptimisticMessageIds(
+  optimisticMessages: SessionChatMessage[],
+  loadedMessages: SessionChatMessage[],
+): Set<string> {
+  const matchedIds = new Set<string>();
   const matchedLoadedIndexes = new Set<number>();
-  const unmatched = optimisticMessages.filter((optimistic) => {
+  for (const optimistic of optimisticMessages) {
     const matchIndex = loadedMessages.findIndex((message, index) => (
       !matchedLoadedIndexes.has(index)
       && message.role === 'user'
       && (message.turnId === optimistic.turnId || message.content.trim() === optimistic.content.trim())
     ));
-    if (matchIndex < 0) return true;
+    if (matchIndex < 0) continue;
     matchedLoadedIndexes.add(matchIndex);
-    return false;
-  });
-  return [...loadedMessages, ...unmatched];
+    matchedIds.add(optimistic.id);
+  }
+  return matchedIds;
 }

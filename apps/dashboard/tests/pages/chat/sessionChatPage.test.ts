@@ -1595,6 +1595,24 @@ test('shows delivery loading on the submit button instead of below the optimisti
   expect(screen.queryByLabelText('Message delivery pending')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Sending message' })).toHaveAttribute('aria-busy', 'true');
 
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  for (const listener of mocks.dashboardEventListeners) {
+    listener({
+      kind: 'session_event',
+      id: 'event-turn-started',
+      occurred_at: '2026-05-14T00:00:00Z',
+      event: {
+        event_id: 'event-turn-started',
+        session_id: 'session-optimistic',
+        turn_id: 'turn-optimistic',
+        source: 'client',
+        type: 'turn.started',
+        time: '2026-05-14T00:00:00Z',
+        payload: { metadata: { inbox_message_id: 'message-optimistic' } },
+      },
+    });
+  }
+
   mocks.timelineState.set(timelineStateValue({
     ...mocks.timelineState.get(),
     sessionId: 'session-optimistic',
@@ -1609,9 +1627,10 @@ test('shows delivery loading on the submit button instead of below the optimisti
   }));
 
   expect(screen.getByRole('button', { name: 'Sending message' })).toBeInTheDocument();
-  expect(screen.getAllByText('slow network message')).toHaveLength(1);
+  await waitFor(() => expect(screen.getAllByText('slow network message')).toHaveLength(1));
   resolveSubmission?.();
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Sending message' })).not.toBeInTheDocument());
+  expect(screen.getAllByText('slow network message')).toHaveLength(1);
 });
 
 
