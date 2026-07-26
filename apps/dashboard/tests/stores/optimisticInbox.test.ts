@@ -86,6 +86,16 @@ test('does not restore a submission when its confirmed Turn arrives before the P
   expect(inboxSubmissionMessages('session-1', [], get(optimisticInboxSubmissions))).toEqual([]);
 });
 
+test('keeps a queued Inbox submission out of chat until a projected Turn exists', () => {
+  beginInboxSubmission('session-1', {
+    input: 'queued while busy',
+    delivery_policy: 'after_idle',
+    metadata: { source: 'dashboard_chat' },
+  }, { showInChat: false });
+
+  expect(inboxSubmissionMessages('session-1', [], get(optimisticInboxSubmissions))).toEqual([]);
+});
+
 test('does not invent a chat Turn for a branch-targeted Inbox submission', () => {
   const localId = beginInboxSubmission('session-1', {
     input: 'replacement',

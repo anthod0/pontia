@@ -147,8 +147,19 @@ export async function archiveSession(sessionId: string): Promise<SessionView> {
   return refreshAfterSessionManagement(await apiArchiveSession(sessionId));
 }
 
-export async function submitInboxMessage(sessionId: string, input: SubmitInboxMessageInput): Promise<InboxMessageView> {
-  const localSubmissionId = beginInboxSubmission(sessionId, input);
+export async function submitInboxMessage(
+  sessionId: string,
+  input: SubmitInboxMessageInput,
+  options: { showInChat?: boolean } = {},
+): Promise<InboxMessageView> {
+  const detailSession = get(sessionDetail)?.session;
+  const currentSession = detailSession?.session_id === sessionId
+    ? detailSession
+    : get(sessions).find((session) => session.session_id === sessionId);
+  const localSubmissionId = beginInboxSubmission(sessionId, input, {
+    showInChat: options.showInChat
+      ?? (!input.branch_target_turn_id && currentSession?.state !== 'busy'),
+  });
   let message: InboxMessageView;
   try {
     message = await apiSubmitInboxMessage(sessionId, input);

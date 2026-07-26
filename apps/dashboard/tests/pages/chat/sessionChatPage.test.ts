@@ -157,6 +157,44 @@ test('keeps Send and queues inbox input while an interruptible session is busy',
     metadata: { source: 'dashboard_chat' },
   }));
   expect(mocks.interruptSession).not.toHaveBeenCalled();
+  expect(screen.queryByText('Queue this follow-up')).not.toBeInTheDocument();
+
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  for (const listener of mocks.dashboardEventListeners) {
+    listener({
+      kind: 'session_event',
+      id: 'event-queued-turn-started',
+      occurred_at: '2026-05-14T00:01:00Z',
+      event: {
+        event_id: 'event-queued-turn-started',
+        session_id: 'session-1',
+        turn_id: 'turn-2',
+        source: 'client',
+        type: 'turn.started',
+        time: '2026-05-14T00:01:00Z',
+        payload: { metadata: { inbox_message_id: 'message-queued' } },
+      },
+    });
+  }
+
+  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-1', 'turn-2'));
+  mocks.timelineState.set(timelineStateValue({
+    sessionId: 'session-1',
+    items: timelineItemsFromTurns([
+      turn({ state: 'completed' }),
+      turn({
+        turn_id: 'turn-2',
+        input: { summary: 'Queue this follow-up' },
+        state: 'running',
+        output: null,
+        completed_at: null,
+        created_at: '2026-05-14T00:01:00Z',
+      }),
+    ]),
+    latestTurnId: 'turn-2',
+    status: 'ready',
+  }));
+  expect(await screen.findByText('Queue this follow-up')).toBeInTheDocument();
 });
 
 

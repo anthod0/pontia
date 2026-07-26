@@ -9,6 +9,7 @@ export interface OptimisticInboxSubmission {
   deliveryPolicy: string | undefined;
   metadata: SubmitInboxMessageInput['metadata'];
   branchTargetTurnId: string | null;
+  showInChat: boolean;
   submittedAt: string;
   acceptedMessage: InboxMessageView | null;
 }
@@ -19,7 +20,11 @@ let submissionSequence = 0;
 const consumedInboxMessageIds = new Set<string>();
 const MAX_CONSUMED_INBOX_MESSAGE_IDS = 500;
 
-export function beginInboxSubmission(sessionId: string, input: SubmitInboxMessageInput): string {
+export function beginInboxSubmission(
+  sessionId: string,
+  input: SubmitInboxMessageInput,
+  options: { showInChat?: boolean } = {},
+): string {
   const localId = `${sessionId}:${++submissionSequence}`;
   const submission: OptimisticInboxSubmission = {
     localId,
@@ -28,6 +33,7 @@ export function beginInboxSubmission(sessionId: string, input: SubmitInboxMessag
     deliveryPolicy: input.delivery_policy,
     metadata: input.metadata,
     branchTargetTurnId: input.branch_target_turn_id ?? null,
+    showInChat: options.showInChat ?? true,
     submittedAt: new Date().toISOString(),
     acceptedMessage: null,
   };
@@ -110,7 +116,7 @@ export function inboxSubmissionMessages(
   const submissions = submissionsBySessionId[sessionId] ?? [];
   const matched = matchedSubmissionIds(submissions, loadedMessages);
   const optimisticMessages = submissions
-    .filter((submission) => !submission.branchTargetTurnId && !matched.has(submission.localId))
+    .filter((submission) => submission.showInChat && !submission.branchTargetTurnId && !matched.has(submission.localId))
     .map(submissionToChatMessage);
   return [...loadedMessages, ...optimisticMessages];
 }

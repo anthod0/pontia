@@ -229,7 +229,7 @@
         ...(message.branch_target_turn_id
           ? { branch_target_turn_id: message.branch_target_turn_id }
           : {}),
-      })
+      }, { showInChat: false })
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -401,6 +401,10 @@
       }
       if (isSessionIdleEvent(streamEvent.event.type)) {
         void refreshCurrentSessionGitStatus()
+        void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
+        return
+      }
+      if (streamEvent.event.type === 'turn.started') {
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
         return
       }

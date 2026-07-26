@@ -112,8 +112,19 @@ vi.mock('../../../src/stores/sessions', () => ({
   sessionDetailError: mocks.sessionDetailError,
   loadSessions: mocks.loadSessions,
   loadSessionDetail: mocks.loadSessionDetail,
-  submitInboxMessage: async (sessionId: string, input: Parameters<typeof beginInboxSubmission>[1]) => {
-    const localId = beginInboxSubmission(sessionId, input);
+  submitInboxMessage: async (
+    sessionId: string,
+    input: Parameters<typeof beginInboxSubmission>[1],
+    options: { showInChat?: boolean } = {},
+  ) => {
+    const detailSession = mocks.sessionDetail.get()?.session;
+    const currentSession = detailSession?.session_id === sessionId
+      ? detailSession
+      : mocks.sessions.get().find((session) => session.session_id === sessionId);
+    const localId = beginInboxSubmission(sessionId, input, {
+      showInChat: options.showInChat
+        ?? (!input.branch_target_turn_id && currentSession?.state !== 'busy'),
+    });
     try {
       const message = await mocks.submitInboxMessage(sessionId, input);
       if (message) confirmInboxSubmission(localId, message);

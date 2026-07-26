@@ -93,7 +93,7 @@ describe('sessions store management actions', () => {
     });
 
     expect(get(optimisticInboxSubmissions)['session-current']).toMatchObject([
-      { input: 'Follow up', acceptedMessage: null },
+      { input: 'Follow up', showInChat: true, acceptedMessage: null },
     ]);
 
     resolveRequest(accepted);
@@ -103,6 +103,27 @@ describe('sessions store management actions', () => {
       { acceptedMessage: { message_id: 'message-accepted' } },
     ]);
     expect(get(sessionDetail)?.inboxMessages).toEqual([accepted]);
+  });
+
+  test('does not present a busy Session queue submission as a chat message', async () => {
+    const busy = session({ session_id: 'session-current', state: 'busy', current_turn_id: 'turn-active' });
+    api.submitInboxMessage.mockImplementation(() => new Promise(() => undefined));
+
+    const { sessionDetail, sessions, submitInboxMessage } = await import('../../src/stores/sessions');
+    const { optimisticInboxSubmissions } = await import('../../src/stores/optimisticInbox');
+    optimisticInboxSubmissions.set({});
+    sessions.set([busy]);
+    sessionDetail.set({ session: busy, turns: [], inboxMessages: [], events: [] });
+
+    void submitInboxMessage('session-current', {
+      input: 'Queue this follow-up',
+      delivery_policy: 'after_idle',
+      metadata: { source: 'dashboard_chat' },
+    });
+
+    expect(get(optimisticInboxSubmissions)['session-current']).toMatchObject([
+      { input: 'Queue this follow-up', showInChat: false, acceptedMessage: null },
+    ]);
   });
 
   test('terminating a different session does not replace the current session detail', async () => {
