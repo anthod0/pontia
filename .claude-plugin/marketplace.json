@@ -6,7 +6,11 @@
   "plugins": [
     {
       "name": "pontia-claude",
-      "source": "./clients/claude",
+      "source": {
+        "source": "git-subdir",
+        "url": "anthod0/pontia",
+        "path": "clients/claude"
+      },
       "description": "Reports Claude Code lifecycle events to pontia"
     }
   ]
