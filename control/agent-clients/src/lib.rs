@@ -167,6 +167,7 @@ mod tests {
                 heartbeat: false,
                 timeline: false,
                 topology: false,
+                branch_control: false,
                 context_usage: ContextUsageCapability::Unsupported,
             }
         );
