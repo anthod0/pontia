@@ -36,6 +36,7 @@ async fn upserts_agent_binding_and_preserves_discovered_flag() {
             client_type: "pi".to_string(),
             launch_cwd: "/workspace/one".to_string(),
             client_session_key: "client-key".to_string(),
+            client_session_file: Some("/tmp/one.jsonl".to_string()),
             metadata: json!({"version": 1}).to_string(),
         })
         .await
@@ -52,6 +53,7 @@ async fn upserts_agent_binding_and_preserves_discovered_flag() {
             client_type: "pi".to_string(),
             launch_cwd: "/workspace/two".to_string(),
             client_session_key: "client-key".to_string(),
+            client_session_file: Some("/tmp/two.jsonl".to_string()),
             metadata: json!({"version": 2}).to_string(),
         })
         .await
@@ -59,6 +61,10 @@ async fn upserts_agent_binding_and_preserves_discovered_flag() {
 
     assert_eq!(updated.id, inserted.id);
     assert_eq!(updated.launch_cwd, "/workspace/one");
+    assert_eq!(
+        updated.client_session_file.as_deref(),
+        Some("/tmp/two.jsonl")
+    );
     assert_eq!(updated.metadata, json!({"version": 2}).to_string());
     assert!(updated.discovered);
 }
@@ -76,6 +82,7 @@ async fn binding_for_session_returns_its_only_binding() {
             client_type: "pi".to_string(),
             launch_cwd: "/workspace".to_string(),
             client_session_key: "only-key".to_string(),
+            client_session_file: None,
             metadata: "{}".to_string(),
         })
         .await
@@ -104,6 +111,7 @@ async fn looks_up_both_sides_of_the_one_to_one_binding() {
             client_type: "pi".to_string(),
             launch_cwd: "/workspace".to_string(),
             client_session_key: "only-key".to_string(),
+            client_session_file: None,
             metadata: "{}".to_string(),
         })
         .await
@@ -139,6 +147,7 @@ async fn agent_binding_can_be_upserted_inside_transaction() {
             client_type: "pi".to_string(),
             launch_cwd: "/workspace/tx".to_string(),
             client_session_key: "tx-key".to_string(),
+            client_session_file: None,
             metadata: json!({"tx": true}).to_string(),
         },
     )

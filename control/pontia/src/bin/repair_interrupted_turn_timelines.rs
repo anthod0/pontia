@@ -18,7 +18,6 @@ use sqlx::{ConnectOptions, Row, SqlitePool, sqlite::SqliteConnectOptions};
 #[derive(Debug)]
 struct Args {
     database: PathBuf,
-    pi_agent_dir: PathBuf,
     apply: bool,
     backup: Option<PathBuf>,
 }
@@ -35,8 +34,7 @@ struct CandidateRow {
     event_timeline_boundary: Option<String>,
     binding_id: Option<String>,
     binding_client_type: Option<String>,
-    launch_cwd: Option<String>,
-    client_session_key: Option<String>,
+    client_session_file: Option<String>,
     next_head_cursor: Option<String>,
 }
 
@@ -94,7 +92,7 @@ async fn run() -> Result<usize, Box<dyn std::error::Error>> {
         .disable_statement_logging();
     let pool = SqlitePool::connect_with(options).await?;
     let rows = load_candidates(&pool).await?;
-    let resolver = PiAgentBindingResolver::with_agent_dir(args.pi_agent_dir);
+    let resolver = PiAgentBindingResolver::new();
     let mut candidates = Vec::with_capacity(rows.len());
 
     for row in rows {
@@ -129,19 +127,17 @@ async fn run() -> Result<usize, Box<dyn std::error::Error>> {
 
 fn parse_args() -> Result<Args, String> {
     let mut database = None;
-    let mut pi_agent_dir = None;
     let mut apply = false;
     let mut backup = None;
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--database" => database = args.next().map(PathBuf::from),
-            "--pi-agent-dir" => pi_agent_dir = args.next().map(PathBuf::from),
             "--apply" => apply = true,
             "--backup" => backup = args.next().map(PathBuf::from),
             "--help" | "-h" => {
                 return Err(
-                    "usage: repair_interrupted_turn_timelines --database <pontia.db> [--pi-agent-dir <dir>] [--apply --backup <backup.db>]"
+                    "usage: repair_interrupted_turn_timelines --database <pontia.db> [--apply --backup <backup.db>]"
                         .to_string(),
                 );
             }
@@ -149,13 +145,11 @@ fn parse_args() -> Result<Args, String> {
         }
     }
     let database = database.ok_or_else(|| "--database is required".to_string())?;
-    let pi_agent_dir = pi_agent_dir.unwrap_or_else(default_pi_agent_dir);
     if !apply && backup.is_some() {
         return Err("--backup requires --apply".to_string());
     }
     Ok(Args {
         database,
-        pi_agent_dir,
         apply,
         backup,
     })
@@ -225,17 +219,6 @@ async fn apply_candidates(
     Ok(candidates.len())
 }
 
-fn default_pi_agent_dir() -> PathBuf {
-    env::var_os("PI_AGENT_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".pi/agent")
-        })
-}
-
 async fn load_candidates(pool: &SqlitePool) -> Result<Vec<CandidateRow>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
@@ -261,8 +244,7 @@ async fn load_candidates(pool: &SqlitePool) -> Result<Vec<CandidateRow>, sqlx::E
                e.timeline_boundary AS event_timeline_boundary,
                a.id AS binding_id,
                a.client_type AS binding_client_type,
-               a.launch_cwd,
-               a.client_session_key,
+               a.client_session_file,
                (
                    SELECT later.head_cursor
                    FROM turns later
@@ -296,8 +278,7 @@ async fn load_candidates(pool: &SqlitePool) -> Result<Vec<CandidateRow>, sqlx::E
                 event_timeline_boundary: row.try_get("event_timeline_boundary")?,
                 binding_id: row.try_get("binding_id")?,
                 binding_client_type: row.try_get("binding_client_type")?,
-                launch_cwd: row.try_get("launch_cwd")?,
-                client_session_key: row.try_get("client_session_key")?,
+                client_session_file: row.try_get("client_session_file")?,
                 next_head_cursor: row.try_get("next_head_cursor")?,
             })
         })
@@ -327,10 +308,9 @@ fn build_candidate(row: CandidateRow, resolver: &PiAgentBindingResolver) -> Repa
     let terminal_leaf_id = required(&row.terminal_leaf_id, "terminal_leaf_id", &mut errors);
     let binding_id = required(&row.binding_id, "agent binding", &mut errors);
     let client_type = required(&row.binding_client_type, "binding client_type", &mut errors);
-    let launch_cwd = required(&row.launch_cwd, "binding launch_cwd", &mut errors);
-    let client_session_key = required(
-        &row.client_session_key,
-        "binding client_session_key",
+    let client_session_file = required(
+        &row.client_session_file,
+        "binding client_session_file",
         &mut errors,
     );
     if client_type.is_some_and(|value| value != "pi") {
@@ -341,21 +321,18 @@ fn build_candidate(row: CandidateRow, resolver: &PiAgentBindingResolver) -> Repa
         Some(terminal_leaf_id),
         Some(binding_id),
         Some(client_type),
-        Some(launch_cwd),
-        Some(client_session_key),
+        Some(client_session_file),
     ) = (
         terminal_leaf_id,
         binding_id,
         client_type,
-        launch_cwd,
-        client_session_key,
+        client_session_file,
     ) {
         match resolver.resolve(&AgentBindingResolveRequest {
             id: binding_id.to_string(),
             session_id: row.session_id.clone(),
             client_type: client_type.to_string(),
-            launch_cwd: PathBuf::from(launch_cwd),
-            client_session_key: client_session_key.to_string(),
+            client_session_file: Some(PathBuf::from(client_session_file)),
         }) {
             Ok(source) => {
                 source_file = Some(source.path.display().to_string());

@@ -17,6 +17,7 @@ pub struct AgentBinding {
     pub client_type: String,
     pub launch_cwd: String,
     pub client_session_key: String,
+    pub client_session_file: Option<String>,
     pub metadata: Value,
     pub discovered: bool,
 }
@@ -27,6 +28,7 @@ pub struct UpsertAgentBindingRequest {
     pub client_type: String,
     pub launch_cwd: String,
     pub client_session_key: String,
+    pub client_session_file: Option<String>,
     pub metadata: Value,
 }
 
@@ -36,6 +38,7 @@ pub struct AgentBindingSessionContext {
     pub session_state: String,
     pub client_type: String,
     pub client_session_key: String,
+    pub client_session_file: Option<String>,
     pub runtime_instance_id: Option<String>,
     pub internal_event_url: String,
     pub binding_metadata: Value,
@@ -48,6 +51,7 @@ pub struct AgentBindingCurrentTurn {
     pub turn_id: String,
     pub client_type: String,
     pub client_session_key: String,
+    pub client_session_file: Option<String>,
     pub runtime_instance_id: Option<String>,
     pub internal_event_url: String,
     pub binding_metadata: Value,
@@ -123,6 +127,7 @@ impl AgentBindingService {
             session_state: row.try_get("session_state")?,
             client_type: binding.client_type,
             client_session_key: binding.client_session_key,
+            client_session_file: binding.client_session_file,
             runtime_instance_id: row.try_get("runtime_instance_id")?,
             internal_event_url,
             binding_metadata: binding.metadata,
@@ -170,6 +175,7 @@ impl AgentBindingService {
             turn_id,
             client_type: binding.client_type,
             client_session_key: binding.client_session_key,
+            client_session_file: binding.client_session_file,
             runtime_instance_id: row.try_get("runtime_instance_id")?,
             internal_event_url,
             binding_metadata: binding.metadata,
@@ -311,6 +317,13 @@ pub(crate) async fn register_agent_binding_for_ready_event_in_tx(
             client_type: event.client_type.clone(),
             launch_cwd,
             client_session_key,
+            client_session_file: event
+                .payload
+                .get("client_session_file")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string),
             metadata,
         },
     )
@@ -337,6 +350,7 @@ fn agent_binding_upsert_record(
         client_type: request.client_type,
         launch_cwd: request.launch_cwd,
         client_session_key: request.client_session_key,
+        client_session_file: request.client_session_file,
         metadata: serde_json::to_string(&request.metadata)?,
     })
 }
@@ -348,6 +362,7 @@ fn agent_binding_from_row(row: AgentBindingRow) -> Result<AgentBinding> {
         client_type: row.client_type,
         launch_cwd: row.launch_cwd,
         client_session_key: row.client_session_key,
+        client_session_file: row.client_session_file,
         metadata: serde_json::from_str(&row.metadata)?,
         discovered: row.discovered,
     })

@@ -515,6 +515,16 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
         .await
         .expect("agent binding count");
     assert_eq!(binding_count, 1);
+    let client_session_file: Option<String> =
+        sqlx::query_scalar("SELECT client_session_file FROM agent_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("agent binding client_session_file");
+    assert_eq!(
+        client_session_file.as_deref(),
+        Some("/tmp/pi/session.jsonl")
+    );
 
     let lifecycle_sources: Vec<(String, String)> =
         sqlx::query_as("SELECT event_type, source FROM events WHERE session_id = ? ORDER BY rowid")

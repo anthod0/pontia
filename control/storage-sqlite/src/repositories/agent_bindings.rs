@@ -10,6 +10,7 @@ pub struct AgentBindingUpsertRecord {
     pub client_type: String,
     pub launch_cwd: String,
     pub client_session_key: String,
+    pub client_session_file: Option<String>,
     pub metadata: String,
 }
 
@@ -39,18 +40,23 @@ impl SqliteAgentBindingRepository {
     ) -> Result<AgentBindingRow> {
         Ok(sqlx::query_as::<_, AgentBindingRow>(
             r#"INSERT INTO agent_bindings
-               (id, session_id, client_type, launch_cwd, client_session_key, metadata)
-               VALUES (?, ?, ?, ?, ?, ?)
+               (id, session_id, client_type, launch_cwd, client_session_key, client_session_file, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(session_id, client_type, client_session_key) DO UPDATE SET
+                   client_session_file = COALESCE(
+                       excluded.client_session_file,
+                       agent_bindings.client_session_file
+                   ),
                    metadata = excluded.metadata,
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               RETURNING id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered"#,
+               RETURNING id, session_id, client_type, launch_cwd, client_session_key, client_session_file, metadata, discovered"#,
         )
         .bind(binding.id)
         .bind(binding.session_id)
         .bind(binding.client_type)
         .bind(binding.launch_cwd)
         .bind(binding.client_session_key)
+        .bind(binding.client_session_file)
         .bind(binding.metadata)
         .fetch_one(&mut **tx)
         .await?)
@@ -62,7 +68,7 @@ impl SqliteAgentBindingRepository {
         client_session_key: &str,
     ) -> Result<Option<AgentBindingRow>> {
         Ok(sqlx::query_as::<_, AgentBindingRow>(
-            r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered
+            r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, client_session_file, metadata, discovered
                FROM agent_bindings
                WHERE client_type = ? AND client_session_key = ?"#,
         )
@@ -74,7 +80,7 @@ impl SqliteAgentBindingRepository {
 
     pub async fn binding_for_session(&self, session_id: &str) -> Result<Option<AgentBindingRow>> {
         Ok(sqlx::query_as::<_, AgentBindingRow>(
-            r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, metadata, discovered
+            r#"SELECT id, session_id, client_type, launch_cwd, client_session_key, client_session_file, metadata, discovered
                FROM agent_bindings
                WHERE session_id = ?"#,
         )

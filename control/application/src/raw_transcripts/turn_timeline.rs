@@ -353,8 +353,7 @@ impl TurnTimelineService {
             id: binding.id.clone(),
             session_id: binding.session_id,
             client_type: binding.client_type,
-            launch_cwd: binding.launch_cwd.into(),
-            client_session_key: binding.client_session_key,
+            client_session_file: binding.client_session_file.map(Into::into),
         }) {
             Ok(source) => source,
             Err(error) => {

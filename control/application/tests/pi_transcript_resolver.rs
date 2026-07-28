@@ -6,35 +6,18 @@ use pontia_agent_clients::{
 };
 use tempfile::tempdir;
 
-fn pi_session_dir(agent_dir: &std::path::Path, cwd: &str) -> std::path::PathBuf {
-    let safe = format!(
-        "--{}--",
-        cwd.trim_start_matches('/').replace(['/', '\\', ':'], "-")
-    );
-    agent_dir.join("sessions").join(safe)
-}
-
 #[test]
-fn pi_resolver_finds_jsonl_for_launch_cwd_and_client_session_key() {
+fn pi_resolver_uses_client_session_file_directly() {
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    let cwd = temp.path().join("workspace");
-    fs::create_dir_all(&cwd).unwrap();
-    let cwd = cwd.canonicalize().unwrap();
-    let session_key = "11111111-2222-3333-4444-555555555555";
-    let session_dir = pi_session_dir(&agent_dir, cwd.to_str().unwrap());
-    fs::create_dir_all(&session_dir).unwrap();
-    let session_file = session_dir.join(format!("2026-06-09T00-00-00-000Z_{session_key}.jsonl"));
+    let session_file = temp.path().join("session-with-unrelated-name.jsonl");
     fs::write(&session_file, "{\"type\":\"session\",\"version\":3}\n").unwrap();
 
-    let resolver = PiAgentBindingResolver::with_agent_dir(agent_dir.clone());
-    let source = resolver
+    let source = PiAgentBindingResolver::new()
         .resolve(&AgentBindingResolveRequest {
             id: "bind_1".to_string(),
             session_id: "sess_1".to_string(),
             client_type: "pi".to_string(),
-            launch_cwd: cwd.clone(),
-            client_session_key: session_key.to_string(),
+            client_session_file: Some(session_file.clone()),
         })
         .unwrap();
 
@@ -42,4 +25,19 @@ fn pi_resolver_finds_jsonl_for_launch_cwd_and_client_session_key() {
     assert_eq!(source.client_type, "pi");
     assert_eq!(source.format, "pi-jsonl");
     assert_eq!(source.path, session_file);
+}
+
+#[test]
+fn pi_resolver_rejects_missing_client_session_file() {
+    let error = PiAgentBindingResolver::new()
+        .resolve(&AgentBindingResolveRequest {
+            id: "bind_1".to_string(),
+            session_id: "sess_1".to_string(),
+            client_type: "pi".to_string(),
+            client_session_file: None,
+        })
+        .unwrap_err();
+
+    assert!(error.to_string().contains("source_unavailable:"));
+    assert!(error.to_string().contains("client_session_file"));
 }

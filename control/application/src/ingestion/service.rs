@@ -415,8 +415,7 @@ impl EventIngestService {
             id: binding.id.clone(),
             session_id: binding.session_id.clone(),
             client_type: binding.client_type.clone(),
-            launch_cwd: PathBuf::from(&binding.launch_cwd),
-            client_session_key: binding.client_session_key.clone(),
+            client_session_file: binding.client_session_file.clone().map(PathBuf::from),
         }) {
             Ok(source) => source,
             Err(error) => {

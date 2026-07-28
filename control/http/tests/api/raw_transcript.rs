@@ -209,17 +209,15 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         ),
     ];
     let transcript = segments.concat();
-    fs::write(
-        session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl")),
-        &transcript,
-    )
-    .unwrap();
+    let transcript_path = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(&transcript_path, &transcript).unwrap();
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
             launch_cwd: cwd.display().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript_path.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -565,17 +563,15 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
         "{\"type\":\"message\",\"id\":\"dispatch-user\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"original\"}}\n",
         "{\"type\":\"message\",\"id\":\"dispatch-answer\",\"parentId\":\"dispatch-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"answer\"}]}}\n"
     );
-    fs::write(
-        session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl")),
-        transcript,
-    )
-    .unwrap();
+    let transcript_path = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(&transcript_path, transcript).unwrap();
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
             launch_cwd: cwd.display().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript_path.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -756,6 +752,7 @@ async fn active_pi_timeline_fixture(
             client_type: "pi".to_string(),
             launch_cwd: cwd.to_string_lossy().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -1017,6 +1014,7 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
             client_type: "generic".to_string(),
             launch_cwd: "/unused".to_string(),
             client_session_key: "generic-timeline".to_string(),
+            client_session_file: None,
             metadata: json!({}),
         })
         .await
@@ -1049,6 +1047,7 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
             client_type: "pi".to_string(),
             launch_cwd: cwd.to_string_lossy().to_string(),
             client_session_key: "invalid-cursor".to_string(),
+            client_session_file: Some(source_path.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -1176,12 +1175,15 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
             launch_cwd: cwd.to_string_lossy().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -1228,10 +1230,9 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     assert_eq!(pending_body["data"]["items"], json!([]));
     assert!(pending_body["data"]["next_turn_id"].is_null());
 
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
     fs::create_dir_all(&session_dir).unwrap();
     fs::write(
-        session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl")),
+        &transcript,
         concat!(
             "{\"type\":\"session\",\"id\":\"native-session\"}\n",
             "{\"type\":\"model_change\",\"id\":\"previous\",\"parentId\":null}\n",
@@ -1292,12 +1293,15 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
     AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
             launch_cwd: cwd.to_string_lossy().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -1310,9 +1314,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
     .await
     .unwrap();
 
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
     fs::create_dir_all(&session_dir).unwrap();
-    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
     fs::write(
         &transcript,
         b"{\"type\":\"model_change\",\"id\":\"previous\",\"parentId\":null}\n",
@@ -1427,6 +1429,7 @@ async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
             client_type: "pi".to_string(),
             launch_cwd: cwd.to_string_lossy().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -1831,6 +1834,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
             client_type: "pi".to_string(),
             launch_cwd: cwd.to_string_lossy().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -2314,6 +2318,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
             client_type: "pi".to_string(),
             launch_cwd: cwd.to_string_lossy().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -2441,6 +2446,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
             client_type: "pi".to_string(),
             launch_cwd: cwd.to_string_lossy().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -2547,17 +2553,15 @@ async fn first_pi_turn_accepts_a_null_previous_leaf_when_that_turn_was_precreate
 
     let session_dir = pi_session_dir(&agent_dir, &cwd);
     fs::create_dir_all(&session_dir).unwrap();
-    fs::write(
-        session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl")),
-        b"",
-    )
-    .unwrap();
+    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(&transcript, b"").unwrap();
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
             client_type: "pi".to_string(),
             launch_cwd: cwd.to_string_lossy().to_string(),
             client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript.display().to_string()),
             metadata: json!({}),
         })
         .await
@@ -2638,6 +2642,12 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
             client_type: "pi".to_string(),
             launch_cwd: temp.path().join("workspace").display().to_string(),
             client_session_key: "missing-session".to_string(),
+            client_session_file: Some(
+                temp.path()
+                    .join("missing-session.jsonl")
+                    .display()
+                    .to_string(),
+            ),
             metadata: json!({}),
         })
         .await

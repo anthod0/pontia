@@ -8,8 +8,7 @@ pub struct AgentBindingResolveRequest {
     pub id: String,
     pub session_id: String,
     pub client_type: String,
-    pub launch_cwd: PathBuf,
-    pub client_session_key: String,
+    pub client_session_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

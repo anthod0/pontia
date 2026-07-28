@@ -208,6 +208,7 @@ impl RuntimeBindingUpsertService {
                 client_type: request.client_type.clone(),
                 launch_cwd: workspace.canonical_path.clone(),
                 client_session_key: request.client_session_key.clone(),
+                client_session_file: non_empty(request.client_session_file.as_deref()),
                 metadata: agent_binding_metadata(&request),
             })
             .await?;
@@ -432,6 +433,7 @@ impl RuntimeBindingUpsertService {
                     client_type: request.client_type.clone(),
                     launch_cwd: workspace.canonical_path.clone(),
                     client_session_key: request.client_session_key.clone(),
+                    client_session_file: non_empty(request.client_session_file.as_deref()),
                     metadata: agent_binding_metadata(request),
                 },
             )

@@ -5,6 +5,7 @@ pub struct AgentBindingRow {
     pub client_type: String,
     pub launch_cwd: String,
     pub client_session_key: String,
+    pub client_session_file: Option<String>,
     pub metadata: String,
     pub discovered: bool,
 }
