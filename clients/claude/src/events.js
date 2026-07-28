@@ -12,7 +12,7 @@ export function buildSessionReadyEvent(context) {
     if (context.clientSessionKey)
         data.client_session_key = context.clientSessionKey;
     if (context.transcriptPath)
-        data.transcript_path = context.transcriptPath;
+        data.client_session_file = context.transcriptPath;
     if (context.clientCwd)
         data.client_cwd = context.clientCwd;
     return {

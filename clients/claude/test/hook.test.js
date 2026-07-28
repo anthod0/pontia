@@ -65,7 +65,7 @@ describe("pontia claude hook", () => {
             data: {
                 runtime_instance_id: "rtinst_1",
                 client_session_key: "claude_session_1",
-                transcript_path: "/tmp/claude/session.jsonl",
+                client_session_file: "/tmp/claude/session.jsonl",
                 client_cwd: workspace,
             },
         });
@@ -82,7 +82,13 @@ describe("pontia claude hook", () => {
             expect(url).toBe("http://localhost/internal/v1/runtime-bindings/upsert");
             expect(init?.method).toBe("POST");
             const request = JSON.parse(String(init?.body));
-            expect(request).toMatchObject({ client_type: "claude", client_session_key: "claude_session_1", client_cwd: workspace });
+            expect(request).toMatchObject({
+                client_type: "claude",
+                client_session_key: "claude_session_1",
+                client_session_file: "/tmp/claude/session.jsonl",
+                client_cwd: workspace,
+            });
+            expect(request).not.toHaveProperty("metadata");
             expect(request.runtime_instance_id).toMatch(/^rtinst_/);
             return new Response(JSON.stringify({
                 session: { session_id: "sess_manual" },

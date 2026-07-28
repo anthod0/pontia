@@ -33,7 +33,7 @@ export async function bindManualSession(env, fetchImpl, details) {
             launch_cwd: details.clientCwd,
             runtime_instance_id: runtimeInstanceId,
             start_command: "claude",
-            metadata: details.transcriptPath ? { transcript_path: details.transcriptPath } : undefined,
+            client_session_file: details.transcriptPath,
             ...(tmux ? { tmux } : {}),
         }),
     });
