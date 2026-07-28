@@ -67,6 +67,9 @@ pub fn timeline_boundary_backend_for(client_type: &str) -> Option<TimelineBounda
 
 pub fn turn_timeline_backend_for(client_type: &str) -> Option<TurnTimelineBackend> {
     let spec = get_client_spec(client_type)?;
+    if spec.adapter.timeline_source != TimelineSourceBehavior::Transcript {
+        return None;
+    }
     match spec.adapter.transcript {
         TranscriptBehavior::Unsupported => None,
         TranscriptBehavior::PiJsonl => Some(TurnTimelineBackend {
@@ -153,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_spec_matches_phase_2_contract() {
+    fn claude_spec_exposes_only_the_linear_reported_event_timeline() {
         let spec = get_client_spec("claude").expect("claude client spec registered");
         assert_eq!(spec.client_type, "claude");
         assert_eq!(
@@ -165,7 +168,7 @@ mod tests {
                 interrupt: true,
                 stream_output: false,
                 heartbeat: false,
-                timeline: false,
+                timeline: true,
                 topology: false,
                 branch_control: false,
                 context_usage: ContextUsageCapability::Unsupported,
@@ -189,6 +192,10 @@ mod tests {
         assert_eq!(
             spec.adapter.system_prompt_injection,
             SystemPromptInjectionBehavior::Disabled
+        );
+        assert_eq!(
+            spec.adapter.timeline_source,
+            TimelineSourceBehavior::ReportedEvents
         );
         assert_eq!(spec.adapter.transcript, TranscriptBehavior::Unsupported);
 

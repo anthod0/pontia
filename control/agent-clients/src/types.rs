@@ -141,6 +141,13 @@ pub enum TranscriptBehavior {
     PiJsonl,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineSourceBehavior {
+    Unsupported,
+    Transcript,
+    ReportedEvents,
+}
+
 /// Rust-side adapter strategy for one agent client.
 ///
 /// These fields describe how the Rust backend starts, controls, observes, or
@@ -160,6 +167,7 @@ pub struct AgentClientAdapter {
     pub runtime_binding: RuntimeBindingBehavior,
     pub system_prompt_injection: SystemPromptInjectionBehavior,
     pub startup_hooks: &'static [StartupHook],
+    pub timeline_source: TimelineSourceBehavior,
     pub transcript: TranscriptBehavior,
 }
 

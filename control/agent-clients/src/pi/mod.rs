@@ -7,7 +7,8 @@ use crate::{
         AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
         DispatchBehavior, HookLogBehavior, InterruptBehavior, RuntimeBehavior,
         RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
-        TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
+        TimelineSourceBehavior, TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior,
+        TurnLifecycleBehavior,
     },
 };
 
@@ -51,6 +52,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         },
         system_prompt_injection: SystemPromptInjectionBehavior::AppendFromExternalApi,
         startup_hooks: &[],
+        timeline_source: TimelineSourceBehavior::Transcript,
         transcript: TranscriptBehavior::PiJsonl,
     },
 };

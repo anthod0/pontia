@@ -73,6 +73,8 @@ pub enum EventType {
     TurnStarted,
     #[serde(rename = "turn.output")]
     TurnOutput,
+    #[serde(rename = "turn.timeline_item")]
+    TurnTimelineItem,
     #[serde(rename = "turn.completed")]
     TurnCompleted,
     #[serde(rename = "turn.failed")]
@@ -107,6 +109,7 @@ impl EventType {
                 | Self::TurnQueued
                 | Self::TurnStarted
                 | Self::TurnOutput
+                | Self::TurnTimelineItem
                 | Self::TurnCompleted
                 | Self::TurnFailed
                 | Self::TurnDispatchFailed
@@ -129,6 +132,7 @@ impl EventType {
                 | Self::SessionContextUsageUpdated
                 | Self::TurnStarted
                 | Self::TurnOutput
+                | Self::TurnTimelineItem
                 | Self::TurnCompleted
                 | Self::TurnFailed
                 | Self::TurnInterrupted
@@ -153,6 +157,7 @@ impl std::fmt::Display for EventType {
             Self::TurnQueued => "turn.queued",
             Self::TurnStarted => "turn.started",
             Self::TurnOutput => "turn.output",
+            Self::TurnTimelineItem => "turn.timeline_item",
             Self::TurnCompleted => "turn.completed",
             Self::TurnFailed => "turn.failed",
             Self::TurnDispatchFailed => "turn.dispatch_failed",
@@ -188,6 +193,7 @@ impl std::str::FromStr for EventType {
             "turn.queued" => Ok(Self::TurnQueued),
             "turn.started" => Ok(Self::TurnStarted),
             "turn.output" => Ok(Self::TurnOutput),
+            "turn.timeline_item" => Ok(Self::TurnTimelineItem),
             "turn.completed" => Ok(Self::TurnCompleted),
             "turn.failed" => Ok(Self::TurnFailed),
             "turn.dispatch_failed" => Ok(Self::TurnDispatchFailed),

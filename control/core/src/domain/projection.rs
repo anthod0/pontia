@@ -153,6 +153,7 @@ impl ProjectionState {
             EventType::TurnStarted | EventType::TurnOutput | EventType::TurnInterruptRequested => {
                 self.apply_turn(event, TurnState::Running)
             }
+            EventType::TurnTimelineItem => Ok(()),
             EventType::TurnCompleted => self.apply_turn(event, TurnState::Completed),
             EventType::TurnFailed | EventType::TurnDispatchFailed | EventType::TurnAbandoned => {
                 self.apply_turn(event, TurnState::Failed)

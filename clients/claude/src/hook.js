@@ -5,7 +5,7 @@ import { stdin as processStdin } from "node:process";
 import { pathToFileURL } from "node:url";
 import { appendDiagnostic } from "./diagnostics.js";
 import { claimTurnContext, defaultHookLogFile, loadCurrentTurnByClientSession, loadSessionByClientSession, loadSessionContext } from "./context.js";
-import { buildSessionExitedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent } from "./events.js";
+import { buildSessionExitedEvent, buildSessionReadyEvent, buildToolTimelineEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent } from "./events.js";
 import { optionalString } from "./internal-api.js";
 import { EventReporter } from "./reporter.js";
 import { bindManualSession } from "./runtime-binding.js";
@@ -155,6 +155,30 @@ async function handleUserPromptSubmit(input, deps) {
         });
     }
 }
+async function handleToolTimeline(input, deps) {
+    const clientSessionKey = optionalString(input.session_id);
+    if (!clientSessionKey)
+        return;
+    const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey);
+    if (!loaded.ok) {
+        await deps.logDiagnostic(loaded.logFile, {
+            level: "warn",
+            code: "tool_turn_lookup_failed",
+            message: loaded.reason,
+        });
+        return;
+    }
+    const context = activeTurnContext(loaded.context);
+    if (!context) {
+        await deps.logDiagnostic(loaded.logFile, {
+            level: "error",
+            code: "tool_turn_missing_turn_id",
+            message: "pontia current-turn lookup did not return a canonical turn_id",
+        });
+        return;
+    }
+    await deps.makeReporter(loaded.logFile).report(context, buildToolTimelineEvent(context, input));
+}
 async function handleStop(input, deps) {
     const clientSessionKey = optionalString(input.session_id);
     if (!clientSessionKey)
@@ -220,6 +244,11 @@ export async function runClaudeHook(input, dependencies = {}) {
                 break;
             case "UserPromptSubmit":
                 await handleUserPromptSubmit(input, deps);
+                break;
+            case "PreToolUse":
+            case "PostToolUse":
+            case "PostToolUseFailure":
+                await handleToolTimeline(input, deps);
                 break;
             case "Stop":
                 await handleStop(input, deps);

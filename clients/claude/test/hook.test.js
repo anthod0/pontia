@@ -176,6 +176,31 @@ describe("pontia claude hook", () => {
             data: { runtime_instance_id: "rtinst_1", input: { summary: "typed in tui" } },
         });
     });
+    test("PreToolUse resolves the active turn and reports a tool call timeline item", async () => {
+        const fetchImpl = vi.fn(async (url) => {
+            expect(url).toBe("http://localhost/internal/v1/agent-bindings/current-turn?client_type=claude&client_session_key=claude_session_1");
+            return new Response(JSON.stringify({ data: { current_turn: {
+                        session_id: "sess_1",
+                        turn_id: "turn_1",
+                        client_type: "claude",
+                        runtime_instance_id: "rtinst_1",
+                        internal_event_url: "http://localhost/internal/v1/events",
+                    } } }), { status: 200 });
+        });
+        const { deps, reported } = install({ fetch: fetchImpl });
+        await runClaudeHook(baseInput({
+            hook_event_name: "PreToolUse",
+            tool_use_id: "toolu_1",
+            tool_name: "Read",
+            tool_input: { file_path: "/repo/src/main.rs" },
+        }), deps);
+        expect(reported).toEqual([expect.objectContaining({
+            session_id: "sess_1",
+            turn_id: "turn_1",
+            type: "turn.timeline_item",
+            data: expect.objectContaining({ item_id: "claude:toolu_1:call", kind: "tool_call" }),
+        })]);
+    });
     test("Stop resolves current turn by Claude session id, reports final output then completed", async () => {
         const fetchImpl = vi.fn(async (url) => {
             expect(url).toBe("http://localhost/internal/v1/agent-bindings/current-turn?client_type=claude&client_session_key=claude_session_1");

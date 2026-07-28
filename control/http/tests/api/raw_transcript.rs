@@ -17,7 +17,7 @@ use pontia_application::{
     AgentBindingService, AppState, EventIngestService, UpsertAgentBindingRequest,
 };
 use pontia_core::domain::{
-    EventSource, EventType, ProjectionState, ReportedEvent, TimelineBoundary,
+    EventSource, EventType, ProjectionState, ReportedEvent, TimelineBoundary, TurnState,
 };
 use pontia_http as http;
 use serde_json::{Value, json};
@@ -819,6 +819,144 @@ async fn precreate_turn_if_missing(state: &AppState, session_id: &str, turn_id: 
         ))
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn claude_timeline_reads_reported_items_for_an_active_cursorless_turn() {
+    let state = test_state().await;
+    let session_id = "sess_claude_reported_timeline";
+    let turn_id = "turn_claude_reported_timeline";
+    seed_session_for_client(&state, session_id, "claude").await;
+    EventIngestService::new(state.db())
+        .ingest_reported_event(ReportedEvent::new(
+            "evt_claude_turn_created".to_string(),
+            session_id.to_string(),
+            Some(turn_id.to_string()),
+            EventSource::ExternalApi,
+            "claude".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    EventIngestService::new(state.db())
+        .ingest_reported_event(ReportedEvent::new(
+            "evt_claude_turn_started".to_string(),
+            session_id.to_string(),
+            Some(turn_id.to_string()),
+            EventSource::AgentAdapter,
+            "claude".to_string(),
+            EventType::TurnStarted,
+            json!({ "input": { "summary": "inspect the code" } }),
+        ))
+        .await
+        .unwrap();
+
+    let (reported_status, reported_body) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.timeline_item",
+            "data": {
+                "item_id": "claude_tool_1_call",
+                "kind": "tool_call",
+                "raw_kind": "PreToolUse",
+                "role": "assistant",
+                "title": "Read src/main.rs",
+                "status": "started",
+                "occurred_at": null,
+                "content_preview": "Read src/main.rs"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(reported_status, StatusCode::OK, "{reported_body:?}");
+    assert_eq!(
+        EventIngestService::new(state.db())
+            .get_turn(turn_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        TurnState::Running,
+        "timeline observations must not change Turn state"
+    );
+    EventIngestService::new(state.db())
+        .ingest_reported_event(ReportedEvent::new(
+            "evt_claude_turn_output".to_string(),
+            session_id.to_string(),
+            Some(turn_id.to_string()),
+            EventSource::AgentAdapter,
+            "claude".to_string(),
+            EventType::TurnOutput,
+            json!({ "output": { "summary": "inspection complete" } }),
+        ))
+        .await
+        .unwrap();
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["data"]["items"].as_array().unwrap().len(), 3);
+    assert_eq!(body["data"]["items"][0]["kind"], "user");
+    assert_eq!(
+        body["data"]["items"][0]["content_preview"],
+        "inspect the code"
+    );
+    assert_eq!(body["data"]["items"][1]["item_id"], "claude_tool_1_call");
+    assert_eq!(body["data"]["items"][1]["kind"], "tool_call");
+    assert_eq!(body["data"]["items"][2]["kind"], "assistant");
+    assert_eq!(
+        body["data"]["items"][2]["content_preview"],
+        "inspection complete"
+    );
+}
+
+#[tokio::test]
+async fn claude_timeline_item_rejects_unknown_payload_fields() {
+    let state = test_state().await;
+    let session_id = "sess_claude_private_timeline";
+    let turn_id = "turn_claude_private_timeline";
+    seed_session_for_client(&state, session_id, "claude").await;
+    EventIngestService::new(state.db())
+        .ingest_reported_event(ReportedEvent::new(
+            "evt_claude_private_turn".to_string(),
+            session_id.to_string(),
+            Some(turn_id.to_string()),
+            EventSource::ExternalApi,
+            "claude".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+
+    let (status, body) = post_internal_event(
+        state,
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.timeline_item",
+            "data": {
+                "item_id": "unsafe_item",
+                "kind": "tool_result",
+                "raw_kind": "PostToolUse",
+                "role": "assistant",
+                "title": "Read complete",
+                "status": "completed",
+                "occurred_at": null,
+                "content_preview": "Read complete",
+                "tool_response": { "secret": "must not persist" }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"]["code"], "invalid_request");
 }
 
 #[tokio::test]

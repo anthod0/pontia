@@ -15,9 +15,12 @@ describe("Claude plugin package config", () => {
         expect(hookSource.startsWith("#!/usr/bin/env node\n")).toBe(true);
         expect(hookStat.mode & 0o111).not.toBe(0);
     });
-    test("registers only phase 2 reporting hooks and does not register MessageDisplay", async () => {
+    test("registers lifecycle and tool reporting hooks without MessageDisplay", async () => {
         const hooksJson = await readJson("hooks/hooks.json");
         expect(Object.keys(hooksJson.hooks).sort()).toEqual([
+            "PostToolUse",
+            "PostToolUseFailure",
+            "PreToolUse",
             "SessionEnd",
             "SessionStart",
             "Stop",

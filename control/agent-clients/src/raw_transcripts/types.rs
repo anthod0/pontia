@@ -90,6 +90,7 @@ pub struct TurnTimelineItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TimelineItem {
     pub item_id: String,
     pub kind: String,
@@ -104,13 +105,14 @@ pub struct TimelineItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ManagedToolUse {
     pub tool_name: String,
     pub input: ManagedToolUseInput,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ManagedToolUseInput {
     Read {
         path: String,

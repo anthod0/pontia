@@ -1042,6 +1042,39 @@ test('coalesces bursty selected-session idle events into one git status refresh'
 });
 
 
+test('refreshes the selected timeline when a tool observation arrives', async () => {
+  const selected = session({ session_id: 'session-claude', state: 'running', client_type: 'claude' });
+  window.history.pushState({}, '', '/dashboard/chat/session-claude');
+  mocks.pathParams = { sessionId: 'session-claude' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-claude', state: 'running' })], inboxMessages: [], events: [] });
+
+  render(SessionChatPage);
+
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  mocks.refreshSessionTimeline.mockClear();
+  for (const listener of mocks.dashboardEventListeners) {
+    listener({
+      kind: 'session_event',
+      id: 'evt-tool-call',
+      occurred_at: '2026-05-14T00:00:00Z',
+      event: {
+        event_id: 'evt-tool-call',
+        session_id: 'session-claude',
+        turn_id: 'turn-1',
+        source: 'agent_adapter',
+        type: 'turn.timeline_item',
+        time: '2026-05-14T00:00:00Z',
+        payload: {},
+      },
+    });
+  }
+
+  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-claude', 'turn-1'));
+});
+
+
 test('does not toast transient network errors from automatic chat refreshes', async () => {
   const selected = session({ session_id: 'session-2', state: 'running' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');

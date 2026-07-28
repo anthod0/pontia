@@ -12,8 +12,8 @@ use crate::{
     types::{
         AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
         DispatchBehavior, InterruptBehavior, RuntimeBehavior, RuntimeBindingBehavior,
-        SystemPromptInjectionBehavior, TerminateBehavior, TranscriptBehavior, TurnContextBehavior,
-        TurnLifecycleBehavior,
+        SystemPromptInjectionBehavior, TerminateBehavior, TimelineSourceBehavior,
+        TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
     },
 };
 
@@ -45,6 +45,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         runtime_binding: RuntimeBindingBehavior::Unsupported,
         system_prompt_injection: SystemPromptInjectionBehavior::Disabled,
         startup_hooks: &[],
+        timeline_source: TimelineSourceBehavior::Unsupported,
         transcript: TranscriptBehavior::Unsupported,
     },
 };
