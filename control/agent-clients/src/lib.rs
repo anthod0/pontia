@@ -62,6 +62,10 @@ pub fn timeline_boundary_backend_for(client_type: &str) -> Option<TimelineBounda
             resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
             capturer: Box::new(pi::raw_transcripts::PiTimelineAdapter::new()),
         }),
+        TranscriptBehavior::ClaudeJsonl => Some(TimelineBoundaryBackend {
+            resolver: Box::new(claude::raw_transcripts::ClaudeAgentBindingResolver::new()),
+            capturer: Box::new(claude::raw_transcripts::ClaudeTimelineAdapter::new()),
+        }),
     }
 }
 
@@ -75,6 +79,10 @@ pub fn turn_timeline_backend_for(client_type: &str) -> Option<TurnTimelineBacken
         TranscriptBehavior::PiJsonl => Some(TurnTimelineBackend {
             resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
             reader: Box::new(pi::raw_transcripts::PiTimelineAdapter::new()),
+        }),
+        TranscriptBehavior::ClaudeJsonl => Some(TurnTimelineBackend {
+            resolver: Box::new(claude::raw_transcripts::ClaudeAgentBindingResolver::new()),
+            reader: Box::new(claude::raw_transcripts::ClaudeTimelineAdapter::new()),
         }),
     }
 }
@@ -156,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_spec_marks_timeline_as_unsupported() {
+    fn claude_spec_exposes_linear_transcript_timeline() {
         let spec = get_client_spec("claude").expect("claude client spec registered");
         assert_eq!(spec.client_type, "claude");
         assert_eq!(
@@ -168,7 +176,7 @@ mod tests {
                 interrupt: true,
                 stream_output: false,
                 heartbeat: false,
-                timeline: false,
+                timeline: true,
                 topology: false,
                 branch_control: false,
                 context_usage: ContextUsageCapability::Unsupported,
@@ -195,9 +203,11 @@ mod tests {
         );
         assert_eq!(
             spec.adapter.timeline_source,
-            TimelineSourceBehavior::Unsupported
+            TimelineSourceBehavior::Transcript
         );
-        assert_eq!(spec.adapter.transcript, TranscriptBehavior::Unsupported);
+        assert_eq!(spec.adapter.transcript, TranscriptBehavior::ClaudeJsonl);
+        assert!(timeline_boundary_backend_for("claude").is_some());
+        assert!(turn_timeline_backend_for("claude").is_some());
 
         let runtime = spec.tmux_runtime().expect("claude uses tmux runtime");
         assert_eq!(runtime.command_env, Some("PONTIA_CLAUDE_TUI_COMMAND"));

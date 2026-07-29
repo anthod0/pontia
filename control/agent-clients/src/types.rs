@@ -139,6 +139,7 @@ pub enum StartupHook {}
 pub enum TranscriptBehavior {
     Unsupported,
     PiJsonl,
+    ClaudeJsonl,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

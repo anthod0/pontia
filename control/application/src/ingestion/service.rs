@@ -354,9 +354,13 @@ impl EventIngestService {
         let Some(kind) = timeline_boundary_kind(event.event_type) else {
             return;
         };
-        if event.client_type != "pi" || event.source != EventSource::AgentAdapter {
+        if event.source != EventSource::AgentAdapter {
             return;
         }
+        let Some(backend) = pontia_agent_clients::timeline_boundary_backend_for(&event.client_type)
+        else {
+            return;
+        };
 
         let turn_id = event.turn_id.as_deref().expect("validated turn_id");
         let binding = match crate::AgentBindingService::new(self.pool.clone())
@@ -379,11 +383,6 @@ impl EventIngestService {
             }
         };
 
-        let Some(backend) = pontia_agent_clients::timeline_boundary_backend_for(&event.client_type)
-        else {
-            warn_timeline_capture_failure(event, turn_id, Some(&binding.id), "adapter_unavailable");
-            return;
-        };
         let native_entry_anchor = match kind {
             TimelineBoundaryCaptureKind::Head => {
                 event.payload.pointer("/timeline_anchor/previous_leaf_id")

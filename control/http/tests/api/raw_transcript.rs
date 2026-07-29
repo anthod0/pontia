@@ -1006,9 +1006,21 @@ async fn turn_timeline_only_allows_the_globally_newest_active_turn() {
 #[tokio::test]
 async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
     let state = test_state().await;
-    for (client_type, session_id, turn_id) in [
-        ("generic", "sess_turn_timeline_generic", "turn_generic"),
-        ("claude", "sess_turn_timeline_claude", "turn_claude"),
+    for (client_type, session_id, turn_id, expected_status, expected_code) in [
+        (
+            "generic",
+            "sess_turn_timeline_generic",
+            "turn_generic",
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "timeline_capability_unavailable",
+        ),
+        (
+            "claude",
+            "sess_turn_timeline_claude",
+            "turn_claude",
+            StatusCode::SERVICE_UNAVAILABLE,
+            "timeline_source_unavailable",
+        ),
     ] {
         seed_session_for_client(&state, session_id, client_type).await;
         AgentBindingService::new(state.db())
@@ -1028,8 +1040,8 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
             &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
         )
         .await;
-        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body:?}");
-        assert_eq!(body["error"]["code"], "timeline_capability_unavailable");
+        assert_eq!(status, expected_status, "{body:?}");
+        assert_eq!(body["error"]["code"], expected_code);
     }
 
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
@@ -1403,6 +1415,106 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
         timeline_body["data"]["items"][1]["content_preview"],
         "answer"
     );
+}
+
+#[tokio::test]
+async fn claude_session_uses_the_linear_turn_timeline_endpoint() {
+    let temp = tempdir().unwrap();
+    let state = test_state().await;
+    let session_id = "sess_claude_linear_timeline";
+    let turn_id = "turn_claude_linear_timeline";
+    seed_session_for_client(&state, session_id, "claude").await;
+
+    let transcript = temp.path().join("claude-session.jsonl");
+    let metadata = b"{\"type\":\"system\",\"subtype\":\"turn_duration\"}\n";
+    let prompt = b"{\"type\":\"user\",\"uuid\":\"claude-user\",\"timestamp\":\"2026-07-15T00:00:01Z\",\"message\":{\"role\":\"user\",\"content\":\"Claude question\"}}\n";
+    fs::write(
+        &transcript,
+        [metadata.as_slice(), prompt.as_slice()].concat(),
+    )
+    .unwrap();
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "claude".to_string(),
+            launch_cwd: temp.path().display().to_string(),
+            client_session_key: "claude-native-session".to_string(),
+            client_session_file: Some(transcript.display().to_string()),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    EventIngestService::new(state.db())
+        .ingest_reported_event(ReportedEvent::new(
+            "evt_claude_turn_created".to_string(),
+            session_id.to_string(),
+            Some(turn_id.to_string()),
+            EventSource::ExternalApi,
+            "claude".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+
+    let (status, started) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.started",
+            "data": { "runtime_instance_id": "rtinst_claude_timeline" }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started:?}");
+
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            concat!(
+                "{\"type\":\"assistant\",\"uuid\":\"claude-thinking\",\"timestamp\":\"2026-07-15T00:00:02Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"inspect first\"}]}}\n",
+                "{\"type\":\"assistant\",\"uuid\":\"claude-answer\",\"timestamp\":\"2026-07-15T00:00:03Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Claude answer\"}]}}\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let (status, completed) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.completed",
+            "data": {}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{completed:?}");
+
+    let (status, body) = get_json(
+        state.clone(),
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["data"]["direction"], "backward");
+    assert_eq!(body["data"]["next_turn_id"], Value::Null);
+    assert_eq!(
+        body["data"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["kind"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["user", "thinking", "assistant"]
+    );
+    assert_eq!(
+        body["data"]["items"][0]["content_preview"],
+        "Claude question"
+    );
+    assert_eq!(body["data"]["items"][2]["content_preview"], "Claude answer");
 }
 
 #[tokio::test]
