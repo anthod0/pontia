@@ -145,7 +145,6 @@ pub enum TranscriptBehavior {
 pub enum TimelineSourceBehavior {
     Unsupported,
     Transcript,
-    ReportedEvents,
 }
 
 /// Rust-side adapter strategy for one agent client.

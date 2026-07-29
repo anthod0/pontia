@@ -6,8 +6,8 @@ use sqlx::SqlitePool;
 use pontia_agent_clients::{
     self as agent_clients, TimelineSourceBehavior,
     raw_transcripts::{
-        AgentBindingResolveRequest, TimelineItem, TurnTimelineItem, TurnTimelineRange,
-        TurnTimelineReadError, TurnTimelineReadRequest,
+        AgentBindingResolveRequest, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
+        TurnTimelineReadRequest,
     },
 };
 use pontia_core::{domain::TurnState, error::Error};
@@ -310,9 +310,6 @@ impl TurnTimelineService {
             .map(|spec| spec.adapter.timeline_source)
             .unwrap_or(TimelineSourceBehavior::Unsupported);
         match timeline_source {
-            TimelineSourceBehavior::ReportedEvents => {
-                return self.read_reported_turns(session_id, selected).await;
-            }
             TimelineSourceBehavior::Unsupported => {
                 return Err(TurnTimelineServiceError::CapabilityUnavailable);
             }
@@ -396,83 +393,6 @@ impl TurnTimelineService {
         };
         if !binding.discovered {
             binding_service.mark_discovered(&binding.id).await?;
-        }
-        Ok(items)
-    }
-
-    async fn read_reported_turns(
-        &self,
-        session_id: &str,
-        selected: &[&TurnRow],
-    ) -> Result<Vec<TurnTimelineItem>, TurnTimelineServiceError> {
-        let events = ExternalQueryService::new(self.pool.clone())
-            .list_session_events(session_id)
-            .await?;
-        let mut events_by_turn = HashMap::<String, Vec<_>>::new();
-        for event in events {
-            if let Some(turn_id) = event.turn_id.clone() {
-                events_by_turn.entry(turn_id).or_default().push(event);
-            }
-        }
-
-        let mut items = Vec::new();
-        for turn in selected {
-            let Some(events) = events_by_turn.remove(&turn.turn_id) else {
-                continue;
-            };
-            for event in events {
-                let item = match event.event_type.as_str() {
-                    "turn.started" => Some(TimelineItem {
-                        item_id: event.event_id,
-                        kind: "user".to_string(),
-                        raw_kind: Some(event.event_type),
-                        role: "user".to_string(),
-                        title: None,
-                        status: None,
-                        occurred_at: Some(event.time),
-                        content_preview: event
-                            .payload
-                            .pointer("/input/summary")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or_default()
-                            .to_string(),
-                        managed_tool_use: None,
-                    }),
-                    "turn.output" => Some(TimelineItem {
-                        item_id: event.event_id,
-                        kind: "assistant".to_string(),
-                        raw_kind: Some(event.event_type),
-                        role: "assistant".to_string(),
-                        title: None,
-                        status: None,
-                        occurred_at: Some(event.time),
-                        content_preview: event
-                            .payload
-                            .pointer("/output/summary")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or_default()
-                            .to_string(),
-                        managed_tool_use: None,
-                    }),
-                    "turn.timeline_item" => {
-                        let mut item = serde_json::from_value::<TimelineItem>(event.payload)
-                            .map_err(|_| TurnTimelineServiceError::TimelineInvalid {
-                                turn_id: turn.turn_id.clone(),
-                            })?;
-                        if item.occurred_at.is_none() {
-                            item.occurred_at = Some(event.time);
-                        }
-                        Some(item)
-                    }
-                    _ => None,
-                };
-                if let Some(item) = item {
-                    items.push(TurnTimelineItem {
-                        turn_id: turn.turn_id.clone(),
-                        item,
-                    });
-                }
-            }
         }
         Ok(items)
     }

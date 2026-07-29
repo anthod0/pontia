@@ -16,7 +16,7 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     interrupt: true,
     stream_output: false,
     heartbeat: false,
-    timeline: true,
+    timeline: false,
     topology: false,
     branch_control: false,
     context_usage: ContextUsageCapability::Unsupported,
@@ -49,7 +49,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         },
         system_prompt_injection: SystemPromptInjectionBehavior::Disabled,
         startup_hooks: &[],
-        timeline_source: TimelineSourceBehavior::ReportedEvents,
+        timeline_source: TimelineSourceBehavior::Unsupported,
         transcript: TranscriptBehavior::Unsupported,
     },
 };

@@ -136,6 +136,31 @@ async fn internal_event_api_rejects_timeline_boundary_as_an_unknown_field() {
 }
 
 #[tokio::test]
+async fn internal_event_api_rejects_removed_timeline_item_events() {
+    let state = test_state().await;
+
+    let (status, body) = post_event(
+        state,
+        json!({
+            "session_id": "sess_removed_timeline_event",
+            "turn_id": "turn_removed_timeline_event",
+            "type": "turn.timeline_item",
+            "data": {}
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("unknown event type: turn.timeline_item")),
+        "{body:?}"
+    );
+}
+
+#[tokio::test]
 async fn internal_event_api_normalizes_started_fact_into_a_domain_event() {
     let state = test_state().await;
     create_session(&state, "sess_normalized", "pi").await;

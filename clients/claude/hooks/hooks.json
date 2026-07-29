@@ -6,15 +6,6 @@
     "UserPromptSubmit": [
       { "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/src/hook.js" }] }
     ],
-    "PreToolUse": [
-      { "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/src/hook.js" }] }
-    ],
-    "PostToolUse": [
-      { "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/src/hook.js" }] }
-    ],
-    "PostToolUseFailure": [
-      { "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/src/hook.js" }] }
-    ],
     "Stop": [
       { "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/src/hook.js" }] }
     ],

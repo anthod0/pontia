@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_spec_exposes_only_the_linear_reported_event_timeline() {
+    fn claude_spec_marks_timeline_as_unsupported() {
         let spec = get_client_spec("claude").expect("claude client spec registered");
         assert_eq!(spec.client_type, "claude");
         assert_eq!(
@@ -168,7 +168,7 @@ mod tests {
                 interrupt: true,
                 stream_output: false,
                 heartbeat: false,
-                timeline: true,
+                timeline: false,
                 topology: false,
                 branch_control: false,
                 context_usage: ContextUsageCapability::Unsupported,
@@ -195,7 +195,7 @@ mod tests {
         );
         assert_eq!(
             spec.adapter.timeline_source,
-            TimelineSourceBehavior::ReportedEvents
+            TimelineSourceBehavior::Unsupported
         );
         assert_eq!(spec.adapter.transcript, TranscriptBehavior::Unsupported);
 

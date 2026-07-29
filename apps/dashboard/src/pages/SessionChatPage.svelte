@@ -404,7 +404,7 @@
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
         return
       }
-      if (streamEvent.event.type === 'turn.started' || streamEvent.event.type === 'turn.timeline_item') {
+      if (streamEvent.event.type === 'turn.started') {
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
         return
       }
