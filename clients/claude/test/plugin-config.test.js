@@ -18,6 +18,7 @@ describe("Claude plugin package config", () => {
     test("registers lifecycle hooks without intermediate message hooks", async () => {
         const hooksJson = await readJson("hooks/hooks.json");
         expect(Object.keys(hooksJson.hooks).sort()).toEqual([
+            "PermissionRequest",
             "SessionEnd",
             "SessionStart",
             "Stop",

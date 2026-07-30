@@ -226,6 +226,56 @@ describe("pontia claude hook", () => {
             data: { failure: { message: "rate_limited: try later" } },
         });
     });
+    test("PermissionRequest registers the native request and stays silent when resolved elsewhere", async () => {
+        const hookInput = baseInput({
+            hook_event_name: "PermissionRequest",
+            prompt_id: "prompt_1",
+            tool_name: "Bash",
+            tool_input: { command: "pnpm test", description: "run tests" },
+            permission_suggestions: [{
+                    type: "addRules",
+                    rules: [{ toolName: "Bash", ruleContent: "pnpm test" }],
+                    behavior: "allow",
+                    destination: "localSettings",
+                }],
+        });
+        const fetchImpl = vi.fn(async (url, init) => {
+            expect(url).toBe("http://localhost/internal/v1/claude/permission-request");
+            expect(init?.method).toBe("POST");
+            expect(JSON.parse(String(init?.body))).toEqual({
+                session_id: "claude_session_1",
+                prompt_id: "prompt_1",
+                tool_name: "Bash",
+                tool_input: { command: "pnpm test", description: "run tests" },
+                permission_suggestions: [{
+                        type: "addRules",
+                        rules: [{ toolName: "Bash", ruleContent: "pnpm test" }],
+                        behavior: "allow",
+                        destination: "localSettings",
+                    }],
+                hook_input: hookInput,
+            });
+            return new Response(JSON.stringify({
+                data: { result: "resolved_elsewhere", request_event_id: "evt_request" },
+            }), { status: 200 });
+        });
+        const { deps, reported, diagnostics } = install({ fetch: fetchImpl });
+        const output = await runClaudeHook(hookInput, deps);
+        expect(output).toBeUndefined();
+        expect(reported).toEqual([]);
+        expect(diagnostics).toEqual([]);
+    });
+    test("PermissionRequest no-ops with empty stdout when Pontia has no binding or active Turn", async () => {
+        const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+        const { deps, diagnostics } = install({ fetch: fetchImpl });
+        const output = await runClaudeHook(baseInput({
+            hook_event_name: "PermissionRequest",
+            tool_name: "Write",
+            tool_input: { file_path: "/repo/file" },
+        }), deps);
+        expect(output).toBeUndefined();
+        expect(diagnostics).toEqual([]);
+    });
     test("manual UserPromptSubmit reuses the runtime context established by SessionStart", async () => {
         const workspace = await realpath(await tempDir());
         const fetchImpl = vi.fn(async (url) => {

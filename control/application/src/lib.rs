@@ -18,6 +18,7 @@ use sqlx::SqlitePool;
 mod agent_bindings;
 mod agent_profiles;
 pub mod app;
+mod approvals;
 mod branch_replay;
 mod events;
 mod git_status;
@@ -44,6 +45,10 @@ pub use agent_profiles::{
     UpsertExecutionProfileRequest,
 };
 pub use app::{AppState, initialize};
+pub use approvals::{
+    ApprovalCoordinator, ApprovalRegistrationRequest, ApprovalRegistrationService,
+    ApprovalWaitOutcome, PendingApproval,
+};
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
 pub(crate) use events::nested_string;
 pub use events::{EventIngestResult, EventIngestService, InternalEventValidationService};

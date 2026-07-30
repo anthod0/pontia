@@ -85,6 +85,14 @@ pub enum EventType {
     TurnInterruptRequested,
     #[serde(rename = "turn.interrupted")]
     TurnInterrupted,
+    #[serde(rename = "approval.requested")]
+    ApprovalRequested,
+    #[serde(rename = "approval.accepted")]
+    ApprovalAccepted,
+    #[serde(rename = "approval.rejected")]
+    ApprovalRejected,
+    #[serde(rename = "approval.cancelled")]
+    ApprovalCancelled,
     #[serde(rename = "inbox.message_queued")]
     InboxMessageQueued,
     #[serde(rename = "inbox.message_dispatched")]
@@ -117,7 +125,17 @@ impl EventType {
     }
 
     pub fn requires_turn_id(self) -> bool {
-        self.is_turn_event()
+        self.is_turn_event() || self.is_approval_event()
+    }
+
+    pub fn is_approval_event(self) -> bool {
+        matches!(
+            self,
+            Self::ApprovalRequested
+                | Self::ApprovalAccepted
+                | Self::ApprovalRejected
+                | Self::ApprovalCancelled
+        )
     }
 
     pub fn is_client_reportable(self) -> bool {
@@ -159,6 +177,10 @@ impl std::fmt::Display for EventType {
             Self::TurnAbandoned => "turn.abandoned",
             Self::TurnInterruptRequested => "turn.interrupt_requested",
             Self::TurnInterrupted => "turn.interrupted",
+            Self::ApprovalRequested => "approval.requested",
+            Self::ApprovalAccepted => "approval.accepted",
+            Self::ApprovalRejected => "approval.rejected",
+            Self::ApprovalCancelled => "approval.cancelled",
             Self::InboxMessageQueued => "inbox.message_queued",
             Self::InboxMessageDispatched => "inbox.message_dispatched",
             Self::InboxMessageCancelled => "inbox.message_cancelled",
@@ -194,6 +216,10 @@ impl std::str::FromStr for EventType {
             "turn.abandoned" => Ok(Self::TurnAbandoned),
             "turn.interrupt_requested" => Ok(Self::TurnInterruptRequested),
             "turn.interrupted" => Ok(Self::TurnInterrupted),
+            "approval.requested" => Ok(Self::ApprovalRequested),
+            "approval.accepted" => Ok(Self::ApprovalAccepted),
+            "approval.rejected" => Ok(Self::ApprovalRejected),
+            "approval.cancelled" => Ok(Self::ApprovalCancelled),
             "inbox.message_queued" => Ok(Self::InboxMessageQueued),
             "inbox.message_dispatched" => Ok(Self::InboxMessageDispatched),
             "inbox.message_cancelled" => Ok(Self::InboxMessageCancelled),

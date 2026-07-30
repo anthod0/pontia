@@ -7,10 +7,10 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use pontia_application::{
-    AgentBindingService, AppState, BranchReplayService, CurrentTurnClaimRequest,
-    CurrentTurnClaimService, EventIngestService, EventReportNormalizer,
-    InternalEventValidationService, ReportedFact, ResolveBranchReplayRequest,
-    RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
+    AgentBindingService, AppState, ApprovalRegistrationRequest, ApprovalRegistrationService,
+    BranchReplayService, CurrentTurnClaimRequest, CurrentTurnClaimService, EventIngestService,
+    EventReportNormalizer, InternalEventValidationService, ReportedFact,
+    ResolveBranchReplayRequest, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
 };
 use pontia_core::{
     domain::{DomainEvent, EventType, MAX_TURN_OUTPUT_SUMMARY_CHARS},
@@ -106,6 +106,28 @@ pub async fn upsert_runtime_binding(
     Ok(Json(response))
 }
 
+pub async fn post_claude_permission_request(
+    State(state): State<AppState>,
+    request: Result<Json<ApprovalRegistrationRequest>, JsonRejection>,
+) -> Result<Response, ApiError> {
+    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
+    let Some(pending) = ApprovalRegistrationService::new(state.db(), state.approvals())
+        .register(request)
+        .await?
+    else {
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    };
+    let request_event_id = pending.request_event_id.clone();
+    let outcome = pending.wait().await;
+    Ok(Json(json!({
+        "data": {
+            "result": outcome,
+            "request_event_id": request_event_id,
+        }
+    }))
+    .into_response())
+}
+
 pub async fn claim_current_turn(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
@@ -199,7 +221,12 @@ pub async fn post_event(
         }));
     }
 
+    let terminal_candidate = reported_event.clone();
     let result = service.ingest_confirmed_event(reported_event).await?;
+    state
+        .approvals()
+        .resolve_terminal_event(&terminal_candidate)
+        .await;
 
     Ok(Json(InternalEventResponse {
         accepted: result.accepted,

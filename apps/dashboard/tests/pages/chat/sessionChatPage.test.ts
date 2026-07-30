@@ -114,6 +114,58 @@ test('replaces Send with Interrupt in the empty composer for a busy interruptibl
   await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith('session-1'));
 });
 
+test('shows a pending Claude approval from the External API session and event snapshot', async () => {
+  const selected = session({
+    client_type: 'claude',
+    state: 'busy',
+    current_turn_id: 'turn-1',
+    metadata: {
+      interaction: {
+        type: 'approval',
+        state: 'awaiting',
+        request_event_id: 'evt-approval',
+      },
+    },
+  });
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ state: 'running', output: null, completed_at: null })],
+    inboxMessages: [],
+    events: [{
+      event_id: 'evt-approval',
+      session_id: 'session-1',
+      turn_id: 'turn-1',
+      source: 'agent_client',
+      type: 'approval.requested',
+      time: '2026-07-30T00:00:00Z',
+      payload: {
+        client_session_id: 'claude-native',
+        prompt_id: 'prompt-1',
+        tool_name: 'Bash',
+        permission_suggestions: [{
+          type: 'addRules',
+          rules: [{ toolName: 'Bash', ruleContent: 'pnpm test' }],
+          behavior: 'allow',
+          destination: 'localSettings',
+        }],
+      },
+    }],
+  });
+  mocks.pathParams = { sessionId: 'session-1' };
+  window.history.pushState({}, '', '/dashboard/chat/session-1');
+
+  render(SessionChatPage);
+
+  const approval = await screen.findByLabelText('Approval required for Bash');
+  expect(within(approval).getByText('Approval required')).toBeInTheDocument();
+  expect(within(approval).getByText('Bash')).toBeInTheDocument();
+  expect(within(approval).getByText('Always allow options')).toBeInTheDocument();
+  expect(within(approval).getByText(/pnpm test/)).toBeInTheDocument();
+  expect(within(approval).queryByText(/tool_input/)).not.toBeInTheDocument();
+});
+
 test.each([
   ['idle session', { state: 'idle', capabilities: { interrupt: true, timeline: true } }],
   ['runtime without interrupt capability', { state: 'busy', capabilities: { interrupt: false, timeline: true } }],

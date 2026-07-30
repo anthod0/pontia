@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { resolve } from "node:path";
-import { stdin as processStdin } from "node:process";
+import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { pathToFileURL } from "node:url";
 import { appendDiagnostic } from "./diagnostics.js";
 import { claimTurnContext, defaultHookLogFile, loadCurrentTurnByClientSession, loadSessionByClientSession, loadSessionContext } from "./context.js";
@@ -10,6 +10,7 @@ import { optionalString } from "./internal-api.js";
 import { EventReporter } from "./reporter.js";
 import { bindManualSession } from "./runtime-binding.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
+import { resolvePontiaConnection } from "./discovery.js";
 function sessionDetailsFromHook(input) {
     return {
         clientSessionKey: optionalString(input.session_id),
@@ -201,6 +202,57 @@ async function handleStopFailure(input, deps) {
     }
     await deps.makeReporter(loaded.logFile).report(context, buildTurnFailedEvent(context, failureMessage(input)));
 }
+function permissionRequestUrl(internalEventUrl) {
+    try {
+        const url = new URL(internalEventUrl);
+        url.pathname = url.pathname.replace(/\/events\/?$/, "/claude/permission-request");
+        return url.toString();
+    }
+    catch {
+        return undefined;
+    }
+}
+async function handlePermissionRequest(input, deps) {
+    const clientSessionKey = optionalString(input.session_id);
+    const toolName = optionalString(input.tool_name);
+    if (!clientSessionKey || !toolName || !input.tool_input || typeof input.tool_input !== "object" || Array.isArray(input.tool_input))
+        return;
+    const connection = await resolvePontiaConnection({ env: deps.env, fetch: deps.fetchImpl });
+    const url = connection?.internalEventUrl ? permissionRequestUrl(connection.internalEventUrl) : undefined;
+    if (!url)
+        return;
+    try {
+        const response = await deps.fetchImpl(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                session_id: clientSessionKey,
+                prompt_id: optionalString(input.prompt_id),
+                tool_name: toolName,
+                tool_input: input.tool_input,
+                permission_suggestions: Array.isArray(input.permission_suggestions)
+                    ? input.permission_suggestions
+                    : [],
+                hook_input: input,
+            }),
+        });
+        if (!response.ok && response.status !== 204) {
+            await deps.logDiagnostic(defaultHookLogFile(deps.env), {
+                level: "warn",
+                code: "permission_request_registration_failed",
+                message: `Pontia PermissionRequest API returned ${response.status}`,
+            });
+        }
+    }
+    catch (error) {
+        await deps.logDiagnostic(defaultHookLogFile(deps.env), {
+            level: "warn",
+            code: "permission_request_registration_exception",
+            message: "Pontia PermissionRequest API could not be reached",
+            details: error instanceof Error ? error.message : String(error),
+        });
+    }
+}
 function requiredDeps(dependencies) {
     const env = dependencies.env ?? process.env;
     const fetchImpl = dependencies.fetch ?? fetch;
@@ -226,6 +278,9 @@ export async function runClaudeHook(input, dependencies = {}) {
                 break;
             case "StopFailure":
                 await handleStopFailure(input, deps);
+                break;
+            case "PermissionRequest":
+                await handlePermissionRequest(input, deps);
                 break;
             case "SessionEnd":
                 await handleSessionEnd(input, deps);
@@ -254,7 +309,9 @@ export async function main() {
     if (!text.trim())
         return;
     try {
-        await runClaudeHook(JSON.parse(text));
+        const output = await runClaudeHook(JSON.parse(text));
+        if (output)
+            processStdout.write(JSON.stringify(output));
     }
     catch {
         // Hook must no-op on malformed input.

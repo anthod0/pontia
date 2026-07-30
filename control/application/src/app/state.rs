@@ -13,7 +13,9 @@ use pontia_runtime::{set_runtime_bind_addr, set_runtime_config};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 use super::set_default_client_type;
-use crate::{GitRefreshCoordinator, IdempotencyCoordinator, WorkspaceBrowserConfig};
+use crate::{
+    ApprovalCoordinator, GitRefreshCoordinator, IdempotencyCoordinator, WorkspaceBrowserConfig,
+};
 
 const SESSION_MESSAGE_UPDATED_DEBOUNCE_MS: u64 = 100;
 
@@ -115,6 +117,7 @@ struct LifecycleState {
 }
 
 struct IntegrationState {
+    approvals: ApprovalCoordinator,
     git_refresh: GitRefreshCoordinator,
     idempotency: IdempotencyCoordinator,
 }
@@ -128,6 +131,7 @@ pub struct AppStateBuilder {
     volatile_events: VolatileEventBroker,
     git_refresh: GitRefreshCoordinator,
     idempotency: IdempotencyCoordinator,
+    approvals: ApprovalCoordinator,
 }
 
 impl AppState {
@@ -141,6 +145,7 @@ impl AppState {
             volatile_events: VolatileEventBroker::default(),
             git_refresh: GitRefreshCoordinator::default(),
             idempotency: IdempotencyCoordinator::default(),
+            approvals: ApprovalCoordinator::default(),
         }
     }
 
@@ -176,6 +181,10 @@ impl AppState {
         self.inner.integrations.idempotency.clone()
     }
 
+    pub fn approvals(&self) -> ApprovalCoordinator {
+        self.inner.integrations.approvals.clone()
+    }
+
     pub fn with_external_api_token(&self, external_api_token: Option<String>) -> Self {
         self.rebuild()
             .external_api_token(external_api_token)
@@ -191,6 +200,7 @@ impl AppState {
             .volatile_events(self.volatile_events())
             .git_refresh(self.git_refresh())
             .idempotency(self.idempotency())
+            .approvals(self.approvals())
     }
 }
 
@@ -230,6 +240,11 @@ impl AppStateBuilder {
         self
     }
 
+    pub fn approvals(mut self, approvals: ApprovalCoordinator) -> Self {
+        self.approvals = approvals;
+        self
+    }
+
     pub fn build(self) -> AppState {
         AppState {
             inner: Arc::new(AppStateInner {
@@ -246,6 +261,7 @@ impl AppStateBuilder {
                     shutdown: self.shutdown,
                 },
                 integrations: IntegrationState {
+                    approvals: self.approvals,
                     git_refresh: self.git_refresh,
                     idempotency: self.idempotency,
                 },

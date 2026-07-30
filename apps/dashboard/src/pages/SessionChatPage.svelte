@@ -8,6 +8,8 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
+  import ApprovalRequestCard from '$lib/components/session-chat/ApprovalRequestCard.svelte'
+  import { approvalRequestFromSnapshot } from '$lib/approvals'
   import type { DashboardStreamEvent, InboxMessageView, SessionView } from '../api/types'
   import type { SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
@@ -118,6 +120,10 @@
   $: selectedSessionGitStatus = selectedSession ? $workspaceGitStatuses[selectedSession.workspace_id ?? ''] : undefined
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, $workspaces, selectedSessionGitStatus, $workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
+  $: pendingApproval = approvalRequestFromSnapshot(
+    $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : null,
+    $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.events : [],
+  )
   $: timelineMessages = $timelineState.sessionId === selectedSessionId
     ? timelineItemsToChatMessages($timelineState.items, $timelineState.mode === 'tree')
     : []
@@ -400,12 +406,17 @@
         if (typeof inboxMessageId === 'string') consumeInboxSubmission(inboxMessageId, streamEvent.event.session_id)
       }
       if (isSessionIdleEvent(streamEvent.event.type)) {
+        if (pendingApproval) void loadSessionDetail(selectedSessionId, { showLoading: false })
         void refreshCurrentSessionGitStatus()
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
         return
       }
       if (streamEvent.event.type === 'turn.started') {
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
+        return
+      }
+      if (streamEvent.event.type.startsWith('approval.')) {
+        void loadSessionDetail(selectedSessionId, { showLoading: false })
         return
       }
       if (streamEvent.event.type !== 'session.message_updated') return
@@ -762,6 +773,10 @@
               </Button>
             </div>
           </div>
+        {/if}
+
+        {#if pendingApproval}
+          <ApprovalRequestCard approval={pendingApproval} />
         {/if}
 
         <SessionComposerDock

@@ -135,9 +135,13 @@ impl ProjectionState {
             EventType::SessionReady => self.apply_session(event, SessionState::Idle),
             EventType::SessionExited => {
                 self.abandon_active_turn_for_session_exit(event)?;
-                self.apply_session(event, SessionState::Exited)
+                self.apply_session(event, SessionState::Exited)?;
+                self.clear_approval_interaction(&event.session_id, None)
             }
-            EventType::SessionError => self.apply_session(event, SessionState::Error),
+            EventType::SessionError => {
+                self.apply_session(event, SessionState::Error)?;
+                self.clear_approval_interaction(&event.session_id, None)
+            }
             EventType::SessionTitleUpdated => self.apply_session(
                 event,
                 self.sessions
@@ -158,6 +162,10 @@ impl ProjectionState {
                 self.apply_turn(event, TurnState::Failed)
             }
             EventType::TurnInterrupted => self.apply_turn(event, TurnState::Interrupted),
+            EventType::ApprovalRequested => self.apply_approval_requested(event),
+            EventType::ApprovalAccepted
+            | EventType::ApprovalRejected
+            | EventType::ApprovalCancelled => self.apply_approval_final(event),
             EventType::InboxMessageQueued
             | EventType::InboxMessageDispatched
             | EventType::InboxMessageCancelled
@@ -165,6 +173,87 @@ impl ProjectionState {
             | EventType::InboxMessageFailed
             | EventType::InboxMessageDismissed => Ok(()),
         }
+    }
+
+    fn apply_approval_requested(&mut self, event: &DomainEvent) -> crate::error::Result<()> {
+        let turn_id = event.turn_id.as_deref().expect("validated turn_id");
+        let Some(turn) = self.turns.get(turn_id) else {
+            return Err(Error::Domain(format!(
+                "approval request {} references missing turn {turn_id}",
+                event.event_id
+            )));
+        };
+        if turn.session_id != event.session_id || !turn.state.is_active() {
+            return Err(Error::Domain(format!(
+                "approval request {} must reference the active Turn",
+                event.event_id
+            )));
+        }
+        let session = self.sessions.get_mut(&event.session_id).ok_or_else(|| {
+            Error::Domain(format!(
+                "approval request {} references missing session {}",
+                event.event_id, event.session_id
+            ))
+        })?;
+        if !session.metadata.is_object() {
+            session.metadata = json!({});
+        }
+        session
+            .metadata
+            .as_object_mut()
+            .expect("metadata normalized")
+            .insert(
+                "interaction".to_string(),
+                json!({
+                    "type": "approval",
+                    "state": "awaiting",
+                    "request_event_id": event.event_id,
+                }),
+            );
+        session.state_version += 1;
+        Ok(())
+    }
+
+    fn apply_approval_final(&mut self, event: &DomainEvent) -> crate::error::Result<()> {
+        let request_event_id = event
+            .payload
+            .get("request_event_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                Error::Domain(format!(
+                    "{} payload.request_event_id is required",
+                    event.event_type
+                ))
+            })?;
+        self.clear_approval_interaction(&event.session_id, Some(request_event_id))
+    }
+
+    fn clear_approval_interaction(
+        &mut self,
+        session_id: &str,
+        expected_request_event_id: Option<&str>,
+    ) -> crate::error::Result<()> {
+        let Some(session) = self.sessions.get_mut(session_id) else {
+            return Ok(());
+        };
+        let Some(metadata) = session.metadata.as_object_mut() else {
+            return Ok(());
+        };
+        let matches = metadata
+            .get("interaction")
+            .and_then(Value::as_object)
+            .is_some_and(|interaction| {
+                interaction.get("type").and_then(Value::as_str) == Some("approval")
+                    && expected_request_event_id.is_none_or(|expected| {
+                        interaction.get("request_event_id").and_then(Value::as_str)
+                            == Some(expected)
+                    })
+            });
+        if matches {
+            metadata.remove("interaction");
+            session.state_version += 1;
+        }
+        Ok(())
     }
 
     fn apply_session(
@@ -450,6 +539,9 @@ impl ProjectionState {
         }
         turn.state_version += 1;
 
+        if new_state.is_terminal() {
+            self.clear_approval_interaction(&event.session_id, None)?;
+        }
         let session = self
             .sessions
             .entry(event.session_id.clone())
