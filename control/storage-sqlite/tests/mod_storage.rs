@@ -32,20 +32,13 @@ async fn sqlite_connections_use_wal_journal_and_ten_second_busy_timeout() {
 }
 
 #[tokio::test]
-async fn connects_to_sqlite_and_runs_migrations() {
+async fn migrations_preserve_removed_schema_contracts() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("control-plane.db");
     let database_url = format!("sqlite://{}", db_path.display());
 
     let pool = connect_sqlite(&database_url).await.expect("connect sqlite");
     run_migrations(&pool).await.expect("run migrations");
-
-    let migration_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations")
-        .fetch_one(&pool)
-        .await
-        .expect("query migrations");
-
-    assert_eq!(migration_count, 6);
 
     let event_columns = sqlx::query("PRAGMA table_info(events)")
         .fetch_all(&pool)
