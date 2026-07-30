@@ -213,7 +213,7 @@ mod tests {
         assert_eq!(runtime.command_env, Some("PONTIA_CLAUDE_TUI_COMMAND"));
         assert_eq!(runtime.default_command, "claude");
         assert_eq!(runtime.startup_args, &[] as &[&str]);
-        assert_eq!(runtime.session_identity_arg, None);
+        assert_eq!(runtime.session_identity_arg, Some("--resume"));
         assert_eq!(runtime.runtime_config_key, Some("claude"));
         let hook_log = runtime.hook_log.expect("claude hook log configured");
         assert_eq!(hook_log.file_name, "claude-hook.log");

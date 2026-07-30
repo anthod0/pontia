@@ -1171,6 +1171,60 @@ async fn webui_resume_of_manually_bound_tui_appends_pi_session_id_to_start_comma
 }
 
 #[tokio::test]
+async fn webui_resume_of_manually_bound_claude_tui_appends_native_session_id_to_start_command() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+
+    let mut body = upsert_body(&workspace, Some("%43"));
+    body["client_type"] = json!("claude");
+    body["client_session_key"] = json!("claude_session_123");
+    body["client_session_file"] = json!("/tmp/claude/session.jsonl");
+    body["client_session_dir"] = Value::Null;
+    body["start_command"] = json!("claude");
+    let (upsert_status, upsert) = post_upsert(state.clone(), body).await;
+    assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
+    let session_id = upsert["session"]["session_id"].as_str().unwrap();
+
+    let (exit_status, exit) = request_json(
+        state.clone(),
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "type": "session.exited",
+            "data": {
+                "runtime_instance_id": upsert["runtime"]["runtime_instance_id"],
+                "reason": "quit"
+            }
+        })),
+    )
+    .await;
+    assert_eq!(exit_status, StatusCode::OK, "{exit:?}");
+
+    let (resume_status, resume) = request_json(
+        state.clone(),
+        "POST",
+        &format!("/external/v1/sessions/{session_id}/resume"),
+        None,
+    )
+    .await;
+    assert_eq!(resume_status, StatusCode::OK, "{resume:?}");
+
+    let start_command: String =
+        sqlx::query_scalar("SELECT start_command FROM runtime_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("runtime start command");
+    assert_eq!(start_command, "claude --resume 'claude_session_123'");
+}
+
+#[tokio::test]
 async fn terminate_manually_bound_tui_without_pane_binding_marks_session_exited() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");

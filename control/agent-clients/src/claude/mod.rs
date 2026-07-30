@@ -32,7 +32,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             command_env: Some("PONTIA_CLAUDE_TUI_COMMAND"),
             default_command: "claude",
             startup_args: &[],
-            session_identity_arg: None,
+            session_identity_arg: Some("--resume"),
             hook_log: Some(HookLogBehavior {
                 file_name: "claude-hook.log",
                 metadata_key: "claude_hook_log",
