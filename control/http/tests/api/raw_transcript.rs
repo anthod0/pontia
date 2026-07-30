@@ -1518,6 +1518,102 @@ async fn claude_session_uses_the_linear_turn_timeline_endpoint() {
 }
 
 #[tokio::test]
+async fn claude_timeline_includes_assistant_appended_after_turn_completion() {
+    let temp = tempdir().unwrap();
+    let state = test_state().await;
+    let session_id = "sess_claude_delayed_assistant";
+    let turn_id = "turn_claude_delayed_assistant";
+    seed_session_for_client(&state, session_id, "claude").await;
+
+    let transcript = temp.path().join("claude-session.jsonl");
+    fs::write(
+        &transcript,
+        concat!(
+            "{\"type\":\"system\",\"subtype\":\"turn_duration\"}\n",
+            "{\"type\":\"user\",\"uuid\":\"claude-user\",\"timestamp\":\"2026-07-15T00:00:01Z\",\"message\":{\"role\":\"user\",\"content\":\"Claude question\"}}\n"
+        ),
+    )
+    .unwrap();
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "claude".to_string(),
+            launch_cwd: temp.path().display().to_string(),
+            client_session_key: "claude-delayed-assistant".to_string(),
+            client_session_file: Some(transcript.display().to_string()),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    EventIngestService::new(state.db())
+        .ingest_reported_event(ReportedEvent::new(
+            "evt_claude_delayed_created".to_string(),
+            session_id.to_string(),
+            Some(turn_id.to_string()),
+            EventSource::ExternalApi,
+            "claude".to_string(),
+            EventType::TurnCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+
+    let (status, started) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.started",
+            "data": { "runtime_instance_id": "rtinst_claude_delayed" }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started:?}");
+
+    let (status, completed) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.completed",
+            "data": {}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{completed:?}");
+
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&transcript)
+        .unwrap()
+        .write_all(
+            concat!(
+                "{\"type\":\"assistant\",\"uuid\":\"claude-answer\",\"timestamp\":\"2026-07-15T00:00:02Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Claude answer\"}]}}\n",
+                "{\"type\":\"user\",\"uuid\":\"next-claude-user\",\"timestamp\":\"2026-07-15T00:01:00Z\",\"message\":{\"role\":\"user\",\"content\":\"Next question\"}}\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    let (status, body) = get_json(
+        state,
+        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(
+        body["data"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["kind"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["user", "assistant"]
+    );
+    assert_eq!(body["data"]["items"][1]["content_preview"], "Claude answer");
+}
+
+#[tokio::test]
 async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
     let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();

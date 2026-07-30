@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     fs::File,
-    io::{Read, Seek, SeekFrom},
+    io::{BufRead, BufReader, Read, Seek, SeekFrom},
 };
 
 use pontia_core::{Error, Result};
@@ -137,7 +137,16 @@ impl TurnTimelineReader for ClaudeTimelineAdapter {
             }
 
             let bytes = read_range_from_source(&request.source, head.byte_offset, tail_offset)?;
-            for value in parse_window(&range.turn_id, &bytes, active)? {
+            let mut values = parse_window(&range.turn_id, &bytes, active)?;
+            if !active && tail_offset < source_length {
+                values.extend(read_delayed_tail_entries(
+                    &request.source.path,
+                    tail_offset,
+                    source_length,
+                    &range.turn_id,
+                )?);
+            }
+            for value in values {
                 let mapped = claude_entry_to_items(&value)
                     .map_err(|error| invalid_range_error(&range.turn_id, &error.to_string()))?;
                 for item in mapped {
@@ -210,6 +219,54 @@ fn current_prompt_start(path: &std::path::Path, source_length: usize) -> Result<
     let Ok(entry) = serde_json::from_slice::<Value>(&line) else {
         return Ok(None);
     };
+    Ok(is_primary_user_entry(&entry).then_some(start))
+}
+
+// Claude invokes Stop before it durably appends the final assistant entry. For a sealed
+// Turn, treat its captured tail as the start of a short read-model recovery window and
+// stop before the next primary prompt so entries cannot leak into the following Turn.
+fn read_delayed_tail_entries(
+    path: &std::path::Path,
+    start: usize,
+    source_length: usize,
+    turn_id: &str,
+) -> std::result::Result<Vec<Value>, TurnTimelineReadError> {
+    let mut file = File::open(path).map_err(|error| source_unavailable(path, error))?;
+    file.seek(SeekFrom::Start(start as u64))
+        .map_err(|error| source_unavailable(path, error))?;
+    let mut reader = BufReader::new(file.take((source_length - start) as u64));
+    let mut line = Vec::new();
+    let mut values = Vec::new();
+
+    loop {
+        line.clear();
+        let bytes_read = reader
+            .read_until(b'\n', &mut line)
+            .map_err(|error| source_unavailable(path, error))?;
+        if bytes_read == 0 || !line.ends_with(b"\n") {
+            break;
+        }
+        line.pop();
+        if line.ends_with(b"\r") {
+            line.pop();
+        }
+        if line.is_empty() {
+            continue;
+        }
+        let text = std::str::from_utf8(&line)
+            .map_err(|_| invalid_range_error(turn_id, "timeline JSONL is not UTF-8"))?;
+        let value: Value = serde_json::from_str(text)
+            .map_err(|_| invalid_range_error(turn_id, "timeline JSONL is malformed"))?;
+        if is_primary_user_entry(&value) {
+            break;
+        }
+        values.push(value);
+    }
+
+    Ok(values)
+}
+
+fn is_primary_user_entry(entry: &Value) -> bool {
     let content = entry.pointer("/message/content");
     let is_primary_user_content = content.is_some_and(|content| match content {
         Value::String(_) => true,
@@ -218,10 +275,9 @@ fn current_prompt_start(path: &std::path::Path, source_length: usize) -> Result<
             .any(|block| block.get("type").and_then(Value::as_str) != Some("tool_result")),
         _ => false,
     });
-    let is_current_prompt = entry.get("type").and_then(Value::as_str) == Some("user")
+    entry.get("type").and_then(Value::as_str) == Some("user")
         && entry.get("isSidechain").and_then(Value::as_bool) != Some(true)
-        && is_primary_user_content;
-    Ok(is_current_prompt.then_some(start))
+        && is_primary_user_content
 }
 
 fn source_unavailable(path: &std::path::Path, error: std::io::Error) -> Error {
