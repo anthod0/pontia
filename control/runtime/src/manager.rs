@@ -76,7 +76,6 @@ impl GenericRuntimeManager {
             log_path: &log_path,
         };
         let launch_script_path = script::write_ephemeral_launch_script(
-            &workspace,
             &runtime_paths,
             &request,
             &launch_id,

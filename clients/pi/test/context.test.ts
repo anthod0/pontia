@@ -62,13 +62,16 @@ describe("loadTurnContext", () => {
 
     const pontiaHome = await pontiaHomeWithConfig();
     const result = await loadTurnContext(
+      { PONTIA_HOME: pontiaHome },
       {
-        PONTIA_WORKSPACE: workspace,
-        PONTIA_HOME: pontiaHome,
-        PONTIA_SESSION_ID: "sess_api",
-        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_api",
+        fetch: fetchImpl,
+        sessionContext: {
+          sessionId: "sess_api",
+          runtimeInstanceId: "rtinst_api",
+          clientType: "pi",
+          internalEventUrl: "http://localhost/internal/v1/events",
+        },
       },
-      { fetch: fetchImpl },
     );
 
     expect(calls).toHaveLength(1);
@@ -146,12 +149,16 @@ describe("loadTurnContext", () => {
 
     const pontiaHome = await pontiaHomeWithConfig();
     const result = await loadTurnContext(
+      { PONTIA_HOME: pontiaHome },
       {
-        PONTIA_HOME: pontiaHome,
-        PONTIA_SESSION_ID: "sess_3",
-        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_file_3",
+        fetch: fetchImpl,
+        sessionContext: {
+          sessionId: "sess_3",
+          runtimeInstanceId: "rtinst_file_3",
+          clientType: "pi",
+          internalEventUrl: "http://localhost/internal/v1/events",
+        },
       },
-      { fetch: fetchImpl },
     );
 
     expect(result.ok).toBe(true);
@@ -175,12 +182,16 @@ describe("loadTurnContext", () => {
 
     const pontiaHome = await pontiaHomeWithConfig();
     const result = await loadTurnContext(
+      { PONTIA_HOME: pontiaHome },
       {
-        PONTIA_HOME: pontiaHome,
-        PONTIA_SESSION_ID: "sess_4",
-        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_4",
+        fetch: fetchImpl,
+        sessionContext: {
+          sessionId: "sess_4",
+          runtimeInstanceId: "rtinst_4",
+          clientType: "pi",
+          internalEventUrl: "http://localhost/internal/v1/events",
+        },
       },
-      { fetch: fetchImpl },
     );
 
     expect(result.ok).toBe(false);

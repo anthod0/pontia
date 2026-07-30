@@ -4,12 +4,12 @@ import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { resolvePontiaConnection } from "./discovery.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
-import { isPontiaManagedTmuxPane } from "./managed-runtime.js";
+import { isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity, type ManagedRuntimeIdentity } from "./managed-runtime.js";
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
-import { bindManualSession, hasExistingAgentBinding, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
-import { loadSessionContext, type SessionContext } from "./session.js";
+import { bindSession, hasExistingAgentBinding, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
+import type { SessionContext } from "./session.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
 interface ReporterLike {
@@ -22,10 +22,11 @@ function reportAccepted(result: EventReportResult | boolean): boolean {
 
 export interface PontiaPiExtensionDependencies {
   env?: EnvLike;
-  loadContext?: (env: EnvLike) => Promise<LoadTurnContextResult>;
+  loadContext?: (env: EnvLike, sessionContext?: SessionContext) => Promise<LoadTurnContextResult>;
   makeReporter?: (logFile: string) => ReporterLike;
   logDiagnostic?: (logFile: string, entry: DiagnosticEntry) => Promise<void>;
   fetch?: typeof fetch;
+  loadManagedRuntime?: (env: EnvLike) => Promise<ManagedRuntimeIdentity | undefined>;
   isManagedPane?: (env: EnvLike) => Promise<boolean>;
 }
 
@@ -98,10 +99,11 @@ function topologyContextFromHookContext(ctx: unknown): PiTopologyContext | undef
 
 export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPiExtensionDependencies = {}): void {
   const env = dependencies.env ?? process.env;
-  const contextLoader = dependencies.loadContext ?? loadTurnContext;
+  const contextLoader = dependencies.loadContext ?? ((contextEnv, sessionContext) => loadTurnContext(contextEnv, { sessionContext }));
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   const fetchImpl = dependencies.fetch ?? fetch;
+  const loadManagedRuntime = dependencies.loadManagedRuntime ?? loadPontiaManagedRuntimeIdentity;
   const isManagedPane = dependencies.isManagedPane ?? isPontiaManagedTmuxPane;
 
   let activeTurn: ActiveTurnState | undefined;
@@ -110,6 +112,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let deferredManualSessionDetails: PiSessionDetails | undefined;
   let reportingDisabled = false;
   let managedPaneConfirmed = false;
+  let launchRuntimeIdentity: ManagedRuntimeIdentity | undefined;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
 
@@ -117,6 +120,20 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     if (managedPaneConfirmed && !refresh) return true;
     managedPaneConfirmed = await isManagedPane(env);
     return managedPaneConfirmed;
+  }
+
+  async function currentManagedSessionContext(): Promise<SessionContext | undefined> {
+    if (boundSessionContext) return boundSessionContext;
+    launchRuntimeIdentity ??= await loadManagedRuntime(env);
+    if (!launchRuntimeIdentity) return undefined;
+    const connection = await resolvePontiaConnection({ env, fetch: fetchImpl });
+    if (!connection?.internalEventUrl) return undefined;
+    return {
+      sessionId: launchRuntimeIdentity.sessionId,
+      runtimeInstanceId: launchRuntimeIdentity.runtimeInstanceId,
+      clientType: "pi",
+      internalEventUrl: connection.internalEventUrl,
+    };
   }
 
   pi.registerCommand("pontia-edit", {
@@ -133,19 +150,16 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         return;
       }
 
-      const loaded = boundSessionContext
-        ? { ok: true as const, context: boundSessionContext, logFile }
-        : await loadSessionContext(env);
-      if (!loaded.ok) {
-        await logDiagnostic(loaded.logFile, {
+      const commandContext = await currentManagedSessionContext();
+      if (!commandContext) {
+        await logDiagnostic(logFile, {
           level: "error",
           code: "branch_replay_stale_context",
           message: "pontia-edit requires a bound Pontia Session and Runtime",
-          details: loaded.reason,
         });
         return;
       }
-      const commandContext = loaded.context;
+      const loaded = { logFile };
       const connection = await resolvePontiaConnection({ env });
       if (!connection?.externalApiToken) {
         await logDiagnostic(loaded.logFile, {
@@ -266,7 +280,11 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     }
     const currentSystemPrompt = typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
     try {
-      const profilePrompt = await loadProfileSystemPrompt(env, fetchImpl);
+      const profilePrompt = await loadProfileSystemPrompt(
+        env,
+        fetchImpl,
+        (await currentManagedSessionContext())?.sessionId,
+      );
       if (!profilePrompt) return { systemPrompt: currentSystemPrompt };
       return { systemPrompt: `${currentSystemPrompt}\n\n${profilePrompt}` };
     } catch (error) {
@@ -289,6 +307,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
       deferredManualSessionDetails = sessionDetails;
+      launchRuntimeIdentity = reason === "fork" ? undefined : await loadManagedRuntime(env);
       const logFile = defaultHookLogFile(env);
       let context: SessionContext | undefined;
 
@@ -307,7 +326,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       }
 
       if (reason === "fork") {
-        const parentSessionId = boundSessionContext?.sessionId ?? optionalString(env.PONTIA_SESSION_ID);
+        const parentSessionId = boundSessionContext?.sessionId;
         if (!parentSessionId) {
           await logDiagnostic(logFile, {
             level: "error",
@@ -316,10 +335,10 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           });
           return;
         }
-        context = await bindManualSession(env, fetchImpl, sessionDetails, { startKind: "fork", parentSessionId });
+        context = await bindSession(env, fetchImpl, sessionDetails, { startKind: "fork", parentSessionId });
         readyReported = false;
       } else {
-        const managedSession = optionalString(env.PONTIA_SESSION_ID) !== undefined;
+        const managedSession = launchRuntimeIdentity !== undefined;
         const existingManualSession = managedSession
           ? false
           : await hasExistingAgentBinding(env, fetchImpl, sessionDetails);
@@ -329,7 +348,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           return;
         }
 
-        context = await bindManualSession(env, fetchImpl, sessionDetails);
+        context = await bindSession(env, fetchImpl, sessionDetails, { managedRuntime: launchRuntimeIdentity });
         if (reason === "resume" || reason === "new") readyReported = false;
       }
       if (!context || !await confirmManagedPane(true)) return;
@@ -353,11 +372,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
 
     try {
-      const loaded = await loadSessionContext(env);
-      const logFile = loaded.logFile;
-      const context = boundSessionContext ?? (loaded.ok ? loaded.context : undefined);
-      if (!context) return;
-      await makeReporter(logFile).report(context, buildSessionExitedEvent(context, reason));
+      const logFile = defaultHookLogFile(env);
+      if (!boundSessionContext) return;
+      await makeReporter(logFile).report(boundSessionContext, buildSessionExitedEvent(boundSessionContext, reason));
     } catch (error) {
       const logFile = defaultHookLogFile(env);
       await logDiagnostic(logFile, {
@@ -374,11 +391,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const previousLeafId = leafIdFromHookContext(ctx);
     if (reportingDisabled) return;
     try {
-      const loaded = await contextLoader(boundSessionContext ? {
-        ...env,
-        PONTIA_SESSION_ID: boundSessionContext.sessionId,
-        PONTIA_RUNTIME_INSTANCE_ID: boundSessionContext.runtimeInstanceId,
-      } : env);
+      const loaded = await contextLoader(env, await currentManagedSessionContext());
       let turnContext: TurnContext | undefined;
       let logFile: string;
       if (loaded.ok) {
@@ -409,7 +422,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
             pendingPrompt = undefined;
             return;
           }
-          boundSessionContext = await bindManualSession(env, fetchImpl, sessionDetails);
+          boundSessionContext = await bindSession(env, fetchImpl, sessionDetails, { managedRuntime: launchRuntimeIdentity });
           if (boundSessionContext && !readyReported) {
             readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
           }

@@ -1,6 +1,7 @@
 import type { EnvLike } from "./context.js";
 import { resolvePontiaConnection } from "./discovery.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
+import type { ManagedRuntimeIdentity } from "./managed-runtime.js";
 import type { SessionContext } from "./session.js";
 
 export type PiSessionDetails = Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">;
@@ -38,11 +39,11 @@ function tmuxBindingFromEnv(env: EnvLike): { socket_path: string; pane_id: strin
   return { socket_path: socketPath, pane_id: paneId };
 }
 
-export async function bindManualSession(
+export async function bindSession(
   env: EnvLike,
   fetchImpl: typeof fetch,
   sessionDetails: PiSessionDetails,
-  options: { startKind?: "fork"; parentSessionId?: string } = {},
+  options: { startKind?: "fork"; parentSessionId?: string; managedRuntime?: ManagedRuntimeIdentity } = {},
 ): Promise<SessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
   const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
@@ -54,9 +55,11 @@ export async function bindManualSession(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      ...(options.startKind !== "fork" && optionalString(env.PONTIA_SESSION_ID) ? { session_id: optionalString(env.PONTIA_SESSION_ID) } : {}),
-      ...(options.startKind !== "fork" && optionalString(env.PONTIA_SESSION_ID) && optionalString(env.PONTIA_RUNTIME_INSTANCE_ID)
-        ? { runtime_instance_id: optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) }
+      ...(options.startKind !== "fork" && options.managedRuntime
+        ? {
+            session_id: options.managedRuntime.sessionId,
+            runtime_instance_id: options.managedRuntime.runtimeInstanceId,
+          }
         : {}),
       client_type: "pi",
       client_session_key: sessionDetails.clientSessionKey,
@@ -82,6 +85,12 @@ export async function bindManualSession(
   if (!sessionId) throw new Error("runtime binding upsert response missing session.session_id");
   if (!resolvedRuntimeInstanceId) throw new Error("runtime binding upsert response missing runtime.runtime_instance_id");
   if (!internalEventUrl) throw new Error("runtime binding upsert response missing runtime.internal_event_url");
+  if (options.managedRuntime && (
+    sessionId !== options.managedRuntime.sessionId ||
+    resolvedRuntimeInstanceId !== options.managedRuntime.runtimeInstanceId
+  )) {
+    throw new Error("runtime binding upsert response does not match tmux runtime identity");
+  }
 
   return {
     sessionId,

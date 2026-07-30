@@ -51,7 +51,6 @@ pub(crate) fn tmux_start_command(
 }
 
 pub(super) fn write_ephemeral_launch_script(
-    workspace: &Path,
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
@@ -62,7 +61,6 @@ pub(super) fn write_ephemeral_launch_script(
     let path = launch_dir.join(format!("{launch_id}.sh"));
     write_launch_script(
         &path,
-        workspace,
         runtime_paths,
         request,
         launch_id,
@@ -76,7 +74,6 @@ pub(super) fn write_ephemeral_launch_script(
 
 pub(super) fn write_launch_script(
     path: &Path,
-    workspace: &Path,
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
@@ -90,11 +87,12 @@ pub(super) fn write_launch_script(
             let command = tmux_start_command(request, tmux_runtime, true);
             (
                 format!(
-                    "echo {} >> \"$PONTIA_RUNTIME_LOG\"",
+                    "echo {} >> {}",
                     shell_quote(&format!(
                         "session={} launch={} pontia runtime started",
                         request.session_id, launch_id
-                    ))
+                    )),
+                    shell_quote_path(runtime_paths.log_path),
                 ),
                 format!("exec sh -lc {}\n", shell_quote(&command)),
             )
@@ -102,11 +100,12 @@ pub(super) fn write_launch_script(
         RuntimeBehavior::InProcess => match client_spec.adapter.dispatch {
             DispatchBehavior::InProcessRecorded | DispatchBehavior::None => (
                 format!(
-                    "exec >> \"$PONTIA_RUNTIME_LOG\" 2>&1\necho {}",
+                    "exec >> {} 2>&1\necho {}",
+                    shell_quote_path(runtime_paths.log_path),
                     shell_quote(&format!(
                         "session={} launch={} pontia runtime started",
                         request.session_id, launch_id
-                    ))
+                    )),
                 ),
                 "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
             ),
@@ -120,15 +119,11 @@ pub(super) fn write_launch_script(
     };
     let content = format!(
         r#"#!/usr/bin/env sh
-export PONTIA_SESSION_ID={}
-export PONTIA_CLIENT_TYPE={}
-export PONTIA_RUNTIME_INSTANCE_ID={}
-export PONTIA_WORKSPACE={}
+unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG
 export PONTIA_HOME={}
-export PONTIA_RUNTIME_LOG={}
 if [ -n "${{TMUX:-}}" ] && [ -n "${{TMUX_PANE:-}}" ]; then
-  tmux set-option -p -t "$TMUX_PANE" @pontia_session_id "$PONTIA_SESSION_ID" || exit 1
-  tmux set-option -p -t "$TMUX_PANE" @pontia_runtime_instance_id "$PONTIA_RUNTIME_INSTANCE_ID" || exit 1
+  tmux set-option -p -t "$TMUX_PANE" @pontia_session_id {} || exit 1
+  tmux set-option -p -t "$TMUX_PANE" @pontia_runtime_instance_id {} || exit 1
 fi
 PONTIA_LAUNCH_SCRIPT=${{0:-}}
 cleanup_pontia_launch_script() {{
@@ -141,12 +136,9 @@ trap cleanup_pontia_launch_script EXIT HUP INT TERM
 cleanup_pontia_launch_script
 {}
 "#,
-        shell_quote(&request.session_id),
-        shell_quote(&request.client_type),
-        shell_quote(runtime_instance_id),
-        shell_quote(&workspace.display().to_string()),
         shell_quote(&pontia_home_for_export()),
-        shell_quote(&runtime_paths.log_path.display().to_string()),
+        shell_quote(&request.session_id),
+        shell_quote(runtime_instance_id),
         log_setup,
         runtime_body,
     );
@@ -225,7 +217,6 @@ mod tests {
 
         write_launch_script(
             &script_path,
-            tempdir.path(),
             &paths,
             &request,
             "launch_1",
@@ -239,12 +230,29 @@ mod tests {
             "script was:\n{script}"
         );
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
-        assert!(script.contains("export PONTIA_RUNTIME_INSTANCE_ID='runtime_instance_1'"));
+        assert!(script.contains("export PONTIA_HOME="));
         assert!(script.contains(
-            "tmux set-option -p -t \"$TMUX_PANE\" @pontia_session_id \"$PONTIA_SESSION_ID\""
+            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG"
         ));
+        for name in [
+            "PONTIA_SESSION_ID",
+            "PONTIA_CLIENT_TYPE",
+            "PONTIA_RUNTIME_INSTANCE_ID",
+            "PONTIA_WORKSPACE",
+            "PONTIA_RUNTIME_LOG",
+        ] {
+            assert!(
+                !script.contains(&format!("export {name}=")),
+                "script unexpectedly exported {name}:\n{script}"
+            );
+        }
+        assert!(
+            script.contains(
+                "tmux set-option -p -t \"$TMUX_PANE\" @pontia_session_id 'sess_resume_1'"
+            )
+        );
         assert!(script.contains(
-            "tmux set-option -p -t \"$TMUX_PANE\" @pontia_runtime_instance_id \"$PONTIA_RUNTIME_INSTANCE_ID\""
+            "tmux set-option -p -t \"$TMUX_PANE\" @pontia_runtime_instance_id 'runtime_instance_1'"
         ));
         assert!(
             script.contains("session=sess_resume_1 launch=launch_1"),
@@ -271,7 +279,6 @@ mod tests {
 
         write_launch_script(
             &script_path,
-            tempdir.path(),
             &paths,
             &request,
             "launch_claude",
@@ -306,7 +313,6 @@ mod tests {
 
         write_launch_script(
             &script_path,
-            tempdir.path(),
             &paths,
             &request,
             "launch_explicit",

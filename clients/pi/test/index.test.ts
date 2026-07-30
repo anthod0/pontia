@@ -61,14 +61,19 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
   const reported: InternalEvent[] = [];
   let turnSequence = 0;
   const env: Record<string, string | undefined> = { PONTIA_HOME: defaultPontiaHome, ...(overrides.env ?? {}) };
+  const managedRuntime = env.PONTIA_SESSION_ID && env.PONTIA_RUNTIME_INSTANCE_ID
+    ? { sessionId: env.PONTIA_SESSION_ID, runtimeInstanceId: env.PONTIA_RUNTIME_INSTANCE_ID }
+    : undefined;
+  delete env.PONTIA_SESSION_ID;
+  delete env.PONTIA_RUNTIME_INSTANCE_ID;
   const suppliedFetch = overrides.fetch;
-  const fetchWithManagedBinding = suppliedFetch && env.PONTIA_SESSION_ID && env.PONTIA_RUNTIME_INSTANCE_ID
+  const fetchWithManagedBinding = suppliedFetch && managedRuntime
     ? (async (url: string | URL | Request, init?: RequestInit) => {
         if (String(url).endsWith("/internal/v1/runtime-bindings/upsert") && !JSON.parse(String(init?.body ?? "{}")).start_kind) {
           return new Response(JSON.stringify({
-            session: { session_id: env.PONTIA_SESSION_ID },
+            session: { session_id: managedRuntime.sessionId },
             runtime: {
-              runtime_instance_id: env.PONTIA_RUNTIME_INSTANCE_ID,
+              runtime_instance_id: managedRuntime.runtimeInstanceId,
               internal_event_url: "http://localhost/internal/v1/events",
             },
           }), { status: 200 });
@@ -85,6 +90,7 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
     }) })),
     logDiagnostic: vi.fn(async () => undefined),
     isManagedPane: vi.fn(async () => true),
+    loadManagedRuntime: vi.fn(async () => managedRuntime),
     ...overrides,
     fetch: fetchWithManagedBinding,
     env,
@@ -580,7 +586,7 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_HOME: dir,
       },
       fetch: fetchImpl as any,
-      loadContext: (env) => loadTurnContext(env, { fetch: fetchImpl as any }),
+      loadContext: (env, sessionContext) => loadTurnContext(env, { fetch: fetchImpl as any, sessionContext }),
     });
 
     await handlers.agent_start({}, {});
@@ -843,6 +849,7 @@ describe("pontia pi extension lifecycle", () => {
     const { handlers } = install({
       env: {
         PONTIA_SESSION_ID: "sess_1",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
       },
       fetch: fetchImpl as any,
     });

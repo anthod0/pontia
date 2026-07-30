@@ -4,12 +4,12 @@ import type { EnvLike } from "./context.js";
 
 const execFileAsync = promisify(execFile);
 
-export async function isPontiaManagedTmuxPane(env: EnvLike = process.env): Promise<boolean> {
-  const tmux = env.TMUX?.trim();
-  const paneId = env.TMUX_PANE?.trim();
-  const socketPath = tmux?.split(",", 1)[0]?.trim();
-  if (!socketPath || !paneId) return false;
+export interface ManagedRuntimeIdentity {
+  sessionId: string;
+  runtimeInstanceId: string;
+}
 
+async function paneOption(socketPath: string, paneId: string, option: string): Promise<string | undefined> {
   try {
     const { stdout } = await execFileAsync("tmux", [
       "-S",
@@ -19,10 +19,30 @@ export async function isPontiaManagedTmuxPane(env: EnvLike = process.env): Promi
       "-v",
       "-t",
       paneId,
-      "@pontia_session_id",
+      option,
     ]);
-    return stdout.trim().length > 0;
+    return stdout.trim() || undefined;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+export async function loadPontiaManagedRuntimeIdentity(
+  env: EnvLike = process.env,
+): Promise<ManagedRuntimeIdentity | undefined> {
+  const tmux = env.TMUX?.trim();
+  const paneId = env.TMUX_PANE?.trim();
+  const socketPath = tmux?.split(",", 1)[0]?.trim();
+  if (!socketPath || !paneId) return undefined;
+
+  const [sessionId, runtimeInstanceId] = await Promise.all([
+    paneOption(socketPath, paneId, "@pontia_session_id"),
+    paneOption(socketPath, paneId, "@pontia_runtime_instance_id"),
+  ]);
+  if (!sessionId || !runtimeInstanceId) return undefined;
+  return { sessionId, runtimeInstanceId };
+}
+
+export async function isPontiaManagedTmuxPane(env: EnvLike = process.env): Promise<boolean> {
+  return (await loadPontiaManagedRuntimeIdentity(env)) !== undefined;
 }
