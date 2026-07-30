@@ -3,6 +3,7 @@
 //! The MVP generic runtime records a binding and immediately reports ready. This
 //! module stays independent from HTTP transport details.
 
+mod claude_integration;
 mod config;
 mod in_process;
 mod manager;
@@ -12,6 +13,9 @@ mod tmux;
 mod types;
 mod utils;
 
+pub use claude_integration::{
+    ClaudeApprovalIntegration, configure_claude_user_approval_integration,
+};
 #[cfg(test)]
 pub use config::reset_runtime_bind_addr_for_tests;
 pub use config::{configured_internal_event_url, set_runtime_bind_addr, set_runtime_config};

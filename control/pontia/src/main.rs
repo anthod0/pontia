@@ -7,7 +7,8 @@ use std::{
     time::Duration,
 };
 
-use tracing::info;
+use pontia_runtime::ClaudeApprovalIntegration;
+use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -15,6 +16,22 @@ async fn main() -> Result<()> {
     init_tracing();
 
     let config = AppConfig::from_env()?;
+    match pontia_runtime::configure_claude_user_approval_integration(
+        config.bind_addr,
+        config.external_api_token.as_deref(),
+    )? {
+        ClaudeApprovalIntegration::Configured { settings_path } => {
+            info!(
+                path = %settings_path.display(),
+                "configured Claude approval integration"
+            );
+        }
+        ClaudeApprovalIntegration::SkippedMissingApiToken => {
+            warn!(
+                "Claude approval integration is disabled because external_api_token is not configured"
+            );
+        }
+    }
     let app_state = application::initialize(&config).await?;
     let dashboard = http::dashboard::resolve_dashboard(&config.dashboard).await;
     let state = http::HttpState::new(app_state, dashboard);

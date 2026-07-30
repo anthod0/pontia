@@ -277,6 +277,36 @@ describe("pontia claude hook", () => {
         expect(diagnostics).toEqual([]);
     });
     test.each([
+        ["managed", { PONTIA_SESSION_ID: "sess_managed", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_managed" }],
+        ["manual", {}],
+    ])("PermissionRequest uses the same hook and Approval API for %s sessions", async (_kind, env) => {
+        const fetchImpl = vi.fn(async (url, init) => {
+            expect(url).toBe("http://localhost/internal/v1/claude/permission-request");
+            expect(JSON.parse(String(init?.body))).toMatchObject({
+                session_id: "claude_session_1",
+                prompt_id: "prompt_1",
+                tool_name: "Bash",
+            });
+            return new Response(JSON.stringify({
+                data: { result: { decision: "accept_once" }, request_event_id: "evt_request" },
+            }), { status: 200 });
+        });
+        const { deps } = install({ env: { PONTIA_HOME: defaultPontiaHome, ...env }, fetch: fetchImpl });
+        const output = await runClaudeHook(baseInput({
+            hook_event_name: "PermissionRequest",
+            prompt_id: "prompt_1",
+            tool_name: "Bash",
+            tool_input: { command: "pnpm test" },
+        }), deps);
+        expect(output).toEqual({
+            hookSpecificOutput: {
+                hookEventName: "PermissionRequest",
+                decision: { behavior: "allow" },
+            },
+        });
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+    test.each([
         [
             "accept once",
             { decision: "accept_once" },

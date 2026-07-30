@@ -32,4 +32,10 @@ describe("Claude plugin package config", () => {
             });
         }
     });
+    test("is installable from the repository marketplace at user scope", async () => {
+        const marketplace = await readJson("../../.claude-plugin/marketplace.json");
+        const plugin = marketplace.plugins.find((entry) => entry.name === "pontia-claude");
+        expect(marketplace.name).toBe("pontia-local");
+        expect(plugin.source).toBe("./clients/claude");
+    });
 });
