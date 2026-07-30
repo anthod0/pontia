@@ -84,6 +84,7 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
       return { accepted: true, eventId: `evt_server_${reported.length}`, turnId: event.type === "turn.started" ? `turn_server_${turnSequence}` : event.turn_id };
     }) })),
     logDiagnostic: vi.fn(async () => undefined),
+    isManagedPane: vi.fn(async () => true),
     ...overrides,
     fetch: fetchWithManagedBinding,
     env,

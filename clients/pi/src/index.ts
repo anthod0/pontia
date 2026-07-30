@@ -4,6 +4,7 @@ import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { resolvePontiaConnection } from "./discovery.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
+import { isPontiaManagedTmuxPane } from "./managed-runtime.js";
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
@@ -25,6 +26,7 @@ export interface PontiaPiExtensionDependencies {
   makeReporter?: (logFile: string) => ReporterLike;
   logDiagnostic?: (logFile: string, entry: DiagnosticEntry) => Promise<void>;
   fetch?: typeof fetch;
+  isManagedPane?: (env: EnvLike) => Promise<boolean>;
 }
 
 interface ActiveTurnState {
@@ -100,14 +102,22 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   const fetchImpl = dependencies.fetch ?? fetch;
+  const isManagedPane = dependencies.isManagedPane ?? isPontiaManagedTmuxPane;
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
   let boundSessionContext: SessionContext | undefined;
   let deferredManualSessionDetails: PiSessionDetails | undefined;
-  let pontiaDisabled = false;
+  let reportingDisabled = false;
+  let managedPaneConfirmed = false;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
+
+  async function confirmManagedPane(refresh = false): Promise<boolean> {
+    if (managedPaneConfirmed && !refresh) return true;
+    managedPaneConfirmed = await isManagedPane(env);
+    return managedPaneConfirmed;
+  }
 
   pi.registerCommand("pontia-edit", {
     description: "Replay a Pontia Inbox message from a historical Pi entry",
@@ -251,7 +261,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   pi.on("before_agent_start", async (event) => {
     const eventRecord = event as unknown as Record<string, unknown>;
     pendingPrompt = optionalString(eventRecord.prompt);
-    if (pontiaDisabled) return { systemPrompt: typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "" };
+    if (reportingDisabled || !await confirmManagedPane()) {
+      return { systemPrompt: typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "" };
+    }
     const currentSystemPrompt = typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
     try {
       const profilePrompt = await loadProfileSystemPrompt(env, fetchImpl);
@@ -269,6 +281,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("session_start", async (event, ctx) => {
+    if (reportingDisabled) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
     if (readyReported && reason !== "fork" && reason !== "resume") return;
     if (reason !== "startup" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
@@ -281,7 +294,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
       const workspaceActive = await isActiveRegisteredWorkspace(env, fetchImpl, sessionDetails.clientCwd);
       if (workspaceActive !== true) {
-        pontiaDisabled = true;
+        reportingDisabled = true;
         await logDiagnostic(logFile, {
           level: "info",
           code: workspaceActive === false ? "workspace_not_active" : "workspace_check_unavailable",
@@ -319,7 +332,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         context = await bindManualSession(env, fetchImpl, sessionDetails);
         if (reason === "resume" || reason === "new") readyReported = false;
       }
-      if (!context) return;
+      if (!context || !await confirmManagedPane(true)) return;
 
       boundSessionContext = context;
       readyReported = reportAccepted(await makeReporter(logFile).report(context, buildSessionReadyEvent(context)));
@@ -335,7 +348,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("session_shutdown", async (event) => {
-    if (pontiaDisabled) return;
+    if (reportingDisabled || !await confirmManagedPane()) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
     if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
 
@@ -359,7 +372,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   pi.on("agent_start", async (_event, ctx) => {
     const topologyContext = topologyContextFromHookContext(ctx);
     const previousLeafId = leafIdFromHookContext(ctx);
-    if (pontiaDisabled) return;
+    if (reportingDisabled) return;
     try {
       const loaded = await contextLoader(boundSessionContext ? {
         ...env,
@@ -383,7 +396,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           }
           const workspaceActive = await isActiveRegisteredWorkspace(env, fetchImpl, sessionDetails.clientCwd);
           if (workspaceActive !== true) {
-            pontiaDisabled = true;
+            reportingDisabled = true;
             await logDiagnostic(logFile, {
               level: "info",
               code: workspaceActive === false ? "workspace_not_active" : "workspace_check_unavailable",
@@ -421,6 +434,10 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       }
 
       pendingPrompt = undefined;
+      if (!await confirmManagedPane(true)) {
+        activeTurn = undefined;
+        return;
+      }
       const reporter = makeReporter(logFile);
       lastContextUsageJson = undefined;
       const started = await reporter.report(turnContext, buildTurnStartedEvent(turnContext, previousLeafId, topologyContext));

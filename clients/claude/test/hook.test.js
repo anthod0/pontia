@@ -44,11 +44,27 @@ function install(overrides = {}) {
             logDiagnostic: vi.fn(async (_logFile, entry) => {
                 diagnostics.push(entry);
             }),
+            isManagedPane: vi.fn(async () => true),
             ...overrides,
         },
     };
 }
 describe("pontia claude hook", () => {
+    test("non-managed panes skip lifecycle events after SessionStart", async () => {
+        const fetchImpl = vi.fn();
+        const { deps, reported } = install({
+            env: { PONTIA_HOME: defaultPontiaHome, PONTIA_RUNTIME_INSTANCE_ID: undefined },
+            fetch: fetchImpl,
+            isManagedPane: vi.fn(async () => false),
+        });
+
+        await runClaudeHook(baseInput({ hook_event_name: "UserPromptSubmit", prompt: "ignored" }), deps);
+        await runClaudeHook(baseInput({ hook_event_name: "Stop", last_assistant_message: "ignored" }), deps);
+        await runClaudeHook(baseInput({ hook_event_name: "SessionEnd" }), deps);
+
+        expect(fetchImpl).not.toHaveBeenCalled();
+        expect(reported).toEqual([]);
+    });
     test("SessionStart reports ready from managed runtime env without external workspace discovery", async () => {
         const workspace = await realpath(await tempDir());
         const fetchImpl = vi.fn();

@@ -7,6 +7,7 @@ import { appendDiagnostic } from "./diagnostics.js";
 import { claimTurnContext, defaultHookLogFile, loadCurrentTurnByClientSession, loadSessionByClientSession, loadSessionContext } from "./context.js";
 import { buildSessionExitedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent } from "./events.js";
 import { optionalString } from "./internal-api.js";
+import { isPontiaManagedTmuxPane } from "./managed-runtime.js";
 import { EventReporter } from "./reporter.js";
 import { bindManualSession } from "./runtime-binding.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
@@ -28,7 +29,7 @@ function failureMessage(input) {
 }
 async function reportReadyForManagedSession(input, deps) {
     const loaded = await loadSessionContext(deps.env);
-    if (!loaded.ok)
+    if (!loaded.ok || !await deps.isManagedPane(deps.env))
         return;
     const context = { ...loaded.context, ...sessionDetailsFromHook(input) };
     await deps.makeReporter(loaded.logFile).report(context, buildSessionReadyEvent(context));
@@ -52,7 +53,8 @@ async function reportReadyForManualSession(input, deps) {
         ? await loadSessionByClientSession(deps.env, deps.fetchImpl, details.clientSessionKey)
         : undefined;
     let context;
-    if (existing?.ok && existing.context.sessionState !== "exited") {
+    const paneAlreadyManaged = await deps.isManagedPane(deps.env);
+    if (existing?.ok && existing.context.sessionState !== "exited" && paneAlreadyManaged) {
         context = { ...existing.context, ...details };
     }
     else if (!existing || existing.ok || existing.reason === "session context not found") {
@@ -61,7 +63,7 @@ async function reportReadyForManualSession(input, deps) {
     else {
         await deps.logDiagnostic(logFile, { level: "warn", code: "session_context_lookup_failed", message: existing.reason });
     }
-    if (!context)
+    if (!context || !await deps.isManagedPane(deps.env))
         return;
     await deps.makeReporter(logFile).report(context, buildSessionReadyEvent(context));
 }
@@ -298,11 +300,18 @@ function requiredDeps(dependencies) {
         fetchImpl,
         makeReporter: dependencies.makeReporter ?? ((logFile) => new EventReporter({ logFile, fetch: fetchImpl })),
         logDiagnostic: dependencies.logDiagnostic ?? appendDiagnostic,
+        isManagedPane: dependencies.isManagedPane ?? isPontiaManagedTmuxPane,
     };
 }
 export async function runClaudeHook(input, dependencies = {}) {
     const deps = requiredDeps(dependencies);
     try {
+        // SessionStart may create a binding and receive its pane marker. Every
+        // later lifecycle event is ignored unless Pontia marked this pane.
+        if (input.hook_event_name !== "PermissionRequest"
+            && input.hook_event_name !== "SessionStart"
+            && !await deps.isManagedPane(deps.env))
+            return;
         switch (input.hook_event_name) {
             case "SessionStart":
                 await handleSessionStart(input, deps);

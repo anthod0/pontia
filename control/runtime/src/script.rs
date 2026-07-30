@@ -126,6 +126,10 @@ export PONTIA_RUNTIME_INSTANCE_ID={}
 export PONTIA_WORKSPACE={}
 export PONTIA_HOME={}
 export PONTIA_RUNTIME_LOG={}
+if [ -n "${{TMUX:-}}" ] && [ -n "${{TMUX_PANE:-}}" ]; then
+  tmux set-option -p -t "$TMUX_PANE" @pontia_session_id "$PONTIA_SESSION_ID" || exit 1
+  tmux set-option -p -t "$TMUX_PANE" @pontia_runtime_instance_id "$PONTIA_RUNTIME_INSTANCE_ID" || exit 1
+fi
 PONTIA_LAUNCH_SCRIPT=${{0:-}}
 cleanup_pontia_launch_script() {{
   if [ -n "$PONTIA_LAUNCH_SCRIPT" ]; then
@@ -236,6 +240,12 @@ mod tests {
         );
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
         assert!(script.contains("export PONTIA_RUNTIME_INSTANCE_ID='runtime_instance_1'"));
+        assert!(script.contains(
+            "tmux set-option -p -t \"$TMUX_PANE\" @pontia_session_id \"$PONTIA_SESSION_ID\""
+        ));
+        assert!(script.contains(
+            "tmux set-option -p -t \"$TMUX_PANE\" @pontia_runtime_instance_id \"$PONTIA_RUNTIME_INSTANCE_ID\""
+        ));
         assert!(
             script.contains("session=sess_resume_1 launch=launch_1"),
             "script was:\n{script}"
