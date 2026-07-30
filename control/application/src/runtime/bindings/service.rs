@@ -18,8 +18,7 @@ use pontia_storage_sqlite::repositories::{
 use super::{
     RuntimeBindingUpsertRequest,
     helpers::{
-        agent_binding_metadata, binding_metadata, capabilities_for_tmux, is_fork_start, non_empty,
-        validate_required,
+        agent_binding_metadata, binding_metadata, is_fork_start, non_empty, validate_required,
     },
 };
 use crate::{
@@ -53,6 +52,17 @@ impl RuntimeBindingUpsertService {
                 request.client_type
             ))
         })?;
+        let tmux = request
+            .tmux
+            .as_ref()
+            .ok_or_else(|| Error::Domain("runtime binding upsert requires tmux".to_string()))?;
+        if non_empty(tmux.socket_path.as_deref()).is_none()
+            || non_empty(tmux.pane_id.as_deref()).is_none()
+        {
+            return Err(Error::Domain(
+                "runtime binding upsert requires tmux.socket_path and tmux.pane_id".to_string(),
+            ));
+        }
 
         let launch_cwd = request
             .launch_cwd
@@ -119,7 +129,7 @@ impl RuntimeBindingUpsertService {
         }
         let internal_event_url = configured_internal_event_url()
             .unwrap_or_else(|| "http://127.0.0.1:8080/internal/v1/events".to_string());
-        let capabilities = capabilities_for_tmux(client_spec, request.tmux.as_ref());
+        let capabilities = client_spec.capabilities.clone();
         let last_seen_at = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("failed to format timestamp: {err}")))?;

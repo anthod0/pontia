@@ -989,8 +989,8 @@ async fn concurrent_first_upserts_for_one_pi_session_key_create_once_without_ove
         .canonicalize()
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
-    let first_request = upsert_body(&workspace, None);
-    let second_request = upsert_body(&workspace, None);
+    let first_request = upsert_body(&workspace, Some("%42"));
+    let second_request = upsert_body(&workspace, Some("%42"));
 
     let (first, second) = tokio::join!(
         post_upsert(state.clone(), first_request),
@@ -1121,7 +1121,7 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
 }
 
 #[tokio::test]
-async fn upsert_non_tmux_pi_session_is_observable_but_not_web_writable() {
+async fn upsert_rejects_a_request_without_tmux_binding() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -1132,31 +1132,17 @@ async fn upsert_non_tmux_pi_session_is_observable_but_not_web_writable() {
 
     let (status, body) = post_upsert(state.clone(), upsert_body(&workspace, None)).await;
 
-    assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(body["runtime"]["capabilities"]["accept_task"], false);
-    assert_eq!(body["runtime"]["capabilities"]["interrupt"], false);
-    assert_eq!(body["runtime"]["capabilities"]["stream_output"], true);
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["error"]["code"], "state_conflict");
     assert_eq!(
-        body["runtime"]["capabilities"]["context_usage"],
-        "estimated"
+        body["error"]["message"],
+        "runtime binding upsert requires tmux"
     );
-    assert_eq!(body["runtime"]["capabilities"]["report_turn_started"], true);
-    assert_eq!(
-        body["runtime"]["capabilities"]["report_turn_finished"],
-        true
-    );
-
-    let session_id = body["session"]["session_id"].as_str().unwrap();
-    let row = sqlx::query("SELECT tmux_socket_path, tmux_pane_id, metadata FROM runtime_bindings WHERE session_id = ?")
-        .bind(session_id)
+    let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
         .fetch_one(&state.db())
         .await
-        .expect("runtime binding");
-    assert!(row.get::<Option<String>, _>("tmux_socket_path").is_none());
-    assert!(row.get::<Option<String>, _>("tmux_pane_id").is_none());
-    let metadata: Value = serde_json::from_str(&row.get::<String, _>("metadata")).unwrap();
-    assert_eq!(metadata["capabilities"]["accept_task"], false);
-    assert_eq!(metadata["capabilities"]["context_usage"], "estimated");
+        .expect("session count");
+    assert_eq!(session_count, 0);
 }
 
 #[tokio::test]
@@ -1323,30 +1309,6 @@ async fn terminate_manually_bound_tui_without_pane_binding_marks_session_exited(
     .await
     .expect("exit event count");
     assert_eq!(exit_event_count, 1);
-}
-
-#[tokio::test]
-async fn terminate_non_tmux_manually_bound_tui_marks_session_exited() {
-    let state = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
-    let workspace = workspace
-        .path()
-        .canonicalize()
-        .expect("canonical workspace");
-    let workspace = workspace.display().to_string();
-
-    let (upsert_status, upsert) = post_upsert(
-        state.clone(),
-        upsert_body_with_tmux(&workspace, "/tmp/tmux-1000/default", None, None),
-    )
-    .await;
-    assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
-    let session_id = upsert["session"]["session_id"].as_str().unwrap();
-
-    let (terminate_status, terminate) = delete_session(state.clone(), session_id).await;
-
-    assert_eq!(terminate_status, StatusCode::OK, "{terminate:?}");
-    assert_eq!(terminate["data"]["session"]["state"], "exited");
 }
 
 #[tokio::test]

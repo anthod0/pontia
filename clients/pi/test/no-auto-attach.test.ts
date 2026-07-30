@@ -33,7 +33,7 @@ async function tempHome() {
 }
 
 describe("pontia pi extension startup boundary", () => {
-  test("does not auto-attach or create runtime context after pi has started", async () => {
+  test("does not register Pontia behavior outside tmux", async () => {
     const { pi, handlers } = fakePi();
     const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 500 }));
     const makeReporter = vi.fn(() => ({ report: vi.fn(async () => true) }));
@@ -54,15 +54,8 @@ describe("pontia pi extension startup boundary", () => {
       logDiagnostic: vi.fn(async () => undefined),
     });
 
-    await handlers.session_start({ reason: "startup" }, {
-      sessionManager: {
-        getSessionId: () => "pi_session_manual",
-        getCwd: () => "/workspace",
-      },
-    });
-    await handlers.before_agent_start({ prompt: "typed in tui", systemPrompt: "Base prompt" }, {});
-    await handlers.agent_start({}, {});
-
+    expect(handlers).toEqual({});
+    expect(pi.registerCommand).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(makeReporter).not.toHaveBeenCalled();
   });

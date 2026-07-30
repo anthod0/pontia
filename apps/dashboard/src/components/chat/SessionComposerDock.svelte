@@ -67,9 +67,7 @@
       </div>
     </div>
     <MessageComposer bind:value={input} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus} />
-    {#if !canAcceptWebInput}
-      <p class="mt-2 text-xs text-muted-foreground">此 session 当前不可从 Web 写入</p>
-    {:else if canSendSessionMessage(session, 'x') === false}
+    {#if canSendSessionMessage(session, 'x') === false}
       <p class="mt-2 text-xs text-muted-foreground">This session cannot accept new messages.</p>
     {/if}
   </div>

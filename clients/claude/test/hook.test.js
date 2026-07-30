@@ -29,7 +29,12 @@ function baseInput(overrides = {}) {
 function install(overrides = {}) {
     const reported = [];
     const diagnostics = [];
-    const env = { PONTIA_HOME: defaultPontiaHome, ...(overrides.env ?? {}) };
+    const env = {
+        PONTIA_HOME: defaultPontiaHome,
+        TMUX: "/tmp/tmux-1000/default,2071,502",
+        TMUX_PANE: "%42",
+        ...(overrides.env ?? {}),
+    };
     const { env: _ignoredEnv, managedRuntime, ...dependencies } = overrides;
     return {
         reported,
@@ -53,6 +58,22 @@ function install(overrides = {}) {
     };
 }
 describe("pontia claude hook", () => {
+    test("hooks are a silent no-op outside tmux", async () => {
+        const fetchImpl = vi.fn();
+        const loadManagedRuntime = vi.fn();
+        const { deps, reported } = install({
+            env: { TMUX: undefined, TMUX_PANE: undefined },
+            fetch: fetchImpl,
+            loadManagedRuntime,
+        });
+
+        const output = await runClaudeHook(baseInput(), deps);
+
+        expect(output).toBeUndefined();
+        expect(loadManagedRuntime).not.toHaveBeenCalled();
+        expect(fetchImpl).not.toHaveBeenCalled();
+        expect(reported).toEqual([]);
+    });
     test("non-managed panes skip lifecycle events after SessionStart", async () => {
         const fetchImpl = vi.fn();
         const { deps, reported } = install({

@@ -1,6 +1,5 @@
 use serde_json::{Value, json};
 
-use pontia_agent_clients as agent_clients;
 use pontia_core::error::{Error, Result};
 
 use super::{RuntimeBindingTmuxRequest, RuntimeBindingUpsertRequest};
@@ -22,17 +21,6 @@ pub(super) fn non_empty(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
-}
-
-pub(super) fn capabilities_for_tmux(
-    client_spec: &agent_clients::AgentClientSpec,
-    tmux: Option<&RuntimeBindingTmuxRequest>,
-) -> SessionCapabilities {
-    let writable = tmux.is_some_and(|tmux| {
-        non_empty(tmux.socket_path.as_deref()).is_some()
-            && non_empty(tmux.pane_id.as_deref()).is_some()
-    });
-    writable_capabilities(client_spec.capabilities.clone(), writable)
 }
 
 pub(crate) fn writable_capabilities(

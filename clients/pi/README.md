@@ -7,6 +7,7 @@ First-party pi extension for connecting pi sessions to pontia.
 - A locally running pontia server
 - A workspace registered in pontia
 - pi CLI
+- A tmux pane (`TMUX` and `TMUX_PANE` must be available)
 - `PONTIA_HOME` when pontia uses a location other than `$HOME/.pontia`
 
 ## Install locally
@@ -34,11 +35,9 @@ tui_command = "pi -e /absolute/path/to/pontia/clients/pi"
 
 Pontia supplies a Session hint when it starts pi. After pi exposes its real native session identity, the extension confirms the same runtime binding with Pontia; the backend then returns the canonical Runtime Instance ID.
 
-A new manually started pi session is not persisted in Pontia until its first prompt starts. A manual session that already has an agent binding reconnects immediately.
+A new manually started pi session inside tmux is not persisted in Pontia until its first prompt starts. A tmux-hosted session that already has an agent binding reconnects immediately. After binding succeeds, Pontia writes `@pontia_session_id` and `@pontia_runtime_instance_id` to the pane and uses them to recover the controlled runtime identity.
 
-Regardless of where the start command came from, run pi in an active workspace registered in pontia. If pontia is unavailable or the workspace is not registered, the extension leaves the pi session running without pontia reporting.
-
-Web-based input is available when the confirmed runtime includes a writable tmux pane. Other sessions may remain observable without accepting input from the Web Dashboard.
+Regardless of where the start command came from, run pi in a tmux pane and in an active workspace registered in pontia. Outside tmux the extension is a silent no-op. If pontia is unavailable or the workspace is not registered, the extension leaves the pi session running without pontia reporting.
 
 ## Troubleshooting
 

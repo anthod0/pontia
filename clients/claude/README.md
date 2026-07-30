@@ -1,8 +1,9 @@
 # Pontia Claude Code integration
 
 This plugin is the shared lifecycle and approval integration for Claude Code
-sessions started by Pontia and for manually started Claude Code sessions in an
-active registered workspace.
+sessions started by Pontia and for manually started Claude Code sessions in a
+tmux pane and an active registered workspace. Outside tmux, Pontia hooks are a
+silent no-op.
 
 Install and enable the `pontia-claude` plugin at user scope so Claude Code loads
 the `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `Stop`,
@@ -23,8 +24,8 @@ Claude events only, over OTLP HTTP/JSON, to Pontia's loopback receiver.
 
 ## Local approval verification
 
-Use both a Pontia-started Claude TUI and a manually started Claude TUI whose
-working directory is an active registered Pontia workspace. Verify:
+Use both a Pontia-started Claude TUI and a manually started Claude TUI in tmux
+whose working directory is an active registered Pontia workspace. Verify:
 
 1. `SessionStart` binds each native Claude session to a Pontia Session.
 2. Trigger a permission request and exercise Dashboard **Accept once**,

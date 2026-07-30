@@ -1,6 +1,10 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
+export function hasTmuxPaneEnvironment(env = process.env) {
+    const socketPath = env.TMUX?.trim().split(",", 1)[0]?.trim();
+    return Boolean(socketPath && env.TMUX_PANE?.trim());
+}
 async function paneOption(socketPath, paneId, option) {
     try {
         const { stdout } = await execFileAsync("tmux", [
@@ -20,11 +24,10 @@ async function paneOption(socketPath, paneId, option) {
     }
 }
 export async function loadPontiaManagedRuntimeIdentity(env = process.env) {
-    const tmux = env.TMUX?.trim();
-    const paneId = env.TMUX_PANE?.trim();
-    const socketPath = tmux?.split(",", 1)[0]?.trim();
-    if (!socketPath || !paneId)
+    if (!hasTmuxPaneEnvironment(env))
         return undefined;
+    const socketPath = env.TMUX.trim().split(",", 1)[0].trim();
+    const paneId = env.TMUX_PANE.trim();
     const [sessionId, runtimeInstanceId] = await Promise.all([
         paneOption(socketPath, paneId, "@pontia_session_id"),
         paneOption(socketPath, paneId, "@pontia_runtime_instance_id"),

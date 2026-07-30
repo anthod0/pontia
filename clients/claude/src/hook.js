@@ -7,7 +7,7 @@ import { appendDiagnostic } from "./diagnostics.js";
 import { claimTurnContext, defaultHookLogFile, loadCurrentTurnByClientSession, loadSessionByClientSession, loadSessionContext } from "./context.js";
 import { buildSessionExitedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent } from "./events.js";
 import { optionalString } from "./internal-api.js";
-import { isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity } from "./managed-runtime.js";
+import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity } from "./managed-runtime.js";
 import { EventReporter } from "./reporter.js";
 import { bindManualSession } from "./runtime-binding.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
@@ -306,6 +306,8 @@ function requiredDeps(dependencies) {
 }
 export async function runClaudeHook(input, dependencies = {}) {
     const deps = requiredDeps(dependencies);
+    if (!hasTmuxPaneEnvironment(deps.env))
+        return;
     try {
         // Every hook is a separate process, so recover Pontia's runtime
         // identity from the tmux pane rather than relying on process memory.

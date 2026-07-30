@@ -4,7 +4,7 @@ import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { resolvePontiaConnection } from "./discovery.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
-import { isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity, type ManagedRuntimeIdentity } from "./managed-runtime.js";
+import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity, type ManagedRuntimeIdentity } from "./managed-runtime.js";
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
@@ -99,6 +99,8 @@ function topologyContextFromHookContext(ctx: unknown): PiTopologyContext | undef
 
 export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPiExtensionDependencies = {}): void {
   const env = dependencies.env ?? process.env;
+  if (!hasTmuxPaneEnvironment(env)) return;
+
   const contextLoader = dependencies.loadContext ?? ((contextEnv, sessionContext) => loadTurnContext(contextEnv, { sessionContext }));
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;

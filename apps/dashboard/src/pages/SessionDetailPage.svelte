@@ -68,7 +68,7 @@
 
   function inboxSubmitUnsupportedReason(session: SessionView | null): string | null {
     if (!session) return 'Select a session first.'
-    if (session.capabilities?.accept_task !== true) return '此 session 当前不可从 Web 写入'
+    if (session.capabilities?.accept_task !== true) return 'Selected session cannot accept tasks.'
     return null
   }
 

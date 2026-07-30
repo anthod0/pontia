@@ -60,7 +60,12 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
   const { pi, handlers, commands, sendUserMessage } = fakePi();
   const reported: InternalEvent[] = [];
   let turnSequence = 0;
-  const env: Record<string, string | undefined> = { PONTIA_HOME: defaultPontiaHome, ...(overrides.env ?? {}) };
+  const env: Record<string, string | undefined> = {
+    PONTIA_HOME: defaultPontiaHome,
+    TMUX: "/tmp/tmux-1000/default,2071,502",
+    TMUX_PANE: "%42",
+    ...(overrides.env ?? {}),
+  };
   const managedRuntime = env.PONTIA_SESSION_ID && env.PONTIA_RUNTIME_INSTANCE_ID
     ? { sessionId: env.PONTIA_SESSION_ID, runtimeInstanceId: env.PONTIA_RUNTIME_INSTANCE_ID }
     : undefined;
@@ -516,48 +521,6 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
   });
 
-  test("runtime binding confirmation omits tmux when pane identity is incomplete", async () => {
-    const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === "http://localhost/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
-      }
-      if (url === "http://localhost/internal/v1/agent-bindings?client_type=pi&client_session_key=pi_session_manual") {
-        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
-      }
-      expect(JSON.parse(String(init?.body))).not.toHaveProperty("tmux");
-      return new Response(JSON.stringify({
-        session: { session_id: "sess_bound" },
-        runtime: {
-          runtime_instance_id: "rtinst_bound",
-          internal_event_url: "http://localhost/internal/v1/events",
-        },
-      }), { status: 200 });
-    });
-    const { handlers } = install({
-      env: {
-        TMUX: "/tmp/tmux-1000/default,2071,502",
-      },
-      fetch: fetchImpl as any,
-      loadContext: vi.fn(async () => ({
-        ok: false as const,
-        reason: "current turn claim unavailable",
-        logFile: "fallback/pi-hook.log",
-        silent: true,
-      })),
-    });
-
-    await handlers.session_start({ reason: "startup" }, {
-      sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => workspace },
-    });
-    await handlers.before_agent_start({ prompt: "typed in tui", systemPrompt: "Base prompt" }, {});
-    await handlers.agent_start({}, {
-      sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => workspace },
-    });
-
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
-  });
-
   test("agent_start consumes backend-delivered current-turn context after reporting started", async () => {
     const dir = await tempDir();
     const fetchImpl = vi.fn(async () =>
@@ -753,7 +716,7 @@ describe("pontia pi extension lifecycle", () => {
   test("registers pi lifecycle handlers without custom tools", () => {
     const { pi } = fakePi();
     createPontiaPiExtension(pi as any, {
-      env: {},
+      env: { TMUX: "/tmp/tmux-1000/default,2071,502", TMUX_PANE: "%42" },
       loadContext: vi.fn(),
       makeReporter: vi.fn(),
       logDiagnostic: vi.fn(),
