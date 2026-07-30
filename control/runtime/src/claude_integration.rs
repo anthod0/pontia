@@ -10,6 +10,63 @@ use pontia_core::error::{Error, Result};
 use serde_json::{Map, Value};
 
 const CLAUDE_SETTINGS_FILE: &str = ".claude/settings.json";
+const CLAUDE_INTEGRATION_DIR: &str = "integrations/claude";
+const CLAUDE_HOOK_EVENTS: &[&str] = &[
+    "SessionStart",
+    "UserPromptSubmit",
+    "PermissionRequest",
+    "Stop",
+    "StopFailure",
+    "SessionEnd",
+];
+const CLAUDE_INTEGRATION_FILES: &[(&str, &[u8], bool)] = &[
+    ("package.json", br#"{"type":"module"}"#, false),
+    (
+        "src/context.js",
+        include_bytes!("../../../clients/claude/src/context.js"),
+        false,
+    ),
+    (
+        "src/diagnostics.js",
+        include_bytes!("../../../clients/claude/src/diagnostics.js"),
+        false,
+    ),
+    (
+        "src/discovery.js",
+        include_bytes!("../../../clients/claude/src/discovery.js"),
+        false,
+    ),
+    (
+        "src/events.js",
+        include_bytes!("../../../clients/claude/src/events.js"),
+        false,
+    ),
+    (
+        "src/hook.js",
+        include_bytes!("../../../clients/claude/src/hook.js"),
+        true,
+    ),
+    (
+        "src/internal-api.js",
+        include_bytes!("../../../clients/claude/src/internal-api.js"),
+        false,
+    ),
+    (
+        "src/reporter.js",
+        include_bytes!("../../../clients/claude/src/reporter.js"),
+        false,
+    ),
+    (
+        "src/runtime-binding.js",
+        include_bytes!("../../../clients/claude/src/runtime-binding.js"),
+        false,
+    ),
+    (
+        "src/workspace.js",
+        include_bytes!("../../../clients/claude/src/workspace.js"),
+        false,
+    ),
+];
 
 const PONTIA_OTEL_ENV: &[(&str, &str)] = &[
     ("CLAUDE_CODE_ENABLE_TELEMETRY", "1"),
@@ -42,16 +99,23 @@ pub fn configure_claude_user_approval_integration(
         key: "HOME",
         message: "is required to configure Claude user settings".to_string(),
     })?;
-    let settings_path = PathBuf::from(home).join(CLAUDE_SETTINGS_FILE);
-    configure_claude_settings_file(&settings_path, bind_addr, api_token)?;
+    let home = PathBuf::from(home);
+    let pontia_home = std::env::var_os("PONTIA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".pontia"));
+    let settings_path = home.join(CLAUDE_SETTINGS_FILE);
+    let integration_dir = pontia_home.join(CLAUDE_INTEGRATION_DIR);
+    configure_claude_settings_file(&settings_path, &integration_dir, bind_addr, api_token)?;
     Ok(ClaudeApprovalIntegration::Configured { settings_path })
 }
 
 fn configure_claude_settings_file(
     settings_path: &Path,
+    integration_dir: &Path,
     bind_addr: SocketAddr,
     api_token: &str,
 ) -> Result<()> {
+    install_claude_integration(integration_dir)?;
     let write_path = settings_write_path(settings_path)?;
     let mut settings = read_settings(&write_path)?;
     let root = settings
@@ -64,17 +128,83 @@ fn configure_claude_settings_file(
     }
     env.insert(
         "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT".to_string(),
-        Value::String(format!(
-            "http://127.0.0.1:{}/internal/v1/otel/v1/logs",
-            bind_addr.port()
-        )),
+        Value::String(otlp_logs_endpoint(bind_addr)),
     );
     env.insert(
         "OTEL_EXPORTER_OTLP_HEADERS".to_string(),
         Value::String(format!("Authorization=Bearer {api_token}")),
     );
+    merge_claude_hooks(root, &integration_dir.join("src/hook.js"))?;
 
     write_settings_atomically(&write_path, &settings)
+}
+
+fn install_claude_integration(integration_dir: &Path) -> Result<()> {
+    for (relative_path, contents, executable) in CLAUDE_INTEGRATION_FILES {
+        let path = integration_dir.join(relative_path);
+        let parent = path
+            .parent()
+            .ok_or_else(|| invalid_settings("Claude integration file has no parent directory"))?;
+        fs::create_dir_all(parent)?;
+        write_file_atomically(&path, contents, if *executable { 0o700 } else { 0o600 })?;
+    }
+    Ok(())
+}
+
+fn merge_claude_hooks(root: &mut Map<String, Value>, hook_path: &Path) -> Result<()> {
+    let hooks = root
+        .entry("hooks".to_string())
+        .or_insert_with(|| Value::Object(Map::new()))
+        .as_object_mut()
+        .ok_or_else(|| invalid_settings("Claude settings hooks must be a JSON object"))?;
+    let hook_command = hook_path.display().to_string();
+
+    for event in CLAUDE_HOOK_EVENTS {
+        let entries = hooks
+            .entry((*event).to_string())
+            .or_insert_with(|| Value::Array(Vec::new()))
+            .as_array_mut()
+            .ok_or_else(|| {
+                invalid_settings(format!(
+                    "Claude settings hooks.{event} must be a JSON array"
+                ))
+            })?;
+        entries.retain(|entry| !entry_uses_command(entry, &hook_command));
+        entries.push(serde_json::json!({
+            "hooks": [{
+                "type": "command",
+                "command": hook_command,
+            }]
+        }));
+    }
+    Ok(())
+}
+
+fn entry_uses_command(entry: &Value, command: &str) -> bool {
+    entry
+        .get("hooks")
+        .and_then(Value::as_array)
+        .is_some_and(|hooks| {
+            hooks
+                .iter()
+                .any(|hook| hook.get("command").and_then(Value::as_str) == Some(command))
+        })
+}
+
+fn otlp_logs_endpoint(bind_addr: SocketAddr) -> String {
+    let endpoint_addr = if bind_addr.ip().is_unspecified() {
+        SocketAddr::new(
+            if bind_addr.is_ipv4() {
+                std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+            } else {
+                std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)
+            },
+            bind_addr.port(),
+        )
+    } else {
+        bind_addr
+    };
+    format!("http://{endpoint_addr}/internal/v1/otel/v1/logs")
 }
 
 fn settings_write_path(settings_path: &Path) -> Result<PathBuf> {
@@ -110,21 +240,22 @@ fn env_object(root: &mut Map<String, Value>) -> Result<&mut Map<String, Value>> 
 }
 
 fn write_settings_atomically(settings_path: &Path, settings: &Value) -> Result<()> {
-    let parent = settings_path.parent().ok_or_else(|| {
-        invalid_settings(format!(
-            "{} has no parent directory",
-            settings_path.display()
-        ))
-    })?;
-    fs::create_dir_all(parent)?;
+    let mut contents = serde_json::to_vec_pretty(settings)?;
+    contents.push(b'\n');
+    write_file_atomically(settings_path, &contents, 0o600)
+}
 
-    let (temp_path, mut file) = create_temp_settings_file(parent)?;
+fn write_file_atomically(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| invalid_settings(format!("{} has no parent directory", path.display())))?;
+    fs::create_dir_all(parent)?;
+    let (temp_path, mut file) = create_temp_file(parent)?;
     let result = (|| -> Result<()> {
-        serde_json::to_writer_pretty(&mut file, settings)?;
-        file.write_all(b"\n")?;
+        file.write_all(contents)?;
         file.sync_all()?;
-        fs::rename(&temp_path, settings_path)?;
-        fs::set_permissions(settings_path, fs::Permissions::from_mode(0o600))?;
+        fs::rename(&temp_path, path)?;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
         Ok(())
     })();
     if result.is_err() {
@@ -133,10 +264,10 @@ fn write_settings_atomically(settings_path: &Path, settings: &Value) -> Result<(
     result
 }
 
-fn create_temp_settings_file(parent: &Path) -> Result<(PathBuf, fs::File)> {
+fn create_temp_file(parent: &Path) -> Result<(PathBuf, fs::File)> {
     for attempt in 0..100 {
         let path = parent.join(format!(
-            ".settings.json.pontia-{}-{attempt}.tmp",
+            ".pontia-write-{}-{attempt}.tmp",
             std::process::id()
         ));
         match OpenOptions::new()
@@ -176,6 +307,7 @@ mod tests {
     fn merges_pontia_otel_logs_configuration_without_touching_other_settings() {
         let dir = tempdir().expect("tempdir");
         let settings_path = dir.path().join(".claude/settings.json");
+        let integration_dir = dir.path().join(".pontia/integrations/claude");
         fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
         fs::write(
             &settings_path,
@@ -194,6 +326,7 @@ mod tests {
 
         configure_claude_settings_file(
             &settings_path,
+            &integration_dir,
             "0.0.0.0:18080".parse().unwrap(),
             "pontia-token",
         )
@@ -205,9 +338,16 @@ mod tests {
             json!({"allow": ["Bash(pnpm test)"]})
         );
         assert_eq!(
-            settings["hooks"],
-            json!({"Notification": [{"hooks": [{"type": "command", "command": "notify"}]}]})
+            settings["hooks"]["Notification"],
+            json!([{"hooks": [{"type": "command", "command": "notify"}]}])
         );
+        let hook_command = integration_dir.join("src/hook.js").display().to_string();
+        for event in CLAUDE_HOOK_EVENTS {
+            assert_eq!(
+                settings["hooks"][event],
+                json!([{"hooks": [{"type": "command", "command": hook_command}]}])
+            );
+        }
         assert_eq!(settings["env"]["EXISTING"], "preserved");
         assert_eq!(settings["env"]["CLAUDE_CODE_ENABLE_TELEMETRY"], "1");
         assert_eq!(settings["env"]["OTEL_LOGS_EXPORTER"], "otlp");
@@ -240,11 +380,14 @@ mod tests {
     fn creates_user_settings_and_is_idempotent() {
         let dir = tempdir().expect("tempdir");
         let settings_path = dir.path().join(".claude/settings.json");
+        let integration_dir = dir.path().join(".pontia/integrations/claude");
         let bind_addr = "127.0.0.1:8080".parse().unwrap();
 
-        configure_claude_settings_file(&settings_path, bind_addr, "token").unwrap();
+        configure_claude_settings_file(&settings_path, &integration_dir, bind_addr, "token")
+            .unwrap();
         let first = fs::read(&settings_path).unwrap();
-        configure_claude_settings_file(&settings_path, bind_addr, "token").unwrap();
+        configure_claude_settings_file(&settings_path, &integration_dir, bind_addr, "token")
+            .unwrap();
 
         assert_eq!(fs::read(&settings_path).unwrap(), first);
     }
@@ -253,11 +396,13 @@ mod tests {
     fn rejects_non_object_env_without_overwriting_the_file() {
         let dir = tempdir().expect("tempdir");
         let settings_path = dir.path().join("settings.json");
+        let integration_dir = dir.path().join("integration");
         fs::write(&settings_path, r#"{"env":"managed elsewhere"}"#).unwrap();
         let original = fs::read(&settings_path).unwrap();
 
         let error = configure_claude_settings_file(
             &settings_path,
+            &integration_dir,
             "127.0.0.1:8080".parse().unwrap(),
             "token",
         )
@@ -275,13 +420,19 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let target = dir.path().join("dotfiles/claude-settings.json");
         let settings_path = dir.path().join(".claude/settings.json");
+        let integration_dir = dir.path().join(".pontia/integrations/claude");
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
         fs::write(&target, r#"{"theme":"dark"}"#).unwrap();
         symlink(&target, &settings_path).unwrap();
 
-        configure_claude_settings_file(&settings_path, "127.0.0.1:8080".parse().unwrap(), "token")
-            .unwrap();
+        configure_claude_settings_file(
+            &settings_path,
+            &integration_dir,
+            "127.0.0.1:8080".parse().unwrap(),
+            "token",
+        )
+        .unwrap();
 
         assert!(
             fs::symlink_metadata(&settings_path)
@@ -292,5 +443,34 @@ mod tests {
         let settings: Value = serde_json::from_slice(&fs::read(&target).unwrap()).unwrap();
         assert_eq!(settings["theme"], "dark");
         assert_eq!(settings["env"]["OTEL_LOGS_EXPORTER"], "otlp");
+    }
+
+    #[test]
+    fn installs_the_embedded_hook_bundle_and_uses_reachable_receiver_addresses() {
+        let dir = tempdir().expect("tempdir");
+        let settings_path = dir.path().join(".claude/settings.json");
+        let integration_dir = dir.path().join(".pontia/integrations/claude");
+
+        configure_claude_settings_file(
+            &settings_path,
+            &integration_dir,
+            "192.0.2.10:18080".parse().unwrap(),
+            "token",
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read(integration_dir.join("src/hook.js")).unwrap(),
+            include_bytes!("../../../clients/claude/src/hook.js")
+        );
+        let settings: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
+        assert_eq!(
+            settings["env"]["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"],
+            "http://192.0.2.10:18080/internal/v1/otel/v1/logs"
+        );
+        assert_eq!(
+            otlp_logs_endpoint("[::]:18081".parse().unwrap()),
+            "http://[::1]:18081/internal/v1/otel/v1/logs"
+        );
     }
 }

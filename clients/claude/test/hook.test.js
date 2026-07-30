@@ -276,11 +276,28 @@ describe("pontia claude hook", () => {
         expect(output).toBeUndefined();
         expect(diagnostics).toEqual([]);
     });
-    test.each([
-        ["managed", { PONTIA_SESSION_ID: "sess_managed", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_managed" }],
-        ["manual", {}],
-    ])("PermissionRequest uses the same hook and Approval API for %s sessions", async (_kind, env) => {
+    test.each(["managed", "manual"])("SessionStart and PermissionRequest use the same Approval path for %s sessions", async (kind) => {
+        const workspace = await realpath(await tempDir());
+        const env = kind === "managed"
+            ? { PONTIA_SESSION_ID: "sess_managed", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_managed" }
+            : {};
         const fetchImpl = vi.fn(async (url, init) => {
+            if (url === "http://localhost/external/v1/workspaces") {
+                return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+            }
+            if (url.startsWith("http://localhost/internal/v1/agent-bindings/session-context?")) {
+                return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+            }
+            if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+                const request = JSON.parse(String(init?.body));
+                return new Response(JSON.stringify({
+                    session: { session_id: "sess_manual" },
+                    runtime: {
+                        runtime_instance_id: request.runtime_instance_id,
+                        internal_event_url: "http://localhost/internal/v1/events",
+                    },
+                }), { status: 200 });
+            }
             expect(url).toBe("http://localhost/internal/v1/claude/permission-request");
             expect(JSON.parse(String(init?.body))).toMatchObject({
                 session_id: "claude_session_1",
@@ -291,20 +308,23 @@ describe("pontia claude hook", () => {
                 data: { result: { decision: "accept_once" }, request_event_id: "evt_request" },
             }), { status: 200 });
         });
-        const { deps } = install({ env: { PONTIA_HOME: defaultPontiaHome, ...env }, fetch: fetchImpl });
+        const { deps, reported } = install({ env: { PONTIA_HOME: defaultPontiaHome, ...env }, fetch: fetchImpl });
+        await runClaudeHook(baseInput({ cwd: workspace }), deps);
         const output = await runClaudeHook(baseInput({
             hook_event_name: "PermissionRequest",
             prompt_id: "prompt_1",
             tool_name: "Bash",
             tool_input: { command: "pnpm test" },
+            cwd: workspace,
         }), deps);
+        expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
         expect(output).toEqual({
             hookSpecificOutput: {
                 hookEventName: "PermissionRequest",
                 decision: { behavior: "allow" },
             },
         });
-        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        expect(fetchImpl.mock.calls.filter(([url]) => url === "http://localhost/internal/v1/claude/permission-request")).toHaveLength(1);
     });
     test.each([
         [

@@ -16,8 +16,10 @@ async fn main() -> Result<()> {
     init_tracing();
 
     let config = AppConfig::from_env()?;
+    let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
+    let bound_addr = listener.local_addr()?;
     match pontia_runtime::configure_claude_user_approval_integration(
-        config.bind_addr,
+        bound_addr,
         config.external_api_token.as_deref(),
     )? {
         ClaudeApprovalIntegration::Configured { settings_path } => {
@@ -36,8 +38,6 @@ async fn main() -> Result<()> {
     let dashboard = http::dashboard::resolve_dashboard(&config.dashboard).await;
     let state = http::HttpState::new(app_state, dashboard);
 
-    let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
-    let bound_addr = listener.local_addr()?;
     info!(addr = %bound_addr, "starting pontia control plane");
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
