@@ -178,6 +178,14 @@ impl RuntimeControlService {
         } else {
             None
         };
+        let persisted_start_command = self.start_command(session_id).await?;
+        let resume_start_command = self
+            .resume_start_command(
+                persisted_start_command.as_deref(),
+                session_id,
+                &session.client_type,
+            )
+            .await?;
         let runtime = self
             .runtime
             .start_session_with_restart_count_and_reuse_target(
@@ -188,16 +196,15 @@ impl RuntimeControlService {
                     workspace_name: runtime_workspace_name,
                     handle: session.handle.clone(),
                     role: session.role.clone(),
-                    start_command: self
-                        .resume_start_command(session_id, &session.client_type)
-                        .await?,
+                    start_command: resume_start_command,
                 },
                 prior_restart_count + 1,
                 tmux_binding
                     .as_ref()
                     .map(|binding| (binding.socket_path.as_str(), binding.pane_id.as_str())),
             )?;
-        self.upsert_runtime_binding(session_id, &runtime).await?;
+        self.upsert_runtime_binding(session_id, &runtime, persisted_start_command)
+            .await?;
         ingest
             .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),

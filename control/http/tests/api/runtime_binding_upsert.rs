@@ -1121,7 +1121,7 @@ async fn upsert_non_tmux_pi_session_is_observable_but_not_web_writable() {
 }
 
 #[tokio::test]
-async fn webui_resume_of_manually_bound_tui_appends_pi_session_id_to_start_command() {
+async fn repeated_webui_resume_of_manually_bound_pi_tui_does_not_persist_session_id_argument() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -1136,42 +1136,27 @@ async fn webui_resume_of_manually_bound_tui_appends_pi_session_id_to_start_comma
     assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
 
-    let (exit_status, exit) = request_json(
+    let first_resumed_runtime_instance_id = exit_and_resume(
         state.clone(),
-        "POST",
-        "/internal/v1/events",
-        Some(json!({
-            "session_id": session_id,
-            "type": "session.exited",
-            "data": {
-                "runtime_instance_id": upsert["runtime"]["runtime_instance_id"],
-                "reason": "quit"
-            }
-        })),
+        session_id,
+        upsert["runtime"]["runtime_instance_id"]
+            .as_str()
+            .expect("initial runtime instance id"),
     )
     .await;
-    assert_eq!(exit_status, StatusCode::OK, "{exit:?}");
+    assert_persisted_start_command(&state, session_id, "pi").await;
 
-    let (resume_status, resume) = request_json(
+    exit_and_resume(
         state.clone(),
-        "POST",
-        &format!("/external/v1/sessions/{session_id}/resume"),
-        None,
+        session_id,
+        &first_resumed_runtime_instance_id,
     )
     .await;
-    assert_eq!(resume_status, StatusCode::OK, "{resume:?}");
-
-    let start_command: String =
-        sqlx::query_scalar("SELECT start_command FROM runtime_bindings WHERE session_id = ?")
-            .bind(session_id)
-            .fetch_one(&state.db())
-            .await
-            .expect("runtime start command");
-    assert_eq!(start_command, "pi --session-id 'pi_session_123'");
+    assert_persisted_start_command(&state, session_id, "pi").await;
 }
 
 #[tokio::test]
-async fn webui_resume_of_manually_bound_claude_tui_appends_native_session_id_to_start_command() {
+async fn repeated_webui_resume_of_manually_bound_claude_tui_does_not_persist_resume_argument() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -1190,6 +1175,26 @@ async fn webui_resume_of_manually_bound_claude_tui_appends_native_session_id_to_
     assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
 
+    let first_resumed_runtime_instance_id = exit_and_resume(
+        state.clone(),
+        session_id,
+        upsert["runtime"]["runtime_instance_id"]
+            .as_str()
+            .expect("initial runtime instance id"),
+    )
+    .await;
+    assert_persisted_start_command(&state, session_id, "claude").await;
+
+    exit_and_resume(
+        state.clone(),
+        session_id,
+        &first_resumed_runtime_instance_id,
+    )
+    .await;
+    assert_persisted_start_command(&state, session_id, "claude").await;
+}
+
+async fn exit_and_resume(state: AppState, session_id: &str, runtime_instance_id: &str) -> String {
     let (exit_status, exit) = request_json(
         state.clone(),
         "POST",
@@ -1198,7 +1203,7 @@ async fn webui_resume_of_manually_bound_claude_tui_appends_native_session_id_to_
             "session_id": session_id,
             "type": "session.exited",
             "data": {
-                "runtime_instance_id": upsert["runtime"]["runtime_instance_id"],
+                "runtime_instance_id": runtime_instance_id,
                 "reason": "quit"
             }
         })),
@@ -1215,13 +1220,24 @@ async fn webui_resume_of_manually_bound_claude_tui_appends_native_session_id_to_
     .await;
     assert_eq!(resume_status, StatusCode::OK, "{resume:?}");
 
-    let start_command: String =
-        sqlx::query_scalar("SELECT start_command FROM runtime_bindings WHERE session_id = ?")
+    sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+        .bind(session_id)
+        .fetch_one(&state.db())
+        .await
+        .expect("resumed runtime instance id")
+}
+
+async fn assert_persisted_start_command(state: &AppState, session_id: &str, expected: &str) {
+    let row =
+        sqlx::query("SELECT start_command, metadata FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())
             .await
             .expect("runtime start command");
-    assert_eq!(start_command, "claude --resume 'claude_session_123'");
+    assert_eq!(row.get::<String, _>("start_command"), expected);
+    let metadata: Value =
+        serde_json::from_str(&row.get::<String, _>("metadata")).expect("runtime metadata");
+    assert_eq!(metadata["start_command"], expected);
 }
 
 #[tokio::test]

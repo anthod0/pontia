@@ -62,23 +62,24 @@ impl RuntimeControlService {
 
     pub(super) async fn resume_start_command(
         &self,
+        start_command: Option<&str>,
         session_id: &str,
         client_type: &str,
     ) -> Result<Option<String>> {
-        let Some(command) = self.start_command(session_id).await? else {
+        let Some(command) = start_command else {
             return Ok(None);
         };
         let Some(session_identity_arg) = pontia_agent_clients::get_client_spec(client_type)
             .and_then(|spec| spec.tmux_runtime())
             .and_then(|runtime| runtime.session_identity_arg)
         else {
-            return Ok(Some(command));
+            return Ok(Some(command.to_string()));
         };
         let Some(client_session_key) = self
             .client_session_key_for_session(session_id, client_type)
             .await?
         else {
-            return Ok(Some(command));
+            return Ok(Some(command.to_string()));
         };
         Ok(Some(format!(
             "{command} {session_identity_arg} {}",
@@ -113,20 +114,30 @@ impl RuntimeControlService {
         &self,
         session_id: &str,
         runtime: &RuntimeStartResult,
+        persisted_start_command: Option<String>,
     ) -> Result<()> {
+        let mut metadata = runtime.binding_metadata();
+        if let Some(object) = metadata.as_object_mut() {
+            match persisted_start_command.as_ref() {
+                Some(command) => {
+                    object.insert("start_command".to_string(), Value::String(command.clone()));
+                }
+                None => {
+                    object.remove("start_command");
+                }
+            }
+        }
         let result = SqliteRuntimeBindingRepository::new(self.pool.clone())
             .upsert_binding_guarded(RuntimeBindingUpsertRecord {
                 session_id: session_id.to_string(),
                 runtime_kind: runtime.runtime_kind.clone(),
                 runtime_instance_id: runtime.runtime_instance_id().map(ToString::to_string),
-                start_command: runtime.metadata["start_command"]
-                    .as_str()
-                    .map(ToString::to_string),
+                start_command: persisted_start_command,
                 launch_cwd: runtime.launch_cwd().map(ToString::to_string),
                 last_seen_at: runtime.last_seen_at().map(ToString::to_string),
                 tmux_socket_path: runtime.tmux_socket_path().map(ToString::to_string),
                 tmux_pane_id: runtime.tmux_pane_id().map(ToString::to_string),
-                metadata: serde_json::to_string(&runtime.binding_metadata())?,
+                metadata: serde_json::to_string(&metadata)?,
             })
             .await;
         if result.is_err() {
