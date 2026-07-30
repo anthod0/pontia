@@ -5,7 +5,7 @@ use pontia_core::{
     error::{Error, Result},
     ids::new_event_id,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{Map, Value};
 use sqlx::SqlitePool;
 use tokio::sync::{Mutex, oneshot};
@@ -31,10 +31,36 @@ pub struct ApprovalRegistrationRequest {
     pub hook_input: Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApprovalWaitOutcome {
     ResolvedElsewhere,
+    AcceptOnce,
+    Reject,
+    AlwaysAllow { permission_suggestion: Value },
+}
+
+impl ApprovalWaitOutcome {
+    pub fn response_value(&self) -> Value {
+        match self {
+            Self::ResolvedElsewhere => Value::String("resolved_elsewhere".to_string()),
+            Self::AcceptOnce => serde_json::json!({"decision": "accept_once"}),
+            Self::Reject => serde_json::json!({"decision": "reject"}),
+            Self::AlwaysAllow {
+                permission_suggestion,
+            } => serde_json::json!({
+                "decision": "always_allow",
+                "permission_suggestion": permission_suggestion,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "decision", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ApprovalDecisionRequest {
+    AcceptOnce,
+    Reject,
+    AlwaysAllow { permission_suggestion: Value },
 }
 
 pub struct PendingApproval {
@@ -56,7 +82,7 @@ struct ApprovalWaiter {
     session_id: String,
     turn_id: String,
     _hook_input: Value,
-    _permission_suggestions: Vec<Value>,
+    permission_suggestions: Vec<Value>,
     sender: oneshot::Sender<ApprovalWaitOutcome>,
 }
 
@@ -90,7 +116,7 @@ impl ApprovalCoordinator {
                 session_id,
                 turn_id,
                 _hook_input: hook_input,
-                _permission_suggestions: permission_suggestions,
+                permission_suggestions,
                 sender,
             },
         );
@@ -105,6 +131,50 @@ impl ApprovalCoordinator {
         if let Some(waiter) = self.waiters.lock().await.remove(request_event_id) {
             let _ = waiter.sender.send(ApprovalWaitOutcome::ResolvedElsewhere);
         }
+    }
+
+    async fn deliver_decision(
+        &self,
+        request_event_id: &str,
+        session_id: &str,
+        decision: ApprovalWaitOutcome,
+    ) -> Result<()> {
+        let mut waiters = self.waiters.lock().await;
+        let waiter = waiters.get(request_event_id).ok_or_else(|| {
+            Error::StateConflict("Approval request is no longer actionable".to_string())
+        })?;
+        if waiter.session_id != session_id {
+            return Err(Error::StateConflict(
+                "Approval request does not belong to the target Session".to_string(),
+            ));
+        }
+        let decision = if let ApprovalWaitOutcome::AlwaysAllow {
+            permission_suggestion,
+        } = &decision
+        {
+            let original = waiter
+                .permission_suggestions
+                .iter()
+                .find(|suggestion| *suggestion == permission_suggestion)
+                .cloned()
+                .ok_or_else(|| {
+                    Error::StateConflict(
+                        "permission suggestion does not exactly match the pending Approval"
+                            .to_string(),
+                    )
+                })?;
+            ApprovalWaitOutcome::AlwaysAllow {
+                permission_suggestion: original,
+            }
+        } else {
+            decision
+        };
+        let waiter = waiters
+            .remove(request_event_id)
+            .expect("checked waiter must still exist while coordinator lock is held");
+        waiter.sender.send(decision).map_err(|_| {
+            Error::StateConflict("Approval request is no longer actionable".to_string())
+        })
     }
 
     pub async fn resolve_terminal_event(&self, event: &ReportedEvent) {
@@ -138,6 +208,103 @@ impl ApprovalCoordinator {
                 let _ = waiter.sender.send(ApprovalWaitOutcome::ResolvedElsewhere);
             }
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct ApprovalCommandService {
+    pool: SqlitePool,
+    coordinator: ApprovalCoordinator,
+}
+
+impl ApprovalCommandService {
+    pub fn new(pool: SqlitePool, coordinator: ApprovalCoordinator) -> Self {
+        Self { pool, coordinator }
+    }
+
+    pub async fn decide(
+        &self,
+        session_id: &str,
+        request_event_id: &str,
+        request: ApprovalDecisionRequest,
+    ) -> Result<Value> {
+        let row = sqlx::query_as::<_, (String, String)>(
+            r#"SELECT session_id, payload
+               FROM events
+               WHERE event_id = ? AND event_type = 'approval.requested'"#,
+        )
+        .bind(request_event_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| {
+            Error::StateConflict("Approval request is no longer actionable".to_string())
+        })?;
+        if row.0 != session_id {
+            return Err(Error::StateConflict(
+                "Approval request does not belong to the target Session".to_string(),
+            ));
+        }
+        let payload: Value = serde_json::from_str(&row.1)?;
+        let metadata =
+            sqlx::query_scalar::<_, String>("SELECT metadata FROM sessions WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_optional(&self.pool)
+                .await?
+                .ok_or_else(|| {
+                    Error::StateConflict("Approval request is no longer actionable".to_string())
+                })?;
+        let metadata: Value = serde_json::from_str(&metadata)?;
+        let interaction = metadata.get("interaction");
+        if interaction
+            .and_then(|value| value.get("type"))
+            .and_then(Value::as_str)
+            != Some("approval")
+            || interaction
+                .and_then(|value| value.get("state"))
+                .and_then(Value::as_str)
+                != Some("awaiting")
+            || interaction
+                .and_then(|value| value.get("request_event_id"))
+                .and_then(Value::as_str)
+                != Some(request_event_id)
+        {
+            return Err(Error::StateConflict(
+                "Approval request is no longer actionable".to_string(),
+            ));
+        }
+
+        let outcome = match request {
+            ApprovalDecisionRequest::AcceptOnce => ApprovalWaitOutcome::AcceptOnce,
+            ApprovalDecisionRequest::Reject => ApprovalWaitOutcome::Reject,
+            ApprovalDecisionRequest::AlwaysAllow {
+                permission_suggestion,
+            } => {
+                let event_matches = payload
+                    .get("permission_suggestions")
+                    .and_then(Value::as_array)
+                    .is_some_and(|suggestions| {
+                        suggestions
+                            .iter()
+                            .any(|suggestion| suggestion == &permission_suggestion)
+                    });
+                if !event_matches {
+                    return Err(Error::StateConflict(
+                        "permission suggestion does not exactly match approval.requested"
+                            .to_string(),
+                    ));
+                }
+                ApprovalWaitOutcome::AlwaysAllow {
+                    permission_suggestion,
+                }
+            }
+        };
+        self.coordinator
+            .deliver_decision(request_event_id, session_id, outcome)
+            .await?;
+        Ok(serde_json::json!({
+            "request_event_id": request_event_id,
+            "delivered": true,
+        }))
     }
 }
 
@@ -429,5 +596,38 @@ mod tests {
             "destination": "localSettings"
         });
         assert!(!valid_permission_suggestion(&too_many_rules));
+    }
+
+    #[tokio::test]
+    async fn concurrent_decisions_only_wake_a_waiter_once() {
+        let coordinator = ApprovalCoordinator::default();
+        let receiver = coordinator
+            .register(
+                "evt_approval".to_string(),
+                "sess_approval".to_string(),
+                "turn_approval".to_string(),
+                json!({}),
+                Vec::new(),
+            )
+            .await
+            .unwrap();
+
+        let accept = coordinator.deliver_decision(
+            "evt_approval",
+            "sess_approval",
+            ApprovalWaitOutcome::AcceptOnce,
+        );
+        let reject = coordinator.deliver_decision(
+            "evt_approval",
+            "sess_approval",
+            ApprovalWaitOutcome::Reject,
+        );
+        let (accept, reject) = tokio::join!(accept, reject);
+
+        assert_ne!(accept.is_ok(), reject.is_ok());
+        assert!(matches!(
+            receiver.await.unwrap(),
+            ApprovalWaitOutcome::AcceptOnce | ApprovalWaitOutcome::Reject
+        ));
     }
 }

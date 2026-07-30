@@ -6,6 +6,11 @@ export interface ApprovalRequestView {
   permissionSuggestions: JsonObject[]
 }
 
+export type ApprovalDecisionInput =
+  | { decision: 'accept_once' }
+  | { decision: 'reject' }
+  | { decision: 'always_allow'; permission_suggestion: JsonObject }
+
 function record(value: unknown): JsonObject | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as JsonObject

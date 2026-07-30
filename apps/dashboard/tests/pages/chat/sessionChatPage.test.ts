@@ -164,6 +164,47 @@ test('shows a pending Claude approval from the External API session and event sn
   expect(within(approval).getByText('Always allow options')).toBeInTheDocument();
   expect(within(approval).getByText(/pnpm test/)).toBeInTheDocument();
   expect(within(approval).queryByText(/tool_input/)).not.toBeInTheDocument();
+
+  await userEvent.click(within(approval).getByRole('button', { name: 'Accept Once' }));
+  await waitFor(() => expect(mocks.decideApproval).toHaveBeenCalledWith(
+    'session-1',
+    'evt-approval',
+    { decision: 'accept_once' },
+  ));
+  expect(within(approval).getByText(/Decision delivered/)).toBeInTheDocument();
+  expect(within(approval).getByRole('button', { name: 'Reject' })).toBeDisabled();
+
+  const replacementSession = {
+    ...selected,
+    metadata: {
+      interaction: {
+        type: 'approval',
+        state: 'awaiting',
+        request_event_id: 'evt-approval-2',
+      },
+    },
+  };
+  mocks.sessionDetail.set({
+    session: replacementSession,
+    turns: [turn({ state: 'running', output: null, completed_at: null })],
+    inboxMessages: [],
+    events: [{
+      event_id: 'evt-approval-2',
+      session_id: 'session-1',
+      turn_id: 'turn-1',
+      source: 'agent_client',
+      type: 'approval.requested',
+      time: '2026-07-30T00:00:01Z',
+      payload: {
+        client_session_id: 'claude-native',
+        tool_name: 'Write',
+        permission_suggestions: [],
+      },
+    }],
+  });
+  const replacement = await screen.findByLabelText('Approval required for Write');
+  expect(within(replacement).getByRole('button', { name: 'Accept Once' })).toBeEnabled();
+  expect(within(replacement).queryByText(/Decision delivered/)).not.toBeInTheDocument();
 });
 
 test.each([

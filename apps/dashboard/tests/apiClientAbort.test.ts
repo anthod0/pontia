@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
+import { decideApproval, getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
 import { token } from '../src/stores/auth';
 
 beforeEach(() => {
@@ -129,6 +129,39 @@ test('retries mutating transient fetch failures with the same idempotency key', 
   const secondHeaders = (fetchMock.mock.calls[1][1] as RequestInit).headers as Headers;
   expect(firstHeaders.get('Idempotency-Key')).toBe('idem-1');
   expect(secondHeaders.get('Idempotency-Key')).toBe('idem-1');
+});
+
+test('submits one exact approval suggestion with an idempotency key', async () => {
+  const fetchMock = vi.fn(async () => jsonResponse({
+    request_event_id: 'evt/approval',
+    delivered: true,
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('crypto', { randomUUID: () => 'approval-idem' });
+  const suggestion = {
+    type: 'addRules',
+    rules: [{ toolName: 'Bash', ruleContent: 'pnpm test' }],
+    behavior: 'allow',
+    destination: 'localSettings',
+  };
+
+  await expect(decideApproval('session/1', 'evt/approval', {
+    decision: 'always_allow',
+    permission_suggestion: suggestion,
+  })).resolves.toEqual({ request_event_id: 'evt/approval', delivered: true });
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/external/v1/sessions/session%2F1/approvals/evt%2Fapproval/decision',
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        decision: 'always_allow',
+        permission_suggestion: suggestion,
+      }),
+    }),
+  );
+  const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Headers;
+  expect(headers.get('Idempotency-Key')).toBe('approval-idem');
 });
 
 test('does not retry aborted requests', async () => {

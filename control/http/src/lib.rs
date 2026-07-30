@@ -202,6 +202,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             "/external/v1/sessions/{session_id}/resume",
             post(external::resume_session),
         )
+        .route(
+            "/external/v1/sessions/{session_id}/approvals/{request_event_id}/decision",
+            post(external::decide_approval),
+        )
         // Read-only turn history. Direct turn dispatch via POST is intentionally not exposed:
         // Web input is submitted through the inbox API, and hook/internal events own turn lifecycle facts.
         .route(

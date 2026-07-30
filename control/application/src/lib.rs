@@ -46,8 +46,8 @@ pub use agent_profiles::{
 };
 pub use app::{AppState, initialize};
 pub use approvals::{
-    ApprovalCoordinator, ApprovalRegistrationRequest, ApprovalRegistrationService,
-    ApprovalWaitOutcome, PendingApproval,
+    ApprovalCommandService, ApprovalCoordinator, ApprovalDecisionRequest,
+    ApprovalRegistrationRequest, ApprovalRegistrationService, ApprovalWaitOutcome, PendingApproval,
 };
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
 pub(crate) use events::nested_string;

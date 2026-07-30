@@ -61,6 +61,68 @@ async fn post(state: AppState, uri: &'static str, body: Value) -> axum::response
         .expect("response")
 }
 
+async fn post_external(
+    state: AppState,
+    uri: &str,
+    body: Value,
+    idempotency_key: &str,
+) -> axum::response::Response {
+    http::router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header(header::AUTHORIZATION, "Bearer test-token")
+                .header("Idempotency-Key", idempotency_key)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
+async fn approval_event_id(state: &AppState) -> String {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if let Some(event_id) = sqlx::query_scalar::<_, String>(
+                "SELECT event_id FROM events WHERE event_type = 'approval.requested'",
+            )
+            .fetch_optional(&state.db())
+            .await
+            .expect("approval event")
+            {
+                break event_id;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("approval event timeout")
+}
+
+fn permission_request_body() -> Value {
+    json!({
+        "session_id": "claude_native",
+        "prompt_id": "prompt_1",
+        "tool_name": "Bash",
+        "tool_input": {"command": "pnpm test"},
+        "permission_suggestions": [{
+            "type": "addRules",
+            "rules": [{"toolName": "Bash", "ruleContent": "pnpm test"}],
+            "behavior": "allow",
+            "destination": "localSettings"
+        }],
+        "hook_input": {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "claude_native",
+            "prompt_id": "prompt_1",
+            "tool_name": "Bash",
+            "tool_input": {"command": "pnpm test"}
+        }
+    })
+}
+
 #[tokio::test]
 async fn permission_request_projects_bounded_snapshot_and_waits_until_turn_terminal() {
     let state = configured_state().await;
@@ -321,4 +383,321 @@ async fn unbound_permission_request_is_an_empty_success_and_creates_no_event() {
             .await
             .expect("event count");
     assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn approval_commands_deliver_each_decision_without_projecting_a_final_fact() {
+    for (database, decision, expected) in [
+        (
+            "approval-accept-once.db",
+            json!({"decision": "accept_once"}),
+            json!({"decision": "accept_once"}),
+        ),
+        (
+            "approval-reject.db",
+            json!({"decision": "reject"}),
+            json!({"decision": "reject"}),
+        ),
+        (
+            "approval-always-allow.db",
+            json!({
+                "decision": "always_allow",
+                "permission_suggestion": {
+                    "type": "addRules",
+                    "rules": [{"toolName": "Bash", "ruleContent": "pnpm test"}],
+                    "behavior": "allow",
+                    "destination": "localSettings"
+                }
+            }),
+            json!({
+                "decision": "always_allow",
+                "permission_suggestion": {
+                    "type": "addRules",
+                    "rules": [{"toolName": "Bash", "ruleContent": "pnpm test"}],
+                    "behavior": "allow",
+                    "destination": "localSettings"
+                }
+            }),
+        ),
+    ] {
+        let state = TestApp::builder()
+            .database_name(database)
+            .external_api_token(Some("test-token".to_string()))
+            .build_state()
+            .await;
+        sqlx::query(
+            r#"INSERT INTO sessions (session_id, client_type, state, current_turn_id, metadata)
+               VALUES ('sess_approval', 'claude', 'busy', 'turn_approval', '{}')"#,
+        )
+        .execute(&state.db())
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO turns (turn_id, session_id, state, input_summary, metadata)
+               VALUES ('turn_approval', 'sess_approval', 'running', 'work', '{}')"#,
+        )
+        .execute(&state.db())
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO agent_bindings (id, session_id, client_type, launch_cwd, client_session_key, metadata)
+               VALUES ('binding_approval', 'sess_approval', 'claude', '/repo', 'claude_native', '{}')"#,
+        )
+        .execute(&state.db())
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata)
+               VALUES ('sess_approval', 'claude_tui', 'rtinst_approval', '{}')"#,
+        )
+        .execute(&state.db())
+        .await
+        .unwrap();
+
+        let request_state = state.clone();
+        let hook_request = tokio::spawn(async move {
+            post(
+                request_state,
+                "/internal/v1/claude/permission-request",
+                permission_request_body(),
+            )
+            .await
+        });
+        let request_event_id = approval_event_id(&state).await;
+        let uri =
+            format!("/external/v1/sessions/sess_approval/approvals/{request_event_id}/decision");
+
+        let response =
+            post_external(state.clone(), &uri, decision.clone(), "approval-command").await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response_body: Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert_eq!(response_body["data"]["request_event_id"], request_event_id);
+        assert_eq!(response_body["data"]["delivered"], true);
+
+        let hook_response = tokio::time::timeout(Duration::from_secs(2), hook_request)
+            .await
+            .expect("hook waiter release")
+            .expect("hook task");
+        let hook_body: Value = serde_json::from_slice(
+            &hook_response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes(),
+        )
+        .unwrap();
+        assert_eq!(hook_body["data"]["result"], expected);
+
+        let metadata: String =
+            sqlx::query_scalar("SELECT metadata FROM sessions WHERE session_id = 'sess_approval'")
+                .fetch_one(&state.db())
+                .await
+                .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&metadata).unwrap()["interaction"]["request_event_id"],
+            request_event_id
+        );
+        let final_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM events WHERE event_type IN ('approval.accepted', 'approval.rejected', 'approval.cancelled')",
+        )
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+        assert_eq!(final_count, 0);
+
+        let duplicate = post_external(state.clone(), &uri, decision, "approval-command").await;
+        assert_eq!(duplicate.status(), StatusCode::OK);
+        let stale = post_external(
+            state.clone(),
+            &uri,
+            json!({"decision": "reject"}),
+            "different-command",
+        )
+        .await;
+        assert_eq!(stale.status(), StatusCode::CONFLICT);
+    }
+}
+
+#[tokio::test]
+async fn always_allow_rejects_mutated_or_cross_request_suggestions_without_waking_the_waiter() {
+    let state = TestApp::builder()
+        .database_name("approval-exact-suggestion.db")
+        .external_api_token(Some("test-token".to_string()))
+        .build_state()
+        .await;
+    sqlx::query(
+        r#"INSERT INTO sessions (session_id, client_type, state, current_turn_id, metadata)
+           VALUES ('sess_approval', 'claude', 'busy', 'turn_approval', '{}')"#,
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO turns (turn_id, session_id, state, input_summary, metadata)
+           VALUES ('turn_approval', 'sess_approval', 'running', 'work', '{}')"#,
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO agent_bindings (id, session_id, client_type, launch_cwd, client_session_key, metadata)
+           VALUES ('binding_approval', 'sess_approval', 'claude', '/repo', 'claude_native', '{}')"#,
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata)
+           VALUES ('sess_approval', 'claude_tui', 'rtinst_approval', '{}')"#,
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+
+    let request_state = state.clone();
+    let hook_request = tokio::spawn(async move {
+        post(
+            request_state,
+            "/internal/v1/claude/permission-request",
+            permission_request_body(),
+        )
+        .await
+    });
+    let request_event_id = approval_event_id(&state).await;
+    let uri = format!("/external/v1/sessions/sess_approval/approvals/{request_event_id}/decision");
+    let mutated = post_external(
+        state.clone(),
+        &uri,
+        json!({
+            "decision": "always_allow",
+            "permission_suggestion": {
+                "type": "addRules",
+                "rules": [{"toolName": "Bash", "ruleContent": "pnpm *"}],
+                "behavior": "allow",
+                "destination": "localSettings"
+            }
+        }),
+        "mutated",
+    )
+    .await;
+    assert_eq!(mutated.status(), StatusCode::CONFLICT);
+    assert!(!hook_request.is_finished());
+
+    for (idempotency_key, permission_suggestion) in [
+        (
+            "added-field",
+            json!({
+                "type": "addRules",
+                "rules": [{"toolName": "Bash", "ruleContent": "pnpm test"}],
+                "behavior": "allow",
+                "destination": "localSettings",
+                "unexpected": true
+            }),
+        ),
+        (
+            "expanded-rule",
+            json!({
+                "type": "addRules",
+                "rules": [
+                    {"toolName": "Bash", "ruleContent": "pnpm test"},
+                    {"toolName": "Bash", "ruleContent": "pnpm *"}
+                ],
+                "behavior": "allow",
+                "destination": "localSettings"
+            }),
+        ),
+        (
+            "cross-request-suggestion",
+            json!({
+                "type": "addRules",
+                "rules": [{"toolName": "Bash", "ruleContent": "cargo test"}],
+                "behavior": "allow",
+                "destination": "localSettings"
+            }),
+        ),
+    ] {
+        let response = post_external(
+            state.clone(),
+            &uri,
+            json!({
+                "decision": "always_allow",
+                "permission_suggestion": permission_suggestion
+            }),
+            idempotency_key,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(!hook_request.is_finished());
+    }
+
+    let wrong_session = post_external(
+        state.clone(),
+        &format!("/external/v1/sessions/other/approvals/{request_event_id}/decision"),
+        json!({"decision": "accept_once"}),
+        "wrong-session",
+    )
+    .await;
+    assert_eq!(wrong_session.status(), StatusCode::CONFLICT);
+    assert!(!hook_request.is_finished());
+
+    let event_only_suggestion = json!({
+        "type": "addRules",
+        "rules": [{"toolName": "Bash", "ruleContent": "cargo test"}],
+        "behavior": "allow",
+        "destination": "localSettings"
+    });
+    let divergent_payload = json!({
+        "client_session_id": "claude_native",
+        "prompt_id": "prompt_1",
+        "tool_name": "Bash",
+        "permission_suggestions": [event_only_suggestion.clone()]
+    });
+    sqlx::query("UPDATE events SET payload = ? WHERE event_id = ?")
+        .bind(divergent_payload.to_string())
+        .bind(&request_event_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    let only_event_matches = post_external(
+        state.clone(),
+        &uri,
+        json!({
+            "decision": "always_allow",
+            "permission_suggestion": event_only_suggestion
+        }),
+        "only-event-matches",
+    )
+    .await;
+    assert_eq!(only_event_matches.status(), StatusCode::CONFLICT);
+    assert!(!hook_request.is_finished());
+    let only_waiter_matches = post_external(
+        state.clone(),
+        &uri,
+        json!({
+            "decision": "always_allow",
+            "permission_suggestion": {
+                "type": "addRules",
+                "rules": [{"toolName": "Bash", "ruleContent": "pnpm test"}],
+                "behavior": "allow",
+                "destination": "localSettings"
+            }
+        }),
+        "only-waiter-matches",
+    )
+    .await;
+    assert_eq!(only_waiter_matches.status(), StatusCode::CONFLICT);
+    assert!(!hook_request.is_finished());
+
+    let accepted = post_external(
+        state,
+        &uri,
+        json!({"decision": "reject"}),
+        "reject-after-conflicts",
+    )
+    .await;
+    assert_eq!(accepted.status(), StatusCode::OK);
+    hook_request.await.unwrap();
 }

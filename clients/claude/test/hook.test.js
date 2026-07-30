@@ -276,6 +276,82 @@ describe("pontia claude hook", () => {
         expect(output).toBeUndefined();
         expect(diagnostics).toEqual([]);
     });
+    test.each([
+        [
+            "accept once",
+            { decision: "accept_once" },
+            {
+                hookSpecificOutput: {
+                    hookEventName: "PermissionRequest",
+                    decision: { behavior: "allow" },
+                },
+            },
+        ],
+        [
+            "reject",
+            { decision: "reject" },
+            {
+                hookSpecificOutput: {
+                    hookEventName: "PermissionRequest",
+                    decision: { behavior: "deny" },
+                },
+            },
+        ],
+        [
+            "always allow",
+            {
+                decision: "always_allow",
+                permission_suggestion: {
+                    type: "addRules",
+                    rules: [{ toolName: "Bash", ruleContent: "pnpm test" }],
+                    behavior: "allow",
+                    destination: "localSettings",
+                },
+            },
+            {
+                hookSpecificOutput: {
+                    hookEventName: "PermissionRequest",
+                    decision: {
+                        behavior: "allow",
+                        updatedPermissions: [{
+                            type: "addRules",
+                            rules: [{ toolName: "Bash", ruleContent: "pnpm test" }],
+                            behavior: "allow",
+                            destination: "localSettings",
+                        }],
+                    },
+                },
+            },
+        ],
+    ])("PermissionRequest emits Claude's exact structured response for %s", async (_label, result, expected) => {
+        const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+            data: { result, request_event_id: "evt_request" },
+        }), { status: 200 }));
+        const { deps, diagnostics } = install({ fetch: fetchImpl });
+        const output = await runClaudeHook(baseInput({
+            hook_event_name: "PermissionRequest",
+            tool_name: "Bash",
+            tool_input: { command: "pnpm test" },
+        }), deps);
+        expect(output).toEqual(expected);
+        expect(diagnostics).toEqual([]);
+    });
+    test("PermissionRequest never emits malformed output for HTTP or response failures", async () => {
+        for (const response of [
+            new Response("upstream failed", { status: 500 }),
+            new Response("{malformed", { status: 200 }),
+            new Response(JSON.stringify({ data: { result: { decision: "always_allow" } } }), { status: 200 }),
+        ]) {
+            const fetchImpl = vi.fn(async () => response);
+            const { deps } = install({ fetch: fetchImpl });
+            const output = await runClaudeHook(baseInput({
+                hook_event_name: "PermissionRequest",
+                tool_name: "Bash",
+                tool_input: { command: "pnpm test" },
+            }), deps);
+            expect(output).toBeUndefined();
+        }
+    });
     test("manual UserPromptSubmit reuses the runtime context established by SessionStart", async () => {
         const workspace = await realpath(await tempDir());
         const fetchImpl = vi.fn(async (url) => {

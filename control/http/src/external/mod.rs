@@ -1,4 +1,5 @@
 mod agent_profiles;
+mod approvals;
 mod auth;
 mod common;
 mod dashboard_events;
@@ -16,6 +17,7 @@ pub use agent_profiles::{
     delete_agent_profile_version, get_agent_profile, get_agent_profile_version,
     list_agent_profile_versions, list_agent_profiles, update_agent_profile_version,
 };
+pub use approvals::decide_approval;
 pub use auth::validate_auth;
 pub use common::{ApiResponse, ExternalApiError};
 pub use dashboard_events::stream_dashboard_events;

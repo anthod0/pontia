@@ -27,6 +27,7 @@ import type {
   WorkspaceRootView,
   WorkspaceView,
 } from './types';
+import type { ApprovalDecisionInput } from '$lib/approvals';
 
 const API_BASE = '/external/v1';
 
@@ -309,6 +310,17 @@ export async function dismissInboxMessage(sessionId: string, messageId: string):
 
 export async function listEvents(sessionId: string): Promise<EventView[]> {
   return (await request<{ events: EventView[] }>(`/sessions/${sessionId}/events`)).events;
+}
+
+export async function decideApproval(
+  sessionId: string,
+  requestEventId: string,
+  input: ApprovalDecisionInput,
+): Promise<{ request_event_id: string; delivered: boolean }> {
+  return request(
+    `/sessions/${encodeURIComponent(sessionId)}/approvals/${encodeURIComponent(requestEventId)}/decision`,
+    { method: 'POST', body: input, mutating: true },
+  );
 }
 
 export async function getTurnTimeline(

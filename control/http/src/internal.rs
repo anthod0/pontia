@@ -121,7 +121,7 @@ pub async fn post_claude_permission_request(
     let outcome = pending.wait().await;
     Ok(Json(json!({
         "data": {
-            "result": outcome,
+            "result": outcome.response_value(),
             "request_event_id": request_event_id,
         }
     }))

@@ -212,6 +212,38 @@ function permissionRequestUrl(internalEventUrl) {
         return undefined;
     }
 }
+function permissionDecisionOutput(result) {
+    if (!result || typeof result !== "object" || Array.isArray(result))
+        return undefined;
+    if (result.decision === "accept_once") {
+        return {
+            hookSpecificOutput: {
+                hookEventName: "PermissionRequest",
+                decision: { behavior: "allow" },
+            },
+        };
+    }
+    if (result.decision === "reject") {
+        return {
+            hookSpecificOutput: {
+                hookEventName: "PermissionRequest",
+                decision: { behavior: "deny" },
+            },
+        };
+    }
+    const suggestion = result.permission_suggestion;
+    if (result.decision !== "always_allow" || !suggestion || typeof suggestion !== "object" || Array.isArray(suggestion))
+        return undefined;
+    return {
+        hookSpecificOutput: {
+            hookEventName: "PermissionRequest",
+            decision: {
+                behavior: "allow",
+                updatedPermissions: [suggestion],
+            },
+        },
+    };
+}
 async function handlePermissionRequest(input, deps) {
     const clientSessionKey = optionalString(input.session_id);
     const toolName = optionalString(input.tool_name);
@@ -236,13 +268,18 @@ async function handlePermissionRequest(input, deps) {
                 hook_input: input,
             }),
         });
-        if (!response.ok && response.status !== 204) {
+        if (response.status === 204)
+            return;
+        if (!response.ok) {
             await deps.logDiagnostic(defaultHookLogFile(deps.env), {
                 level: "warn",
                 code: "permission_request_registration_failed",
                 message: `Pontia PermissionRequest API returned ${response.status}`,
             });
+            return;
         }
+        const body = await response.json();
+        return permissionDecisionOutput(body?.data?.result);
     }
     catch (error) {
         await deps.logDiagnostic(defaultHookLogFile(deps.env), {
@@ -280,8 +317,7 @@ export async function runClaudeHook(input, dependencies = {}) {
                 await handleStopFailure(input, deps);
                 break;
             case "PermissionRequest":
-                await handlePermissionRequest(input, deps);
-                break;
+                return await handlePermissionRequest(input, deps);
             case "SessionEnd":
                 await handleSessionEnd(input, deps);
                 break;

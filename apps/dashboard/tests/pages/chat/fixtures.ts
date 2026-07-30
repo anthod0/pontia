@@ -98,6 +98,7 @@ const mocks = vi.hoisted(() => {
     refreshWorkspaceGitStatus: vi.fn(async () => undefined),
     loadAgentProfiles: vi.fn(async () => undefined),
     toastError: vi.fn(),
+    decideApproval: vi.fn(),
     navigate: vi.fn(),
     pathParams: {} as Record<string, string>,
   };
@@ -170,6 +171,11 @@ vi.mock('../../../src/services/eventStream', () => ({
 }));
 
 vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate }));
+
+vi.mock('../../../src/api/client', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../../src/api/client')>(),
+  decideApproval: mocks.decideApproval,
+}));
 
 vi.mock('svelte-sonner', () => ({
   toast: { error: mocks.toastError },

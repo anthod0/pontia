@@ -10,6 +10,8 @@
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import ApprovalRequestCard from '$lib/components/session-chat/ApprovalRequestCard.svelte'
   import { approvalRequestFromSnapshot } from '$lib/approvals'
+  import type { ApprovalDecisionInput } from '$lib/approvals'
+  import { decideApproval } from '../api/client'
   import type { DashboardStreamEvent, InboxMessageView, SessionView } from '../api/types'
   import type { SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
@@ -151,6 +153,11 @@
     if (routeSessionId) return routeSessionId
     const pathMatch = window.location.pathname.match(/\/chat\/([^/?#]+)$/)
     return pathMatch ? decodeURIComponent(pathMatch[1]) : ''
+  }
+
+  async function submitApprovalDecision(decision: ApprovalDecisionInput): Promise<void> {
+    if (!selectedSessionId || !pendingApproval) return
+    await decideApproval(selectedSessionId, pendingApproval.requestEventId, decision)
   }
 
   function eligibleBranchActionInputs(
@@ -776,7 +783,9 @@
         {/if}
 
         {#if pendingApproval}
-          <ApprovalRequestCard approval={pendingApproval} />
+          {#key pendingApproval.requestEventId}
+            <ApprovalRequestCard approval={pendingApproval} onDecision={submitApprovalDecision} />
+          {/key}
         {/if}
 
         <SessionComposerDock
