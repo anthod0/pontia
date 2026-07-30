@@ -71,7 +71,7 @@ impl RuntimeControlService {
         };
         let Some(session_identity_arg) = pontia_agent_clients::get_client_spec(client_type)
             .and_then(|spec| spec.tmux_runtime())
-            .and_then(|runtime| runtime.session_identity_arg)
+            .and_then(|runtime| runtime.resume_session_identity_arg)
         else {
             return Ok(Some(command.to_string()));
         };

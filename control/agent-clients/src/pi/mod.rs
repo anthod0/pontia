@@ -33,7 +33,8 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             command_env: Some("PONTIA_PI_TUI_COMMAND"),
             default_command: "pi",
             startup_args: &["--approve"],
-            session_identity_arg: Some("--session-id"),
+            startup_session_identity_arg: Some("--session-id"),
+            resume_session_identity_arg: Some("--session-id"),
             hook_log: Some(HookLogBehavior {
                 file_name: "pi-hook.log",
                 metadata_key: "pi_hook_log",
