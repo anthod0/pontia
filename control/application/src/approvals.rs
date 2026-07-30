@@ -8,7 +8,7 @@ use pontia_core::{
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use sqlx::SqlitePool;
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::{Mutex, Notify, oneshot};
 
 use crate::{AgentBindingService, EventIngestService};
 
@@ -80,15 +80,84 @@ impl PendingApproval {
 
 struct ApprovalWaiter {
     session_id: String,
-    turn_id: String,
     _hook_input: Value,
     permission_suggestions: Vec<Value>,
     sender: oneshot::Sender<ApprovalWaitOutcome>,
 }
 
+struct ApprovalRequestOwner {
+    session_id: String,
+    turn_id: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ApprovalAcceptScope {
+    Once,
+    Always,
+    Unknown,
+}
+
+impl ApprovalAcceptScope {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Once => "once",
+            Self::Always => "always",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ClaudeDecision {
+    Accept,
+    Reject,
+}
+
+impl ClaudeDecision {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "accept" => Some(Self::Accept),
+            "reject" => Some(Self::Reject),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClaudeDecisionSource {
+    Config,
+    Hook,
+    UserPermanent,
+    UserTemporary,
+    UserAbort,
+    Other,
+}
+
+impl From<&str> for ClaudeDecisionSource {
+    fn from(value: &str) -> Self {
+        match value {
+            "config" => Self::Config,
+            "hook" => Self::Hook,
+            "user_permanent" => Self::UserPermanent,
+            "user_temporary" => Self::UserTemporary,
+            "user_abort" => Self::UserAbort,
+            _ => Self::Other,
+        }
+    }
+}
+
+#[derive(Default)]
+struct ApprovalCoordinatorState {
+    active_requests: HashMap<String, ApprovalRequestOwner>,
+    waiters: HashMap<String, ApprovalWaiter>,
+    web_accept_scopes: HashMap<String, ApprovalAcceptScope>,
+}
+
 #[derive(Clone, Default)]
 pub struct ApprovalCoordinator {
-    waiters: Arc<Mutex<HashMap<String, ApprovalWaiter>>>,
+    state: Arc<Mutex<ApprovalCoordinatorState>>,
+    changed: Arc<Notify>,
+    finalization: Arc<Mutex<()>>,
 }
 
 impl ApprovalCoordinator {
@@ -100,37 +169,65 @@ impl ApprovalCoordinator {
         hook_input: Value,
         permission_suggestions: Vec<Value>,
     ) -> Result<oneshot::Receiver<ApprovalWaitOutcome>> {
-        let mut waiters = self.waiters.lock().await;
-        if waiters
-            .values()
-            .any(|waiter| waiter.session_id == session_id && waiter.turn_id == turn_id)
-        {
-            return Err(Error::StateConflict(
-                "the active Turn already has a pending Approval".to_string(),
-            ));
+        loop {
+            let changed = self.changed.notified();
+            let mut state = self.state.lock().await;
+            if !state
+                .active_requests
+                .values()
+                .any(|owner| owner.session_id == session_id && owner.turn_id == turn_id)
+            {
+                let (sender, receiver) = oneshot::channel();
+                state.active_requests.insert(
+                    request_event_id.clone(),
+                    ApprovalRequestOwner {
+                        session_id: session_id.clone(),
+                        turn_id: turn_id.clone(),
+                    },
+                );
+                state.waiters.insert(
+                    request_event_id,
+                    ApprovalWaiter {
+                        session_id,
+                        _hook_input: hook_input,
+                        permission_suggestions,
+                        sender,
+                    },
+                );
+                return Ok(receiver);
+            }
+            drop(state);
+            changed.await;
         }
-        let (sender, receiver) = oneshot::channel();
-        waiters.insert(
-            request_event_id,
-            ApprovalWaiter {
-                session_id,
-                turn_id,
-                _hook_input: hook_input,
-                permission_suggestions,
-                sender,
-            },
-        );
-        Ok(receiver)
     }
 
     async fn remove(&self, request_event_id: &str) {
-        self.waiters.lock().await.remove(request_event_id);
+        let mut state = self.state.lock().await;
+        state.active_requests.remove(request_event_id);
+        state.waiters.remove(request_event_id);
+        state.web_accept_scopes.remove(request_event_id);
+        drop(state);
+        self.changed.notify_waiters();
     }
 
     async fn resolve_request(&self, request_event_id: &str) {
-        if let Some(waiter) = self.waiters.lock().await.remove(request_event_id) {
+        let mut state = self.state.lock().await;
+        state.active_requests.remove(request_event_id);
+        state.web_accept_scopes.remove(request_event_id);
+        if let Some(waiter) = state.waiters.remove(request_event_id) {
             let _ = waiter.sender.send(ApprovalWaitOutcome::ResolvedElsewhere);
         }
+        drop(state);
+        self.changed.notify_waiters();
+    }
+
+    async fn hook_accept_scope(&self, request_event_id: &str) -> Option<ApprovalAcceptScope> {
+        self.state
+            .lock()
+            .await
+            .web_accept_scopes
+            .get(request_event_id)
+            .copied()
     }
 
     async fn deliver_decision(
@@ -139,8 +236,8 @@ impl ApprovalCoordinator {
         session_id: &str,
         decision: ApprovalWaitOutcome,
     ) -> Result<()> {
-        let mut waiters = self.waiters.lock().await;
-        let waiter = waiters.get(request_event_id).ok_or_else(|| {
+        let mut state = self.state.lock().await;
+        let waiter = state.waiters.get(request_event_id).ok_or_else(|| {
             Error::StateConflict("Approval request is no longer actionable".to_string())
         })?;
         if waiter.session_id != session_id {
@@ -169,12 +266,27 @@ impl ApprovalCoordinator {
         } else {
             decision
         };
-        let waiter = waiters
+        let web_accept_scope = match &decision {
+            ApprovalWaitOutcome::AcceptOnce => Some(ApprovalAcceptScope::Once),
+            ApprovalWaitOutcome::AlwaysAllow { .. } => Some(ApprovalAcceptScope::Always),
+            ApprovalWaitOutcome::ResolvedElsewhere | ApprovalWaitOutcome::Reject => None,
+        };
+        let waiter = state
+            .waiters
             .remove(request_event_id)
             .expect("checked waiter must still exist while coordinator lock is held");
-        waiter.sender.send(decision).map_err(|_| {
-            Error::StateConflict("Approval request is no longer actionable".to_string())
-        })
+        if let Some(scope) = web_accept_scope {
+            state
+                .web_accept_scopes
+                .insert(request_event_id.to_string(), scope);
+        }
+        if waiter.sender.send(decision).is_err() {
+            state.web_accept_scopes.remove(request_event_id);
+            return Err(Error::StateConflict(
+                "Approval request is no longer actionable".to_string(),
+            ));
+        }
+        Ok(())
     }
 
     pub async fn resolve_terminal_event(&self, event: &ReportedEvent) {
@@ -191,23 +303,28 @@ impl ApprovalCoordinator {
         }
 
         let matching_ids = {
-            let waiters = self.waiters.lock().await;
-            waiters
+            let state = self.state.lock().await;
+            state
+                .active_requests
                 .iter()
-                .filter(|(_, waiter)| {
-                    waiter.session_id == event.session_id
+                .filter(|(_, owner)| {
+                    owner.session_id == event.session_id
                         && (event.event_type == EventType::SessionExited
-                            || event.turn_id.as_deref() == Some(waiter.turn_id.as_str()))
+                            || event.turn_id.as_deref() == Some(owner.turn_id.as_str()))
                 })
                 .map(|(request_event_id, _)| request_event_id.clone())
                 .collect::<Vec<_>>()
         };
-        let mut waiters = self.waiters.lock().await;
+        let mut state = self.state.lock().await;
         for request_event_id in matching_ids {
-            if let Some(waiter) = waiters.remove(&request_event_id) {
+            state.active_requests.remove(&request_event_id);
+            state.web_accept_scopes.remove(&request_event_id);
+            if let Some(waiter) = state.waiters.remove(&request_event_id) {
                 let _ = waiter.sender.send(ApprovalWaitOutcome::ResolvedElsewhere);
             }
         }
+        drop(state);
+        self.changed.notify_waiters();
     }
 }
 
@@ -228,6 +345,7 @@ impl ApprovalCommandService {
         request_event_id: &str,
         request: ApprovalDecisionRequest,
     ) -> Result<Value> {
+        let _finalization = self.coordinator.finalization.lock().await;
         let row = sqlx::query_as::<_, (String, String)>(
             r#"SELECT session_id, payload
                FROM events
@@ -305,6 +423,160 @@ impl ApprovalCommandService {
             "request_event_id": request_event_id,
             "delivered": true,
         }))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClaudeToolDecisionObservation {
+    pub client_session_id: String,
+    pub prompt_id: String,
+    pub tool_name: String,
+    pub tool_use_id: Option<String>,
+    pub decision: String,
+    pub decision_source: String,
+}
+
+#[derive(Clone)]
+pub struct ApprovalObservationService {
+    pool: SqlitePool,
+    coordinator: ApprovalCoordinator,
+}
+
+impl ApprovalObservationService {
+    pub fn new(pool: SqlitePool, coordinator: ApprovalCoordinator) -> Self {
+        Self { pool, coordinator }
+    }
+
+    pub async fn observe_claude_tool_decision(
+        &self,
+        observation: ClaudeToolDecisionObservation,
+    ) -> Result<bool> {
+        let client_session_id = bounded_required("session.id", &observation.client_session_id)?;
+        let prompt_id = bounded_required("prompt.id", &observation.prompt_id)?;
+        let tool_name = bounded_required("tool_name", &observation.tool_name)?;
+        let Some(decision) =
+            ClaudeDecision::parse(bounded_required("decision", &observation.decision)?)
+        else {
+            return Ok(false);
+        };
+        let decision_source =
+            ClaudeDecisionSource::from(bounded_required("source", &observation.decision_source)?);
+        let tool_use_id = observation
+            .tool_use_id
+            .as_deref()
+            .map(|value| bounded_required("tool_use_id", value))
+            .transpose()?;
+
+        let _finalization = self.coordinator.finalization.lock().await;
+        let Some(context) = AgentBindingService::new(self.pool.clone())
+            .current_turn_for_client_session("claude", client_session_id)
+            .await?
+        else {
+            return Ok(false);
+        };
+
+        let unresolved = sqlx::query_as::<_, (String, String)>(
+            r#"SELECT requested.event_id, requested.payload
+               FROM events requested
+               WHERE requested.session_id = ?
+                 AND requested.turn_id = ?
+                 AND requested.event_type = 'approval.requested'
+                 AND NOT EXISTS (
+                     SELECT 1
+                     FROM events final
+                     WHERE final.session_id = requested.session_id
+                       AND final.turn_id = requested.turn_id
+                       AND final.event_type IN (
+                           'approval.accepted',
+                           'approval.rejected',
+                           'approval.cancelled'
+                       )
+                       AND json_extract(final.payload, '$.request_event_id') =
+                           requested.event_id
+                 )"#,
+        )
+        .bind(&context.session_id)
+        .bind(&context.turn_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let [(request_event_id, requested_payload)] = unresolved.as_slice() else {
+            return Ok(false);
+        };
+        let requested_payload: Value = serde_json::from_str(requested_payload)?;
+        if requested_payload
+            .get("client_session_id")
+            .and_then(Value::as_str)
+            != Some(client_session_id)
+            || requested_payload.get("prompt_id").and_then(Value::as_str) != Some(prompt_id)
+            || requested_payload.get("tool_name").and_then(Value::as_str) != Some(tool_name)
+        {
+            return Ok(false);
+        }
+
+        let (event_type, accepted_scope) = match decision {
+            ClaudeDecision::Accept => {
+                let scope = match decision_source {
+                    ClaudeDecisionSource::UserTemporary => ApprovalAcceptScope::Once,
+                    ClaudeDecisionSource::UserPermanent => ApprovalAcceptScope::Always,
+                    ClaudeDecisionSource::Config => ApprovalAcceptScope::Unknown,
+                    ClaudeDecisionSource::Hook => self
+                        .coordinator
+                        .hook_accept_scope(request_event_id)
+                        .await
+                        .unwrap_or(ApprovalAcceptScope::Unknown),
+                    _ => return Ok(false),
+                };
+                (EventType::ApprovalAccepted, Some(scope))
+            }
+            ClaudeDecision::Reject if decision_source == ClaudeDecisionSource::UserAbort => {
+                (EventType::ApprovalCancelled, None)
+            }
+            ClaudeDecision::Reject => (EventType::ApprovalRejected, None),
+        };
+
+        let mut payload = Map::new();
+        payload.insert(
+            "request_event_id".to_string(),
+            Value::String(request_event_id.clone()),
+        );
+        payload.insert(
+            "client_session_id".to_string(),
+            Value::String(client_session_id.to_string()),
+        );
+        payload.insert(
+            "prompt_id".to_string(),
+            Value::String(prompt_id.to_string()),
+        );
+        payload.insert(
+            "tool_name".to_string(),
+            Value::String(tool_name.to_string()),
+        );
+        if let Some(tool_use_id) = tool_use_id {
+            payload.insert(
+                "tool_use_id".to_string(),
+                Value::String(tool_use_id.to_string()),
+            );
+        }
+        if let Some(scope) = accepted_scope {
+            payload.insert(
+                "scope".to_string(),
+                Value::String(scope.as_str().to_string()),
+            );
+        }
+
+        EventIngestService::new(self.pool.clone())
+            .ingest_reported_event(ReportedEvent::new(
+                new_event_id().to_string(),
+                context.session_id,
+                Some(context.turn_id),
+                EventSource::AgentClient,
+                "claude".to_string(),
+                event_type,
+                Value::Object(payload),
+            ))
+            .await?;
+        self.coordinator.resolve_request(request_event_id).await;
+        Ok(true)
     }
 }
 

@@ -154,9 +154,21 @@ pub async fn resolve_branch_replay(
 }
 
 fn authenticate_branch_replay(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
-    let expected = state.external_api_token().ok_or_else(|| {
-        ApiError::authentication_failed("Internal branch replay token is not configured")
-    })?;
+    authenticate_internal_token(
+        state,
+        headers,
+        "Internal branch replay token is not configured",
+    )
+}
+
+pub(crate) fn authenticate_internal_token(
+    state: &AppState,
+    headers: &HeaderMap,
+    not_configured_message: &'static str,
+) -> Result<(), ApiError> {
+    let expected = state
+        .external_api_token()
+        .ok_or_else(|| ApiError::authentication_failed(not_configured_message))?;
     let authorized = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
@@ -361,7 +373,7 @@ pub struct ApiError {
 }
 
 impl ApiError {
-    fn invalid_request(message: impl Into<String>) -> Self {
+    pub(crate) fn invalid_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
             code: "invalid_request",

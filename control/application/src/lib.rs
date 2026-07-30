@@ -47,7 +47,8 @@ pub use agent_profiles::{
 pub use app::{AppState, initialize};
 pub use approvals::{
     ApprovalCommandService, ApprovalCoordinator, ApprovalDecisionRequest,
-    ApprovalRegistrationRequest, ApprovalRegistrationService, ApprovalWaitOutcome, PendingApproval,
+    ApprovalObservationService, ApprovalRegistrationRequest, ApprovalRegistrationService,
+    ApprovalWaitOutcome, ClaudeToolDecisionObservation, PendingApproval,
 };
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
 pub(crate) use events::nested_string;

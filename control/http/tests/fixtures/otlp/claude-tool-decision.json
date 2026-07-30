@@ -1,0 +1,79 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "claude-code"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "com.anthropic.claude_code.events"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1785384000000000000",
+              "observedTimeUnixNano": "1785384000001000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "eventName": "claude_code.tool_decision",
+              "body": {
+                "stringValue": "claude_code.tool_decision"
+              },
+              "attributes": [
+                {
+                  "key": "event.name",
+                  "value": {
+                    "stringValue": "tool_decision"
+                  }
+                },
+                {
+                  "key": "session.id",
+                  "value": {
+                    "stringValue": "claude_native"
+                  }
+                },
+                {
+                  "key": "prompt.id",
+                  "value": {
+                    "stringValue": "prompt_1"
+                  }
+                },
+                {
+                  "key": "tool_name",
+                  "value": {
+                    "stringValue": "Bash"
+                  }
+                },
+                {
+                  "key": "tool_use_id",
+                  "value": {
+                    "stringValue": "toolu_01PontiaApproval"
+                  }
+                },
+                {
+                  "key": "decision",
+                  "value": {
+                    "stringValue": "accept"
+                  }
+                },
+                {
+                  "key": "source",
+                  "value": {
+                    "stringValue": "user_temporary"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
