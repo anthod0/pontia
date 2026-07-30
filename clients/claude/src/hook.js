@@ -7,7 +7,7 @@ import { appendDiagnostic } from "./diagnostics.js";
 import { claimTurnContext, defaultHookLogFile, loadCurrentTurnByClientSession, loadSessionByClientSession, loadSessionContext } from "./context.js";
 import { buildSessionExitedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent } from "./events.js";
 import { optionalString } from "./internal-api.js";
-import { isPontiaManagedTmuxPane } from "./managed-runtime.js";
+import { isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity } from "./managed-runtime.js";
 import { EventReporter } from "./reporter.js";
 import { bindManualSession } from "./runtime-binding.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
@@ -28,8 +28,8 @@ function failureMessage(input) {
     return details ? `${error}: ${details}` : error;
 }
 async function reportReadyForManagedSession(input, deps) {
-    const loaded = await loadSessionContext(deps.env);
-    if (!loaded.ok || !await deps.isManagedPane(deps.env))
+    const loaded = await loadSessionContext(deps.env, deps.runtimeIdentity);
+    if (!loaded.ok)
         return;
     const context = { ...loaded.context, ...sessionDetailsFromHook(input) };
     await deps.makeReporter(loaded.logFile).report(context, buildSessionReadyEvent(context));
@@ -68,7 +68,7 @@ async function reportReadyForManualSession(input, deps) {
     await deps.makeReporter(logFile).report(context, buildSessionReadyEvent(context));
 }
 async function handleSessionStart(input, deps) {
-    if (optionalString(deps.env.PONTIA_SESSION_ID)) {
+    if (deps.runtimeIdentity) {
         await reportReadyForManagedSession(input, deps);
     }
     else {
@@ -76,7 +76,7 @@ async function handleSessionStart(input, deps) {
     }
 }
 async function handleSessionEnd(input, deps) {
-    let loaded = await loadSessionContext(deps.env);
+    let loaded = await loadSessionContext(deps.env, deps.runtimeIdentity);
     if (!loaded.ok) {
         const clientSessionKey = optionalString(input.session_id);
         if (!clientSessionKey)
@@ -132,14 +132,14 @@ async function manualTurnContext(input, deps, logFile) {
 }
 async function handleUserPromptSubmit(input, deps) {
     const prompt = optionalString(input.prompt);
-    const claimed = await claimTurnContext(deps.env, deps.fetchImpl);
+    const claimed = await claimTurnContext(deps.env, deps.fetchImpl, deps.runtimeIdentity);
     const logFile = claimed.logFile;
     let context;
     if (claimed.ok) {
         context = { ...claimed.context, input: prompt ?? claimed.context.input };
     }
     else {
-        const loaded = await loadSessionContext(deps.env);
+        const loaded = await loadSessionContext(deps.env, deps.runtimeIdentity);
         if (loaded.ok) {
             context = { ...loaded.context, input: prompt };
         }
@@ -162,7 +162,7 @@ async function handleStop(input, deps) {
     const clientSessionKey = optionalString(input.session_id);
     if (!clientSessionKey)
         return;
-    const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey);
+    const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey, deps.runtimeIdentity);
     if (!loaded.ok) {
         if (!loaded.silent)
             await deps.logDiagnostic(loaded.logFile, { level: "warn", code: "current_turn_lookup_failed", message: loaded.reason });
@@ -190,7 +190,7 @@ async function handleStopFailure(input, deps) {
     const clientSessionKey = optionalString(input.session_id);
     if (!clientSessionKey)
         return;
-    const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey);
+    const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey, deps.runtimeIdentity);
     if (!loaded.ok)
         return;
     const context = activeTurnContext(loaded.context);
@@ -300,17 +300,21 @@ function requiredDeps(dependencies) {
         fetchImpl,
         makeReporter: dependencies.makeReporter ?? ((logFile) => new EventReporter({ logFile, fetch: fetchImpl })),
         logDiagnostic: dependencies.logDiagnostic ?? appendDiagnostic,
+        loadManagedRuntime: dependencies.loadManagedRuntime ?? loadPontiaManagedRuntimeIdentity,
         isManagedPane: dependencies.isManagedPane ?? isPontiaManagedTmuxPane,
     };
 }
 export async function runClaudeHook(input, dependencies = {}) {
     const deps = requiredDeps(dependencies);
     try {
+        // Every hook is a separate process, so recover Pontia's runtime
+        // identity from the tmux pane rather than relying on process memory.
+        deps.runtimeIdentity = await deps.loadManagedRuntime(deps.env);
         // SessionStart may create a binding and receive its pane marker. Every
         // later lifecycle event is ignored unless Pontia marked this pane.
         if (input.hook_event_name !== "PermissionRequest"
             && input.hook_event_name !== "SessionStart"
-            && !await deps.isManagedPane(deps.env))
+            && !deps.runtimeIdentity)
             return;
         switch (input.hook_event_name) {
             case "SessionStart":

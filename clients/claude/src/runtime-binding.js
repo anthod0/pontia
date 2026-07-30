@@ -1,9 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { resolvePontiaConnection } from "./discovery.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
-function newRuntimeInstanceId() {
-    return `rtinst_${randomUUID()}`;
-}
 function tmuxBindingFromEnv(env) {
     const tmux = optionalString(env.TMUX);
     const paneId = optionalString(env.TMUX_PANE);
@@ -13,15 +9,12 @@ function tmuxBindingFromEnv(env) {
     return { socket_path: socketPath, pane_id: paneId };
 }
 export async function bindManualSession(env, fetchImpl, details) {
-    if (optionalString(env.PONTIA_SESSION_ID))
-        return undefined;
     if (!details.clientSessionKey)
         return undefined;
     const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
     const url = discovered?.bindingUpsertUrl;
     if (!url)
         return undefined;
-    const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? newRuntimeInstanceId();
     const tmux = tmuxBindingFromEnv(env);
     const response = await fetchImpl(url, {
         method: "POST",
@@ -31,7 +24,6 @@ export async function bindManualSession(env, fetchImpl, details) {
             client_session_key: details.clientSessionKey,
             client_cwd: details.clientCwd,
             launch_cwd: details.clientCwd,
-            runtime_instance_id: runtimeInstanceId,
             start_command: "claude",
             client_session_file: details.transcriptPath,
             ...(tmux ? { tmux } : {}),
@@ -44,9 +36,9 @@ export async function bindManualSession(env, fetchImpl, details) {
     const session = asRecord(record?.session);
     const runtime = asRecord(record?.runtime);
     const sessionId = optionalString(session?.session_id);
-    const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id) ?? runtimeInstanceId;
+    const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id);
     const internalEventUrl = optionalString(runtime?.internal_event_url) ?? discovered?.internalEventUrl;
-    if (!sessionId || !internalEventUrl)
+    if (!sessionId || !resolvedRuntimeInstanceId || !internalEventUrl)
         return undefined;
     return { sessionId, clientType: "claude", internalEventUrl, runtimeInstanceId: resolvedRuntimeInstanceId, ...details };
 }

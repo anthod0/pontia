@@ -30,11 +30,16 @@ function agentBindingContextUrl(internalEventUrl, path, clientSessionKey) {
         return undefined;
     }
 }
-function contextFromRecord(record, env, logFile, internalEventUrl) {
+function contextMatchesRuntimeIdentity(context, runtimeIdentity) {
+    return !runtimeIdentity
+        || (context.sessionId === runtimeIdentity.sessionId
+            && context.runtimeInstanceId === runtimeIdentity.runtimeInstanceId);
+}
+function contextFromRecord(record, logFile, internalEventUrl) {
     const sessionId = optionalString(record.session_id);
     const turnId = optionalString(record.turn_id);
     const clientType = optionalString(record.client_type);
-    const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID) ?? optionalString(record.runtime_instance_id);
+    const runtimeInstanceId = optionalString(record.runtime_instance_id);
     const resolvedInternalEventUrl = optionalString(record.internal_event_url) ?? internalEventUrl;
     const errors = [];
     if (!sessionId)
@@ -42,7 +47,7 @@ function contextFromRecord(record, env, logFile, internalEventUrl) {
     if (clientType !== "claude")
         errors.push("client_type must be claude");
     if (!runtimeInstanceId)
-        errors.push("runtime_instance_id or PONTIA_RUNTIME_INSTANCE_ID is required");
+        errors.push("runtime_instance_id is required");
     if (!resolvedInternalEventUrl)
         errors.push("internal_event_url is required");
     if (errors.length > 0)
@@ -59,16 +64,14 @@ function contextFromRecord(record, env, logFile, internalEventUrl) {
         },
     };
 }
-export async function loadSessionContext(env = process.env) {
+export async function loadSessionContext(env = process.env, runtimeIdentity) {
     const logFile = defaultHookLogFile(env);
-    const sessionId = optionalString(env.PONTIA_SESSION_ID);
-    const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID);
     const connection = await resolvePontiaConnection({ env });
     const errors = [];
-    if (!sessionId)
-        errors.push("PONTIA_SESSION_ID is required");
-    if (!runtimeInstanceId)
-        errors.push("PONTIA_RUNTIME_INSTANCE_ID is required");
+    if (!runtimeIdentity?.sessionId)
+        errors.push("tmux session marker is required");
+    if (!runtimeIdentity?.runtimeInstanceId)
+        errors.push("tmux runtime instance marker is required");
     if (!connection?.internalEventUrl)
         errors.push("pontia connection from PONTIA_HOME/config.toml is required");
     if (errors.length > 0)
@@ -76,25 +79,28 @@ export async function loadSessionContext(env = process.env) {
     return {
         ok: true,
         logFile,
-        context: { sessionId: sessionId, runtimeInstanceId: runtimeInstanceId, clientType: "claude", internalEventUrl: connection.internalEventUrl },
+        context: {
+            sessionId: runtimeIdentity.sessionId,
+            runtimeInstanceId: runtimeIdentity.runtimeInstanceId,
+            clientType: "claude",
+            internalEventUrl: connection.internalEventUrl,
+        },
     };
 }
-export async function claimTurnContext(env, fetchImpl) {
+export async function claimTurnContext(env, fetchImpl, runtimeIdentity) {
     const logFile = defaultHookLogFile(env);
-    const sessionId = optionalString(env.PONTIA_SESSION_ID);
-    const runtimeInstanceId = optionalString(env.PONTIA_RUNTIME_INSTANCE_ID);
-    if (!sessionId || !runtimeInstanceId)
+    if (!runtimeIdentity?.sessionId || !runtimeIdentity?.runtimeInstanceId)
         return { ok: false, reason: "managed runtime context unavailable", logFile, silent: true };
     const connection = await resolvePontiaConnection({ env, fetch: fetchImpl });
     const internalEventUrl = connection?.internalEventUrl;
-    const url = internalEventUrl ? claimUrl(internalEventUrl, sessionId) : undefined;
+    const url = internalEventUrl ? claimUrl(internalEventUrl, runtimeIdentity.sessionId) : undefined;
     if (!url)
         return { ok: false, reason: "current turn claim unavailable", logFile, silent: true };
     try {
         const response = await fetchImpl(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ runtime_instance_id: runtimeInstanceId, client_type: "claude" }),
+            body: JSON.stringify({ runtime_instance_id: runtimeIdentity.runtimeInstanceId, client_type: "claude" }),
         });
         if (!response.ok)
             return { ok: false, reason: "current turn claim failed", logFile, silent: true };
@@ -102,7 +108,11 @@ export async function claimTurnContext(env, fetchImpl) {
         const currentTurn = asRecord(asRecord(asRecord(body)?.data)?.current_turn);
         if (!currentTurn)
             return { ok: false, reason: "no pending current turn", logFile, silent: true };
-        return contextFromRecord(currentTurn, env, logFile, internalEventUrl);
+        const result = contextFromRecord(currentTurn, logFile, internalEventUrl);
+        if (result.ok && !contextMatchesRuntimeIdentity(result.context, runtimeIdentity)) {
+            return { ok: false, reason: "current turn context does not match tmux runtime identity", logFile };
+        }
+        return result;
     }
     catch {
         return { ok: false, reason: "current turn claim exception", logFile, silent: true };
@@ -148,7 +158,7 @@ export async function loadSessionByClientSession(env, fetchImpl, clientSessionKe
         return { ok: false, reason: "session context lookup exception", logFile };
     }
 }
-export async function loadCurrentTurnByClientSession(env, fetchImpl, clientSessionKey) {
+export async function loadCurrentTurnByClientSession(env, fetchImpl, clientSessionKey, runtimeIdentity) {
     const logFile = defaultHookLogFile(env);
     const connection = await resolvePontiaConnection({ env, fetch: fetchImpl });
     const internalEventUrl = connection?.internalEventUrl;
@@ -163,7 +173,10 @@ export async function loadCurrentTurnByClientSession(env, fetchImpl, clientSessi
         const currentTurn = asRecord(asRecord(asRecord(body)?.data)?.current_turn);
         if (!currentTurn)
             return { ok: false, reason: "no active current turn", logFile, silent: true };
-        return contextFromRecord(currentTurn, env, logFile, internalEventUrl);
+        const result = contextFromRecord(currentTurn, logFile, internalEventUrl);
+        if (result.ok && !contextMatchesRuntimeIdentity(result.context, runtimeIdentity))
+            return { ok: false, reason: "current turn context does not match tmux runtime identity", logFile };
+        return result;
     }
     catch {
         return { ok: false, reason: "current turn lookup exception", logFile, silent: true };
