@@ -339,14 +339,17 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         readyReported = false;
       } else {
         const existingSession = await loadExistingSessionContext(env, fetchImpl, sessionDetails);
-        if (existingSession && existingSession.sessionState !== "exited") {
+        if (
+          existingSession
+          && ["idle", "busy", "interrupted"].includes(existingSession.sessionState)
+        ) {
           reportingDisabled = true;
           boundSessionContext = undefined;
           readyReported = false;
           await logDiagnostic(logFile, {
             level: "info",
             code: "duplicate_active_client_session",
-            message: "native pi session is already bound to a non-exited pontia session; duplicate TUI reporting disabled",
+            message: "native pi session is already bound to an active pontia session; duplicate TUI reporting disabled",
             details: {
               client_session_key: sessionDetails.clientSessionKey,
               session_id: existingSession.sessionId,

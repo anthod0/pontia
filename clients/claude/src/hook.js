@@ -45,11 +45,11 @@ async function reportReadyForClientSession(input, deps) {
     const existing = details.clientSessionKey
         ? await loadSessionByClientSession(deps.env, deps.fetchImpl, details.clientSessionKey)
         : undefined;
-    if (existing?.ok && existing.context.sessionState !== "exited") {
+    if (existing?.ok && ["idle", "busy", "interrupted"].includes(existing.context.sessionState)) {
         await deps.logDiagnostic(logFile, {
             level: "info",
             code: "duplicate_active_client_session",
-            message: "native Claude session is already bound to a non-exited pontia session; duplicate TUI reporting disabled",
+            message: "native Claude session is already bound to an active pontia session; duplicate TUI reporting disabled",
             details: {
                 client_session_key: details.clientSessionKey,
                 session_id: existing.context.sessionId,

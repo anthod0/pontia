@@ -132,7 +132,7 @@ describe("pontia claude hook", () => {
             data: { runtime_instance_id: "rtinst_fresh", client_session_key: "claude_session_1" },
         });
     });
-    test("SessionStart suppresses a duplicate TUI for a key bound to a non-exited Session", async () => {
+    test.each(["idle", "busy", "interrupted"])("SessionStart suppresses a duplicate TUI for a key bound to a %s Session", async (sessionState) => {
         const workspace = await realpath(await tempDir());
         const fetchImpl = vi.fn(async (url) => {
             if (url === "http://localhost/external/v1/workspaces") {
@@ -141,7 +141,7 @@ describe("pontia claude hook", () => {
             if (url.startsWith("http://localhost/internal/v1/agent-bindings/session-context?")) {
                 return new Response(JSON.stringify({ data: { session_context: {
                     session_id: "sess_active",
-                    session_state: "idle",
+                    session_state: sessionState,
                     client_type: "claude",
                     runtime_instance_id: "rtinst_active",
                     internal_event_url: "http://localhost/internal/v1/events",
@@ -154,6 +154,41 @@ describe("pontia claude hook", () => {
         expect(reported).toEqual([]);
         expect(diagnostics).toEqual([expect.objectContaining({ code: "duplicate_active_client_session" })]);
         expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+    test("SessionStart finishes binding a starting Session and reports ready", async () => {
+        const workspace = await realpath(await tempDir());
+        const fetchImpl = vi.fn(async (url) => {
+            if (url === "http://localhost/external/v1/workspaces") {
+                return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+            }
+            if (url.startsWith("http://localhost/internal/v1/agent-bindings/session-context?")) {
+                return new Response(JSON.stringify({ data: { session_context: {
+                    session_id: "sess_starting",
+                    session_state: "starting",
+                    client_type: "claude",
+                    runtime_instance_id: "rtinst_starting",
+                    internal_event_url: "http://localhost/internal/v1/events",
+                } } }), { status: 200 });
+            }
+            if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+                return new Response(JSON.stringify({
+                    session: { session_id: "sess_starting" },
+                    runtime: { runtime_instance_id: "rtinst_bound", internal_event_url: "http://localhost/internal/v1/events" },
+                }), { status: 200 });
+            }
+            return new Response("unexpected", { status: 500 });
+        });
+        const { deps, reported, diagnostics } = install({ fetch: fetchImpl });
+
+        await runClaudeHook(baseInput({ cwd: workspace }), deps);
+
+        expect(fetchImpl).toHaveBeenCalledTimes(3);
+        expect(diagnostics).toEqual([]);
+        expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+        expect(reported[0]).toMatchObject({
+            session_id: "sess_starting",
+            data: { runtime_instance_id: "rtinst_bound" },
+        });
     });
     test("manual SessionStart creates a binding in an active workspace and reports ready", async () => {
         const workspace = await realpath(await tempDir());
