@@ -29,6 +29,16 @@ pub struct SqliteWorkflowRepository {
     pool: SqlitePool,
 }
 
+struct RunningWorkflowTransition<'a> {
+    workflow_id: &'a str,
+    unsubmitted_node_id: Option<&'a str>,
+    event_id: &'a str,
+    state: &'a str,
+    event_type: &'a str,
+    failure_message: Option<&'a str>,
+    payload: &'a str,
+}
+
 impl SqliteWorkflowRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
@@ -147,14 +157,20 @@ impl SqliteWorkflowRepository {
         let result = sqlx::query(
             r#"UPDATE workflow_nodes
                SET submitted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE node_id = ? AND submitted_at IS NULL"#,
+               WHERE node_id = ?
+                 AND submitted_at IS NULL
+                 AND EXISTS (
+                     SELECT 1 FROM workflows
+                     WHERE workflows.workflow_id = workflow_nodes.workflow_id
+                       AND workflows.state = 'running'
+                 )"#,
         )
         .bind(node_id)
         .execute(&self.pool)
         .await?;
         if result.rows_affected() != 1 {
             return Err(Error::StateConflict(format!(
-                "workflow node {node_id} is missing or already submitted"
+                "workflow node {node_id} must be unsubmitted in a running workflow"
             )));
         }
         Ok(())
@@ -267,9 +283,22 @@ impl SqliteWorkflowRepository {
         Ok(())
     }
 
-    pub async fn idle_workflow(&self, workflow_id: &str, event_id: &str) -> Result<()> {
-        self.transition_running_workflow(workflow_id, event_id, "idle", "workflow.idle", None, "{}")
-            .await
+    pub async fn idle_unsubmitted_workflow_node(
+        &self,
+        workflow_id: &str,
+        node_id: &str,
+        event_id: &str,
+    ) -> Result<()> {
+        self.transition_running_workflow(RunningWorkflowTransition {
+            workflow_id,
+            unsubmitted_node_id: Some(node_id),
+            event_id,
+            state: "idle",
+            event_type: "workflow.idle",
+            failure_message: None,
+            payload: "{}",
+        })
+        .await
     }
 
     pub async fn fail_workflow(
@@ -279,25 +308,41 @@ impl SqliteWorkflowRepository {
         failure_message: &str,
     ) -> Result<()> {
         let payload = serde_json::json!({ "failure_message": failure_message }).to_string();
-        self.transition_running_workflow(
+        self.transition_running_workflow(RunningWorkflowTransition {
             workflow_id,
+            unsubmitted_node_id: None,
             event_id,
-            "failed",
-            "workflow.failed",
-            Some(failure_message),
-            &payload,
-        )
+            state: "failed",
+            event_type: "workflow.failed",
+            failure_message: Some(failure_message),
+            payload: &payload,
+        })
+        .await
+    }
+
+    pub async fn fail_unsubmitted_workflow_node(
+        &self,
+        workflow_id: &str,
+        node_id: &str,
+        event_id: &str,
+        failure_message: &str,
+    ) -> Result<()> {
+        let payload = serde_json::json!({ "failure_message": failure_message }).to_string();
+        self.transition_running_workflow(RunningWorkflowTransition {
+            workflow_id,
+            unsubmitted_node_id: Some(node_id),
+            event_id,
+            state: "failed",
+            event_type: "workflow.failed",
+            failure_message: Some(failure_message),
+            payload: &payload,
+        })
         .await
     }
 
     async fn transition_running_workflow(
         &self,
-        workflow_id: &str,
-        event_id: &str,
-        state: &str,
-        event_type: &str,
-        failure_message: Option<&str>,
-        payload: &str,
+        transition: RunningWorkflowTransition<'_>,
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
         let result = sqlx::query(
@@ -305,22 +350,39 @@ impl SqliteWorkflowRepository {
                SET state = ?,
                    failure_message = ?,
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE workflow_id = ? AND state = 'running'"#,
+               WHERE workflow_id = ?
+                 AND state = 'running'
+                 AND (
+                     ? IS NULL
+                     OR EXISTS (
+                         SELECT 1 FROM workflow_nodes
+                         WHERE workflow_nodes.workflow_id = workflows.workflow_id
+                           AND workflow_nodes.node_id = ?
+                           AND workflow_nodes.submitted_at IS NULL
+                     )
+                 )"#,
         )
-        .bind(state)
-        .bind(failure_message)
-        .bind(workflow_id)
+        .bind(transition.state)
+        .bind(transition.failure_message)
+        .bind(transition.workflow_id)
+        .bind(transition.unsubmitted_node_id)
+        .bind(transition.unsubmitted_node_id)
         .execute(&mut *tx)
         .await?;
         if result.rows_affected() != 1 {
+            let expected = transition.unsubmitted_node_id.map_or_else(
+                || "running state".to_string(),
+                |node_id| format!("running state with unsubmitted node {node_id}"),
+            );
             return Err(Error::StateConflict(format!(
-                "workflow {workflow_id} must exist in running state"
+                "workflow {} must exist in {expected}",
+                transition.workflow_id
             )));
         }
         let sequence: i64 = sqlx::query_scalar(
             "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_events WHERE workflow_id = ?",
         )
-        .bind(workflow_id)
+        .bind(transition.workflow_id)
         .fetch_one(&mut *tx)
         .await?;
         sqlx::query(
@@ -328,11 +390,11 @@ impl SqliteWorkflowRepository {
                (event_id, workflow_id, sequence, event_type, payload)
                VALUES (?, ?, ?, ?, ?)"#,
         )
-        .bind(event_id)
-        .bind(workflow_id)
+        .bind(transition.event_id)
+        .bind(transition.workflow_id)
         .bind(sequence)
-        .bind(event_type)
-        .bind(payload)
+        .bind(transition.event_type)
+        .bind(transition.payload)
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;

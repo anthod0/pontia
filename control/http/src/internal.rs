@@ -456,6 +456,7 @@ impl ApiError {
             },
             WorkflowError::RootNodeNotFound(_)
             | WorkflowError::MissingCreatedSessionId
+            | WorkflowError::RuntimeControlUnavailable { .. }
             | WorkflowError::Io(_)
             | WorkflowError::Json(_) => Self {
                 status: StatusCode::INTERNAL_SERVER_ERROR,

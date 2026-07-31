@@ -3,6 +3,7 @@ use std::{
     future::Future,
     path::Path,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use pontia_application::CreateSessionRequest;
@@ -64,7 +65,7 @@ impl SessionCreator for SequencedSessionCreator {
 
 #[derive(Clone, Default)]
 struct RecordingExitRequester {
-    ensure_error: Arc<Mutex<Option<PontiaError>>>,
+    ensure_missing_binding: bool,
     request_error: Arc<Mutex<Option<PontiaError>>>,
     requests: Arc<Mutex<Vec<(String, String)>>>,
 }
@@ -72,9 +73,7 @@ struct RecordingExitRequester {
 impl RecordingExitRequester {
     fn missing_runtime_binding() -> Self {
         Self {
-            ensure_error: Arc::new(Mutex::new(Some(PontiaError::CapabilityUnavailable(
-                "session session_root has no current runtime binding".to_string(),
-            )))),
+            ensure_missing_binding: true,
             ..Self::default()
         }
     }
@@ -95,8 +94,18 @@ impl GracefulExitRequester for RecordingExitRequester {
         _session_id: &str,
         _runtime_instance_id: &str,
     ) -> impl Future<Output = pontia_workflow::Result<()>> + Send {
-        let error = self.ensure_error.lock().expect("ensure error lock").take();
-        async move { error.map_or(Ok(()), |error| Err(error.into())) }
+        let missing = self.ensure_missing_binding;
+        let session_id = _session_id.to_string();
+        async move {
+            if missing {
+                Err(pontia_workflow::Error::RuntimeControlUnavailable {
+                    session_id,
+                    message: "no current runtime binding".to_string(),
+                })
+            } else {
+                Ok(())
+            }
+        }
     }
 
     fn request_graceful_exit(
@@ -124,7 +133,11 @@ struct TestAgentEvents {
 
 impl TestAgentEvents {
     fn new() -> Self {
-        let (sender, _) = broadcast::channel(16);
+        Self::with_capacity(16)
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
+        let (sender, _) = broadcast::channel(capacity);
         Self { sender }
     }
 
@@ -204,7 +217,7 @@ async fn seed_linear_workflow(
 }
 
 async fn wait_for_state(repository: &SqliteWorkflowRepository, workflow_id: &str, expected: &str) {
-    for _ in 0..100 {
+    for _ in 0..200 {
         let workflow = repository
             .get_workflow(workflow_id)
             .await
@@ -213,7 +226,7 @@ async fn wait_for_state(repository: &SqliteWorkflowRepository, workflow_id: &str
         if workflow.state == expected {
             return;
         }
-        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
     }
     panic!("workflow {workflow_id} did not reach {expected}");
 }
@@ -423,11 +436,13 @@ async fn submission_binding_and_exit_failures_fail_without_starting_a_child() {
         let repository = SqliteWorkflowRepository::new(pool.clone());
         seed_linear_workflow(&repository, workflow_id, "[]", true).await;
         let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
+        let scheduler_task_owner = Arc::downgrade(&sessions.requests);
+        let events = TestAgentEvents::new();
         let scheduler = WorkflowScheduler::with_services(
             pool,
             sessions.clone(),
             exits.clone(),
-            TestAgentEvents::new(),
+            events.clone(),
             temp.path().join("pontia-home"),
         );
         scheduler.start(workflow_id).await.expect("start workflow");
@@ -471,6 +486,15 @@ async fn submission_binding_and_exit_failures_fail_without_starting_a_child() {
                 .session_id
                 .is_none()
         );
+        drop(scheduler);
+        drop(sessions);
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while scheduler_task_owner.upgrade().is_some() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("failed Workflow Scheduler task should end without another Agent fact");
     }
 }
 
@@ -537,4 +561,105 @@ async fn downstream_session_creation_failure_stops_the_workflow() {
             .session_id
             .is_none()
     );
+}
+
+#[tokio::test]
+async fn submission_and_terminal_transition_have_one_atomic_winner() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let pool = test_pool(&temp.path().join("atomic-race.db")).await;
+    let repository = SqliteWorkflowRepository::new(pool);
+
+    for index in 0..20 {
+        let workflow_id = format!("wf_atomic_{index}");
+        let node_id = format!("{workflow_id}_root");
+        seed_linear_workflow(&repository, &workflow_id, "[]", false).await;
+        repository
+            .start_workflow(&workflow_id, &format!("evt_started_{index}"))
+            .await
+            .expect("start workflow record");
+
+        let submission_repository = repository.clone();
+        let submission_node_id = node_id.clone();
+        let terminal_repository = repository.clone();
+        let terminal_workflow_id = workflow_id.clone();
+        let terminal_node_id = node_id.clone();
+        let (submission, terminal) = tokio::join!(
+            async move {
+                submission_repository
+                    .record_node_submission(&submission_node_id)
+                    .await
+            },
+            async move {
+                terminal_repository
+                    .idle_unsubmitted_workflow_node(
+                        &terminal_workflow_id,
+                        &terminal_node_id,
+                        &format!("evt_idle_{index}"),
+                    )
+                    .await
+            }
+        );
+
+        assert_ne!(submission.is_ok(), terminal.is_ok());
+        let workflow = repository
+            .get_workflow(&workflow_id)
+            .await
+            .expect("load workflow")
+            .expect("workflow exists");
+        let node = repository
+            .get_node(&node_id)
+            .await
+            .expect("load node")
+            .expect("node exists");
+        if submission.is_ok() {
+            assert_eq!(workflow.state, "running");
+            assert!(node.submitted_at.is_some());
+        } else {
+            assert_eq!(workflow.state, "idle");
+            assert!(node.submitted_at.is_none());
+        }
+    }
+}
+
+#[tokio::test]
+async fn lagged_notifications_reconcile_persisted_turn_terminal_facts() {
+    for (event_type, expected_state) in [
+        (EventType::TurnCompleted, "idle"),
+        (EventType::TurnFailed, "failed"),
+        (EventType::TurnInterrupted, "failed"),
+    ] {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let pool = test_pool(&temp.path().join("lagged-terminal.db")).await;
+        let repository = SqliteWorkflowRepository::new(pool.clone());
+        seed_linear_workflow(&repository, "wf_lagged_terminal", "[]", false).await;
+        let events = TestAgentEvents::with_capacity(1);
+        let scheduler = WorkflowScheduler::with_services(
+            pool.clone(),
+            SequencedSessionCreator::new([Some("session_root")]),
+            RecordingExitRequester::default(),
+            events.clone(),
+            temp.path().join("pontia-home"),
+        );
+        scheduler
+            .start("wf_lagged_terminal")
+            .await
+            .expect("start workflow");
+
+        sqlx::query(
+            r#"INSERT INTO events
+               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload)
+               VALUES (?, 'session_root', 'turn_root', 'agent_client', 'pi', ?,
+                       '2026-07-31T00:00:00Z',
+                       '{"runtime_instance_id":"runtime_session_root"}')"#,
+        )
+        .bind(format!("evt_persisted_{event_type}"))
+        .bind(event_type.to_string())
+        .execute(&pool)
+        .await
+        .expect("persist terminal Agent fact");
+        events.publish("session_root", event_type);
+        events.publish("session_other", EventType::TurnCompleted);
+
+        wait_for_state(&repository, "wf_lagged_terminal", expected_state).await;
+    }
 }

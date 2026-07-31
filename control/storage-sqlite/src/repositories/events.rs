@@ -117,6 +117,29 @@ impl SqliteEventRepository {
             != 0)
     }
 
+    pub async fn latest_agent_client_terminal_event(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<EventRow>> {
+        Ok(sqlx::query_as::<_, EventRow>(
+            r#"SELECT event_id, session_id, turn_id, source, event_type, occurred_at, payload
+               FROM events
+               WHERE session_id = ?
+                 AND source = 'agent_client'
+                 AND event_type IN (
+                     'turn.completed',
+                     'turn.failed',
+                     'turn.interrupted',
+                     'session.exited'
+                 )
+               ORDER BY CASE event_type WHEN 'session.exited' THEN 0 ELSE 1 END, rowid DESC
+               LIMIT 1"#,
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
     pub async fn list_domain_event_rows(&self, session_id: &str) -> Result<Vec<DomainEventRow>> {
         Ok(sqlx::query_as::<_, DomainEventRow>(
             r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload, timeline_boundary, turn_topology

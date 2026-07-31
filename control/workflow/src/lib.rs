@@ -3,6 +3,7 @@
 use std::{
     future::Future,
     path::{Component, Path, PathBuf},
+    time::Duration,
 };
 
 use pontia_application::{
@@ -55,6 +56,9 @@ pub enum Error {
         runtime_instance_id: String,
     },
 
+    #[error("runtime control is unavailable for session {session_id}: {message}")]
+    RuntimeControlUnavailable { session_id: String, message: String },
+
     #[error("output {actual} does not match Agent Node declared output {expected}")]
     OutputMismatch { expected: String, actual: String },
 }
@@ -98,7 +102,14 @@ impl GracefulExitRequester for PiGracefulExitService {
     ) -> Result<()> {
         PiGracefulExitService::ensure_current_runtime(self, session_id, runtime_instance_id)
             .await
-            .map_err(Into::into)
+            .map_err(|error| match error {
+                pontia_core::Error::CapabilityUnavailable(message)
+                | pontia_core::Error::NotFound(message) => Error::RuntimeControlUnavailable {
+                    session_id: session_id.to_string(),
+                    message,
+                },
+                error => error.into(),
+            })
     }
 
     async fn request_graceful_exit(
@@ -146,13 +157,14 @@ enum AgentTerminal {
 
 impl AgentTerminal {
     fn from_event(event: &DomainEvent, session_id: &str) -> Option<Self> {
-        if event.session_id != session_id
-            || event.source != EventSource::AgentClient
-            || event.client_type != "pi"
-        {
+        if event.session_id != session_id || event.source != EventSource::AgentClient {
             return None;
         }
-        match event.event_type {
+        Self::from_event_type(event.event_type)
+    }
+
+    fn from_event_type(event_type: EventType) -> Option<Self> {
+        match event_type {
             EventType::TurnCompleted => Some(Self::TurnCompleted),
             EventType::TurnFailed => Some(Self::TurnFailed),
             EventType::TurnInterrupted => Some(Self::TurnInterrupted),
@@ -287,7 +299,24 @@ where
         let mut watched_session_id = session_id.clone();
         tokio::spawn(async move {
             loop {
-                let (terminal, runtime_instance_id) = match agent_events.recv().await {
+                let received = tokio::select! {
+                    received = agent_events.recv() => received,
+                    () = tokio::time::sleep(Duration::from_millis(250)) => {
+                        match repository.get_workflow(&watched_workflow_id).await {
+                            Ok(Some(workflow)) if workflow.state == "running" => continue,
+                            Ok(Some(_)) | Ok(None) => break,
+                            Err(error) => {
+                                tracing::error!(
+                                    workflow_id = %watched_workflow_id,
+                                    %error,
+                                    "failed to reconcile Workflow state while waiting for Agent facts"
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                };
+                let (terminal, runtime_instance_id) = match received {
                     Ok(event) => match AgentTerminal::from_event(&event, &watched_session_id) {
                         Some(terminal) => (
                             terminal,
@@ -299,20 +328,37 @@ where
                     },
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
                         match persisted_events
-                            .has_agent_client_session_exit(&watched_session_id, "pi")
+                            .latest_agent_client_terminal_event(&watched_session_id)
                             .await
                         {
-                            Ok(true) => {
+                            Ok(Some(event)) => {
+                                let Some(terminal) = event
+                                    .event_type
+                                    .parse::<EventType>()
+                                    .ok()
+                                    .and_then(AgentTerminal::from_event_type)
+                                else {
+                                    continue;
+                                };
+                                let runtime_instance_id =
+                                    serde_json::from_str::<serde_json::Value>(&event.payload)
+                                        .ok()
+                                        .and_then(|payload| {
+                                            payload["runtime_instance_id"]
+                                                .as_str()
+                                                .map(str::to_string)
+                                        });
                                 tracing::warn!(
                                     workflow_id = %watched_workflow_id,
                                     node_id = %watched_node_id,
                                     session_id = %watched_session_id,
                                     skipped,
-                                    "reconciled workflow Agent Node after lagged event notifications"
+                                    event_type = %event.event_type,
+                                    "reconciled Workflow Agent Node from a durable terminal fact after lagged notifications"
                                 );
-                                (AgentTerminal::SessionExited, None)
+                                (terminal, runtime_instance_id)
                             }
-                            Ok(false) => continue,
+                            Ok(None) => continue,
                             Err(error) => {
                                 tracing::error!(
                                     workflow_id = %watched_workflow_id,
@@ -328,6 +374,25 @@ where
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 };
+                match repository.get_workflow(&watched_workflow_id).await {
+                    Ok(Some(workflow)) if workflow.state == "running" => {}
+                    Ok(Some(_)) => break,
+                    Ok(None) => {
+                        tracing::error!(
+                            workflow_id = %watched_workflow_id,
+                            "workflow disappeared while handling an Agent terminal fact"
+                        );
+                        break;
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            workflow_id = %watched_workflow_id,
+                            %error,
+                            "failed to load Workflow state after an Agent terminal fact"
+                        );
+                        continue;
+                    }
+                }
                 let submitted = match repository.get_node(&watched_node_id).await {
                     Ok(Some(node)) => node.submitted_at.is_some(),
                     Ok(None) => {
@@ -352,7 +417,11 @@ where
                     match terminal {
                         AgentTerminal::TurnCompleted => {
                             if let Err(error) = repository
-                                .idle_workflow(&watched_workflow_id, &Uuid::now_v7().to_string())
+                                .idle_unsubmitted_workflow_node(
+                                    &watched_workflow_id,
+                                    &watched_node_id,
+                                    &Uuid::now_v7().to_string(),
+                                )
                                 .await
                             {
                                 tracing::error!(
@@ -373,8 +442,9 @@ where
                                 watched_node_id
                             );
                             if let Err(error) = repository
-                                .fail_workflow(
+                                .fail_unsubmitted_workflow_node(
                                     &watched_workflow_id,
+                                    &watched_node_id,
                                     &Uuid::now_v7().to_string(),
                                     &failure_message,
                                 )
@@ -524,7 +594,7 @@ where
             .ensure_current_runtime(&request.session_id, &request.runtime_instance_id)
             .await
         {
-            if is_missing_runtime_binding(&error) {
+            if is_runtime_control_unavailable(&error) {
                 let failure_message = format!(
                     "runtime binding is unavailable for Workflow Session {}: {error}",
                     request.session_id
@@ -708,10 +778,6 @@ fn validate_handoff_file_name(name: &str) -> Result<()> {
     Err(Error::InvalidHandoffFileName(name.to_string()))
 }
 
-fn is_missing_runtime_binding(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::Pontia(pontia_core::Error::CapabilityUnavailable(message))
-            if message.contains("runtime binding") || message.contains("bound pi TUI pane")
-    )
+fn is_runtime_control_unavailable(error: &Error) -> bool {
+    matches!(error, Error::RuntimeControlUnavailable { .. })
 }
