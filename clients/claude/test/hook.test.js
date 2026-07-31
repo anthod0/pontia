@@ -157,7 +157,7 @@ describe("pontia claude hook", () => {
     });
     test("SessionStart finishes binding a starting Session and reports ready", async () => {
         const workspace = await realpath(await tempDir());
-        const fetchImpl = vi.fn(async (url) => {
+        const fetchImpl = vi.fn(async (url, init) => {
             if (url === "http://localhost/external/v1/workspaces") {
                 return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
             }
@@ -171,6 +171,10 @@ describe("pontia claude hook", () => {
                 } } }), { status: 200 });
             }
             if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+                expect(JSON.parse(String(init?.body))).toMatchObject({
+                    client_session_key: "claude_session_1",
+                    runtime_instance_id: "rtinst_starting",
+                });
                 return new Response(JSON.stringify({
                     session: { session_id: "sess_starting" },
                     runtime: { runtime_instance_id: "rtinst_bound", internal_event_url: "http://localhost/internal/v1/events" },

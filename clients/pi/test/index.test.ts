@@ -789,20 +789,24 @@ describe("pontia pi extension lifecycle", () => {
 
   test("session_start resume immediately reattaches when switched client session has a pontia binding", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
       if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_resume") {
         return new Response(JSON.stringify({ data: { session_context: {
           session_id: "sess_resume",
-          session_state: "exited",
+          session_state: "starting",
           client_type: "pi",
-          runtime_instance_id: "rtinst_old",
+          runtime_instance_id: "rtinst_resume",
           internal_event_url: "http://localhost/internal/v1/events",
         } } }), { status: 200 });
       }
       if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          client_session_key: "pi_session_resume",
+          runtime_instance_id: "rtinst_resume",
+        });
         return new Response(JSON.stringify({
           session: { session_id: "sess_resume" },
           runtime: {

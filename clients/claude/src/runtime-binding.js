@@ -8,7 +8,7 @@ function tmuxBindingFromEnv(env) {
         return undefined;
     return { socket_path: socketPath, pane_id: paneId };
 }
-export async function bindManualSession(env, fetchImpl, details) {
+export async function bindManualSession(env, fetchImpl, details, options = {}) {
     if (!details.clientSessionKey)
         return undefined;
     const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
@@ -26,6 +26,7 @@ export async function bindManualSession(env, fetchImpl, details) {
             launch_cwd: details.clientCwd,
             start_command: "claude",
             client_session_file: details.transcriptPath,
+            ...(options.runtimeInstanceId ? { runtime_instance_id: options.runtimeInstanceId } : {}),
             ...(tmux ? { tmux } : {}),
         }),
     });

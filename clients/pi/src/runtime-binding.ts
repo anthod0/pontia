@@ -45,7 +45,7 @@ export async function bindSession(
   env: EnvLike,
   fetchImpl: typeof fetch,
   sessionDetails: PiSessionDetails,
-  options: { startKind?: "fork"; parentSessionId?: string } = {},
+  options: { startKind?: "fork"; parentSessionId?: string; runtimeInstanceId?: string } = {},
 ): Promise<SessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
   const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
@@ -66,6 +66,7 @@ export async function bindSession(
       start_command: "pi",
       ...(options.startKind ? { start_kind: options.startKind } : {}),
       ...(options.parentSessionId ? { parent_session_id: options.parentSessionId } : {}),
+      ...(options.runtimeInstanceId ? { runtime_instance_id: options.runtimeInstanceId } : {}),
       ...(tmux ? { tmux } : {}),
     }),
   });

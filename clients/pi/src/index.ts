@@ -364,7 +364,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           return;
         }
 
-        context = await bindSession(env, fetchImpl, sessionDetails);
+        context = await bindSession(env, fetchImpl, sessionDetails, {
+          runtimeInstanceId: existingSession?.runtimeInstanceId,
+        });
         if (reason === "resume" || reason === "new") readyReported = false;
       }
       if (!context || !await confirmManagedPane(true)) return;

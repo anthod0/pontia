@@ -27,6 +27,9 @@ function failureMessage(input) {
     const details = optionalString(input.error_details);
     return details ? `${error}: ${details}` : error;
 }
+function runtimeInstanceIdForExistingSession(existing) {
+    return existing?.ok ? existing.context.runtimeInstanceId : undefined;
+}
 async function reportReadyForClientSession(input, deps) {
     const details = sessionDetailsFromHook(input);
     const logFile = defaultHookLogFile(deps.env);
@@ -60,7 +63,8 @@ async function reportReadyForClientSession(input, deps) {
     }
     let context;
     if (!existing || existing.ok || existing.reason === "session context not found") {
-        context = await bindManualSession(deps.env, deps.fetchImpl, details);
+        const runtimeInstanceId = runtimeInstanceIdForExistingSession(existing);
+        context = await bindManualSession(deps.env, deps.fetchImpl, details, { runtimeInstanceId });
     }
     else {
         await deps.logDiagnostic(logFile, { level: "warn", code: "session_context_lookup_failed", message: existing.reason });
@@ -105,7 +109,8 @@ async function manualTurnContext(input, deps, logFile) {
             });
             return undefined;
         }
-        session = await bindManualSession(deps.env, deps.fetchImpl, details);
+        const runtimeInstanceId = runtimeInstanceIdForExistingSession(existing);
+        session = await bindManualSession(deps.env, deps.fetchImpl, details, { runtimeInstanceId });
         if (session)
             await deps.makeReporter(logFile).report(session, buildSessionReadyEvent(session));
     }
