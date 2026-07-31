@@ -206,6 +206,21 @@ impl GenericRuntimeManager {
         tmux::mark_pontia_pane(socket_path, pane_id, session_id, runtime_instance_id)
     }
 
+    pub fn clear_tmux_pane_markers(
+        &self,
+        socket_path: &str,
+        pane_id: &str,
+        expected_session_id: &str,
+        expected_runtime_instance_id: &str,
+    ) -> Result<()> {
+        tmux::clear_pontia_pane_markers(
+            socket_path,
+            pane_id,
+            expected_session_id,
+            expected_runtime_instance_id,
+        )
+    }
+
     pub fn kill_tmux_pane(&self, socket_path: &str, pane_id: &str) -> Result<()> {
         tmux::kill_pane(socket_path, pane_id)
     }

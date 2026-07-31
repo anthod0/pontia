@@ -337,6 +337,106 @@ fn upsert_body_with_tmux(
 }
 
 #[tokio::test]
+async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marker_identity() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+    let session_id = "sess_precreated_pi";
+    sqlx::query(
+        "INSERT INTO sessions (session_id, client_type, state, metadata) VALUES (?, 'pi', 'starting', '{}')",
+    )
+    .bind(session_id)
+    .execute(&state.db())
+    .await
+    .expect("precreate session");
+    sqlx::query(
+        r#"INSERT INTO runtime_bindings
+           (session_id, runtime_kind, runtime_instance_id, launch_cwd, tmux_socket_path, tmux_pane_id, metadata)
+           VALUES (?, 'pi_tui', 'rtinst_precreated', ?, '/tmp/tmux-1000/default', '%42',
+                   '{"runtime_instance_id":"rtinst_precreated","binding_confirmed":false}')"#,
+    )
+    .bind(session_id)
+    .bind(&workspace)
+    .execute(&state.db())
+    .await
+    .expect("precreate runtime binding");
+    let mut body = upsert_body(&workspace, Some("%42"));
+    body["client_session_key"] = json!(session_id);
+
+    let (status, response) = post_upsert(state.clone(), body).await;
+
+    assert_eq!(status, StatusCode::OK, "{response:?}");
+    assert_eq!(response["session"]["session_id"], session_id);
+    assert_eq!(
+        response["runtime"]["runtime_instance_id"],
+        "rtinst_precreated"
+    );
+    let binding_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM agent_bindings WHERE session_id = ? AND client_session_key = ?",
+    )
+    .bind(session_id)
+    .bind(session_id)
+    .fetch_one(&state.db())
+    .await
+    .expect("agent binding count");
+    assert_eq!(binding_count, 1);
+}
+
+#[tokio::test]
+async fn claude_client_session_key_binds_the_precreated_runtime_by_controlled_pane() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+    let session_id = "sess_precreated_claude";
+    sqlx::query(
+        "INSERT INTO sessions (session_id, client_type, state, metadata) VALUES (?, 'claude', 'starting', '{}')",
+    )
+    .bind(session_id)
+    .execute(&state.db())
+    .await
+    .expect("precreate session");
+    sqlx::query(
+        r#"INSERT INTO runtime_bindings
+           (session_id, runtime_kind, runtime_instance_id, launch_cwd, tmux_socket_path, tmux_pane_id, metadata)
+           VALUES (?, 'claude_tui', 'rtinst_precreated_claude', ?, '/tmp/tmux-1000/default', '%52',
+                   '{"runtime_instance_id":"rtinst_precreated_claude","binding_confirmed":false}')"#,
+    )
+    .bind(session_id)
+    .bind(&workspace)
+    .execute(&state.db())
+    .await
+    .expect("precreate runtime binding");
+    let mut body = upsert_body(&workspace, Some("%52"));
+    body["client_type"] = json!("claude");
+    body["client_session_key"] = json!("claude_native_session");
+    body["start_command"] = json!("claude");
+
+    let (status, response) = post_upsert(state.clone(), body).await;
+
+    assert_eq!(status, StatusCode::OK, "{response:?}");
+    assert_eq!(response["session"]["session_id"], session_id);
+    assert_eq!(
+        response["runtime"]["runtime_instance_id"],
+        "rtinst_precreated_claude"
+    );
+    let bound_session: String = sqlx::query_scalar(
+        "SELECT session_id FROM agent_bindings WHERE client_type = 'claude' AND client_session_key = 'claude_native_session'",
+    )
+    .fetch_one(&state.db())
+    .await
+    .expect("Claude Agent binding");
+    assert_eq!(bound_session, session_id);
+}
+
+#[tokio::test]
 async fn fork_upsert_creates_independent_child_session_with_lineage() {
     let pontia_home = tempfile::tempdir().expect("pontia home");
     unsafe {
@@ -583,6 +683,57 @@ async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
         tmux_display(&pane_id, "#{@pontia_runtime_instance_id}"),
         body["runtime"]["runtime_instance_id"].as_str().unwrap()
     );
+}
+
+#[tokio::test]
+async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() {
+    let state = test_state().await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = workspace
+        .path()
+        .canonicalize()
+        .expect("canonical workspace");
+    let workspace = workspace.display().to_string();
+    let tmux_session = format!("pontia_exit_unmark_{}", std::process::id());
+    let _guard = TmuxSessionGuard(tmux_session.clone());
+    let status = Command::new("tmux")
+        .args(["new-session", "-d", "-s", &tmux_session, "sh"])
+        .stderr(Stdio::null())
+        .status()
+        .expect("spawn tmux");
+    assert!(status.success(), "tmux session should start");
+    let socket_path = tmux_display(&tmux_session, "#{socket_path}");
+    let pane_id = tmux_display(&tmux_session, "#{pane_id}");
+
+    let (upsert_status, upsert) = post_upsert(
+        state.clone(),
+        upsert_body_with_tmux(
+            &workspace,
+            &socket_path,
+            Some(&pane_id),
+            Some(&tmux_session),
+        ),
+    )
+    .await;
+    assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
+    let session_id = upsert["session"]["session_id"].as_str().unwrap();
+    let runtime_instance_id = upsert["runtime"]["runtime_instance_id"].as_str().unwrap();
+
+    let (exit_status, exit) = request_json(
+        state,
+        "POST",
+        "/internal/v1/events",
+        Some(json!({
+            "session_id": session_id,
+            "type": "session.exited",
+            "data": { "runtime_instance_id": runtime_instance_id, "reason": "quit" }
+        })),
+    )
+    .await;
+
+    assert_eq!(exit_status, StatusCode::OK, "{exit:?}");
+    assert_eq!(tmux_display(&pane_id, "#{@pontia_session_id}"), "");
+    assert_eq!(tmux_display(&pane_id, "#{@pontia_runtime_instance_id}"), "");
 }
 
 #[tokio::test]
@@ -1354,6 +1505,8 @@ async fn terminate_manually_bound_tui_session_sends_pi_exit_sequence_to_bound_pa
     assert_eq!(terminate_status, StatusCode::OK, "{terminate:?}");
     assert_eq!(terminate["data"]["session"]["state"], "exited");
     assert!(tmux_pane_alive(&socket_path, &pane_id));
+    assert_eq!(tmux_display(&pane_id, "#{@pontia_session_id}"), "");
+    assert_eq!(tmux_display(&pane_id, "#{@pontia_runtime_instance_id}"), "");
     assert_eq!(wait_for_signal_count(signal_log.path(), 2), 2);
 }
 

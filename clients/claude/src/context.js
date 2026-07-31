@@ -64,29 +64,6 @@ function contextFromRecord(record, logFile, internalEventUrl) {
         },
     };
 }
-export async function loadSessionContext(env = process.env, runtimeIdentity) {
-    const logFile = defaultHookLogFile(env);
-    const connection = await resolvePontiaConnection({ env });
-    const errors = [];
-    if (!runtimeIdentity?.sessionId)
-        errors.push("tmux session marker is required");
-    if (!runtimeIdentity?.runtimeInstanceId)
-        errors.push("tmux runtime instance marker is required");
-    if (!connection?.internalEventUrl)
-        errors.push("pontia connection from PONTIA_HOME/config.toml is required");
-    if (errors.length > 0)
-        return { ok: false, reason: errors.join("; "), logFile };
-    return {
-        ok: true,
-        logFile,
-        context: {
-            sessionId: runtimeIdentity.sessionId,
-            runtimeInstanceId: runtimeIdentity.runtimeInstanceId,
-            clientType: "claude",
-            internalEventUrl: connection.internalEventUrl,
-        },
-    };
-}
 export async function claimTurnContext(env, fetchImpl, runtimeIdentity) {
     const logFile = defaultHookLogFile(env);
     if (!runtimeIdentity?.sessionId || !runtimeIdentity?.runtimeInstanceId)
@@ -138,7 +115,7 @@ export async function loadSessionByClientSession(env, fetchImpl, clientSessionKe
         const runtimeInstanceId = optionalString(record?.runtime_instance_id);
         const clientType = optionalString(record?.client_type);
         const resolvedInternalEventUrl = optionalString(record?.internal_event_url) ?? internalEventUrl;
-        if (!sessionId || !runtimeInstanceId || clientType !== "claude" || !resolvedInternalEventUrl) {
+        if (!sessionId || !sessionState || !runtimeInstanceId || clientType !== "claude" || !resolvedInternalEventUrl) {
             return { ok: false, reason: "invalid session context lookup response", logFile };
         }
         return {

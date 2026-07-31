@@ -8,7 +8,7 @@ import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRunti
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
-import { bindSession, hasExistingAgentBinding, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
+import { bindSession, loadExistingSessionContext, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
 import type { SessionContext } from "./session.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
@@ -114,7 +114,6 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let deferredManualSessionDetails: PiSessionDetails | undefined;
   let reportingDisabled = false;
   let managedPaneConfirmed = false;
-  let launchRuntimeIdentity: ManagedRuntimeIdentity | undefined;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
 
@@ -126,13 +125,13 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   async function currentManagedSessionContext(): Promise<SessionContext | undefined> {
     if (boundSessionContext) return boundSessionContext;
-    launchRuntimeIdentity ??= await loadManagedRuntime(env);
-    if (!launchRuntimeIdentity) return undefined;
+    const runtimeIdentity = await loadManagedRuntime(env);
+    if (!runtimeIdentity) return undefined;
     const connection = await resolvePontiaConnection({ env, fetch: fetchImpl });
     if (!connection?.internalEventUrl) return undefined;
     return {
-      sessionId: launchRuntimeIdentity.sessionId,
-      runtimeInstanceId: launchRuntimeIdentity.runtimeInstanceId,
+      sessionId: runtimeIdentity.sessionId,
+      runtimeInstanceId: runtimeIdentity.runtimeInstanceId,
       clientType: "pi",
       internalEventUrl: connection.internalEventUrl,
     };
@@ -285,7 +284,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       const profilePrompt = await loadProfileSystemPrompt(
         env,
         fetchImpl,
-        (await currentManagedSessionContext())?.sessionId,
+        boundSessionContext?.sessionId,
       );
       if (!profilePrompt) return { systemPrompt: currentSystemPrompt };
       return { systemPrompt: `${currentSystemPrompt}\n\n${profilePrompt}` };
@@ -309,7 +308,6 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
       deferredManualSessionDetails = sessionDetails;
-      launchRuntimeIdentity = reason === "fork" ? undefined : await loadManagedRuntime(env);
       const logFile = defaultHookLogFile(env);
       let context: SessionContext | undefined;
 
@@ -340,17 +338,30 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         context = await bindSession(env, fetchImpl, sessionDetails, { startKind: "fork", parentSessionId });
         readyReported = false;
       } else {
-        const managedSession = launchRuntimeIdentity !== undefined;
-        const existingManualSession = managedSession
-          ? false
-          : await hasExistingAgentBinding(env, fetchImpl, sessionDetails);
-        if (!managedSession && !existingManualSession) {
+        const existingSession = await loadExistingSessionContext(env, fetchImpl, sessionDetails);
+        if (existingSession && existingSession.sessionState !== "exited") {
+          reportingDisabled = true;
+          boundSessionContext = undefined;
+          readyReported = false;
+          await logDiagnostic(logFile, {
+            level: "info",
+            code: "duplicate_active_client_session",
+            message: "native pi session is already bound to a non-exited pontia session; duplicate TUI reporting disabled",
+            details: {
+              client_session_key: sessionDetails.clientSessionKey,
+              session_id: existingSession.sessionId,
+              session_state: existingSession.sessionState,
+            },
+          });
+          return;
+        }
+        if (!existingSession && !await confirmManagedPane()) {
           boundSessionContext = undefined;
           readyReported = false;
           return;
         }
 
-        context = await bindSession(env, fetchImpl, sessionDetails, { managedRuntime: launchRuntimeIdentity });
+        context = await bindSession(env, fetchImpl, sessionDetails);
         if (reason === "resume" || reason === "new") readyReported = false;
       }
       if (!context || !await confirmManagedPane(true)) return;
@@ -393,7 +404,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const previousLeafId = leafIdFromHookContext(ctx);
     if (reportingDisabled) return;
     try {
-      const loaded = await contextLoader(env, await currentManagedSessionContext());
+      const loaded = await contextLoader(env, boundSessionContext);
       let turnContext: TurnContext | undefined;
       let logFile: string;
       if (loaded.ok) {
@@ -424,7 +435,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
             pendingPrompt = undefined;
             return;
           }
-          boundSessionContext = await bindSession(env, fetchImpl, sessionDetails, { managedRuntime: launchRuntimeIdentity });
+          boundSessionContext = await bindSession(env, fetchImpl, sessionDetails);
           if (boundSessionContext && !readyReported) {
             readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
           }

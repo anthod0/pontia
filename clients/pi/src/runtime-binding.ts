@@ -1,7 +1,6 @@
 import type { EnvLike } from "./context.js";
 import { resolvePontiaConnection } from "./discovery.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
-import type { ManagedRuntimeIdentity } from "./managed-runtime.js";
 import type { SessionContext } from "./session.js";
 
 export type PiSessionDetails = Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">;
@@ -27,8 +26,11 @@ export function piSessionDetailsFromHookContext(ctx: unknown): PiSessionDetails 
   };
 }
 
-function agentBindingLookupUrl(discoveredBindingUpsertUrl?: string): string | undefined {
-  return discoveredBindingUpsertUrl?.replace(/\/runtime-bindings\/upsert\/?$/, "/agent-bindings");
+function agentBindingSessionContextUrl(discoveredBindingUpsertUrl?: string): string | undefined {
+  return discoveredBindingUpsertUrl?.replace(
+    /\/runtime-bindings\/upsert\/?$/,
+    "/agent-bindings/session-context",
+  );
 }
 
 function tmuxBindingFromEnv(env: EnvLike): { socket_path: string; pane_id: string } | undefined {
@@ -43,7 +45,7 @@ export async function bindSession(
   env: EnvLike,
   fetchImpl: typeof fetch,
   sessionDetails: PiSessionDetails,
-  options: { startKind?: "fork"; parentSessionId?: string; managedRuntime?: ManagedRuntimeIdentity } = {},
+  options: { startKind?: "fork"; parentSessionId?: string } = {},
 ): Promise<SessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
   const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
@@ -55,12 +57,6 @@ export async function bindSession(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      ...(options.startKind !== "fork" && options.managedRuntime
-        ? {
-            session_id: options.managedRuntime.sessionId,
-            runtime_instance_id: options.managedRuntime.runtimeInstanceId,
-          }
-        : {}),
       client_type: "pi",
       client_session_key: sessionDetails.clientSessionKey,
       client_session_file: sessionDetails.clientSessionFile,
@@ -85,13 +81,6 @@ export async function bindSession(
   if (!sessionId) throw new Error("runtime binding upsert response missing session.session_id");
   if (!resolvedRuntimeInstanceId) throw new Error("runtime binding upsert response missing runtime.runtime_instance_id");
   if (!internalEventUrl) throw new Error("runtime binding upsert response missing runtime.internal_event_url");
-  if (options.managedRuntime && (
-    sessionId !== options.managedRuntime.sessionId ||
-    resolvedRuntimeInstanceId !== options.managedRuntime.runtimeInstanceId
-  )) {
-    throw new Error("runtime binding upsert response does not match tmux runtime identity");
-  }
-
   return {
     sessionId,
     clientType: "pi",
@@ -101,20 +90,42 @@ export async function bindSession(
   };
 }
 
-export async function hasExistingAgentBinding(
+export interface ExistingPiSessionContext extends SessionContext {
+  sessionState: string;
+}
+
+export async function loadExistingSessionContext(
   env: EnvLike,
   fetchImpl: typeof fetch,
   sessionDetails: PiSessionDetails,
-): Promise<boolean> {
-  if (!sessionDetails.clientSessionKey) return false;
+): Promise<ExistingPiSessionContext | undefined> {
+  if (!sessionDetails.clientSessionKey) return undefined;
   const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
-  const baseUrl = agentBindingLookupUrl(discovered?.bindingUpsertUrl);
-  if (!baseUrl) return false;
+  const baseUrl = agentBindingSessionContextUrl(discovered?.bindingUpsertUrl);
+  if (!baseUrl) return undefined;
   const url = new URL(baseUrl);
   url.searchParams.set("client_type", "pi");
   url.searchParams.set("client_session_key", sessionDetails.clientSessionKey);
   const response = await fetchImpl(url.toString());
-  if (response.status === 404) return false;
-  if (!response.ok) throw new Error(`agent binding lookup failed: ${response.status} ${response.statusText}`);
-  return true;
+  if (response.status === 404) return undefined;
+  const body = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(`agent binding session context lookup failed: ${response.status} ${response.statusText}`);
+
+  const record = asRecord(asRecord(asRecord(body)?.data)?.session_context);
+  const sessionId = optionalString(record?.session_id);
+  const sessionState = optionalString(record?.session_state);
+  const clientType = optionalString(record?.client_type);
+  const runtimeInstanceId = optionalString(record?.runtime_instance_id);
+  const internalEventUrl = optionalString(record?.internal_event_url) ?? discovered?.internalEventUrl;
+  if (!sessionId || !sessionState || clientType !== "pi" || !runtimeInstanceId || !internalEventUrl) {
+    throw new Error("agent binding session context lookup returned an invalid context");
+  }
+  return {
+    sessionId,
+    sessionState,
+    clientType: "pi",
+    runtimeInstanceId,
+    internalEventUrl,
+    ...sessionDetails,
+  };
 }

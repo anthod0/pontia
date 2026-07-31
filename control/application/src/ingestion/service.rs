@@ -10,6 +10,7 @@ use pontia_core::{
     },
     error::{Error, Result},
 };
+use pontia_runtime::GenericRuntimeManager;
 use pontia_storage_sqlite::repositories::{
     agent_bindings::SqliteAgentBindingRepository,
     events::{EventInsertRecord, SqliteEventRepository},
@@ -112,6 +113,7 @@ impl EventIngestService {
             .existing_event_state_version(&event.event_id, &event.session_id)
             .await?
         {
+            self.clear_exited_session_tmux_markers(&event, false).await;
             return Ok(EventIngestResult {
                 accepted: true,
                 duplicate: true,
@@ -263,6 +265,7 @@ impl EventIngestService {
 
         tx.commit().await?;
 
+        self.clear_exited_session_tmux_markers(&event, true).await;
         self.link_started_turn_to_inbox_message(&event).await?;
 
         if matches!(
@@ -286,6 +289,49 @@ impl EventIngestService {
             turn_id: event.turn_id,
             state_version,
         })
+    }
+
+    async fn clear_exited_session_tmux_markers(
+        &self,
+        event: &DomainEvent,
+        allow_bound_runtime_fallback: bool,
+    ) {
+        if event.event_type != EventType::SessionExited {
+            return;
+        }
+        let repository = SqliteRuntimeBindingRepository::new(self.pool.clone());
+        let runtime_instance_id = match event
+            .payload
+            .get("runtime_instance_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(runtime_instance_id) => runtime_instance_id.to_string(),
+            None if allow_bound_runtime_fallback => {
+                let Ok(Some(runtime_instance_id)) =
+                    repository.runtime_instance_id(&event.session_id).await
+                else {
+                    return;
+                };
+                runtime_instance_id
+            }
+            None => return,
+        };
+        let Ok(Some(binding)) = repository.tmux_pane_binding(&event.session_id).await else {
+            return;
+        };
+        let (Some(socket_path), Some(pane_id)) =
+            (binding.socket_path.as_deref(), binding.pane_id.as_deref())
+        else {
+            return;
+        };
+        let _ = GenericRuntimeManager.clear_tmux_pane_markers(
+            socket_path,
+            pane_id,
+            &event.session_id,
+            &runtime_instance_id,
+        );
     }
 
     fn enrich_pi_topology(

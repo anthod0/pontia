@@ -33,9 +33,9 @@ For sessions started by pontia, configure the pi command in `$PONTIA_HOME/config
 tui_command = "pi -e /absolute/path/to/pontia/clients/pi"
 ```
 
-Pontia supplies a Session hint when it starts pi. After pi exposes its real native session identity, the extension confirms the same runtime binding with Pontia; the backend then returns the canonical Runtime Instance ID.
+Pontia supplies a Session hint when it starts pi. Pi exposes that hint as its native `client_session_key`; the extension uses this key to identify and bind the Pontia Session, and the backend returns the canonical Runtime Instance ID. Tmux pane markers are not a Session identity source.
 
-A new manually started pi session inside tmux is not persisted in Pontia until its first prompt starts. A tmux-hosted session that already has an agent binding reconnects immediately. After binding succeeds, Pontia writes `@pontia_session_id` and `@pontia_runtime_instance_id` to the pane and uses them to recover the controlled runtime identity.
+A new manually started pi session inside tmux is not persisted in Pontia until its first prompt starts. An exited session with the same native key can reconnect, while a second TUI for a key already bound to a non-exited Session is ignored. After binding succeeds, Pontia writes `@pontia_session_id` and `@pontia_runtime_instance_id` to the pane for runtime management and clears both markers when the Session exits.
 
 Regardless of where the start command came from, run pi in a tmux pane and in an active workspace registered in pontia. Outside tmux the extension is a silent no-op. If pontia is unavailable or the workspace is not registered, the extension leaves the pi session running without pontia reporting.
 

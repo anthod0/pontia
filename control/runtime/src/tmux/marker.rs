@@ -23,6 +23,25 @@ pub(crate) fn mark_pontia_pane(
     )
 }
 
+pub(crate) fn clear_pontia_pane_markers(
+    socket_path: &str,
+    pane_id: &str,
+    expected_session_id: &str,
+    expected_runtime_instance_id: &str,
+) -> Result<()> {
+    if !is_pane_alive(socket_path, pane_id)
+        || pane_option(socket_path, pane_id, PONTIA_SESSION_MARKER).as_deref()
+            != Some(expected_session_id)
+        || pane_option(socket_path, pane_id, PONTIA_RUNTIME_INSTANCE_MARKER).as_deref()
+            != Some(expected_runtime_instance_id)
+    {
+        return Ok(());
+    }
+
+    unset_pane_option(socket_path, pane_id, PONTIA_SESSION_MARKER)?;
+    unset_pane_option(socket_path, pane_id, PONTIA_RUNTIME_INSTANCE_MARKER)
+}
+
 pub(crate) fn is_reusable_pontia_shell_pane(
     socket_path: &str,
     pane_id: &str,
@@ -62,6 +81,30 @@ fn set_pane_option(socket_path: &str, pane_id: &str, option: &str, value: &str) 
     } else {
         Err(Error::Domain(format!(
             "tmux pane marker failed with status {status}"
+        )))
+    }
+}
+
+fn unset_pane_option(socket_path: &str, pane_id: &str, option: &str) -> Result<()> {
+    let status = Command::new("tmux")
+        .args([
+            "-S",
+            socket_path,
+            "set-option",
+            "-p",
+            "-u",
+            "-t",
+            pane_id,
+            option,
+        ])
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|err| Error::Domain(format!("tmux pane marker cleanup failed: {err}")))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(Error::Domain(format!(
+            "tmux pane marker cleanup failed with status {status}"
         )))
     }
 }

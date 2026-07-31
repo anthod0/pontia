@@ -78,8 +78,13 @@ impl RuntimeBindingUpsertService {
             self.ensure_requested_session(&session_id, &request).await?;
             Some(session_id)
         } else {
-            self.session_id_for_client_session(&request.client_type, &request.client_session_key)
+            match self
+                .session_id_for_client_session(&request.client_type, &request.client_session_key)
                 .await?
+            {
+                Some(session_id) => Some(session_id),
+                None => self.unbound_session_id_for_client_session(&request).await?,
+            }
         };
         let session_id = match existing_session_id {
             Some(session_id) => {
@@ -145,7 +150,14 @@ impl RuntimeBindingUpsertService {
         let hook_log_metadata_display = hook_log_metadata
             .as_ref()
             .map(|(metadata_key, path)| (*metadata_key, path.display().to_string()));
-        let requested_runtime_instance_id = non_empty(request.runtime_instance_id.as_deref());
+        let requested_runtime_instance_id = match non_empty(request.runtime_instance_id.as_deref())
+        {
+            Some(runtime_instance_id) => Some(runtime_instance_id),
+            None => {
+                self.unconfirmed_runtime_instance_id_for_pane(&session_id, &request)
+                    .await?
+            }
+        };
         let mut confirmed_metadata = binding_metadata(
             &request,
             &workspace.canonical_path,
@@ -251,6 +263,83 @@ impl RuntimeBindingUpsertService {
         SqliteAgentBindingRepository::new(self.pool.clone())
             .session_id_for_client_session(client_type, client_session_key)
             .await
+    }
+
+    async fn unbound_session_id_for_client_session(
+        &self,
+        request: &RuntimeBindingUpsertRequest,
+    ) -> Result<Option<String>> {
+        if request.client_type == "pi"
+            && let Some(session_id) = sqlx::query_scalar(
+                r#"SELECT s.session_id
+                   FROM sessions s
+                   LEFT JOIN agent_bindings a ON a.session_id = s.session_id
+                   WHERE s.session_id = ? AND s.client_type = ? AND a.id IS NULL"#,
+            )
+            .bind(&request.client_session_key)
+            .bind(&request.client_type)
+            .fetch_optional(&self.pool)
+            .await?
+        {
+            return Ok(Some(session_id));
+        }
+
+        let Some(tmux) = request.tmux.as_ref() else {
+            return Ok(None);
+        };
+        let Some(socket_path) = non_empty(tmux.socket_path.as_deref()) else {
+            return Ok(None);
+        };
+        let Some(pane_id) = non_empty(tmux.pane_id.as_deref()) else {
+            return Ok(None);
+        };
+        Ok(sqlx::query_scalar(
+            r#"SELECT s.session_id
+               FROM sessions s
+               JOIN runtime_bindings r ON r.session_id = s.session_id
+               LEFT JOIN agent_bindings a ON a.session_id = s.session_id
+               WHERE s.client_type = ?
+                 AND s.state != 'exited'
+                 AND a.id IS NULL
+                 AND r.tmux_socket_path = ?
+                 AND r.tmux_pane_id = ?
+                 AND COALESCE(json_extract(r.metadata, '$.binding_confirmed'), 0) = 0"#,
+        )
+        .bind(&request.client_type)
+        .bind(socket_path)
+        .bind(pane_id)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    async fn unconfirmed_runtime_instance_id_for_pane(
+        &self,
+        session_id: &str,
+        request: &RuntimeBindingUpsertRequest,
+    ) -> Result<Option<String>> {
+        let Some(tmux) = request.tmux.as_ref() else {
+            return Ok(None);
+        };
+        let Some(socket_path) = non_empty(tmux.socket_path.as_deref()) else {
+            return Ok(None);
+        };
+        let Some(pane_id) = non_empty(tmux.pane_id.as_deref()) else {
+            return Ok(None);
+        };
+        Ok(sqlx::query_scalar(
+            r#"SELECT runtime_instance_id
+               FROM runtime_bindings
+               WHERE session_id = ?
+                 AND tmux_socket_path = ?
+                 AND tmux_pane_id = ?
+                 AND COALESCE(json_extract(metadata, '$.binding_confirmed'), 0) = 0"#,
+        )
+        .bind(session_id)
+        .bind(socket_path)
+        .bind(pane_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten())
     }
 
     async fn ensure_requested_session(

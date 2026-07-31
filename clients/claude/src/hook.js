@@ -4,10 +4,10 @@ import { resolve } from "node:path";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { pathToFileURL } from "node:url";
 import { appendDiagnostic } from "./diagnostics.js";
-import { claimTurnContext, defaultHookLogFile, loadCurrentTurnByClientSession, loadSessionByClientSession, loadSessionContext } from "./context.js";
+import { claimTurnContext, defaultHookLogFile, loadCurrentTurnByClientSession, loadSessionByClientSession } from "./context.js";
 import { buildSessionExitedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent } from "./events.js";
 import { optionalString } from "./internal-api.js";
-import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity } from "./managed-runtime.js";
+import { hasTmuxPaneEnvironment } from "./managed-runtime.js";
 import { EventReporter } from "./reporter.js";
 import { bindManualSession } from "./runtime-binding.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
@@ -27,14 +27,7 @@ function failureMessage(input) {
     const details = optionalString(input.error_details);
     return details ? `${error}: ${details}` : error;
 }
-async function reportReadyForManagedSession(input, deps) {
-    const loaded = await loadSessionContext(deps.env, deps.runtimeIdentity);
-    if (!loaded.ok)
-        return;
-    const context = { ...loaded.context, ...sessionDetailsFromHook(input) };
-    await deps.makeReporter(loaded.logFile).report(context, buildSessionReadyEvent(context));
-}
-async function reportReadyForManualSession(input, deps) {
+async function reportReadyForClientSession(input, deps) {
     const details = sessionDetailsFromHook(input);
     const logFile = defaultHookLogFile(deps.env);
     const workspaceActive = await isActiveRegisteredWorkspace(deps.env, deps.fetchImpl, details.clientCwd);
@@ -52,67 +45,66 @@ async function reportReadyForManualSession(input, deps) {
     const existing = details.clientSessionKey
         ? await loadSessionByClientSession(deps.env, deps.fetchImpl, details.clientSessionKey)
         : undefined;
-    let context;
-    const paneAlreadyManaged = await deps.isManagedPane(deps.env);
-    if (existing?.ok && existing.context.sessionState !== "exited" && paneAlreadyManaged) {
-        context = { ...existing.context, ...details };
+    if (existing?.ok && existing.context.sessionState !== "exited") {
+        await deps.logDiagnostic(logFile, {
+            level: "info",
+            code: "duplicate_active_client_session",
+            message: "native Claude session is already bound to a non-exited pontia session; duplicate TUI reporting disabled",
+            details: {
+                client_session_key: details.clientSessionKey,
+                session_id: existing.context.sessionId,
+                session_state: existing.context.sessionState,
+            },
+        });
+        return;
     }
-    else if (!existing || existing.ok || existing.reason === "session context not found") {
+    let context;
+    if (!existing || existing.ok || existing.reason === "session context not found") {
         context = await bindManualSession(deps.env, deps.fetchImpl, details);
     }
     else {
         await deps.logDiagnostic(logFile, { level: "warn", code: "session_context_lookup_failed", message: existing.reason });
     }
-    if (!context || !await deps.isManagedPane(deps.env))
+    if (!context)
         return;
     await deps.makeReporter(logFile).report(context, buildSessionReadyEvent(context));
 }
 async function handleSessionStart(input, deps) {
-    if (deps.runtimeIdentity) {
-        await reportReadyForManagedSession(input, deps);
-    }
-    else {
-        await reportReadyForManualSession(input, deps);
-    }
+    await reportReadyForClientSession(input, deps);
 }
 async function handleSessionEnd(input, deps) {
-    let loaded = await loadSessionContext(deps.env, deps.runtimeIdentity);
-    if (!loaded.ok) {
-        const clientSessionKey = optionalString(input.session_id);
-        if (!clientSessionKey)
-            return;
-        loaded = await loadSessionByClientSession(deps.env, deps.fetchImpl, clientSessionKey);
-        if (!loaded.ok) {
-            await deps.logDiagnostic(loaded.logFile, { level: "warn", code: "session_context_lookup_failed", message: loaded.reason });
-            return;
-        }
-    }
-    if (!loaded.ok)
+    const clientSessionKey = optionalString(input.session_id);
+    if (!clientSessionKey)
         return;
+    const loaded = await loadSessionByClientSession(deps.env, deps.fetchImpl, clientSessionKey);
+    if (!loaded.ok) {
+        await deps.logDiagnostic(loaded.logFile, { level: "warn", code: "session_context_lookup_failed", message: loaded.reason });
+        return;
+    }
     await deps.makeReporter(loaded.logFile).report(loaded.context, buildSessionExitedEvent(loaded.context, optionalString(input.reason) ?? "exit"));
 }
 async function manualTurnContext(input, deps, logFile) {
     const details = sessionDetailsFromHook(input);
-    const workspaceActive = await isActiveRegisteredWorkspace(deps.env, deps.fetchImpl, details.clientCwd);
-    if (workspaceActive !== true) {
-        await deps.logDiagnostic(logFile, {
-            level: "info",
-            code: workspaceActive === false ? "workspace_not_active" : "workspace_check_unavailable",
-            message: workspaceActive === false
-                ? "current claude workspace is not an active registered pontia workspace; pontia reporting disabled"
-                : "could not verify active registered pontia workspace; pontia reporting disabled",
-            details: { client_cwd: details.clientCwd },
-        });
-        return undefined;
-    }
     const existing = details.clientSessionKey
         ? await loadSessionByClientSession(deps.env, deps.fetchImpl, details.clientSessionKey)
         : undefined;
     let session;
-    if (existing?.ok) {
+    if (existing?.ok && existing.context.sessionState !== "exited") {
         session = { ...existing.context, ...details };
     }
-    else if (existing?.reason === "session context not found") {
+    else if (existing?.ok || existing?.reason === "session context not found") {
+        const workspaceActive = await isActiveRegisteredWorkspace(deps.env, deps.fetchImpl, details.clientCwd);
+        if (workspaceActive !== true) {
+            await deps.logDiagnostic(logFile, {
+                level: "info",
+                code: workspaceActive === false ? "workspace_not_active" : "workspace_check_unavailable",
+                message: workspaceActive === false
+                    ? "current claude workspace is not an active registered pontia workspace; pontia reporting disabled"
+                    : "could not verify active registered pontia workspace; pontia reporting disabled",
+                details: { client_cwd: details.clientCwd },
+            });
+            return undefined;
+        }
         session = await bindManualSession(deps.env, deps.fetchImpl, details);
         if (session)
             await deps.makeReporter(logFile).report(session, buildSessionReadyEvent(session));
@@ -132,23 +124,22 @@ async function manualTurnContext(input, deps, logFile) {
 }
 async function handleUserPromptSubmit(input, deps) {
     const prompt = optionalString(input.prompt);
-    const claimed = await claimTurnContext(deps.env, deps.fetchImpl, deps.runtimeIdentity);
-    const logFile = claimed.logFile;
-    let context;
-    if (claimed.ok) {
-        context = { ...claimed.context, input: prompt ?? claimed.context.input };
-    }
-    else {
-        const loaded = await loadSessionContext(deps.env, deps.runtimeIdentity);
-        if (loaded.ok) {
-            context = { ...loaded.context, input: prompt };
-        }
-        else if (claimed.silent) {
-            context = await manualTurnContext(input, deps, logFile);
-        }
-    }
-    if (!context)
+    const logFile = defaultHookLogFile(deps.env);
+    const session = await manualTurnContext(input, deps, logFile);
+    if (!session)
         return;
+    const claimed = await claimTurnContext(deps.env, deps.fetchImpl, session);
+    if (!claimed.ok && !claimed.silent) {
+        await deps.logDiagnostic(logFile, {
+            level: "warn",
+            code: "current_turn_claim_failed",
+            message: claimed.reason,
+        });
+        return;
+    }
+    const context = claimed.ok
+        ? { ...claimed.context, input: prompt ?? claimed.context.input }
+        : { ...session, input: prompt };
     const result = await deps.makeReporter(logFile).report(context, buildTurnStartedEvent(context));
     if (result.accepted && !result.turnId) {
         await deps.logDiagnostic(logFile, {
@@ -162,7 +153,10 @@ async function handleStop(input, deps) {
     const clientSessionKey = optionalString(input.session_id);
     if (!clientSessionKey)
         return;
-    const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey, deps.runtimeIdentity);
+    const session = await loadSessionByClientSession(deps.env, deps.fetchImpl, clientSessionKey);
+    if (!session.ok)
+        return;
+    const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey, session.context);
     if (!loaded.ok) {
         if (!loaded.silent)
             await deps.logDiagnostic(loaded.logFile, { level: "warn", code: "current_turn_lookup_failed", message: loaded.reason });
@@ -190,7 +184,10 @@ async function handleStopFailure(input, deps) {
     const clientSessionKey = optionalString(input.session_id);
     if (!clientSessionKey)
         return;
-    const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey, deps.runtimeIdentity);
+    const session = await loadSessionByClientSession(deps.env, deps.fetchImpl, clientSessionKey);
+    if (!session.ok)
+        return;
+    const loaded = await loadCurrentTurnByClientSession(deps.env, deps.fetchImpl, clientSessionKey, session.context);
     if (!loaded.ok)
         return;
     const context = activeTurnContext(loaded.context);
@@ -300,8 +297,6 @@ function requiredDeps(dependencies) {
         fetchImpl,
         makeReporter: dependencies.makeReporter ?? ((logFile) => new EventReporter({ logFile, fetch: fetchImpl })),
         logDiagnostic: dependencies.logDiagnostic ?? appendDiagnostic,
-        loadManagedRuntime: dependencies.loadManagedRuntime ?? loadPontiaManagedRuntimeIdentity,
-        isManagedPane: dependencies.isManagedPane ?? isPontiaManagedTmuxPane,
     };
 }
 export async function runClaudeHook(input, dependencies = {}) {
@@ -309,15 +304,6 @@ export async function runClaudeHook(input, dependencies = {}) {
     if (!hasTmuxPaneEnvironment(deps.env))
         return;
     try {
-        // Every hook is a separate process, so recover Pontia's runtime
-        // identity from the tmux pane rather than relying on process memory.
-        deps.runtimeIdentity = await deps.loadManagedRuntime(deps.env);
-        // SessionStart may create a binding and receive its pane marker. Every
-        // later lifecycle event is ignored unless Pontia marked this pane.
-        if (input.hook_event_name !== "PermissionRequest"
-            && input.hook_event_name !== "SessionStart"
-            && !deps.runtimeIdentity)
-            return;
         switch (input.hook_event_name) {
             case "SessionStart":
                 await handleSessionStart(input, deps);

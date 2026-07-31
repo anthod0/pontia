@@ -35,7 +35,21 @@ function install(overrides = {}) {
         TMUX_PANE: "%42",
         ...(overrides.env ?? {}),
     };
-    const { env: _ignoredEnv, managedRuntime, ...dependencies } = overrides;
+    const { env: _ignoredEnv, managedRuntime, keyContext = managedRuntime, fetch: suppliedFetch, ...dependencies } = overrides;
+    const fetchImpl = suppliedFetch && keyContext
+        ? vi.fn(async (url, init) => {
+            if (String(url).includes("/internal/v1/agent-bindings/session-context?")) {
+                return new Response(JSON.stringify({ data: { session_context: {
+                    session_id: keyContext.sessionId,
+                    session_state: "idle",
+                    client_type: "claude",
+                    runtime_instance_id: keyContext.runtimeInstanceId,
+                    internal_event_url: "http://localhost/internal/v1/events",
+                } } }), { status: 200 });
+            }
+            return suppliedFetch(url, init);
+        })
+        : suppliedFetch;
     return {
         reported,
         diagnostics,
@@ -52,7 +66,7 @@ function install(overrides = {}) {
                 diagnostics.push(entry);
             }),
             loadManagedRuntime: vi.fn(async () => managedRuntime),
-            isManagedPane: vi.fn(async () => true),
+            fetch: fetchImpl,
             ...dependencies,
         },
     };
@@ -74,8 +88,8 @@ describe("pontia claude hook", () => {
         expect(fetchImpl).not.toHaveBeenCalled();
         expect(reported).toEqual([]);
     });
-    test("non-managed panes skip lifecycle events after SessionStart", async () => {
-        const fetchImpl = vi.fn();
+    test("unknown client keys do not report lifecycle events", async () => {
+        const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 }));
         const { deps, reported } = install({
             fetch: fetchImpl,
             isManagedPane: vi.fn(async () => false),
@@ -85,29 +99,61 @@ describe("pontia claude hook", () => {
         await runClaudeHook(baseInput({ hook_event_name: "Stop", last_assistant_message: "ignored" }), deps);
         await runClaudeHook(baseInput({ hook_event_name: "SessionEnd" }), deps);
 
-        expect(fetchImpl).not.toHaveBeenCalled();
+        expect(fetchImpl).toHaveBeenCalled();
         expect(reported).toEqual([]);
     });
-    test("SessionStart reports ready from managed tmux markers without external workspace discovery", async () => {
+    test("SessionStart does not use stale tmux markers as the Claude session identity", async () => {
         const workspace = await realpath(await tempDir());
-        const fetchImpl = vi.fn();
+        const fetchImpl = vi.fn(async (url, init) => {
+            if (url === "http://localhost/external/v1/workspaces") {
+                return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+            }
+            if (url.startsWith("http://localhost/internal/v1/agent-bindings/session-context?")) {
+                return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+            }
+            expect(url).toBe("http://localhost/internal/v1/runtime-bindings/upsert");
+            const request = JSON.parse(String(init?.body));
+            expect(request.client_session_key).toBe("claude_session_1");
+            expect(request).not.toHaveProperty("session_id");
+            expect(request).not.toHaveProperty("runtime_instance_id");
+            return new Response(JSON.stringify({
+                session: { session_id: "sess_fresh" },
+                runtime: { runtime_instance_id: "rtinst_fresh", internal_event_url: "http://localhost/internal/v1/events" },
+            }), { status: 200 });
+        });
         const { deps, reported } = install({
-            managedRuntime: { sessionId: "sess_ready", runtimeInstanceId: "rtinst_1" },
+            managedRuntime: { sessionId: "sess_stale", runtimeInstanceId: "rtinst_stale" },
+            keyContext: null,
             fetch: fetchImpl,
         });
         await runClaudeHook(baseInput({ cwd: workspace }), deps);
-        expect(fetchImpl).not.toHaveBeenCalled();
-        expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
-        expect(reported[0]).toEqual({
-            session_id: "sess_ready",
-            type: "session.ready",
-            data: {
-                runtime_instance_id: "rtinst_1",
-                client_session_key: "claude_session_1",
-                client_session_file: "/tmp/claude/session.jsonl",
-                client_cwd: workspace,
-            },
+        expect(reported[0]).toMatchObject({
+            session_id: "sess_fresh",
+            data: { runtime_instance_id: "rtinst_fresh", client_session_key: "claude_session_1" },
         });
+    });
+    test("SessionStart suppresses a duplicate TUI for a key bound to a non-exited Session", async () => {
+        const workspace = await realpath(await tempDir());
+        const fetchImpl = vi.fn(async (url) => {
+            if (url === "http://localhost/external/v1/workspaces") {
+                return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+            }
+            if (url.startsWith("http://localhost/internal/v1/agent-bindings/session-context?")) {
+                return new Response(JSON.stringify({ data: { session_context: {
+                    session_id: "sess_active",
+                    session_state: "idle",
+                    client_type: "claude",
+                    runtime_instance_id: "rtinst_active",
+                    internal_event_url: "http://localhost/internal/v1/events",
+                } } }), { status: 200 });
+            }
+            return new Response("unexpected", { status: 500 });
+        });
+        const { deps, reported, diagnostics } = install({ fetch: fetchImpl });
+        await runClaudeHook(baseInput({ cwd: workspace }), deps);
+        expect(reported).toEqual([]);
+        expect(diagnostics).toEqual([expect.objectContaining({ code: "duplicate_active_client_session" })]);
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
     test("manual SessionStart creates a binding in an active workspace and reports ready", async () => {
         const workspace = await realpath(await tempDir());
@@ -386,7 +432,7 @@ describe("pontia claude hook", () => {
             tool_input: { command: "pnpm test" },
             cwd: workspace,
         }), deps);
-        expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+        expect(reported.map((event) => event.type)).toEqual(kind === "managed" ? [] : ["session.ready"]);
         expect(output).toEqual({
             hookSpecificOutput: {
                 hookEventName: "PermissionRequest",
@@ -487,10 +533,18 @@ describe("pontia claude hook", () => {
             data: { runtime_instance_id: "rtinst_stable", input: { summary: "typed manually" } },
         });
     });
-    test("SessionEnd reports exited using managed tmux markers", async () => {
-        const { deps, reported } = install({
-            managedRuntime: { sessionId: "sess_1", runtimeInstanceId: "rtinst_1" },
+    test("SessionEnd resolves the Session by client key without tmux markers", async () => {
+        const fetchImpl = vi.fn(async (url) => {
+            expect(url).toContain("/internal/v1/agent-bindings/session-context?client_type=claude&client_session_key=claude_session_1");
+            return new Response(JSON.stringify({ data: { session_context: {
+                session_id: "sess_1",
+                session_state: "idle",
+                client_type: "claude",
+                runtime_instance_id: "rtinst_1",
+                internal_event_url: "http://localhost/internal/v1/events",
+            } } }), { status: 200 });
         });
+        const { deps, reported } = install({ fetch: fetchImpl, managedRuntime: undefined });
         await runClaudeHook(baseInput({ hook_event_name: "SessionEnd", reason: "quit" }), deps);
         expect(reported.map((event) => event.type)).toEqual(["session.exited"]);
         expect(reported[0]).toEqual({
@@ -499,16 +553,15 @@ describe("pontia claude hook", () => {
             data: { reason: "quit", runtime_instance_id: "rtinst_1" },
         });
     });
-    test("manual SessionEnd recovers its stable session context from tmux and reports exited", async () => {
+    test("SessionEnd does not fall back to stale tmux markers when key lookup fails", async () => {
+        const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 }));
         const { deps, reported } = install({
-            managedRuntime: { sessionId: "sess_manual", runtimeInstanceId: "rtinst_stable" },
+            managedRuntime: { sessionId: "sess_stale", runtimeInstanceId: "rtinst_stale" },
+            keyContext: null,
+            fetch: fetchImpl,
         });
         await runClaudeHook(baseInput({ hook_event_name: "SessionEnd", reason: "prompt_input_exit" }), deps);
-        expect(reported.map((event) => event.type)).toEqual(["session.exited"]);
-        expect(reported[0]).toMatchObject({
-            session_id: "sess_manual",
-            data: { runtime_instance_id: "rtinst_stable", reason: "prompt_input_exit" },
-        });
+        expect(reported).toEqual([]);
     });
     test("MessageDisplay is ignored in phase 2", async () => {
         const { deps, reported } = install();

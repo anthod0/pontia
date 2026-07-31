@@ -5,7 +5,9 @@ mod pane;
 mod session;
 
 pub(super) use dispatch::dispatch_tui_turn;
-pub(super) use marker::{is_reusable_pontia_shell_pane, mark_pontia_pane};
+pub(super) use marker::{
+    clear_pontia_pane_markers, is_reusable_pontia_shell_pane, mark_pontia_pane,
+};
 pub(super) use pane::{
     TmuxPaneBinding, is_pane_alive, kill_pane, pane_binding, run_launch_command_in_pane, send_keys,
 };

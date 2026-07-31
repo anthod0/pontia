@@ -3,7 +3,9 @@
 This plugin is the shared lifecycle and approval integration for Claude Code
 sessions started by Pontia and for manually started Claude Code sessions in a
 tmux pane and an active registered workspace. Outside tmux, Pontia hooks are a
-silent no-op.
+silent no-op. Hooks identify the Pontia Session through Claude's native
+`session_id` (`client_session_key`), never through tmux pane markers. A second
+TUI for a native key already bound to a non-exited Session is ignored.
 
 Install and enable the `pontia-claude` plugin at user scope so Claude Code loads
 the `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `Stop`,
