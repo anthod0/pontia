@@ -45,6 +45,10 @@ impl TestApp {
     pub fn temp_workspace(&self) -> tempfile::TempDir {
         tempfile::tempdir().expect("workspace")
     }
+
+    pub fn set_env(&mut self, key: &str, value: impl Into<OsString>) {
+        self._env.set(key, value.into());
+    }
 }
 
 #[derive(Default)]

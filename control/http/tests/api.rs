@@ -40,5 +40,7 @@ mod task_lifecycle;
 mod test_app_support;
 #[path = "api/turn_submit.rs"]
 mod turn_submit;
+#[path = "api/workflow_submission.rs"]
+mod workflow_submission;
 #[path = "api/workspace.rs"]
 mod workspace;

@@ -11,11 +11,13 @@ use pontia_application::{
     BranchReplayService, CurrentTurnClaimRequest, CurrentTurnClaimService, EventIngestService,
     EventReportNormalizer, InternalEventValidationService, ReportedFact,
     ResolveBranchReplayRequest, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
+    SessionCommandService,
 };
 use pontia_core::{
     domain::{DomainEvent, EventType, MAX_TURN_OUTPUT_SUMMARY_CHARS},
     error::Error,
 };
+use pontia_workflow::{SubmitWorkflowNodeRequest, WorkflowScheduler};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -41,6 +43,15 @@ pub struct InternalEventResponse {
     turn_id: Option<String>,
     state_version: i64,
     warnings: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowSubmissionRequest {
+    session_id: String,
+    runtime_instance_id: String,
+    output: String,
+    content: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -151,6 +162,35 @@ pub async fn resolve_branch_replay(
         .resolve_command(request)
         .await?;
     Ok(Json(json!({ "data": { "branch_replay": replay } })))
+}
+
+pub async fn submit_workflow_output(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    request: Result<Json<WorkflowSubmissionRequest>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    authenticate_internal_token(
+        &state,
+        &headers,
+        "Internal Workflow API token is not configured",
+    )?;
+    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
+    let scheduler = WorkflowScheduler::new(
+        state.db(),
+        SessionCommandService::new(state.db()),
+        state.agent_events(),
+        pontia_config::pontia_home_dir(),
+    );
+    scheduler
+        .submit(SubmitWorkflowNodeRequest {
+            session_id: request.session_id,
+            runtime_instance_id: request.runtime_instance_id,
+            output: request.output,
+            content: request.content,
+        })
+        .await
+        .map_err(ApiError::from_workflow)?;
+    Ok(Json(json!({ "data": { "submitted": true } })))
 }
 
 fn authenticate_branch_replay(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
@@ -386,6 +426,42 @@ impl ApiError {
             status: StatusCode::UNAUTHORIZED,
             code: "authentication_failed",
             message: message.into(),
+        }
+    }
+
+    fn from_workflow(error: pontia_workflow::Error) -> Self {
+        use pontia_workflow::Error as WorkflowError;
+
+        match error {
+            WorkflowError::Pontia(error) => Self::from(error),
+            WorkflowError::WorkflowNotFound(workflow_id) => Self {
+                status: StatusCode::NOT_FOUND,
+                code: "not_found",
+                message: format!("workflow {workflow_id} not found"),
+            },
+            WorkflowError::NodeForSessionNotFound(session_id) => Self {
+                status: StatusCode::NOT_FOUND,
+                code: "not_found",
+                message: format!("session {session_id} is not bound to a workflow Agent Node"),
+            },
+            WorkflowError::InvalidHandoffFileName(message) => {
+                Self::invalid_request(format!("invalid Handoff file name: {message}"))
+            }
+            WorkflowError::WorkflowNotRunning { .. }
+            | WorkflowError::RuntimeMismatch { .. }
+            | WorkflowError::OutputMismatch { .. } => Self {
+                status: StatusCode::CONFLICT,
+                code: "state_conflict",
+                message: error.to_string(),
+            },
+            WorkflowError::RootNodeNotFound(_)
+            | WorkflowError::MissingCreatedSessionId
+            | WorkflowError::Io(_)
+            | WorkflowError::Json(_) => Self {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                code: "internal_error",
+                message: error.to_string(),
+            },
         }
     }
 }

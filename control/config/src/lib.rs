@@ -274,6 +274,11 @@ impl AppConfig {
     }
 }
 
+pub fn pontia_home_dir() -> PathBuf {
+    let vars: HashMap<String, String> = env::vars().collect();
+    pontia_home_path(&vars)
+}
+
 fn get<'a>(vars: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
     vars.get(key).map(String::as_str)
 }
