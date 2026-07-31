@@ -16,6 +16,7 @@ pub struct RuntimeBindingUpsertRecord {
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct RuntimeBindingTmuxPaneRow {
+    pub runtime_instance_id: Option<String>,
     pub socket_path: Option<String>,
     pub pane_id: Option<String>,
 }
@@ -180,7 +181,7 @@ impl SqliteRuntimeBindingRepository {
         session_id: &str,
     ) -> Result<Option<RuntimeBindingTmuxPaneRow>> {
         Ok(sqlx::query_as::<_, RuntimeBindingTmuxPaneRow>(
-            "SELECT tmux_socket_path AS socket_path, tmux_pane_id AS pane_id FROM runtime_bindings WHERE session_id = ?",
+            "SELECT runtime_instance_id, tmux_socket_path AS socket_path, tmux_pane_id AS pane_id FROM runtime_bindings WHERE session_id = ?",
         )
         .bind(session_id)
         .fetch_optional(&self.pool)

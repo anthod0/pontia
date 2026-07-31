@@ -106,6 +106,27 @@ impl SqliteWorkflowRepository {
         .await?)
     }
 
+    pub async fn get_node_by_session(&self, session_id: &str) -> Result<Option<WorkflowNodeRow>> {
+        let nodes = sqlx::query_as::<_, WorkflowNodeRow>(
+            r#"SELECT node_id, workflow_id, parent_node_id, title, instructions, inputs, output,
+                      execution_profile_id, execution_profile_version, session_id, submitted_at,
+                      created_at
+               FROM workflow_nodes WHERE session_id = ?
+               ORDER BY created_at, node_id
+               LIMIT 2"#,
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await?;
+        match nodes.as_slice() {
+            [] => Ok(None),
+            [node] => Ok(Some(node.clone())),
+            _ => Err(Error::StateConflict(format!(
+                "session {session_id} is bound to multiple workflow nodes"
+            ))),
+        }
+    }
+
     pub async fn bind_node_session(&self, node_id: &str, session_id: &str) -> Result<()> {
         let result = sqlx::query(
             "UPDATE workflow_nodes SET session_id = ? WHERE node_id = ? AND session_id IS NULL",
@@ -203,6 +224,43 @@ impl SqliteWorkflowRepository {
         )
         .bind(event_id)
         .bind(workflow_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn complete_workflow(&self, workflow_id: &str, event_id: &str) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        let result = sqlx::query(
+            r#"UPDATE workflows
+               SET state = 'completed',
+                   completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE workflow_id = ? AND state = 'running'"#,
+        )
+        .bind(workflow_id)
+        .execute(&mut *tx)
+        .await?;
+        if result.rows_affected() != 1 {
+            return Err(Error::StateConflict(format!(
+                "workflow {workflow_id} must exist in running state"
+            )));
+        }
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_events WHERE workflow_id = ?",
+        )
+        .bind(workflow_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query(
+            r#"INSERT INTO workflow_events
+               (event_id, workflow_id, sequence, event_type, payload)
+               VALUES (?, ?, ?, 'workflow.completed', '{}')"#,
+        )
+        .bind(event_id)
+        .bind(workflow_id)
+        .bind(sequence)
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;

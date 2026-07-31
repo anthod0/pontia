@@ -5,7 +5,11 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use pontia_application::{CreateSessionRequest, InitialTaskRequest, SessionCommandService};
+use pontia_application::{
+    AgentEventBroker, CreateSessionRequest, InitialTaskRequest, PiGracefulExitService,
+    SessionCommandService,
+};
+use pontia_core::domain::{DomainEvent, EventSource, EventType};
 use pontia_storage_sqlite::{
     models::workflows::{WorkflowNodeRow, WorkflowRow},
     repositories::workflows::SqliteWorkflowRepository,
@@ -38,6 +42,21 @@ pub enum Error {
 
     #[error("invalid Handoff file name: {0}")]
     InvalidHandoffFileName(String),
+
+    #[error("session {0} is not bound to a workflow Agent Node")]
+    NodeForSessionNotFound(String),
+
+    #[error("workflow {workflow_id} must be running, but is {state}")]
+    WorkflowNotRunning { workflow_id: String, state: String },
+
+    #[error("runtime {runtime_instance_id} is not the current runtime for session {session_id}")]
+    RuntimeMismatch {
+        session_id: String,
+        runtime_instance_id: String,
+    },
+
+    #[error("output {actual} does not match Agent Node declared output {expected}")]
+    OutputMismatch { expected: String, actual: String },
 }
 
 pub trait SessionCreator {
@@ -57,31 +76,113 @@ impl SessionCreator for SessionCommandService {
     }
 }
 
+pub trait GracefulExitRequester {
+    fn ensure_current_runtime(
+        &self,
+        session_id: &str,
+        runtime_instance_id: &str,
+    ) -> impl Future<Output = Result<()>> + Send;
+
+    fn request_graceful_exit(
+        &self,
+        session_id: &str,
+        runtime_instance_id: &str,
+    ) -> impl Future<Output = Result<()>> + Send;
+}
+
+impl GracefulExitRequester for PiGracefulExitService {
+    async fn ensure_current_runtime(
+        &self,
+        session_id: &str,
+        runtime_instance_id: &str,
+    ) -> Result<()> {
+        PiGracefulExitService::ensure_current_runtime(self, session_id, runtime_instance_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn request_graceful_exit(
+        &self,
+        session_id: &str,
+        runtime_instance_id: &str,
+    ) -> Result<()> {
+        self.request_exit(session_id, runtime_instance_id)
+            .await
+            .map_err(Into::into)
+    }
+}
+
+pub trait AgentEventSubscriber {
+    fn subscribe(&self) -> tokio::sync::broadcast::Receiver<DomainEvent>;
+}
+
+impl AgentEventSubscriber for AgentEventBroker {
+    fn subscribe(&self) -> tokio::sync::broadcast::Receiver<DomainEvent> {
+        AgentEventBroker::subscribe(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubmitWorkflowNodeRequest {
+    pub session_id: String,
+    pub runtime_instance_id: String,
+    pub output: String,
+    pub content: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartWorkflowOutcome {
     pub node_id: String,
     pub session_id: String,
 }
 
-pub struct WorkflowScheduler<S> {
+pub struct WorkflowScheduler<S, X, B> {
     repository: SqliteWorkflowRepository,
     sessions: S,
+    exits: X,
+    agent_events: B,
     pontia_home: PathBuf,
 }
 
-impl<S> WorkflowScheduler<S>
+impl<S> WorkflowScheduler<S, PiGracefulExitService, AgentEventBroker>
 where
     S: SessionCreator,
 {
-    pub fn new(pool: SqlitePool, sessions: S, pontia_home: PathBuf) -> Self {
+    pub fn new(
+        pool: SqlitePool,
+        sessions: S,
+        agent_events: AgentEventBroker,
+        pontia_home: PathBuf,
+    ) -> Self {
+        let exits = PiGracefulExitService::new(pool.clone());
+        Self::with_services(pool, sessions, exits, agent_events, pontia_home)
+    }
+}
+
+impl<S, X, B> WorkflowScheduler<S, X, B>
+where
+    S: SessionCreator,
+    X: GracefulExitRequester,
+    B: AgentEventSubscriber,
+{
+    pub fn with_services(
+        pool: SqlitePool,
+        sessions: S,
+        exits: X,
+        agent_events: B,
+        pontia_home: PathBuf,
+    ) -> Self {
         Self {
             repository: SqliteWorkflowRepository::new(pool),
             sessions,
+            exits,
+            agent_events,
             pontia_home,
         }
     }
 
     pub async fn start(&self, workflow_id: &str) -> Result<StartWorkflowOutcome> {
+        let mut agent_events = self.agent_events.subscribe();
         let workflow = self
             .repository
             .get_workflow(workflow_id)
@@ -107,10 +208,108 @@ where
             .bind_node_session(&root.node_id, &session_id)
             .await?;
 
+        let repository = self.repository.clone();
+        let watched_workflow_id = workflow.workflow_id;
+        let watched_node_id = root.node_id.clone();
+        let watched_session_id = session_id.clone();
+        tokio::spawn(async move {
+            loop {
+                let event = match agent_events.recv().await {
+                    Ok(event) => event,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                };
+                if event.session_id != watched_session_id
+                    || event.source != EventSource::AgentClient
+                    || event.client_type != "pi"
+                    || event.event_type != EventType::SessionExited
+                {
+                    continue;
+                }
+                let submitted = match repository.get_node(&watched_node_id).await {
+                    Ok(Some(node)) => node.submitted_at.is_some(),
+                    Ok(None) => {
+                        tracing::error!(
+                            workflow_id = %watched_workflow_id,
+                            node_id = %watched_node_id,
+                            "workflow node disappeared while handling confirmed Session exit"
+                        );
+                        break;
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            workflow_id = %watched_workflow_id,
+                            node_id = %watched_node_id,
+                            %error,
+                            "failed to load workflow node after confirmed Session exit"
+                        );
+                        continue;
+                    }
+                };
+                if !submitted {
+                    break;
+                }
+                if let Err(error) = repository
+                    .complete_workflow(&watched_workflow_id, &Uuid::now_v7().to_string())
+                    .await
+                {
+                    tracing::error!(
+                        workflow_id = %watched_workflow_id,
+                        node_id = %watched_node_id,
+                        %error,
+                        "failed to complete workflow after confirmed Session exit"
+                    );
+                    continue;
+                }
+                break;
+            }
+        });
+
         Ok(StartWorkflowOutcome {
             node_id: root.node_id,
             session_id,
         })
+    }
+
+    pub async fn submit(&self, request: SubmitWorkflowNodeRequest) -> Result<()> {
+        let node = self
+            .repository
+            .get_node_by_session(&request.session_id)
+            .await?
+            .ok_or_else(|| Error::NodeForSessionNotFound(request.session_id.clone()))?;
+        let workflow = self
+            .repository
+            .get_workflow(&node.workflow_id)
+            .await?
+            .ok_or_else(|| Error::WorkflowNotFound(node.workflow_id.clone()))?;
+        if workflow.state != "running" {
+            return Err(Error::WorkflowNotRunning {
+                workflow_id: workflow.workflow_id,
+                state: workflow.state,
+            });
+        }
+        self.exits
+            .ensure_current_runtime(&request.session_id, &request.runtime_instance_id)
+            .await?;
+        if request.output != node.output {
+            return Err(Error::OutputMismatch {
+                expected: node.output,
+                actual: request.output,
+            });
+        }
+        validate_handoff_file_name(&request.output)?;
+        tokio::fs::write(
+            self.handoff_dir(&workflow.workflow_id)
+                .join(&request.output),
+            request.content,
+        )
+        .await?;
+        self.repository
+            .record_node_submission(&node.node_id)
+            .await?;
+        self.exits
+            .request_graceful_exit(&request.session_id, &request.runtime_instance_id)
+            .await
     }
 
     fn handoff_dir(&self, workflow_id: &str) -> PathBuf {

@@ -178,3 +178,67 @@ async fn starting_a_pending_workflow_atomically_updates_state_and_appends_starte
     assert_eq!(workflow.state, "pending");
     assert_eq!(workflow.started_at, None);
 }
+
+#[tokio::test]
+async fn completing_a_running_workflow_atomically_updates_state_and_appends_completed_event() {
+    let repository = SqliteWorkflowRepository::new(test_pool().await);
+    repository
+        .create_workflow(CreateWorkflowRecord {
+            workflow_id: "wf_complete".to_string(),
+            title: "Complete me".to_string(),
+            cwd: "/work/project".to_string(),
+            state: "pending".to_string(),
+        })
+        .await
+        .expect("create workflow");
+    repository
+        .start_workflow("wf_complete", "evt_started")
+        .await
+        .expect("start workflow");
+
+    repository
+        .complete_workflow("wf_complete", "evt_completed")
+        .await
+        .expect("complete workflow");
+
+    let workflow = repository
+        .get_workflow("wf_complete")
+        .await
+        .expect("load workflow")
+        .expect("workflow exists");
+    assert_eq!(workflow.state, "completed");
+    assert!(workflow.completed_at.is_some());
+    let events = repository
+        .list_events("wf_complete")
+        .await
+        .expect("list events");
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[1].sequence, 2);
+    assert_eq!(events[1].event_type, "workflow.completed");
+
+    repository
+        .create_workflow(CreateWorkflowRecord {
+            workflow_id: "wf_complete_rollback".to_string(),
+            title: "Rollback completion".to_string(),
+            cwd: "/work/project".to_string(),
+            state: "pending".to_string(),
+        })
+        .await
+        .expect("create rollback workflow");
+    repository
+        .start_workflow("wf_complete_rollback", "evt_rollback_started")
+        .await
+        .expect("start rollback workflow");
+    let error = repository
+        .complete_workflow("wf_complete_rollback", "evt_completed")
+        .await
+        .expect_err("duplicate event id must roll back completion");
+    assert!(error.to_string().contains("UNIQUE"));
+    let workflow = repository
+        .get_workflow("wf_complete_rollback")
+        .await
+        .expect("load rollback workflow")
+        .expect("workflow exists");
+    assert_eq!(workflow.state, "running");
+    assert_eq!(workflow.completed_at, None);
+}

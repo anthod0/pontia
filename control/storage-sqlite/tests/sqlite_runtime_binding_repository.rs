@@ -69,6 +69,7 @@ async fn upserts_runtime_binding_and_replaces_structured_fields() {
         .await
         .expect("pane binding")
         .expect("pane exists");
+    assert_eq!(pane.runtime_instance_id.as_deref(), Some("rtinst_two"));
     assert_eq!(pane.socket_path.as_deref(), Some("/tmp/tmux2.sock"));
     assert_eq!(pane.pane_id.as_deref(), Some("%2"));
 }

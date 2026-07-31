@@ -27,6 +27,7 @@ mod idempotency;
 mod inbox;
 pub mod ingestion;
 mod mapping;
+mod pi_control;
 pub mod queries;
 mod raw_transcripts;
 pub mod runtime;
@@ -61,6 +62,7 @@ pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequ
 pub use ingestion::{
     EventReportNormalizer, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
 };
+pub use pi_control::PiGracefulExitService;
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
     TurnTimelineDirection, TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage,
