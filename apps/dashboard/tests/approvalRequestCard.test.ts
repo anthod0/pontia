@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen, within } from '@testing-library/svelte'
 import { describe, expect, test, vi } from 'vitest'
 import ApprovalRequestCard from '../src/lib/components/session-chat/ApprovalRequestCard.svelte'
 
@@ -16,6 +16,36 @@ const approval = {
 }
 
 describe('ApprovalRequestCard', () => {
+  test('uses a white request surface and separates suggestion actions from current-request decisions', () => {
+    render(ApprovalRequestCard, { props: { approval, onDecision: vi.fn() } })
+
+    expect(screen.getByLabelText('Approval required for Bash')).toHaveClass('bg-white')
+    const decisions = screen.getByRole('group', { name: 'Current request decisions' })
+    expect(within(decisions).getByRole('button', { name: 'Accept Once' })).toHaveClass('bg-white')
+    expect(within(decisions).getByRole('button', { name: 'Reject' })).toBeInTheDocument()
+    expect(within(decisions).queryByRole('button', { name: 'Always Allow' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Always Allow' })).toHaveClass('bg-white')
+  })
+
+  test('gives every permission suggestion its own Always Allow action', async () => {
+    const alternativeSuggestion = { ...suggestion, destination: 'userSettings' }
+    const onDecision = vi.fn(async () => undefined)
+    render(ApprovalRequestCard, {
+      props: {
+        approval: { ...approval, permissionSuggestions: [suggestion, alternativeSuggestion] },
+        onDecision,
+      },
+    })
+
+    const alwaysAllow = screen.getAllByRole('button', { name: 'Always Allow' })
+    expect(alwaysAllow).toHaveLength(2)
+    await fireEvent.click(alwaysAllow[1])
+    expect(onDecision).toHaveBeenCalledWith({
+      decision: 'always_allow',
+      permission_suggestion: alternativeSuggestion,
+    })
+  })
+
   test.each([
     ['Accept Once', { decision: 'accept_once' }],
     ['Reject', { decision: 'reject' }],
@@ -28,7 +58,7 @@ describe('ApprovalRequestCard', () => {
 
     expect(onDecision).toHaveBeenCalledTimes(1)
     expect(onDecision).toHaveBeenCalledWith(expected)
-    expect(screen.getByText(/Decision delivered/)).toBeInTheDocument()
+    expect(screen.queryByText(/Decision delivered|Waiting for a decision/)).not.toBeInTheDocument()
   })
 
   test('disables every decision while a command is in flight', async () => {
