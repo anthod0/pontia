@@ -12,7 +12,7 @@ use pontia_application::{
 use pontia_core::domain::{DomainEvent, EventSource, EventType};
 use pontia_storage_sqlite::{
     models::workflows::{WorkflowNodeRow, WorkflowRow},
-    repositories::workflows::SqliteWorkflowRepository,
+    repositories::{events::SqliteEventRepository, workflows::SqliteWorkflowRepository},
 };
 use serde_json::json;
 use sqlx::SqlitePool;
@@ -138,6 +138,7 @@ pub struct StartWorkflowOutcome {
 
 pub struct WorkflowScheduler<S, X, B> {
     repository: SqliteWorkflowRepository,
+    persisted_events: SqliteEventRepository,
     sessions: S,
     exits: X,
     agent_events: B,
@@ -173,7 +174,8 @@ where
         pontia_home: PathBuf,
     ) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(pool),
+            repository: SqliteWorkflowRepository::new(pool.clone()),
+            persisted_events: SqliteEventRepository::new(pool),
             sessions,
             exits,
             agent_events,
@@ -181,7 +183,10 @@ where
         }
     }
 
-    pub async fn start(&self, workflow_id: &str) -> Result<StartWorkflowOutcome> {
+    pub async fn start(&self, workflow_id: &str) -> Result<StartWorkflowOutcome>
+    where
+        S: Clone + Send + Sync + 'static,
+    {
         let mut agent_events = self.agent_events.subscribe();
         let workflow = self
             .repository
@@ -199,31 +204,63 @@ where
             .await?;
         let handoff_dir = self.handoff_dir(workflow_id);
         tokio::fs::create_dir_all(&handoff_dir).await?;
-        let initial_task = render_initial_task(&root, &handoff_dir).await?;
-        let session_id = self
-            .sessions
-            .create_session(session_request(&workflow, &root, initial_task))
-            .await?;
-        self.repository
-            .bind_node_session(&root.node_id, &session_id)
-            .await?;
+        let session_id = activate_node(
+            &self.sessions,
+            &self.repository,
+            &workflow,
+            &root,
+            &handoff_dir,
+        )
+        .await?;
 
         let repository = self.repository.clone();
-        let watched_workflow_id = workflow.workflow_id;
-        let watched_node_id = root.node_id.clone();
-        let watched_session_id = session_id.clone();
+        let persisted_events = self.persisted_events.clone();
+        let sessions = self.sessions.clone();
+        let handoff_dir = handoff_dir.clone();
+        let watched_workflow_id = workflow.workflow_id.clone();
+        let mut watched_node_id = root.node_id.clone();
+        let mut watched_session_id = session_id.clone();
         tokio::spawn(async move {
             loop {
-                let event = match agent_events.recv().await {
-                    Ok(event) => event,
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                let confirmed_exit = match agent_events.recv().await {
+                    Ok(event) => {
+                        event.session_id == watched_session_id
+                            && event.source == EventSource::AgentClient
+                            && event.client_type == "pi"
+                            && event.event_type == EventType::SessionExited
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        match persisted_events
+                            .has_agent_client_session_exit(&watched_session_id, "pi")
+                            .await
+                        {
+                            Ok(confirmed_exit) => {
+                                tracing::warn!(
+                                    workflow_id = %watched_workflow_id,
+                                    node_id = %watched_node_id,
+                                    session_id = %watched_session_id,
+                                    skipped,
+                                    confirmed_exit,
+                                    "reconciled workflow Agent Node after lagged event notifications"
+                                );
+                                confirmed_exit
+                            }
+                            Err(error) => {
+                                tracing::error!(
+                                    workflow_id = %watched_workflow_id,
+                                    node_id = %watched_node_id,
+                                    session_id = %watched_session_id,
+                                    skipped,
+                                    %error,
+                                    "failed to reconcile lagged workflow event notifications"
+                                );
+                                continue;
+                            }
+                        }
+                    }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 };
-                if event.session_id != watched_session_id
-                    || event.source != EventSource::AgentClient
-                    || event.client_type != "pi"
-                    || event.event_type != EventType::SessionExited
-                {
+                if !confirmed_exit {
                     continue;
                 }
                 let submitted = match repository.get_node(&watched_node_id).await {
@@ -249,19 +286,61 @@ where
                 if !submitted {
                     break;
                 }
-                if let Err(error) = repository
-                    .complete_workflow(&watched_workflow_id, &Uuid::now_v7().to_string())
-                    .await
+
+                let downstream = match repository.list_nodes(&watched_workflow_id).await {
+                    Ok(nodes) => nodes
+                        .into_iter()
+                        .find(|node| node.parent_node_id.as_deref() == Some(&watched_node_id)),
+                    Err(error) => {
+                        tracing::error!(
+                            workflow_id = %watched_workflow_id,
+                            node_id = %watched_node_id,
+                            %error,
+                            "failed to find downstream workflow node after confirmed Session exit"
+                        );
+                        break;
+                    }
+                };
+
+                let Some(downstream) = downstream else {
+                    if let Err(error) = repository
+                        .complete_workflow(&watched_workflow_id, &Uuid::now_v7().to_string())
+                        .await
+                    {
+                        tracing::error!(
+                            workflow_id = %watched_workflow_id,
+                            node_id = %watched_node_id,
+                            %error,
+                            "failed to complete workflow after confirmed Session exit"
+                        );
+                        continue;
+                    }
+                    break;
+                };
+
+                let downstream_session_id = match activate_node(
+                    &sessions,
+                    &repository,
+                    &workflow,
+                    &downstream,
+                    &handoff_dir,
+                )
+                .await
                 {
-                    tracing::error!(
-                        workflow_id = %watched_workflow_id,
-                        node_id = %watched_node_id,
-                        %error,
-                        "failed to complete workflow after confirmed Session exit"
-                    );
-                    continue;
-                }
-                break;
+                    Ok(session_id) => session_id,
+                    Err(error) => {
+                        tracing::error!(
+                            workflow_id = %watched_workflow_id,
+                            node_id = %downstream.node_id,
+                            %error,
+                            "failed to activate downstream workflow Agent Node"
+                        );
+                        break;
+                    }
+                };
+
+                watched_node_id = downstream.node_id;
+                watched_session_id = downstream_session_id;
             }
         });
 
@@ -318,6 +397,23 @@ where
             .join(workflow_id)
             .join("handoff")
     }
+}
+
+async fn activate_node<S: SessionCreator>(
+    sessions: &S,
+    repository: &SqliteWorkflowRepository,
+    workflow: &WorkflowRow,
+    node: &WorkflowNodeRow,
+    handoff_dir: &Path,
+) -> Result<String> {
+    let initial_task = render_initial_task(node, handoff_dir).await?;
+    let session_id = sessions
+        .create_session(session_request(workflow, node, initial_task))
+        .await?;
+    repository
+        .bind_node_session(&node.node_id, &session_id)
+        .await?;
+    Ok(session_id)
 }
 
 fn session_request(

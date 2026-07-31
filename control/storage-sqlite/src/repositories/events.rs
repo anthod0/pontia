@@ -96,6 +96,27 @@ impl SqliteEventRepository {
         )
     }
 
+    pub async fn has_agent_client_session_exit(
+        &self,
+        session_id: &str,
+        client_type: &str,
+    ) -> Result<bool> {
+        Ok(sqlx::query_scalar::<_, i64>(
+            r#"SELECT EXISTS(
+                   SELECT 1 FROM events
+                   WHERE session_id = ?
+                     AND source = 'agent_client'
+                     AND client_type = ?
+                     AND event_type = 'session.exited'
+               )"#,
+        )
+        .bind(session_id)
+        .bind(client_type)
+        .fetch_one(&self.pool)
+        .await?
+            != 0)
+    }
+
     pub async fn list_domain_event_rows(&self, session_id: &str) -> Result<Vec<DomainEventRow>> {
         Ok(sqlx::query_as::<_, DomainEventRow>(
             r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload, timeline_boundary, turn_topology
