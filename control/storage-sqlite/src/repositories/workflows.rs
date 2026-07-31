@@ -266,4 +266,76 @@ impl SqliteWorkflowRepository {
         tx.commit().await?;
         Ok(())
     }
+
+    pub async fn idle_workflow(&self, workflow_id: &str, event_id: &str) -> Result<()> {
+        self.transition_running_workflow(workflow_id, event_id, "idle", "workflow.idle", None, "{}")
+            .await
+    }
+
+    pub async fn fail_workflow(
+        &self,
+        workflow_id: &str,
+        event_id: &str,
+        failure_message: &str,
+    ) -> Result<()> {
+        let payload = serde_json::json!({ "failure_message": failure_message }).to_string();
+        self.transition_running_workflow(
+            workflow_id,
+            event_id,
+            "failed",
+            "workflow.failed",
+            Some(failure_message),
+            &payload,
+        )
+        .await
+    }
+
+    async fn transition_running_workflow(
+        &self,
+        workflow_id: &str,
+        event_id: &str,
+        state: &str,
+        event_type: &str,
+        failure_message: Option<&str>,
+        payload: &str,
+    ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        let result = sqlx::query(
+            r#"UPDATE workflows
+               SET state = ?,
+                   failure_message = ?,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE workflow_id = ? AND state = 'running'"#,
+        )
+        .bind(state)
+        .bind(failure_message)
+        .bind(workflow_id)
+        .execute(&mut *tx)
+        .await?;
+        if result.rows_affected() != 1 {
+            return Err(Error::StateConflict(format!(
+                "workflow {workflow_id} must exist in running state"
+            )));
+        }
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_events WHERE workflow_id = ?",
+        )
+        .bind(workflow_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query(
+            r#"INSERT INTO workflow_events
+               (event_id, workflow_id, sequence, event_type, payload)
+               VALUES (?, ?, ?, ?, ?)"#,
+        )
+        .bind(event_id)
+        .bind(workflow_id)
+        .bind(sequence)
+        .bind(event_type)
+        .bind(payload)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
 }

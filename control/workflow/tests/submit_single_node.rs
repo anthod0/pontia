@@ -263,6 +263,18 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         EventType::TurnCompleted,
         "rtinst_submit",
     ));
+    events.publish(event(
+        "evt_turn_failed_after_submission",
+        "session_submit",
+        EventType::TurnFailed,
+        "rtinst_submit",
+    ));
+    events.publish(event(
+        "evt_turn_interrupted_after_submission",
+        "session_submit",
+        EventType::TurnInterrupted,
+        "rtinst_submit",
+    ));
     tokio::task::yield_now().await;
     assert_eq!(
         repository

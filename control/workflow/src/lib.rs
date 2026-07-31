@@ -136,6 +136,47 @@ pub struct StartWorkflowOutcome {
     pub session_id: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AgentTerminal {
+    TurnCompleted,
+    TurnFailed,
+    TurnInterrupted,
+    SessionExited,
+}
+
+impl AgentTerminal {
+    fn from_event(event: &DomainEvent, session_id: &str) -> Option<Self> {
+        if event.session_id != session_id
+            || event.source != EventSource::AgentClient
+            || event.client_type != "pi"
+        {
+            return None;
+        }
+        match event.event_type {
+            EventType::TurnCompleted => Some(Self::TurnCompleted),
+            EventType::TurnFailed => Some(Self::TurnFailed),
+            EventType::TurnInterrupted => Some(Self::TurnInterrupted),
+            EventType::SessionExited => Some(Self::SessionExited),
+            _ => None,
+        }
+    }
+
+    fn event_type(self) -> &'static str {
+        match self {
+            Self::TurnCompleted => "turn.completed",
+            Self::TurnFailed => "turn.failed",
+            Self::TurnInterrupted => "turn.interrupted",
+            Self::SessionExited => "session.exited",
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ActivationFailure {
+    error: Error,
+    failure_message: String,
+}
+
 pub struct WorkflowScheduler<S, X, B> {
     repository: SqliteWorkflowRepository,
     persisted_events: SqliteEventRepository,
@@ -186,6 +227,7 @@ where
     pub async fn start(&self, workflow_id: &str) -> Result<StartWorkflowOutcome>
     where
         S: Clone + Send + Sync + 'static,
+        X: Clone + Send + Sync + 'static,
     {
         let mut agent_events = self.agent_events.subscribe();
         let workflow = self
@@ -203,48 +245,74 @@ where
             .start_workflow(workflow_id, &Uuid::now_v7().to_string())
             .await?;
         let handoff_dir = self.handoff_dir(workflow_id);
-        tokio::fs::create_dir_all(&handoff_dir).await?;
-        let session_id = activate_node(
+        if let Err(error) = tokio::fs::create_dir_all(&handoff_dir).await {
+            let failure_message = format!(
+                "failed to create Workflow Handoff directory {}: {error}",
+                handoff_dir.display()
+            );
+            self.repository
+                .fail_workflow(workflow_id, &Uuid::now_v7().to_string(), &failure_message)
+                .await?;
+            return Err(error.into());
+        }
+        let session_id = match activate_node(
             &self.sessions,
             &self.repository,
             &workflow,
             &root,
             &handoff_dir,
         )
-        .await?;
+        .await
+        {
+            Ok(session_id) => session_id,
+            Err(failure) => {
+                self.repository
+                    .fail_workflow(
+                        workflow_id,
+                        &Uuid::now_v7().to_string(),
+                        &failure.failure_message,
+                    )
+                    .await?;
+                return Err(failure.error);
+            }
+        };
 
         let repository = self.repository.clone();
         let persisted_events = self.persisted_events.clone();
         let sessions = self.sessions.clone();
+        let exits = self.exits.clone();
         let handoff_dir = handoff_dir.clone();
         let watched_workflow_id = workflow.workflow_id.clone();
         let mut watched_node_id = root.node_id.clone();
         let mut watched_session_id = session_id.clone();
         tokio::spawn(async move {
             loop {
-                let confirmed_exit = match agent_events.recv().await {
-                    Ok(event) => {
-                        event.session_id == watched_session_id
-                            && event.source == EventSource::AgentClient
-                            && event.client_type == "pi"
-                            && event.event_type == EventType::SessionExited
-                    }
+                let (terminal, runtime_instance_id) = match agent_events.recv().await {
+                    Ok(event) => match AgentTerminal::from_event(&event, &watched_session_id) {
+                        Some(terminal) => (
+                            terminal,
+                            event.payload["runtime_instance_id"]
+                                .as_str()
+                                .map(str::to_string),
+                        ),
+                        None => continue,
+                    },
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
                         match persisted_events
                             .has_agent_client_session_exit(&watched_session_id, "pi")
                             .await
                         {
-                            Ok(confirmed_exit) => {
+                            Ok(true) => {
                                 tracing::warn!(
                                     workflow_id = %watched_workflow_id,
                                     node_id = %watched_node_id,
                                     session_id = %watched_session_id,
                                     skipped,
-                                    confirmed_exit,
                                     "reconciled workflow Agent Node after lagged event notifications"
                                 );
-                                confirmed_exit
+                                (AgentTerminal::SessionExited, None)
                             }
+                            Ok(false) => continue,
                             Err(error) => {
                                 tracing::error!(
                                     workflow_id = %watched_workflow_id,
@@ -260,9 +328,6 @@ where
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 };
-                if !confirmed_exit {
-                    continue;
-                }
                 let submitted = match repository.get_node(&watched_node_id).await {
                     Ok(Some(node)) => node.submitted_at.is_some(),
                     Ok(None) => {
@@ -284,7 +349,79 @@ where
                     }
                 };
                 if !submitted {
+                    match terminal {
+                        AgentTerminal::TurnCompleted => {
+                            if let Err(error) = repository
+                                .idle_workflow(&watched_workflow_id, &Uuid::now_v7().to_string())
+                                .await
+                            {
+                                tracing::error!(
+                                    workflow_id = %watched_workflow_id,
+                                    node_id = %watched_node_id,
+                                    %error,
+                                    "failed to idle Workflow after unsubmitted Turn completion"
+                                );
+                                continue;
+                            }
+                        }
+                        AgentTerminal::TurnFailed
+                        | AgentTerminal::TurnInterrupted
+                        | AgentTerminal::SessionExited => {
+                            let failure_message = format!(
+                                "Agent Client reported {} before Agent Node {} Submission",
+                                terminal.event_type(),
+                                watched_node_id
+                            );
+                            if let Err(error) = repository
+                                .fail_workflow(
+                                    &watched_workflow_id,
+                                    &Uuid::now_v7().to_string(),
+                                    &failure_message,
+                                )
+                                .await
+                            {
+                                tracing::error!(
+                                    workflow_id = %watched_workflow_id,
+                                    node_id = %watched_node_id,
+                                    %error,
+                                    "failed to persist Workflow failure after Agent terminal fact"
+                                );
+                                continue;
+                            }
+                            if terminal != AgentTerminal::SessionExited {
+                                match runtime_instance_id {
+                                    Some(runtime_instance_id) => {
+                                        if let Err(error) = exits
+                                            .request_graceful_exit(
+                                                &watched_session_id,
+                                                &runtime_instance_id,
+                                            )
+                                            .await
+                                        {
+                                            tracing::warn!(
+                                                workflow_id = %watched_workflow_id,
+                                                node_id = %watched_node_id,
+                                                session_id = %watched_session_id,
+                                                %error,
+                                                "failed to request graceful Session cleanup"
+                                            );
+                                        }
+                                    }
+                                    None => tracing::warn!(
+                                        workflow_id = %watched_workflow_id,
+                                        node_id = %watched_node_id,
+                                        session_id = %watched_session_id,
+                                        "cannot request graceful Session cleanup because the Agent fact has no runtime binding identity"
+                                    ),
+                                }
+                            }
+                        }
+                    }
                     break;
+                }
+
+                if terminal != AgentTerminal::SessionExited {
+                    continue;
                 }
 
                 let downstream = match repository.list_nodes(&watched_workflow_id).await {
@@ -328,13 +465,28 @@ where
                 .await
                 {
                     Ok(session_id) => session_id,
-                    Err(error) => {
+                    Err(failure) => {
+                        let transition_result = repository
+                            .fail_workflow(
+                                &watched_workflow_id,
+                                &Uuid::now_v7().to_string(),
+                                &failure.failure_message,
+                            )
+                            .await;
                         tracing::error!(
                             workflow_id = %watched_workflow_id,
                             node_id = %downstream.node_id,
-                            %error,
+                            error = %failure.error,
                             "failed to activate downstream workflow Agent Node"
                         );
+                        if let Err(error) = transition_result {
+                            tracing::error!(
+                                workflow_id = %watched_workflow_id,
+                                node_id = %downstream.node_id,
+                                %error,
+                                "failed to persist downstream Agent Node activation failure"
+                            );
+                        }
                         break;
                     }
                 };
@@ -367,9 +519,26 @@ where
                 state: workflow.state,
             });
         }
-        self.exits
+        if let Err(error) = self
+            .exits
             .ensure_current_runtime(&request.session_id, &request.runtime_instance_id)
-            .await?;
+            .await
+        {
+            if is_missing_runtime_binding(&error) {
+                let failure_message = format!(
+                    "runtime binding is unavailable for Workflow Session {}: {error}",
+                    request.session_id
+                );
+                self.repository
+                    .fail_workflow(
+                        &workflow.workflow_id,
+                        &Uuid::now_v7().to_string(),
+                        &failure_message,
+                    )
+                    .await?;
+            }
+            return Err(error);
+        }
         if request.output != node.output {
             return Err(Error::OutputMismatch {
                 expected: node.output,
@@ -386,9 +555,25 @@ where
         self.repository
             .record_node_submission(&node.node_id)
             .await?;
-        self.exits
+        if let Err(error) = self
+            .exits
             .request_graceful_exit(&request.session_id, &request.runtime_instance_id)
             .await
+        {
+            let failure_message = format!(
+                "graceful exit request failed for Workflow Session {}: {error}",
+                request.session_id
+            );
+            self.repository
+                .fail_workflow(
+                    &workflow.workflow_id,
+                    &Uuid::now_v7().to_string(),
+                    &failure_message,
+                )
+                .await?;
+            return Err(error);
+        }
+        Ok(())
     }
 
     fn handoff_dir(&self, workflow_id: &str) -> PathBuf {
@@ -405,14 +590,28 @@ async fn activate_node<S: SessionCreator>(
     workflow: &WorkflowRow,
     node: &WorkflowNodeRow,
     handoff_dir: &Path,
-) -> Result<String> {
+) -> std::result::Result<String, ActivationFailure> {
     let initial_task = render_initial_task(node, handoff_dir).await?;
     let session_id = sessions
         .create_session(session_request(workflow, node, initial_task))
-        .await?;
+        .await
+        .map_err(|error| ActivationFailure {
+            failure_message: format!(
+                "Session creation failed for Workflow Agent Node {}: {error}",
+                node.node_id
+            ),
+            error,
+        })?;
     repository
         .bind_node_session(&node.node_id, &session_id)
-        .await?;
+        .await
+        .map_err(|error| ActivationFailure {
+            failure_message: format!(
+                "failed to bind Session {session_id} to Workflow Agent Node {}: {error}",
+                node.node_id
+            ),
+            error: error.into(),
+        })?;
     Ok(session_id)
 }
 
@@ -439,15 +638,52 @@ fn session_request(
     }
 }
 
-async fn render_initial_task(node: &WorkflowNodeRow, handoff_dir: &Path) -> Result<String> {
-    let inputs: Vec<String> = serde_json::from_str(&node.inputs)?;
+async fn render_initial_task(
+    node: &WorkflowNodeRow,
+    handoff_dir: &Path,
+) -> std::result::Result<String, ActivationFailure> {
+    let inputs: Vec<String> =
+        serde_json::from_str(&node.inputs).map_err(|error| ActivationFailure {
+            failure_message: format!(
+                "Workflow Agent Node {} has invalid declared Handoff inputs: {error}",
+                node.node_id
+            ),
+            error: error.into(),
+        })?;
     let mut rendered_inputs = String::new();
     for input in inputs {
-        validate_handoff_file_name(&input)?;
-        let content = tokio::fs::read_to_string(handoff_dir.join(&input)).await?;
+        validate_handoff_file_name(&input).map_err(|error| ActivationFailure {
+            failure_message: format!(
+                "Workflow Agent Node {} declared invalid Handoff input {input}: {error}",
+                node.node_id
+            ),
+            error,
+        })?;
+        let bytes = tokio::fs::read(handoff_dir.join(&input))
+            .await
+            .map_err(|error| ActivationFailure {
+                failure_message: format!(
+                    "failed to read declared Handoff input {input} for Workflow Agent Node {}: {error}",
+                    node.node_id
+                ),
+                error: error.into(),
+            })?;
+        let content = String::from_utf8(bytes).map_err(|error| ActivationFailure {
+            failure_message: format!(
+                "declared Handoff input {input} for Workflow Agent Node {} is not valid UTF-8",
+                node.node_id
+            ),
+            error: std::io::Error::new(std::io::ErrorKind::InvalidData, error).into(),
+        })?;
         rendered_inputs.push_str(&format!("\n## Input file: {input}\n\n{content}\n"));
     }
-    validate_handoff_file_name(&node.output)?;
+    validate_handoff_file_name(&node.output).map_err(|error| ActivationFailure {
+        failure_message: format!(
+            "Workflow Agent Node {} declared invalid Handoff output {}: {error}",
+            node.node_id, node.output
+        ),
+        error,
+    })?;
 
     Ok(format!(
         "# Workflow Agent Node\n\n\
@@ -470,4 +706,12 @@ fn validate_handoff_file_name(name: &str) -> Result<()> {
         return Ok(());
     }
     Err(Error::InvalidHandoffFileName(name.to_string()))
+}
+
+fn is_missing_runtime_binding(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::Pontia(pontia_core::Error::CapabilityUnavailable(message))
+            if message.contains("runtime binding") || message.contains("bound pi TUI pane")
+    )
 }
