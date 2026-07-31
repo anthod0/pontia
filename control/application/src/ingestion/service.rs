@@ -22,7 +22,8 @@ use pontia_storage_sqlite::repositories::{
 
 use super::{EventIngestResult, PontiaEvent};
 use crate::{
-    InboxCommandService, UpsertAgentBindingRequest, row_to_event, row_to_session, row_to_turn,
+    AgentEventBroker, InboxCommandService, UpsertAgentBindingRequest, row_to_event, row_to_session,
+    row_to_turn,
 };
 use pontia_agent_clients::raw_transcripts::{
     AgentBindingResolveRequest, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
@@ -34,11 +35,20 @@ use pontia_agent_clients::{
 #[derive(Clone)]
 pub struct EventIngestService {
     pool: SqlitePool,
+    agent_events: Option<AgentEventBroker>,
 }
 
 impl EventIngestService {
     pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            agent_events: None,
+        }
+    }
+
+    pub fn with_agent_events(mut self, agent_events: AgentEventBroker) -> Self {
+        self.agent_events = Some(agent_events);
+        self
     }
 
     pub async fn ingest_pontia_event(&self, event: PontiaEvent) -> Result<EventIngestResult> {
@@ -264,6 +274,10 @@ impl EventIngestService {
             .await?;
 
         tx.commit().await?;
+
+        if let Some(agent_events) = &self.agent_events {
+            agent_events.publish(event.clone());
+        }
 
         self.clear_exited_session_tmux_markers(&event, true).await;
         self.link_started_turn_to_inbox_message(&event).await?;

@@ -211,7 +211,7 @@ pub async fn post_event(
     InternalEventValidationService::new()
         .validate(&event)
         .map_err(domain_error_as_invalid_request)?;
-    let service = EventIngestService::new(state.db());
+    let service = EventIngestService::new(state.db()).with_agent_events(state.agent_events());
     service
         .ensure_confirmed_event_matches_session_boundary(&event)
         .await

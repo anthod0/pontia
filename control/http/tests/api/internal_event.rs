@@ -14,6 +14,7 @@ use pontia_storage_sqlite::repositories::runtime_bindings::{
     RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository,
 };
 use serde_json::{Value, json};
+use std::time::Duration;
 use tower::ServiceExt;
 
 async fn test_state() -> AppState {
@@ -205,6 +206,108 @@ async fn internal_event_api_normalizes_started_fact_into_a_domain_event() {
     assert_eq!(started.client_type, "pi");
     assert_eq!(started.payload["input"]["summary"], "hello");
     assert_eq!(started.payload["metadata"]["inbox_message_id"], "msg_1");
+}
+
+#[tokio::test]
+async fn internal_event_api_broadcasts_a_started_fact_after_commit() {
+    let state = test_state().await;
+    create_session(&state, "sess_broadcast", "pi").await;
+    bind_runtime(&state, "sess_broadcast", "rtinst_broadcast").await;
+    let mut subscriber = state.agent_events().subscribe();
+
+    let (status, body) = post_event(
+        state.clone(),
+        json!({
+            "session_id": "sess_broadcast",
+            "type": "turn.started",
+            "data": { "runtime_instance_id": "rtinst_broadcast" }
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let broadcast = tokio::time::timeout(Duration::from_secs(1), subscriber.recv())
+        .await
+        .expect("committed event should be broadcast")
+        .expect("broker should stay open");
+    assert_eq!(broadcast.event_id, body["event_id"]);
+    assert_eq!(broadcast.turn_id.as_deref(), body["turn_id"].as_str());
+    assert_eq!(broadcast.event_type, EventType::TurnStarted);
+    let turn = EventIngestService::new(state.db())
+        .get_turn(broadcast.turn_id.as_deref().expect("turn id"))
+        .await
+        .expect("turn query")
+        .expect("projected turn");
+    assert_eq!(turn.state.to_string(), "running");
+}
+
+#[tokio::test]
+async fn internal_event_api_rejection_does_not_broadcast() {
+    let state = test_state().await;
+    create_session(&state, "sess_rejected_broadcast", "generic").await;
+    let mut subscriber = state.agent_events().subscribe();
+
+    let (status, body) = post_event(
+        state.clone(),
+        json!({
+            "session_id": "sess_rejected_broadcast",
+            "type": "turn.completed",
+            "data": {}
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert!(matches!(
+        subscriber.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+}
+
+#[tokio::test]
+async fn internal_event_ingestion_does_not_rebroadcast_a_duplicate_domain_event() {
+    let state = test_state().await;
+    create_session(&state, "sess_duplicate_broadcast", "generic").await;
+    bind_runtime(
+        &state,
+        "sess_duplicate_broadcast",
+        "rtinst_duplicate_broadcast",
+    )
+    .await;
+    let mut subscriber = state.agent_events().subscribe();
+    let service = EventIngestService::new(state.db()).with_agent_events(state.agent_events());
+    let reported = ReportedEvent::new(
+        "evt_duplicate_broadcast".to_string(),
+        "sess_duplicate_broadcast".to_string(),
+        None,
+        EventSource::AgentClient,
+        "generic".to_string(),
+        EventType::SessionReady,
+        json!({ "runtime_instance_id": "rtinst_duplicate_broadcast" }),
+    );
+
+    service
+        .ingest_confirmed_event(reported.clone())
+        .await
+        .expect("first report");
+    assert_eq!(
+        subscriber
+            .recv()
+            .await
+            .expect("first committed event")
+            .event_id,
+        "evt_duplicate_broadcast"
+    );
+
+    let duplicate = service
+        .ingest_confirmed_event(reported)
+        .await
+        .expect("duplicate report");
+    assert!(duplicate.duplicate);
+    assert!(matches!(
+        subscriber.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
 }
 
 #[tokio::test]
@@ -539,6 +642,7 @@ async fn internal_event_api_validates_context_usage_and_truncates_output() {
 async fn internal_event_api_keeps_session_message_updates_volatile() {
     let state = test_state().await;
     create_session(&state, "sess_volatile", "generic").await;
+    let mut agent_events = state.agent_events().subscribe();
     let before = EventIngestService::new(state.db())
         .list_events("sess_volatile")
         .await
@@ -560,4 +664,8 @@ async fn internal_event_api_keeps_session_message_updates_volatile() {
         .expect("events")
         .len();
     assert_eq!(after, before);
+    assert!(matches!(
+        agent_events.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
 }

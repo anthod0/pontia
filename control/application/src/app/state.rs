@@ -14,7 +14,8 @@ use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 use super::set_default_client_type;
 use crate::{
-    ApprovalCoordinator, GitRefreshCoordinator, IdempotencyCoordinator, WorkspaceBrowserConfig,
+    AgentEventBroker, ApprovalCoordinator, GitRefreshCoordinator, IdempotencyCoordinator,
+    WorkspaceBrowserConfig,
 };
 
 const SESSION_MESSAGE_UPDATED_DEBOUNCE_MS: u64 = 100;
@@ -109,6 +110,7 @@ struct AppRuntimeState {
 }
 
 struct EventState {
+    agent_events: AgentEventBroker,
     volatile_events: VolatileEventBroker,
 }
 
@@ -128,6 +130,7 @@ pub struct AppStateBuilder {
     workspace_browser: WorkspaceBrowserConfig,
     file_picker: FilePickerConfig,
     shutdown: ShutdownSignal,
+    agent_events: AgentEventBroker,
     volatile_events: VolatileEventBroker,
     git_refresh: GitRefreshCoordinator,
     idempotency: IdempotencyCoordinator,
@@ -142,6 +145,7 @@ impl AppState {
             workspace_browser: WorkspaceBrowserConfig::default(),
             file_picker: FilePickerConfig::default(),
             shutdown: ShutdownSignal::default(),
+            agent_events: AgentEventBroker::default(),
             volatile_events: VolatileEventBroker::default(),
             git_refresh: GitRefreshCoordinator::default(),
             idempotency: IdempotencyCoordinator::default(),
@@ -173,6 +177,10 @@ impl AppState {
         self.inner.events.volatile_events.clone()
     }
 
+    pub fn agent_events(&self) -> AgentEventBroker {
+        self.inner.events.agent_events.clone()
+    }
+
     pub fn git_refresh(&self) -> GitRefreshCoordinator {
         self.inner.integrations.git_refresh.clone()
     }
@@ -197,6 +205,7 @@ impl AppState {
             .workspace_browser(self.workspace_browser())
             .file_picker(self.file_picker())
             .shutdown(self.shutdown())
+            .agent_events(self.agent_events())
             .volatile_events(self.volatile_events())
             .git_refresh(self.git_refresh())
             .idempotency(self.idempotency())
@@ -230,6 +239,11 @@ impl AppStateBuilder {
         self
     }
 
+    pub fn agent_events(mut self, agent_events: AgentEventBroker) -> Self {
+        self.agent_events = agent_events;
+        self
+    }
+
     pub fn git_refresh(mut self, git_refresh: GitRefreshCoordinator) -> Self {
         self.git_refresh = git_refresh;
         self
@@ -255,6 +269,7 @@ impl AppStateBuilder {
                     file_picker: self.file_picker,
                 },
                 events: EventState {
+                    agent_events: self.agent_events,
                     volatile_events: self.volatile_events,
                 },
                 lifecycle: LifecycleState {

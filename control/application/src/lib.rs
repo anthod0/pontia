@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
 mod agent_bindings;
+mod agent_events;
 mod agent_profiles;
 pub mod app;
 mod approvals;
@@ -40,6 +41,7 @@ pub use agent_bindings::{
     AgentBinding, AgentBindingCurrentTurn, AgentBindingService, AgentBindingSessionContext,
     UpsertAgentBindingRequest,
 };
+pub use agent_events::AgentEventBroker;
 pub use agent_profiles::{
     AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView,
     UpsertExecutionProfileRequest,
