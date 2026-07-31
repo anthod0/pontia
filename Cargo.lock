@@ -1461,6 +1461,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pontia-workflow"
+version = "0.1.0"
+dependencies = [
+ "pontia-application",
+ "pontia-core",
+ "pontia-storage-sqlite",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "pontiactl"
 version = "0.1.0"
 dependencies = [

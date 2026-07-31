@@ -7,4 +7,5 @@ pub mod runtime_bindings;
 pub mod sessions;
 pub mod tasks;
 pub mod turns;
+pub mod workflows;
 pub mod workspaces;

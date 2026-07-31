@@ -9,6 +9,7 @@ members = [
     "control/application",
     "control/http",
     "control/pontiactl",
+    "control/workflow",
 ]
 default-members = ["control/pontia"]
 resolver = "2"

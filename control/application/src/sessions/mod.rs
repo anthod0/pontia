@@ -40,6 +40,12 @@ pub struct CreateSessionOutcome {
     pub duplicate: bool,
 }
 
+impl CreateSessionOutcome {
+    pub fn session_id(&self) -> Option<&str> {
+        self.data.get("session")?.get("session_id")?.as_str()
+    }
+}
+
 #[derive(Clone)]
 pub struct SessionCommandService {
     pool: SqlitePool,
