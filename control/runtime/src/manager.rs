@@ -50,9 +50,8 @@ impl GenericRuntimeManager {
             .tmux_runtime()
             .map(|runtime| script::tmux_start_command(&request, runtime, false));
         let base_tmux_session = tmux::tmux_session_name(&request);
-        let reuse_target = reuse_target.filter(|(socket_path, pane_id)| {
-            tmux::is_reusable_pontia_shell_pane(socket_path, pane_id, &request.session_id)
-        });
+        let reuse_target = reuse_target
+            .filter(|(socket_path, pane_id)| tmux::is_reusable_shell_pane(socket_path, pane_id));
         let tmux_session = if reuse_target.is_some() {
             base_tmux_session.clone()
         } else if restart_count > 0 && tmux::is_alive(&base_tmux_session) {

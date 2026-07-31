@@ -42,15 +42,8 @@ pub(crate) fn clear_pontia_pane_markers(
     unset_pane_option(socket_path, pane_id, PONTIA_RUNTIME_INSTANCE_MARKER)
 }
 
-pub(crate) fn is_reusable_pontia_shell_pane(
-    socket_path: &str,
-    pane_id: &str,
-    session_id: &str,
-) -> bool {
+pub(crate) fn is_reusable_shell_pane(socket_path: &str, pane_id: &str) -> bool {
     if !is_pane_alive(socket_path, pane_id) {
-        return false;
-    }
-    if pane_option(socket_path, pane_id, PONTIA_SESSION_MARKER).as_deref() != Some(session_id) {
         return false;
     }
     pane_current_command(socket_path, pane_id)
