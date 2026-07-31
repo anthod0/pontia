@@ -1,4 +1,8 @@
-use std::{env, fs, process::Command};
+use std::{
+    env, fs,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    process::Command,
+};
 
 use clap::{Args, Parser, Subcommand};
 use pontia_config::AppConfig;
@@ -72,7 +76,7 @@ async fn submit_workflow(args: SubmitArgs) -> Result<(), String> {
         .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
     let url = format!(
         "http://{}/internal/v1/workflow/submissions",
-        config.bind_addr
+        local_api_addr(config.bind_addr)
     );
     let response = reqwest::Client::new()
         .post(url)
@@ -94,6 +98,18 @@ async fn submit_workflow(args: SubmitArgs) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+fn local_api_addr(bind_addr: SocketAddr) -> SocketAddr {
+    let ip = if bind_addr.ip().is_unspecified() {
+        match bind_addr.ip() {
+            IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::LOCALHOST),
+            IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::LOCALHOST),
+        }
+    } else {
+        bind_addr.ip()
+    };
+    SocketAddr::new(ip, bind_addr.port())
 }
 
 fn current_managed_pane_identity() -> Result<(String, String), String> {

@@ -142,7 +142,7 @@ fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
         .env("PATH", path)
         .env("TMUX", "/tmp/tmux-test/default,1,0")
         .env("TMUX_PANE", "%7")
-        .env("PONTIA_BIND_ADDR", addr.to_string())
+        .env("PONTIA_BIND_ADDR", format!("0.0.0.0:{}", addr.port()))
         .env("PONTIA_EXTERNAL_API_TOKEN", "cli-test-token")
         .output()
         .expect("run workflow submit");
@@ -154,6 +154,7 @@ fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
     );
     let request = request.join().expect("request capture thread");
     assert!(request.starts_with("POST /internal/v1/workflow/submissions HTTP/1.1"));
+    assert!(request.contains(&format!("host: 127.0.0.1:{}", addr.port())));
     assert!(request.contains("authorization: Bearer cli-test-token"));
     assert!(request.contains(
         r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli","output":"result.md","content":"Workflow result: 完成\n"}"#
