@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pontia_agent_clients::{TerminateBehavior, get_client_spec};
 use pontia_core::{Error, Result};
 use pontia_runtime::GenericRuntimeManager;
@@ -193,4 +195,3 @@ mod tests {
         assert_eq!(state, "working");
     }
 }
-use std::sync::Arc;
