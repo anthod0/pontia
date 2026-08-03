@@ -27,15 +27,12 @@ fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn process_fingerprint(metadata: &str) -> Result<Option<TmuxProcessFingerprint>> {
-    let metadata = serde_json::from_str::<Value>(metadata)?;
-    metadata
+fn process_fingerprint(metadata: &str) -> Option<TmuxProcessFingerprint> {
+    serde_json::from_str::<Value>(metadata)
+        .ok()?
         .get("tmux_process_fingerprint")
-        .filter(|fingerprint| fingerprint.is_object())
         .cloned()
-        .map(serde_json::from_value)
-        .transpose()
-        .map_err(Into::into)
+        .and_then(|fingerprint| serde_json::from_value(fingerprint).ok())
 }
 
 #[derive(Clone)]
@@ -122,31 +119,22 @@ impl RuntimeObservationService {
                 else {
                     return Ok(());
                 };
-                let metadata = repository.metadata(session_id).await?;
-                if metadata
-                    .as_deref()
-                    .map(process_fingerprint)
-                    .transpose()?
-                    .flatten()
-                    .is_some()
-                {
-                    let Some(runtime_instance_id) = row.runtime_instance_id else {
-                        return Ok(());
-                    };
-                    return self
-                        .observe_tmux_process(ActiveTmuxProcessBindingRow {
-                            session_id: session_id.to_string(),
-                            client_type: session.client_type,
-                            runtime_instance_id,
-                            socket_path,
-                            pane_id,
-                            metadata: metadata.expect("fingerprint came from metadata"),
-                        })
-                        .await;
-                }
-                if self.runtime.is_tmux_pane_alive(&socket_path, &pane_id) {
+                let Some(metadata) = repository.metadata(session_id).await? else {
                     return Ok(());
-                }
+                };
+                let Some(runtime_instance_id) = row.runtime_instance_id else {
+                    return Ok(());
+                };
+                return self
+                    .observe_tmux_process(ActiveTmuxProcessBindingRow {
+                        session_id: session_id.to_string(),
+                        client_type: session.client_type,
+                        runtime_instance_id,
+                        socket_path,
+                        pane_id,
+                        metadata,
+                    })
+                    .await;
             }
             RuntimeBehavior::InProcess => {
                 let metadata = SqliteRuntimeBindingRepository::new(self.pool.clone())
@@ -172,8 +160,10 @@ impl RuntimeObservationService {
     }
 
     async fn observe_tmux_process(&self, binding: ActiveTmuxProcessBindingRow) -> Result<()> {
-        let Some(fingerprint) = process_fingerprint(&binding.metadata)? else {
-            return Ok(());
+        let Some(fingerprint) = process_fingerprint(&binding.metadata) else {
+            return self
+                .record_process_exit(binding, "agent_process_fingerprint_unavailable")
+                .await;
         };
         if self.runtime.validate_tmux_process_fingerprint(
             &binding.socket_path,
@@ -192,8 +182,16 @@ impl RuntimeObservationService {
             return Ok(());
         }
 
-        let ingest = self.ingest_service();
-        ingest
+        self.record_process_exit(binding, "agent_process_fingerprint_missing")
+            .await
+    }
+
+    async fn record_process_exit(
+        &self,
+        binding: ActiveTmuxProcessBindingRow,
+        reason: &str,
+    ) -> Result<()> {
+        self.ingest_service()
             .ingest_runtime_observation_event(PontiaEvent::new(
                 binding.session_id,
                 None,
@@ -202,7 +200,7 @@ impl RuntimeObservationService {
                 PontiaEventType::SessionExited,
                 json!({
                     "runtime_instance_id": binding.runtime_instance_id,
-                    "reason": "agent_process_fingerprint_missing",
+                    "reason": reason,
                 }),
             ))
             .await?;

@@ -208,11 +208,7 @@ impl SqliteRuntimeBindingRepository {
                       r.metadata
                FROM sessions s
                JOIN runtime_bindings r ON r.session_id = s.session_id
-               WHERE s.state NOT IN ('exited', 'error')
-                 AND r.runtime_instance_id IS NOT NULL
-                 AND r.tmux_socket_path IS NOT NULL
-                 AND r.tmux_pane_id IS NOT NULL
-                 AND json_type(r.metadata, '$.tmux_process_fingerprint') = 'object'"#,
+               WHERE s.state IN ('idle', 'busy', 'interrupted')"#,
         )
         .fetch_all(&self.pool)
         .await?)

@@ -90,6 +90,57 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
     assert_eq!(source, "runtime_manager");
 }
 
+#[tokio::test]
+async fn active_tmux_session_without_a_fingerprint_exits_immediately() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let database_url = format!(
+        "sqlite://{}?mode=rwc",
+        temp.path().join("missing-fingerprint.db").display()
+    );
+    let db = connect_sqlite(&database_url).await.expect("connect");
+    run_migrations(&db).await.expect("migrate");
+    sqlx::query(
+        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_without_fingerprint', 'pi', 'idle')",
+    )
+    .execute(&db)
+    .await
+    .expect("insert session");
+    sqlx::query(
+        r#"INSERT INTO runtime_bindings (
+               session_id, runtime_kind, runtime_instance_id,
+               tmux_socket_path, tmux_pane_id, metadata
+           ) VALUES (?, 'pi_tui', ?, ?, ?, '{}')"#,
+    )
+    .bind("sess_without_fingerprint")
+    .bind("rtinst_without_fingerprint")
+    .bind("/tmp/missing-tmux-socket")
+    .bind("%404")
+    .execute(&db)
+    .await
+    .expect("insert binding");
+
+    RuntimeObservationService::new(db.clone())
+        .sweep_active_tmux_sessions()
+        .await
+        .expect("sweep runtime bindings");
+
+    let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
+        .bind("sess_without_fingerprint")
+        .fetch_one(&db)
+        .await
+        .expect("load session state");
+    assert_eq!(state, "exited");
+
+    let reason: String = sqlx::query_scalar(
+        "SELECT json_extract(payload, '$.reason') FROM events WHERE session_id = ? AND event_type = 'session.exited'",
+    )
+    .bind("sess_without_fingerprint")
+    .fetch_one(&db)
+    .await
+    .expect("load exit reason");
+    assert_eq!(reason, "agent_process_fingerprint_unavailable");
+}
+
 fn tmux_value(session: &str, format: &str) -> String {
     let output = Command::new("tmux")
         .args(["display-message", "-p", "-t", session, format])
