@@ -152,7 +152,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
 }
 
 #[test]
-fn terminate_tmux_pane_kills_bound_pane_when_send_keys_fails() {
+fn failed_exit_signal_does_not_kill_bound_pane() {
     let _guard = path_env_lock().lock().expect("path env lock");
     let tempdir = tempfile::tempdir().expect("tempdir");
     let tmux_log = tempdir.path().join("tmux.log");
@@ -165,8 +165,8 @@ fn terminate_tmux_pane_kills_bound_pane_when_send_keys_fails() {
     }
 
     GenericRuntimeManager
-        .terminate_tmux_pane("/tmp/tmux-test", "%42", &["C-c", "C-c"])
-        .expect("terminate tmux pane should fallback to kill-pane");
+        .send_tmux_keys("/tmp/tmux-test", "%42", &["C-c", "C-c"])
+        .expect_err("failed exit signal should be reported");
 
     unsafe {
         std::env::remove_var("TMUX_SEND_KEYS_FAIL");
@@ -179,15 +179,7 @@ fn terminate_tmux_pane_kills_bound_pane_when_send_keys_fails() {
             .any(|line| line == "-S /tmp/tmux-test send-keys -t %42 C-c"),
         "{log}"
     );
-    assert!(
-        log.lines()
-            .any(|line| line == "-S /tmp/tmux-test kill-pane -t %42"),
-        "{log}"
-    );
-    assert!(
-        !log.lines().any(|line| line.contains("kill-session")),
-        "{log}"
-    );
+    assert!(!log.lines().any(|line| line.contains("kill-pane")), "{log}");
 }
 
 #[test]

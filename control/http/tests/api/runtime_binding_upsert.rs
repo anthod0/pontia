@@ -1417,7 +1417,7 @@ async fn assert_persisted_start_command(state: &AppState, session_id: &str, expe
 }
 
 #[tokio::test]
-async fn terminate_manually_bound_tui_without_pane_binding_marks_session_exited() {
+async fn terminate_manually_bound_tui_without_pane_binding_is_rejected() {
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -1449,8 +1449,12 @@ async fn terminate_manually_bound_tui_without_pane_binding_marks_session_exited(
 
     let (terminate_status, terminate) = delete_session(state.clone(), session_id).await;
 
-    assert_eq!(terminate_status, StatusCode::OK, "{terminate:?}");
-    assert_eq!(terminate["data"]["session"]["state"], "exited");
+    assert_eq!(
+        terminate_status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{terminate:?}"
+    );
+    assert_eq!(terminate["error"]["code"], "capability_unavailable");
 
     let exit_event_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM events WHERE session_id = ? AND event_type = 'session.exited'",
@@ -1459,7 +1463,7 @@ async fn terminate_manually_bound_tui_without_pane_binding_marks_session_exited(
     .fetch_one(&state.db())
     .await
     .expect("exit event count");
-    assert_eq!(exit_event_count, 1);
+    assert_eq!(exit_event_count, 0);
 }
 
 #[tokio::test]
@@ -1503,11 +1507,23 @@ async fn terminate_manually_bound_tui_session_sends_pi_exit_sequence_to_bound_pa
     let (terminate_status, terminate) = delete_session(state.clone(), session_id).await;
 
     assert_eq!(terminate_status, StatusCode::OK, "{terminate:?}");
-    assert_eq!(terminate["data"]["session"]["state"], "exited");
+    assert_ne!(terminate["data"]["session"]["state"], "exited");
     assert!(tmux_pane_alive(&socket_path, &pane_id));
-    assert_eq!(tmux_display(&pane_id, "#{@pontia_session_id}"), "");
-    assert_eq!(tmux_display(&pane_id, "#{@pontia_runtime_instance_id}"), "");
+    assert_eq!(tmux_display(&pane_id, "#{@pontia_session_id}"), session_id);
+    assert_eq!(
+        tmux_display(&pane_id, "#{@pontia_runtime_instance_id}"),
+        upsert["runtime"]["runtime_instance_id"].as_str().unwrap()
+    );
     assert_eq!(wait_for_signal_count(signal_log.path(), 2), 2);
+
+    let exit_event_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM events WHERE session_id = ? AND event_type = 'session.exited'",
+    )
+    .bind(session_id)
+    .fetch_one(&state.db())
+    .await
+    .expect("exit event count");
+    assert_eq!(exit_event_count, 0);
 }
 
 fn tmux_display(target: &str, format: &str) -> String {

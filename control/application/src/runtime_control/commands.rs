@@ -108,13 +108,16 @@ impl RuntimeControlService {
                 })?;
             match terminate_behavior {
                 TerminateBehavior::TmuxSendKeys(keys) => {
-                    if let Some(tmux_binding) = self.tmux_pane_binding(session_id).await? {
-                        self.runtime.terminate_tmux_pane(
-                            &tmux_binding.socket_path,
-                            &tmux_binding.pane_id,
-                            keys,
-                        )?;
-                    }
+                    let tmux_binding = self.tmux_pane_binding(session_id).await?.ok_or_else(|| {
+                        Error::CapabilityUnavailable(format!(
+                            "session {session_id} runtime does not support graceful exit: missing tmux pane binding"
+                        ))
+                    })?;
+                    self.runtime.send_tmux_keys(
+                        &tmux_binding.socket_path,
+                        &tmux_binding.pane_id,
+                        keys,
+                    )?;
                 }
                 TerminateBehavior::RuntimeManager => {
                     if let Some(runtime_target) = self.runtime_target(session_id).await? {
@@ -122,16 +125,6 @@ impl RuntimeControlService {
                     }
                 }
             }
-            EventIngestService::new(self.pool.clone())
-                .ingest_pontia_event(PontiaEvent::new(
-                    session_id.to_string(),
-                    None,
-                    PontiaEventSource::ExternalApi,
-                    session.client_type.clone(),
-                    PontiaEventType::SessionExited,
-                    json!({ "reason": "terminate_requested" }),
-                ))
-                .await?;
         }
 
         let session = query

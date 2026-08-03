@@ -224,18 +224,6 @@ impl GenericRuntimeManager {
         tmux::kill_pane(socket_path, pane_id)
     }
 
-    pub fn terminate_tmux_pane(
-        &self,
-        socket_path: &str,
-        pane_id: &str,
-        keys: &[&str],
-    ) -> Result<()> {
-        if tmux::send_keys(socket_path, pane_id, keys).is_err() {
-            tmux::kill_pane(socket_path, pane_id)?;
-        }
-        Ok(())
-    }
-
     pub fn is_tmux_pane_alive(&self, socket_path: &str, pane_id: &str) -> bool {
         tmux::is_pane_alive(socket_path, pane_id)
     }
