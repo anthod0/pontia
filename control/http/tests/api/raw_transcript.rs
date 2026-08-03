@@ -1784,7 +1784,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
 
     fs::OpenOptions::new()
         .append(true)
-        .open(&transcript)
+        .open(transcript)
         .unwrap()
         .write_all(
             concat!(
@@ -1835,7 +1835,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
 
     fs::OpenOptions::new()
         .append(true)
-        .open(&transcript)
+        .open(transcript)
         .unwrap()
         .write_all(
             concat!(
@@ -1922,7 +1922,7 @@ async fn turn_timeline_rejects_unassignable_active_pi_entries() {
     let transcript = &fixture.transcript;
     fs::OpenOptions::new()
         .append(true)
-        .open(&transcript)
+        .open(transcript)
         .unwrap()
         .write_all(
             concat!(
@@ -1958,7 +1958,7 @@ async fn turn_timeline_rejects_unassignable_active_pi_entries() {
         b"{not json}\n".as_slice(),
         b"{\"type\":\"message\",\"id\":\"partial\",\"parentId\":\"root\"}".as_slice(),
     ] {
-        fs::write(&transcript, [root.as_slice(), invalid_suffix].concat()).unwrap();
+        fs::write(transcript, [root.as_slice(), invalid_suffix].concat()).unwrap();
         let (status, body) = get_json(
             state.clone(),
             &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
