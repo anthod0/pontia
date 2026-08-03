@@ -124,31 +124,6 @@ fn pane_option(socket_path: &str, pane_id: &str, option: &str) -> Option<String>
         .filter(|value| !value.is_empty())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn foreground_command_allows_only_shell_processes() {
-        let ps_output = " 1234 Ss+ bash\n 1235 S+ sh\n 1236 S+ zsh\n";
-
-        assert!(foreground_command_is_reusable_shell(ps_output));
-    }
-
-    #[test]
-    fn foreground_command_rejects_non_shell_processes_even_when_shell_exists() {
-        let ps_output = " 1234 Ss bash\n 1235 S+ pi\n";
-
-        assert!(!foreground_command_is_reusable_shell(ps_output));
-    }
-
-    #[test]
-    fn foreground_command_rejects_empty_or_background_only_processes() {
-        assert!(!foreground_command_is_reusable_shell(""));
-        assert!(!foreground_command_is_reusable_shell(" 1234 Ss bash\n"));
-    }
-}
-
 fn pane_tty(socket_path: &str, pane_id: &str) -> Option<String> {
     let output = Command::new("tmux")
         .args([
@@ -220,4 +195,29 @@ fn pane_current_command(socket_path: &str, pane_id: &str) -> Option<String> {
     }
     Some(String::from_utf8(output.stdout).ok()?.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn foreground_command_allows_only_shell_processes() {
+        let ps_output = " 1234 Ss+ bash\n 1235 S+ sh\n 1236 S+ zsh\n";
+
+        assert!(foreground_command_is_reusable_shell(ps_output));
+    }
+
+    #[test]
+    fn foreground_command_rejects_non_shell_processes_even_when_shell_exists() {
+        let ps_output = " 1234 Ss bash\n 1235 S+ pi\n";
+
+        assert!(!foreground_command_is_reusable_shell(ps_output));
+    }
+
+    #[test]
+    fn foreground_command_rejects_empty_or_background_only_processes() {
+        assert!(!foreground_command_is_reusable_shell(""));
+        assert!(!foreground_command_is_reusable_shell(" 1234 Ss bash\n"));
+    }
 }
