@@ -2,6 +2,7 @@ mod dispatch;
 mod identifier;
 mod marker;
 mod pane;
+mod process;
 mod session;
 
 pub(super) use dispatch::dispatch_tui_turn;
@@ -9,6 +10,8 @@ pub(super) use marker::{clear_pontia_pane_markers, is_reusable_shell_pane, mark_
 pub(super) use pane::{
     TmuxPaneBinding, is_pane_alive, kill_pane, pane_binding, run_launch_command_in_pane, send_keys,
 };
+pub use process::TmuxProcessFingerprint;
+pub(crate) use process::{capture_fingerprint, validate_fingerprint};
 pub(super) use session::{
     interrupt_session, is_alive, spawn_tmux_session, terminate_session, tmux_session_name,
 };
@@ -146,6 +149,44 @@ mod tests {
             thread::sleep(Duration::from_millis(20));
         }
         false
+    }
+
+    #[test]
+    fn process_fingerprint_tracks_the_exact_agent_process() {
+        let session = format!("pontia_test_process_fingerprint_{}", std::process::id());
+        let status = Command::new("tmux")
+            .args(["new-session", "-d", "-s", &session, "sleep 60"])
+            .stderr(Stdio::null())
+            .status()
+            .expect("spawn tmux");
+        assert!(status.success(), "tmux session should start");
+
+        let binding = pane_binding(&session).expect("pane binding");
+        let fingerprint = (0..50)
+            .find_map(|_| {
+                let fingerprint =
+                    capture_fingerprint(&binding.socket_path, &binding.pane_id, &["sleep"]);
+                if fingerprint.is_none() {
+                    thread::sleep(Duration::from_millis(20));
+                }
+                fingerprint
+            })
+            .expect("capture sleep process fingerprint");
+        assert!(validate_fingerprint(
+            &binding.socket_path,
+            &binding.pane_id,
+            &fingerprint,
+        ));
+
+        let _ = Command::new("tmux")
+            .args(["kill-session", "-t", &session])
+            .stderr(Stdio::null())
+            .status();
+        assert!(!validate_fingerprint(
+            &binding.socket_path,
+            &binding.pane_id,
+            &fingerprint,
+        ));
     }
 
     #[test]

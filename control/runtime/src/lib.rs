@@ -21,6 +21,7 @@ pub use config::reset_runtime_bind_addr_for_tests;
 pub use config::{configured_internal_event_url, set_runtime_bind_addr, set_runtime_config};
 pub use manager::GenericRuntimeManager;
 use std::path::PathBuf;
+pub use tmux::TmuxProcessFingerprint;
 pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

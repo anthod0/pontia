@@ -81,6 +81,8 @@ pub struct TmuxRuntimeBehavior {
     pub startup_args: &'static [&'static str],
     pub startup_session_identity_arg: Option<&'static str>,
     pub resume_session_identity_arg: Option<&'static str>,
+    /// Process names used to identify this agent below its bound tmux pane.
+    pub process_names: &'static [&'static str],
     pub hook_log: Option<HookLogBehavior>,
     pub runtime_config_key: Option<&'static str>,
 }

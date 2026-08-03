@@ -35,6 +35,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             startup_args: &["--approve"],
             startup_session_identity_arg: Some("--session-id"),
             resume_session_identity_arg: Some("--session-id"),
+            process_names: &["pi"],
             hook_log: Some(HookLogBehavior {
                 file_name: "pi-hook.log",
                 metadata_key: "pi_hook_log",

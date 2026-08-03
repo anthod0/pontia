@@ -34,6 +34,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             startup_args: &[],
             startup_session_identity_arg: None,
             resume_session_identity_arg: Some("--resume"),
+            process_names: &["claude"],
             hook_log: Some(HookLogBehavior {
                 file_name: "claude-hook.log",
                 metadata_key: "claude_hook_log",

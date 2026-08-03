@@ -35,6 +35,9 @@ async fn main() -> Result<()> {
         }
     }
     let app_state = application::initialize(&config).await?;
+    let runtime_observer = application::RuntimeObservationService::new(app_state.db())
+        .with_agent_events(app_state.agent_events());
+    tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
     let dashboard = http::dashboard::resolve_dashboard(&config.dashboard).await;
     let state = http::HttpState::new(app_state, dashboard);
 

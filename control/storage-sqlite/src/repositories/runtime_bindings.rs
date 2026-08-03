@@ -21,6 +21,16 @@ pub struct RuntimeBindingTmuxPaneRow {
     pub pane_id: Option<String>,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ActiveTmuxProcessBindingRow {
+    pub session_id: String,
+    pub client_type: String,
+    pub runtime_instance_id: String,
+    pub socket_path: String,
+    pub pane_id: String,
+    pub metadata: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct SqliteRuntimeBindingRepository {
     pool: SqlitePool,
@@ -185,6 +195,26 @@ impl SqliteRuntimeBindingRepository {
         )
         .bind(session_id)
         .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn active_tmux_process_bindings(&self) -> Result<Vec<ActiveTmuxProcessBindingRow>> {
+        Ok(sqlx::query_as::<_, ActiveTmuxProcessBindingRow>(
+            r#"SELECT s.session_id,
+                      s.client_type,
+                      r.runtime_instance_id,
+                      r.tmux_socket_path AS socket_path,
+                      r.tmux_pane_id AS pane_id,
+                      r.metadata
+               FROM sessions s
+               JOIN runtime_bindings r ON r.session_id = s.session_id
+               WHERE s.state NOT IN ('exited', 'error')
+                 AND r.runtime_instance_id IS NOT NULL
+                 AND r.tmux_socket_path IS NOT NULL
+                 AND r.tmux_pane_id IS NOT NULL
+                 AND json_type(r.metadata, '$.tmux_process_fingerprint') = 'object'"#,
+        )
+        .fetch_all(&self.pool)
         .await?)
     }
 

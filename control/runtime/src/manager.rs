@@ -240,6 +240,24 @@ impl GenericRuntimeManager {
         tmux::is_pane_alive(socket_path, pane_id)
     }
 
+    pub fn capture_tmux_process_fingerprint(
+        &self,
+        socket_path: &str,
+        pane_id: &str,
+        process_names: &[&str],
+    ) -> Option<crate::TmuxProcessFingerprint> {
+        tmux::capture_fingerprint(socket_path, pane_id, process_names)
+    }
+
+    pub fn validate_tmux_process_fingerprint(
+        &self,
+        socket_path: &str,
+        pane_id: &str,
+        fingerprint: &crate::TmuxProcessFingerprint,
+    ) -> bool {
+        tmux::validate_fingerprint(socket_path, pane_id, fingerprint)
+    }
+
     pub fn restart_session(&self, request: RuntimeStartRequest) -> Result<RuntimeStartResult> {
         self.start_session(request)
     }

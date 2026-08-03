@@ -56,6 +56,16 @@ impl EventIngestService {
             .await
     }
 
+    /// Ingests a Pontia runtime observation while fencing it to the currently
+    /// bound runtime instance.
+    pub async fn ingest_runtime_observation_event(
+        &self,
+        event: PontiaEvent,
+    ) -> Result<EventIngestResult> {
+        self.ingest_domain_event(event.into_reported_event().into(), None, true)
+            .await
+    }
+
     /// Ingests a fact supplied by an explicit agent-client adapter.
     ///
     /// This path preserves adapter and replay behavior that predates runtime
@@ -814,7 +824,10 @@ fn warn_topology_resolution(event: &DomainEvent, diagnostic: TopologyDiagnostic)
 }
 
 fn is_confirmed_runtime_source(source: EventSource) -> bool {
-    matches!(source, EventSource::AgentAdapter | EventSource::AgentClient)
+    matches!(
+        source,
+        EventSource::AgentAdapter | EventSource::AgentClient | EventSource::RuntimeManager
+    )
 }
 
 fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {

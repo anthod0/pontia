@@ -169,6 +169,30 @@ impl RuntimeBindingUpsertService {
                 .map(|(metadata_key, path)| (*metadata_key, path.as_str())),
             &capabilities,
         );
+        confirmed_metadata["tmux_process_fingerprint"] = Value::Null;
+        if let (Some(socket_path), Some(pane_id), Some(tmux_runtime)) = (
+            tmux_socket_path.as_deref(),
+            tmux_pane_id.as_deref(),
+            client_spec.tmux_runtime(),
+        ) {
+            match GenericRuntimeManager.capture_tmux_process_fingerprint(
+                socket_path,
+                pane_id,
+                tmux_runtime.process_names,
+            ) {
+                Some(fingerprint) => {
+                    confirmed_metadata["tmux_process_fingerprint"] = json!(fingerprint);
+                }
+                None => {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        client_type = %request.client_type,
+                        pane_id,
+                        "could not capture agent process fingerprint for tmux runtime binding"
+                    );
+                }
+            }
+        }
         let mut tx = self.pool.begin().await?;
         pontia_storage_sqlite::repositories::turns::SqliteTurnRepository::serialize_session_turn_writes_in_tx(
             &mut tx,
