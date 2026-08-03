@@ -783,9 +783,16 @@
         {/if}
 
         {#if pendingApproval}
-          {#key pendingApproval.requestEventId}
-            <ApprovalRequestCard approval={pendingApproval} onDecision={submitApprovalDecision} />
-          {/key}
+          <div
+            data-chat-approval-dock="fixed"
+            class="pointer-events-none fixed bottom-36 left-0 right-0 z-50 px-2 transition-[left] duration-200 ease-linear sm:px-4 md:left-[var(--sidebar-width)] md:px-6 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]"
+          >
+            <div class="pointer-events-auto mx-auto max-h-[calc(100svh-11rem)] w-full max-w-4xl overflow-y-auto">
+              {#key pendingApproval.requestEventId}
+                <ApprovalRequestCard approval={pendingApproval} onDecision={submitApprovalDecision} />
+              {/key}
+            </div>
+          </div>
         {/if}
 
         <SessionComposerDock

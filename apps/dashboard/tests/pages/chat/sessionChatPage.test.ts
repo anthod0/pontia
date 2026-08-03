@@ -159,6 +159,8 @@ test('shows a pending Claude approval from the External API session and event sn
   render(SessionChatPage);
 
   const approval = await screen.findByLabelText('Approval required for Bash');
+  const approvalDock = approval.closest('[data-chat-approval-dock="fixed"]');
+  expect(approvalDock).toHaveClass('fixed', 'bottom-36');
   expect(within(approval).getByText('Approval required')).toBeInTheDocument();
   expect(within(approval).getByText('Bash')).toBeInTheDocument();
   expect(within(approval).getByText('Always allow options')).toBeInTheDocument();
@@ -171,7 +173,7 @@ test('shows a pending Claude approval from the External API session and event sn
     'evt-approval',
     { decision: 'accept_once' },
   ));
-  expect(within(approval).getByText(/Decision delivered/)).toBeInTheDocument();
+  expect(within(approval).queryByText(/Decision delivered|Waiting for a decision/)).not.toBeInTheDocument();
   expect(within(approval).getByRole('button', { name: 'Reject' })).toBeDisabled();
 
   const replacementSession = {
@@ -204,7 +206,6 @@ test('shows a pending Claude approval from the External API session and event sn
   });
   const replacement = await screen.findByLabelText('Approval required for Write');
   expect(within(replacement).getByRole('button', { name: 'Accept Once' })).toBeEnabled();
-  expect(within(replacement).queryByText(/Decision delivered/)).not.toBeInTheDocument();
 });
 
 test.each([

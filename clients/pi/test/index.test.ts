@@ -382,32 +382,75 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test("an active pontia session for the native key suppresses duplicate TUI binding", async () => {
+  test.each(["idle", "busy", "interrupted"])(
+    "a %s pontia session for the native key suppresses duplicate TUI binding",
+    async (sessionState) => {
+      const workspace = await realpath(await tempDir());
+      const fetchImpl = vi.fn(async (url: string) => {
+        if (url === "http://localhost/external/v1/workspaces") {
+          return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+        }
+        if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_active") {
+          return new Response(JSON.stringify({ data: { session_context: {
+            session_id: "sess_active",
+            session_state: sessionState,
+            client_type: "pi",
+            client_session_key: "pi_session_active",
+            runtime_instance_id: "rtinst_active",
+            internal_event_url: "http://localhost/internal/v1/events",
+          } } }), { status: 200 });
+        }
+        return new Response(`unexpected ${url}`, { status: 500 });
+      });
+      const { handlers, reported } = install({ fetch: fetchImpl as any });
+
+      await handlers.session_start({ reason: "startup" }, {
+        sessionManager: { getSessionId: () => "pi_session_active", getCwd: () => workspace },
+      });
+
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(reported).toEqual([]);
+    },
+  );
+
+  test("a starting pontia session allows its native client to finish binding and report ready", async () => {
     const workspace = await realpath(await tempDir());
     const fetchImpl = vi.fn(async (url: string) => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_active") {
+      if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_starting") {
         return new Response(JSON.stringify({ data: { session_context: {
-          session_id: "sess_active",
-          session_state: "idle",
+          session_id: "sess_starting",
+          session_state: "starting",
           client_type: "pi",
-          client_session_key: "pi_session_active",
-          runtime_instance_id: "rtinst_active",
+          runtime_instance_id: "rtinst_starting",
           internal_event_url: "http://localhost/internal/v1/events",
         } } }), { status: 200 });
+      }
+      if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+        return new Response(JSON.stringify({
+          session: { session_id: "sess_starting" },
+          runtime: {
+            runtime_instance_id: "rtinst_bound",
+            internal_event_url: "http://localhost/internal/v1/events",
+          },
+        }), { status: 200 });
       }
       return new Response(`unexpected ${url}`, { status: 500 });
     });
     const { handlers, reported } = install({ fetch: fetchImpl as any });
 
     await handlers.session_start({ reason: "startup" }, {
-      sessionManager: { getSessionId: () => "pi_session_active", getCwd: () => workspace },
+      sessionManager: { getSessionId: () => "pi_session_starting", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(reported).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_starting",
+      data: { runtime_instance_id: "rtinst_bound" },
+    });
   });
 
   test("manual session_start startup immediately reattaches when client session already has a pontia binding", async () => {
@@ -746,20 +789,24 @@ describe("pontia pi extension lifecycle", () => {
 
   test("session_start resume immediately reattaches when switched client session has a pontia binding", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
       if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_resume") {
         return new Response(JSON.stringify({ data: { session_context: {
           session_id: "sess_resume",
-          session_state: "exited",
+          session_state: "starting",
           client_type: "pi",
-          runtime_instance_id: "rtinst_old",
+          runtime_instance_id: "rtinst_resume",
           internal_event_url: "http://localhost/internal/v1/events",
         } } }), { status: 200 });
       }
       if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          client_session_key: "pi_session_resume",
+          runtime_instance_id: "rtinst_resume",
+        });
         return new Response(JSON.stringify({
           session: { session_id: "sess_resume" },
           runtime: {

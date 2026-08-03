@@ -5,9 +5,7 @@ mod pane;
 mod session;
 
 pub(super) use dispatch::dispatch_tui_turn;
-pub(super) use marker::{
-    clear_pontia_pane_markers, is_reusable_pontia_shell_pane, mark_pontia_pane,
-};
+pub(super) use marker::{clear_pontia_pane_markers, is_reusable_shell_pane, mark_pontia_pane};
 pub(super) use pane::{
     TmuxPaneBinding, is_pane_alive, kill_pane, pane_binding, run_launch_command_in_pane, send_keys,
 };
@@ -111,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    fn pane_marker_and_shell_command_allow_reuse_only_for_matching_pontia_shell_pane() {
+    fn shell_pane_is_reusable_while_pontia_markers_are_present() {
         let session = format!("pontia_test_reuse_shell_{}", std::process::id());
         let status = Command::new("tmux")
             .args(["new-session", "-d", "-s", &session, "sh"])
@@ -129,15 +127,9 @@ mod tests {
         )
         .expect("mark pontia pane");
 
-        assert!(wait_for_reusable_pontia_shell_pane(
+        assert!(wait_for_reusable_shell_pane(
             &binding.socket_path,
             &binding.pane_id,
-            "session_reuse",
-        ));
-        assert!(!is_reusable_pontia_shell_pane(
-            &binding.socket_path,
-            &binding.pane_id,
-            "other_session",
         ));
 
         let _ = Command::new("tmux")
@@ -146,13 +138,9 @@ mod tests {
             .status();
     }
 
-    fn wait_for_reusable_pontia_shell_pane(
-        socket_path: &str,
-        pane_id: &str,
-        session_id: &str,
-    ) -> bool {
+    fn wait_for_reusable_shell_pane(socket_path: &str, pane_id: &str) -> bool {
         for _ in 0..50 {
-            if is_reusable_pontia_shell_pane(socket_path, pane_id, session_id) {
+            if is_reusable_shell_pane(socket_path, pane_id) {
                 return true;
             }
             thread::sleep(Duration::from_millis(20));
@@ -186,19 +174,14 @@ mod tests {
         .expect("start foreground child process");
 
         for _ in 0..50 {
-            if !is_reusable_pontia_shell_pane(
-                &binding.socket_path,
-                &binding.pane_id,
-                "session_reuse",
-            ) {
+            if !is_reusable_shell_pane(&binding.socket_path, &binding.pane_id) {
                 break;
             }
             thread::sleep(Duration::from_millis(20));
         }
-        assert!(!is_reusable_pontia_shell_pane(
+        assert!(!is_reusable_shell_pane(
             &binding.socket_path,
             &binding.pane_id,
-            "session_reuse",
         ));
 
         let _ = Command::new("tmux")
@@ -227,10 +210,9 @@ mod tests {
         )
         .expect("mark pontia pane");
 
-        assert!(!is_reusable_pontia_shell_pane(
+        assert!(!is_reusable_shell_pane(
             &binding.socket_path,
             &binding.pane_id,
-            "session_reuse",
         ));
 
         let _ = Command::new("tmux")

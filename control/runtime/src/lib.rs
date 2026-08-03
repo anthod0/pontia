@@ -142,7 +142,7 @@ mod tests {
     }
 
     #[test]
-    fn tmux_runtime_reuses_marked_shell_pane_when_requested() {
+    fn tmux_runtime_reuses_released_shell_pane_when_requested() {
         let dir = tempfile::tempdir().expect("tempdir");
         let output = dir.path().join("reused.log");
         let session_id = "sess_tmux_reuse_shell".to_string();
@@ -154,30 +154,34 @@ mod tests {
             .expect("spawn tmux");
         assert!(status.success(), "tmux session should start");
         let binding = tmux::pane_binding(&tmux_session).expect("pane binding");
-        tmux::mark_pontia_pane(
-            &binding.socket_path,
-            &binding.pane_id,
-            &session_id,
-            "rtinst_previous",
-        )
-        .expect("mark pane");
-        for _ in 0..50 {
-            if tmux::is_reusable_pontia_shell_pane(
+        let manager = GenericRuntimeManager;
+        manager
+            .mark_tmux_pane_for_session(
                 &binding.socket_path,
                 &binding.pane_id,
                 &session_id,
-            ) {
+                "rtinst_previous",
+            )
+            .expect("mark pane");
+        manager
+            .clear_tmux_pane_markers(
+                &binding.socket_path,
+                &binding.pane_id,
+                &session_id,
+                "rtinst_previous",
+            )
+            .expect("release exited runtime pane");
+        for _ in 0..50 {
+            if tmux::is_reusable_shell_pane(&binding.socket_path, &binding.pane_id) {
                 break;
             }
             thread::sleep(Duration::from_millis(20));
         }
-        assert!(tmux::is_reusable_pontia_shell_pane(
+        assert!(tmux::is_reusable_shell_pane(
             &binding.socket_path,
             &binding.pane_id,
-            &session_id,
         ));
 
-        let manager = GenericRuntimeManager;
         let runtime = manager
             .start_session_with_restart_count_and_reuse_target(
                 RuntimeStartRequest {
