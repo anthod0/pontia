@@ -1,6 +1,7 @@
 //! Workflow orchestration over Pontia application services.
 
 use std::{
+    collections::HashSet,
     future::Future,
     path::{Component, Path, PathBuf},
     time::Duration,
@@ -13,7 +14,10 @@ use pontia_application::{
 use pontia_core::domain::{DomainEvent, EventSource, EventType};
 use pontia_storage_sqlite::{
     models::workflows::{WorkflowNodeRow, WorkflowRow},
-    repositories::{events::SqliteEventRepository, workflows::SqliteWorkflowRepository},
+    repositories::{
+        events::SqliteEventRepository,
+        workflows::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository},
+    },
 };
 use serde_json::json;
 use sqlx::SqlitePool;
@@ -31,6 +35,15 @@ pub enum Error {
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+
+    #[error("invalid Workflow definition: {0}")]
+    InvalidDefinition(String),
+
+    #[error("unsupported Workflow Node type: {0}")]
+    UnsupportedNodeType(String),
+
+    #[error("invalid Workflow ID: {0}")]
+    InvalidWorkflowId(String),
 
     #[error("workflow {0} not found")]
     WorkflowNotFound(String),
@@ -134,6 +147,39 @@ impl AgentEventSubscriber for AgentEventBroker {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunWorkflowRequest {
+    pub workflow_id: String,
+    pub title: String,
+    pub cwd: String,
+    pub handoffs: Vec<InitialHandoff>,
+    pub nodes: Vec<WorkflowNodeDefinition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitialHandoff {
+    pub name: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowNodeDefinition {
+    pub node_type: String,
+    pub title: String,
+    pub instructions: String,
+    pub inputs: Vec<String>,
+    pub output: String,
+    pub execution_profile_id: Option<String>,
+    pub execution_profile_version: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunWorkflowOutcome {
+    pub workflow_id: String,
+    pub node_id: String,
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubmitWorkflowNodeRequest {
     pub session_id: String,
     pub runtime_instance_id: String,
@@ -234,6 +280,129 @@ where
             agent_events,
             pontia_home,
         }
+    }
+
+    pub async fn run(&self, request: RunWorkflowRequest) -> Result<RunWorkflowOutcome>
+    where
+        S: Clone + Send + Sync + 'static,
+        X: Clone + Send + Sync + 'static,
+    {
+        validate_workflow_id(&request.workflow_id)?;
+        if request.title.trim().is_empty() {
+            return Err(Error::InvalidDefinition(
+                "title must not be empty".to_string(),
+            ));
+        }
+        if request.nodes.is_empty() {
+            return Err(Error::InvalidDefinition(
+                "at least one Agent Node is required".to_string(),
+            ));
+        }
+
+        let mut available_handoffs = HashSet::new();
+        for handoff in &request.handoffs {
+            validate_handoff_file_name(&handoff.name)?;
+            if !available_handoffs.insert(handoff.name.clone()) {
+                return Err(Error::InvalidDefinition(format!(
+                    "duplicate initial Handoff file {}",
+                    handoff.name
+                )));
+            }
+        }
+        for node in &request.nodes {
+            if node.node_type != "agent" {
+                return Err(Error::UnsupportedNodeType(node.node_type.clone()));
+            }
+            if node.title.trim().is_empty() {
+                return Err(Error::InvalidDefinition(
+                    "Agent Node title must not be empty".to_string(),
+                ));
+            }
+            match (
+                node.execution_profile_id.as_ref(),
+                node.execution_profile_version.as_ref(),
+            ) {
+                (Some(_), Some(_)) | (None, None) => {}
+                _ => {
+                    return Err(Error::InvalidDefinition(format!(
+                        "Agent Node {} must specify both execution_profile_id and execution_profile_version",
+                        node.title
+                    )));
+                }
+            }
+            for input in &node.inputs {
+                validate_handoff_file_name(input)?;
+                if !available_handoffs.contains(input) {
+                    return Err(Error::InvalidDefinition(format!(
+                        "Agent Node {} input {input} is not an initial Handoff or prior Agent Node output",
+                        node.title
+                    )));
+                }
+            }
+            validate_handoff_file_name(&node.output)?;
+            available_handoffs.insert(node.output.clone());
+        }
+
+        let workflow_dir = self
+            .pontia_home
+            .join("workflows")
+            .join(&request.workflow_id);
+        let handoff_dir = workflow_dir.join("handoff");
+        tokio::fs::create_dir_all(self.pontia_home.join("workflows")).await?;
+        tokio::fs::create_dir(&workflow_dir).await?;
+        if let Err(error) = tokio::fs::create_dir(&handoff_dir).await {
+            let _ = tokio::fs::remove_dir_all(&workflow_dir).await;
+            return Err(error.into());
+        }
+        for handoff in &request.handoffs {
+            if let Err(error) =
+                tokio::fs::write(handoff_dir.join(&handoff.name), &handoff.content).await
+            {
+                let _ = tokio::fs::remove_dir_all(&workflow_dir).await;
+                return Err(error.into());
+            }
+        }
+
+        let mut parent_node_id = None;
+        let mut nodes = Vec::with_capacity(request.nodes.len());
+        for definition in request.nodes {
+            let node_id = format!("node_{}", Uuid::now_v7());
+            nodes.push(CreateWorkflowNodeRecord {
+                node_id: node_id.clone(),
+                workflow_id: request.workflow_id.clone(),
+                parent_node_id: parent_node_id.clone(),
+                title: definition.title,
+                instructions: definition.instructions,
+                inputs: serde_json::to_string(&definition.inputs)?,
+                output: definition.output,
+                execution_profile_id: definition.execution_profile_id,
+                execution_profile_version: definition.execution_profile_version,
+            });
+            parent_node_id = Some(node_id);
+        }
+        if let Err(error) = self
+            .repository
+            .create_definition(
+                CreateWorkflowRecord {
+                    workflow_id: request.workflow_id.clone(),
+                    title: request.title,
+                    cwd: request.cwd,
+                    state: "pending".to_string(),
+                },
+                nodes,
+            )
+            .await
+        {
+            let _ = tokio::fs::remove_dir_all(&workflow_dir).await;
+            return Err(error.into());
+        }
+
+        let started = self.start(&request.workflow_id).await?;
+        Ok(RunWorkflowOutcome {
+            workflow_id: request.workflow_id,
+            node_id: started.node_id,
+            session_id: started.session_id,
+        })
     }
 
     pub async fn start(&self, workflow_id: &str) -> Result<StartWorkflowOutcome>
@@ -768,6 +937,17 @@ async fn render_initial_task(
          ```\n",
         node.instructions, rendered_inputs, node.output, node.output
     ))
+}
+
+fn validate_workflow_id(workflow_id: &str) -> Result<()> {
+    let mut components = Path::new(workflow_id).components();
+    if matches!(components.next(), Some(Component::Normal(_)))
+        && components.next().is_none()
+        && workflow_id.starts_with("wf_")
+    {
+        return Ok(());
+    }
+    Err(Error::InvalidWorkflowId(workflow_id.to_string()))
 }
 
 fn validate_handoff_file_name(name: &str) -> Result<()> {

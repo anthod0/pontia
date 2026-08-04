@@ -45,6 +45,13 @@ esac
 }
 
 fn capture_one_request(listener: TcpListener) -> thread::JoinHandle<String> {
+    capture_one_request_with_response(listener, r#"{"data":{"submitted":true}}"#)
+}
+
+fn capture_one_request_with_response(
+    listener: TcpListener,
+    response_body: &'static str,
+) -> thread::JoinHandle<String> {
     thread::spawn(move || {
         let (mut stream, _) = listener.accept().expect("accept request");
         let mut bytes = Vec::new();
@@ -71,11 +78,13 @@ fn capture_one_request(listener: TcpListener) -> thread::JoinHandle<String> {
                 break;
             }
         }
-        stream
-            .write_all(
-                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 27\r\nConnection: close\r\n\r\n{\"data\":{\"submitted\":true}}",
-            )
-            .expect("write response");
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response_body.len(),
+            response_body
+        )
+        .expect("write response");
         String::from_utf8(bytes).expect("request is utf-8")
     })
 }
@@ -111,6 +120,93 @@ fn version_reports_the_workspace_version() {
         String::from_utf8(output.stdout).expect("version is utf-8"),
         format!("pontiactl {}\n", env!("CARGO_PKG_VERSION"))
     );
+}
+
+#[test]
+fn workflow_run_posts_a_linear_agent_workflow_from_toml() {
+    let dir = temp_dir("run-success");
+    let definition = dir.join("workflow.toml");
+    fs::write(dir.join("requirements.md"), "Build Workflow run.\n").expect("write handoff");
+    fs::write(
+        &definition,
+        r#"title = "Implement Workflow run"
+cwd = "."
+
+[[handoffs]]
+name = "requirements.md"
+source = "./requirements.md"
+
+[[nodes]]
+type = "agent"
+title = "Research"
+instructions = "Research the implementation."
+inputs = ["requirements.md"]
+output = "research.md"
+execution_profile_id = "researcher"
+execution_profile_version = "1"
+
+[[nodes]]
+type = "agent"
+title = "Implement"
+instructions = "Implement the feature."
+inputs = ["research.md"]
+output = "result.md"
+"#,
+    )
+    .expect("write workflow definition");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+    let addr = listener.local_addr().expect("test server address");
+    let request = capture_one_request_with_response(
+        listener,
+        r#"{"data":{"workflow_id":"wf_created","node_id":"node_root","session_id":"sess_root"}}"#,
+    );
+
+    let output = pontiactl()
+        .args(["workflow", "run", definition.to_str().expect("utf-8 path")])
+        .env("PONTIA_BIND_ADDR", format!("0.0.0.0:{}", addr.port()))
+        .env("PONTIA_EXTERNAL_API_TOKEN", "cli-test-token")
+        .output()
+        .expect("run workflow");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("stdout"),
+        "wf_created\n"
+    );
+    let request = request.join().expect("request capture thread");
+    assert!(request.starts_with("POST /internal/v1/workflows HTTP/1.1"));
+    assert!(request.contains("authorization: Bearer cli-test-token"));
+    let (_, body) = request.split_once("\r\n\r\n").expect("request body");
+    let body: serde_json::Value = serde_json::from_str(body).expect("JSON request");
+    assert!(
+        body["workflow_id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("wf_"))
+    );
+    assert_eq!(body["title"], "Implement Workflow run");
+    assert_eq!(
+        body["cwd"],
+        dir.canonicalize()
+            .expect("canonical dir")
+            .display()
+            .to_string()
+    );
+    assert_eq!(
+        body["handoffs"],
+        serde_json::json!([{"name":"requirements.md", "content":"Build Workflow run.\n"}])
+    );
+    assert_eq!(body["nodes"][0]["type"], "agent");
+    assert_eq!(body["nodes"][0]["execution_profile_id"], "researcher");
+    assert_eq!(
+        body["nodes"][1]["inputs"],
+        serde_json::json!(["research.md"])
+    );
+
+    fs::remove_dir_all(dir).expect("remove temp dir");
 }
 
 #[test]

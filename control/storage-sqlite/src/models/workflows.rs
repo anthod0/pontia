@@ -16,6 +16,7 @@ pub struct WorkflowNodeRow {
     pub node_id: String,
     pub workflow_id: String,
     pub parent_node_id: Option<String>,
+    pub node_type: String,
     pub title: String,
     pub instructions: String,
     pub inputs: String,
