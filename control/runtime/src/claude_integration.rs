@@ -10,7 +10,6 @@ use pontia_core::error::{Error, Result};
 use serde_json::{Map, Value};
 
 const CLAUDE_SETTINGS_FILE: &str = ".claude/settings.json";
-const LEGACY_CLAUDE_HOOK: &str = "integrations/claude/src/hook.js";
 const PONTIA_OTEL_ENV: &[(&str, &str)] = &[
     ("CLAUDE_CODE_ENABLE_TELEMETRY", "1"),
     ("OTEL_LOGS_EXPORTER", "otlp"),
@@ -42,19 +41,13 @@ pub fn configure_claude_user_approval_integration(
         key: "HOME",
         message: "is required to configure Claude user settings".to_string(),
     })?;
-    let home = PathBuf::from(home);
-    let pontia_home = std::env::var_os("PONTIA_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".pontia"));
-    let settings_path = home.join(CLAUDE_SETTINGS_FILE);
-    let legacy_hook_path = pontia_home.join(LEGACY_CLAUDE_HOOK);
-    configure_claude_settings_file(&settings_path, &legacy_hook_path, bind_addr, api_token)?;
+    let settings_path = PathBuf::from(home).join(CLAUDE_SETTINGS_FILE);
+    configure_claude_settings_file(&settings_path, bind_addr, api_token)?;
     Ok(ClaudeApprovalIntegration::Configured { settings_path })
 }
 
 fn configure_claude_settings_file(
     settings_path: &Path,
-    legacy_hook_path: &Path,
     bind_addr: SocketAddr,
     api_token: &str,
 ) -> Result<()> {
@@ -63,7 +56,6 @@ fn configure_claude_settings_file(
     let root = settings
         .as_object_mut()
         .ok_or_else(|| invalid_settings("settings root must be a JSON object"))?;
-    remove_legacy_claude_hooks(root, legacy_hook_path);
     let env = env_object(root)?;
 
     for (key, value) in PONTIA_OTEL_ENV {
@@ -78,38 +70,6 @@ fn configure_claude_settings_file(
         Value::String(format!("Authorization=Bearer {api_token}")),
     );
     write_settings_atomically(&write_path, &settings)
-}
-
-fn remove_legacy_claude_hooks(root: &mut Map<String, Value>, legacy_hook_path: &Path) {
-    let Some(hooks) = root.get_mut("hooks").and_then(Value::as_object_mut) else {
-        return;
-    };
-    let command = legacy_hook_path.display().to_string();
-    let mut removed_legacy_hook = false;
-    hooks.retain(|_, entries| {
-        let Some(entries) = entries.as_array_mut() else {
-            return true;
-        };
-        let previous_len = entries.len();
-        entries.retain(|entry| !entry_uses_command(entry, &command));
-        let removed_from_event = entries.len() != previous_len;
-        removed_legacy_hook |= removed_from_event;
-        !removed_from_event || !entries.is_empty()
-    });
-    if removed_legacy_hook && hooks.is_empty() {
-        root.remove("hooks");
-    }
-}
-
-fn entry_uses_command(entry: &Value, command: &str) -> bool {
-    entry
-        .get("hooks")
-        .and_then(Value::as_array)
-        .is_some_and(|hooks| {
-            hooks
-                .iter()
-                .any(|hook| hook.get("command").and_then(Value::as_str) == Some(command))
-        })
 }
 
 fn otlp_logs_endpoint(bind_addr: SocketAddr) -> String {
@@ -228,7 +188,6 @@ mod tests {
     fn merges_pontia_otel_logs_configuration_without_touching_other_settings() {
         let dir = tempdir().expect("tempdir");
         let settings_path = dir.path().join(".claude/settings.json");
-        let legacy_hook_path = dir.path().join(".pontia/integrations/claude/src/hook.js");
         fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
         fs::write(
             &settings_path,
@@ -247,7 +206,6 @@ mod tests {
 
         configure_claude_settings_file(
             &settings_path,
-            &legacy_hook_path,
             "0.0.0.0:18080".parse().unwrap(),
             "pontia-token",
         )
@@ -291,57 +249,14 @@ mod tests {
     }
 
     #[test]
-    fn removes_only_legacy_settings_hooks() {
-        let dir = tempdir().expect("tempdir");
-        let settings_path = dir.path().join(".claude/settings.json");
-        let legacy_hook_path = dir.path().join(".pontia/integrations/claude/src/hook.js");
-        fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
-        fs::write(
-            &settings_path,
-            serde_json::to_vec_pretty(&json!({
-                "hooks": {
-                    "SessionStart": [
-                        {"hooks": [{"type": "command", "command": legacy_hook_path}]},
-                        {"hooks": [{"type": "command", "command": "plugin-hook"}]}
-                    ],
-                    "Stop": [{"hooks": [{"type": "command", "command": legacy_hook_path}]}]
-                }
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-
-        configure_claude_settings_file(
-            &settings_path,
-            &legacy_hook_path,
-            "127.0.0.1:8080".parse().unwrap(),
-            "token",
-        )
-        .unwrap();
-
-        let settings: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
-        assert_eq!(
-            settings["hooks"],
-            json!({
-                "SessionStart": [
-                    {"hooks": [{"type": "command", "command": "plugin-hook"}]}
-                ]
-            })
-        );
-    }
-
-    #[test]
     fn creates_user_settings_and_is_idempotent() {
         let dir = tempdir().expect("tempdir");
         let settings_path = dir.path().join(".claude/settings.json");
-        let legacy_hook_path = dir.path().join(".pontia/integrations/claude/src/hook.js");
         let bind_addr = "127.0.0.1:8080".parse().unwrap();
 
-        configure_claude_settings_file(&settings_path, &legacy_hook_path, bind_addr, "token")
-            .unwrap();
+        configure_claude_settings_file(&settings_path, bind_addr, "token").unwrap();
         let first = fs::read(&settings_path).unwrap();
-        configure_claude_settings_file(&settings_path, &legacy_hook_path, bind_addr, "token")
-            .unwrap();
+        configure_claude_settings_file(&settings_path, bind_addr, "token").unwrap();
 
         assert_eq!(fs::read(&settings_path).unwrap(), first);
     }
@@ -350,13 +265,11 @@ mod tests {
     fn rejects_non_object_env_without_overwriting_the_file() {
         let dir = tempdir().expect("tempdir");
         let settings_path = dir.path().join("settings.json");
-        let legacy_hook_path = dir.path().join("integration/src/hook.js");
         fs::write(&settings_path, r#"{"env":"managed elsewhere"}"#).unwrap();
         let original = fs::read(&settings_path).unwrap();
 
         let error = configure_claude_settings_file(
             &settings_path,
-            &legacy_hook_path,
             "127.0.0.1:8080".parse().unwrap(),
             "token",
         )
@@ -374,19 +287,13 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let target = dir.path().join("dotfiles/claude-settings.json");
         let settings_path = dir.path().join(".claude/settings.json");
-        let legacy_hook_path = dir.path().join(".pontia/integrations/claude/src/hook.js");
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
         fs::write(&target, r#"{"theme":"dark"}"#).unwrap();
         symlink(&target, &settings_path).unwrap();
 
-        configure_claude_settings_file(
-            &settings_path,
-            &legacy_hook_path,
-            "127.0.0.1:8080".parse().unwrap(),
-            "token",
-        )
-        .unwrap();
+        configure_claude_settings_file(&settings_path, "127.0.0.1:8080".parse().unwrap(), "token")
+            .unwrap();
 
         assert!(
             fs::symlink_metadata(&settings_path)
@@ -400,20 +307,16 @@ mod tests {
     }
 
     #[test]
-    fn does_not_install_a_hook_bundle_and_uses_reachable_receiver_addresses() {
+    fn uses_reachable_receiver_addresses() {
         let dir = tempdir().expect("tempdir");
         let settings_path = dir.path().join(".claude/settings.json");
-        let legacy_hook_path = dir.path().join(".pontia/integrations/claude/src/hook.js");
 
         configure_claude_settings_file(
             &settings_path,
-            &legacy_hook_path,
             "192.0.2.10:18080".parse().unwrap(),
             "token",
         )
         .unwrap();
-
-        assert!(!legacy_hook_path.exists());
         let settings: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
         assert_eq!(
             settings["env"]["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"],
