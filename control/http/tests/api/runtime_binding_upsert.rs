@@ -331,7 +331,7 @@ fn upsert_body_with_tmux(
         "client_session_dir": "/tmp/pi",
         "client_cwd": workspace,
         "launch_cwd": workspace,
-        "start_command": "pi --approve -e /repo/clients/pi",
+        "start_command": "pi --approve",
         "tmux": tmux
     })
 }
@@ -577,10 +577,7 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
         row.get::<String, _>("runtime_instance_id"),
         runtime_instance_id
     );
-    assert_eq!(
-        row.get::<String, _>("start_command"),
-        "pi --approve -e /repo/clients/pi"
-    );
+    assert_eq!(row.get::<String, _>("start_command"), "pi --approve");
     assert_eq!(row.get::<String, _>("launch_cwd"), workspace);
     assert_eq!(
         row.get::<String, _>("tmux_socket_path"),

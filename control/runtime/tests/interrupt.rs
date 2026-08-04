@@ -54,7 +54,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         clients: HashMap::from([(
             "pi".to_string(),
             RuntimeClientConfig {
-                tui_command: Some("custom-pi -e /configured/clients/pi".to_string()),
+                tui_command: Some("custom-pi --profile configured".to_string()),
             },
         )]),
     });
@@ -91,7 +91,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     let launch_script = std::fs::read_to_string(launch_script_path_from_tmux_log(&log))
         .expect("ephemeral launch script");
     assert!(
-        launch_script.contains("custom-pi -e /configured/clients/pi --approve --session-id"),
+        launch_script.contains("custom-pi --profile configured --approve --session-id"),
         "{launch_script}"
     );
     assert!(launch_script.contains("sess_configured"), "{launch_script}");

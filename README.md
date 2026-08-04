@@ -72,6 +72,16 @@ pnpm --dir=apps/dashboard install
 pnpm --dir=apps/dashboard run build
 ```
 
+### Install the pi client plugin
+
+Register the first-party plugin in pi's user-level package settings:
+
+```bash
+pi install ./clients/pi
+```
+
+The local package remains in this checkout, so keep the repository path available while using it. Once installed, pi loads the plugin automatically; Pontia does not need to pass an extension path on each launch.
+
 ### Configure pontia
 
 `pontia` reads configuration only from `$PONTIA_HOME/config.toml` (default `~/.pontia/config.toml`) plus non-path environment variable overrides.
@@ -89,7 +99,7 @@ run_migrations = true
 source = "apps/dashboard/dist"
 
 [runtime.pi]
-tui_command = "pi -e /absolute/path/to/pontia/clients/pi"
+tui_command = "pi"
 
 [workspace_browser]
 roots = [

@@ -12,17 +12,13 @@ First-party pi extension for connecting pi sessions to pontia.
 
 ## Install locally
 
-From the pontia repository root, run pi with this package as a temporary extension:
+From the pontia repository root, register this package in pi's user-level settings:
 
 ```bash
-pi --approve -e ./clients/pi
+pi install ./clients/pi
 ```
 
-Or install it into project-local pi settings:
-
-```bash
-pi install -l ./clients/pi
-```
+Pi records the local package path without copying it, so keep the repository path available while using the plugin. The user-level install makes the plugin available in every workspace; the extension remains a silent no-op outside a tmux pane or an active workspace registered in Pontia.
 
 ## Use with pontia
 
@@ -30,8 +26,10 @@ For sessions started by pontia, configure the pi command in `$PONTIA_HOME/config
 
 ```toml
 [runtime.pi]
-tui_command = "pi -e /absolute/path/to/pontia/clients/pi"
+tui_command = "pi"
 ```
+
+Pontia appends the required `--approve` and native session identity arguments when it starts pi. The plugin is loaded from pi's user-level package settings rather than through a per-launch extension path.
 
 Pontia supplies a Session hint when it starts pi. Pi exposes that hint as its native `client_session_key`; the extension uses this key to identify and bind the Pontia Session, and the backend returns the canonical Runtime Instance ID. Tmux pane markers are not a Session identity source.
 
