@@ -13,12 +13,10 @@ the `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `Stop`,
 
 Start or restart Pontia before starting Claude Code. Pontia merges only the
 required logs-only OpenTelemetry configuration into `~/.claude/settings.json`,
-preserving unrelated settings, hooks, permissions, and environment entries. It
-also removes hook entries created by older Pontia versions under
-`$PONTIA_HOME/integrations/claude`; hooks now load exclusively from the plugin.
-An `external_api_token` must be configured in `$PONTIA_HOME/config.toml` (or
-`PONTIA_EXTERNAL_API_TOKEN`) so Claude can authenticate to the fixed internal
-OTLP logs receiver.
+preserving unrelated settings, hooks, permissions, and environment entries.
+Hooks load exclusively from the plugin. An `external_api_token` must be
+configured in `$PONTIA_HOME/config.toml` (or `PONTIA_EXTERNAL_API_TOKEN`) so
+Claude can authenticate to the fixed internal OTLP logs receiver.
 
 The generated configuration explicitly disables metrics, traces, prompts,
 assistant responses, tool details/content, and raw API body capture. It exports
