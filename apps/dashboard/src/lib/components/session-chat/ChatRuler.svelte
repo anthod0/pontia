@@ -75,21 +75,20 @@
     data-chat-ruler
   >
     <div class="relative max-h-[calc(100svh-14rem)] overflow-y-auto px-2 py-2">
-      <div class="absolute bottom-2 left-1/2 top-2 w-px -translate-x-1/2 bg-border" aria-hidden="true"></div>
-      <ol class="relative flex min-w-8 flex-col items-center gap-1">
+      <ol class="relative flex min-w-8 flex-col items-end gap-0">
         {#each orderedTurns as turn (turn.turn_id)}
           {@const navigable = navigableTurnIdSet.has(turn.turn_id)}
           {@const branched = branchedTurnIdSet.has(turn.turn_id)}
           {#each MESSAGE_ROLES as role (role)}
             {@const summary = summaryFor(turn, role)}
-            <li class="relative flex h-3 w-9 items-center justify-center">
+            <li class="relative flex h-2 w-9 items-center justify-end">
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   {#snippet child({ props })}
                     <button
                       type="button"
                       {...props}
-                      class={`relative z-10 h-2 rounded-full border border-background transition-[width,background-color,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${role === 'user' ? 'w-7' : 'w-4'} ${navigable ? 'cursor-pointer bg-foreground/65 hover:bg-foreground' : 'cursor-default bg-muted-foreground/30'}`}
+                      class={`relative z-10 h-px rounded-full bg-gray-300 transition-[width,background-color,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${role === 'user' ? 'w-6' : 'w-4'} ${navigable ? 'cursor-pointer hover:bg-gray-400' : 'cursor-default opacity-50'}`}
                       aria-label={`${roleLabel(role)} message: ${summary}${navigable ? '' : ' (not on the current branch)'}`}
                       aria-disabled={!navigable}
                       data-chat-ruler-mark

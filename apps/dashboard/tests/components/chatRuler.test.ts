@@ -52,8 +52,8 @@ describe('ChatRuler', () => {
     const marks = document.querySelectorAll('[data-chat-ruler-mark]');
     expect(marks).toHaveLength(6);
     const userMark = screen.getByRole('button', { name: 'User message: Root question' });
-    expect(userMark).toHaveClass('w-7');
-    expect(screen.getByRole('button', { name: 'Assistant message: Root answer' })).toHaveClass('w-4');
+    expect(userMark).toHaveClass('h-px', 'w-6', 'bg-gray-300');
+    expect(screen.getByRole('button', { name: 'Assistant message: Root answer' })).toHaveClass('h-px', 'w-4', 'bg-gray-300');
 
     await user.hover(userMark);
     expect(await screen.findByText('Root question')).toBeInTheDocument();
