@@ -2123,3 +2123,31 @@ test('hides exit on exited sessions and waits for idle after automatic resume be
   }));
   expect(mocks.resumeSession.mock.invocationCallOrder[0]).toBeLessThan(mocks.submitInboxMessage.mock.invocationCallOrder[0]);
 });
+
+
+test('scrolls to a message selected from the conversation ruler', async () => {
+  const user = userEvent.setup();
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    writable: true,
+    value: scrollIntoView,
+  });
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: 'session-2', input: { summary: 'Jump target' } })],
+    inboxMessages: [],
+    events: [],
+  });
+
+  render(SessionChatPage);
+
+  await user.click(await screen.findByRole('button', { name: 'User message: Jump target' }));
+  expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+  delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+});

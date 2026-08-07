@@ -8,12 +8,13 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
+  import ChatRuler from '$lib/components/session-chat/ChatRuler.svelte'
   import ApprovalRequestCard from '$lib/components/session-chat/ApprovalRequestCard.svelte'
   import { approvalRequestFromSnapshot } from '$lib/approvals'
   import type { ApprovalDecisionInput } from '$lib/approvals'
   import { decideApproval } from '../api/client'
-  import type { DashboardStreamEvent, InboxMessageView, SessionView } from '../api/types'
-  import type { SessionChatMessage } from '$lib/session-chat/sessionChat'
+  import type { DashboardStreamEvent, InboxMessageView, SessionView, TurnView } from '../api/types'
+  import type { ChatMessageRole, SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
     canSendSessionMessage,
     timelineItemsToChatMessages,
@@ -140,6 +141,13 @@
   $: branchActionInputs = eligibleBranchActionInputs(selectedSession, messages)
   $: branchActionMessageIds = Object.keys(branchActionInputs)
   $: timelineUnavailable = $timelineState.sessionId === selectedSessionId && Boolean($timelineState.error)
+  $: rulerTurns = $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.turns : []
+  $: rulerTreeMode = $timelineState.sessionId === selectedSessionId && $timelineState.mode === 'tree'
+  $: rulerNavigableTurnIds = navigableRulerTurnIds(
+    rulerTurns,
+    rulerTreeMode,
+    $timelineState.sessionId === selectedSessionId ? $timelineState.latestTurnId : null,
+  )
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
   $: inboxActionableCount = visibleInboxMessages.filter((message) => message.state === 'pending' || message.state === 'failed').length
@@ -183,6 +191,52 @@
       if (!projectedTurn.input?.summary?.trim() || !message.content.trim()) return []
       return [[message.id, message.content]]
     }))
+  }
+
+  function navigableRulerTurnIds(
+    turns: TurnView[],
+    treeMode: boolean,
+    latestTurnId: string | null,
+  ): string[] {
+    if (!treeMode) return turns.map((turn) => turn.turn_id)
+    if (!latestTurnId) return []
+
+    const turnsById = new Map(turns.map((turn) => [turn.turn_id, turn]))
+    const lineage: string[] = []
+    const visited = new Set<string>()
+    let turnId: string | null = latestTurnId
+    while (turnId && !visited.has(turnId)) {
+      visited.add(turnId)
+      lineage.push(turnId)
+      turnId = turnsById.get(turnId)?.parent_turn_id ?? null
+    }
+    return lineage
+  }
+
+  function chatMessageElement(turnId: string, role: ChatMessageRole): HTMLElement | null {
+    return [...document.querySelectorAll<HTMLElement>('[data-chat-message-id][data-chat-turn-id][data-chat-role]')]
+      .find((element) => element.dataset.chatTurnId === turnId && element.dataset.chatRole === role) ?? null
+  }
+
+  async function navigateFromRuler(turnId: string, role: ChatMessageRole): Promise<void> {
+    if (!rulerNavigableTurnIds.includes(turnId)) return
+    let target = chatMessageElement(turnId, role)
+    const visitedCursors = new Set<string | null>()
+
+    while (!target) {
+      const state = get(timelineState)
+      if (state.sessionId !== selectedSessionId || !state.hasMore || state.refreshing) return
+      if (visitedCursors.has(state.nextOlderTurnId)) return
+      visitedCursors.add(state.nextOlderTurnId)
+      await loadSessionTimeline(selectedSessionId, {
+        mode: 'more',
+        ...(rulerTreeMode ? { topology: true } : {}),
+      })
+      await tick()
+      target = chatMessageElement(turnId, role)
+    }
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   function availableWorkspaceId(workspaceId: string | null): string | null {
@@ -414,12 +468,13 @@
         if (typeof inboxMessageId === 'string') consumeInboxSubmission(inboxMessageId, streamEvent.event.session_id)
       }
       if (isSessionIdleEvent(streamEvent.event.type)) {
-        if (pendingApproval) void loadSessionDetail(selectedSessionId, { showLoading: false })
+        void loadSessionDetail(selectedSessionId, { showLoading: false })
         void refreshCurrentSessionGitStatus()
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
         return
       }
       if (streamEvent.event.type === 'turn.started') {
+        void loadSessionDetail(selectedSessionId, { showLoading: false })
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
         return
       }
@@ -827,6 +882,15 @@
     </div>
   </div>
 </section>
+
+{#if selectedSession && !initialChatScrollPending && rulerTurns.length}
+  <ChatRuler
+    turns={rulerTurns}
+    treeMode={rulerTreeMode}
+    navigableTurnIds={rulerNavigableTurnIds}
+    onNavigate={navigateFromRuler}
+  />
+{/if}
 
 <RenameSessionDialog
   bind:open={renameSessionDialogOpen}

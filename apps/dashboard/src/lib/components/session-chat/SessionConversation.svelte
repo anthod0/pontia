@@ -271,6 +271,8 @@
       from={chatMessage.role}
       class={chatMessage.role === 'user' ? `relative ${editingMessageId === chatMessage.id ? 'w-full' : ''}` : undefined}
       data-chat-message-id={chatMessage.id}
+      data-chat-turn-id={chatMessage.turnId}
+      data-chat-role={chatMessage.role}
     >
       <Message.Content class={`${chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''} ${editingMessageId === chatMessage.id ? 'w-full' : ''}`}>
         {#if displayItem.showAgentStatus}
