@@ -40,6 +40,10 @@ async fn dashboard_serves_configured_local_entrypoint() {
             .expect("response");
 
     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get(header::CACHE_CONTROL),
+        Some(&header::HeaderValue::from_static("no-cache")),
+    );
     let body = response
         .into_body()
         .collect()
@@ -95,6 +99,42 @@ async fn dashboard_serves_files_from_configured_dist_root() {
         .expect("body")
         .to_bytes();
     assert_eq!(&body[..], b"png-bytes");
+}
+
+#[tokio::test]
+async fn dashboard_serves_pwa_files_with_required_headers() {
+    let (_dir, root) = build_local_dashboard("custom dashboard", "custom.js");
+    std::fs::write(root.join("manifest.webmanifest"), b"{}").expect("manifest");
+    std::fs::write(root.join("service-worker.js"), b"// worker").expect("service worker");
+
+    for (path, expected_content_type) in [
+        ("manifest.webmanifest", "application/manifest+json"),
+        ("service-worker.js", "text/javascript; charset=utf-8"),
+    ] {
+        let response = http::router(
+            test_state_with_dashboard(ResolvedDashboard::available(root.clone())).await,
+        )
+        .oneshot(
+            Request::builder()
+                .uri(format!("/dashboard/{path}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE),
+            Some(&header::HeaderValue::from_static(expected_content_type)),
+            "{path}",
+        );
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL),
+            Some(&header::HeaderValue::from_static("no-cache")),
+            "{path}",
+        );
+    }
 }
 
 #[tokio::test]

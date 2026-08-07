@@ -1,0 +1,23 @@
+{
+  "id": "/dashboard/",
+  "name": "Pontia Dashboard",
+  "short_name": "Pontia",
+  "description": "Monitor and control Pontia coding agent sessions.",
+  "start_url": "/dashboard/",
+  "scope": "/dashboard/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6b48fe",
+  "icons": [
+    {
+      "src": "/dashboard/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/dashboard/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

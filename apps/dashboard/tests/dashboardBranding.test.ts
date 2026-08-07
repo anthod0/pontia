@@ -7,6 +7,16 @@ import AppSidebarHost from './components/layout/AppSidebarHost.svelte';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appHtml = readFileSync(resolve(__dirname, '../src/app.html'), 'utf8');
+const manifest = JSON.parse(
+  readFileSync(resolve(__dirname, '../public/manifest.webmanifest'), 'utf8'),
+) as {
+  id: string;
+  name: string;
+  start_url: string;
+  scope: string;
+  display: string;
+  icons: Array<{ src: string; sizes: string; type: string }>;
+};
 
 const mocks = vi.hoisted(() => {
   function readableStore<T>(value: T) {
@@ -55,6 +65,22 @@ test('dashboard head advertises packaged logo icons', () => {
   expect(appHtml).toContain('<link rel="icon" type="image/png" sizes="32x32" href="%sveltekit.assets%/logo-32.png" />');
   expect(appHtml).toContain('<link rel="icon" type="image/png" sizes="192x192" href="%sveltekit.assets%/logo-192.png" />');
   expect(appHtml).toContain('<link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/logo-180.png" />');
+  expect(appHtml).toContain('<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />');
+  expect(appHtml).toContain('<meta name="theme-color" content="#6b48fe" />');
+});
+
+test('dashboard manifest is installable within the dashboard scope', () => {
+  expect(manifest).toMatchObject({
+    id: '/dashboard/',
+    name: 'Pontia Dashboard',
+    start_url: '/dashboard/',
+    scope: '/dashboard/',
+    display: 'standalone',
+  });
+  expect(manifest.icons).toEqual(expect.arrayContaining([
+    { src: '/dashboard/logo-192.png', sizes: '192x192', type: 'image/png' },
+    { src: '/dashboard/logo-512.png', sizes: '512x512', type: 'image/png' },
+  ]));
 });
 
 test('dashboard sidebar renders the SVG logo asset and brand text', () => {

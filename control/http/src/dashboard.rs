@@ -319,7 +319,14 @@ pub async fn dashboard(State(dashboard): State<ResolvedDashboard>) -> Response {
     };
 
     match tokio::fs::read(root.join("index.html")).await {
-        Ok(bytes) => ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], bytes).into_response(),
+        Ok(bytes) => (
+            [
+                (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                (header::CACHE_CONTROL, "no-cache"),
+            ],
+            bytes,
+        )
+            .into_response(),
         Err(_) => (StatusCode::NOT_FOUND, dashboard.unavailable_message()).into_response(),
     }
 }
@@ -361,10 +368,16 @@ async fn try_dashboard_dist_file(
         return None;
     }
 
-    tokio::fs::read(path)
-        .await
-        .ok()
-        .map(|bytes| ([(header::CONTENT_TYPE, content_type(relative_path))], bytes).into_response())
+    tokio::fs::read(path).await.ok().map(|bytes| {
+        (
+            [
+                (header::CONTENT_TYPE, content_type(relative_path)),
+                (header::CACHE_CONTROL, cache_control(relative_path)),
+            ],
+            bytes,
+        )
+            .into_response()
+    })
 }
 
 fn safe_asset_path(relative_path: &str) -> Option<PathBuf> {
@@ -390,7 +403,19 @@ fn content_type(path: &str) -> &'static str {
         "image/png"
     } else if path.ends_with(".ico") {
         "image/x-icon"
+    } else if path.ends_with(".webmanifest") {
+        "application/manifest+json"
     } else {
         "application/octet-stream"
+    }
+}
+
+fn cache_control(path: &str) -> &'static str {
+    if path == "service-worker.js" || path.ends_with(".webmanifest") {
+        "no-cache"
+    } else if path.starts_with("_app/immutable/") {
+        "public, max-age=31536000, immutable"
+    } else {
+        "public, max-age=3600"
     }
 }
