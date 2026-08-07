@@ -26,6 +26,7 @@
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.12.3",
     "bits-ui": "^2.18.1",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
     "svelte": "^5.55.5",
     "svelte-check": "^4.4.8",

@@ -2,6 +2,7 @@ import { get, writable } from 'svelte/store';
 import { getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates } from '../api/client';
 import { ApiError } from '../api/errors';
 import type { TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage, TurnTreeHistoryPage } from '../api/types';
+import { readCachedTimeline, writeCachedTimeline } from '../lib/session-chat/timelineCache';
 
 export type TimelineRefreshKind = 'history' | 'tail' | null;
 export type TimelineStatus =
@@ -63,6 +64,35 @@ export function hasTimelineSnapshot(state: TimelineState, sessionId: string): bo
   return state.sessionId === sessionId && (state.status === 'ready' || state.status === 'empty');
 }
 
+export async function restoreSessionTimeline(
+  sessionId: string,
+  options: { topology: boolean },
+): Promise<boolean> {
+  const snapshot = await readCachedTimeline(sessionId);
+  const expectedMode = options.topology ? 'tree' : 'linear';
+  const current = get(timelineState);
+  if ((current.sessionId && current.sessionId !== sessionId) || !snapshot || snapshot.mode !== expectedMode) return false;
+
+  timelineState.set({
+    sessionId,
+    mode: snapshot.mode,
+    groups: snapshot.groups,
+    items: snapshot.items,
+    nextOlderTurnId: snapshot.nextOlderTurnId,
+    latestTurnId: snapshot.latestTurnId,
+    hasMore: snapshot.hasMore,
+    loading: false,
+    refreshing: false,
+    refreshKind: null,
+    status: statusForItems(snapshot.items),
+    errorCode: null,
+    error: null,
+  });
+  if (snapshot.latestTurnId) cachedRefreshCursorSessions.add(sessionId);
+  if (snapshot.hasMore && snapshot.nextOlderTurnId) cachedHistoryCursorSessions.add(sessionId);
+  return true;
+}
+
 type TimelineUpdateQueue = {
   promise: Promise<void>;
   resolve: () => void;
@@ -74,9 +104,18 @@ type TimelineUpdateQueue = {
 };
 
 const timelineUpdateQueues = new Map<string, TimelineUpdateQueue>();
+const cachedRefreshCursorSessions = new Set<string>();
+const cachedHistoryCursorSessions = new Set<string>();
 
 export function resetTimelineState(sessionId = ''): void {
   timelineState.set(emptyState(sessionId));
+  if (sessionId) {
+    cachedRefreshCursorSessions.delete(sessionId);
+    cachedHistoryCursorSessions.delete(sessionId);
+  } else {
+    cachedRefreshCursorSessions.clear();
+    cachedHistoryCursorSessions.clear();
+  }
   if (sessionId) {
     clearTimelineUpdateQueue(sessionId);
   } else {
@@ -191,6 +230,10 @@ export async function loadSessionTimeline(
   }
 
   const mode = options.mode ?? 'rebuild';
+  if (mode === 'rebuild') {
+    cachedRefreshCursorSessions.delete(sessionId);
+    cachedHistoryCursorSessions.delete(sessionId);
+  }
   const current = get(timelineState);
   const sameSession = current.sessionId === sessionId;
   const topology = options.topology ?? (sameSession && current.mode === 'tree');
@@ -239,6 +282,8 @@ export async function loadSessionTimeline(
           error: null,
         };
       });
+      if (mode === 'more') cachedHistoryCursorSessions.delete(sessionId);
+      await persistTimelineSnapshot(sessionId);
       return page;
     }
 
@@ -269,8 +314,19 @@ export async function loadSessionTimeline(
         error: null,
       };
     });
+    if (mode === 'more') cachedHistoryCursorSessions.delete(sessionId);
+    await persistTimelineSnapshot(sessionId);
     return page;
   } catch (error) {
+    if (mode === 'more' && cachedHistoryCursorSessions.has(sessionId)) {
+      if (isStaleCachedCursorError(error)) {
+        cachedHistoryCursorSessions.delete(sessionId);
+        cachedRefreshCursorSessions.delete(sessionId);
+        return loadSessionTimeline(sessionId, { mode: 'rebuild', topology });
+      }
+      retainCachedTimelineAfterError(sessionId);
+      return null;
+    }
     applyTimelineError(sessionId, error);
     return null;
   }
@@ -322,7 +378,19 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
         error: null,
       };
     });
+    cachedRefreshCursorSessions.delete(sessionId);
+    await persistTimelineSnapshot(sessionId);
   } catch (error) {
+    if (cachedRefreshCursorSessions.has(sessionId)) {
+      if (isStaleCachedCursorError(error)) {
+        cachedRefreshCursorSessions.delete(sessionId);
+        cachedHistoryCursorSessions.delete(sessionId);
+        await loadSessionTimeline(sessionId, { mode: 'rebuild' });
+        return;
+      }
+      retainCachedTimelineAfterError(sessionId);
+      return;
+    }
     applyTimelineError(sessionId, error);
   }
 }
@@ -360,7 +428,19 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
         error: null,
       };
     });
+    cachedRefreshCursorSessions.delete(sessionId);
+    await persistTimelineSnapshot(sessionId);
   } catch (error) {
+    if (cachedRefreshCursorSessions.has(sessionId)) {
+      if (isStaleCachedCursorError(error)) {
+        cachedRefreshCursorSessions.delete(sessionId);
+        cachedHistoryCursorSessions.delete(sessionId);
+        await loadSessionTimeline(sessionId, { mode: 'rebuild', topology: true });
+        return;
+      }
+      retainCachedTimelineAfterError(sessionId);
+      return;
+    }
     applyTimelineError(sessionId, error);
   }
 }
@@ -427,6 +507,41 @@ function clearTimelineUpdateQueue(sessionId: string): void {
   if (queue.timer) clearTimeout(queue.timer);
   timelineUpdateQueues.delete(sessionId);
   if (!queue.running) queue.resolve();
+}
+
+function retainCachedTimelineAfterError(sessionId: string): void {
+  timelineState.update((state) => state.sessionId !== sessionId ? state : ({
+    ...state,
+    loading: false,
+    refreshing: false,
+    refreshKind: null,
+    status: statusForItems(state.items),
+    errorCode: null,
+    error: null,
+  }));
+}
+
+function isStaleCachedCursorError(error: unknown): boolean {
+  return error instanceof ApiError && (
+    error.code === 'turn_timeline_unavailable'
+    || error.code === 'turn_timeline_invalid'
+    || error.code === 'turn_topology_unknown'
+    || error.code === 'turn_topology_invalid'
+  );
+}
+
+async function persistTimelineSnapshot(sessionId: string): Promise<void> {
+  const state = get(timelineState);
+  if (!hasTimelineSnapshot(state, sessionId) || state.mode === null) return;
+  await writeCachedTimeline({
+    sessionId,
+    mode: state.mode,
+    groups: state.groups,
+    items: state.items,
+    nextOlderTurnId: state.nextOlderTurnId,
+    latestTurnId: state.latestTurnId,
+    hasMore: state.hasMore,
+  });
 }
 
 async function refreshSessionTimelineNow(sessionId: string, turnId: string | null): Promise<void> {

@@ -1047,7 +1047,40 @@ test('loads earlier chat history only after pulling beyond the top history senti
 });
 
 
-test('refreshes an already-loaded selected chat through its latest projected Turn without rebuilding history', async () => {
+test('restores a cached selected chat and refreshes it without rebuilding history', async () => {
+  const selected = session({ session_id: 'session-cached', state: 'running' });
+  window.history.pushState({}, '', '/dashboard/chat/session-cached');
+  mocks.pathParams = { sessionId: 'session-cached' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [turn({ turn_id: 'turn-latest', session_id: 'session-cached' })], inboxMessages: [], events: [] });
+  let resolveRefresh: (() => void) | null = null;
+  mocks.refreshSessionTimeline.mockImplementation(() => new Promise<void>((resolve) => {
+    resolveRefresh = resolve;
+  }));
+  mocks.restoreSessionTimeline.mockImplementation(async (sessionId: string) => {
+    mocks.timelineState.set(timelineStateValue({
+      sessionId,
+      items: timelineItemsFromTurns([turn({ turn_id: 'turn-latest', session_id: sessionId })]),
+      nextOlderTurnId: 'turn-older',
+      latestTurnId: 'turn-latest',
+      hasMore: true,
+      status: 'ready',
+    }));
+    return true;
+  });
+
+  render(SessionChatPage);
+
+  await waitFor(() => expect(mocks.restoreSessionTimeline).toHaveBeenCalledWith('session-cached', { topology: false }));
+  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-cached', 'turn-latest'));
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-cached', expect.objectContaining({ mode: 'rebuild' }));
+  expect(await screen.findByText('hello')).toBeInTheDocument();
+  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="true"]')).not.toBeInTheDocument());
+  resolveRefresh?.();
+});
+
+test('refreshes an already-loaded selected chat through its cached latest Turn without rebuilding history', async () => {
   const selected = session({ session_id: 'session-2', state: 'running' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -1068,7 +1101,7 @@ test('refreshes an already-loaded selected chat through its latest projected Tur
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1'));
+  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-latest'));
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'rebuild' });
   expect(mocks.resetTimelineState).not.toHaveBeenCalledWith('session-2');
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
@@ -1963,6 +1996,7 @@ test('does not scroll to the document bottom after retrying an inbox message', a
 
   render(SessionChatPage);
 
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
   await user.click(await screen.findByRole('button', { name: /open inbox, 1 message/i }));
   scrollTo.mockClear();
   await user.click(await screen.findByRole('button', { name: /retry inbox message fix the failing dashboard test/i }));

@@ -57,6 +57,7 @@
     loadSessionTimeline,
     refreshSessionTimeline,
     resetTimelineState,
+    restoreSessionTimeline,
     timelineState,
   } from '../stores/timeline'
   import { subscribeDashboardEvents } from '../services/eventStream'
@@ -516,14 +517,20 @@
         return
       }
 
-      const currentTimeline = get(timelineState)
+      let currentTimeline = get(timelineState)
       const latestTurnId = latestProjectedTurnId()
       const topology = loadedSession?.capabilities.topology === true
       const expectedMode = topology ? 'tree' : 'linear'
-      const hasLoadedTimeline = hasTimelineSnapshot(currentTimeline, sessionId)
+      let hasLoadedTimeline = hasTimelineSnapshot(currentTimeline, sessionId)
         && currentTimeline.mode === expectedMode
-      if (!hasLoadedTimeline) resetTimelineState(sessionId)
-      if (hasLoadedTimeline) await refreshSessionTimeline(sessionId, latestTurnId)
+      if (!hasLoadedTimeline) {
+        resetTimelineState(sessionId)
+        await restoreSessionTimeline(sessionId, { topology })
+        currentTimeline = get(timelineState)
+        hasLoadedTimeline = hasTimelineSnapshot(currentTimeline, sessionId)
+          && currentTimeline.mode === expectedMode
+      }
+      if (hasLoadedTimeline) void refreshSessionTimeline(sessionId, currentTimeline.latestTurnId ?? latestTurnId)
       else await loadSessionTimeline(sessionId, {
         mode: 'rebuild',
         latestTurnId,

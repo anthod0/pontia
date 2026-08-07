@@ -91,6 +91,7 @@ const mocks = vi.hoisted(() => {
     createSession: vi.fn(),
     loadSessionTimeline: vi.fn(async (sessionId: string) => null),
     refreshSessionTimeline: vi.fn(async () => undefined),
+    restoreSessionTimeline: vi.fn(async () => false),
     resetTimelineState: vi.fn((sessionId = '') => {
       mocks.timelineState.set(mocks.timelineStateValue({ sessionId }));
     }),
@@ -159,6 +160,7 @@ vi.mock('../../../src/stores/timeline', () => ({
   timelineState: mocks.timelineState,
   loadSessionTimeline: mocks.loadSessionTimeline,
   refreshSessionTimeline: mocks.refreshSessionTimeline,
+  restoreSessionTimeline: mocks.restoreSessionTimeline,
   hasTimelineSnapshot: (state: TimelineState, sessionId: string) => state.sessionId === sessionId && (state.status === 'ready' || state.status === 'empty'),
   resetTimelineState: mocks.resetTimelineState,
 }));
@@ -309,6 +311,7 @@ beforeEach(() => {
   mocks.loadSessionDetail.mockReset().mockResolvedValue(null);
   mocks.loadSessionTimeline.mockReset();
   mocks.refreshSessionTimeline.mockReset().mockResolvedValue(undefined);
+  mocks.restoreSessionTimeline.mockReset().mockResolvedValue(false);
   mocks.createSession.mockResolvedValue({ session: activeSession, initial_turn: null } satisfies CreateSessionResult);
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     const detail = mocks.sessionDetail.get();

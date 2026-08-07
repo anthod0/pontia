@@ -22,6 +22,7 @@ const {
   loadSessionTimeline,
   refreshSessionTimeline,
   resetTimelineState,
+  restoreSessionTimeline,
   timelineState,
 } = await import('../src/stores/timeline');
 
@@ -208,6 +209,108 @@ test('initial history loads chronological projected Turn items in the backward d
     latestTurnId: 'turn-2',
     hasMore: true,
     status: 'ready',
+    error: null,
+  });
+});
+
+test('a persisted timeline resumes incremental refresh and older pagination without rebuilding', async () => {
+  mocks.getTurnTimeline
+    .mockResolvedValueOnce(page({
+      items: [item('turn-2', 'item-2', 'cached')],
+      next_turn_id: 'turn-1',
+    }))
+    .mockResolvedValueOnce(page({
+      direction: 'forward',
+      items: [
+        item('turn-2', 'item-2-final', 'refreshed'),
+        item('turn-3', 'item-3', 'new'),
+      ],
+      next_turn_id: null,
+    }))
+    .mockResolvedValueOnce(page({
+      items: [item('turn-1', 'item-1', 'older')],
+      next_turn_id: null,
+    }));
+
+  await loadSessionTimeline('sess-cached', { mode: 'rebuild' });
+  resetTimelineState();
+
+  await expect(restoreSessionTimeline('sess-cached', { topology: false })).resolves.toBe(true);
+  expect(get(timelineState)).toMatchObject({
+    sessionId: 'sess-cached',
+    latestTurnId: 'turn-2',
+    nextOlderTurnId: 'turn-1',
+    hasMore: true,
+    status: 'ready',
+  });
+
+  await refreshSessionTimeline('sess-cached');
+  await loadSessionTimeline('sess-cached', { mode: 'more' });
+
+  expect(mocks.getTurnTimeline).toHaveBeenCalledTimes(3);
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-cached', {
+    direction: 'forward',
+    turnId: 'turn-2',
+    limit: 100,
+  });
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, 'sess-cached', {
+    direction: 'backward',
+    turnId: 'turn-1',
+    limit: 20,
+  });
+  expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual([
+    'item-1',
+    'item-2-final',
+    'item-3',
+  ]);
+});
+
+test('a stale persisted refresh cursor falls back to rebuilding the timeline', async () => {
+  mocks.getTurnTimeline
+    .mockResolvedValueOnce(page({ items: [item('turn-stale', 'item-stale', 'cached')], next_turn_id: null }))
+    .mockRejectedValueOnce(new ApiError('Cached range is invalid', 'turn_timeline_invalid', 409))
+    .mockResolvedValueOnce(page({ items: [item('turn-current', 'item-current', 'rebuilt')], next_turn_id: null }));
+
+  await loadSessionTimeline('sess-stale', { mode: 'rebuild' });
+  resetTimelineState();
+  await restoreSessionTimeline('sess-stale', { topology: false });
+
+  await refreshSessionTimeline('sess-stale');
+
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-stale', {
+    direction: 'forward',
+    turnId: 'turn-stale',
+    limit: 100,
+  });
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, 'sess-stale', {
+    direction: 'backward',
+    limit: 20,
+  });
+  expect(get(timelineState)).toMatchObject({
+    items: [expect.objectContaining({ item_id: 'item-current' })],
+    latestTurnId: 'turn-current',
+    status: 'ready',
+    error: null,
+  });
+});
+
+test('a transient refresh failure keeps a restored timeline available for retry', async () => {
+  mocks.getTurnTimeline
+    .mockResolvedValueOnce(page({ items: [item('turn-cached', 'item-cached', 'cached')], next_turn_id: null }))
+    .mockRejectedValueOnce(new Error('offline'));
+
+  await loadSessionTimeline('sess-offline', { mode: 'rebuild' });
+  resetTimelineState();
+  await restoreSessionTimeline('sess-offline', { topology: false });
+
+  await refreshSessionTimeline('sess-offline');
+
+  expect(mocks.getTurnTimeline).toHaveBeenCalledTimes(2);
+  expect(get(timelineState)).toMatchObject({
+    items: [expect.objectContaining({ item_id: 'item-cached' })],
+    latestTurnId: 'turn-cached',
+    status: 'ready',
+    refreshing: false,
     error: null,
   });
 });
