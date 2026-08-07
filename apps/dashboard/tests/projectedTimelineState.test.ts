@@ -100,10 +100,10 @@ test('tree history follows backend groups and paginates without a duplicate boun
   await loadSessionTimeline('sess-1', { mode: 'rebuild', topology: true });
   await loadSessionTimeline('sess-1', { mode: 'more', topology: true });
 
-  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(1, 'sess-1', { limit: 5 });
+  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(1, 'sess-1', { limit: 20 });
   expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(2, 'sess-1', {
     fromTurnId: 'turn-1',
-    limit: 5,
+    limit: 20,
   });
   expect(get(timelineState).groups.map((entry) => entry.turn_id)).toEqual([
     'turn-1',
@@ -199,7 +199,7 @@ test('initial history loads chronological projected Turn items in the backward d
 
   expect(mocks.getTurnTimeline).toHaveBeenCalledWith('sess-1', {
     direction: 'backward',
-    limit: 5,
+    limit: 20,
   });
   expect(get(timelineState)).toMatchObject({
     sessionId: 'sess-1',
@@ -229,7 +229,7 @@ test('older history uses next_turn_id and prepends only previously unseen Turn g
   expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-1', {
     direction: 'backward',
     turnId: 'turn-1',
-    limit: 5,
+    limit: 20,
   });
   expect(get(timelineState).items.map(({ turn_id, item_id }) => [turn_id, item_id])).toEqual([
     ['turn-1', 'item-1'],
