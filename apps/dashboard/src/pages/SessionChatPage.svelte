@@ -236,7 +236,7 @@
       target = chatMessageElement(turnId, role)
     }
 
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   function availableWorkspaceId(workspaceId: string | null): string | null {

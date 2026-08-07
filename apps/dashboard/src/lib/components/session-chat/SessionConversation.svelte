@@ -269,7 +269,7 @@
     {@const chatMessage = displayItem.message}
     <Message.Root
       from={chatMessage.role}
-      class={chatMessage.role === 'user' ? `relative ${editingMessageId === chatMessage.id ? 'w-full' : ''}` : undefined}
+      class={`${chatMessage.role === 'user' ? `relative ${editingMessageId === chatMessage.id ? 'w-full' : ''}` : ''} scroll-mt-16`}
       data-chat-message-id={chatMessage.id}
       data-chat-turn-id={chatMessage.turnId}
       data-chat-role={chatMessage.role}

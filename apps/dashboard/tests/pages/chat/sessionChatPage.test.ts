@@ -2148,6 +2148,6 @@ test('scrolls to a message selected from the conversation ruler', async () => {
   render(SessionChatPage);
 
   await user.click(await screen.findByRole('button', { name: 'User message: Jump target' }));
-  expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+  expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
 });
