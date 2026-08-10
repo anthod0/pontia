@@ -4,6 +4,7 @@
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
   import { isTransientNetworkError } from '../api/client'
+  import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import { rememberOptimisticInitialMessage } from '../stores/optimisticChat'
@@ -27,11 +28,13 @@
   let actionError: string | null = null
   let lastToastedError: string | null = null
   let queryWorkspaceSelectionId: string | null = null
+  let autofocusComposer = false
 
   const CLIENT_TYPE_OPTIONS = ['pi', 'claude']
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
 
   onMount(async () => {
+    autofocusComposer = claimChatEntryAutofocus('/chat')
     await Promise.all([loadSessions(), loadWorkspaces()])
     ensureCreateWorkspaceSelection()
   })
@@ -140,6 +143,7 @@
     bind:clientType={createClientType}
     {creating}
     {canCreate}
+    autofocus={autofocusComposer}
     workspaces={$workspaces}
     workspacesLoading={$workspacesLoading}
     {selectedWorkspace}

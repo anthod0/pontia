@@ -1,7 +1,6 @@
 import { get } from 'svelte/store';
 import { loadSessions, loadSessionDetail, sessionDetail } from '../stores/sessions';
 import { hasTimelineSnapshot, loadSessionTimeline, refreshSessionTimeline, timelineState } from '../stores/timeline';
-import { refreshWorkspaceGitStatus } from '../stores/workspaces';
 
 export type DashboardSnapshotRefreshReason = 'online' | 'sse_open' | 'sse_fallback';
 
@@ -24,7 +23,6 @@ async function refreshDashboardSnapshotNow(_options: DashboardSnapshotRefreshOpt
   const detail = get(sessionDetail);
   const timeline = get(timelineState);
   const selectedSessionId = detail?.session.session_id ?? timeline.sessionId ?? null;
-  const workspaceId = detail?.session.workspace_id ?? null;
   const refreshes: Promise<unknown>[] = [loadSessions({ showLoading: false })];
 
   if (selectedSessionId) {
@@ -33,8 +31,6 @@ async function refreshDashboardSnapshotNow(_options: DashboardSnapshotRefreshOpt
       ? refreshSessionTimeline(selectedSessionId, timeline.latestTurnId)
       : loadSessionTimeline(selectedSessionId, { mode: 'rebuild', latestTurnId: timeline.latestTurnId }));
   }
-
-  if (workspaceId) refreshes.push(refreshWorkspaceGitStatus(workspaceId));
 
   await Promise.allSettled(refreshes);
 }

@@ -6,6 +6,18 @@ import type { CreateSessionResult } from '../../../src/api/types';
 
 const NewChatPage = (await import('../../../src/pages/NewChatPage.svelte')).default;
 
+test('focuses the prompt only on the first entry to the new chat page', async () => {
+  const firstPage = render(NewChatPage);
+
+  const firstPrompt = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  await waitFor(() => expect(firstPrompt).toHaveFocus());
+  firstPage.unmount();
+
+  render(NewChatPage);
+  const revisitedPrompt = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  expect(revisitedPrompt).not.toHaveFocus();
+});
+
 test('prefers the new chat workspace query parameter over the remembered workspace', async () => {
   window.history.pushState({}, '', '/dashboard/chat?workspace=workspace-2');
   window.localStorage.setItem('pontia.chat.lastWorkspaceId', 'workspace-1');

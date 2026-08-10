@@ -3,6 +3,7 @@
   import { get } from 'svelte/store'
   import { ChevronDown, CircleAlert } from '@lucide/svelte'
   import { navigate } from '$lib/navigation'
+  import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
@@ -80,7 +81,7 @@
   let inboxSheetOpen = false
   let renameSessionDialogOpen = false
   let unsubscribeDashboardEvents: (() => void) | null = null
-  let foregroundRefreshInFlight: Promise<void> | null = null
+  let autofocusComposer = false
   let showScrollDownButton = false
   let scrollDownButtonRendered = false
   let scrollDownButtonHideTimer: ReturnType<typeof setTimeout> | null = null
@@ -97,25 +98,17 @@
 
   onMount(async () => {
     selectedSessionId = requestedSessionIdFromLocation()
+    autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
     initialChatScrollPending = Boolean(selectedSessionId)
     await Promise.all([loadSessions(), loadWorkspaces()])
-    if (selectedSessionId) {
-      await loadSelectedSession(selectedSessionId)
-      await refreshSessionGitStatus(currentSelectedSession())
-    }
+    if (selectedSessionId) await loadSelectedSession(selectedSessionId)
     if (destroyed) return
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
-    window.addEventListener('focus', handleForegroundResume)
-    window.addEventListener('pageshow', handleForegroundResume)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
   })
 
   onDestroy(() => {
     destroyed = true
     unsubscribeDashboardEvents?.()
-    window.removeEventListener('focus', handleForegroundResume)
-    window.removeEventListener('pageshow', handleForegroundResume)
-    document.removeEventListener('visibilitychange', handleVisibilityChange)
     bottomIntersectionObserver?.disconnect()
     if (scrollDownButtonHideTimer) clearTimeout(scrollDownButtonHideTimer)
   })
@@ -420,38 +413,6 @@
     }
   }
 
-  function handleForegroundResume(): void {
-    if (document.visibilityState === 'hidden') return
-    const sessionId = selectedSessionId
-    if (!sessionId) return
-    if (foregroundRefreshInFlight) return
-
-    const currentTimeline = get(timelineState)
-    const latestTurnId = latestProjectedTurnId()
-    const topology = currentSelectedSession()?.capabilities.topology === true
-    const expectedMode = topology ? 'tree' : 'linear'
-    const timelineRefresh = hasTimelineSnapshot(currentTimeline, sessionId) && currentTimeline.mode === expectedMode
-      ? refreshSessionTimeline(sessionId, latestTurnId)
-      : loadSessionTimeline(sessionId, {
-          mode: 'rebuild',
-          latestTurnId,
-          ...(topology ? { topology: true } : {}),
-        })
-
-    foregroundRefreshInFlight = Promise.all([
-      loadSessionDetail(sessionId, { showLoading: false }),
-      timelineRefresh,
-    ]).then(() => undefined).finally(() => {
-      foregroundRefreshInFlight = null
-    })
-  }
-
-  function handleVisibilityChange(): void {
-    handleForegroundResume()
-    if (document.visibilityState === 'hidden') return
-    void refreshCurrentSessionGitStatus()
-  }
-
   function isSessionIdleEvent(eventType: string): boolean {
     return eventType === 'session.ready'
       || eventType === 'turn.completed'
@@ -469,7 +430,6 @@
       }
       if (isSessionIdleEvent(streamEvent.event.type)) {
         void loadSessionDetail(selectedSessionId, { showLoading: false })
-        void refreshCurrentSessionGitStatus()
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
         return
       }
@@ -541,8 +501,8 @@
     actionError = null
     branchActionError = null
     if (selectedSessionId) {
+      autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
       await loadSelectedSession(selectedSessionId)
-      await refreshSessionGitStatus(currentSelectedSession())
     } else {
       historyObserverEnabled = false
       initialChatScrollPending = false
@@ -868,6 +828,7 @@
           {submitting}
           {actionBusy}
           {canSend}
+          autofocus={autofocusComposer}
           onOpenInbox={() => (inboxSheetOpen = true)}
           onExit={() => void runSessionLifecycle('exit')}
           onOpenConsole={openSessionConsole}

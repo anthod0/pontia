@@ -18,6 +18,7 @@
     submitLabel?: string
     interruptMode?: boolean
     interruptBusy?: boolean
+    autofocus?: boolean
     onSubmit: () => void
     onInterrupt?: () => void
     onFocus?: () => void
@@ -35,6 +36,7 @@
     submitLabel,
     interruptMode = false,
     interruptBusy = false,
+    autofocus = false,
     onSubmit,
     onInterrupt,
     onFocus,
@@ -80,7 +82,7 @@
 <PromptInput.Root class="w-full" onSubmit={submit}>
   <PromptInput.Body>
     <div class="relative">
-      <FileMentionTextarea id={inputId} bind:value {workspaceId} {placeholder} {disabled} shortcutFocusTarget onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-10 pr-10' : 'min-h-10'} />
+      <FileMentionTextarea id={inputId} bind:value {workspaceId} {placeholder} {disabled} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-10 pr-10' : 'min-h-10'} />
       {#if fullscreen}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={() => (fullscreenOpen = true)}>
           <Maximize2 class="size-4" />

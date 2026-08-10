@@ -16,6 +16,7 @@
     onkeydown?: (event: KeyboardEvent) => void
     onfocus?: (event: FocusEvent) => void
     shortcutFocusTarget?: boolean
+    autofocus?: boolean
   }
 
   let {
@@ -28,6 +29,7 @@
     onkeydown,
     onfocus,
     shortcutFocusTarget = false,
+    autofocus = false,
   }: Props = $props()
 
   let textarea = $state<HTMLTextAreaElement | null>(null)
@@ -40,6 +42,13 @@
   let debounce: ReturnType<typeof setTimeout> | null = null
   let controller: AbortController | null = null
   let requestId = 0
+  let autofocusHandled = false
+
+  $effect(() => {
+    if (!autofocus || autofocusHandled || disabled || !textarea) return
+    autofocusHandled = true
+    textarea.focus({ preventScroll: true })
+  })
 
   function closePicker(): void {
     open = false
@@ -154,6 +163,11 @@
     if (isPickerControlKey(event.key)) return
     refreshMention()
   }
+
+  function handleFocus(event: FocusEvent): void {
+    onfocus?.(event)
+    refreshMention()
+  }
 </script>
 
 <div class="relative w-full">
@@ -169,7 +183,7 @@
     oninput={refreshMention}
     onkeyup={handleKeyup}
     onclick={refreshMention}
-    onfocus={(event) => { onfocus?.(event); refreshMention() }}
+    onfocus={handleFocus}
   />
 
   {#if open}

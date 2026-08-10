@@ -17,6 +17,7 @@
     submitting?: boolean
     actionBusy?: boolean
     canSend?: boolean
+    autofocus?: boolean
     onOpenInbox: () => void
     onExit: () => void
     onOpenConsole: () => void
@@ -39,6 +40,7 @@
     submitting = false,
     actionBusy = false,
     canSend = false,
+    autofocus = false,
     onOpenInbox,
     onExit,
     onOpenConsole,
@@ -66,7 +68,7 @@
         <SessionActions {session} {inboxActionableCount} {actionBusy} {onOpenInbox} {onExit} {onOpenConsole} {onNewChat} {onRename} {onRestart} />
       </div>
     </div>
-    <MessageComposer bind:value={input} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus} />
+    <MessageComposer bind:value={input} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus} />
     {#if canSendSessionMessage(session, 'x') === false}
       <p class="mt-2 text-xs text-muted-foreground">This session cannot accept new messages.</p>
     {/if}

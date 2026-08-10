@@ -48,6 +48,35 @@ function observedHistorySentinels(): Element[] {
     .filter((element): element is Element => Boolean(element?.hasAttribute('data-chat-history-top-sentinel')));
 }
 
+test('focuses the composer and refreshes git only on the first entry, then refreshes git on manual focus', async () => {
+  const selected = session({ session_id: 'session-2', workspace_id: 'workspace-1' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+
+  const firstPage = render(SessionChatPage);
+
+  const composer = await screen.findByPlaceholderText('Send a follow-up message…');
+  await waitFor(() => expect(composer).toHaveFocus());
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1);
+  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
+
+  composer.blur();
+  composer.focus();
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(2));
+
+  firstPage.unmount();
+  mocks.refreshWorkspaceGitStatus.mockClear();
+  render(SessionChatPage);
+  const revisitedComposer = await screen.findByPlaceholderText('Send a follow-up message…');
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  expect(revisitedComposer).not.toHaveFocus();
+  expect(mocks.refreshWorkspaceGitStatus).not.toHaveBeenCalled();
+});
+
 function prepareBranchChat(
   turns: TurnView[],
   sessionOverrides: Partial<SessionView> = {},
@@ -863,6 +892,8 @@ test('shows workspace git status in the selected chat composer summary', async (
 
   render(SessionChatPage);
 
+  const composer = await screen.findByPlaceholderText('Send a follow-up message…');
+  composer.focus();
   await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
   const sessionDetailsButton = await screen.findByRole('button', { name: 'Session details: project · pi · main · dirty' });
   expect(sessionDetailsButton).toHaveTextContent('project · main ↑1 ↓2 +3 ~4 ?5 !6 · pi');
@@ -1080,7 +1111,7 @@ test('restores a cached selected chat and refreshes it without rebuilding histor
   resolveRefresh?.();
 });
 
-test('refreshes an already-loaded selected chat through its cached latest Turn without rebuilding history', async () => {
+test('does not refresh an already-loaded selected chat when the window regains focus', async () => {
   const selected = session({ session_id: 'session-2', state: 'running' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -1121,13 +1152,15 @@ test('refreshes an already-loaded selected chat through its cached latest Turn w
   }));
 
   window.dispatchEvent(new Event('focus'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
 
-  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2', { showLoading: false }));
-  expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1');
+  expect(mocks.loadSessionDetail).not.toHaveBeenCalled();
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
+  expect(mocks.refreshSessionTimeline).not.toHaveBeenCalled();
 });
 
 
-test('coalesces bursty selected-session idle events into one git status refresh', async () => {
+test('does not refresh git status for selected-session idle events', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -1138,7 +1171,6 @@ test('coalesces bursty selected-session idle events into one git status refresh'
   render(SessionChatPage);
 
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
-  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
   mocks.refreshWorkspaceGitStatus.mockClear();
   mocks.refreshSessionTimeline.mockClear();
 
@@ -1163,9 +1195,8 @@ test('coalesces bursty selected-session idle events into one git status refresh'
     listener(idleEvent('evt-failed', 'turn.failed'));
   }
 
-  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1));
-  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
-  expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1');
+  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1'));
+  expect(mocks.refreshWorkspaceGitStatus).not.toHaveBeenCalled();
 });
 
 

@@ -15,6 +15,7 @@
     clientTypeOptions: string[]
     fixedWorkspace?: boolean
     promptDisabled?: boolean
+    autofocus?: boolean
     placement?: 'center' | 'bottom'
     onStartChat: () => void
   }
@@ -31,6 +32,7 @@
     clientTypeOptions,
     fixedWorkspace = false,
     promptDisabled = false,
+    autofocus = false,
     placement = 'center',
     onStartChat,
   }: Props = $props()
@@ -43,6 +45,7 @@
       bind:value={prompt}
       {workspaceId}
       inputId="chat-prompt"
+      {autofocus}
       placeholder="Ask the agent to implement, inspect, or explain something…"
       disabled={promptDisabled}
       submitDisabled={!canCreate}
