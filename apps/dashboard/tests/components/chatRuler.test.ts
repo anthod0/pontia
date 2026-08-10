@@ -52,14 +52,33 @@ describe('ChatRuler', () => {
     const marks = document.querySelectorAll('[data-chat-ruler-mark]');
     expect(marks).toHaveLength(6);
     const userMark = screen.getByRole('button', { name: 'User message: Root question' });
-    expect(userMark).toHaveClass('h-px', 'w-6', 'bg-gray-300');
-    expect(screen.getByRole('button', { name: 'Assistant message: Root answer' })).toHaveClass('h-px', 'w-4', 'bg-gray-300');
+    expect(userMark).toHaveClass('h-full', 'w-full');
+    expect(userMark.parentElement).toHaveClass('h-2');
+    expect(userMark.querySelector('[data-chat-ruler-line]')).toHaveClass('h-px', 'w-[10px]', 'bg-gray-300');
+    expect(
+      screen
+        .getByRole('button', { name: 'Assistant message: Root answer' })
+        .querySelector('[data-chat-ruler-line]'),
+    ).toHaveClass('h-px', 'w-[5px]', 'bg-gray-300');
 
     await user.hover(userMark);
-    expect(await screen.findByText('Root question')).toBeInTheDocument();
+    const summary = await screen.findByText('Root question');
+    const tooltipLayout = summary.parentElement;
+    expect(summary).toHaveClass('text-gray-600');
+    expect(tooltipLayout).toHaveClass('flex-col', 'items-start');
+    expect(tooltipLayout?.parentElement).toHaveClass(
+      'border',
+      'border-gray-200',
+      'bg-gray-100',
+      'text-gray-900',
+      'shadow-md',
+    );
+    expect(tooltipLayout?.parentElement?.querySelector('.hidden')).toBeInTheDocument();
+    expect(tooltipLayout?.children[0]).toHaveTextContent('User');
+    expect(tooltipLayout?.children[1]).toHaveTextContent('Root question');
   });
 
-  test('marks sibling branches only in tree mode', () => {
+  test('renders sibling branches as darker user lines only in tree mode', () => {
     const { rerender } = render(ChatRuler, {
       props: {
         turns,
@@ -74,10 +93,16 @@ describe('ChatRuler', () => {
       treeMode: true,
       navigableTurnIds: ['turn-root', 'turn-current'],
     });
-    expect(document.querySelectorAll('[data-chat-ruler-branch]')).toHaveLength(2);
+    const branchLines = document.querySelectorAll('[data-chat-ruler-branch]');
+    expect(branchLines).toHaveLength(1);
+    expect(branchLines[0].tagName).toBe('SPAN');
+    expect(branchLines[0]).toHaveClass('h-px', 'w-[10px]', 'bg-gray-500');
+    expect(branchLines[0].closest('button')).toHaveAttribute('data-turn-id', 'turn-current');
+    expect(screen.queryByRole('button', { name: 'User message: Other branch question' })).not.toBeInTheDocument();
+    expect(document.querySelector('[data-chat-ruler] svg')).not.toBeInTheDocument();
   });
 
-  test('navigates current-lineage marks and leaves other branches inactive', async () => {
+  test('renders and navigates only current-lineage marks', async () => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();
     render(ChatRuler, {
@@ -89,12 +114,11 @@ describe('ChatRuler', () => {
       },
     });
 
-    await user.click(screen.getByRole('button', { name: 'User message: Current branch question' }));
-    expect(onNavigate).toHaveBeenCalledWith('turn-current', 'user');
+    expect(document.querySelectorAll('[data-chat-ruler-mark]')).toHaveLength(4);
+    expect(screen.queryByRole('button', { name: 'User message: Other branch question' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', {
-      name: 'User message: Other branch question (not on the current branch)',
-    }));
+    await user.click(screen.getByRole('button', { name: 'User message: Current branch question' }));
     expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith('turn-current', 'user');
   });
 });

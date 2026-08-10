@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { GitFork } from '@lucide/svelte'
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
   import type { TurnView } from '../../../api/types'
   import type { ChatMessageRole } from '../../session-chat/sessionChat'
@@ -19,8 +18,9 @@
   }: Props = $props()
 
   const MESSAGE_ROLES: ChatMessageRole[] = ['user', 'assistant']
-  const orderedTurns = $derived(turns.slice().sort(compareTurns))
   const navigableTurnIdSet = $derived(new Set(navigableTurnIds))
+  const orderedTurns = $derived(turns.slice().sort(compareTurns))
+  const visibleTurns = $derived(orderedTurns.filter((turn) => navigableTurnIdSet.has(turn.turn_id)))
   const branchedTurnIdSet = $derived(branchTurnIds(orderedTurns, treeMode))
 
   function compareTurns(a: TurnView, b: TurnView): number {
@@ -67,7 +67,7 @@
   }
 </script>
 
-{#if orderedTurns.length}
+{#if visibleTurns.length}
   <Tooltip.Provider delayDuration={120}>
   <aside
     class="fixed right-4 top-1/2 z-30 hidden -translate-y-1/2 xl:block"
@@ -76,11 +76,11 @@
   >
     <div class="relative max-h-[calc(100svh-14rem)] overflow-y-auto px-2 py-2">
       <ol class="relative flex min-w-8 flex-col items-end gap-0">
-        {#each orderedTurns as turn (turn.turn_id)}
-          {@const navigable = navigableTurnIdSet.has(turn.turn_id)}
+        {#each visibleTurns as turn (turn.turn_id)}
           {@const branched = branchedTurnIdSet.has(turn.turn_id)}
           {#each MESSAGE_ROLES as role (role)}
             {@const summary = summaryFor(turn, role)}
+            {@const branchMark = branched && role === 'user'}
             <li class="relative flex h-2 w-9 items-center justify-end">
               <Tooltip.Root>
                 <Tooltip.Trigger>
@@ -88,33 +88,34 @@
                     <button
                       type="button"
                       {...props}
-                      class={`relative z-10 h-px rounded-full bg-gray-300 transition-[width,background-color,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${role === 'user' ? 'w-6' : 'w-4'} ${navigable ? 'cursor-pointer hover:bg-gray-400' : 'cursor-default opacity-50'}`}
-                      aria-label={`${roleLabel(role)} message: ${summary}${navigable ? '' : ' (not on the current branch)'}`}
-                      aria-disabled={!navigable}
+                      class="group relative z-10 flex h-full w-full cursor-pointer items-center justify-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      aria-label={`${roleLabel(role)} message: ${summary}`}
                       data-chat-ruler-mark
                       data-turn-id={turn.turn_id}
                       data-role={role}
-                      data-navigable={navigable ? 'true' : 'false'}
                       onclick={() => activate(turn, role)}
-                    ></button>
+                    >
+                      <span
+                        class={`h-px rounded-full transition-[width,background-color] ${role === 'user' ? 'w-[10px]' : 'w-[5px]'} ${branchMark ? 'bg-gray-500 group-hover:bg-gray-600' : 'bg-gray-300 group-hover:bg-gray-400'}`}
+                        aria-hidden="true"
+                        data-chat-ruler-line
+                        data-chat-ruler-branch={branchMark ? 'true' : undefined}
+                      ></span>
+                    </button>
                   {/snippet}
                 </Tooltip.Trigger>
-                <Tooltip.Content side="left" sideOffset={8} class="max-w-80 whitespace-normal">
-                  <span class="font-medium">{roleLabel(role)}</span>
-                  <span class="line-clamp-3 text-background/80">{summary}</span>
-                  {#if !navigable}
-                    <span class="text-background/60">Not on the current branch</span>
-                  {/if}
+                <Tooltip.Content
+                  side="left"
+                  sideOffset={8}
+                  class="max-w-80 whitespace-normal border border-gray-200 bg-gray-100 text-gray-900 shadow-md"
+                  arrowClasses="hidden"
+                >
+                  <div class="flex flex-col items-start gap-1.5">
+                    <span class="font-medium">{roleLabel(role)}</span>
+                    <span class="line-clamp-3 text-gray-600">{summary}</span>
+                  </div>
                 </Tooltip.Content>
               </Tooltip.Root>
-              {#if branched && role === 'user'}
-                <GitFork
-                  class="absolute -right-1 size-3 text-primary"
-                  aria-label="Branch turn"
-                  data-chat-ruler-branch
-                  data-turn-id={turn.turn_id}
-                />
-              {/if}
             </li>
           {/each}
         {/each}
