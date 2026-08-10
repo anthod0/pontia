@@ -2,7 +2,7 @@ import { get } from 'svelte/store';
 import { loadSessions, loadSessionDetail, sessionDetail } from '../stores/sessions';
 import { hasTimelineSnapshot, loadSessionTimeline, refreshSessionTimeline, timelineState } from '../stores/timeline';
 
-export type DashboardSnapshotRefreshReason = 'online' | 'sse_open' | 'sse_fallback';
+export type DashboardSnapshotRefreshReason = 'sse_fallback';
 
 export type DashboardSnapshotRefreshOptions = {
   reason: DashboardSnapshotRefreshReason;

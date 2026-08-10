@@ -41,6 +41,8 @@ let controller: AbortController | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let generation = 0;
 let started = false;
+let lifecycleListenersAttached = false;
+let lifecycleReconnectQueued = false;
 
 function clearReconnectTimer(): void {
   if (reconnectTimer) {
@@ -49,9 +51,54 @@ function clearReconnectTimer(): void {
   }
 }
 
+function attachLifecycleListeners(): void {
+  if (lifecycleListenersAttached || typeof window === 'undefined') return;
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('online', queueLifecycleReconnect);
+  window.addEventListener('pageshow', queueLifecycleReconnect);
+  lifecycleListenersAttached = true;
+}
+
+function detachLifecycleListeners(): void {
+  if (!lifecycleListenersAttached || typeof window === 'undefined') return;
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  window.removeEventListener('online', queueLifecycleReconnect);
+  window.removeEventListener('pageshow', queueLifecycleReconnect);
+  lifecycleListenersAttached = false;
+}
+
+function handleVisibilityChange(): void {
+  if (document.visibilityState === 'visible') queueLifecycleReconnect();
+}
+
+function queueLifecycleReconnect(): void {
+  if (!started || lifecycleReconnectQueued) return;
+  lifecycleReconnectQueued = true;
+  const requestedGeneration = generation;
+  queueMicrotask(() => {
+    lifecycleReconnectQueued = false;
+    if (!started || generation !== requestedGeneration) return;
+    forceReconnect();
+  });
+}
+
+function forceReconnect(): void {
+  if (!started) return;
+  const nextGeneration = ++generation;
+  clearReconnectTimer();
+  const previousController = controller;
+  controller = null;
+  previousController?.abort();
+  reconnectCount.update((count) => count + 1);
+  sseStatus.set('reconnecting');
+  void connect(nextGeneration);
+}
+
 export function stopEventStream(): void {
   generation += 1;
   started = false;
+  lifecycleReconnectQueued = false;
+  detachLifecycleListeners();
   clearReconnectTimer();
   controller?.abort();
   controller = null;
@@ -66,20 +113,24 @@ export function startEventStream(): void {
   reconnectCount.set(0);
   lastConnectionError.set(null);
   streamedSessionId.set('dashboard');
+  attachLifecycleListeners();
   void connect(generation);
 }
 
 async function connect(streamGeneration: number): Promise<void> {
+  if (!started || streamGeneration !== generation) return;
   const bearer = get(token).trim();
   if (!bearer) {
     sseStatus.set('idle');
     lastConnectionError.set('Set an API token in Settings to open the dashboard event stream.');
     started = false;
+    detachLifecycleListeners();
     streamedSessionId.set(null);
     return;
   }
 
-  controller = new AbortController();
+  const localController = new AbortController();
+  controller = localController;
   sseStatus.set(get(reconnectCount) > 0 ? 'reconnecting' : 'connecting');
   lastConnectionError.set(null);
 
@@ -88,8 +139,10 @@ async function connect(streamGeneration: number): Promise<void> {
     const query = after ? `?after=${encodeURIComponent(after)}` : '';
     const response = await fetch(`${API_BASE}/dashboard/events/stream${query}`, {
       headers: { Authorization: `Bearer ${bearer}` },
-      signal: controller.signal,
+      signal: localController.signal,
     });
+
+    if (localController.signal.aborted || streamGeneration !== generation || !started) return;
 
     if (!response.ok || !response.body) {
       if (isAuthenticationFailure(response.status)) {
@@ -97,7 +150,7 @@ async function connect(streamGeneration: number): Promise<void> {
         stopEventStream();
         return;
       }
-      if (after) {
+      if (after && (response.status === 409 || response.status === 410)) {
         dashboardStreamCursor.set(null);
         await refreshDashboardSnapshot({ reason: 'sse_fallback' });
       }
@@ -105,12 +158,13 @@ async function connect(streamGeneration: number): Promise<void> {
     }
 
     sseStatus.set('open');
-    void refreshDashboardSnapshot({ reason: 'sse_open' });
-    await readSse(response.body, handleDashboardEvent);
+    await readSse(response.body, (event, cursor) => {
+      if (streamGeneration === generation) handleDashboardEvent(event, cursor);
+    });
 
     if (streamGeneration === generation && started) scheduleReconnect(streamGeneration);
   } catch (error) {
-    if (controller?.signal.aborted || streamGeneration !== generation) return;
+    if (localController.signal.aborted || streamGeneration !== generation) return;
     lastConnectionError.set(error instanceof Error ? error.message : String(error));
     sseStatus.set('error');
     scheduleReconnect(streamGeneration);
