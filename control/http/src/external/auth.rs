@@ -3,7 +3,10 @@ use serde_json::json;
 
 use pontia_application::AppState;
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
+use super::{
+    authentication::authenticate,
+    response::{ApiResponse, ExternalApiError, ok},
+};
 
 pub async fn validate_auth(
     State(state): State<AppState>,

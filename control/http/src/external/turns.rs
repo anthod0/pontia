@@ -8,8 +8,11 @@ use serde_json::{Value, json};
 
 use pontia_application::{AppState, ExternalQueryService, RuntimeControlService};
 
-use super::common::{
-    ApiResponse, ExternalApiError, authenticate, ensure_session_exists, idempotent, ok,
+use super::{
+    authentication::authenticate,
+    idempotency::idempotent,
+    response::{ApiResponse, ExternalApiError, ok},
+    session_guard::ensure_session_exists,
 };
 
 pub async fn interrupt_turn(

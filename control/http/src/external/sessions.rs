@@ -12,7 +12,11 @@ use pontia_application::{
     SessionCommandService, UpdateSessionRequest,
 };
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, idempotent, ok};
+use super::{
+    authentication::authenticate,
+    idempotency::idempotent,
+    response::{ApiResponse, ExternalApiError, ok},
+};
 
 pub async fn create_session(
     State(state): State<AppState>,

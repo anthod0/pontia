@@ -12,7 +12,9 @@ use tokio_stream::{Stream, wrappers::ReceiverStream};
 use pontia_application::{AppState, EventStreamScope, EventView, ExternalQueryService};
 use pontia_core::domain::{DomainEvent, EventType};
 
-use super::common::{ExternalApiError, authenticate, ensure_session_exists};
+use super::{
+    authentication::authenticate, response::ExternalApiError, session_guard::ensure_session_exists,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct EventStreamQuery {

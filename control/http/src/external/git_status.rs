@@ -7,7 +7,10 @@ use serde_json::{Value, json};
 
 use pontia_application::{AppState, ExternalQueryService, WorkspaceGitStatusService};
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
+use super::{
+    authentication::authenticate,
+    response::{ApiResponse, ExternalApiError, ok},
+};
 
 pub async fn get_workspace_git_status(
     State(state): State<AppState>,

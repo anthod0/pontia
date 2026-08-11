@@ -1,11 +1,14 @@
 mod agent_profiles;
 mod approvals;
 mod auth;
-mod common;
+mod authentication;
 mod dashboard_events;
 mod events;
 mod git_status;
+mod idempotency;
 mod inbox;
+mod response;
+mod session_guard;
 mod sessions;
 mod tasks;
 mod timeline;
@@ -19,7 +22,6 @@ pub use agent_profiles::{
 };
 pub use approvals::decide_approval;
 pub use auth::validate_auth;
-pub use common::{ApiResponse, ExternalApiError};
 pub use dashboard_events::stream_dashboard_events;
 pub use events::{stream_session_events, stream_turn_events};
 pub use git_status::{get_workspace_git_status, refresh_workspace_git_status};
@@ -27,6 +29,7 @@ pub use inbox::{
     cancel_inbox_message, dismiss_inbox_message, get_inbox_message, list_inbox_messages,
     submit_inbox_message,
 };
+pub use response::{ApiResponse, ExternalApiError};
 pub use sessions::{
     archive_session, create_session, get_session, interrupt_session, list_sessions, pin_session,
     restart_session, resume_session, terminate_session, unarchive_session, unpin_session,

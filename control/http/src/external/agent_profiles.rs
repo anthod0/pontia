@@ -9,7 +9,11 @@ use serde_json::{Value, json};
 
 use pontia_application::{AgentProfileService, AppState, UpsertExecutionProfileRequest};
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, idempotent, ok};
+use super::{
+    authentication::authenticate,
+    idempotency::idempotent,
+    response::{ApiResponse, ExternalApiError, ok},
+};
 
 #[derive(Debug, Deserialize)]
 pub struct AgentProfilesQuery {

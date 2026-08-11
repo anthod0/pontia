@@ -16,8 +16,9 @@ use pontia_core::{
 };
 
 use super::{
-    common::{ExternalApiError, authenticate},
+    authentication::authenticate,
     events::{EventStreamQuery, event_view_from_domain_event, is_test_stream_once},
+    response::ExternalApiError,
 };
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

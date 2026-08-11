@@ -8,7 +8,11 @@ use serde_json::{Value, json};
 
 use pontia_application::{AppState, InboxCommandService, SubmitInboxMessageRequest};
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, idempotent, ok};
+use super::{
+    authentication::authenticate,
+    idempotency::idempotent,
+    response::{ApiResponse, ExternalApiError, ok},
+};
 
 pub async fn submit_inbox_message(
     State(state): State<AppState>,

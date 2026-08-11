@@ -7,7 +7,11 @@ use axum::{
 use pontia_application::{AppState, ApprovalCommandService, ApprovalDecisionRequest};
 use serde_json::json;
 
-use super::common::{ExternalApiError, authenticate, idempotent, ok};
+use super::{
+    authentication::authenticate,
+    idempotency::idempotent,
+    response::{ExternalApiError, ok},
+};
 
 pub async fn decide_approval(
     State(state): State<AppState>,

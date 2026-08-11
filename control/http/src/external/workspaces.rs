@@ -12,7 +12,10 @@ use pontia_application::{
     WorkspaceBrowserService,
 };
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
+use super::{
+    authentication::authenticate,
+    response::{ApiResponse, ExternalApiError, ok},
+};
 
 #[derive(Debug, Deserialize)]
 pub struct WorkspaceEntriesQuery {

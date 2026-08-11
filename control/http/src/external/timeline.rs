@@ -10,7 +10,10 @@ use pontia_application::{
     AppState, TurnTimelineDirection, TurnTimelineService, TurnTimelineServiceError,
 };
 
-use super::common::{ApiResponse, ExternalApiError, authenticate, ok};
+use super::{
+    authentication::authenticate,
+    response::{ApiResponse, ExternalApiError, ok},
+};
 
 pub async fn get_turn_timeline(
     State(state): State<AppState>,

@@ -1,14 +1,11 @@
-use std::future::Future;
-
 use axum::{
     Json,
-    http::{HeaderMap, StatusCode, header},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use pontia_application::{AppState, ExternalQueryService, IdempotencyOutcome};
 use pontia_core::error::Error;
 
 #[derive(Debug, Serialize)]
@@ -22,62 +19,6 @@ pub struct ApiResponse<T: Serialize> {
 struct ApiErrorBody {
     code: &'static str,
     message: String,
-}
-
-pub(super) async fn ensure_session_exists(
-    service: &ExternalQueryService,
-    session_id: &str,
-) -> Result<(), ExternalApiError> {
-    service
-        .get_session(session_id)
-        .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
-    Ok(())
-}
-
-pub(super) fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<(), ExternalApiError> {
-    let Some(expected) = state.external_api_token() else {
-        return Err(ExternalApiError::authentication_failed(
-            "external API token is not configured",
-        ));
-    };
-
-    let authorized = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|token| token == expected);
-
-    if authorized {
-        Ok(())
-    } else {
-        Err(ExternalApiError::authentication_failed(
-            "missing or invalid bearer token",
-        ))
-    }
-}
-
-pub(super) fn idempotency_key(headers: &HeaderMap) -> Option<&str> {
-    headers
-        .get("Idempotency-Key")
-        .and_then(|value| value.to_str().ok())
-}
-
-pub(super) async fn idempotent<F, Fut>(
-    state: &AppState,
-    headers: &HeaderMap,
-    operation: impl Into<String>,
-    action: F,
-) -> Result<IdempotencyOutcome, ExternalApiError>
-where
-    F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<Value, Error>>,
-{
-    state
-        .idempotency()
-        .run(operation, idempotency_key(headers), action)
-        .await
-        .map_err(Into::into)
 }
 
 pub(super) fn ok(data: Value) -> Json<ApiResponse<Value>> {
@@ -96,7 +37,7 @@ pub struct ExternalApiError {
 }
 
 impl ExternalApiError {
-    fn authentication_failed(message: impl Into<String>) -> Self {
+    pub(super) fn authentication_failed(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
             code: "authentication_failed",
