@@ -64,6 +64,10 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
         })
         .await
         .expect("create child node");
+    repository
+        .start_workflow("wf_1", "evt_1")
+        .await
+        .expect("start workflow");
 
     repository
         .bind_node_session("node_1", "session_1")
@@ -89,7 +93,7 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
         .expect("workflow exists");
     assert_eq!(workflow.title, "Draft release notes");
     assert_eq!(workflow.cwd, "/work/project");
-    assert_eq!(workflow.state, "pending");
+    assert_eq!(workflow.state, "running");
 
     let nodes = repository.list_nodes("wf_1").await.expect("list nodes");
     assert_eq!(nodes.len(), 2);
@@ -101,11 +105,14 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
     assert_eq!(nodes[1].output, "approved.md");
 
     let events = repository.list_events("wf_1").await.expect("list events");
-    assert_eq!(events.len(), 2);
+    assert_eq!(events.len(), 3);
     assert_eq!(events[0].sequence, 1);
-    assert_eq!(events[0].event_id, "evt_2");
+    assert_eq!(events[0].event_id, "evt_1");
+    assert_eq!(events[0].event_type, "workflow.started");
     assert_eq!(events[1].sequence, 2);
-    assert_eq!(events[1].event_id, "evt_3");
+    assert_eq!(events[1].event_id, "evt_2");
+    assert_eq!(events[2].sequence, 3);
+    assert_eq!(events[2].event_id, "evt_3");
 }
 
 #[tokio::test]
