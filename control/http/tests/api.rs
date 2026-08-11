@@ -22,8 +22,8 @@ mod health;
 mod internal_event;
 #[path = "api/raw_transcript/mod.rs"]
 mod raw_transcript;
-#[path = "api/runtime_binding_upsert.rs"]
-mod runtime_binding_upsert;
+#[path = "api/runtime_binding/mod.rs"]
+mod runtime_binding;
 #[path = "api/runtime_lifecycle.rs"]
 mod runtime_lifecycle;
 #[path = "api/session_create.rs"]
