@@ -1,37 +1,7 @@
 use serde_json::{Value, json};
 
-use pontia_core::error::{Error, Result};
-
-use super::{RuntimeBindingTmuxRequest, RuntimeBindingUpsertRequest};
+use super::{RuntimeBindingTmuxRequest, RuntimeBindingUpsertRequest, request::non_empty};
 use crate::SessionCapabilities;
-
-pub(super) fn validate_required(field: &str, value: &str) -> Result<()> {
-    if value.trim().is_empty() {
-        return Err(Error::Domain(format!("{field} is required")));
-    }
-    Ok(())
-}
-
-pub(super) fn is_fork_start(request: &RuntimeBindingUpsertRequest) -> bool {
-    matches!(request.start_kind.as_deref().map(str::trim), Some("fork"))
-}
-
-pub(super) fn non_empty(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-}
-
-pub(crate) fn writable_capabilities(
-    mut capabilities: SessionCapabilities,
-    writable: bool,
-) -> SessionCapabilities {
-    capabilities.accept_task = writable;
-    capabilities.interrupt = writable;
-    capabilities.branch_control = capabilities.branch_control && writable;
-    capabilities
-}
 
 pub(super) fn binding_metadata(
     request: &RuntimeBindingUpsertRequest,
@@ -103,7 +73,7 @@ pub(super) fn binding_metadata(
     Value::Object(metadata)
 }
 
-pub(super) fn tmux_metadata(tmux: &RuntimeBindingTmuxRequest) -> Value {
+fn tmux_metadata(tmux: &RuntimeBindingTmuxRequest) -> Value {
     let mut metadata = serde_json::Map::new();
     insert_optional(&mut metadata, "session_id", &tmux.session_id);
     insert_optional(&mut metadata, "session_name", &tmux.session_name);
@@ -135,7 +105,7 @@ pub(super) fn agent_binding_metadata(request: &RuntimeBindingUpsertRequest) -> V
     Value::Object(metadata)
 }
 
-pub(super) fn insert_optional(
+fn insert_optional(
     metadata: &mut serde_json::Map<String, Value>,
     key: &str,
     value: &Option<String>,
@@ -148,7 +118,6 @@ pub(super) fn insert_optional(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::bindings::RuntimeBindingUpsertRequest;
 
     #[test]
     fn binding_metadata_uses_client_hook_log_metadata_key() {
