@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::test_app::TestApp;
+use crate::common::test_app::TestApp;
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
@@ -10,19 +10,6 @@ use pontia_application::AppState;
 use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
-
-async fn configured_state() -> AppState {
-    let state = TestApp::builder()
-        .database_name("approval-registration.db")
-        .build_state()
-        .await;
-    insert_approval_context(
-        &state,
-        r#"{"internal_event_url":"http://127.0.0.1/internal/v1/events"}"#,
-    )
-    .await;
-    state
-}
 
 async fn insert_approval_context(state: &AppState, runtime_metadata: &str) {
     sqlx::query(
@@ -89,40 +76,6 @@ async fn post_external(
         )
         .await
         .expect("response")
-}
-
-async fn post_otlp(
-    state: AppState,
-    body: Value,
-    authorization: Option<&str>,
-) -> axum::response::Response {
-    let mut request = Request::builder()
-        .method("POST")
-        .uri("/internal/v1/otel/v1/logs")
-        .header(header::CONTENT_TYPE, "application/json");
-    if let Some(authorization) = authorization {
-        request = request.header(header::AUTHORIZATION, authorization);
-    }
-    http::router(state)
-        .oneshot(request.body(Body::from(body.to_string())).expect("request"))
-        .await
-        .expect("response")
-}
-
-fn tool_decision_fixture() -> Value {
-    serde_json::from_str(include_str!("../fixtures/otlp/claude-tool-decision.json"))
-        .expect("valid OTLP JSON fixture")
-}
-
-fn set_tool_decision_attribute(fixture: &mut Value, key: &str, value: &str) {
-    let attributes = fixture["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]["attributes"]
-        .as_array_mut()
-        .expect("fixture log attributes");
-    let attribute = attributes
-        .iter_mut()
-        .find(|attribute| attribute["key"] == key)
-        .expect("fixture attribute");
-    attribute["value"]["stringValue"] = Value::String(value.to_string());
 }
 
 async fn configured_otel_state(database_name: &str) -> AppState {

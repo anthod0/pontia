@@ -1,4 +1,4 @@
-use crate::test_app::TestApp;
+use crate::common::test_app::TestApp;
 use pontia_application::EventIngestService;
 use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use serde_json::json;

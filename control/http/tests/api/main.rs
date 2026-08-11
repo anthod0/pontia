@@ -1,12 +1,5 @@
-#[path = "../support/generic_client.rs"]
-mod generic_client;
-#[allow(dead_code)]
-#[path = "../support/http.rs"]
-mod http;
-#[path = "../support/task_state.rs"]
-mod task_state;
-#[path = "../support/test_app.rs"]
-mod test_app;
+#[path = "../common/mod.rs"]
+mod common;
 
 mod agent_profile;
 mod approval;
@@ -20,6 +13,7 @@ mod runtime_lifecycle;
 mod session_create;
 mod session_inbox;
 mod session_workspace_linking;
+mod support;
 mod task_creation;
 mod task_lifecycle;
 mod test_app_support;

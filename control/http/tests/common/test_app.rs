@@ -16,9 +16,9 @@ fn env_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
-pub struct TestApp {
-    pub state: AppState,
-    pub db: SqlitePool,
+pub(crate) struct TestApp {
+    pub(crate) state: AppState,
+    pub(crate) db: SqlitePool,
     pontia_home: tempfile::TempDir,
     workspace: tempfile::TempDir,
     _db_dir: Option<tempfile::TempDir>,
@@ -26,33 +26,33 @@ pub struct TestApp {
 }
 
 impl TestApp {
-    pub fn builder() -> TestAppBuilder {
+    pub(crate) fn builder() -> TestAppBuilder {
         TestAppBuilder::default()
     }
 
-    pub async fn new() -> Self {
+    pub(crate) async fn new() -> Self {
         Self::builder().build().await
     }
 
-    pub fn pontia_home(&self) -> &tempfile::TempDir {
+    pub(crate) fn pontia_home(&self) -> &tempfile::TempDir {
         &self.pontia_home
     }
 
-    pub fn workspace(&self) -> &tempfile::TempDir {
+    pub(crate) fn workspace(&self) -> &tempfile::TempDir {
         &self.workspace
     }
 
-    pub fn temp_workspace(&self) -> tempfile::TempDir {
+    pub(crate) fn temp_workspace(&self) -> tempfile::TempDir {
         tempfile::tempdir().expect("workspace")
     }
 
-    pub fn set_env(&mut self, key: &str, value: impl Into<OsString>) {
+    pub(crate) fn set_env(&mut self, key: &str, value: impl Into<OsString>) {
         self._env.set(key, value.into());
     }
 }
 
 #[derive(Default)]
-pub struct TestAppBuilder {
+pub(crate) struct TestAppBuilder {
     external_api_token: Option<Option<String>>,
     workspace_browser: Option<WorkspaceBrowserConfig>,
     file_picker: Option<FilePickerConfig>,
@@ -62,37 +62,37 @@ pub struct TestAppBuilder {
 }
 
 impl TestAppBuilder {
-    pub fn external_api_token(mut self, token: Option<String>) -> Self {
+    pub(crate) fn external_api_token(mut self, token: Option<String>) -> Self {
         self.external_api_token = Some(token);
         self
     }
 
-    pub fn workspace_browser(mut self, workspace_browser: WorkspaceBrowserConfig) -> Self {
+    pub(crate) fn workspace_browser(mut self, workspace_browser: WorkspaceBrowserConfig) -> Self {
         self.workspace_browser = Some(workspace_browser);
         self
     }
 
-    pub fn file_picker(mut self, file_picker: FilePickerConfig) -> Self {
+    pub(crate) fn file_picker(mut self, file_picker: FilePickerConfig) -> Self {
         self.file_picker = Some(file_picker);
         self
     }
 
-    pub fn in_memory_db(mut self) -> Self {
+    pub(crate) fn in_memory_db(mut self) -> Self {
         self.in_memory_db = true;
         self
     }
 
-    pub fn database_name(mut self, name: impl Into<String>) -> Self {
+    pub(crate) fn database_name(mut self, name: impl Into<String>) -> Self {
         self.database_name = Some(name.into());
         self
     }
 
-    pub fn pi_runtime_stub(mut self, enabled: bool) -> Self {
+    pub(crate) fn pi_runtime_stub(mut self, enabled: bool) -> Self {
         self.pi_runtime_stub = enabled;
         self
     }
 
-    pub async fn build(self) -> TestApp {
+    pub(crate) async fn build(self) -> TestApp {
         let pontia_home = tempfile::tempdir().expect("pontia home");
         let workspace = tempfile::tempdir().expect("workspace");
         let mut env = EnvGuard::new();
@@ -117,7 +117,7 @@ impl TestAppBuilder {
         }
     }
 
-    pub async fn build_state(self) -> AppState {
+    pub(crate) async fn build_state(self) -> AppState {
         let (db, db_dir) = self.open_database().await;
         let state = self.build_app_state(db);
         if let Some(dir) = db_dir {
@@ -157,27 +157,27 @@ impl TestAppBuilder {
     }
 }
 
-pub struct EnvGuard {
+pub(crate) struct EnvGuard {
     _lock: MutexGuard<'static, ()>,
     saved: Vec<(String, Option<OsString>)>,
 }
 
 impl EnvGuard {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             _lock: env_lock().lock().expect("test env lock"),
             saved: Vec::new(),
         }
     }
 
-    pub fn set(&mut self, key: &str, value: OsString) {
+    pub(crate) fn set(&mut self, key: &str, value: OsString) {
         self.save_once(key);
         unsafe {
             env::set_var(key, value);
         }
     }
 
-    pub fn remove(&mut self, key: &str) {
+    pub(crate) fn remove(&mut self, key: &str) {
         self.save_once(key);
         unsafe {
             env::remove_var(key);

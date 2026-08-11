@@ -8,13 +8,13 @@ use pontia_http as http;
 use serde_json::Value;
 use tower::ServiceExt;
 
-pub const TOKEN: &str = "test-token";
+pub(crate) const TOKEN: &str = "test-token";
 
-pub async fn post_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Value) {
+pub(crate) async fn post_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Value) {
     post_json_with_idempotency(state, uri, body, None).await
 }
 
-pub async fn post_json_with_idempotency(
+pub(crate) async fn post_json_with_idempotency(
     state: AppState,
     uri: &str,
     body: Value,
@@ -37,7 +37,7 @@ pub async fn post_json_with_idempotency(
     json_response(response).await
 }
 
-pub async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
+pub(crate) async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
     let response = http::router(state)
         .oneshot(
             Request::builder()
@@ -53,7 +53,7 @@ pub async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
     json_response(response).await
 }
 
-pub async fn json_response(response: axum::response::Response) -> (StatusCode, Value) {
+pub(crate) async fn json_response(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let body = response
         .into_body()

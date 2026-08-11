@@ -13,7 +13,7 @@ use pontia_storage_sqlite::repositories::{
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use crate::test_app::TestApp;
+use crate::common::test_app::TestApp;
 
 async fn seed_running_workflow(app: &TestApp) {
     let workflows = SqliteWorkflowRepository::new(app.db.clone());

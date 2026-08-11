@@ -1,4 +1,4 @@
-use crate::test_app::TestApp;
+use crate::common::test_app::TestApp;
 use std::{
     fs,
     io::Write,
@@ -96,10 +96,6 @@ async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
     (status, json)
 }
 
-async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
-    post_internal_json(state, "/internal/v1/events", body).await
-}
-
 async fn post_internal_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Value) {
     let response = http::router(state)
         .oneshot(
@@ -123,32 +119,8 @@ async fn post_internal_json(state: AppState, uri: &str, body: Value) -> (StatusC
     (status, serde_json::from_slice(&body).expect("json body"))
 }
 
-async fn post_external_json(
-    state: AppState,
-    uri: &str,
-    idempotency_key: Option<&str>,
-    body: Value,
-) -> (StatusCode, Value) {
-    let mut builder = Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-        .header(header::CONTENT_TYPE, "application/json");
-    if let Some(key) = idempotency_key {
-        builder = builder.header("Idempotency-Key", key);
-    }
-    let response = http::router(state)
-        .oneshot(builder.body(Body::from(body.to_string())).expect("request"))
-        .await
-        .expect("response");
-    let status = response.status();
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .expect("body")
-        .to_bytes();
-    (status, serde_json::from_slice(&body).expect("json body"))
+async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
+    post_internal_json(state, "/internal/v1/events", body).await
 }
 
 fn pi_session_dir(agent_dir: &std::path::Path, cwd: &std::path::Path) -> std::path::PathBuf {
@@ -159,72 +131,6 @@ fn pi_session_dir(agent_dir: &std::path::Path, cwd: &std::path::Path) -> std::pa
             .replace(['/', '\\', ':'], "-")
     );
     agent_dir.join("sessions").join(safe)
-}
-
-struct ActivePiTimelineFixture {
-    _temp: tempfile::TempDir,
-    state: AppState,
-    session_id: &'static str,
-    transcript: PathBuf,
-}
-
-async fn active_pi_timeline_fixture(
-    session_id: &'static str,
-    session_key: &str,
-    turn_id: &str,
-    _started_event_id: &str,
-) -> ActivePiTimelineFixture {
-    let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
-    let state = test_state().await;
-    let cwd = temp.path().join("workspace");
-    fs::create_dir_all(&cwd).unwrap();
-    let cwd = cwd.canonicalize().unwrap();
-    seed_session(&state, session_id).await;
-
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    fs::create_dir_all(&session_dir).unwrap();
-    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
-    fs::write(
-        &transcript,
-        b"{\"type\":\"message\",\"id\":\"root\",\"parentId\":null}\n",
-    )
-    .unwrap();
-    AgentBindingService::new(state.db())
-        .upsert_binding(UpsertAgentBindingRequest {
-            session_id: session_id.to_string(),
-            client_type: "pi".to_string(),
-            launch_cwd: cwd.to_string_lossy().to_string(),
-            client_session_key: session_key.to_string(),
-            client_session_file: Some(transcript.display().to_string()),
-            metadata: json!({}),
-        })
-        .await
-        .unwrap();
-    precreate_turn_if_missing(&state, session_id, turn_id).await;
-    let (status, body) = post_internal_event(
-        state.clone(),
-        json!({
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "type": "turn.started",
-            "data": {
-                "runtime_instance_id": "rtinst_projected_timeline",
-                "timeline_anchor": { "previous_leaf_id": "root" },
-                "topology_context": { "entries": [] },
-            }
-        }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body:?}");
-
-    ActivePiTimelineFixture {
-        _temp: temp,
-        state,
-        session_id,
-        transcript,
-    }
 }
 
 async fn seed_session_for_client(state: &AppState, session_id: &str, client_type: &str) {
@@ -291,29 +197,4 @@ async fn post_pi_turn_event(
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
-}
-
-fn pi_text_turn_entries(
-    user_id: &str,
-    parent_id: Option<&str>,
-    user_content: &str,
-    assistant_id: &str,
-    assistant_content: &str,
-) -> String {
-    let user = json!({
-        "type": "message",
-        "id": user_id,
-        "parentId": parent_id,
-        "message": { "role": "user", "content": user_content },
-    });
-    let assistant = json!({
-        "type": "message",
-        "id": assistant_id,
-        "parentId": user_id,
-        "message": {
-            "role": "assistant",
-            "content": [{ "type": "text", "text": assistant_content }],
-        },
-    });
-    format!("{user}\n{assistant}\n")
 }

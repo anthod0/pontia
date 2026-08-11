@@ -1,4 +1,4 @@
-use crate::test_app::TestApp;
+use crate::common::test_app::TestApp;
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
@@ -11,7 +11,7 @@ use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use crate::generic_client::GenericClientTestScope;
+use crate::common::generic_client::GenericClientTestScope;
 
 const TOKEN: &str = "test-token";
 

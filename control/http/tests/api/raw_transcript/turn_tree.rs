@@ -1,4 +1,34 @@
-use super::*;
+use super::{
+    AgentBindingService, CapturedLogWriter, EventIngestService, EventType, PI_AGENT_DIR_ENV_LOCK,
+    ProjectionState, StatusCode, UpsertAgentBindingRequest, Value, WithSubscriber, Write, fs,
+    get_json, json, pi_session_dir, post_internal_event, precreate_turn_if_missing, seed_session,
+    tempdir, test_state,
+};
+
+fn pi_text_turn_entries(
+    user_id: &str,
+    parent_id: Option<&str>,
+    user_content: &str,
+    assistant_id: &str,
+    assistant_content: &str,
+) -> String {
+    let user = json!({
+        "type": "message",
+        "id": user_id,
+        "parentId": parent_id,
+        "message": { "role": "user", "content": user_content },
+    });
+    let assistant = json!({
+        "type": "message",
+        "id": assistant_id,
+        "parentId": user_id,
+        "message": {
+            "role": "assistant",
+            "content": [{ "type": "text", "text": assistant_content }],
+        },
+    });
+    format!("{user}\n{assistant}\n")
+}
 
 #[tokio::test]
 async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persisting_native_evidence()

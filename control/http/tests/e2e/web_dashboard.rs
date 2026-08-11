@@ -13,7 +13,7 @@ use pontia_http::{
     dashboard::{ResolvedDashboard, resolve_dashboard},
 };
 
-use crate::test_app::TestApp;
+use crate::common::test_app::TestApp;
 
 async fn test_state_with_dashboard(dashboard: ResolvedDashboard) -> http::HttpState {
     let app_state = TestApp::builder()

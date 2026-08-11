@@ -10,7 +10,7 @@ use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use crate::test_app::TestApp;
+use crate::common::test_app::TestApp;
 
 async fn post_run(app: &TestApp, body: Value) -> (StatusCode, Value) {
     let response = http::router(app.state.clone())

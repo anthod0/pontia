@@ -9,13 +9,9 @@ use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-#[path = "support/generic_client.rs"]
-mod generic_client;
-#[path = "support/test_app.rs"]
-mod test_app;
+mod common;
 
-use generic_client::GenericClientTestScope;
-use test_app::TestApp;
+use common::{generic_client::GenericClientTestScope, test_app::TestApp};
 
 const TOKEN: &str = "test-token";
 

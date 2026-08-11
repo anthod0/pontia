@@ -1,7 +1,9 @@
 use crate::{
-    generic_client::GenericClientTestScope,
-    http::{get_json, post_json},
-    task_state::test_state,
+    common::generic_client::GenericClientTestScope,
+    support::{
+        http::{get_json, post_json},
+        task_state::test_state,
+    },
 };
 use axum::http::StatusCode;
 use serde_json::json;

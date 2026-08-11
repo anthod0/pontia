@@ -1,4 +1,43 @@
-use super::*;
+use super::{
+    AppState, Body, BodyExt, Duration, Request, ServiceExt, StatusCode, Value, approval_event_id,
+    configured_otel_state, header, http, json, permission_request_body, post, post_external,
+};
+
+async fn post_otlp(
+    state: AppState,
+    body: Value,
+    authorization: Option<&str>,
+) -> axum::response::Response {
+    let mut request = Request::builder()
+        .method("POST")
+        .uri("/internal/v1/otel/v1/logs")
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(authorization) = authorization {
+        request = request.header(header::AUTHORIZATION, authorization);
+    }
+    http::router(state)
+        .oneshot(request.body(Body::from(body.to_string())).expect("request"))
+        .await
+        .expect("response")
+}
+
+fn tool_decision_fixture() -> Value {
+    serde_json::from_str(include_str!(
+        "../../fixtures/otlp/claude-tool-decision.json"
+    ))
+    .expect("valid OTLP JSON fixture")
+}
+
+fn set_tool_decision_attribute(fixture: &mut Value, key: &str, value: &str) {
+    let attributes = fixture["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]["attributes"]
+        .as_array_mut()
+        .expect("fixture log attributes");
+    let attribute = attributes
+        .iter_mut()
+        .find(|attribute| attribute["key"] == key)
+        .expect("fixture attribute");
+    attribute["value"]["stringValue"] = Value::String(value.to_string());
+}
 
 #[tokio::test]
 async fn otlp_tool_decision_authenticates_and_resolves_the_matching_approval_once() {

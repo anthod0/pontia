@@ -1,4 +1,75 @@
-use super::*;
+use super::{
+    AgentBindingService, AppState, EventIngestService, EventSource, EventType,
+    PI_AGENT_DIR_ENV_LOCK, PathBuf, ReportedEvent, StatusCode, UpsertAgentBindingRequest, Value,
+    Write, fs, get_json, json, pi_session_dir, post_internal_event, post_pi_turn_event,
+    precreate_turn_if_missing, seed_session, seed_session_for_client, tempdir, test_state,
+};
+
+struct ActivePiTimelineFixture {
+    _temp: tempfile::TempDir,
+    state: AppState,
+    session_id: &'static str,
+    transcript: PathBuf,
+}
+
+async fn active_pi_timeline_fixture(
+    session_id: &'static str,
+    session_key: &str,
+    turn_id: &str,
+    _started_event_id: &str,
+) -> ActivePiTimelineFixture {
+    let temp = tempdir().unwrap();
+    let agent_dir = temp.path().join("agent");
+    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
+    let state = test_state().await;
+    let cwd = temp.path().join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.canonicalize().unwrap();
+    seed_session(&state, session_id).await;
+
+    let session_dir = pi_session_dir(&agent_dir, &cwd);
+    fs::create_dir_all(&session_dir).unwrap();
+    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    fs::write(
+        &transcript,
+        b"{\"type\":\"message\",\"id\":\"root\",\"parentId\":null}\n",
+    )
+    .unwrap();
+    AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session_id.to_string(),
+            client_type: "pi".to_string(),
+            launch_cwd: cwd.to_string_lossy().to_string(),
+            client_session_key: session_key.to_string(),
+            client_session_file: Some(transcript.display().to_string()),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    precreate_turn_if_missing(&state, session_id, turn_id).await;
+    let (status, body) = post_internal_event(
+        state.clone(),
+        json!({
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "type": "turn.started",
+            "data": {
+                "runtime_instance_id": "rtinst_projected_timeline",
+                "timeline_anchor": { "previous_leaf_id": "root" },
+                "topology_context": { "entries": [] },
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+
+    ActivePiTimelineFixture {
+        _temp: temp,
+        state,
+        session_id,
+        transcript,
+    }
+}
 
 #[tokio::test]
 async fn claude_session_uses_the_linear_turn_timeline_endpoint() {

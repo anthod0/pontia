@@ -7,37 +7,37 @@ use serde_json::Value;
 use sqlx::Row;
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
-pub struct GenericClientTestScope {
+pub(crate) struct GenericClientTestScope {
     _guard: OwnedMutexGuard<()>,
 }
 
 #[allow(dead_code)]
 impl GenericClientTestScope {
-    pub async fn new() -> Self {
+    pub(crate) async fn new() -> Self {
         let guard = generic_test_lock().clone().lock_owned().await;
         GenericTestClient::clear_recorded_inputs();
         GenericRuntimeManager::reset_in_process_registry();
         Self { _guard: guard }
     }
 
-    pub fn with_capabilities(self, capabilities: AgentClientCapabilities) -> Self {
+    pub(crate) fn with_capabilities(self, capabilities: AgentClientCapabilities) -> Self {
         GenericTestClient::set_capabilities(capabilities);
         self
     }
 
-    pub fn recorded_inputs(&self) -> Vec<AgentInput> {
+    pub(crate) fn recorded_inputs(&self) -> Vec<AgentInput> {
         GenericTestClient::recorded_inputs()
     }
 
-    pub fn is_runtime_alive(&self, runtime_handle: &str) -> bool {
+    pub(crate) fn is_runtime_alive(&self, runtime_handle: &str) -> bool {
         GenericRuntimeManager.is_alive(runtime_handle)
     }
 
-    pub fn reset_runtime_registry(&self) {
+    pub(crate) fn reset_runtime_registry(&self) {
         GenericRuntimeManager::reset_in_process_registry();
     }
 
-    pub async fn runtime_handle(&self, state: &AppState, session_id: &str) -> String {
+    pub(crate) async fn runtime_handle(&self, state: &AppState, session_id: &str) -> String {
         self.runtime_metadata(state, session_id).await["in_process"]["runtime_handle"]
             .as_str()
             .expect("runtime handle")
@@ -45,7 +45,7 @@ impl GenericClientTestScope {
     }
 
     #[allow(dead_code)]
-    pub async fn enable_builtin_profiles(&self, state: &AppState) {
+    pub(crate) async fn enable_builtin_profiles(&self, state: &AppState) {
         sqlx::query(
             r#"UPDATE execution_profiles
                SET supported_client_types = '["generic"]'
@@ -56,7 +56,7 @@ impl GenericClientTestScope {
         .expect("enable generic builtin profiles");
     }
 
-    pub async fn runtime_metadata(&self, state: &AppState, session_id: &str) -> Value {
+    pub(crate) async fn runtime_metadata(&self, state: &AppState, session_id: &str) -> Value {
         let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())

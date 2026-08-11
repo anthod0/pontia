@@ -1,4 +1,37 @@
-use super::*;
+use super::{
+    AgentBindingService, AppState, Body, BodyExt, Command, PI_AGENT_DIR_ENV_LOCK, PiJsonlV2Cursor,
+    Request, ServiceExt, StatusCode, Stdio, TOKEN, TimelineBoundaryRelation,
+    UpsertAgentBindingRequest, Value, fs, header, http, json, pi_session_dir, post_internal_json,
+    seed_session, tempdir, test_state,
+};
+
+async fn post_external_json(
+    state: AppState,
+    uri: &str,
+    idempotency_key: Option<&str>,
+    body: Value,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(key) = idempotency_key {
+        builder = builder.header("Idempotency-Key", key);
+    }
+    let response = http::router(state)
+        .oneshot(builder.body(Body::from(body.to_string())).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    (status, serde_json::from_slice(&body).expect("json body"))
+}
 
 #[tokio::test]
 async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without_mutation() {

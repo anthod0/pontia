@@ -8,7 +8,7 @@ use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use crate::{generic_client::GenericClientTestScope, test_app::TestApp};
+use crate::common::{generic_client::GenericClientTestScope, test_app::TestApp};
 
 const TOKEN: &str = "test-token";
 

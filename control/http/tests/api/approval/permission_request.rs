@@ -1,4 +1,19 @@
-use super::*;
+use super::{
+    AppState, BodyExt, Duration, StatusCode, TestApp, Value, insert_approval_context, json, post,
+};
+
+async fn configured_state() -> AppState {
+    let state = TestApp::builder()
+        .database_name("approval-registration.db")
+        .build_state()
+        .await;
+    insert_approval_context(
+        &state,
+        r#"{"internal_event_url":"http://127.0.0.1/internal/v1/events"}"#,
+    )
+    .await;
+    state
+}
 
 #[tokio::test]
 async fn permission_request_projects_bounded_snapshot_and_waits_until_turn_terminal() {

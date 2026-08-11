@@ -1,5 +1,4 @@
-use crate::generic_client::GenericClientTestScope;
-use crate::test_app::TestApp;
+use crate::common::{generic_client::GenericClientTestScope, test_app::TestApp};
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},
