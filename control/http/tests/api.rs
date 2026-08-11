@@ -20,7 +20,7 @@ mod external_queries;
 mod health;
 #[path = "api/internal_event.rs"]
 mod internal_event;
-#[path = "api/raw_transcript.rs"]
+#[path = "api/raw_transcript/mod.rs"]
 mod raw_transcript;
 #[path = "api/runtime_binding_upsert.rs"]
 mod runtime_binding_upsert;
