@@ -10,7 +10,7 @@ mod test_app;
 
 #[path = "api/agent_profile.rs"]
 mod agent_profile;
-#[path = "api/approval.rs"]
+#[path = "api/approval/mod.rs"]
 mod approval;
 #[path = "api/external_event_stream.rs"]
 mod external_event_stream;
