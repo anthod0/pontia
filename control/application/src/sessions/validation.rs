@@ -1,5 +1,5 @@
-use super::*;
 use pontia_agent_clients::{DispatchMode, get_client_spec};
+use pontia_core::error::{Error, Result};
 
 pub(super) fn client_dispatch_mode(client_type: &str) -> Result<DispatchMode> {
     get_client_spec(client_type)

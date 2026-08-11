@@ -1,5 +1,7 @@
-use super::*;
+use pontia_core::error::Result;
 use pontia_storage_sqlite::models::agent_profiles::ExecutionProfileRow;
+
+use super::ExecutionProfileView;
 
 pub(super) fn row_to_execution_profile_view(
     row: ExecutionProfileRow,

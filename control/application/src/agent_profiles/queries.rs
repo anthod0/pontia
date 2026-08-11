@@ -1,6 +1,7 @@
-use super::rows::row_to_execution_profile_view;
-use super::*;
+use pontia_core::error::Result;
 use pontia_storage_sqlite::repositories::agent_profiles::SqliteAgentProfileRepository;
+
+use super::{AgentProfileService, ExecutionProfileView, rows::row_to_execution_profile_view};
 
 impl AgentProfileService {
     pub async fn list_latest(&self) -> Result<Vec<ExecutionProfileView>> {

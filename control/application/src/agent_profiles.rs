@@ -1,4 +1,4 @@
-use super::*;
+use sqlx::SqlitePool;
 
 mod commands;
 mod models;

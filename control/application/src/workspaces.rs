@@ -1,5 +1,5 @@
 mod browser;
-mod helpers;
+mod path_policy;
 mod persistence;
 mod types;
 

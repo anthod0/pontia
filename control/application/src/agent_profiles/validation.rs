@@ -1,4 +1,8 @@
-use super::*;
+use pontia_core::error::{Error, Result};
+use serde_json::Value;
+
+use super::{ExecutionProfileView, UpsertExecutionProfileRequest};
+use crate::is_supported_client_type;
 
 pub(super) fn validate_request(request: &UpsertExecutionProfileRequest) -> Result<()> {
     validate_non_empty("profile_id", &request.profile_id)?;

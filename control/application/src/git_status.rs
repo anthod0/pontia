@@ -1,7 +1,8 @@
-use super::*;
+use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::git_status::{
     GitStatusUpsertRecord, SqliteGitStatusRepository,
 };
+use sqlx::SqlitePool;
 use std::{
     collections::HashMap,
     future::Future,
@@ -10,6 +11,8 @@ use std::{
     sync::mpsc,
     time::{Duration, Instant},
 };
+
+use crate::{ExternalQueryService, WorkspaceGitStatusView, get_workspace_record};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ParsedGitStatus {

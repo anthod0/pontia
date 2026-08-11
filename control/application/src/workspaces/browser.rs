@@ -13,7 +13,9 @@ use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 use super::{
     FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,
     WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceRootView,
-    helpers::{canonical_root, path_to_api_relative, resolve_relative_path, should_skip_directory},
+    path_policy::{
+        canonical_root, path_to_api_relative, resolve_relative_path, should_skip_directory,
+    },
     persistence::{get_workspace_record, upsert_canonical_workspace},
 };
 use crate::{ExternalQueryService, WorkspaceView};
