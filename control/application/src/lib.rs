@@ -1,17 +1,4 @@
-use std::str::FromStr;
-
-use pontia_agent_clients as agent_clients;
 pub use pontia_config::FilePickerConfig;
-use pontia_core::{
-    domain::{
-        DomainEvent, EventSource, EventType, SessionProjection, SessionState, TurnProjection,
-        TurnState, TurnTopology,
-    },
-    error::{Error, Result},
-};
-use serde::Serialize;
-use serde_json::Value;
-use sqlx::SqlitePool;
 
 mod agent_bindings;
 mod agent_events;
@@ -19,12 +6,10 @@ mod agent_profiles;
 pub mod app;
 mod approvals;
 mod branch_replay;
-mod events;
 mod git_status;
 mod idempotency;
 mod inbox;
 pub mod ingestion;
-mod mapping;
 mod pi_control;
 pub mod queries;
 mod raw_transcripts;
@@ -52,13 +37,12 @@ pub use approvals::{
     ApprovalWaitOutcome, ClaudeToolDecisionObservation, PendingApproval,
 };
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
-pub(crate) use events::nested_string;
-pub use events::{EventIngestResult, EventIngestService, InternalEventValidationService};
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use idempotency::{IdempotencyCoordinator, IdempotencyOutcome};
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
 pub use ingestion::{
-    EventReportNormalizer, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
+    EventIngestResult, EventIngestService, EventReportNormalizer, InternalEventValidationService,
+    PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
 };
 pub use pi_control::PiGracefulExitService;
 pub use queries::ExternalQueryService;
@@ -88,5 +72,4 @@ pub use workspaces::{
 };
 
 pub(crate) use app::{default_client_type, is_supported_client_type};
-pub(crate) use mapping::*;
 pub use workspaces::{WorkspaceRecord, get_workspace_record, upsert_workspace};

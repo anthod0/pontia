@@ -1,5 +1,9 @@
-use super::*;
+use pontia_core::error::Result;
 use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
+use serde_json::Value;
+
+use super::ExternalQueryService;
+use crate::views::turns::{TurnView, row_to_view};
 
 impl ExternalQueryService {
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnView>> {
@@ -8,7 +12,7 @@ impl ExternalQueryService {
 
         let mut turns = rows
             .into_iter()
-            .map(turn_row_to_view)
+            .map(row_to_view)
             .collect::<Result<Vec<_>>>()?;
         for turn in &mut turns {
             self.enrich_turn_view(turn).await?;
@@ -21,7 +25,7 @@ impl ExternalQueryService {
         let Some(row) = repository.get_turn(session_id, turn_id).await? else {
             return Ok(None);
         };
-        let mut turn = turn_row_to_view(row)?;
+        let mut turn = row_to_view(row)?;
         self.enrich_turn_view(&mut turn).await?;
         Ok(Some(turn))
     }
@@ -80,4 +84,12 @@ impl ExternalQueryService {
 
         Ok(())
     }
+}
+
+fn nested_string(value: &Value, path: &[&str]) -> Option<String> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current.as_str().map(ToString::to_string)
 }

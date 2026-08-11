@@ -12,7 +12,7 @@ use sqlx::SqlitePool;
 use crate::{
     BranchReplayService, EventIngestService, ExternalQueryService, InboxMessageView, PontiaEvent,
     PontiaEventSource, PontiaEventType, RuntimeControlService, TurnCommandService,
-    row_to_inbox_message_view,
+    views::inbox::row_to_view,
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -159,7 +159,7 @@ impl InboxCommandService {
         let rows = SqliteInboxRepository::new(self.pool.clone())
             .list_messages(session_id)
             .await?;
-        rows.into_iter().map(row_to_inbox_message_view).collect()
+        rows.into_iter().map(row_to_view).collect()
     }
 
     pub async fn get_message(
@@ -170,7 +170,7 @@ impl InboxCommandService {
         let row = SqliteInboxRepository::new(self.pool.clone())
             .get_message(session_id, message_id)
             .await?;
-        row.map(row_to_inbox_message_view).transpose()
+        row.map(row_to_view).transpose()
     }
 
     pub async fn cancel_message(

@@ -1,5 +1,6 @@
 mod effects;
 mod enrichment;
+mod persistence;
 mod validation;
 
 use sqlx::SqlitePool;
@@ -12,17 +13,26 @@ use pontia_core::{
     error::{Error, Result},
 };
 use pontia_storage_sqlite::repositories::{
-    events::{EventInsertRecord, SqliteEventRepository},
-    sessions::{SessionProjectionUpsertRecord, SqliteSessionRepository},
-    turns::{SqliteTurnRepository, TurnProjectionUpsertRecord},
+    events::SqliteEventRepository, sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
 };
 
-use self::enrichment::{consume_transient_pi_native_evidence, should_resolve_pi_topology};
-use super::{EventIngestResult, PontiaEvent};
-use crate::{
-    AgentEventBroker, InboxCommandService, UpsertAgentBindingRequest, row_to_event, row_to_session,
-    row_to_turn,
+use self::{
+    effects::{clear_exited_session_tmux_markers, link_started_turn_to_inbox_message},
+    enrichment::{
+        consume_transient_pi_native_evidence, enrich_pi_topology, enrich_timeline_boundary,
+        should_resolve_pi_topology,
+    },
+    persistence::{insert_event_in_tx, persist_projections_in_tx},
+    validation::{
+        ensure_confirmed_event_matches_session_boundary, ensure_runtime_fence_in_tx,
+        validate_turn_identity_in_tx,
+    },
 };
+use super::{
+    EventIngestResult, PontiaEvent,
+    projection_rows::{event_from_row, session_from_row, turn_from_row},
+};
+use crate::{AgentEventBroker, InboxCommandService, UpsertAgentBindingRequest};
 
 #[derive(Clone)]
 pub struct EventIngestService {
@@ -125,7 +135,7 @@ impl EventIngestService {
             .existing_event_state_version(&event.event_id, &event.session_id)
             .await?
         {
-            self.clear_exited_session_tmux_markers(&event, false).await;
+            clear_exited_session_tmux_markers(&self.pool, &event, false).await;
             return Ok(EventIngestResult {
                 accepted: true,
                 duplicate: true,
@@ -136,7 +146,7 @@ impl EventIngestService {
             });
         }
 
-        self.enrich_timeline_boundary(&mut event).await;
+        enrich_timeline_boundary(&self.pool, &mut event).await;
         let topology_evidence = consume_transient_pi_native_evidence(&mut event);
         let topology_binding_id = if should_resolve_pi_topology(&event) {
             crate::AgentBindingService::new(self.pool.clone())
@@ -165,107 +175,32 @@ impl EventIngestService {
                 .await?;
             }
             if enforce_runtime_fence {
-                self.ensure_runtime_fence_in_tx(&mut tx, &event).await?;
+                ensure_runtime_fence_in_tx(&mut tx, &event).await?;
             }
         }
-        self.validate_turn_identity_in_tx(&mut tx, &event, enforce_runtime_fence)
-            .await?;
+        validate_turn_identity_in_tx(&mut tx, &event, enforce_runtime_fence).await?;
         let sessions =
             SqliteSessionRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
                 .await?
                 .into_iter()
-                .map(row_to_session)
+                .map(session_from_row)
                 .collect::<Result<Vec<_>>>()?;
         let turns = SqliteTurnRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
             .await?
             .into_iter()
-            .map(row_to_turn)
+            .map(turn_from_row)
             .collect::<Result<Vec<_>>>()?;
-        self.enrich_pi_topology(&mut event, topology_binding_id, topology_evidence, &turns);
+        enrich_pi_topology(&mut event, topology_binding_id, topology_evidence, &turns);
         let mut projection = ProjectionState::with_existing(sessions, turns);
         projection.apply(&event)?;
 
-        let payload = serde_json::to_string(&event.payload)?;
-        let timeline_boundary = event
-            .timeline_boundary
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()?;
-        let turn_topology = event
-            .topology
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()?;
-        let occurred_at = event
-            .occurred_at
-            .format(&time::format_description::well_known::Rfc3339)
-            .map_err(|err| {
-                pontia_core::error::Error::Domain(format!("invalid event timestamp: {err}"))
-            })?;
-
-        SqliteEventRepository::insert_event_in_tx(
-            &mut tx,
-            EventInsertRecord {
-                event_id: event.event_id.clone(),
-                session_id: event.session_id.clone(),
-                turn_id: event.turn_id.clone(),
-                source: event.source.to_string(),
-                client_type: event.client_type.clone(),
-                event_type: event.event_type.to_string(),
-                occurred_at,
-                payload,
-                timeline_boundary,
-                turn_topology,
-            },
-        )
-        .await?;
+        insert_event_in_tx(&mut tx, &event).await?;
 
         let state_version =
             SqliteEventRepository::session_event_count_in_tx(&mut tx, &event.session_id).await?;
 
         if event.event_type != EventType::SessionMessageUpdated {
-            for session in projection.sessions() {
-                let metadata = serde_json::to_string(&session.metadata)?;
-                SqliteSessionRepository::upsert_projection_in_tx(
-                    &mut tx,
-                    SessionProjectionUpsertRecord {
-                        session_id: session.session_id.clone(),
-                        client_type: session.client_type.clone(),
-                        title: session.title.clone(),
-                        handle: session.handle.clone(),
-                        role: session.role.clone(),
-                        description: session.description.clone(),
-                        execution_profile_id: session.execution_profile_id.clone(),
-                        execution_profile_version: session.execution_profile_version.clone(),
-                        state: session.state.to_string(),
-                        current_turn_id: session.current_turn_id.clone(),
-                        state_version,
-                        metadata,
-                    },
-                )
-                .await?;
-            }
-
-            for turn in projection.turns() {
-                let metadata = serde_json::to_string(&turn.metadata)?;
-                SqliteTurnRepository::upsert_projection_in_tx(
-                    &mut tx,
-                    TurnProjectionUpsertRecord {
-                        turn_id: turn.turn_id.clone(),
-                        session_id: turn.session_id.clone(),
-                        head_cursor: turn.head_cursor.clone(),
-                        tail_cursor: turn.tail_cursor.clone(),
-                        parent_turn_id: turn.topology.parent_turn_id().map(ToString::to_string),
-                        topology_status: turn.topology.status().to_string(),
-                        state: turn.state.to_string(),
-                        state_version: turn.state_version,
-                        input_summary: turn.input_summary.clone(),
-                        output_summary: turn.output_summary.clone(),
-                        metadata,
-                    },
-                )
-                .await?;
-            }
+            persist_projections_in_tx(&mut tx, &projection, state_version).await?;
         }
 
         if let Some(binding) = initial_agent_binding {
@@ -281,8 +216,8 @@ impl EventIngestService {
             agent_events.publish(event.clone());
         }
 
-        self.clear_exited_session_tmux_markers(&event, true).await;
-        self.link_started_turn_to_inbox_message(&event).await?;
+        clear_exited_session_tmux_markers(&self.pool, &event, true).await;
+        link_started_turn_to_inbox_message(&self.pool, &event).await?;
 
         if matches!(
             event.event_type,
@@ -307,6 +242,13 @@ impl EventIngestService {
         })
     }
 
+    pub async fn ensure_confirmed_event_matches_session_boundary(
+        &self,
+        event: &DomainEvent,
+    ) -> Result<()> {
+        ensure_confirmed_event_matches_session_boundary(&self.pool, event).await
+    }
+
     pub async fn get_session(&self, session_id: &str) -> Result<Option<SessionProjection>> {
         let mut sessions = self.load_session_projection(session_id).await?;
         Ok(sessions.pop())
@@ -316,7 +258,7 @@ impl EventIngestService {
         SqliteTurnRepository::new(self.pool.clone())
             .get_projection(turn_id)
             .await?
-            .map(row_to_turn)
+            .map(turn_from_row)
             .transpose()
     }
 
@@ -325,7 +267,7 @@ impl EventIngestService {
             .list_domain_event_rows(session_id)
             .await?;
 
-        rows.into_iter().map(row_to_event).collect()
+        rows.into_iter().map(event_from_row).collect()
     }
 
     pub async fn volatile_state_version(&self, session_id: &str) -> Result<i64> {
@@ -349,6 +291,6 @@ impl EventIngestService {
             .load_projection_rows(session_id)
             .await?;
 
-        rows.into_iter().map(row_to_session).collect()
+        rows.into_iter().map(session_from_row).collect()
     }
 }

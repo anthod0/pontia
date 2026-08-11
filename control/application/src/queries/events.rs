@@ -1,12 +1,18 @@
-use super::*;
+use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::events::SqliteEventRepository;
+
+use super::ExternalQueryService;
+use crate::views::events::{
+    EventStreamItem, EventStreamScope, EventView, TaskEventStreamItem, row_to_item,
+    row_to_task_item, row_to_view,
+};
 
 impl ExternalQueryService {
     pub async fn list_session_events(&self, session_id: &str) -> Result<Vec<EventView>> {
         let repository = SqliteEventRepository::new(self.pool.clone());
         let rows = repository.list_session_events(session_id).await?;
 
-        rows.into_iter().map(event_row_to_view).collect()
+        rows.into_iter().map(row_to_view).collect()
     }
 
     pub async fn list_turn_events(
@@ -17,7 +23,7 @@ impl ExternalQueryService {
         let repository = SqliteEventRepository::new(self.pool.clone());
         let rows = repository.list_turn_events(session_id, turn_id).await?;
 
-        rows.into_iter().map(event_row_to_view).collect()
+        rows.into_iter().map(row_to_view).collect()
     }
 
     pub async fn resolve_event_cursor(
@@ -69,7 +75,7 @@ impl ExternalQueryService {
             .list_session_stream_rows_after(after_rowid, limit)
             .await?;
 
-        rows.into_iter().map(event_stream_row_to_item).collect()
+        rows.into_iter().map(row_to_item).collect()
     }
 
     pub async fn list_task_event_stream_items_after(
@@ -82,9 +88,7 @@ impl ExternalQueryService {
             .list_task_stream_rows_after(after_rowid, limit)
             .await?;
 
-        rows.into_iter()
-            .map(task_event_stream_row_to_item)
-            .collect()
+        rows.into_iter().map(row_to_task_item).collect()
     }
 
     pub async fn list_event_stream_items_after(
@@ -110,6 +114,6 @@ impl ExternalQueryService {
             }
         };
 
-        rows.into_iter().map(event_stream_row_to_item).collect()
+        rows.into_iter().map(row_to_item).collect()
     }
 }

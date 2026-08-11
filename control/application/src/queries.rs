@@ -1,4 +1,4 @@
-use super::*;
+use sqlx::SqlitePool;
 
 mod events;
 mod git_status;

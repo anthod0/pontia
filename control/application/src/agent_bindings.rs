@@ -1,4 +1,7 @@
-use super::*;
+use pontia_core::{
+    domain::{DomainEvent, EventSource, EventType},
+    error::{Error, Result},
+};
 use pontia_storage_sqlite::{
     models::agent_bindings::AgentBindingRow,
     repositories::{
@@ -8,7 +11,9 @@ use pontia_storage_sqlite::{
         turns::SqliteTurnRepository,
     },
 };
-use sqlx::Row;
+use serde::Serialize;
+use serde_json::Value;
+use sqlx::{Row, SqlitePool};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AgentBinding {

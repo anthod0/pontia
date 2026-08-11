@@ -1,6 +1,11 @@
-use super::*;
+use pontia_agent_clients as agent_clients;
+use pontia_core::error::Result;
 use pontia_storage_sqlite::repositories::sessions::{SessionListOptions, SqliteSessionRepository};
+use serde_json::Value;
 use sqlx::Row;
+
+use super::ExternalQueryService;
+use crate::views::sessions::{SessionCapabilities, SessionLineageView, SessionView, row_to_view};
 
 impl ExternalQueryService {
     pub async fn list_sessions(
@@ -20,7 +25,7 @@ impl ExternalQueryService {
 
         let mut sessions = rows
             .into_iter()
-            .map(session_row_to_view)
+            .map(row_to_view)
             .collect::<Result<Vec<_>>>()?;
         for session in &mut sessions {
             self.enrich_session_view(session).await?;
@@ -33,7 +38,7 @@ impl ExternalQueryService {
         let Some(row) = repository.get_session(session_id).await? else {
             return Ok(None);
         };
-        let mut session = session_row_to_view(row)?;
+        let mut session = row_to_view(row)?;
         self.enrich_session_view(&mut session).await?;
         Ok(Some(session))
     }

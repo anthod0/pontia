@@ -1,5 +1,8 @@
-use super::*;
+use pontia_core::error::Result;
 use pontia_storage_sqlite::repositories::git_status::SqliteGitStatusRepository;
+
+use super::ExternalQueryService;
+use crate::views::workspaces::{WorkspaceGitStatusView, git_status_row_to_view};
 
 impl ExternalQueryService {
     pub async fn get_workspace_git_status(
@@ -15,7 +18,7 @@ impl ExternalQueryService {
         let row = repository.get_status(workspace_id).await?;
 
         match row {
-            Some(row) => row_to_workspace_git_status_view(row).map(Some),
+            Some(row) => git_status_row_to_view(row).map(Some),
             None => Ok(Some(WorkspaceGitStatusView::unknown(workspace_id))),
         }
     }
