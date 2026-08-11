@@ -110,10 +110,8 @@ async fn post_otlp(
 }
 
 fn tool_decision_fixture() -> Value {
-    serde_json::from_str(include_str!(
-        "../../fixtures/otlp/claude-tool-decision.json"
-    ))
-    .expect("valid OTLP JSON fixture")
+    serde_json::from_str(include_str!("../fixtures/otlp/claude-tool-decision.json"))
+        .expect("valid OTLP JSON fixture")
 }
 
 fn set_tool_decision_attribute(fixture: &mut Value, key: &str, value: &str) {
