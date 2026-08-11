@@ -13,10 +13,7 @@ use pontia_core::{
     time::utc_now,
 };
 
-use super::{
-    RuntimeStartRequest, RuntimeStartResult, paths,
-    utils::{sanitize_identifier, short_session_id},
-};
+use super::{RuntimeStartRequest, RuntimeStartResult, paths, session_identifier::short_session_id};
 
 #[derive(Debug, Clone)]
 struct InProcessRuntimeState {
@@ -104,18 +101,25 @@ fn registry() -> &'static Mutex<HashMap<String, InProcessRuntimeState>> {
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn sanitize_runtime_handle_component(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
+        .collect()
+}
+
 fn runtime_handle(request: &RuntimeStartRequest) -> String {
     let handle = request
         .handle
         .as_deref()
         .map(|value| value.trim_start_matches('@'))
         .filter(|value| !value.is_empty())
-        .map(sanitize_identifier);
+        .map(sanitize_runtime_handle_component);
     let role = request
         .role
         .as_deref()
         .filter(|value| !value.is_empty())
-        .map(sanitize_identifier);
+        .map(sanitize_runtime_handle_component);
     let Some(handle) = handle else {
         return format!("{}:{}", request.client_type, request.session_id);
     };

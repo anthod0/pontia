@@ -9,9 +9,9 @@ mod in_process;
 mod manager;
 mod paths;
 mod script;
+mod session_identifier;
 mod tmux;
 mod types;
-mod utils;
 
 pub use claude_integration::{
     ClaudeApprovalIntegration, configure_claude_user_approval_integration,

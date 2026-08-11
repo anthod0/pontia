@@ -7,9 +7,9 @@ use std::{
 
 use pontia_core::error::{Error, Result};
 
-use crate::RuntimeStartRequest;
+use crate::{RuntimeStartRequest, session_identifier::short_session_id};
 
-use super::identifier::{sanitize_tmux_identifier, short_session_id};
+use super::identifier::sanitize_tmux_identifier;
 
 pub(crate) fn spawn_tmux_session(
     tmux_session: &str,

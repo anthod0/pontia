@@ -13,7 +13,6 @@ use pontia_core::error::{Error, Result};
 use super::{
     RuntimeStartRequest,
     config::{configured_internal_event_url, configured_tui_command},
-    utils::shell_quote,
 };
 
 pub(super) struct RuntimePaths<'a> {
@@ -150,6 +149,10 @@ cleanup_pontia_launch_script
         .open(path)?;
     file.write_all(content.as_bytes())?;
     Ok(())
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 pub(super) fn shell_quote_path(path: &Path) -> String {
