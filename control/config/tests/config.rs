@@ -292,7 +292,16 @@ fn provides_development_defaults_for_optional_values() {
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
     assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia-e1.db");
     assert_eq!(config.external_api_token, None);
-    assert_eq!(config.dashboard.source, None);
+    assert_eq!(
+        config.dashboard.source.as_deref(),
+        Some(concat!(
+            "https://github.com/anthod0/pontia/releases/download/v",
+            env!("CARGO_PKG_VERSION"),
+            "/pontia-dashboard-v",
+            env!("CARGO_PKG_VERSION"),
+            ".zip"
+        ))
+    );
     assert!(config.run_migrations);
     assert_eq!(config.default_client_type, "pi");
     assert!(config.workspace_browser.roots.is_empty());

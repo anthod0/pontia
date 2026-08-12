@@ -21,9 +21,30 @@ pub struct AppConfig {
     pub dashboard: DashboardConfig,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+const DEFAULT_DASHBOARD_SOURCE: &str = concat!(
+    "https://github.com/anthod0/pontia/releases/download/v",
+    env!("CARGO_PKG_VERSION"),
+    "/pontia-dashboard-v",
+    env!("CARGO_PKG_VERSION"),
+    ".zip"
+);
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct DashboardConfig {
+    #[serde(default = "default_dashboard_source")]
     pub source: Option<String>,
+}
+
+impl Default for DashboardConfig {
+    fn default() -> Self {
+        Self {
+            source: default_dashboard_source(),
+        }
+    }
+}
+
+fn default_dashboard_source() -> Option<String> {
+    Some(DEFAULT_DASHBOARD_SOURCE.to_string())
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
