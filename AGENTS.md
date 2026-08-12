@@ -3,7 +3,7 @@
 - `pontia` is a Rust console/control plane for coding agents with a web dashboard and client integrations.
 - Backend: Rust 2024, Axum, Tokio, SQLx/SQLite.
 - Frontend/dashboard and client plugins use pnpm.
-- Key paths: `control/`, `control/*/tests/`, `apps/dashboard/`, `apps/dashboard/tests/`, `clients/pi/`, `README.md`.
+- Key paths: `control/`, `control/*/tests/`, `apps/dashboard/`, `apps/dashboard/tests/`, `apps/website/`, `clients/pi/`, `README.md`.
 
 ## Local instructions
 
@@ -36,6 +36,10 @@ If `AGENTS.local.md` exists, read it before making changes.
 - Dashboard:
   - `pnpm --dir=apps/dashboard run check`
   - `pnpm --dir=apps/dashboard run build`
+- Website:
+  - `pnpm --dir=apps/website run check`
+  - `pnpm --dir=apps/website run build`
+  - `pnpm --dir=apps/website run preview`
 - Client packages:
   - `pnpm --dir clients/pi test`
   - `pnpm --dir clients/pi typecheck`

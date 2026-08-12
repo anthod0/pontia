@@ -10,6 +10,9 @@ backend:
 dashboard:
     pnpm --dir=apps/dashboard run dev
 
+website:
+    pnpm --dir=apps/website run dev
+
 fmt:
     cargo fmt
 
@@ -31,4 +34,7 @@ test:
 dashboard-check:
     pnpm --dir=apps/dashboard run check
 
-check: fmt-check sqlx-check clippy test dashboard-check
+website-check:
+    pnpm --dir=apps/website run check
+
+check: fmt-check sqlx-check clippy test dashboard-check website-check
