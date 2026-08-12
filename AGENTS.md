@@ -1,51 +1,29 @@
+## Local instructions
+
+If `AGENTS.local.md` exists, read it before making changes.
+
 ## Project snapshot
 
 - `pontia` is a Rust console/control plane for coding agents with a web dashboard and client integrations.
 - Backend: Rust 2024, Axum, Tokio, SQLx/SQLite.
 - Frontend/dashboard and client plugins use pnpm.
-- Key paths: `control/`, `control/*/tests/`, `apps/dashboard/`, `apps/dashboard/tests/`, `apps/website/`, `clients/pi/`, `README.md`.
-
-## Local instructions
-
-If `AGENTS.local.md` exists, read it before making changes.
+- Use `pnpm dlx` (not `npx`) to run package binaries.
 
 ## Dashboard UI rules
 
-- Dashboard UI uses shadcn-svelte-style components under `apps/dashboard/src/lib/components/ui/`.
 - When a new basic UI primitive is needed, first check the shadcn-svelte component catalog and add the component through the shadcn-svelte CLI instead of hand-rolling it.
-- Prefer extending or composing existing `ui/` components before writing one-off markup for common primitives such as popovers, dialogs, checkboxes, progress bars, collapsibles, selects, menus, tabs, tables, and form fields.
-- Hand-written UI primitives are acceptable only when the component is project-specific or shadcn-svelte does not provide a suitable primitive.
-- Use pnpm for shadcn-svelte CLI commands in the dashboard, for example: `pnpm dlx shadcn-svelte@latest add <component> --cwd apps/dashboard`.
+- Prefer extending or composing existing `ui/` components before writing one-off markup for common primitives.
 
-## Database migration rules
+## Commands
 
-- Never modify an existing SQL migration file after it has been committed or may have been applied to any database.
-- SQLx migration checksums are authoritative: changing existing `control/storage-sqlite/migrations/*.sql` files causes `VersionMismatch` failures for users with existing databases.
-- Database schema/data fixes must be implemented by appending a new numbered SQL migration only.
-- If a historical migration appears wrong, preserve it and add a follow-up migration that transforms existing databases from the old state to the desired state.
+- Run `just --list` to discover project commands and `just check` for the standard verification suite.
+- Use pnpm for package-specific scripts not exposed through `just`.
+- Run backend Cargo checks through `just` so SQLx uses the generated check database; do not commit `.sqlx/`.
 
-## Common commands
+## Coding style
 
-- Backend checks/tests:
-  - `just fmt-check`
-  - `just test`
-  - `just clippy`
-  - `just sqlx-check`
-- Backend + dashboard check:
-  - `just check`
-- Dashboard:
-  - `pnpm --dir=apps/dashboard run check`
-  - `pnpm --dir=apps/dashboard run build`
-- Website:
-  - `pnpm --dir=apps/website run check`
-  - `pnpm --dir=apps/website run build`
-  - `pnpm --dir=apps/website run preview`
-- Client packages:
-  - `pnpm --dir clients/pi test`
-  - `pnpm --dir clients/pi typecheck`
-
-Notes:
-
-- SQLx compile-time query checks use a temporary SQLite database generated from `control/storage-sqlite/migrations/*.sql` by `scripts/sqlx-check-db.sh` / `just sqlx-db`.
-- Do not commit `.sqlx/`; run backend cargo commands through the `just` targets so `DATABASE_URL` points at the generated check database.
-- Client plugin packages currently have `test` and `typecheck` scripts, not `build` scripts.
+- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
+- Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.
+- Grow the system in layers. Start from the smallest version that works end to end, and add each new capability on top of a product that already works.
+- Keep components modular and concerns clearly separated.
+- Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.
