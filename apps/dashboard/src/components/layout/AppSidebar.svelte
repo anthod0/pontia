@@ -25,7 +25,7 @@
   }
 
   const primaryItems: Item[] = [
-    { label: 'New Chat', path: '/chat', icon: SquarePen },
+    { label: 'New Chat', path: '/', icon: SquarePen },
   ]
 
   const settingsSections = [
@@ -55,7 +55,6 @@
   }
 
   function isActive(path: string) {
-    if (path === '/chat') return currentPath === '/chat'
     return currentPath === path
   }
 
@@ -152,8 +151,8 @@
 
   function openNewChatForWorkspace(event: MouseEvent, workspace: WorkspaceView): void {
     event.stopPropagation()
-    navigate('/chat', { workspace: workspace.workspace_id })
-    currentPath = '/chat'
+    navigate('/', { workspace: workspace.workspace_id })
+    currentPath = '/'
     notifyRouteChanged()
   }
 
@@ -300,7 +299,7 @@
     <button
       type="button"
       class="flex items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-semibold hover:bg-sidebar-accent group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0"
-      onclick={() => go('/chat')}
+      onclick={() => go('/')}
       aria-label="Open new chat"
     >
       <span class="flex size-8 shrink-0 items-center justify-center rounded-lg">
@@ -318,7 +317,7 @@
               <Sidebar.MenuButton isActive={isActive(item.path)} tooltipContent={item.label} onclick={() => go(item.path)}>
                 <item.icon />
                 <span>{item.label}</span>
-                {#if item.path === '/chat'}
+                {#if item.path === '/'}
                   {@render shortcutHint('N')}
                 {/if}
               </Sidebar.MenuButton>

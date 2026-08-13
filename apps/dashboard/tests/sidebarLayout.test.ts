@@ -61,7 +61,7 @@ vi.mock('../src/stores/workspaces', () => ({
 }));
 
 beforeEach(() => {
-  window.history.pushState({}, '', '/dashboard/chat');
+  window.history.pushState({}, '', '/dashboard');
   mocks.sessions.set([]);
   mocks.sessionsLoading.set(false);
   mocks.workspaces.set([]);
@@ -430,7 +430,7 @@ test('sidebar recent workspace hover action starts a new chat for that workspace
 
   await fireEvent.click(newChatButton);
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat', { workspace: 'workspace-active' });
+  expect(mocks.navigate).toHaveBeenCalledWith('/', { workspace: 'workspace-active' });
   expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
 });
 
@@ -683,7 +683,7 @@ test('sidebar session actions menu unpins pinned sessions', async () => {
 });
 
 test('sidebar only marks new chat active on the default route', () => {
-  window.history.pushState({}, '', '/dashboard/chat');
+  window.history.pushState({}, '', '/dashboard');
 
   render(AppSidebarHost);
 
@@ -704,7 +704,7 @@ test('sidebar New Chat notifies mounted route components about the route change'
   render(AppSidebarHost);
   await fireEvent.click(screen.getByText('New Chat'));
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat');
+  expect(mocks.navigate).toHaveBeenCalledWith('/');
   expect(popstateListener).toHaveBeenCalledTimes(1);
   window.removeEventListener('popstate', popstateListener);
 });
@@ -899,7 +899,7 @@ test('chat shortcuts are scoped to chat routes and do not interrupt typing', asy
   await fireEvent.keyDown(window, { key: '1', altKey: true });
   expect(mocks.navigate).not.toHaveBeenCalled();
 
-  window.history.pushState({}, '', '/dashboard/chat');
+  window.history.pushState({}, '', '/dashboard');
   const input = document.createElement('textarea');
   document.body.appendChild(input);
   input.focus();
@@ -915,7 +915,7 @@ test('chat new and focus shortcuts work on chat routes', async () => {
   document.body.appendChild(input);
 
   await fireEvent.keyDown(window, { key: 'n', altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat');
+  expect(mocks.navigate).toHaveBeenLastCalledWith('/');
 
   await fireEvent.keyDown(window, { key: 'l', altKey: true });
   expect(document.activeElement).toBe(input);
@@ -935,7 +935,7 @@ test('chat new shortcut on a session route preserves the current session workspa
 
   await fireEvent.keyDown(window, { key: 'n', altKey: true });
 
-  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat', { workspace: 'workspace-current' });
+  expect(mocks.navigate).toHaveBeenLastCalledWith('/', { workspace: 'workspace-current' });
 });
 
 test('chat app shell reserves composer space only for session chat routes', () => {
@@ -954,7 +954,7 @@ test('chat app shell reserves composer space only for session chat routes', () =
   expect(sessionMain?.firstElementChild).not.toHaveClass('min-h-0');
 
   unmount();
-  window.history.pushState({}, '', '/dashboard/chat');
+  window.history.pushState({}, '', '/dashboard');
   render(AppShellHost);
 
   const newChatMain = screen.getByText('App shell page content').closest('main');

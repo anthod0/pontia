@@ -19,7 +19,7 @@ test('focuses the prompt only on the first entry to the new chat page', async ()
 });
 
 test('prefers the new chat workspace query parameter over the remembered workspace', async () => {
-  window.history.pushState({}, '', '/dashboard/chat?workspace=workspace-2');
+  window.history.pushState({}, '', '/dashboard?workspace=workspace-2');
   window.localStorage.setItem('pontia.chat.lastWorkspaceId', 'workspace-1');
   mocks.workspaces.set([
     workspace({ workspace_id: 'workspace-1', name: 'pontia' }),

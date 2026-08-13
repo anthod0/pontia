@@ -47,8 +47,8 @@
     const currentSessionId = sessionIdFromChatPath(window.location.pathname)
     const currentSession = currentSessionId ? get(sessions).find((session) => session.session_id === currentSessionId) : null
     const workspaceId = currentSession?.workspace_id?.trim()
-    if (workspaceId) openChat('/chat', { workspace: workspaceId })
-    else openChat('/chat')
+    if (workspaceId) openChat('/', { workspace: workspaceId })
+    else openChat('/')
   }
 
   function focusChatInput(): void {

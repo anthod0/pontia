@@ -27,5 +27,5 @@ export function sessionIdFromChatPath(pathname: string): string | null {
 
 export function isChatRoute(pathname: string): boolean {
   const normalized = pathname.replace(/^\/dashboard/, '');
-  return normalized === '/chat' || normalized.startsWith('/chat/');
+  return normalized === '/' || normalized === '' || normalized.startsWith('/chat/');
 }

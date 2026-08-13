@@ -9,5 +9,5 @@
     eyebrow="404"
     description="This dashboard route is not registered yet."
   />
-  <Button href="/dashboard/chat">Back to chat</Button>
+  <Button href="/dashboard">Back to chat</Button>
 </div>

@@ -97,7 +97,7 @@
 
   function openSelectedSessionChat(): void {
     if (selectedSessionId) navigate(`/chat/${selectedSessionId}`)
-    else navigate('/chat')
+    else navigate('/')
   }
 
   async function refreshAll(): Promise<void> {

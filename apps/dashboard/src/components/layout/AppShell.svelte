@@ -24,7 +24,7 @@
   }
 
   function isChatPath(path: string): boolean {
-    return path === '/dashboard/chat' || path.startsWith('/dashboard/chat/')
+    return path === '/dashboard' || path === '/dashboard/' || path.startsWith('/dashboard/chat/')
   }
 
   function isChatSessionPath(path: string): boolean {

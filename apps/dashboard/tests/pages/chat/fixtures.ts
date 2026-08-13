@@ -289,7 +289,7 @@ afterEach(() => {
 beforeEach(() => {
   if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = () => false;
   if (!Element.prototype.releasePointerCapture) Element.prototype.releasePointerCapture = () => undefined;
-  window.history.pushState({}, '', '/dashboard/chat');
+  window.history.pushState({}, '', '/dashboard');
   const activeSession = session();
   mocks.loadedSessions = [activeSession];
   mocks.sessions.set([activeSession]);

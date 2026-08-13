@@ -3,7 +3,7 @@ import { base } from '$app/paths';
 
 export function dashboardPath(path: string): string {
   if (!path.startsWith('/')) throw new Error(`Dashboard paths must be absolute: ${path}`);
-  return `${base}${path === '/' ? '/' : path}`;
+  return path === '/' ? base || '/' : `${base}${path}`;
 }
 
 export async function navigate(path: string, query?: Record<string, string | null | undefined>): Promise<void> {

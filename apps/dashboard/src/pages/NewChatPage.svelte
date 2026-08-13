@@ -34,7 +34,7 @@
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
 
   onMount(async () => {
-    autofocusComposer = claimChatEntryAutofocus('/chat')
+    autofocusComposer = claimChatEntryAutofocus('/')
     await Promise.all([loadSessions(), loadWorkspaces()])
     ensureCreateWorkspaceSelection()
   })

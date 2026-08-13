@@ -118,7 +118,7 @@ test('opens new chat from a session menu with the current workspace query parame
   await fireEvent.click(await screen.findByRole('button', { name: /advanced session controls/i }));
   await fireEvent.click(await screen.findByRole('menuitem', { name: /new chat/i }));
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat', { workspace: 'workspace-2' });
+  expect(mocks.navigate).toHaveBeenCalledWith('/', { workspace: 'workspace-2' });
 });
 
 

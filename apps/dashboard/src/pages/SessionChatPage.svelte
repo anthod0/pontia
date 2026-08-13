@@ -488,10 +488,10 @@
     resetTimelineState()
     if (queryWorkspaceId) {
       const availableQueryWorkspaceId = availableWorkspaceId(queryWorkspaceId)
-      navigate('/chat', { workspace: availableQueryWorkspaceId ?? queryWorkspaceId })
+      navigate('/', { workspace: availableQueryWorkspaceId ?? queryWorkspaceId })
       return
     }
-    navigate('/chat')
+    navigate('/')
   }
 
   async function selectSessionFromLocation(): Promise<void> {
