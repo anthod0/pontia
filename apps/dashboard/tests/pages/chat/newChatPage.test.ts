@@ -33,6 +33,24 @@ test('prefers the new chat workspace query parameter over the remembered workspa
   expect(window.localStorage.getItem('pontia.chat.lastWorkspaceId')).toBe('workspace-1');
 });
 
+test('updates the selected workspace when the mounted page query changes', async () => {
+  mocks.workspaces.set([
+    workspace({ workspace_id: 'workspace-1', name: 'pontia' }),
+    workspace({ workspace_id: 'workspace-2', name: 'sandbox', canonical_path: '/repo/sandbox', display_path: '~/repo/sandbox' }),
+  ]);
+
+  render(NewChatPage);
+
+  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('pontia');
+
+  window.history.pushState({}, '', '/dashboard?workspace=workspace-2');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+
+  await waitFor(() => expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('sandbox'));
+});
+
 
 test('remembers the selected new chat workspace after starting a chat', async () => {
   const user = userEvent.setup();

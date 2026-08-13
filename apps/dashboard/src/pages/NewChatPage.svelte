@@ -33,10 +33,12 @@
   const CLIENT_TYPE_OPTIONS = ['pi', 'claude']
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
 
-  onMount(async () => {
+  onMount(() => {
+    const handleLocationChange = () => ensureCreateWorkspaceSelection()
+    window.addEventListener('popstate', handleLocationChange)
     autofocusComposer = claimChatEntryAutofocus('/')
-    await Promise.all([loadSessions(), loadWorkspaces()])
-    ensureCreateWorkspaceSelection()
+    void Promise.all([loadSessions(), loadWorkspaces()]).then(ensureCreateWorkspaceSelection)
+    return () => window.removeEventListener('popstate', handleLocationChange)
   })
 
   $: if ($workspaces.length) ensureCreateWorkspaceSelection()
