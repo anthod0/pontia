@@ -17,7 +17,7 @@ use crate::{
     PontiaEventType,
 };
 
-const PROCESS_OBSERVATION_INTERVAL: Duration = Duration::from_secs(30);
+const PROCESS_OBSERVATION_INTERVAL: Duration = Duration::from_secs(10);
 const PROCESS_OBSERVATION_RETRY_DELAY: Duration = Duration::from_secs(1);
 
 fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
@@ -60,7 +60,7 @@ impl RuntimeObservationService {
         let mut interval = tokio::time::interval(PROCESS_OBSERVATION_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // Tokio intervals tick immediately. Fingerprints are captured by the
-        // binding path, so the first validation is intentionally delayed 30s.
+        // binding path, so the first validation is intentionally delayed 10s.
         interval.tick().await;
 
         loop {
