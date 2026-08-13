@@ -9,6 +9,7 @@
   import { archiveSession, pinSession, sessions, sessionsLoading, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
   import { workspaces, workspacesLoading } from '../../stores/workspaces'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
+  import { sessionStateDotClass } from '$lib/sessionState'
   import { workspaceTitle } from '../chat/sessionMetadata'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import type { SessionView, WorkspaceView } from '../../api/types'
@@ -101,21 +102,6 @@
     expandedWorkspaceIds = {
       ...expandedWorkspaceIds,
       [workspaceId]: !isWorkspaceExpanded(workspaceId),
-    }
-  }
-
-  function sessionStateDotClass(state: string) {
-    switch (state) {
-      case 'busy':
-      case 'starting':
-        return 'bg-amber-500'
-      case 'idle':
-      case 'interrupted':
-        return 'bg-emerald-500'
-      case 'error':
-        return 'bg-destructive'
-      default:
-        return 'bg-muted-foreground'
     }
   }
 

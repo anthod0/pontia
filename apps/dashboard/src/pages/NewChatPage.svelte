@@ -3,6 +3,7 @@
   import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
+  import AgentOverview from '../components/home/AgentOverview.svelte'
   import { isTransientNetworkError } from '../api/client'
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
@@ -18,7 +19,9 @@
     createSession,
     loadSessionDetail,
     loadSessions,
+    sessions,
     sessionsError,
+    sessionsLoading,
   } from '../stores/sessions'
   import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
 
@@ -28,16 +31,17 @@
   let actionError: string | null = null
   let lastToastedError: string | null = null
   let queryWorkspaceSelectionId: string | null = null
+  let overviewWorkspaceId: string | null = null
   let autofocusComposer = false
 
   const CLIENT_TYPE_OPTIONS = ['pi', 'claude']
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
 
   onMount(() => {
-    const handleLocationChange = () => ensureCreateWorkspaceSelection()
+    const handleLocationChange = () => syncWorkspaceSelectionsFromLocation()
     window.addEventListener('popstate', handleLocationChange)
     autofocusComposer = claimChatEntryAutofocus('/')
-    void Promise.all([loadSessions(), loadWorkspaces()]).then(ensureCreateWorkspaceSelection)
+    void Promise.all([loadSessions(), loadWorkspaces()]).then(syncWorkspaceSelectionsFromLocation)
     return () => window.removeEventListener('popstate', handleLocationChange)
   })
 
@@ -92,6 +96,20 @@
     return $workspaces[0]?.workspace_id ?? ''
   }
 
+  function syncWorkspaceSelectionsFromLocation(): void {
+    overviewWorkspaceId = availableWorkspaceId(readQueryWorkspaceId())
+    ensureCreateWorkspaceSelection()
+  }
+
+  function selectOverviewWorkspace(workspaceId: string | null): void {
+    overviewWorkspaceId = workspaceId
+    if (workspaceId) {
+      createWorkspaceId = workspaceId
+      rememberCreateWorkspaceSelection(workspaceId)
+    }
+    void navigate('/', { workspace: workspaceId })
+  }
+
   function ensureCreateWorkspaceSelection(): void {
     if (!$workspaces.length) return
     const queryWorkspaceId = availableWorkspaceId(readQueryWorkspaceId())
@@ -138,7 +156,15 @@
   }
 </script>
 
-<section class="flex min-h-[calc(100svh-5.5rem)] flex-col md:min-h-[calc(100svh-6.5rem)]">
+<section class="flex min-h-[calc(100svh-5.5rem)] flex-col gap-8 md:min-h-[calc(100svh-6.5rem)]">
+  <AgentOverview
+    sessions={$sessions}
+    workspaces={$workspaces}
+    loading={$sessionsLoading}
+    selectedWorkspaceId={overviewWorkspaceId}
+    onWorkspaceChange={selectOverviewWorkspace}
+  />
+
   <NewChatPanel
     bind:prompt={$chatDraft}
     bind:workspaceId={createWorkspaceId}

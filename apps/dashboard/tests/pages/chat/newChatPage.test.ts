@@ -29,7 +29,7 @@ test('prefers the new chat workspace query parameter over the remembered workspa
   render(NewChatPage);
 
   await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('sandbox');
+  expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent('sandbox');
   expect(window.localStorage.getItem('pontia.chat.lastWorkspaceId')).toBe('workspace-1');
 });
 
@@ -43,12 +43,12 @@ test('updates the selected workspace when the mounted page query changes', async
 
   await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('pontia');
+  expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent('pontia');
 
   window.history.pushState({}, '', '/dashboard?workspace=workspace-2');
   window.dispatchEvent(new PopStateEvent('popstate'));
 
-  await waitFor(() => expect(screen.getByLabelText(/workspace/i)).toHaveTextContent('sandbox'));
+  await waitFor(() => expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent('sandbox'));
 });
 
 
@@ -64,7 +64,7 @@ test('remembers the selected new chat workspace after starting a chat', async ()
   render(NewChatPage);
 
   await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  const workspaceSelector = screen.getByLabelText(/workspace/i);
+  const workspaceSelector = screen.getByLabelText(/^Workspace$/i);
   await user.click(workspaceSelector);
   await user.keyboard('{ArrowDown}{Enter}{Escape}');
   expect(workspaceSelector).toHaveTextContent('sandbox');
@@ -76,6 +76,49 @@ test('remembers the selected new chat workspace after starting a chat', async ()
   expect(window.localStorage.getItem('pontia.chat.lastWorkspaceId')).toBe('workspace-2');
 });
 
+
+test('shows active agents and opens their chats from the overview', async () => {
+  mocks.sessions.set([
+    session({ session_id: 'session-working', title: 'Implement overview', state: 'busy', updated_at: '2026-05-14T00:01:00Z' }),
+    session({ session_id: 'session-idle', title: 'Review changes', state: 'idle' }),
+    session({ session_id: 'session-exited', title: 'Old session', state: 'exited' }),
+  ]);
+
+  render(NewChatPage);
+
+  expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument();
+  expect(screen.getByText('1 agent wait for next step')).toBeInTheDocument();
+  expect(screen.getByText('Implement overview')).toBeInTheDocument();
+  expect(screen.getByText('Review changes')).toBeInTheDocument();
+  expect(screen.queryByText('Old session')).not.toBeInTheDocument();
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Open Implement overview, Working' }));
+  expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-working');
+});
+
+test('filters the overview by workspace and syncs the new chat target', async () => {
+  const user = userEvent.setup();
+  mocks.workspaces.set([
+    workspace({ workspace_id: 'workspace-1', name: 'pontia' }),
+    workspace({ workspace_id: 'workspace-2', name: 'sandbox', canonical_path: '/repo/sandbox', display_path: '~/repo/sandbox' }),
+  ]);
+  mocks.sessions.set([
+    session({ session_id: 'session-pontia', title: 'Pontia agent', workspace_id: 'workspace-1' }),
+    session({ session_id: 'session-sandbox', title: 'Sandbox agent', workspace_id: 'workspace-2' }),
+  ]);
+
+  render(NewChatPage);
+
+  const overviewWorkspace = await screen.findByRole('button', { name: 'Overview workspace' });
+  expect(overviewWorkspace).toHaveTextContent('All workspaces');
+  await user.click(overviewWorkspace);
+  await user.keyboard('{ArrowDown}{ArrowDown}{Enter}{Escape}');
+
+  expect(mocks.navigate).toHaveBeenCalledWith('/', { workspace: 'workspace-2' });
+  expect(screen.queryByText('Pontia agent')).not.toBeInTheDocument();
+  expect(screen.getByText('Sandbox agent')).toBeInTheDocument();
+  expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent('sandbox');
+});
 
 test('renders a bottom-aligned prompt input with inline workspace and client selectors on the bare chat route', async () => {
   render(NewChatPage);
@@ -96,7 +139,7 @@ test('renders a bottom-aligned prompt input with inline workspace and client sel
   expect(panel).toContainElement(promptInput);
   expect(screen.queryByText(/Enter the first prompt/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/^Prompt$/i)).not.toBeInTheDocument();
-  const workspaceSelector = screen.getByLabelText(/workspace/i);
+  const workspaceSelector = screen.getByLabelText(/^Workspace$/i);
   const clientSelector = screen.getByLabelText(/client/i);
   expect(workspaceSelector).toHaveTextContent('pontia');
   expect(clientSelector).toHaveTextContent('pi');
