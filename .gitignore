@@ -1,6 +1,5 @@
 /target/
 /.cache/
-/.sqlx/
 node_modules/
 apps/web/dist/
 clients/claude/dist/

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DB_PATH="${PONTIA_SQLX_CHECK_DB_PATH:-/tmp/pontia_sqlx_check.db}"
+DB_PATH="${PONTIA_DEV_DB_PATH:-/tmp/pontia_dev.db}"
 
 rm -f "$DB_PATH" "$DB_PATH-shm" "$DB_PATH-wal"
 

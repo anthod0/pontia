@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT task_id, state, input, workspace_id, session_id, turn_id,\n                      routing_state, routing_reason, routing_confidence, metadata,\n                      created_at, updated_at\n               FROM tasks ORDER BY created_at DESC, task_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "task_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "state",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "input",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "workspace_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "session_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "turn_id",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "routing_state",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "routing_reason",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "routing_confidence",
+        "ordinal": 8,
+        "type_info": "Float"
+      },
+      {
+        "name": "metadata",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 11,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e932940949cd90ee7a1efd0110d1ac77c3a09dd8479e67330f0f0111abf00973"
+}

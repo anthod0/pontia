@@ -5,7 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 export PONTIA_EXTERNAL_API_TOKEN="${PONTIA_EXTERNAL_API_TOKEN:-dev-token}"
-export DATABASE_URL="${DATABASE_URL:-$(./scripts/sqlx-check-db.sh)}"
+export DATABASE_URL="${DATABASE_URL:-$(./scripts/dev-db.sh)}"
+export SQLX_OFFLINE=true
 
 backend_pid=""
 frontend_pid=""
@@ -49,7 +50,7 @@ trap cleanup EXIT INT TERM
 
 echo "Starting pontia backend with cargo run..."
 echo "Using PONTIA_EXTERNAL_API_TOKEN=$PONTIA_EXTERNAL_API_TOKEN"
-echo "Using DATABASE_URL=$DATABASE_URL for SQLx compile-time checks"
+echo "Using development database at DATABASE_URL=$DATABASE_URL"
 cargo run &
 backend_pid=$!
 

@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT event_id, task_id, event_type, payload, created_at\n               FROM task_events WHERE task_id = ? ORDER BY created_at, event_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "event_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "task_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "event_type",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "payload",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f3e5f46d37346d92374ab702a6b5a6a0d83b5802dbc6782b52239a852e829a81"
+}

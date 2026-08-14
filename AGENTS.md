@@ -18,7 +18,8 @@ If `AGENTS.local.md` exists, read it before making changes.
 
 - Run `just --list` to discover project commands and `just check` for the standard verification suite.
 - Use pnpm for package-specific scripts not exposed through `just`.
-- Run backend Cargo checks through `just` so SQLx uses the generated check database; do not commit `.sqlx/`.
+- Run backend Cargo checks through `just` so SQLx uses the committed `.sqlx/` metadata in offline mode.
+- Commit `.sqlx/`. After changing SQLx query macros or SQLite migrations, run `just sqlx-prepare` and include the refreshed metadata.
 
 ## Coding style
 
