@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use pontia_agent_clients::{TerminateBehavior, get_client_spec};
 use pontia_core::error::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
@@ -146,7 +148,11 @@ impl RuntimeControlService {
         })
     }
 
-    pub async fn resume_session(&self, session_id: &str) -> Result<ControlCommandOutcome> {
+    pub async fn resume_session(
+        &self,
+        session_id: &str,
+        pontia_home: &Path,
+    ) -> Result<ControlCommandOutcome> {
         let query = ExternalQueryService::new(self.pool.clone());
         let session = query
             .get_session(session_id)
@@ -190,6 +196,7 @@ impl RuntimeControlService {
         let runtime = self
             .runtime
             .start_session_with_restart_count_and_reuse_target(
+                pontia_home,
                 RuntimeStartRequest {
                     session_id: session_id.to_string(),
                     client_type: session.client_type.clone(),
@@ -235,7 +242,11 @@ impl RuntimeControlService {
         })
     }
 
-    pub async fn restart_session(&self, session_id: &str) -> Result<ControlCommandOutcome> {
+    pub async fn restart_session(
+        &self,
+        session_id: &str,
+        pontia_home: &Path,
+    ) -> Result<ControlCommandOutcome> {
         let query = ExternalQueryService::new(self.pool.clone());
         let session = query
             .get_session(session_id)
@@ -292,6 +303,7 @@ impl RuntimeControlService {
             None
         };
         let runtime = self.runtime.start_session_with_restart_count(
+            pontia_home,
             RuntimeStartRequest {
                 session_id: session_id.to_string(),
                 client_type: session.client_type.clone(),

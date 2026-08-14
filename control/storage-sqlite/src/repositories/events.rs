@@ -305,19 +305,18 @@ mod tests {
     use super::*;
     use crate::{connect_sqlite, run_migrations};
 
-    async fn pool() -> sqlx::SqlitePool {
+    async fn pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
         let db_path = dir.path().join("events.db");
-        let _kept_dir = dir.keep();
         let database_url = format!("sqlite://{}", db_path.display());
         let db = connect_sqlite(&database_url).await.expect("connect");
         run_migrations(&db).await.expect("migrate");
-        db
+        (db, dir)
     }
 
     #[tokio::test]
     async fn counts_persisted_events_for_session_without_transaction() {
-        let pool = pool().await;
+        let (pool, _pontia_home) = pool().await;
         sqlx::query(
             r#"INSERT INTO events
                (event_id, session_id, source, client_type, event_type, occurred_at, payload)

@@ -12,12 +12,9 @@ mod session_identifier;
 mod tmux;
 mod types;
 
-pub use config::{
-    configured_internal_event_url, set_runtime_bind_addr, set_runtime_config,
-    set_runtime_pontia_home,
-};
 #[cfg(test)]
-pub use config::{reset_runtime_bind_addr_for_tests, reset_runtime_pontia_home_for_tests};
+pub use config::reset_runtime_bind_addr_for_tests;
+pub use config::{configured_internal_event_url, set_runtime_bind_addr, set_runtime_config};
 pub use manager::GenericRuntimeManager;
 use std::path::PathBuf;
 pub use tmux::TmuxProcessFingerprint;
@@ -35,18 +32,18 @@ impl PontiaLogPaths {
     }
 }
 
-pub fn pontia_log_paths() -> pontia_core::error::Result<PontiaLogPaths> {
-    let pontia_home = config::configured_pontia_home()?;
-    let paths = paths::log_paths(&pontia_home);
-    Ok(PontiaLogPaths {
+pub fn pontia_log_paths(pontia_home: &std::path::Path) -> PontiaLogPaths {
+    let paths = paths::log_paths(pontia_home);
+    PontiaLogPaths {
         log_dir: paths.log_dir,
         runtime_log: paths.runtime_log,
-    })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::{
+        path::Path,
         process::{Command, Stdio},
         thread,
         time::Duration,
@@ -60,15 +57,18 @@ mod tests {
         let session_id = "sess_generic_in_process".to_string();
 
         let runtime = manager
-            .start_session(RuntimeStartRequest {
-                session_id: session_id.clone(),
-                client_type: "generic".to_string(),
-                workspace: None,
-                workspace_name: None,
-                handle: None,
-                role: None,
-                start_command: None,
-            })
+            .start_session(
+                Path::new("/pontia-test-home"),
+                RuntimeStartRequest {
+                    session_id: session_id.clone(),
+                    client_type: "generic".to_string(),
+                    workspace: None,
+                    workspace_name: None,
+                    handle: None,
+                    role: None,
+                    start_command: None,
+                },
+            )
             .expect("generic runtime should start");
 
         assert_eq!(runtime.runtime_kind, "in_process");
@@ -90,15 +90,18 @@ mod tests {
         let session_id = "sess_1234567890abcdef".to_string();
 
         let runtime = manager
-            .start_session(RuntimeStartRequest {
-                session_id,
-                client_type: "generic".to_string(),
-                workspace: None,
-                workspace_name: None,
-                handle: Some("@reviewer".to_string()),
-                role: Some("execution reviewer".to_string()),
-                start_command: None,
-            })
+            .start_session(
+                Path::new("/pontia-test-home"),
+                RuntimeStartRequest {
+                    session_id,
+                    client_type: "generic".to_string(),
+                    workspace: None,
+                    workspace_name: None,
+                    handle: Some("@reviewer".to_string()),
+                    role: Some("execution reviewer".to_string()),
+                    start_command: None,
+                },
+            )
             .expect("generic runtime should start");
 
         assert_eq!(
@@ -121,7 +124,7 @@ mod tests {
         };
 
         let first = manager
-            .start_session(request.clone())
+            .start_session(Path::new("/pontia-test-home"), request.clone())
             .expect("generic runtime should start");
         assert!(manager.is_alive(&first.runtime_handle));
 
@@ -131,7 +134,7 @@ mod tests {
         assert!(!manager.is_alive(&first.runtime_handle));
 
         let second = manager
-            .start_session_with_restart_count(request, 1)
+            .start_session_with_restart_count(Path::new("/pontia-test-home"), request, 1)
             .expect("generic runtime should restart");
         assert_eq!(second.runtime_handle, first.runtime_handle);
         assert!(manager.is_alive(&second.runtime_handle));
@@ -185,6 +188,7 @@ mod tests {
 
         let runtime = manager
             .start_session_with_restart_count_and_reuse_target(
+                dir.path(),
                 RuntimeStartRequest {
                     session_id: session_id.clone(),
                     client_type: "pi".to_string(),

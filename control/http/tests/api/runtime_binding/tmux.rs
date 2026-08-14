@@ -4,7 +4,7 @@ use super::{
 use std::process::{Command, Stdio};
 #[tokio::test]
 async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -44,7 +44,7 @@ async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
 
 #[tokio::test]
 async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -95,7 +95,7 @@ async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() 
 
 #[tokio::test]
 async fn terminate_manually_bound_tui_without_pane_binding_is_rejected() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -145,7 +145,7 @@ async fn terminate_manually_bound_tui_without_pane_binding_is_rejected() {
 
 #[tokio::test]
 async fn terminate_manually_bound_tui_session_sends_pi_exit_sequence_to_bound_pane() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()

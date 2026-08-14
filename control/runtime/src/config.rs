@@ -1,6 +1,5 @@
 use std::{
     net::SocketAddr,
-    path::PathBuf,
     sync::{OnceLock, RwLock},
 };
 
@@ -10,11 +9,6 @@ use pontia_config::RuntimeConfig;
 fn runtime_config() -> &'static RwLock<RuntimeConfig> {
     static CONFIG: OnceLock<RwLock<RuntimeConfig>> = OnceLock::new();
     CONFIG.get_or_init(|| RwLock::new(RuntimeConfig::default()))
-}
-
-fn pontia_home_config() -> &'static RwLock<Option<PathBuf>> {
-    static CONFIG: OnceLock<RwLock<Option<PathBuf>>> = OnceLock::new();
-    CONFIG.get_or_init(|| RwLock::new(None))
 }
 
 fn runtime_bind_addr_config() -> &'static RwLock<Option<SocketAddr>> {
@@ -29,37 +23,11 @@ pub fn set_runtime_config(config: RuntimeConfig) {
     *guard = config;
 }
 
-pub fn set_runtime_pontia_home(pontia_home: PathBuf) {
-    let mut guard = pontia_home_config()
-        .write()
-        .expect("Pontia home config lock poisoned");
-    *guard = Some(pontia_home);
-}
-
-pub(super) fn configured_pontia_home() -> pontia_core::error::Result<PathBuf> {
-    pontia_home_config()
-        .read()
-        .expect("Pontia home config lock poisoned")
-        .clone()
-        .ok_or_else(|| pontia_core::Error::InvalidConfig {
-            key: "PONTIA_HOME",
-            message: "runtime Pontia home is not configured".to_string(),
-        })
-}
-
 pub fn set_runtime_bind_addr(bind_addr: SocketAddr) {
     let mut guard = runtime_bind_addr_config()
         .write()
         .expect("runtime bind addr lock poisoned");
     *guard = Some(bind_addr);
-}
-
-#[cfg(test)]
-pub fn reset_runtime_pontia_home_for_tests() {
-    let mut guard = pontia_home_config()
-        .write()
-        .expect("Pontia home config lock poisoned");
-    *guard = None;
 }
 
 #[cfg(test)]

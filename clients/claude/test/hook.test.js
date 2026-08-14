@@ -1,20 +1,21 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { runClaudeHook } from "../src/hook.js";
-const tmpDirs = [];
-const defaultPontiaHome = mkdtempSync(join(tmpdir(), "pontia-claude-hook-home-"));
-writeFileSync(join(defaultPontiaHome, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
+import { tempDir as isolatedTempDir } from "./temp-dir.js";
+
+let defaultPontiaHome;
+
 async function tempDir() {
-    const dir = await mkdtemp(join(tmpdir(), "pontia-claude-hook-"));
-    tmpDirs.push(dir);
-    return dir;
+    return isolatedTempDir("pontia-claude-hook-");
 }
-afterEach(async () => {
-    await Promise.all(tmpDirs.map((dir) => rm(dir, { recursive: true, force: true })));
-    tmpDirs.length = 0;
+
+beforeEach(async () => {
+    defaultPontiaHome = await isolatedTempDir("pontia-claude-hook-home-");
+    await writeFile(join(defaultPontiaHome, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
+});
+
+afterEach(() => {
     vi.restoreAllMocks();
 });
 function baseInput(overrides = {}) {

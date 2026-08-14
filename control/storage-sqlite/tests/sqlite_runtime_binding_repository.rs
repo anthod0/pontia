@@ -5,19 +5,18 @@ use pontia_storage_sqlite::{
 };
 use serde_json::json;
 
-async fn test_pool() -> sqlx::SqlitePool {
+async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("sqlite_runtime_binding_repository.db");
-    let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let pool = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&pool).await.expect("migrate");
-    pool
+    (pool, dir)
 }
 
 #[tokio::test]
 async fn upserts_runtime_binding_and_replaces_structured_fields() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query("INSERT INTO sessions (session_id, client_type, state, metadata) VALUES ('sess_runtime', 'pi', 'ready', '{}')")
         .execute(&pool)
         .await
@@ -76,7 +75,7 @@ async fn upserts_runtime_binding_and_replaces_structured_fields() {
 
 #[tokio::test]
 async fn runtime_binding_metadata_can_be_read_inside_transaction() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query("INSERT INTO sessions (session_id, client_type, state, metadata) VALUES ('sess_tx', 'pi', 'ready', '{}')")
         .execute(&pool)
         .await

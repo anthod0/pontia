@@ -2,14 +2,12 @@ use std::path::{Path, PathBuf};
 
 use pontia_core::error::Result;
 
-use super::{RuntimeStartRequest, config::configured_pontia_home};
+use super::RuntimeStartRequest;
 
-pub(super) fn workspace_path(request: &RuntimeStartRequest) -> Result<PathBuf> {
+pub(super) fn workspace_path(pontia_home: &Path, request: &RuntimeStartRequest) -> Result<PathBuf> {
     let path = match request.workspace.as_ref() {
         Some(workspace) => PathBuf::from(workspace),
-        None => configured_pontia_home()?
-            .join("workspaces")
-            .join(&request.session_id),
+        None => pontia_home.join("workspaces").join(&request.session_id),
     };
     std::fs::create_dir_all(&path)?;
     Ok(path)

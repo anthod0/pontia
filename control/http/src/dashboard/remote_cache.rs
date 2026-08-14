@@ -1,6 +1,6 @@
 use std::{
     ffi::OsStr,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -8,13 +8,24 @@ use tracing::warn;
 
 use super::{ResolvedDashboard, archive};
 
-pub(super) async fn resolve(source: &str, cache_dir: &Path) -> ResolvedDashboard {
+pub(super) async fn resolve(source: &str, pontia_home: &Path) -> ResolvedDashboard {
+    let cache_dir = pontia_home.join("cache/dashboard");
+    if let Err(error) = validate_cache_boundary(pontia_home, &cache_dir) {
+        return ResolvedDashboard::unavailable(error);
+    }
     let current_dir = cache_dir.join("current");
 
-    match refresh(source, cache_dir, &current_dir).await {
+    match refresh(pontia_home, source, &cache_dir, &current_dir).await {
         Ok(root) => ResolvedDashboard::available(root),
         Err(err) => {
             warn!(source, cache_dir = %cache_dir.display(), error = %err, "failed to refresh remote dashboard cache");
+            if let Err(cache_err) = validate_cache_boundary(pontia_home, &cache_dir)
+                .and_then(|()| reject_symlink(Some(&current_dir), "current dashboard cache"))
+            {
+                return ResolvedDashboard::unavailable(format!(
+                    "failed to refresh remote dashboard ({err}); refusing cached dashboard: {cache_err}"
+                ));
+            }
             match cached_dashboard_root(&current_dir) {
                 Ok(root) => ResolvedDashboard::available(root),
                 Err(cache_err) => ResolvedDashboard::unavailable(format!(
@@ -25,9 +36,13 @@ pub(super) async fn resolve(source: &str, cache_dir: &Path) -> ResolvedDashboard
     }
 }
 
-async fn refresh(source: &str, cache_dir: &Path, current_dir: &Path) -> Result<PathBuf, String> {
-    reject_symlink(cache_dir.parent(), "dashboard cache parent")?;
-    reject_symlink(Some(cache_dir), "dashboard cache")?;
+async fn refresh(
+    pontia_home: &Path,
+    source: &str,
+    cache_dir: &Path,
+    current_dir: &Path,
+) -> Result<PathBuf, String> {
+    validate_cache_boundary(pontia_home, cache_dir)?;
     tokio::fs::create_dir_all(cache_dir)
         .await
         .map_err(|err| format!("failed to create cache dir: {err}"))?;
@@ -54,7 +69,7 @@ async fn refresh(source: &str, cache_dir: &Path, current_dir: &Path) -> Result<P
     match extract_result {
         Ok(_) => {
             if tokio::fs::try_exists(current_dir).await.unwrap_or(false) {
-                remove_cache_tree(cache_dir, current_dir, CacheTreeKind::Current)
+                remove_cache_tree(pontia_home, cache_dir, current_dir, CacheTreeKind::Current)
                     .await
                     .map_err(|err| format!("failed to replace cached dashboard: {err}"))?;
             }
@@ -64,7 +79,8 @@ async fn refresh(source: &str, cache_dir: &Path, current_dir: &Path) -> Result<P
             cached_dashboard_root(current_dir)
         }
         Err(err) => {
-            let _ = remove_cache_tree(cache_dir, &staging_dir, CacheTreeKind::Staging).await;
+            let _ = remove_cache_tree(pontia_home, cache_dir, &staging_dir, CacheTreeKind::Staging)
+                .await;
             Err(err)
         }
     }
@@ -77,6 +93,7 @@ enum CacheTreeKind {
 }
 
 async fn remove_cache_tree(
+    pontia_home: &Path,
     cache_dir: &Path,
     target: &Path,
     kind: CacheTreeKind,
@@ -95,12 +112,30 @@ async fn remove_cache_tree(
             target.display()
         ));
     }
-    reject_symlink(cache_dir.parent(), "dashboard cache parent")?;
-    reject_symlink(Some(cache_dir), "dashboard cache")?;
+    validate_cache_boundary(pontia_home, cache_dir)?;
     reject_symlink(Some(target), "dashboard cache cleanup target")?;
     tokio::fs::remove_dir_all(target)
         .await
         .map_err(|err| err.to_string())
+}
+
+fn validate_cache_boundary(pontia_home: &Path, cache_dir: &Path) -> Result<(), String> {
+    if pontia_home.as_os_str().is_empty()
+        || !pontia_home.is_absolute()
+        || pontia_home.parent().is_none()
+        || pontia_home
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+        || cache_dir != pontia_home.join("cache/dashboard")
+    {
+        return Err(format!(
+            "refusing unsafe dashboard cache root {}",
+            cache_dir.display()
+        ));
+    }
+    reject_symlink(Some(pontia_home), "Pontia home")?;
+    reject_symlink(Some(&pontia_home.join("cache")), "dashboard cache parent")?;
+    reject_symlink(Some(cache_dir), "dashboard cache")
 }
 
 fn reject_symlink(path: Option<&Path>, description: &str) -> Result<(), String> {

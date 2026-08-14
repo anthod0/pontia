@@ -109,19 +109,18 @@ mod tests {
     use super::*;
     use crate::{connect_sqlite, run_migrations};
 
-    async fn pool() -> sqlx::SqlitePool {
+    async fn pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
         let db_path = dir.path().join("git-status.db");
-        let _kept_dir = dir.keep();
         let database_url = format!("sqlite://{}", db_path.display());
         let db = connect_sqlite(&database_url).await.expect("connect");
         run_migrations(&db).await.expect("migrate");
-        db
+        (db, dir)
     }
 
     #[tokio::test]
     async fn upserts_and_reads_workspace_git_status() {
-        let pool = pool().await;
+        let (pool, _pontia_home) = pool().await;
         sqlx::query("INSERT INTO workspaces (workspace_id, canonical_path, display_path, name) VALUES ('ws_1', '/tmp/ws_1', '/tmp/ws_1', 'ws_1')")
             .execute(&pool)
             .await

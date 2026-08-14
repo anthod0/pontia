@@ -4,7 +4,7 @@ use super::{
 use sqlx::Row;
 #[tokio::test]
 async fn current_runtime_exit_abandons_its_active_turn() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -68,7 +68,7 @@ async fn current_runtime_exit_abandons_its_active_turn() {
 
 #[tokio::test]
 async fn stale_runtime_exit_cannot_exit_the_current_runtime_session() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -127,7 +127,7 @@ async fn stale_runtime_exit_cannot_exit_the_current_runtime_session() {
 
 #[tokio::test]
 async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -220,7 +220,7 @@ async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
 
 #[tokio::test]
 async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -283,7 +283,7 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
 
 #[tokio::test]
 async fn repeated_webui_resume_of_manually_bound_pi_tui_does_not_persist_session_id_argument() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -318,7 +318,7 @@ async fn repeated_webui_resume_of_manually_bound_pi_tui_does_not_persist_session
 
 #[tokio::test]
 async fn repeated_webui_resume_of_manually_bound_claude_tui_does_not_persist_resume_argument() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()

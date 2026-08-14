@@ -23,14 +23,13 @@ impl Drop for TmuxSessionGuard {
     }
 }
 
-async fn test_pool() -> SqlitePool {
+async fn test_pool() -> (SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("turn-readiness.db");
-    let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
-    db
+    (db, dir)
 }
 
 fn tmux_session_name(session_id: &str) -> String {
@@ -64,7 +63,7 @@ async fn ingest_session_event(
 
 #[tokio::test]
 async fn pi_tmux_turn_dispatch_requires_bound_tmux_pane_before_creating_turn() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     let session_id = new_session_id().to_string();
     let runtime_instance_id = "rtinst_no_pane";
 
@@ -132,7 +131,7 @@ async fn pi_tmux_turn_dispatch_requires_bound_tmux_pane_before_creating_turn() {
 
 #[tokio::test]
 async fn pi_tmux_turn_dispatch_waits_for_agent_client_ready() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     let session_id = new_session_id().to_string();
     let tmux_session_name = tmux_session_name(&session_id);
     let _guard = TmuxSessionGuard {

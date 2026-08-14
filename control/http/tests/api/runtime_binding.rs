@@ -14,12 +14,13 @@ mod lifecycle;
 mod tmux;
 mod upsert;
 
-pub(super) async fn test_state() -> AppState {
-    TestApp::builder()
+pub(super) async fn test_state() -> (AppState, TestApp) {
+    let app = TestApp::builder()
         .database_name("runtime-binding-upsert.db")
         .external_api_token(Some("test-token".to_string()))
-        .build_state()
-        .await
+        .build()
+        .await;
+    (app.state.clone(), app)
 }
 
 pub(super) async fn post_upsert(state: AppState, body: Value) -> (StatusCode, Value) {

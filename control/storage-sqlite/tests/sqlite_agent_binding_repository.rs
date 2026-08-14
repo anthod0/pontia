@@ -5,14 +5,13 @@ use pontia_storage_sqlite::{
 };
 use serde_json::json;
 
-async fn test_pool() -> sqlx::SqlitePool {
+async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("sqlite_agent_binding_repository.db");
-    let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let pool = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&pool).await.expect("migrate");
-    pool
+    (pool, dir)
 }
 
 async fn insert_session(pool: &sqlx::SqlitePool, session_id: &str) {
@@ -25,7 +24,7 @@ async fn insert_session(pool: &sqlx::SqlitePool, session_id: &str) {
 
 #[tokio::test]
 async fn upserts_agent_binding_and_preserves_discovered_flag() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     insert_session(&pool, "sess_agent_binding").await;
     let repository = SqliteAgentBindingRepository::new(pool);
 
@@ -71,7 +70,7 @@ async fn upserts_agent_binding_and_preserves_discovered_flag() {
 
 #[tokio::test]
 async fn binding_for_session_returns_its_only_binding() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     insert_session(&pool, "sess_primary").await;
     let repository = SqliteAgentBindingRepository::new(pool);
 
@@ -100,7 +99,7 @@ async fn binding_for_session_returns_its_only_binding() {
 
 #[tokio::test]
 async fn looks_up_both_sides_of_the_one_to_one_binding() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     insert_session(&pool, "sess_lookup").await;
     let repository = SqliteAgentBindingRepository::new(pool);
 
@@ -135,7 +134,7 @@ async fn looks_up_both_sides_of_the_one_to_one_binding() {
 
 #[tokio::test]
 async fn agent_binding_can_be_upserted_inside_transaction() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     insert_session(&pool, "sess_tx_agent_binding").await;
 
     let mut tx = pool.begin().await.expect("begin tx");

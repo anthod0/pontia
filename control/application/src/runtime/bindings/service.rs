@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use pontia_agent_clients as agent_clients;
 use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
@@ -16,11 +18,12 @@ static RUNTIME_BINDING_UPSERT_LOCK: Mutex<()> = Mutex::const_new(());
 #[derive(Clone)]
 pub struct RuntimeBindingUpsertService {
     pub(super) pool: SqlitePool,
+    pub(super) pontia_home: PathBuf,
 }
 
 impl RuntimeBindingUpsertService {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
+        Self { pool, pontia_home }
     }
 
     pub async fn upsert(&self, request: RuntimeBindingUpsertRequest) -> Result<Value> {

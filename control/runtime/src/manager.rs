@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
@@ -8,29 +10,37 @@ use pontia_core::{
     time::utc_now,
 };
 
-use super::{
-    AgentInput, RuntimeStartRequest, RuntimeStartResult, config::configured_pontia_home,
-    in_process, paths, script, tmux,
-};
+use super::{AgentInput, RuntimeStartRequest, RuntimeStartResult, in_process, paths, script, tmux};
 
 #[derive(Debug, Clone, Default)]
 pub struct GenericRuntimeManager;
 
 impl GenericRuntimeManager {
-    pub fn start_session(&self, request: RuntimeStartRequest) -> Result<RuntimeStartResult> {
-        self.start_session_with_restart_count(request, 0)
+    pub fn start_session(
+        &self,
+        pontia_home: &Path,
+        request: RuntimeStartRequest,
+    ) -> Result<RuntimeStartResult> {
+        self.start_session_with_restart_count(pontia_home, request, 0)
     }
 
     pub fn start_session_with_restart_count(
         &self,
+        pontia_home: &Path,
         request: RuntimeStartRequest,
         restart_count: i64,
     ) -> Result<RuntimeStartResult> {
-        self.start_session_with_restart_count_and_reuse_target(request, restart_count, None)
+        self.start_session_with_restart_count_and_reuse_target(
+            pontia_home,
+            request,
+            restart_count,
+            None,
+        )
     }
 
     pub fn start_session_with_restart_count_and_reuse_target(
         &self,
+        pontia_home: &Path,
         request: RuntimeStartRequest,
         restart_count: i64,
         reuse_target: Option<(&str, &str)>,
@@ -46,7 +56,7 @@ impl GenericRuntimeManager {
             client_spec.capabilities.clone()
         };
         if client_spec.adapter.runtime == RuntimeBehavior::InProcess {
-            return in_process::start_session(request, capabilities, restart_count);
+            return in_process::start_session(pontia_home, request, capabilities, restart_count);
         }
 
         let start_command = client_spec
@@ -62,10 +72,9 @@ impl GenericRuntimeManager {
         } else {
             base_tmux_session
         };
-        let pontia_home = configured_pontia_home()?;
-        let workspace = paths::workspace_path(&request)?;
+        let workspace = paths::workspace_path(pontia_home, &request)?;
         script::run_startup_hooks(client_spec.adapter.startup_hooks, &workspace)?;
-        let log_paths = paths::log_paths(&pontia_home);
+        let log_paths = paths::log_paths(pontia_home);
         std::fs::create_dir_all(&log_paths.log_dir)?;
         let log_path = log_paths.runtime_log.clone();
         let internal_event_url = script::internal_event_url();
@@ -79,7 +88,7 @@ impl GenericRuntimeManager {
             log_path: &log_path,
         };
         let launch_script_path = script::write_ephemeral_launch_script(
-            &pontia_home,
+            pontia_home,
             &runtime_paths,
             &request,
             &launch_id,
@@ -251,8 +260,12 @@ impl GenericRuntimeManager {
         tmux::validate_fingerprint(socket_path, pane_id, fingerprint)
     }
 
-    pub fn restart_session(&self, request: RuntimeStartRequest) -> Result<RuntimeStartResult> {
-        self.start_session(request)
+    pub fn restart_session(
+        &self,
+        pontia_home: &Path,
+        request: RuntimeStartRequest,
+    ) -> Result<RuntimeStartResult> {
+        self.start_session(pontia_home, request)
     }
 
     pub fn is_alive(&self, runtime_handle: &str) -> bool {

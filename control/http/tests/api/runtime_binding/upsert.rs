@@ -1,9 +1,8 @@
 use super::{StatusCode, Value, json, post_upsert, request_json, test_state, upsert_body};
-use pontia_runtime::set_runtime_pontia_home;
 use sqlx::Row;
 #[tokio::test]
 async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marker_identity() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -53,7 +52,7 @@ async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marke
 
 #[tokio::test]
 async fn claude_client_session_key_binds_the_precreated_runtime_by_controlled_pane() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -103,9 +102,7 @@ async fn claude_client_session_key_binds_the_precreated_runtime_by_controlled_pa
 
 #[tokio::test]
 async fn fork_upsert_creates_independent_child_session_with_lineage() {
-    let pontia_home = tempfile::tempdir().expect("pontia home");
-    set_runtime_pontia_home(pontia_home.path().to_path_buf());
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -188,9 +185,7 @@ async fn fork_upsert_creates_independent_child_session_with_lineage() {
 
 #[tokio::test]
 async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() {
-    let pontia_home = tempfile::tempdir().expect("pontia home");
-    set_runtime_pontia_home(pontia_home.path().to_path_buf());
-    let state = test_state().await;
+    let (state, app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -250,7 +245,7 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     assert_eq!(metadata["tmux"]["session_name"], "dev");
     assert_eq!(metadata["capabilities"]["accept_task"], true);
     assert_eq!(metadata["capabilities"]["context_usage"], "estimated");
-    let expected_state_dir = pontia_home.path().join("state");
+    let expected_state_dir = app.pontia_home().path().join("state");
     assert_eq!(
         metadata["log_dir"],
         expected_state_dir.display().to_string()
@@ -302,7 +297,7 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
 
 #[tokio::test]
 async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fields() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -354,7 +349,7 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
 
 #[tokio::test]
 async fn upsert_rejects_a_different_tui_while_the_bound_session_is_not_exited() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -387,7 +382,7 @@ async fn upsert_rejects_a_different_tui_while_the_bound_session_is_not_exited() 
 
 #[tokio::test]
 async fn upsert_rejects_a_different_runtime_owner_while_a_turn_is_active() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -446,7 +441,7 @@ async fn upsert_rejects_a_different_runtime_owner_while_a_turn_is_active() {
 
 #[tokio::test]
 async fn concurrent_first_upserts_for_one_pi_session_key_create_once_without_overwriting() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -478,7 +473,7 @@ async fn concurrent_first_upserts_for_one_pi_session_key_create_once_without_ove
 
 #[tokio::test]
 async fn upsert_rejects_a_runtime_binding_that_disagrees_with_the_agent_binding() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()
@@ -523,7 +518,7 @@ async fn upsert_rejects_a_runtime_binding_that_disagrees_with_the_agent_binding(
 
 #[tokio::test]
 async fn upsert_rejects_a_request_without_tmux_binding() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
         .path()

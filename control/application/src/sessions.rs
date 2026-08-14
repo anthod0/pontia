@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use pontia_runtime::GenericRuntimeManager;
 use serde::Deserialize;
 use serde_json::Value;
@@ -54,13 +56,15 @@ impl CreateSessionOutcome {
 #[derive(Clone)]
 pub struct SessionCommandService {
     pool: SqlitePool,
+    pontia_home: PathBuf,
     runtime: GenericRuntimeManager,
 }
 
 impl SessionCommandService {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
         Self {
             pool,
+            pontia_home,
             runtime: GenericRuntimeManager,
         }
     }

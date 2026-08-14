@@ -9,19 +9,18 @@ use pontia_storage_sqlite::{
 };
 use serde_json::json;
 
-async fn test_pool() -> sqlx::SqlitePool {
+async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("sqlite_event_ingest_repositories.db");
-    let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let pool = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&pool).await.expect("migrate");
-    pool
+    (pool, dir)
 }
 
 #[tokio::test]
 async fn sqlite_event_repository_supports_ingest_event_writes_and_reads() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     let repository = SqliteEventRepository::new(pool.clone());
 
     let mut tx = pool.begin().await.expect("begin tx");
@@ -66,7 +65,7 @@ async fn sqlite_event_repository_supports_ingest_event_writes_and_reads() {
 
 #[tokio::test]
 async fn sqlite_session_and_turn_repositories_support_projection_rows() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     let mut tx = pool.begin().await.expect("begin tx");
 
     SqliteSessionRepository::upsert_projection_in_tx(

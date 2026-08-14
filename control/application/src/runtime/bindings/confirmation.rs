@@ -30,7 +30,7 @@ impl RuntimeBindingUpsertService {
         workspace: &WorkspaceRecord,
         client_spec: &AgentClientSpec,
     ) -> Result<Value> {
-        let log_paths = pontia_log_paths()?;
+        let log_paths = pontia_log_paths(&self.pontia_home);
         std::fs::create_dir_all(&log_paths.log_dir)?;
         std::fs::OpenOptions::new()
             .create(true)

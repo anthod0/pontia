@@ -5,14 +5,13 @@ use pontia_storage_sqlite::{
 };
 use serde_json::json;
 
-async fn test_pool() -> sqlx::SqlitePool {
+async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("sqlite_agent_profile_repository.db");
-    let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let pool = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&pool).await.expect("migrate");
-    pool
+    (pool, dir)
 }
 
 fn upsert_record(profile_id: &str, version: &str, name: &str) -> ExecutionProfileWriteRecord {
@@ -38,7 +37,7 @@ fn upsert_record(profile_id: &str, version: &str, name: &str) -> ExecutionProfil
 
 #[tokio::test]
 async fn inserts_updates_and_gets_execution_profile_versions() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     let repository = SqliteAgentProfileRepository::new(pool);
 
     repository
@@ -92,7 +91,7 @@ async fn inserts_updates_and_gets_execution_profile_versions() {
 
 #[tokio::test]
 async fn lists_latest_and_versions_with_archive_filters() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     let repository = SqliteAgentProfileRepository::new(pool);
 
     repository
@@ -147,7 +146,7 @@ async fn lists_latest_and_versions_with_archive_filters() {
 
 #[tokio::test]
 async fn archives_active_versions_and_reports_affected_rows() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     let repository = SqliteAgentProfileRepository::new(pool);
 
     repository

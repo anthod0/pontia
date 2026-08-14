@@ -7,9 +7,7 @@ use std::{
 
 use pontia_agent_clients::InterruptBehavior;
 use pontia_config::{RuntimeClientConfig, RuntimeConfig};
-use pontia_runtime::{
-    GenericRuntimeManager, RuntimeStartRequest, set_runtime_config, set_runtime_pontia_home,
-};
+use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, set_runtime_config};
 
 fn path_env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -48,7 +46,6 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     let fake_tmux = tempdir.path().join("tmux");
     write_fake_tmux(&fake_tmux);
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
-    set_runtime_pontia_home(tempdir.path().join("pontia-home"));
     unsafe {
         std::env::remove_var("PONTIA_PI_TUI_COMMAND");
     }
@@ -62,15 +59,18 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     });
 
     GenericRuntimeManager
-        .start_session(RuntimeStartRequest {
-            session_id: "sess_configured".to_string(),
-            client_type: "pi".to_string(),
-            workspace: Some(tempdir.path().join("workspace").display().to_string()),
-            workspace_name: None,
-            handle: None,
-            role: None,
-            start_command: None,
-        })
+        .start_session(
+            tempdir.path().join("pontia-home").as_path(),
+            RuntimeStartRequest {
+                session_id: "sess_configured".to_string(),
+                client_type: "pi".to_string(),
+                workspace: Some(tempdir.path().join("workspace").display().to_string()),
+                workspace_name: None,
+                handle: None,
+                role: None,
+                start_command: None,
+            },
+        )
         .expect("start session");
 
     restore_fake_tmux(original_path);
@@ -108,7 +108,6 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
     let fake_tmux = tempdir.path().join("tmux");
     write_fake_tmux(&fake_tmux);
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
-    set_runtime_pontia_home(tempdir.path().join("pontia-home"));
     unsafe {
         std::env::set_var("PONTIA_PI_TUI_COMMAND", "custom-pi from-env");
     }
@@ -122,15 +121,18 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
     });
 
     GenericRuntimeManager
-        .start_session(RuntimeStartRequest {
-            session_id: "sess_env_override".to_string(),
-            client_type: "pi".to_string(),
-            workspace: Some(tempdir.path().join("workspace-env").display().to_string()),
-            workspace_name: None,
-            handle: None,
-            role: None,
-            start_command: None,
-        })
+        .start_session(
+            tempdir.path().join("pontia-home").as_path(),
+            RuntimeStartRequest {
+                session_id: "sess_env_override".to_string(),
+                client_type: "pi".to_string(),
+                workspace: Some(tempdir.path().join("workspace-env").display().to_string()),
+                workspace_name: None,
+                handle: None,
+                role: None,
+                start_command: None,
+            },
+        )
         .expect("start session");
 
     restore_fake_tmux(original_path);

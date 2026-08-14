@@ -184,7 +184,7 @@ async fn dashboard_reports_unavailable_remote_without_cache() {
 #[tokio::test]
 async fn missing_dashboard_config_reports_that_dashboard_is_not_configured() {
     let pontia_home = tempfile::tempdir().expect("pontia home");
-    let dashboard = resolve_dashboard(&DashboardConfig::default(), pontia_home.path()).await;
+    let dashboard = resolve_dashboard(&DashboardConfig { source: None }, pontia_home.path()).await;
     let (status, message) = request_dashboard(dashboard).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -221,6 +221,29 @@ async fn local_dashboard_source_does_not_expand_tilde() {
 
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert!(message.contains("~/pontia-dashboard-must-not-expand/index.html"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn remote_dashboard_rejects_a_symlinked_pontia_home_before_cache_access() {
+    let temp = tempfile::tempdir().expect("temporary filesystem boundary");
+    let real_home = temp.path().join("real-pontia-home");
+    let linked_home = temp.path().join("linked-pontia-home");
+    std::fs::create_dir(&real_home).expect("real Pontia home");
+    std::os::unix::fs::symlink(&real_home, &linked_home).expect("Pontia home symlink");
+
+    let dashboard = resolve_dashboard(
+        &DashboardConfig {
+            source: Some("http://127.0.0.1:9/dashboard.zip".to_string()),
+        },
+        &linked_home,
+    )
+    .await;
+    let (status, message) = request_dashboard(dashboard).await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(message.contains("Pontia home"), "{message}");
+    assert!(!real_home.join("cache").exists());
 }
 
 #[tokio::test]

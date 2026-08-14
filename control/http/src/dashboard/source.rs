@@ -17,7 +17,7 @@ pub async fn resolve_dashboard(config: &DashboardConfig, pontia_home: &Path) -> 
     };
 
     if is_remote_source(source) {
-        remote_cache::resolve(source, &pontia_home.join("cache/dashboard")).await
+        remote_cache::resolve(source, pontia_home).await
     } else {
         resolve_local_dashboard(source).await
     }

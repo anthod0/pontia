@@ -4,7 +4,7 @@ use super::{
 };
 #[tokio::test]
 async fn internal_agent_binding_session_context_returns_stable_runtime_without_an_active_turn() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, state, current_turn_id, metadata)
            VALUES ('sess_context', 'claude', 'idle', NULL, '{}')"#,
@@ -45,7 +45,7 @@ async fn internal_agent_binding_session_context_returns_stable_runtime_without_a
 
 #[tokio::test]
 async fn internal_agent_binding_current_turn_returns_active_turn_context_by_client_session() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, state, current_turn_id, metadata)
            VALUES ('sess_current', 'claude', 'busy', 'turn_current', '{}')"#,
@@ -98,7 +98,7 @@ async fn internal_agent_binding_current_turn_returns_active_turn_context_by_clie
 
 #[tokio::test]
 async fn internal_agent_binding_current_turn_ignores_a_terminal_sticky_branch_leaf() {
-    let state = test_state().await;
+    let (state, _app) = test_state().await;
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, state, current_turn_id, metadata)
            VALUES ('sess_idle', 'claude', 'idle', 'turn_completed', '{}')"#,

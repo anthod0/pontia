@@ -122,19 +122,18 @@ mod tests {
     use pontia_storage_sqlite::{connect_sqlite, run_migrations};
     use serde_json::json;
 
-    async fn pool() -> SqlitePool {
+    async fn pool() -> (SqlitePool, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
         let db_path = dir.path().join("readiness.db");
-        let _kept_dir = dir.keep();
         let database_url = format!("sqlite://{}", db_path.display());
         let db = connect_sqlite(&database_url).await.expect("connect");
         run_migrations(&db).await.expect("migrate");
-        db
+        (db, dir)
     }
 
     #[tokio::test]
     async fn readiness_matches_current_runtime_instance_id() {
-        let pool = pool().await;
+        let (pool, _pontia_home) = pool().await;
         let service = EventIngestService::new(pool.clone());
         service
             .ingest_reported_event(ReportedEvent::new(
@@ -183,7 +182,7 @@ mod tests {
 
     #[tokio::test]
     async fn readiness_wait_times_out_clearly() {
-        let pool = pool().await;
+        let (pool, _pontia_home) = pool().await;
         let readiness = RuntimeReadinessService::with_options(
             pool,
             Duration::from_millis(5),

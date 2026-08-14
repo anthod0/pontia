@@ -9,7 +9,6 @@ use std::{
 
 use pontia_application::AppState;
 use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
-use pontia_runtime::set_runtime_pontia_home;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use sqlx::SqlitePool;
 
@@ -96,7 +95,6 @@ impl TestAppBuilder {
     pub(crate) async fn build(self) -> TestApp {
         let pontia_home = tempfile::tempdir().expect("pontia home");
         let workspace = tempfile::tempdir_in(pontia_home.path()).expect("workspace");
-        set_runtime_pontia_home(pontia_home.path().to_path_buf());
         let mut env = EnvGuard::new();
         if self.pi_runtime_stub {
             env.set(

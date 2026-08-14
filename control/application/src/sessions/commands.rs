@@ -110,15 +110,18 @@ impl SessionCommandService {
             ))
             .await?;
 
-        let runtime = self.runtime.start_session(RuntimeStartRequest {
-            session_id: session_id.clone(),
-            client_type: request.client_type.clone(),
-            workspace: runtime_workspace.clone(),
-            workspace_name: runtime_workspace_name,
-            handle: request.handle.clone(),
-            role: request.role.clone(),
-            start_command: None,
-        })?;
+        let runtime = self.runtime.start_session(
+            &self.pontia_home,
+            RuntimeStartRequest {
+                session_id: session_id.clone(),
+                client_type: request.client_type.clone(),
+                workspace: runtime_workspace.clone(),
+                workspace_name: runtime_workspace_name,
+                handle: request.handle.clone(),
+                role: request.role.clone(),
+                start_command: None,
+            },
+        )?;
         self.upsert_runtime_binding(&session_id, &runtime).await?;
         self.update_session_workspace(&session_id, workspace_record.as_ref())
             .await?;

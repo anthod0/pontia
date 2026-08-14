@@ -24,7 +24,7 @@ pub async fn create_session(
     Json(request): Json<CreateSessionRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(state.db());
+    let service = SessionCommandService::new(state.db(), state.pontia_home().to_path_buf());
     let outcome = idempotent(&state, &headers, "create_session", || async move {
         Ok(service.create_session(request).await?.data)
     })
@@ -66,7 +66,7 @@ pub async fn update_session(
     Json(request): Json<UpdateSessionRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(state.db());
+    let service = SessionCommandService::new(state.db(), state.pontia_home().to_path_buf());
     let data = service.update_session(&session_id, request).await?;
     Ok(ok(data))
 }
@@ -77,7 +77,7 @@ pub async fn pin_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(state.db());
+    let service = SessionCommandService::new(state.db(), state.pontia_home().to_path_buf());
     let data = service.pin_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -88,7 +88,7 @@ pub async fn unpin_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(state.db());
+    let service = SessionCommandService::new(state.db(), state.pontia_home().to_path_buf());
     let data = service.unpin_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -99,7 +99,7 @@ pub async fn archive_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(state.db());
+    let service = SessionCommandService::new(state.db(), state.pontia_home().to_path_buf());
     let data = service.archive_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -110,7 +110,7 @@ pub async fn unarchive_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(state.db());
+    let service = SessionCommandService::new(state.db(), state.pontia_home().to_path_buf());
     let data = service.unarchive_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -166,9 +166,13 @@ pub async fn restart_session(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let service = RuntimeControlService::new(state.db());
+    let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("restart_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
-        Ok(service.restart_session(&session_id).await?.data)
+        Ok(service
+            .restart_session(&session_id, &pontia_home)
+            .await?
+            .data)
     })
     .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
@@ -181,9 +185,13 @@ pub async fn resume_session(
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
     let service = RuntimeControlService::new(state.db());
+    let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("resume_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
-        Ok(service.resume_session(&session_id).await?.data)
+        Ok(service
+            .resume_session(&session_id, &pontia_home)
+            .await?
+            .data)
     })
     .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())

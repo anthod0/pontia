@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 use pontia_application::{AgentEventBroker, PiGracefulExitService};
 use pontia_storage_sqlite::repositories::{
@@ -71,6 +71,7 @@ where
         X: Clone + Send + Sync + 'static,
     {
         validate_run_request(&request)?;
+        validate_pontia_home_boundary(&self.pontia_home)?;
 
         let workflow_dir = self
             .pontia_home
@@ -163,6 +164,7 @@ where
         self.repository
             .start_workflow(workflow_id, &Uuid::now_v7().to_string())
             .await?;
+        validate_pontia_home_boundary(&self.pontia_home)?;
         let handoff_dir = self.handoff_dir(workflow_id);
         if let Err(error) = tokio::fs::create_dir_all(&handoff_dir).await {
             let failure_message = format!(
@@ -259,6 +261,7 @@ where
             });
         }
         validate_handoff_file_name(&request.output)?;
+        validate_pontia_home_boundary(&self.pontia_home)?;
         tokio::fs::write(
             self.handoff_dir(&workflow.workflow_id)
                 .join(&request.output),
@@ -289,7 +292,8 @@ where
         Ok(())
     }
 
-    async fn remove_workflow_tree(&self, target: &std::path::Path) -> Result<()> {
+    async fn remove_workflow_tree(&self, target: &Path) -> Result<()> {
+        validate_pontia_home_boundary(&self.pontia_home)?;
         let workflows_dir = self.pontia_home.join("workflows");
         let name = target
             .file_name()
@@ -316,5 +320,25 @@ where
             .join("workflows")
             .join(workflow_id)
             .join("handoff")
+    }
+}
+
+fn validate_pontia_home_boundary(pontia_home: &Path) -> Result<()> {
+    if pontia_home.as_os_str().is_empty()
+        || !pontia_home.is_absolute()
+        || pontia_home.parent().is_none()
+        || pontia_home
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err(Error::InvalidWorkflowId(pontia_home.display().to_string()));
+    }
+    match std::fs::symlink_metadata(pontia_home) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Err(Error::InvalidWorkflowId(pontia_home.display().to_string()))
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
     }
 }

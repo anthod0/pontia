@@ -5,19 +5,18 @@ use pontia_storage_sqlite::{
 };
 use serde_json::json;
 
-async fn test_pool() -> sqlx::SqlitePool {
+async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("sqlite_task_repository.db");
-    let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let pool = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&pool).await.expect("migrate");
-    pool
+    (pool, dir)
 }
 
 #[tokio::test]
 async fn sqlite_task_repository_lists_tasks_with_existing_order_and_json_fields_as_strings() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         r#"INSERT INTO tasks
            (task_id, state, input, metadata, created_at, updated_at)
@@ -43,7 +42,7 @@ async fn sqlite_task_repository_lists_tasks_with_existing_order_and_json_fields_
 
 #[tokio::test]
 async fn sqlite_task_repository_lists_task_events_with_existing_order_and_payload_as_string() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         "INSERT INTO tasks (task_id, state, input) VALUES ('task_events', 'created', 'input')",
     )
@@ -77,7 +76,7 @@ async fn sqlite_task_repository_lists_task_events_with_existing_order_and_payloa
 
 #[tokio::test]
 async fn sqlite_task_repository_creates_updates_and_records_task_events() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     let repository = SqliteTaskRepository::new(pool.clone());
 
     repository

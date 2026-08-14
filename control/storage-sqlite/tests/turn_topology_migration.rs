@@ -5,18 +5,18 @@ const CHILD_A: &str = "turn_01900000-0000-7000-8000-000000000002";
 const FUTURE_A: &str = "turn_01900000-0000-7000-8000-000000000003";
 const ROOT_B: &str = "turn_01900000-0000-7000-8000-000000000004";
 
-async fn pool() -> sqlx::SqlitePool {
+async fn pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("turn_topology_migration.db");
-    let _kept_dir = dir.keep();
-    connect_sqlite(&format!("sqlite://{}", db_path.display()))
+    let pool = connect_sqlite(&format!("sqlite://{}", db_path.display()))
         .await
-        .expect("connect")
+        .expect("connect");
+    (pool, dir)
 }
 
 #[tokio::test]
 async fn turns_without_topology_are_explicitly_unknown() {
-    let pool = pool().await;
+    let (pool, _pontia_home) = pool().await;
     run_migrations(&pool).await.expect("migrate");
 
     sqlx::query(
@@ -57,7 +57,7 @@ async fn turns_without_topology_are_explicitly_unknown() {
 
 #[tokio::test]
 async fn sqlite_enforces_turn_topology_invariants_and_write_once_resolution() {
-    let pool = pool().await;
+    let (pool, _pontia_home) = pool().await;
     run_migrations(&pool).await.expect("migrate");
     for session_id in ["sess_a", "sess_b"] {
         sqlx::query(

@@ -8,20 +8,19 @@ use pontia_storage_sqlite::{
 };
 use serde_json::json;
 
-async fn test_pool() -> sqlx::SqlitePool {
+async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("sqlite_session_turn_repositories.db");
-    let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let pool = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&pool).await.expect("migrate");
-    pool
+    (pool, dir)
 }
 
 #[tokio::test]
 async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_recently_updated_order()
  {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
            VALUES ('ws_1', '/canonical', '/canonical', 'canonical')"#,
@@ -56,7 +55,7 @@ async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_
 
 #[tokio::test]
 async fn sqlite_session_repository_lists_only_sessions_in_active_workspaces() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name, state)
            VALUES
@@ -87,7 +86,7 @@ async fn sqlite_session_repository_lists_only_sessions_in_active_workspaces() {
 
 #[tokio::test]
 async fn sqlite_session_repository_includes_pinned_sessions_outside_limit_when_requested() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
            VALUES ('ws_active', '/active', '/active', 'active')"#,
@@ -123,7 +122,7 @@ async fn sqlite_session_repository_includes_pinned_sessions_outside_limit_when_r
 
 #[tokio::test]
 async fn sqlite_session_repository_finds_active_session_handle_conflicts_only() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
            VALUES ('ws_1', '/one', '/one', 'one'), ('ws_2', '/two', '/two', 'two')"#,
@@ -161,7 +160,7 @@ async fn sqlite_session_repository_finds_active_session_handle_conflicts_only() 
 
 #[tokio::test]
 async fn sqlite_session_repository_updates_workspace_binding() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
            VALUES ('ws_old', '/old-canonical', '/old-canonical', 'old'),
@@ -195,7 +194,7 @@ async fn sqlite_session_repository_updates_workspace_binding() {
 
 #[tokio::test]
 async fn sqlite_turn_repository_resolves_the_unique_active_turn() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, state, metadata)
            VALUES ('sess_active_turn', 'pi', 'idle', '{}')"#,
@@ -226,7 +225,7 @@ async fn sqlite_turn_repository_resolves_the_unique_active_turn() {
 
 #[tokio::test]
 async fn sqlite_turn_repository_rejects_multiple_active_turns() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, state, metadata)
            VALUES ('sess_invalid_active_turns', 'pi', 'busy', '{}')"#,
@@ -254,7 +253,7 @@ async fn sqlite_turn_repository_rejects_multiple_active_turns() {
 
 #[tokio::test]
 async fn sqlite_turn_repository_lists_turns_and_event_rows_with_existing_order() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, state, metadata)
            VALUES ('sess_turns', 'pi', 'ready', '{}')"#,

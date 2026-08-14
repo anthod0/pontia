@@ -200,19 +200,18 @@ mod tests {
     use super::*;
     use crate::{connect_sqlite, run_migrations};
 
-    async fn pool() -> sqlx::SqlitePool {
+    async fn pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
         let db_path = dir.path().join("inbox.db");
-        let _kept_dir = dir.keep();
         let database_url = format!("sqlite://{}", db_path.display());
         let db = connect_sqlite(&database_url).await.expect("connect");
         run_migrations(&db).await.expect("migrate");
-        db
+        (db, dir)
     }
 
     #[tokio::test]
     async fn queues_interrupt_message_and_supersedes_previous_pending_interrupts() {
-        let pool = pool().await;
+        let (pool, _pontia_home) = pool().await;
         sqlx::query(
             "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_1', 'pi', 'idle')",
         )
@@ -240,7 +239,7 @@ mod tests {
 
     #[tokio::test]
     async fn round_trips_a_nullable_branch_target_turn() {
-        let pool = pool().await;
+        let (pool, _pontia_home) = pool().await;
         sqlx::query(
             "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_1', 'pi', 'idle')",
         )

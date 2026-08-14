@@ -7,19 +7,18 @@ use pontia_storage_sqlite::{
 };
 use serde_json::json;
 
-async fn test_pool() -> sqlx::SqlitePool {
+async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("sqlite_workflow_repository.db");
-    let _kept_dir = dir.keep();
     let database_url = format!("sqlite://{}", db_path.display());
     let pool = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&pool).await.expect("migrate");
-    pool
+    (pool, dir)
 }
 
 #[tokio::test]
 async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_events() {
-    let pool = test_pool().await;
+    let (pool, _pontia_home) = test_pool().await;
     let repository = SqliteWorkflowRepository::new(pool.clone());
     sqlx::query(
         "INSERT INTO sessions (session_id, client_type, state) VALUES ('session_1', 'pi', 'starting')",
@@ -117,7 +116,8 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
 
 #[tokio::test]
 async fn starting_a_pending_workflow_atomically_updates_state_and_appends_started_event() {
-    let repository = SqliteWorkflowRepository::new(test_pool().await);
+    let (pool, _pontia_home) = test_pool().await;
+    let repository = SqliteWorkflowRepository::new(pool);
     repository
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_start".to_string(),
@@ -188,7 +188,8 @@ async fn starting_a_pending_workflow_atomically_updates_state_and_appends_starte
 
 #[tokio::test]
 async fn completing_a_running_workflow_atomically_updates_state_and_appends_completed_event() {
-    let repository = SqliteWorkflowRepository::new(test_pool().await);
+    let (pool, _pontia_home) = test_pool().await;
+    let repository = SqliteWorkflowRepository::new(pool);
     repository
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_complete".to_string(),
