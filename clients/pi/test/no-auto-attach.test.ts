@@ -17,7 +17,7 @@ function fakePi() {
 }
 
 describe("pontia pi extension startup boundary", () => {
-  test("does not register Pontia behavior without PONTIA_HOME", async () => {
+  test("does not register Pontia behavior with an invalid PONTIA_HOME", async () => {
     const { pi, handlers } = fakePi();
     const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 500 }));
     const makeReporter = vi.fn(() => ({ report: vi.fn(async () => true) }));
@@ -29,7 +29,7 @@ describe("pontia pi extension startup boundary", () => {
     }));
 
     createPontiaPiExtension(pi as any, {
-      env: { TMUX: "/tmp/tmux-1000/default,2071,502", TMUX_PANE: "%42" },
+      env: { PONTIA_HOME: "", TMUX: "/tmp/tmux-1000/default,2071,502", TMUX_PANE: "%42" },
       fetch: fetchImpl as any,
       loadContext,
       makeReporter,

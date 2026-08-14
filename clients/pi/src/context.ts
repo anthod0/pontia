@@ -111,7 +111,7 @@ async function claimTurnContext(
 export async function loadTurnContext(env: EnvLike = process.env, options: LoadTurnContextOptions = {}): Promise<LoadTurnContextResult> {
   const pontiaHome = pontiaHomeFromEnv(env);
   if (!pontiaHome) {
-    return { ok: false, reason: "PONTIA_HOME must be a non-empty absolute path", silent: true };
+    return { ok: false, reason: "Pontia home must resolve to a non-root absolute path", silent: true };
   }
   const logFile = defaultHookLogFile(pontiaHome);
   const claimed = await claimTurnContext(pontiaHome, logFile, options.fetch ?? fetch, options.sessionContext);

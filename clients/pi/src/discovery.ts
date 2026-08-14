@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, parse, sep } from "node:path";
 import type { EnvLike } from "./context.js";
 
 export interface PontiaConnection {
@@ -21,8 +21,15 @@ function optionalString(value: unknown): string | undefined {
 }
 
 export function pontiaHomeFromEnv(env: EnvLike = process.env): string | undefined {
-  const pontiaHome = optionalString(env.PONTIA_HOME);
-  return pontiaHome && isAbsolute(pontiaHome) ? pontiaHome : undefined;
+  if (env.PONTIA_HOME !== undefined) return validRoot(env.PONTIA_HOME);
+  const home = validRoot(env.HOME);
+  return home ? join(home, ".pontia") : undefined;
+}
+
+function validRoot(value: unknown): string | undefined {
+  const path = optionalString(value);
+  if (!path || !isAbsolute(path) || parse(path).root === path || path.split(sep).includes("..")) return undefined;
+  return path;
 }
 
 function parseTomlString(raw: string, key: string): string | undefined {
@@ -54,8 +61,8 @@ function connectionFromBaseUrl(baseUrl: string, externalApiToken?: string): Pont
 }
 
 export async function resolvePontiaConnection(options: PontiaDiscoveryOptions = {}): Promise<PontiaConnection | undefined> {
-  const pontiaHome = options.pontiaHome ?? pontiaHomeFromEnv(options.env);
-  if (!pontiaHome || !isAbsolute(pontiaHome)) return undefined;
+  const pontiaHome = options.pontiaHome !== undefined ? validRoot(options.pontiaHome) : pontiaHomeFromEnv(options.env);
+  if (!pontiaHome) return undefined;
   const configPath = join(pontiaHome, "config.toml");
 
   let raw: string;

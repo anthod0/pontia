@@ -21,7 +21,6 @@ describe("loadTurnContext", () => {
   });
 
   test.each([
-    ["missing", {}],
     ["empty", { PONTIA_HOME: "" }],
     ["relative", { PONTIA_HOME: "relative/pontia-home" }],
   ])("stays inactive when PONTIA_HOME is %s", async (_case, env) => {
@@ -29,7 +28,7 @@ describe("loadTurnContext", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: "PONTIA_HOME must be a non-empty absolute path",
+      reason: "Pontia home must resolve to a non-root absolute path",
       silent: true,
     });
   });

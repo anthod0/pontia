@@ -289,9 +289,8 @@ fn rejects_generic_as_default_client_type() {
 }
 
 #[test]
-fn rejects_missing_empty_relative_and_tilde_prefixed_pontia_home() {
+fn rejects_invalid_explicit_pontia_home() {
     for (name, vars) in [
-        ("missing", HashMap::new()),
         (
             "empty",
             HashMap::from([("PONTIA_HOME".to_string(), "   ".to_string())]),

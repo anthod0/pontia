@@ -125,21 +125,14 @@ fn version_reports_the_workspace_version() {
 #[test]
 fn workflow_commands_reject_invalid_pontia_home_before_reading_inputs() {
     for (name, pontia_home) in [
-        ("missing", None),
-        ("empty", Some("")),
-        ("relative", Some("relative/pontia")),
-        ("tilde", Some("~/.pontia")),
+        ("empty", ""),
+        ("relative", "relative/pontia"),
+        ("tilde", "~/.pontia"),
     ] {
         let mut command = pontiactl();
-        command.args(["workflow", "run", "/input/must-not-be-read.toml"]);
-        match pontia_home {
-            Some(value) => {
-                command.env("PONTIA_HOME", value);
-            }
-            None => {
-                command.env_remove("PONTIA_HOME");
-            }
-        }
+        command
+            .args(["workflow", "run", "/input/must-not-be-read.toml"])
+            .env("PONTIA_HOME", pontia_home);
         let output = command.output().expect("run pontiactl");
         assert!(!output.status.success(), "{name}");
         let stderr = String::from_utf8_lossy(&output.stderr);

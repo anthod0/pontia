@@ -4,8 +4,8 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-if [[ -z "${PONTIA_HOME:-}" || "$PONTIA_HOME" != /* || "$PONTIA_HOME" == "/" ]]; then
-  echo "PONTIA_HOME must be set to a non-root absolute path" >&2
+if [[ -n "${PONTIA_HOME:-}" && ( "${PONTIA_HOME:-}" != /* || "${PONTIA_HOME:-}" == "/" ) ]]; then
+  echo "PONTIA_HOME must be a non-root absolute path when set" >&2
   exit 1
 fi
 
@@ -53,7 +53,11 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "Starting pontia backend with cargo run..."
-echo "Using PONTIA_HOME=$PONTIA_HOME"
+if [[ -n "${PONTIA_HOME:-}" ]]; then
+  echo "Using PONTIA_HOME=$PONTIA_HOME"
+else
+  echo "Using the default Pontia home"
+fi
 echo "Using PONTIA_EXTERNAL_API_TOKEN=$PONTIA_EXTERNAL_API_TOKEN"
 cargo run &
 backend_pid=$!

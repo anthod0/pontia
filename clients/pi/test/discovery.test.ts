@@ -31,14 +31,11 @@ describe("resolvePontiaConnection", () => {
   });
 
   test.each([
-    ["missing", undefined],
     ["empty", "   "],
     ["relative", "relative/pontia-home"],
     ["tilde-prefixed", "~/.pontia"],
   ])("stays inactive when PONTIA_HOME is %s", async (_case, pontiaHome) => {
-    const result = await resolvePontiaConnection({
-      env: pontiaHome === undefined ? {} : { PONTIA_HOME: pontiaHome },
-    });
+    const result = await resolvePontiaConnection({ env: { PONTIA_HOME: pontiaHome } });
 
     expect(result).toBeUndefined();
   });

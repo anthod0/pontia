@@ -84,11 +84,9 @@ The local package remains in this checkout, so keep the repository path availabl
 
 ### Configure pontia
 
-`pontia` requires `PONTIA_HOME` to be a non-empty absolute path and reads configuration only from `$PONTIA_HOME/config.toml`, plus non-path environment variable overrides. Missing, relative, and `~`-prefixed values are rejected.
+`pontia` uses `$HOME/.pontia` by default. Set `PONTIA_HOME` to a non-empty, non-root absolute path to override that location. An explicitly configured empty, relative, `~`-prefixed, root, or parent-traversing value is rejected instead of falling back to the default.
 
-> **Breaking deployment requirement:** set an absolute `PONTIA_HOME` before upgrading or starting Pontia. There is no compatibility fallback to `~/.pontia`, `$HOME`, or an operating-system user directory; a deployment without a valid value fails at startup.
-
-The database, logs, launch scripts, Workflow handoffs, and remote Dashboard cache all live beneath this root.
+`HOME` is consulted only to resolve the default Pontia home. Configuration is then read from `config.toml` beneath the resolved home, and the database, logs, launch scripts, Workflow handoffs, and remote Dashboard cache are all derived from that root.
 
 Minimal example:
 
@@ -135,6 +133,7 @@ Environment-variable overrides are also supported. See [`.env.example`](.env.exa
 ### Run the server
 
 ```bash
+# Optional: omit this to use $HOME/.pontia.
 export PONTIA_HOME=/absolute/path/to/pontia-home
 just backend
 ```
