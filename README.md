@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/anthod0/pontia/assets/assets/logo/dark/logo-transparent.png" width="120" alt="Pontia Logo" />
+  <img src="./assets/logo.svg" width="120" alt="Pontia Logo" />
 </p>
 
 <p align="center">An experimental control plane for coding agents.</p>
