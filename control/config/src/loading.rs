@@ -37,12 +37,12 @@ impl AppConfig {
         };
         let file = file.as_ref();
 
-        let bind_addr = get(vars, "PONTIA_BIND_ADDR")
-            .or_else(|| file.and_then(|config| config.bind_addr.as_deref()))
+        let bind_addr = file
+            .and_then(|config| config.bind_addr.as_deref())
             .unwrap_or(DEFAULT_BIND_ADDR)
             .parse::<SocketAddr>()
             .map_err(|err| Error::InvalidConfig {
-                key: "PONTIA_BIND_ADDR",
+                key: "bind_addr",
                 message: err.to_string(),
             })?;
 

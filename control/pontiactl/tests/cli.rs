@@ -24,6 +24,14 @@ fn temp_dir(name: &str) -> PathBuf {
     path
 }
 
+fn write_pontia_config(home: &PathBuf, port: u16) {
+    fs::write(
+        home.join("config.toml"),
+        format!("bind_addr = \"0.0.0.0:{port}\"\nexternal_api_token = \"cli-test-token\"\n"),
+    )
+    .expect("write pontia config");
+}
+
 fn install_fake_tmux(bin_dir: &PathBuf) {
     let tmux = bin_dir.join("tmux");
     fs::write(
@@ -156,6 +164,7 @@ output = "result.md"
     .expect("write workflow definition");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
     let addr = listener.local_addr().expect("test server address");
+    write_pontia_config(&dir, addr.port());
     let request = capture_one_request_with_response(
         listener,
         r#"{"data":{"workflow_id":"wf_created","node_id":"node_root","session_id":"sess_root"}}"#,
@@ -163,8 +172,7 @@ output = "result.md"
 
     let output = pontiactl()
         .args(["workflow", "run", definition.to_str().expect("utf-8 path")])
-        .env("PONTIA_BIND_ADDR", format!("0.0.0.0:{}", addr.port()))
-        .env("PONTIA_EXTERNAL_API_TOKEN", "cli-test-token")
+        .env("PONTIA_HOME", &dir)
         .output()
         .expect("run workflow");
 
@@ -219,6 +227,7 @@ fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
     fs::write(&input, "Workflow result: 完成\n").expect("write input");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
     let addr = listener.local_addr().expect("test server address");
+    write_pontia_config(&dir, addr.port());
     let request = capture_one_request(listener);
     let path = format!(
         "{}:{}",
@@ -238,8 +247,7 @@ fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
         .env("PATH", path)
         .env("TMUX", "/tmp/tmux-test/default,1,0")
         .env("TMUX_PANE", "%7")
-        .env("PONTIA_BIND_ADDR", format!("0.0.0.0:{}", addr.port()))
-        .env("PONTIA_EXTERNAL_API_TOKEN", "cli-test-token")
+        .env("PONTIA_HOME", &dir)
         .output()
         .expect("run workflow submit");
 

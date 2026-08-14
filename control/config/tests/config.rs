@@ -5,7 +5,6 @@ use pontia_config::{AppConfig, FilePickerConfig, RuntimeClientConfig, RuntimeCon
 #[test]
 fn loads_config_from_key_value_source() {
     let vars = HashMap::from([
-        ("PONTIA_BIND_ADDR".to_string(), "127.0.0.1:4000".to_string()),
         (
             "PONTIA_DASHBOARD_SOURCE".to_string(),
             "https://example.test/dashboard.tar.gz".to_string(),
@@ -24,7 +23,7 @@ fn loads_config_from_key_value_source() {
 
     let config = AppConfig::from_vars(&vars).expect("config should load");
 
-    assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4000");
+    assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
     assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia-e1.db");
     assert_eq!(config.external_api_token.as_deref(), Some("dev-token"));
     assert_eq!(
@@ -166,7 +165,6 @@ tui_command = "pi from file"
     )
     .expect("write config");
     let vars = HashMap::from([
-        ("PONTIA_BIND_ADDR".to_string(), "127.0.0.1:5050".to_string()),
         (
             "PONTIA_EXTERNAL_API_TOKEN".to_string(),
             "env-token".to_string(),
@@ -185,7 +183,7 @@ tui_command = "pi from file"
     let config =
         AppConfig::from_vars_and_file(&vars, Some(&config_path)).expect("config should load");
 
-    assert_eq!(config.bind_addr.to_string(), "127.0.0.1:5050");
+    assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4040");
     assert_eq!(config.external_api_token.as_deref(), Some("env-token"));
     assert_eq!(
         config
