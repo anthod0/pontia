@@ -3,7 +3,6 @@
 //! The MVP generic runtime records a binding and immediately reports ready. This
 //! module stays independent from HTTP transport details.
 
-mod claude_integration;
 mod config;
 mod in_process;
 mod manager;
@@ -13,12 +12,12 @@ mod session_identifier;
 mod tmux;
 mod types;
 
-pub use claude_integration::{
-    ClaudeApprovalIntegration, configure_claude_user_approval_integration,
+pub use config::{
+    configured_internal_event_url, set_runtime_bind_addr, set_runtime_config,
+    set_runtime_pontia_home,
 };
 #[cfg(test)]
-pub use config::reset_runtime_bind_addr_for_tests;
-pub use config::{configured_internal_event_url, set_runtime_bind_addr, set_runtime_config};
+pub use config::{reset_runtime_bind_addr_for_tests, reset_runtime_pontia_home_for_tests};
 pub use manager::GenericRuntimeManager;
 use std::path::PathBuf;
 pub use tmux::TmuxProcessFingerprint;
@@ -37,7 +36,8 @@ impl PontiaLogPaths {
 }
 
 pub fn pontia_log_paths() -> pontia_core::error::Result<PontiaLogPaths> {
-    let paths = paths::log_paths("")?;
+    let pontia_home = config::configured_pontia_home()?;
+    let paths = paths::log_paths(&pontia_home);
     Ok(PontiaLogPaths {
         log_dir: paths.log_dir,
         runtime_log: paths.runtime_log,

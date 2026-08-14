@@ -70,7 +70,7 @@ pub async fn run_workflow(
         state.db(),
         SessionCommandService::new(state.db()),
         state.agent_events(),
-        pontia_config::pontia_home_dir(),
+        state.pontia_home().to_path_buf(),
     );
     let outcome = scheduler
         .run(RunWorkflowRequest {
@@ -125,7 +125,7 @@ pub async fn submit_workflow_output(
         state.db(),
         SessionCommandService::new(state.db()),
         state.agent_events(),
-        pontia_config::pontia_home_dir(),
+        state.pontia_home().to_path_buf(),
     );
     scheduler
         .submit(SubmitWorkflowNodeRequest {

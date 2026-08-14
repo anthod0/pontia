@@ -13,7 +13,10 @@ use pontia_core::{
     time::utc_now,
 };
 
-use super::{RuntimeStartRequest, RuntimeStartResult, paths, session_identifier::short_session_id};
+use super::{
+    RuntimeStartRequest, RuntimeStartResult, config::configured_pontia_home, paths,
+    session_identifier::short_session_id,
+};
 
 #[derive(Debug, Clone)]
 struct InProcessRuntimeState {
@@ -29,7 +32,8 @@ pub(super) fn start_session(
     let started_at = utc_now()
         .format(&Rfc3339)
         .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
-    let log_paths = paths::log_paths(&request.session_id)?;
+    let pontia_home = configured_pontia_home()?;
+    let log_paths = paths::log_paths(&pontia_home);
     std::fs::create_dir_all(&log_paths.log_dir)?;
     std::fs::OpenOptions::new()
         .create(true)

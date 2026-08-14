@@ -183,7 +183,8 @@ async fn dashboard_reports_unavailable_remote_without_cache() {
 
 #[tokio::test]
 async fn missing_dashboard_config_reports_that_dashboard_is_not_configured() {
-    let dashboard = resolve_dashboard(&DashboardConfig::default()).await;
+    let pontia_home = tempfile::tempdir().expect("pontia home");
+    let dashboard = resolve_dashboard(&DashboardConfig::default(), pontia_home.path()).await;
     let (status, message) = request_dashboard(dashboard).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -193,14 +194,33 @@ async fn missing_dashboard_config_reports_that_dashboard_is_not_configured() {
 #[tokio::test]
 async fn configured_local_dashboard_without_index_reports_missing_entrypoint() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let dashboard = resolve_dashboard(&DashboardConfig {
-        source: Some(dir.path().display().to_string()),
-    })
+    let dashboard = resolve_dashboard(
+        &DashboardConfig {
+            source: Some(dir.path().display().to_string()),
+        },
+        dir.path(),
+    )
     .await;
     let (status, message) = request_dashboard(dashboard).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert!(message.contains("dashboard entrypoint not found"));
+}
+
+#[tokio::test]
+async fn local_dashboard_source_does_not_expand_tilde() {
+    let pontia_home = tempfile::tempdir().expect("pontia home");
+    let dashboard = resolve_dashboard(
+        &DashboardConfig {
+            source: Some("~/pontia-dashboard-must-not-expand".to_string()),
+        },
+        pontia_home.path(),
+    )
+    .await;
+    let (status, message) = request_dashboard(dashboard).await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(message.contains("~/pontia-dashboard-must-not-expand/index.html"));
 }
 
 #[tokio::test]
@@ -222,19 +242,22 @@ async fn remote_dashboard_refreshes_cache_and_falls_back_when_refresh_fails() {
     });
 
     let pontia_home = tempfile::tempdir().expect("pontia home");
-    unsafe {
-        std::env::set_var("PONTIA_HOME", pontia_home.path());
-    }
     let config = DashboardConfig {
         source: Some(format!("http://{addr}/dashboard.zip")),
     };
-    let dashboard = resolve_dashboard(&config).await;
+    let dashboard = resolve_dashboard(&config, pontia_home.path()).await;
     let html = request_dashboard_html(dashboard).await;
     assert!(html.contains("remote dashboard"));
+    assert!(
+        pontia_home
+            .path()
+            .join("cache/dashboard/current/dist/index.html")
+            .is_file()
+    );
 
     server.abort();
 
-    let dashboard = resolve_dashboard(&config).await;
+    let dashboard = resolve_dashboard(&config, pontia_home.path()).await;
     let html = request_dashboard_html(dashboard).await;
     assert!(html.contains("remote dashboard"));
 }

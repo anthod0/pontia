@@ -1,4 +1,5 @@
 use super::{StatusCode, Value, json, post_upsert, request_json, test_state, upsert_body};
+use pontia_runtime::set_runtime_pontia_home;
 use sqlx::Row;
 #[tokio::test]
 async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marker_identity() {
@@ -103,9 +104,7 @@ async fn claude_client_session_key_binds_the_precreated_runtime_by_controlled_pa
 #[tokio::test]
 async fn fork_upsert_creates_independent_child_session_with_lineage() {
     let pontia_home = tempfile::tempdir().expect("pontia home");
-    unsafe {
-        std::env::set_var("PONTIA_HOME", pontia_home.path());
-    }
+    set_runtime_pontia_home(pontia_home.path().to_path_buf());
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -190,9 +189,7 @@ async fn fork_upsert_creates_independent_child_session_with_lineage() {
 #[tokio::test]
 async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() {
     let pontia_home = tempfile::tempdir().expect("pontia home");
-    unsafe {
-        std::env::set_var("PONTIA_HOME", pontia_home.path());
-    }
+    set_runtime_pontia_home(pontia_home.path().to_path_buf());
     let state = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -266,9 +263,6 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
         metadata["pi_hook_log"],
         expected_state_dir.join("pi-hook.log").display().to_string()
     );
-    unsafe {
-        std::env::remove_var("PONTIA_HOME");
-    }
 
     let binding_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings WHERE session_id = ? AND client_type = 'pi' AND client_session_key = 'pi_session_123'")
         .bind(session_id)

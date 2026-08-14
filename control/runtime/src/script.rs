@@ -50,16 +50,18 @@ pub(crate) fn tmux_start_command(
 }
 
 pub(super) fn write_ephemeral_launch_script(
+    pontia_home: &Path,
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
     runtime_instance_id: &str,
 ) -> Result<PathBuf> {
-    let launch_dir = pontia_home_path_for_export().join("state/launch");
+    let launch_dir = pontia_home.join("state/launch");
     std::fs::create_dir_all(&launch_dir)?;
     let path = launch_dir.join(format!("{launch_id}.sh"));
     write_launch_script(
         &path,
+        pontia_home,
         runtime_paths,
         request,
         launch_id,
@@ -73,6 +75,7 @@ pub(super) fn write_ephemeral_launch_script(
 
 pub(super) fn write_launch_script(
     path: &Path,
+    pontia_home: &Path,
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
@@ -135,7 +138,7 @@ trap cleanup_pontia_launch_script EXIT HUP INT TERM
 cleanup_pontia_launch_script
 {}
 "#,
-        shell_quote(&pontia_home_for_export()),
+        shell_quote(&pontia_home.display().to_string()),
         shell_quote(&request.session_id),
         shell_quote(runtime_instance_id),
         log_setup,
@@ -157,22 +160,6 @@ fn shell_quote(value: &str) -> String {
 
 pub(super) fn shell_quote_path(path: &Path) -> String {
     shell_quote(&path.display().to_string())
-}
-
-fn pontia_home_for_export() -> String {
-    pontia_home_path_for_export().display().to_string()
-}
-
-fn pontia_home_path_for_export() -> PathBuf {
-    std::env::var("PONTIA_HOME")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            std::env::var("HOME")
-                .map(|home| PathBuf::from(home).join(".pontia"))
-                .unwrap_or_else(|_| PathBuf::from(".pontia"))
-        })
 }
 
 pub(super) fn internal_event_url() -> String {
@@ -220,6 +207,7 @@ mod tests {
 
         write_launch_script(
             &script_path,
+            tempdir.path(),
             &paths,
             &request,
             "launch_1",
@@ -282,6 +270,7 @@ mod tests {
 
         write_launch_script(
             &script_path,
+            tempdir.path(),
             &paths,
             &request,
             "launch_claude",
@@ -316,6 +305,7 @@ mod tests {
 
         write_launch_script(
             &script_path,
+            tempdir.path(),
             &paths,
             &request,
             "launch_explicit",

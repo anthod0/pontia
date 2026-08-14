@@ -6,7 +6,6 @@ license.workspace = true
 
 [dependencies]
 axum = "0.8"
-dotenvy = "0.15"
 pontia-agent-clients = { path = "../agent-clients" }
 pontia-application = { path = "../application" }
 pontia-config = { path = "../config" }

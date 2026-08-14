@@ -6,7 +6,7 @@ async fn app_state_is_constructed_through_builder() {
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
 
-    let state = AppState::builder(db.clone()).build();
+    let state = AppState::builder(db.clone(), "/tmp/pontia-test-home".into()).build();
 
     let fetched: i64 = sqlx::query_scalar("SELECT 1")
         .fetch_one(&state.db())
@@ -20,7 +20,8 @@ async fn app_state_is_available_from_app_namespace() {
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
 
-    let state: app::AppState = AppState::builder(db.clone()).build();
+    let state: app::AppState =
+        AppState::builder(db.clone(), "/tmp/pontia-test-home".into()).build();
 
     let fetched: i64 = sqlx::query_scalar("SELECT 1")
         .fetch_one(&state.db())

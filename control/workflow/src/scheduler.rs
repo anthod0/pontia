@@ -77,17 +77,26 @@ where
             .join("workflows")
             .join(&request.workflow_id);
         let handoff_dir = workflow_dir.join("handoff");
-        tokio::fs::create_dir_all(self.pontia_home.join("workflows")).await?;
+        let workflows_dir = self.pontia_home.join("workflows");
+        match std::fs::symlink_metadata(&workflows_dir) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(Error::InvalidWorkflowId(request.workflow_id));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        tokio::fs::create_dir_all(&workflows_dir).await?;
         tokio::fs::create_dir(&workflow_dir).await?;
         if let Err(error) = tokio::fs::create_dir(&handoff_dir).await {
-            let _ = tokio::fs::remove_dir_all(&workflow_dir).await;
+            let _ = self.remove_workflow_tree(&workflow_dir).await;
             return Err(error.into());
         }
         for handoff in &request.handoffs {
             if let Err(error) =
                 tokio::fs::write(handoff_dir.join(&handoff.name), &handoff.content).await
             {
-                let _ = tokio::fs::remove_dir_all(&workflow_dir).await;
+                let _ = self.remove_workflow_tree(&workflow_dir).await;
                 return Err(error.into());
             }
         }
@@ -122,7 +131,7 @@ where
             )
             .await
         {
-            let _ = tokio::fs::remove_dir_all(&workflow_dir).await;
+            let _ = self.remove_workflow_tree(&workflow_dir).await;
             return Err(error.into());
         }
 
@@ -277,6 +286,28 @@ where
                 .await?;
             return Err(error);
         }
+        Ok(())
+    }
+
+    async fn remove_workflow_tree(&self, target: &std::path::Path) -> Result<()> {
+        let workflows_dir = self.pontia_home.join("workflows");
+        let name = target
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .ok_or_else(|| Error::InvalidWorkflowId(target.display().to_string()))?;
+        if target.parent() != Some(workflows_dir.as_path())
+            || target == workflows_dir
+            || !name.starts_with("wf_")
+        {
+            return Err(Error::InvalidWorkflowId(target.display().to_string()));
+        }
+        for path in [&workflows_dir, target] {
+            let metadata = std::fs::symlink_metadata(path)?;
+            if metadata.file_type().is_symlink() {
+                return Err(Error::InvalidWorkflowId(target.display().to_string()));
+            }
+        }
+        tokio::fs::remove_dir_all(target).await?;
         Ok(())
     }
 

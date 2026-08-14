@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { optionalString } from "./internal-api.js";
-function defaultPontiaHome(env) {
-    return env.PONTIA_HOME ?? join(env.HOME ?? homedir(), ".pontia");
+export function pontiaHomeFromEnv(env = process.env) {
+    const value = optionalString(env.PONTIA_HOME);
+    return value && isAbsolute(value) ? value : undefined;
 }
 function normalizeBaseUrl(value) {
     const trimmed = value.trim().replace(/\/+$/, "");
@@ -39,8 +39,11 @@ export async function resolvePontiaConnection(options = {}) {
             bindingUpsertUrl: `${internalBase}/runtime-bindings/upsert`,
         };
     }
+    const pontiaHome = pontiaHomeFromEnv(env);
+    if (!pontiaHome)
+        return undefined;
     try {
-        const config = await readFile(join(defaultPontiaHome(env), "config.toml"), "utf8");
+        const config = await readFile(join(pontiaHome, "config.toml"), "utf8");
         const bindAddr = parseConfigValue(config, "bind_addr");
         if (!bindAddr)
             return undefined;

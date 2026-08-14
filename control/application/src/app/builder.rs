@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
 use sqlx::SqlitePool;
 
@@ -6,6 +8,7 @@ use crate::{AgentEventBroker, ApprovalCoordinator, GitRefreshCoordinator, Idempo
 
 pub struct AppStateBuilder {
     pub(super) db: SqlitePool,
+    pub(super) pontia_home: PathBuf,
     pub(super) external_api_token: Option<String>,
     pub(super) workspace_browser: WorkspaceBrowserConfig,
     pub(super) file_picker: FilePickerConfig,
@@ -18,9 +21,10 @@ pub struct AppStateBuilder {
 }
 
 impl AppStateBuilder {
-    pub(super) fn new(db: SqlitePool) -> Self {
+    pub(super) fn new(db: SqlitePool, pontia_home: PathBuf) -> Self {
         Self {
             db,
+            pontia_home,
             external_api_token: None,
             workspace_browser: WorkspaceBrowserConfig::default(),
             file_picker: FilePickerConfig::default(),

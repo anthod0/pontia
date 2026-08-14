@@ -1,10 +1,54 @@
-use std::{collections::HashMap, fs};
+use std::{
+    collections::HashMap,
+    ffi::OsString,
+    fs,
+    sync::{Mutex, MutexGuard},
+};
 
 use pontia_config::{AppConfig, FilePickerConfig, RuntimeClientConfig, RuntimeConfig};
 
+static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+struct EnvGuard {
+    _lock: MutexGuard<'static, ()>,
+    saved: Vec<(&'static str, Option<OsString>)>,
+}
+
+impl EnvGuard {
+    fn lock(keys: &[&'static str]) -> Self {
+        let lock = ENV_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        Self {
+            _lock: lock,
+            saved: keys
+                .iter()
+                .map(|key| (*key, std::env::var_os(key)))
+                .collect(),
+        }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in self.saved.iter().rev() {
+            unsafe {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+}
+
+fn vars_for_home(home: &std::path::Path) -> HashMap<String, String> {
+    HashMap::from([("PONTIA_HOME".to_string(), home.display().to_string())])
+}
+
 #[test]
 fn loads_config_from_key_value_source() {
+    let home = tempfile::tempdir().expect("Pontia home");
     let vars = HashMap::from([
+        ("PONTIA_HOME".to_string(), home.path().display().to_string()),
         (
             "PONTIA_DASHBOARD_SOURCE".to_string(),
             "https://example.test/dashboard.tar.gz".to_string(),
@@ -24,7 +68,13 @@ fn loads_config_from_key_value_source() {
     let config = AppConfig::from_vars(&vars).expect("config should load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
-    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia-e1.db");
+    assert_eq!(
+        config.database_url,
+        format!(
+            "sqlite://{}",
+            home.path().join("data/pontia-e1.db").display()
+        )
+    );
     assert_eq!(config.external_api_token.as_deref(), Some("dev-token"));
     assert_eq!(
         config.dashboard.source.as_deref(),
@@ -41,7 +91,8 @@ fn loads_config_from_key_value_source() {
 
 #[test]
 fn file_picker_uses_built_in_defaults_when_not_configured() {
-    let config = AppConfig::from_vars(&HashMap::new()).expect("config should load");
+    let home = tempfile::tempdir().expect("Pontia home");
+    let config = AppConfig::from_vars(&vars_for_home(home.path())).expect("config should load");
 
     assert!(config.file_picker.enabled);
     assert_eq!(config.file_picker.min_query_chars, 0);
@@ -76,8 +127,7 @@ ignore_globs = []
     )
     .expect("write config");
 
-    let config = AppConfig::from_vars_and_file(&HashMap::new(), Some(&config_path))
-        .expect("config should load");
+    let config = AppConfig::from_vars(&vars_for_home(dir.path())).expect("config should load");
 
     assert!(config.file_picker.include_hidden);
     assert!(!config.file_picker.respect_gitignore);
@@ -115,11 +165,16 @@ roots = [
     )
     .expect("write config");
 
-    let config = AppConfig::from_vars_and_file(&HashMap::new(), Some(&config_path))
-        .expect("config should load");
+    let config = AppConfig::from_vars(&vars_for_home(dir.path())).expect("config should load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4040");
-    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia-e1.db");
+    assert_eq!(
+        config.database_url,
+        format!(
+            "sqlite://{}",
+            dir.path().join("data/pontia-e1.db").display()
+        )
+    );
     assert_eq!(config.external_api_token.as_deref(), Some("file-token"));
     assert_eq!(
         config.dashboard.source.as_deref(),
@@ -165,6 +220,7 @@ tui_command = "pi from file"
     )
     .expect("write config");
     let vars = HashMap::from([
+        ("PONTIA_HOME".to_string(), dir.path().display().to_string()),
         (
             "PONTIA_EXTERNAL_API_TOKEN".to_string(),
             "env-token".to_string(),
@@ -180,8 +236,7 @@ tui_command = "pi from file"
         ("PONTIA_DEFAULT_CLIENT_TYPE".to_string(), "pi".to_string()),
     ]);
 
-    let config =
-        AppConfig::from_vars_and_file(&vars, Some(&config_path)).expect("config should load");
+    let config = AppConfig::from_vars(&vars).expect("config should load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4040");
     assert_eq!(config.external_api_token.as_deref(), Some("env-token"));
@@ -219,10 +274,14 @@ fn runtime_config_resolves_tui_commands_by_agent_client_config_key() {
 
 #[test]
 fn rejects_generic_as_default_client_type() {
-    let vars = HashMap::from([(
-        "PONTIA_DEFAULT_CLIENT_TYPE".to_string(),
-        "generic".to_string(),
-    )]);
+    let home = tempfile::tempdir().expect("Pontia home");
+    let vars = HashMap::from([
+        ("PONTIA_HOME".to_string(), home.path().display().to_string()),
+        (
+            "PONTIA_DEFAULT_CLIENT_TYPE".to_string(),
+            "generic".to_string(),
+        ),
+    ]);
 
     let error = AppConfig::from_vars(&vars).expect_err("generic default should fail");
 
@@ -230,16 +289,42 @@ fn rejects_generic_as_default_client_type() {
 }
 
 #[test]
+fn rejects_missing_empty_relative_and_tilde_prefixed_pontia_home() {
+    for (name, vars) in [
+        ("missing", HashMap::new()),
+        (
+            "empty",
+            HashMap::from([("PONTIA_HOME".to_string(), "   ".to_string())]),
+        ),
+        (
+            "relative",
+            HashMap::from([("PONTIA_HOME".to_string(), "var/pontia".to_string())]),
+        ),
+        (
+            "tilde",
+            HashMap::from([("PONTIA_HOME".to_string(), "~/.pontia".to_string())]),
+        ),
+        (
+            "filesystem-root",
+            HashMap::from([("PONTIA_HOME".to_string(), "/".to_string())]),
+        ),
+    ] {
+        let error = AppConfig::from_vars(&vars).expect_err(name);
+        assert!(error.to_string().contains("PONTIA_HOME"), "{name}: {error}");
+    }
+}
+
+#[test]
 fn pontia_home_overrides_development_default_data_paths() {
-    let config = AppConfig::from_vars(&HashMap::from([(
-        "PONTIA_HOME".to_string(),
-        "/tmp/custom-pontia".to_string(),
-    )]))
-    .expect("defaults load");
+    let home = tempfile::tempdir().expect("Pontia home");
+    let config = AppConfig::from_vars(&vars_for_home(home.path())).expect("defaults load");
 
     assert_eq!(
         config.database_url,
-        "sqlite:///tmp/custom-pontia/data/pontia-e1.db"
+        format!(
+            "sqlite://{}",
+            home.path().join("data/pontia-e1.db").display()
+        )
     );
 }
 
@@ -256,25 +341,13 @@ external_api_token = "home-config-token"
     )
     .expect("write config");
 
-    let previous_home = std::env::var_os("PONTIA_HOME");
-    let previous_token = std::env::var_os("PONTIA_EXTERNAL_API_TOKEN");
+    let _env = EnvGuard::lock(&["PONTIA_HOME", "PONTIA_EXTERNAL_API_TOKEN"]);
     unsafe {
         std::env::set_var("PONTIA_HOME", dir.path());
         std::env::remove_var("PONTIA_EXTERNAL_API_TOKEN");
     }
 
     let config = AppConfig::from_env().expect("config should load");
-
-    unsafe {
-        match previous_home {
-            Some(value) => std::env::set_var("PONTIA_HOME", value),
-            None => std::env::remove_var("PONTIA_HOME"),
-        }
-        match previous_token {
-            Some(value) => std::env::set_var("PONTIA_EXTERNAL_API_TOKEN", value),
-            None => std::env::remove_var("PONTIA_EXTERNAL_API_TOKEN"),
-        }
-    }
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4545");
     assert_eq!(
@@ -285,10 +358,17 @@ external_api_token = "home-config-token"
 
 #[test]
 fn provides_development_defaults_for_optional_values() {
-    let config = AppConfig::from_vars(&HashMap::<String, String>::new()).expect("defaults load");
+    let home = tempfile::tempdir().expect("Pontia home");
+    let config = AppConfig::from_vars(&vars_for_home(home.path())).expect("defaults load");
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
-    assert_eq!(config.database_url, "sqlite://~/.pontia/data/pontia-e1.db");
+    assert_eq!(
+        config.database_url,
+        format!(
+            "sqlite://{}",
+            home.path().join("data/pontia-e1.db").display()
+        )
+    );
     assert_eq!(config.external_api_token, None);
     assert_eq!(
         config.dashboard.source.as_deref(),

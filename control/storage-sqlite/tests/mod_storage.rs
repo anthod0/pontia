@@ -1,13 +1,13 @@
-use pontia_storage_sqlite::{connect_sqlite, normalize_sqlite_database_url, run_migrations};
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use sqlx::Row;
 
-#[test]
-fn expands_tilde_sqlite_database_urls_before_connecting() {
-    let normalized =
-        normalize_sqlite_database_url("sqlite://~/.pontia/data/pontia.db", "/home/alice")
-            .expect("normalize");
+#[tokio::test]
+async fn rejects_tilde_prefixed_sqlite_database_urls() {
+    let error = connect_sqlite("sqlite://~/.pontia/data/pontia.db")
+        .await
+        .expect_err("tilde path must be rejected");
 
-    assert_eq!(normalized, "sqlite:///home/alice/.pontia/data/pontia.db");
+    assert!(error.to_string().contains("tilde-prefixed SQLite paths"));
 }
 
 #[tokio::test]

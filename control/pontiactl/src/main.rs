@@ -121,9 +121,12 @@ async fn main() {
     let cli = Cli::parse();
     let result = match cli.command {
         None => Ok(()),
-        Some(CommandKind::Workflow(workflow)) => match workflow.command {
-            WorkflowCommandKind::Run(args) => run_workflow(args).await,
-            WorkflowCommandKind::Submit(args) => submit_workflow(args).await,
+        Some(CommandKind::Workflow(workflow)) => match AppConfig::from_env() {
+            Ok(config) => match workflow.command {
+                WorkflowCommandKind::Run(args) => run_workflow(args, &config).await,
+                WorkflowCommandKind::Submit(args) => submit_workflow(args, &config).await,
+            },
+            Err(error) => Err(error.to_string()),
         },
     };
     if let Err(error) = result {
@@ -132,7 +135,7 @@ async fn main() {
     }
 }
 
-async fn run_workflow(args: RunArgs) -> Result<(), String> {
+async fn run_workflow(args: RunArgs, config: &AppConfig) -> Result<(), String> {
     let definition_path = args.workflow_file.canonicalize().map_err(|error| {
         format!(
             "failed to resolve Workflow file {}: {error}",
@@ -182,9 +185,9 @@ async fn run_workflow(args: RunArgs) -> Result<(), String> {
         handoffs,
         nodes: definition.nodes,
     };
-    let config = AppConfig::from_env().map_err(|error| error.to_string())?;
     let token = config
         .external_api_token
+        .as_deref()
         .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
     let url = format!(
         "http://{}/internal/v1/workflows",
@@ -224,13 +227,13 @@ fn resolve_existing_path(base: &Path, path: &Path, description: &str) -> Result<
     })
 }
 
-async fn submit_workflow(args: SubmitArgs) -> Result<(), String> {
+async fn submit_workflow(args: SubmitArgs, config: &AppConfig) -> Result<(), String> {
     let content = fs::read_to_string(&args.input)
         .map_err(|error| format!("failed to read UTF-8 input file {}: {error}", args.input))?;
     let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
-    let config = AppConfig::from_env().map_err(|error| error.to_string())?;
     let token = config
         .external_api_token
+        .as_deref()
         .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
     let url = format!(
         "http://{}/internal/v1/workflow/submissions",

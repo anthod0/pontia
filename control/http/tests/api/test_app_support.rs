@@ -20,10 +20,7 @@ async fn test_app_creates_isolated_state_home_and_workspace() {
             .starts_with(app.pontia_home().path())
     );
     assert!(app.workspace().path().exists());
-    assert_eq!(
-        std::env::var("PONTIA_HOME").ok().as_deref(),
-        Some(app.pontia_home().path().to_str().unwrap())
-    );
+    assert_eq!(app.state.pontia_home(), app.pontia_home().path());
     assert_eq!(
         std::env::var("PONTIA_PI_TUI_COMMAND").ok().as_deref(),
         Some("sh -c 'cat >> \"$PWD/pi-tui-input.log\"' --")

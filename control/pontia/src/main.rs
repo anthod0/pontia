@@ -7,38 +7,21 @@ use std::{
     time::Duration,
 };
 
-use pontia_runtime::ClaudeApprovalIntegration;
-use tracing::{info, warn};
+use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_tracing();
-
     let config = AppConfig::from_env()?;
+    init_tracing();
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
-    match pontia_runtime::configure_claude_user_approval_integration(
-        bound_addr,
-        config.external_api_token.as_deref(),
-    )? {
-        ClaudeApprovalIntegration::Configured { settings_path } => {
-            info!(
-                path = %settings_path.display(),
-                "configured Claude approval integration"
-            );
-        }
-        ClaudeApprovalIntegration::SkippedMissingApiToken => {
-            warn!(
-                "Claude approval integration is disabled because external_api_token is not configured"
-            );
-        }
-    }
     let app_state = application::initialize(&config).await?;
     let runtime_observer = application::RuntimeObservationService::new(app_state.db())
         .with_agent_events(app_state.agent_events());
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
-    let dashboard = http::dashboard::resolve_dashboard(&config.dashboard).await;
+    let dashboard =
+        http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;
     let state = http::HttpState::new(app_state, dashboard);
 
     info!(addr = %bound_addr, "starting pontia control plane");

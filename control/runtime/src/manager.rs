@@ -8,7 +8,10 @@ use pontia_core::{
     time::utc_now,
 };
 
-use super::{AgentInput, RuntimeStartRequest, RuntimeStartResult, in_process, paths, script, tmux};
+use super::{
+    AgentInput, RuntimeStartRequest, RuntimeStartResult, config::configured_pontia_home,
+    in_process, paths, script, tmux,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct GenericRuntimeManager;
@@ -59,9 +62,10 @@ impl GenericRuntimeManager {
         } else {
             base_tmux_session
         };
+        let pontia_home = configured_pontia_home()?;
         let workspace = paths::workspace_path(&request)?;
         script::run_startup_hooks(client_spec.adapter.startup_hooks, &workspace)?;
-        let log_paths = paths::log_paths(&request.session_id)?;
+        let log_paths = paths::log_paths(&pontia_home);
         std::fs::create_dir_all(&log_paths.log_dir)?;
         let log_path = log_paths.runtime_log.clone();
         let internal_event_url = script::internal_event_url();
@@ -75,6 +79,7 @@ impl GenericRuntimeManager {
             log_path: &log_path,
         };
         let launch_script_path = script::write_ephemeral_launch_script(
+            &pontia_home,
             &runtime_paths,
             &request,
             &launch_id,

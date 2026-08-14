@@ -1,10 +1,10 @@
-use std::{env, path::PathBuf};
+use std::path::{Path, PathBuf};
 
 use pontia_config::DashboardConfig;
 
 use super::{ResolvedDashboard, remote_cache};
 
-pub async fn resolve_dashboard(config: &DashboardConfig) -> ResolvedDashboard {
+pub async fn resolve_dashboard(config: &DashboardConfig, pontia_home: &Path) -> ResolvedDashboard {
     let Some(source) = config
         .source
         .as_deref()
@@ -17,14 +17,14 @@ pub async fn resolve_dashboard(config: &DashboardConfig) -> ResolvedDashboard {
     };
 
     if is_remote_source(source) {
-        remote_cache::resolve(source).await
+        remote_cache::resolve(source, &pontia_home.join("cache/dashboard")).await
     } else {
         resolve_local_dashboard(source).await
     }
 }
 
 async fn resolve_local_dashboard(source: &str) -> ResolvedDashboard {
-    let root = expand_tilde(source);
+    let root = PathBuf::from(source);
     match tokio::fs::metadata(root.join("index.html")).await {
         Ok(metadata) if metadata.is_file() => ResolvedDashboard::available(root),
         Ok(_) => ResolvedDashboard::unavailable(format!(
@@ -36,20 +36,6 @@ async fn resolve_local_dashboard(source: &str) -> ResolvedDashboard {
             root.join("index.html").display()
         )),
     }
-}
-
-fn expand_tilde(value: &str) -> PathBuf {
-    if value == "~" {
-        return env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(value));
-    }
-    if let Some(rest) = value.strip_prefix("~/")
-        && let Some(home) = env::var_os("HOME")
-    {
-        return PathBuf::from(home).join(rest);
-    }
-    PathBuf::from(value)
 }
 
 fn is_remote_source(source: &str) -> bool {

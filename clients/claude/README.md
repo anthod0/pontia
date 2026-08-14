@@ -11,16 +11,10 @@ Install and enable the `pontia-claude` plugin at user scope so Claude Code loads
 the `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `Stop`,
 `StopFailure`, and `SessionEnd` hooks declared in `hooks/hooks.json`.
 
-Start or restart Pontia before starting Claude Code. Pontia merges only the
-required logs-only OpenTelemetry configuration into `~/.claude/settings.json`,
-preserving unrelated settings, hooks, permissions, and environment entries.
-Hooks load exclusively from the plugin. An `external_api_token` must be
-configured in `$PONTIA_HOME/config.toml` (or `PONTIA_EXTERNAL_API_TOKEN`) so
-Claude can authenticate to the fixed internal OTLP logs receiver.
-
-The generated configuration explicitly disables metrics, traces, prompts,
-assistant responses, tool details/content, and raw API body capture. It exports
-Claude events only, over OTLP HTTP/JSON, to Pontia's loopback receiver.
+Pontia does not read or modify Claude user settings. Hooks load exclusively
+from the separately installed plugin. An `external_api_token` must be configured
+in `$PONTIA_HOME/config.toml` (or `PONTIA_EXTERNAL_API_TOKEN`) for authenticated
+Pontia requests.
 
 ## Local approval verification
 

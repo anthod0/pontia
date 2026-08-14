@@ -84,9 +84,9 @@ The local package remains in this checkout, so keep the repository path availabl
 
 ### Configure pontia
 
-`pontia` reads configuration only from `$PONTIA_HOME/config.toml` (default `~/.pontia/config.toml`) plus non-path environment variable overrides.
+`pontia` requires `PONTIA_HOME` to be a non-empty absolute path and reads configuration only from `$PONTIA_HOME/config.toml`, plus non-path environment variable overrides. Missing, relative, and `~`-prefixed values are rejected.
 
-Set `PONTIA_HOME` to move the whole pontia home root; the database, logs, and dashboard cache live under that root.
+The database, logs, launch scripts, Workflow handoffs, and remote Dashboard cache all live beneath this root.
 
 Minimal example:
 
@@ -128,11 +128,12 @@ ignore_globs = [
 ]
 ```
 
-Environment variables and `.env` are also supported. See [`.env.example`](.env.example) if present in your checkout.
+Environment-variable overrides are also supported. See [`.env.example`](.env.example) for a shell environment template; Pontia does not load `.env` files itself.
 
 ### Run the server
 
 ```bash
+export PONTIA_HOME=/absolute/path/to/pontia-home
 just backend
 ```
 

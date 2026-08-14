@@ -3,28 +3,20 @@ use std::{
     io::{Read, Write},
     net::TcpListener,
     os::unix::fs::PermissionsExt,
-    path::PathBuf,
+    path::Path,
     process::Command,
     thread,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 fn pontiactl() -> Command {
     Command::new(env!("CARGO_BIN_EXE_pontiactl"))
 }
 
-fn temp_dir(name: &str) -> PathBuf {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time")
-        .as_nanos();
-    let path =
-        std::env::temp_dir().join(format!("pontiactl-{name}-{}-{nonce}", std::process::id()));
-    fs::create_dir_all(&path).expect("create temp dir");
-    path
+fn temp_dir(_name: &str) -> tempfile::TempDir {
+    tempfile::tempdir().expect("create temp dir")
 }
 
-fn write_pontia_config(home: &PathBuf, port: u16) {
+fn write_pontia_config(home: &Path, port: u16) {
     fs::write(
         home.join("config.toml"),
         format!("bind_addr = \"0.0.0.0:{port}\"\nexternal_api_token = \"cli-test-token\"\n"),
@@ -32,7 +24,7 @@ fn write_pontia_config(home: &PathBuf, port: u16) {
     .expect("write pontia config");
 }
 
-fn install_fake_tmux(bin_dir: &PathBuf) {
+fn install_fake_tmux(bin_dir: &Path) {
     let tmux = bin_dir.join("tmux");
     fs::write(
         &tmux,
@@ -131,10 +123,36 @@ fn version_reports_the_workspace_version() {
 }
 
 #[test]
+fn workflow_commands_reject_invalid_pontia_home_before_reading_inputs() {
+    for (name, pontia_home) in [
+        ("missing", None),
+        ("empty", Some("")),
+        ("relative", Some("relative/pontia")),
+        ("tilde", Some("~/.pontia")),
+    ] {
+        let mut command = pontiactl();
+        command.args(["workflow", "run", "/input/must-not-be-read.toml"]);
+        match pontia_home {
+            Some(value) => {
+                command.env("PONTIA_HOME", value);
+            }
+            None => {
+                command.env_remove("PONTIA_HOME");
+            }
+        }
+        let output = command.output().expect("run pontiactl");
+        assert!(!output.status.success(), "{name}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("PONTIA_HOME"), "{name}: {stderr}");
+        assert!(!stderr.contains("Workflow file"), "{name}: {stderr}");
+    }
+}
+
+#[test]
 fn workflow_run_posts_a_linear_agent_workflow_from_toml() {
     let dir = temp_dir("run-success");
-    let definition = dir.join("workflow.toml");
-    fs::write(dir.join("requirements.md"), "Build Workflow run.\n").expect("write handoff");
+    let definition = dir.path().join("workflow.toml");
+    fs::write(dir.path().join("requirements.md"), "Build Workflow run.\n").expect("write handoff");
     fs::write(
         &definition,
         r#"title = "Implement Workflow run"
@@ -164,7 +182,7 @@ output = "result.md"
     .expect("write workflow definition");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
     let addr = listener.local_addr().expect("test server address");
-    write_pontia_config(&dir, addr.port());
+    write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request_with_response(
         listener,
         r#"{"data":{"workflow_id":"wf_created","node_id":"node_root","session_id":"sess_root"}}"#,
@@ -172,7 +190,7 @@ output = "result.md"
 
     let output = pontiactl()
         .args(["workflow", "run", definition.to_str().expect("utf-8 path")])
-        .env("PONTIA_HOME", &dir)
+        .env("PONTIA_HOME", dir.path())
         .output()
         .expect("run workflow");
 
@@ -198,7 +216,8 @@ output = "result.md"
     assert_eq!(body["title"], "Implement Workflow run");
     assert_eq!(
         body["cwd"],
-        dir.canonicalize()
+        dir.path()
+            .canonicalize()
             .expect("canonical dir")
             .display()
             .to_string()
@@ -213,21 +232,19 @@ output = "result.md"
         body["nodes"][1]["inputs"],
         serde_json::json!(["research.md"])
     );
-
-    fs::remove_dir_all(dir).expect("remove temp dir");
 }
 
 #[test]
 fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
     let dir = temp_dir("submit-success");
-    let bin_dir = dir.join("bin");
+    let bin_dir = dir.path().join("bin");
     fs::create_dir(&bin_dir).expect("create bin dir");
     install_fake_tmux(&bin_dir);
-    let input = dir.join("handoff.txt");
+    let input = dir.path().join("handoff.txt");
     fs::write(&input, "Workflow result: 完成\n").expect("write input");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
     let addr = listener.local_addr().expect("test server address");
-    write_pontia_config(&dir, addr.port());
+    write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request(listener);
     let path = format!(
         "{}:{}",
@@ -247,7 +264,7 @@ fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
         .env("PATH", path)
         .env("TMUX", "/tmp/tmux-test/default,1,0")
         .env("TMUX_PANE", "%7")
-        .env("PONTIA_HOME", &dir)
+        .env("PONTIA_HOME", dir.path())
         .output()
         .expect("run workflow submit");
 
@@ -263,15 +280,13 @@ fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
     assert!(request.contains(
         r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli","output":"result.md","content":"Workflow result: 完成\n"}"#
     ));
-
-    fs::remove_dir_all(dir).expect("remove temp dir");
 }
 
 #[test]
 fn workflow_submit_rejects_missing_and_non_utf8_input_before_pane_discovery() {
     let dir = temp_dir("source-errors");
-    let missing = dir.join("missing.txt");
-    let invalid = dir.join("invalid.txt");
+    let missing = dir.path().join("missing.txt");
+    let invalid = dir.path().join("invalid.txt");
     fs::write(&invalid, [0xff, 0xfe]).expect("write invalid utf-8");
 
     for (input, expected) in [
@@ -287,6 +302,7 @@ fn workflow_submit_rejects_missing_and_non_utf8_input_before_pane_discovery() {
                 "--output",
                 "result.md",
             ])
+            .env("PONTIA_HOME", dir.path())
             .env_remove("TMUX")
             .env_remove("TMUX_PANE")
             .output()
@@ -299,14 +315,12 @@ fn workflow_submit_rejects_missing_and_non_utf8_input_before_pane_discovery() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-
-    fs::remove_dir_all(dir).expect("remove temp dir");
 }
 
 #[test]
 fn workflow_submit_rejects_a_pane_without_pontia_identity() {
     let dir = temp_dir("unmanaged-pane");
-    let bin_dir = dir.join("bin");
+    let bin_dir = dir.path().join("bin");
     fs::create_dir(&bin_dir).expect("create bin dir");
     let tmux = bin_dir.join("tmux");
     fs::write(&tmux, "#!/bin/sh\nexit 1\n").expect("write fake tmux");
@@ -315,7 +329,7 @@ fn workflow_submit_rejects_a_pane_without_pontia_identity() {
         .permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(tmux, permissions).expect("make fake tmux executable");
-    let input = dir.join("handoff.txt");
+    let input = dir.path().join("handoff.txt");
     fs::write(&input, "result").expect("write input");
     let path = format!(
         "{}:{}",
@@ -333,6 +347,7 @@ fn workflow_submit_rejects_a_pane_without_pontia_identity() {
             "result.md",
         ])
         .env("PATH", path)
+        .env("PONTIA_HOME", dir.path())
         .env("TMUX", "/tmp/tmux-test/default,1,0")
         .env("TMUX_PANE", "%8")
         .output()
@@ -343,6 +358,4 @@ fn workflow_submit_rejects_a_pane_without_pontia_identity() {
         String::from_utf8_lossy(&output.stderr)
             .contains("not running in a Pontia-managed tmux pane")
     );
-
-    fs::remove_dir_all(dir).expect("remove temp dir");
 }

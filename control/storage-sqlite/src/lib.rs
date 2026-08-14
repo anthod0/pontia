@@ -10,12 +10,13 @@ use sqlx::{
 };
 
 pub async fn connect_sqlite(database_url: &str) -> Result<SqlitePool> {
-    let database_url = if sqlite_url_uses_home(database_url) {
-        normalize_sqlite_database_url(database_url, &home_dir()?)?
-    } else {
-        database_url.to_string()
-    };
-    ensure_parent_dir(&database_url)?;
+    if sqlite_url_uses_tilde(database_url) {
+        return Err(Error::InvalidConfig {
+            key: "database_url",
+            message: "tilde-prefixed SQLite paths are not supported".to_string(),
+        });
+    }
+    ensure_parent_dir(database_url)?;
 
     let options = database_url
         .parse::<SqliteConnectOptions>()?
@@ -32,33 +33,10 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-pub fn normalize_sqlite_database_url(database_url: &str, home: &str) -> Result<String> {
-    let Some(path) = database_url.strip_prefix("sqlite://") else {
-        return Ok(database_url.to_string());
-    };
-
-    if path == "~" {
-        return Ok(format!("sqlite://{home}"));
-    }
-
-    if let Some(rest) = path.strip_prefix("~/") {
-        return Ok(format!("sqlite://{home}/{rest}"));
-    }
-
-    Ok(database_url.to_string())
-}
-
-fn sqlite_url_uses_home(database_url: &str) -> bool {
+fn sqlite_url_uses_tilde(database_url: &str) -> bool {
     database_url
         .strip_prefix("sqlite://")
         .is_some_and(|path| path == "~" || path.starts_with("~/"))
-}
-
-fn home_dir() -> Result<String> {
-    std::env::var("HOME").map_err(|_| Error::InvalidConfig {
-        key: "HOME",
-        message: "required to expand sqlite://~ database URL".to_string(),
-    })
 }
 
 fn ensure_parent_dir(database_url: &str) -> Result<()> {

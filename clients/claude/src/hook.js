@@ -11,7 +11,7 @@ import { hasTmuxPaneEnvironment } from "./managed-runtime.js";
 import { EventReporter } from "./reporter.js";
 import { bindManualSession } from "./runtime-binding.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
-import { resolvePontiaConnection } from "./discovery.js";
+import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
 function sessionDetailsFromHook(input) {
     return {
         clientSessionKey: optionalString(input.session_id),
@@ -306,7 +306,7 @@ function requiredDeps(dependencies) {
 }
 export async function runClaudeHook(input, dependencies = {}) {
     const deps = requiredDeps(dependencies);
-    if (!hasTmuxPaneEnvironment(deps.env))
+    if (!pontiaHomeFromEnv(deps.env) || !hasTmuxPaneEnvironment(deps.env))
         return;
     try {
         switch (input.hook_event_name) {

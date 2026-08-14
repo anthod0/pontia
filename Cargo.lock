@@ -1328,7 +1328,6 @@ name = "pontia"
 version = "0.1.0"
 dependencies = [
  "axum",
- "dotenvy",
  "http-body-util",
  "pontia-agent-clients",
  "pontia-application",
@@ -1388,7 +1387,6 @@ dependencies = [
 name = "pontia-config"
 version = "0.1.0"
 dependencies = [
- "dotenvy",
  "pontia-agent-clients",
  "pontia-core",
  "serde",
@@ -1486,6 +1484,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "toml",
  "uuid",

@@ -1,5 +1,4 @@
 use std::{
-    env,
     ffi::OsStr,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -9,11 +8,10 @@ use tracing::warn;
 
 use super::{ResolvedDashboard, archive};
 
-pub(super) async fn resolve(source: &str) -> ResolvedDashboard {
-    let cache_dir = default_cache_dir();
+pub(super) async fn resolve(source: &str, cache_dir: &Path) -> ResolvedDashboard {
     let current_dir = cache_dir.join("current");
 
-    match refresh(source, &cache_dir, &current_dir).await {
+    match refresh(source, cache_dir, &current_dir).await {
         Ok(root) => ResolvedDashboard::available(root),
         Err(err) => {
             warn!(source, cache_dir = %cache_dir.display(), error = %err, "failed to refresh remote dashboard cache");
@@ -28,6 +26,8 @@ pub(super) async fn resolve(source: &str) -> ResolvedDashboard {
 }
 
 async fn refresh(source: &str, cache_dir: &Path, current_dir: &Path) -> Result<PathBuf, String> {
+    reject_symlink(cache_dir.parent(), "dashboard cache parent")?;
+    reject_symlink(Some(cache_dir), "dashboard cache")?;
     tokio::fs::create_dir_all(cache_dir)
         .await
         .map_err(|err| format!("failed to create cache dir: {err}"))?;
@@ -44,9 +44,9 @@ async fn refresh(source: &str, cache_dir: &Path, current_dir: &Path) -> Result<P
         .map_err(|err| format!("failed to read archive body: {err}"))?;
 
     let staging_dir = cache_dir.join(format!("staging-{}", unique_suffix()));
-    tokio::fs::create_dir_all(&staging_dir)
+    tokio::fs::create_dir(&staging_dir)
         .await
-        .map_err(|err| format!("failed to create staging dir: {err}"))?;
+        .map_err(|err| format!("failed to create unique staging dir: {err}"))?;
 
     let extract_result = archive::extract(source, &bytes, &staging_dir)
         .and_then(|()| find_unique_index_parent(&staging_dir));
@@ -54,7 +54,7 @@ async fn refresh(source: &str, cache_dir: &Path, current_dir: &Path) -> Result<P
     match extract_result {
         Ok(_) => {
             if tokio::fs::try_exists(current_dir).await.unwrap_or(false) {
-                tokio::fs::remove_dir_all(current_dir)
+                remove_cache_tree(cache_dir, current_dir, CacheTreeKind::Current)
                     .await
                     .map_err(|err| format!("failed to replace cached dashboard: {err}"))?;
             }
@@ -64,9 +64,57 @@ async fn refresh(source: &str, cache_dir: &Path, current_dir: &Path) -> Result<P
             cached_dashboard_root(current_dir)
         }
         Err(err) => {
-            let _ = tokio::fs::remove_dir_all(&staging_dir).await;
+            let _ = remove_cache_tree(cache_dir, &staging_dir, CacheTreeKind::Staging).await;
             Err(err)
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CacheTreeKind {
+    Current,
+    Staging,
+}
+
+async fn remove_cache_tree(
+    cache_dir: &Path,
+    target: &Path,
+    kind: CacheTreeKind,
+) -> Result<(), String> {
+    let name = target
+        .file_name()
+        .and_then(OsStr::to_str)
+        .ok_or_else(|| "dashboard cache cleanup target has no valid name".to_string())?;
+    let expected_name = match kind {
+        CacheTreeKind::Current => name == "current",
+        CacheTreeKind::Staging => name.starts_with("staging-") && name.len() > "staging-".len(),
+    };
+    if !expected_name || target.parent() != Some(cache_dir) || target == cache_dir {
+        return Err(format!(
+            "refusing unsafe dashboard cache cleanup target {}",
+            target.display()
+        ));
+    }
+    reject_symlink(cache_dir.parent(), "dashboard cache parent")?;
+    reject_symlink(Some(cache_dir), "dashboard cache")?;
+    reject_symlink(Some(target), "dashboard cache cleanup target")?;
+    tokio::fs::remove_dir_all(target)
+        .await
+        .map_err(|err| err.to_string())
+}
+
+fn reject_symlink(path: Option<&Path>, description: &str) -> Result<(), String> {
+    let Some(path) = path else {
+        return Err(format!("{description} has no parent"));
+    };
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(format!(
+            "refusing {description} through symbolic link {}",
+            path.display()
+        )),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("failed to inspect {description}: {error}")),
     }
 }
 
@@ -105,16 +153,6 @@ fn collect_index_files(root: &Path, matches: &mut Vec<PathBuf>) -> Result<(), St
         }
     }
     Ok(())
-}
-
-fn default_cache_dir() -> PathBuf {
-    match env::var_os("PONTIA_HOME") {
-        Some(home) if !home.is_empty() => PathBuf::from(home).join("cache/dashboard"),
-        _ => match env::var_os("HOME") {
-            Some(home) => PathBuf::from(home).join(".pontia/cache/dashboard"),
-            None => PathBuf::from(".pontia/cache/dashboard"),
-        },
-    }
 }
 
 fn unique_suffix() -> String {

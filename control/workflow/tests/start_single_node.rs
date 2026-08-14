@@ -128,7 +128,8 @@ async fn start_launches_first_node_as_a_pi_session_with_handoff_protocol() {
 #[tokio::test]
 async fn start_creates_the_workflow_handoff_directory() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let pool = test_pool(&temp.path().join("workflow-directory.db")).await;
+    let pontia_home = temp.path().join("pontia-home");
+    let pool = test_pool(&pontia_home.join("data/workflow-directory.db")).await;
     let repository = SqliteWorkflowRepository::new(pool.clone());
     repository
         .create_workflow(CreateWorkflowRecord {
@@ -153,7 +154,6 @@ async fn start_creates_the_workflow_handoff_directory() {
         })
         .await
         .expect("create node");
-    let pontia_home = temp.path().join("new-pontia-home");
     let scheduler = WorkflowScheduler::new(
         pool,
         RecordingSessionCreator::default(),

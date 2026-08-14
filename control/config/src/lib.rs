@@ -10,6 +10,7 @@ mod workspace_roots;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
+    pub pontia_home: PathBuf,
     pub bind_addr: SocketAddr,
     pub database_url: String,
     pub external_api_token: Option<String>,
@@ -140,10 +141,6 @@ pub struct WorkspaceRootConfig {
     pub root_id: String,
     pub label: String,
     pub path: String,
-}
-
-pub fn pontia_home_dir() -> PathBuf {
-    paths::pontia_home_dir()
 }
 
 fn default_true() -> bool {

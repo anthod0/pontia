@@ -7,7 +7,9 @@ use std::{
 
 use pontia_agent_clients::InterruptBehavior;
 use pontia_config::{RuntimeClientConfig, RuntimeConfig};
-use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, set_runtime_config};
+use pontia_runtime::{
+    GenericRuntimeManager, RuntimeStartRequest, set_runtime_config, set_runtime_pontia_home,
+};
 
 fn path_env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -46,8 +48,8 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     let fake_tmux = tempdir.path().join("tmux");
     write_fake_tmux(&fake_tmux);
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
+    set_runtime_pontia_home(tempdir.path().join("pontia-home"));
     unsafe {
-        std::env::set_var("PONTIA_HOME", tempdir.path().join("pontia-home"));
         std::env::remove_var("PONTIA_PI_TUI_COMMAND");
     }
     set_runtime_config(RuntimeConfig {
@@ -72,9 +74,6 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         .expect("start session");
 
     restore_fake_tmux(original_path);
-    unsafe {
-        std::env::remove_var("PONTIA_HOME");
-    }
     set_runtime_config(RuntimeConfig::default());
 
     let pontia_home = tempdir.path().join("pontia-home");
@@ -91,6 +90,10 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     let launch_script = std::fs::read_to_string(launch_script_path_from_tmux_log(&log))
         .expect("ephemeral launch script");
     assert!(
+        launch_script.contains(&format!("export PONTIA_HOME='{}'", pontia_home.display())),
+        "{launch_script}"
+    );
+    assert!(
         launch_script.contains("custom-pi --profile configured --approve --session-id"),
         "{launch_script}"
     );
@@ -105,8 +108,8 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
     let fake_tmux = tempdir.path().join("tmux");
     write_fake_tmux(&fake_tmux);
     let original_path = install_fake_tmux(tempdir.path(), &tmux_log, None);
+    set_runtime_pontia_home(tempdir.path().join("pontia-home"));
     unsafe {
-        std::env::set_var("PONTIA_HOME", tempdir.path().join("pontia-home"));
         std::env::set_var("PONTIA_PI_TUI_COMMAND", "custom-pi from-env");
     }
     set_runtime_config(RuntimeConfig {
@@ -132,7 +135,6 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
 
     restore_fake_tmux(original_path);
     unsafe {
-        std::env::remove_var("PONTIA_HOME");
         std::env::remove_var("PONTIA_PI_TUI_COMMAND");
     }
     set_runtime_config(RuntimeConfig::default());

@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
 use sqlx::SqlitePool;
@@ -24,6 +27,7 @@ struct PersistenceState {
 }
 
 struct AppRuntimeState {
+    pontia_home: PathBuf,
     external_api_token: Option<String>,
     workspace_browser: WorkspaceBrowserConfig,
     file_picker: FilePickerConfig,
@@ -45,8 +49,8 @@ struct IntegrationState {
 }
 
 impl AppState {
-    pub fn builder(db: SqlitePool) -> AppStateBuilder {
-        AppStateBuilder::new(db)
+    pub fn builder(db: SqlitePool, pontia_home: PathBuf) -> AppStateBuilder {
+        AppStateBuilder::new(db, pontia_home)
     }
 
     pub(super) fn from_builder(builder: AppStateBuilder) -> Self {
@@ -54,6 +58,7 @@ impl AppState {
             inner: Arc::new(AppStateInner {
                 persistence: PersistenceState { db: builder.db },
                 config: AppRuntimeState {
+                    pontia_home: builder.pontia_home,
                     external_api_token: builder.external_api_token,
                     workspace_browser: builder.workspace_browser,
                     file_picker: builder.file_picker,
@@ -76,6 +81,10 @@ impl AppState {
 
     pub fn db(&self) -> SqlitePool {
         self.inner.persistence.db.clone()
+    }
+
+    pub fn pontia_home(&self) -> &Path {
+        &self.inner.config.pontia_home
     }
 
     pub fn external_api_token(&self) -> Option<&str> {
@@ -121,7 +130,7 @@ impl AppState {
     }
 
     fn rebuild(&self) -> AppStateBuilder {
-        AppState::builder(self.db())
+        AppState::builder(self.db(), self.inner.config.pontia_home.clone())
             .external_api_token(self.inner.config.external_api_token.clone())
             .workspace_browser(self.workspace_browser())
             .file_picker(self.file_picker())

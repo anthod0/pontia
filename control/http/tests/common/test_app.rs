@@ -3,11 +3,13 @@
 use std::{
     env,
     ffi::OsString,
+    path::PathBuf,
     sync::{Mutex, MutexGuard, OnceLock},
 };
 
 use pontia_application::AppState;
 use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
+use pontia_runtime::set_runtime_pontia_home;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use sqlx::SqlitePool;
 
@@ -21,7 +23,6 @@ pub(crate) struct TestApp {
     pub(crate) db: SqlitePool,
     pontia_home: tempfile::TempDir,
     workspace: tempfile::TempDir,
-    _db_dir: Option<tempfile::TempDir>,
     _env: EnvGuard,
 }
 
@@ -43,7 +44,7 @@ impl TestApp {
     }
 
     pub(crate) fn temp_workspace(&self) -> tempfile::TempDir {
-        tempfile::tempdir().expect("workspace")
+        tempfile::tempdir_in(self.pontia_home.path()).expect("workspace")
     }
 
     pub(crate) fn set_env(&mut self, key: &str, value: impl Into<OsString>) {
@@ -94,9 +95,9 @@ impl TestAppBuilder {
 
     pub(crate) async fn build(self) -> TestApp {
         let pontia_home = tempfile::tempdir().expect("pontia home");
-        let workspace = tempfile::tempdir().expect("workspace");
+        let workspace = tempfile::tempdir_in(pontia_home.path()).expect("workspace");
+        set_runtime_pontia_home(pontia_home.path().to_path_buf());
         let mut env = EnvGuard::new();
-        env.set("PONTIA_HOME", pontia_home.path().as_os_str().to_owned());
         if self.pi_runtime_stub {
             env.set(
                 "PONTIA_PI_TUI_COMMAND",
@@ -104,46 +105,42 @@ impl TestAppBuilder {
             );
         }
 
-        let (db, db_dir) = self.open_database().await;
-        let state = self.build_app_state(db.clone());
+        let db = self.open_database(Some(pontia_home.path())).await;
+        let state = self.build_app_state(db.clone(), pontia_home.path().to_path_buf());
 
         TestApp {
             state,
             db,
             pontia_home,
             workspace,
-            _db_dir: db_dir,
             _env: env,
         }
     }
 
     pub(crate) async fn build_state(self) -> AppState {
-        let (db, db_dir) = self.open_database().await;
-        let state = self.build_app_state(db);
-        if let Some(dir) = db_dir {
-            let _kept_dir = dir.keep();
-        }
-        state
-    }
-
-    async fn open_database(&self) -> (SqlitePool, Option<tempfile::TempDir>) {
-        let (db, db_dir) = if self.in_memory_db {
-            let db = connect_sqlite("sqlite://:memory:").await.expect("connect");
-            (db, None)
-        } else {
-            let dir = tempfile::tempdir().expect("tempdir");
-            let db_name = self.database_name.as_deref().unwrap_or("test.db");
-            let db_path = dir.path().join(db_name);
-            let database_url = format!("sqlite://{}", db_path.display());
-            let db = connect_sqlite(&database_url).await.expect("connect");
-            (db, Some(dir))
-        };
+        let db = connect_sqlite("sqlite::memory:").await.expect("connect");
         run_migrations(&db).await.expect("migrate");
-        (db, db_dir)
+        self.build_app_state(db, "/nonexistent/pontia-test-home".into())
     }
 
-    fn build_app_state(self, db: SqlitePool) -> AppState {
-        let mut builder = AppState::builder(db).external_api_token(
+    async fn open_database(&self, pontia_home: Option<&std::path::Path>) -> SqlitePool {
+        let database_url = if self.in_memory_db {
+            "sqlite::memory:".to_string()
+        } else {
+            let db_name = self.database_name.as_deref().unwrap_or("test.db");
+            let db_path = pontia_home
+                .expect("filesystem database requires Pontia home")
+                .join("data")
+                .join(db_name);
+            format!("sqlite://{}", db_path.display())
+        };
+        let db = connect_sqlite(&database_url).await.expect("connect");
+        run_migrations(&db).await.expect("migrate");
+        db
+    }
+
+    fn build_app_state(self, db: SqlitePool, pontia_home: PathBuf) -> AppState {
+        let mut builder = AppState::builder(db, pontia_home).external_api_token(
             self.external_api_token
                 .unwrap_or_else(|| Some("test-token".to_string())),
         );

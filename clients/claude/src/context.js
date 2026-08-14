@@ -1,12 +1,11 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
-import { resolvePontiaConnection } from "./discovery.js";
+import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
 import { asRecord, optionalString } from "./internal-api.js";
-function fallbackLogDir(env = process.env) {
-    return join(env.PONTIA_HOME ?? join(env.HOME ?? homedir(), ".pontia"), "state");
-}
 export function defaultHookLogFile(env = process.env) {
-    return join(fallbackLogDir(env), "claude-hook.log");
+    const pontiaHome = pontiaHomeFromEnv(env);
+    if (!pontiaHome)
+        throw new Error("PONTIA_HOME must be a non-empty absolute path");
+    return join(pontiaHome, "state", "claude-hook.log");
 }
 function claimUrl(internalEventUrl, sessionId) {
     try {

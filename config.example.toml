@@ -5,9 +5,8 @@ run_migrations = true
 [dashboard]
 # Local Vite dist directory or a remote .tar.gz/.tgz/.zip archive containing exactly one index.html.
 source = "apps/dashboard/dist"
-# Used only for remote sources. On startup pontia tries to refresh this cache;
-# if refresh fails, an existing cached dashboard is served.
-cache_dir = "~/.pontia/cache/dashboard"
+# Remote sources are cached beneath $PONTIA_HOME/cache/dashboard. If refresh
+# fails, an existing cached dashboard is served.
 
 [runtime.pi]
 # Install the plugin once with `pi install ./clients/pi`; pi then loads it from user settings.
