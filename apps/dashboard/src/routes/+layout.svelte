@@ -11,6 +11,7 @@
   import { loadSessions } from '../stores/sessions';
   import { loadTasks } from '../stores/tasks';
   import { loadWorkspaces } from '../stores/workspaces';
+  import { loadWorkflows } from '../stores/workflows';
 
   let { children }: { children: Snippet } = $props();
   let unsubscribeToken: (() => void) | null = null;
@@ -18,7 +19,7 @@
   let authenticatedToken = $state(get(token).trim());
 
   function startDashboard(): void {
-    void Promise.all([loadTasks(), loadWorkspaces(), loadAgentProfiles(), loadSessions()]);
+    void Promise.all([loadTasks(), loadWorkspaces(), loadAgentProfiles(), loadSessions(), loadWorkflows({ showLoading: false })]);
     startEventStream();
     dashboardStarted = true;
   }

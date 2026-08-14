@@ -18,6 +18,7 @@ mod task_creation;
 mod task_lifecycle;
 mod test_app_support;
 mod turn_submit;
+mod workflow_queries;
 mod workflow_run;
 mod workflow_submission;
 mod workspace;

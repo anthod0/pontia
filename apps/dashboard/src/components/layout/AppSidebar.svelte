@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Archive, ChevronDown, EllipsisVertical, Folder, FolderOpen, LogOut, Pencil, Pin, PinOff, Settings, SquarePen } from '@lucide/svelte'
+  import { Archive, ChevronDown, EllipsisVertical, Folder, FolderOpen, LogOut, Pencil, Pin, PinOff, Settings, SquarePen, Workflow } from '@lucide/svelte'
   import { navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -27,6 +27,7 @@
 
   const primaryItems: Item[] = [
     { label: 'New Chat', path: '/', icon: SquarePen },
+    { label: 'Workflows', path: '/workflows', icon: Workflow },
   ]
 
   const settingsSections = [
@@ -56,7 +57,7 @@
   }
 
   function isActive(path: string) {
-    return currentPath === path
+    return currentPath === path || (path !== '/' && currentPath.startsWith(`${path}/`))
   }
 
   function isSettingsActive() {

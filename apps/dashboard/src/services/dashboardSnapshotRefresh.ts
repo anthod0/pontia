@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { loadSessions, loadSessionDetail, sessionDetail } from '../stores/sessions';
 import { hasTimelineSnapshot, loadSessionTimeline, refreshSessionTimeline, timelineState } from '../stores/timeline';
+import { loadWorkflows, refreshWorkflow, selectedWorkflowId } from '../stores/workflows';
 
 export type DashboardSnapshotRefreshReason = 'sse_fallback';
 
@@ -23,7 +24,13 @@ async function refreshDashboardSnapshotNow(_options: DashboardSnapshotRefreshOpt
   const detail = get(sessionDetail);
   const timeline = get(timelineState);
   const selectedSessionId = detail?.session.session_id ?? timeline.sessionId ?? null;
-  const refreshes: Promise<unknown>[] = [loadSessions({ showLoading: false })];
+  const workflowId = get(selectedWorkflowId);
+  const refreshes: Promise<unknown>[] = [
+    loadSessions({ showLoading: false }),
+    loadWorkflows({ showLoading: false }),
+  ];
+
+  if (workflowId) refreshes.push(refreshWorkflow(workflowId, { showLoading: false }));
 
   if (selectedSessionId) {
     refreshes.push(loadSessionDetail(selectedSessionId, { showLoading: false }));

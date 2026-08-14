@@ -6,6 +6,51 @@ export type TurnState = 'queued' | 'running' | 'completed' | 'failed' | 'interru
 export type TurnTopologyStatus = 'unknown' | 'root' | 'linked';
 export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now';
 export type InboxMessageState = 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed' | 'dismissed';
+export type WorkflowState = 'pending' | 'running' | 'idle' | 'completed' | 'failed';
+export type WorkflowAgentStatus = 'pending' | 'starting' | 'running' | 'idle' | 'exiting' | 'submitted' | 'failed' | 'unknown';
+
+export interface WorkflowListItemView {
+  workflow_id: string;
+  title: string;
+  state: WorkflowState;
+  failure_message: string | null;
+  agent_submitted_count: number;
+  agent_total_count: number;
+  current_phase_name: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  elapsed_ms: number;
+  observation_error: string | null;
+}
+
+export interface WorkflowNodeView {
+  node_id: string;
+  phase: string;
+  title: string;
+  status: WorkflowAgentStatus;
+  session_id: string | null;
+  session_state: string | null;
+  submitted_at: string | null;
+}
+
+export interface WorkflowDetailView {
+  workflow_id: string;
+  title: string;
+  state: WorkflowState;
+  failure_message: string | null;
+  cwd: string;
+  agent_submitted_count: number;
+  agent_total_count: number;
+  current_node_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  elapsed_ms: number;
+  nodes: WorkflowNodeView[];
+}
 
 export type ContextUsageCapability = 'unsupported' | 'estimated' | 'exact';
 

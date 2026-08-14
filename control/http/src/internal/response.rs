@@ -63,6 +63,7 @@ impl ApiError {
                 message: error.to_string(),
             },
             WorkflowError::RootNodeNotFound(_)
+            | WorkflowError::InvalidObservation(_)
             | WorkflowError::MissingCreatedSessionId
             | WorkflowError::RuntimeControlUnavailable { .. }
             | WorkflowError::Io(_)

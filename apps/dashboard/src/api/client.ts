@@ -26,6 +26,8 @@ import type {
   WorkspaceGitStatusView,
   WorkspaceRootView,
   WorkspaceView,
+  WorkflowDetailView,
+  WorkflowListItemView,
 } from './types';
 import type { ApprovalDecisionInput } from '$lib/approvals';
 
@@ -183,6 +185,14 @@ export type ListSessionsOptions = {
   limit?: number;
   includePinned?: boolean;
 };
+
+export async function listWorkflows(limit = 50, options: ReadRequestOptions = {}): Promise<WorkflowListItemView[]> {
+  return (await request<{ workflows: WorkflowListItemView[] }>(`/workflows?limit=${limit}`, options)).workflows;
+}
+
+export async function getWorkflow(workflowId: string, options: ReadRequestOptions = {}): Promise<WorkflowDetailView> {
+  return (await request<{ workflow: WorkflowDetailView }>(`/workflows/${encodeURIComponent(workflowId)}`, options)).workflow;
+}
 
 export async function listSessions(options: ListSessionsOptions = {}): Promise<SessionView[]> {
   const query = new URLSearchParams();

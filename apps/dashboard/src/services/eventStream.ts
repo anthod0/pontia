@@ -12,6 +12,7 @@ import { loadAgentProfiles } from '../stores/agentProfiles';
 import { loadTasks, refreshTask, selectedTaskId } from '../stores/tasks';
 import { loadSessions, loadSessionDetail, sessionDetail } from '../stores/sessions';
 import { loadWorkspaces } from '../stores/workspaces';
+import { loadWorkflows, refreshWorkflow, selectedWorkflowId, selectedWorkflowSessionIds } from '../stores/workflows';
 import { createDashboardRefreshScheduler } from './dashboardRefreshScheduler';
 import { isAuthenticationFailure } from '../api/client';
 import { refreshDashboardSnapshot } from './dashboardSnapshotRefresh';
@@ -29,12 +30,16 @@ export function subscribeDashboardEvents(listener: DashboardEventListener): () =
 const refreshScheduler = createDashboardRefreshScheduler({
   getSelectedTaskId: () => get(selectedTaskId),
   getSelectedSessionId: () => get(sessionDetail)?.session.session_id ?? null,
+  getSelectedWorkflowId: () => get(selectedWorkflowId),
+  getSelectedWorkflowSessionIds: selectedWorkflowSessionIds,
   loadTasks,
   loadWorkspaces,
   loadAgentProfiles,
   loadSessions: () => loadSessions({ showLoading: false }),
+  loadWorkflows: () => loadWorkflows({ showLoading: false }),
   refreshTask,
   refreshSession: (sessionId) => loadSessionDetail(sessionId, { showLoading: false }),
+  refreshWorkflow: (workflowId) => refreshWorkflow(workflowId, { showLoading: false }),
 });
 
 let controller: AbortController | null = null;

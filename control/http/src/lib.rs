@@ -124,6 +124,11 @@ pub fn router(state: impl Into<HttpState>) -> Router {
                 .put(external::update_agent_profile_version)
                 .delete(external::delete_agent_profile_version),
         )
+        .route("/external/v1/workflows", get(external::list_workflows))
+        .route(
+            "/external/v1/workflows/{workflow_id}",
+            get(external::get_workflow),
+        )
         .route(
             "/external/v1/workspaces",
             get(external::list_workspaces).post(external::register_workspace),

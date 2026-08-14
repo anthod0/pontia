@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   loadSessions: vi.fn(async () => undefined),
   loadTasks: vi.fn(async () => undefined),
   loadWorkspaces: vi.fn(async () => undefined),
+  loadWorkflows: vi.fn(async () => undefined),
 }));
 
 vi.mock('../src/services/eventStream', () => ({
@@ -39,6 +40,9 @@ vi.mock('../src/stores/workspaces', () => ({
   workspacesError: writable(null),
   workspacesLoading: writable(false),
   loadWorkspaces: mocks.loadWorkspaces,
+}));
+vi.mock('../src/stores/workflows', () => ({
+  loadWorkflows: mocks.loadWorkflows,
 }));
 
 beforeEach(() => {

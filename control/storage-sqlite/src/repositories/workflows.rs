@@ -122,6 +122,19 @@ impl SqliteWorkflowRepository {
         Ok(())
     }
 
+    pub async fn list_workflows(&self, limit: u32) -> Result<Vec<WorkflowRow>> {
+        Ok(sqlx::query_as::<_, WorkflowRow>(
+            r#"SELECT workflow_id, title, cwd, state, failure_message, created_at, updated_at,
+                      started_at, completed_at
+               FROM workflows
+               ORDER BY created_at DESC, workflow_id DESC
+               LIMIT ?"#,
+        )
+        .bind(i64::from(limit))
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn get_workflow(&self, workflow_id: &str) -> Result<Option<WorkflowRow>> {
         Ok(sqlx::query_as::<_, WorkflowRow>(
             r#"SELECT workflow_id, title, cwd, state, failure_message, created_at, updated_at,

@@ -26,6 +26,9 @@ pub enum Error {
     #[error("workflow {0} has no root node")]
     RootNodeNotFound(String),
 
+    #[error("workflow {0} cannot be observed because its definition is invalid")]
+    InvalidObservation(String),
+
     #[error("session creation response did not contain a session_id")]
     MissingCreatedSessionId,
 
