@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type { EnvLike } from "./context.js";
 
 export interface PontiaConnection {
@@ -12,6 +11,7 @@ export interface PontiaConnection {
 }
 
 export interface PontiaDiscoveryOptions {
+  pontiaHome?: string;
   env?: EnvLike;
   fetch?: typeof fetch;
 }
@@ -20,25 +20,9 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function homeDir(env: EnvLike): string {
-  return optionalString(env.HOME) ?? homedir();
-}
-
-function expandPath(path: string, env: EnvLike): string {
-  const home = homeDir(env);
-  let expanded = path;
-  if (expanded === "~") expanded = home;
-  else if (expanded.startsWith("~/")) expanded = join(home, expanded.slice(2));
-  expanded = expanded.replace(/^\$HOME(?=\/|$)/, home);
-  return isAbsolute(expanded) ? expanded : resolve(expanded);
-}
-
-function pontiaHomeDir(env: EnvLike): string {
-  return optionalString(env.PONTIA_HOME) ?? join(homeDir(env), ".pontia");
-}
-
-function defaultPontiaConfigPath(env: EnvLike): string {
-  return join(pontiaHomeDir(env), "config.toml");
+export function pontiaHomeFromEnv(env: EnvLike = process.env): string | undefined {
+  const pontiaHome = optionalString(env.PONTIA_HOME);
+  return pontiaHome && isAbsolute(pontiaHome) ? pontiaHome : undefined;
 }
 
 function parseTomlString(raw: string, key: string): string | undefined {
@@ -70,8 +54,9 @@ function connectionFromBaseUrl(baseUrl: string, externalApiToken?: string): Pont
 }
 
 export async function resolvePontiaConnection(options: PontiaDiscoveryOptions = {}): Promise<PontiaConnection | undefined> {
-  const env = options.env ?? process.env;
-  const configPath = expandPath(defaultPontiaConfigPath(env), env);
+  const pontiaHome = options.pontiaHome ?? pontiaHomeFromEnv(options.env);
+  if (!pontiaHome || !isAbsolute(pontiaHome)) return undefined;
+  const configPath = join(pontiaHome, "config.toml");
 
   let raw: string;
   try {

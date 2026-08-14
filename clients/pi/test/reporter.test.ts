@@ -1,20 +1,12 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { buildSessionContextUsageUpdatedEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiContext, contextUsageFromPiEvent, contextUsageFromPiHook } from "../src/events.js";
 import { EventReporter } from "../src/reporter.js";
-const tmpDirs: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(tmpDirs.map((dir) => rm(dir, { recursive: true, force: true })));
-  tmpDirs.length = 0;
-});
+import { tempDir } from "./temp-dir.js";
 
 async function tempLogFile() {
-  const dir = await mkdtemp(join(tmpdir(), "pontia-pi-reporter-"));
-  tmpDirs.push(dir);
-  return join(dir, "pi-hook.log");
+  return join(await tempDir("pontia-pi-reporter-"), "pi-hook.log");
 }
 
 const context = {

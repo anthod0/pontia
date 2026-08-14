@@ -1,20 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { afterEach, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { defaultHookLogFile, loadTurnContext } from "../src/context.js";
-
-const tmpDirs: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(tmpDirs.map((dir) => rm(dir, { recursive: true, force: true })));
-  tmpDirs.length = 0;
-});
+import { tempDir } from "./temp-dir.js";
 
 async function tempWorkspace() {
-  const dir = await mkdtemp(join(tmpdir(), "pontia-pi-context-"));
-  tmpDirs.push(dir);
-  return dir;
+  return tempDir("pontia-pi-context-");
 }
 
 async function pontiaHomeWithConfig(bindAddr = "localhost:80") {
@@ -24,22 +15,26 @@ async function pontiaHomeWithConfig(bindAddr = "localhost:80") {
 }
 
 describe("loadTurnContext", () => {
-  test("falls back to pontia home state directory for hook log when explicit log directory is missing", async () => {
-    const home = await tempWorkspace();
-    expect(defaultHookLogFile({ HOME: home, PONTIA_WORKSPACE: "/project" })).toBe(
-      join(home, ".pontia", "state", "pi-hook.log"),
-    );
+  test("uses the validated Pontia home for the default hook log path", async () => {
+    const pontiaHome = await tempWorkspace();
+    expect(defaultHookLogFile(pontiaHome)).toBe(join(pontiaHome, "state", "pi-hook.log"));
   });
 
-  test("uses PONTIA_HOME for the default hook log path", async () => {
-    const pontiaHome = await tempWorkspace();
-    expect(defaultHookLogFile({ PONTIA_HOME: pontiaHome, PONTIA_WORKSPACE: "/project" })).toBe(
-      join(pontiaHome, "state", "pi-hook.log"),
-    );
+  test.each([
+    ["missing", {}],
+    ["empty", { PONTIA_HOME: "" }],
+    ["relative", { PONTIA_HOME: "relative/pontia-home" }],
+  ])("stays inactive when PONTIA_HOME is %s", async (_case, env) => {
+    const result = await loadTurnContext(env);
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "PONTIA_HOME must be a non-empty absolute path",
+      silent: true,
+    });
   });
 
   test("claims current turn from internal API when session context is available", async () => {
-    const workspace = await tempWorkspace();
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({ url: String(url), init });

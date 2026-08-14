@@ -8,7 +8,7 @@ First-party pi extension for connecting pi sessions to pontia.
 - A workspace registered in pontia
 - pi CLI
 - A tmux pane (`TMUX` and `TMUX_PANE` must be available)
-- `PONTIA_HOME` when pontia uses a location other than `$HOME/.pontia`
+- A non-empty, absolute `PONTIA_HOME` path
 
 ## Install locally
 
@@ -18,7 +18,7 @@ From the pontia repository root, register this package in pi's user-level settin
 pi install ./clients/pi
 ```
 
-Pi records the local package path without copying it, so keep the repository path available while using the plugin. The user-level install makes the plugin available in every workspace; the extension remains a silent no-op outside a tmux pane or an active workspace registered in Pontia.
+Pi records the local package path without copying it, so keep the repository path available while using the plugin. The user-level install makes the plugin available in every workspace; the extension remains a silent no-op when `PONTIA_HOME` is unavailable, outside a tmux pane, or outside an active workspace registered in Pontia.
 
 ## Use with pontia
 
@@ -42,13 +42,13 @@ Regardless of where the start command came from, run pi in a tmux pane and in an
 The extension writes diagnostics to:
 
 ```text
-${PONTIA_HOME:-$HOME/.pontia}/state/pi-hook.log
+$PONTIA_HOME/state/pi-hook.log
 ```
 
 Follow the log while reproducing a problem:
 
 ```bash
-tail -f "${PONTIA_HOME:-$HOME/.pontia}/state/pi-hook.log"
+tail -f "$PONTIA_HOME/state/pi-hook.log"
 ```
 
 ## Development

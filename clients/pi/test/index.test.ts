@@ -1,11 +1,10 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
 import { loadTurnContext, type TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
+import { tempDir as isolatedTempDir } from "./temp-dir.js";
 
 interface HandlerMap {
   [event: string]: (event: any, ctx: any) => Promise<any> | any;
@@ -40,21 +39,20 @@ const context: TurnContext = {
   internalEventUrl: "http://localhost/internal/v1/events",
 };
 
-const tmpDirs: string[] = [];
-const defaultPontiaHome = mkdtempSync(join(tmpdir(), "pontia-pi-index-home-"));
-writeFileSync(join(defaultPontiaHome, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
-
-afterEach(async () => {
-  vi.useRealTimers();
-  await Promise.all(tmpDirs.map((dir) => rm(dir, { recursive: true, force: true })));
-  tmpDirs.length = 0;
-});
+let defaultPontiaHome: string;
 
 async function tempDir() {
-  const dir = await mkdtemp(join(tmpdir(), "pontia-pi-index-"));
-  tmpDirs.push(dir);
-  return dir;
+  return isolatedTempDir("pontia-pi-index-");
 }
+
+beforeEach(async () => {
+  defaultPontiaHome = await isolatedTempDir("pontia-pi-index-home-");
+  await writeFile(join(defaultPontiaHome, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1]> = {}) {
   const { pi, handlers, commands, sendUserMessage } = fakePi();
@@ -623,7 +621,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("session_start without pontia env discovers pontia and confirms binding", async () => {
+  test("session_start discovers Pontia connection from PONTIA_HOME and confirms binding", async () => {
     const root = await tempDir();
     const workspace = await realpath(await tempDir());
     const pontiaConfig = join(root, ".pontia", "config.toml");
@@ -832,10 +830,9 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("session_start does not report ready when binding confirmation is unavailable", async () => {
-    const home = await tempDir();
     const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 500 }));
     const { handlers, reported } = install({
-      env: { HOME: home, PONTIA_SESSION_ID: "sess_partial" },
+      env: { PONTIA_SESSION_ID: "sess_partial" },
       fetch: fetchImpl as any,
     });
 
@@ -863,7 +860,11 @@ describe("pontia pi extension lifecycle", () => {
   test("registers pi lifecycle handlers without custom tools", () => {
     const { pi } = fakePi();
     createPontiaPiExtension(pi as any, {
-      env: { TMUX: "/tmp/tmux-1000/default,2071,502", TMUX_PANE: "%42" },
+      env: {
+        PONTIA_HOME: defaultPontiaHome,
+        TMUX: "/tmp/tmux-1000/default,2071,502",
+        TMUX_PANE: "%42",
+      },
       loadContext: vi.fn(),
       makeReporter: vi.fn(),
       logDiagnostic: vi.fn(),

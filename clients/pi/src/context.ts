@@ -1,6 +1,5 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
-import { resolvePontiaConnection } from "./discovery.js";
+import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
 import type { SessionContext } from "./session.js";
 
 export interface TurnContext {
@@ -15,7 +14,7 @@ export interface TurnContext {
 
 export type LoadTurnContextResult =
   | { ok: true; context: TurnContext; logFile: string }
-  | { ok: false; reason: string; logFile: string; silent?: boolean };
+  | { ok: false; reason: string; logFile?: string; silent?: boolean };
 
 export type EnvLike = Record<string, string | undefined>;
 
@@ -24,12 +23,8 @@ export interface LoadTurnContextOptions {
   sessionContext?: SessionContext;
 }
 
-function fallbackLogDir(env: EnvLike = process.env): string {
-  return join(env.PONTIA_HOME ?? join(env.HOME ?? homedir(), ".pontia"), "state");
-}
-
-export function defaultHookLogFile(env: EnvLike = process.env): string {
-  return join(fallbackLogDir(env), "pi-hook.log");
+export function defaultHookLogFile(pontiaHome: string): string {
+  return join(pontiaHome, "state", "pi-hook.log");
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -85,13 +80,13 @@ function contextFromRecord(record: Record<string, unknown>, logFile: string, dis
 }
 
 async function claimTurnContext(
-  env: EnvLike,
+  pontiaHome: string,
   logFile: string,
   fetchImpl: typeof fetch,
   sessionContext?: SessionContext,
 ): Promise<LoadTurnContextResult | undefined> {
   if (!sessionContext) return undefined;
-  const connection = await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const connection = await resolvePontiaConnection({ pontiaHome, fetch: fetchImpl });
   const internalEventUrl = sessionContext.internalEventUrl ?? connection?.internalEventUrl;
   const url = claimUrl(internalEventUrl, sessionContext.sessionId);
   if (!url) return undefined;
@@ -114,8 +109,12 @@ async function claimTurnContext(
 }
 
 export async function loadTurnContext(env: EnvLike = process.env, options: LoadTurnContextOptions = {}): Promise<LoadTurnContextResult> {
-  const logFile = defaultHookLogFile(env);
-  const claimed = await claimTurnContext(env, logFile, options.fetch ?? fetch, options.sessionContext);
+  const pontiaHome = pontiaHomeFromEnv(env);
+  if (!pontiaHome) {
+    return { ok: false, reason: "PONTIA_HOME must be a non-empty absolute path", silent: true };
+  }
+  const logFile = defaultHookLogFile(pontiaHome);
+  const claimed = await claimTurnContext(pontiaHome, logFile, options.fetch ?? fetch, options.sessionContext);
   if (claimed) return claimed;
   return { ok: false, reason: "current turn claim unavailable", logFile, silent: true };
 }

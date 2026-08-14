@@ -1,7 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { LoadTurnContextResult } from "../src/context.js";
 
@@ -19,21 +16,8 @@ function fakePi() {
   };
 }
 
-const tmpDirs: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(tmpDirs.map((dir) => rm(dir, { recursive: true, force: true })));
-  tmpDirs.length = 0;
-});
-
-async function tempHome() {
-  const dir = await mkdtemp(join(tmpdir(), "pontia-pi-no-auto-"));
-  tmpDirs.push(dir);
-  return dir;
-}
-
 describe("pontia pi extension startup boundary", () => {
-  test("does not register Pontia behavior outside tmux", async () => {
+  test("does not register Pontia behavior without PONTIA_HOME", async () => {
     const { pi, handlers } = fakePi();
     const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 500 }));
     const makeReporter = vi.fn(() => ({ report: vi.fn(async () => true) }));
@@ -44,10 +28,8 @@ describe("pontia pi extension startup boundary", () => {
       silent: true,
     }));
 
-    const home = await tempHome();
-
     createPontiaPiExtension(pi as any, {
-      env: { HOME: home },
+      env: { TMUX: "/tmp/tmux-1000/default,2071,502", TMUX_PANE: "%42" },
       fetch: fetchImpl as any,
       loadContext,
       makeReporter,

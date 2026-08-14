@@ -42,13 +42,14 @@ function tmuxBindingFromEnv(env: EnvLike): { socket_path: string; pane_id: strin
 }
 
 export async function bindSession(
+  pontiaHome: string,
   env: EnvLike,
   fetchImpl: typeof fetch,
   sessionDetails: PiSessionDetails,
   options: { startKind?: "fork"; parentSessionId?: string; runtimeInstanceId?: string } = {},
 ): Promise<SessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
-  const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const discovered = await resolvePontiaConnection({ pontiaHome, fetch: fetchImpl });
   const url = discovered?.bindingUpsertUrl;
   if (!url) return undefined;
 
@@ -96,12 +97,12 @@ export interface ExistingPiSessionContext extends SessionContext {
 }
 
 export async function loadExistingSessionContext(
-  env: EnvLike,
+  pontiaHome: string,
   fetchImpl: typeof fetch,
   sessionDetails: PiSessionDetails,
 ): Promise<ExistingPiSessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
-  const discovered = await resolvePontiaConnection({ env, fetch: fetchImpl });
+  const discovered = await resolvePontiaConnection({ pontiaHome, fetch: fetchImpl });
   const baseUrl = agentBindingSessionContextUrl(discovered?.bindingUpsertUrl);
   if (!baseUrl) return undefined;
   const url = new URL(baseUrl);
