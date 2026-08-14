@@ -1,8 +1,7 @@
 use super::{
-    AgentBindingService, CapturedLogWriter, EventIngestService, EventType, PI_AGENT_DIR_ENV_LOCK,
-    ProjectionState, StatusCode, UpsertAgentBindingRequest, Value, WithSubscriber, Write, fs,
-    get_json, json, pi_session_dir, post_internal_event, precreate_turn_if_missing, seed_session,
-    tempdir, test_state,
+    AgentBindingService, CapturedLogWriter, EventIngestService, EventType, ProjectionState,
+    StatusCode, UpsertAgentBindingRequest, Value, WithSubscriber, Write, fs, get_json, json,
+    post_internal_event, precreate_turn_if_missing, seed_session, tempdir, test_state,
 };
 
 fn pi_text_turn_entries(
@@ -33,10 +32,7 @@ fn pi_text_turn_entries(
 #[tokio::test]
 async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persisting_native_evidence()
  {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
 
     let state = test_state().await;
     let session_id = "sess_pi_linear_topology";
@@ -45,9 +41,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     fs::create_dir_all(&cwd).unwrap();
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    fs::create_dir_all(&session_dir).unwrap();
-    let transcript = session_dir.join(format!("2026-07-16T00-00-00-000Z_{session_key}.jsonl"));
+    let transcript = temp.path().join(format!("bound-{session_key}.jsonl"));
     fs::write(&transcript, b"").unwrap();
     AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
@@ -484,7 +478,6 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     }));
     assert!(started_events.iter().all(|event| event.topology.is_some()));
 
-    fs::remove_file(&transcript).unwrap();
     let mut replay = ProjectionState::default();
     for event in &events {
         replay.apply(event).unwrap();

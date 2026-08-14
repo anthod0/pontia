@@ -1,7 +1,7 @@
 use super::{
-    AgentBindingService, AppState, EventIngestService, EventSource, EventType,
-    PI_AGENT_DIR_ENV_LOCK, ReportedEvent, StatusCode, UpsertAgentBindingRequest, fs, get_json,
-    json, pi_session_dir, seed_session, seed_session_for_client, tempdir, test_state,
+    AgentBindingService, AppState, EventIngestService, EventSource, EventType, ReportedEvent,
+    StatusCode, UpsertAgentBindingRequest, fs, get_json, json, seed_session,
+    seed_session_for_client, tempdir, test_state,
 };
 
 #[tokio::test]
@@ -227,18 +227,13 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
         assert_eq!(body["error"]["code"], expected_code);
     }
 
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
     let pi_session = "sess_turn_timeline_invalid";
     seed_session(&state, pi_session).await;
     let cwd = temp.path().join("workspace");
     fs::create_dir_all(&cwd).unwrap();
     let cwd = cwd.canonicalize().unwrap();
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    fs::create_dir_all(&session_dir).unwrap();
-    let source_path = session_dir.join("2026-07-15T00-00-00-000Z_invalid-cursor.jsonl");
+    let source_path = temp.path().join("bound-invalid-cursor.jsonl");
     fs::write(&source_path, b"{\"id\":\"entry\",\"parentId\":null}\n").unwrap();
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
@@ -273,7 +268,13 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
             .contains("turn_invalid_cursor")
     );
 
-    fs::remove_dir_all(&session_dir).unwrap();
+    let stale_bound_path = temp.path().join("stale-bound-source.jsonl");
+    sqlx::query("UPDATE agent_bindings SET client_session_file = ? WHERE id = ?")
+        .bind(stale_bound_path.display().to_string())
+        .bind(&binding.id)
+        .execute(&state.db())
+        .await
+        .unwrap();
     let (status, body) = get_json(
         state,
         &format!("/external/v1/sessions/{pi_session}/turns/timeline?direction=forward"),

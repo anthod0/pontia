@@ -1,8 +1,7 @@
 use super::{
-    AgentBindingService, AppState, Body, BodyExt, Command, PI_AGENT_DIR_ENV_LOCK, PiJsonlV2Cursor,
-    Request, ServiceExt, StatusCode, Stdio, TOKEN, TimelineBoundaryRelation,
-    UpsertAgentBindingRequest, Value, fs, header, http, json, pi_session_dir, post_internal_json,
-    seed_session, tempdir, test_state,
+    AgentBindingService, AppState, Body, BodyExt, Command, PiJsonlV2Cursor, Request, ServiceExt,
+    StatusCode, Stdio, TOKEN, TimelineBoundaryRelation, UpsertAgentBindingRequest, Value, fs,
+    header, http, json, post_internal_json, seed_session, tempdir, test_state,
 };
 
 async fn post_external_json(
@@ -35,10 +34,7 @@ async fn post_external_json(
 
 #[tokio::test]
 async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without_mutation() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
     let state = test_state().await;
     let session_id = "sess_branch_resolve";
     let runtime_instance_id = "rtinst_branch_resolve";
@@ -53,8 +49,6 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         .unwrap();
 
     let session_key = "branch-resolve";
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    fs::create_dir_all(&session_dir).unwrap();
     let segments = [
         concat!(
             "{\"type\":\"message\",\"id\":\"root-user\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"root\"}}\n",
@@ -74,7 +68,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         ),
     ];
     let transcript = segments.concat();
-    let transcript_path = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    let transcript_path = temp.path().join(format!("bound-{session_key}.jsonl"));
     fs::write(&transcript_path, &transcript).unwrap();
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
@@ -361,8 +355,8 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         5
     );
 
-    let (stale_status, _) = post_internal_json(
-        state,
+    let (stale_runtime_status, _) = post_internal_json(
+        state.clone(),
         "/internal/v1/inbox/branch-replay/resolve",
         json!({
             "inbox_message_id": "msg_branch_root",
@@ -372,7 +366,33 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         }),
     )
     .await;
-    assert_eq!(stale_status, StatusCode::CONFLICT);
+    assert_eq!(stale_runtime_status, StatusCode::CONFLICT);
+
+    let unbound_candidate = temp.path().join("unbound-candidate.jsonl");
+    fs::write(&unbound_candidate, &transcript).unwrap();
+    let stale_bound_path = temp.path().join("stale-bound-source.jsonl");
+    sqlx::query("UPDATE agent_bindings SET client_session_file = ? WHERE id = ?")
+        .bind(stale_bound_path.display().to_string())
+        .bind(&binding.id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    let (stale_source_status, stale_source_body) = post_internal_json(
+        state,
+        "/internal/v1/inbox/branch-replay/resolve",
+        json!({
+            "inbox_message_id": "msg_branch_root",
+            "session_id": session_id,
+            "runtime_instance_id": runtime_instance_id,
+            "client_type": "pi"
+        }),
+    )
+    .await;
+    assert_eq!(
+        stale_source_status,
+        StatusCode::CONFLICT,
+        "{stale_source_body:?}"
+    );
 }
 
 #[tokio::test]
@@ -403,10 +423,7 @@ async fn branch_replay_resolution_requires_internal_bearer_authentication() {
 
 #[tokio::test]
 async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_turn() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
     let state = test_state().await;
     let session_id = "sess_branch_dispatch";
     let target_turn_id = "turn_branch_dispatch_target";
@@ -422,13 +439,11 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
         .unwrap();
 
     let session_key = "branch-dispatch";
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    fs::create_dir_all(&session_dir).unwrap();
     let transcript = concat!(
         "{\"type\":\"message\",\"id\":\"dispatch-user\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"original\"}}\n",
         "{\"type\":\"message\",\"id\":\"dispatch-answer\",\"parentId\":\"dispatch-user\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"answer\"}]}}\n"
     );
-    let transcript_path = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    let transcript_path = temp.path().join(format!("bound-{session_key}.jsonl"));
     fs::write(&transcript_path, transcript).unwrap();
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {

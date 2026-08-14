@@ -1,17 +1,13 @@
 use super::{
     AgentBindingService, CapturedLogWriter, EventIngestService, EventSource, EventType,
-    PI_AGENT_DIR_ENV_LOCK, ProjectionState, ReportedEvent, StatusCode, TimelineBoundary,
-    UpsertAgentBindingRequest, Value, WithSubscriber, Write, fs, get_json, json, pi_session_dir,
-    post_internal_event, post_pi_turn_event, precreate_turn_if_missing, seed_session, tempdir,
-    test_state,
+    ProjectionState, ReportedEvent, StatusCode, TimelineBoundary, UpsertAgentBindingRequest, Value,
+    WithSubscriber, Write, fs, get_json, json, post_internal_event, post_pi_turn_event,
+    precreate_turn_if_missing, seed_session, tempdir, test_state,
 };
 
 #[tokio::test]
 async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
     let state = test_state().await;
     let session_id = "sess_delayed_first_timeline";
     let session_key = "delayed-first-timeline";
@@ -20,8 +16,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    let transcript = temp.path().join(format!("bound-{session_key}.jsonl"));
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
@@ -75,7 +70,6 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     assert_eq!(pending_body["data"]["items"], json!([]));
     assert!(pending_body["data"]["next_turn_id"].is_null());
 
-    fs::create_dir_all(&session_dir).unwrap();
     fs::write(
         &transcript,
         concat!(
@@ -125,10 +119,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
 
 #[tokio::test]
 async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
     let state = test_state().await;
     let session_id = "sess_delayed_terminal";
     let session_key = "delayed-terminal";
@@ -138,8 +129,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    let transcript = temp.path().join(format!("bound-{session_key}.jsonl"));
     AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session_id.to_string(),
@@ -159,7 +149,6 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
     .await
     .unwrap();
 
-    fs::create_dir_all(&session_dir).unwrap();
     fs::write(
         &transcript,
         b"{\"type\":\"model_change\",\"id\":\"previous\",\"parentId\":null}\n",
@@ -248,10 +237,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
 
 #[tokio::test]
 async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
 
     let state = test_state().await;
     let session_id = "sess_pi_boundaries";
@@ -262,9 +248,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    fs::create_dir_all(&session_dir).unwrap();
-    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    let transcript = temp.path().join(format!("bound-{session_key}.jsonl"));
     fs::write(
         &transcript,
         b"{\"type\":\"message\",\"id\":\"previous_leaf\",\"parentId\":null}\n",
@@ -376,10 +360,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
 
 #[tokio::test]
 async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readable() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
 
     let state = test_state().await;
     let session_id = "sess_pi_interrupted_boundary";
@@ -390,9 +371,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    fs::create_dir_all(&session_dir).unwrap();
-    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    let transcript = temp.path().join(format!("bound-{session_key}.jsonl"));
     fs::write(
         &transcript,
         b"{\"type\":\"message\",\"id\":\"previous_leaf\",\"parentId\":null}\n",
@@ -498,10 +477,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
 
 #[tokio::test]
 async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warning() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("missing-agent-dir");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
     let state = test_state().await;
     let session_id = "sess_pi_boundary_missing";
     seed_session(&state, session_id).await;

@@ -22,13 +22,11 @@ use pontia_core::domain::{
 use pontia_http as http;
 use serde_json::{Value, json};
 use tempfile::tempdir;
-use tokio::sync::Mutex;
 use tower::ServiceExt;
 use tracing::instrument::WithSubscriber;
 use tracing_subscriber::fmt::MakeWriter;
 
 const TOKEN: &str = "test-token";
-static PI_AGENT_DIR_ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
 mod branch_replay;
 mod timeline_boundaries;
@@ -121,16 +119,6 @@ async fn post_internal_json(state: AppState, uri: &str, body: Value) -> (StatusC
 
 async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
     post_internal_json(state, "/internal/v1/events", body).await
-}
-
-fn pi_session_dir(agent_dir: &std::path::Path, cwd: &std::path::Path) -> std::path::PathBuf {
-    let safe = format!(
-        "--{}--",
-        cwd.to_string_lossy()
-            .trim_start_matches('/')
-            .replace(['/', '\\', ':'], "-")
-    );
-    agent_dir.join("sessions").join(safe)
 }
 
 async fn seed_session_for_client(state: &AppState, session_id: &str, client_type: &str) {

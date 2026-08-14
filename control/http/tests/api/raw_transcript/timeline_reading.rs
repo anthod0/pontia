@@ -1,8 +1,8 @@
 use super::{
-    AgentBindingService, AppState, EventIngestService, EventSource, EventType,
-    PI_AGENT_DIR_ENV_LOCK, PathBuf, ReportedEvent, StatusCode, UpsertAgentBindingRequest, Value,
-    Write, fs, get_json, json, pi_session_dir, post_internal_event, post_pi_turn_event,
-    precreate_turn_if_missing, seed_session, seed_session_for_client, tempdir, test_state,
+    AgentBindingService, AppState, EventIngestService, EventSource, EventType, PathBuf,
+    ReportedEvent, StatusCode, UpsertAgentBindingRequest, Value, Write, fs, get_json, json,
+    post_internal_event, post_pi_turn_event, precreate_turn_if_missing, seed_session,
+    seed_session_for_client, tempdir, test_state,
 };
 
 struct ActivePiTimelineFixture {
@@ -19,17 +19,13 @@ async fn active_pi_timeline_fixture(
     _started_event_id: &str,
 ) -> ActivePiTimelineFixture {
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
     let state = test_state().await;
     let cwd = temp.path().join("workspace");
     fs::create_dir_all(&cwd).unwrap();
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    fs::create_dir_all(&session_dir).unwrap();
-    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    let transcript = temp.path().join(format!("bound-{session_key}.jsonl"));
     fs::write(
         &transcript,
         b"{\"type\":\"message\",\"id\":\"root\",\"parentId\":null}\n",
@@ -269,10 +265,7 @@ async fn claude_timeline_includes_assistant_appended_after_turn_completion() {
 
 #[tokio::test]
 async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let temp = tempdir().unwrap();
-    let agent_dir = temp.path().join("agent");
-    unsafe { std::env::set_var("PI_AGENT_DIR", &agent_dir) };
     let state = test_state().await;
     let session_id = "sess_projected_timeline";
     let session_key = "projected-timeline";
@@ -281,9 +274,7 @@ async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
     let cwd = cwd.canonicalize().unwrap();
     seed_session(&state, session_id).await;
 
-    let session_dir = pi_session_dir(&agent_dir, &cwd);
-    fs::create_dir_all(&session_dir).unwrap();
-    let transcript = session_dir.join(format!("2026-07-15T00-00-00-000Z_{session_key}.jsonl"));
+    let transcript = temp.path().join(format!("bound-{session_key}.jsonl"));
     fs::write(
         &transcript,
         b"{\"type\":\"message\",\"id\":\"root\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"before\"}}\n",
@@ -414,7 +405,6 @@ async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
 
 #[tokio::test]
 async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_boundaries() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let fixture = active_pi_timeline_fixture(
         "sess_active_turn_empty",
         "active-turn-empty",
@@ -563,7 +553,6 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
 
 #[tokio::test]
 async fn turn_timeline_rejects_unassignable_active_pi_entries() {
-    let _guard = PI_AGENT_DIR_ENV_LOCK.lock().await;
     let fixture = active_pi_timeline_fixture(
         "sess_active_turn_unassignable",
         "active-turn-unassignable",
