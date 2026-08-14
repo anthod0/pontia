@@ -1,0 +1,2 @@
+ALTER TABLE workflow_nodes
+ADD COLUMN phase TEXT NOT NULL DEFAULT '';

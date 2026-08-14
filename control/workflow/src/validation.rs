@@ -37,6 +37,17 @@ pub(crate) fn validate_run_request(request: &RunWorkflowRequest) -> Result<()> {
                 "Agent Node title must not be empty".to_string(),
             ));
         }
+        let phase = node.phase.trim();
+        if phase.is_empty() {
+            return Err(Error::InvalidDefinition(
+                "Agent Node phase must not be empty".to_string(),
+            ));
+        }
+        if phase.chars().count() > 80 {
+            return Err(Error::InvalidDefinition(
+                "Agent Node phase must be at most 80 characters".to_string(),
+            ));
+        }
         match (
             node.execution_profile_id.as_ref(),
             node.execution_profile_version.as_ref(),

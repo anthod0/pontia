@@ -16,6 +16,7 @@ pub struct CreateWorkflowNodeRecord {
     pub node_id: String,
     pub workflow_id: String,
     pub parent_node_id: Option<String>,
+    pub phase: String,
     pub title: String,
     pub instructions: String,
     pub inputs: String,
@@ -63,13 +64,14 @@ impl SqliteWorkflowRepository {
         for node in nodes {
             sqlx::query(
                 r#"INSERT INTO workflow_nodes
-                   (node_id, workflow_id, parent_node_id, node_type, title, instructions, inputs,
-                    output, execution_profile_id, execution_profile_version)
-                   VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?)"#,
+                   (node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
+                    inputs, output, execution_profile_id, execution_profile_version)
+                   VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?, ?)"#,
             )
             .bind(node.node_id)
             .bind(node.workflow_id)
             .bind(node.parent_node_id)
+            .bind(node.phase)
             .bind(node.title)
             .bind(node.instructions)
             .bind(node.inputs)
@@ -100,14 +102,15 @@ impl SqliteWorkflowRepository {
     pub async fn create_node(&self, node: CreateWorkflowNodeRecord) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO workflow_nodes
-               (node_id, workflow_id, parent_node_id, node_type, title, instructions, inputs, output,
-                execution_profile_id, execution_profile_version)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               (node_id, workflow_id, parent_node_id, node_type, phase, title, instructions, inputs,
+                output, execution_profile_id, execution_profile_version)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(node.node_id)
         .bind(node.workflow_id)
         .bind(node.parent_node_id)
         .bind("agent")
+        .bind(node.phase)
         .bind(node.title)
         .bind(node.instructions)
         .bind(node.inputs)
@@ -132,9 +135,9 @@ impl SqliteWorkflowRepository {
 
     pub async fn list_nodes(&self, workflow_id: &str) -> Result<Vec<WorkflowNodeRow>> {
         Ok(sqlx::query_as::<_, WorkflowNodeRow>(
-            r#"SELECT node_id, workflow_id, parent_node_id, node_type, title, instructions, inputs, output,
-                      execution_profile_id, execution_profile_version, session_id, submitted_at,
-                      created_at
+            r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
+                      inputs, output, execution_profile_id, execution_profile_version, session_id,
+                      submitted_at, created_at
                FROM workflow_nodes
                WHERE workflow_id = ?
                ORDER BY created_at, node_id"#,
@@ -146,9 +149,9 @@ impl SqliteWorkflowRepository {
 
     pub async fn get_node(&self, node_id: &str) -> Result<Option<WorkflowNodeRow>> {
         Ok(sqlx::query_as::<_, WorkflowNodeRow>(
-            r#"SELECT node_id, workflow_id, parent_node_id, node_type, title, instructions, inputs, output,
-                      execution_profile_id, execution_profile_version, session_id, submitted_at,
-                      created_at
+            r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
+                      inputs, output, execution_profile_id, execution_profile_version, session_id,
+                      submitted_at, created_at
                FROM workflow_nodes WHERE node_id = ?"#,
         )
         .bind(node_id)
@@ -158,9 +161,9 @@ impl SqliteWorkflowRepository {
 
     pub async fn get_node_by_session(&self, session_id: &str) -> Result<Option<WorkflowNodeRow>> {
         let nodes = sqlx::query_as::<_, WorkflowNodeRow>(
-            r#"SELECT node_id, workflow_id, parent_node_id, node_type, title, instructions, inputs, output,
-                      execution_profile_id, execution_profile_version, session_id, submitted_at,
-                      created_at
+            r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
+                      inputs, output, execution_profile_id, execution_profile_version, session_id,
+                      submitted_at, created_at
                FROM workflow_nodes WHERE session_id = ?
                ORDER BY created_at, node_id
                LIMIT 2"#,

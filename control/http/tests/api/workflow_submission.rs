@@ -31,6 +31,7 @@ async fn seed_running_workflow(app: &TestApp) {
             node_id: "node_http_submit".to_string(),
             workflow_id: "wf_http_submit".to_string(),
             parent_node_id: None,
+            phase: "Test Phase".to_string(),
             title: "Writer".to_string(),
             instructions: "Write the handoff".to_string(),
             inputs: "[]".to_string(),

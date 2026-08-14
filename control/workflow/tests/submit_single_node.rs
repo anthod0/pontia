@@ -149,6 +149,7 @@ async fn seed_running_single_node(
             node_id: node_id.to_string(),
             workflow_id: workflow_id.to_string(),
             parent_node_id: None,
+            phase: "Test Phase".to_string(),
             title: "Writer".to_string(),
             instructions: "Write the result.".to_string(),
             inputs: "[]".to_string(),

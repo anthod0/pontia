@@ -74,6 +74,7 @@ struct HandoffDefinition {
 struct NodeDefinition {
     #[serde(rename = "type")]
     node_type: String,
+    phase: String,
     title: String,
     instructions: String,
     #[serde(default)]

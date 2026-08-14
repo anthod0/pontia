@@ -110,6 +110,7 @@ where
                 node_id: node_id.clone(),
                 workflow_id: request.workflow_id.clone(),
                 parent_node_id: parent_node_id.clone(),
+                phase: definition.phase.trim().to_string(),
                 title: definition.title,
                 instructions: definition.instructions,
                 inputs: serde_json::to_string(&definition.inputs)?,

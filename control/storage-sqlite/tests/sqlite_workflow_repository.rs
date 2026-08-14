@@ -40,6 +40,7 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
             node_id: "node_1".to_string(),
             workflow_id: "wf_1".to_string(),
             parent_node_id: None,
+            phase: "Drafting".to_string(),
             title: "Writer".to_string(),
             instructions: "Write the release notes.".to_string(),
             inputs: json!(["brief.md", "changes.md"]).to_string(),
@@ -54,6 +55,7 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
             node_id: "node_2".to_string(),
             workflow_id: "wf_1".to_string(),
             parent_node_id: Some("node_1".to_string()),
+            phase: "Review".to_string(),
             title: "Reviewer".to_string(),
             instructions: "Review the release notes.".to_string(),
             inputs: json!(["release.md"]).to_string(),
@@ -97,11 +99,31 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
     let nodes = repository.list_nodes("wf_1").await.expect("list nodes");
     assert_eq!(nodes.len(), 2);
     assert_eq!(nodes[0].node_id, "node_1");
+    assert_eq!(nodes[0].phase, "Drafting");
     assert_eq!(nodes[0].inputs, r#"["brief.md","changes.md"]"#);
     assert_eq!(nodes[0].session_id.as_deref(), Some("session_1"));
     assert!(nodes[0].submitted_at.is_some());
     assert_eq!(nodes[1].parent_node_id.as_deref(), Some("node_1"));
+    assert_eq!(nodes[1].phase, "Review");
     assert_eq!(nodes[1].output, "approved.md");
+    assert_eq!(
+        repository
+            .get_node("node_1")
+            .await
+            .expect("get node")
+            .expect("node exists")
+            .phase,
+        "Drafting"
+    );
+    assert_eq!(
+        repository
+            .get_node_by_session("session_1")
+            .await
+            .expect("get node by session")
+            .expect("bound node exists")
+            .phase,
+        "Drafting"
+    );
 
     let events = repository.list_events("wf_1").await.expect("list events");
     assert_eq!(events.len(), 3);
@@ -249,4 +271,55 @@ async fn completing_a_running_workflow_atomically_updates_state_and_appends_comp
         .expect("workflow exists");
     assert_eq!(workflow.state, "running");
     assert_eq!(workflow.completed_at, None);
+}
+
+#[tokio::test]
+async fn phase_migration_backfills_existing_workflow_nodes_with_an_empty_label() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("workflow-phase-migration.db");
+    let pool = connect_sqlite(&format!("sqlite://{}", db_path.display()))
+        .await
+        .expect("connect");
+
+    sqlx::raw_sql(include_str!(
+        "../migrations/0010_add_workflow_orchestration.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("create pre-phase workflow schema");
+    sqlx::raw_sql(include_str!(
+        "../migrations/0011_add_workflow_node_type.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("add node type");
+    sqlx::query(
+        r#"INSERT INTO workflows (workflow_id, title, cwd, state)
+           VALUES ('wf_existing', 'Existing', '/work', 'pending')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert existing workflow");
+    sqlx::query(
+        r#"INSERT INTO workflow_nodes
+           (node_id, workflow_id, node_type, title, instructions, inputs, output)
+           VALUES ('node_existing', 'wf_existing', 'agent', 'Existing node', 'Work', '[]', 'result.md')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert pre-phase node");
+
+    sqlx::raw_sql(include_str!(
+        "../migrations/0012_add_workflow_node_phase.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("add phase");
+
+    let phase: String =
+        sqlx::query_scalar("SELECT phase FROM workflow_nodes WHERE node_id = 'node_existing'")
+            .fetch_one(&pool)
+            .await
+            .expect("load migrated phase");
+    assert_eq!(phase, "");
 }

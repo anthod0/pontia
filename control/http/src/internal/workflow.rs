@@ -36,6 +36,7 @@ struct WorkflowRunHandoff {
 struct WorkflowRunNode {
     #[serde(rename = "type")]
     node_type: String,
+    phase: String,
     title: String,
     instructions: String,
     #[serde(default)]
@@ -90,6 +91,7 @@ pub async fn run_workflow(
                 .into_iter()
                 .map(|node| WorkflowNodeDefinition {
                     node_type: node.node_type,
+                    phase: node.phase,
                     title: node.title,
                     instructions: node.instructions,
                     inputs: node.inputs,

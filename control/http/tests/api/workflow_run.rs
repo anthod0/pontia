@@ -50,6 +50,7 @@ async fn internal_workflow_run_rejects_unsupported_node_types_before_creation() 
             "cwd": app.workspace().path().display().to_string(),
             "nodes": [{
                 "type": "control",
+                "phase": "Control",
                 "title": "Sequence",
                 "instructions": "Run children.",
                 "inputs": [],
@@ -90,6 +91,7 @@ async fn internal_workflow_run_creates_and_starts_a_linear_agent_workflow() {
             "nodes": [
                 {
                     "type": "agent",
+                    "phase": "  Discovery  ",
                     "title": "Research",
                     "instructions": "Research the implementation.",
                     "inputs": ["requirements.md"],
@@ -99,10 +101,21 @@ async fn internal_workflow_run_creates_and_starts_a_linear_agent_workflow() {
                 },
                 {
                     "type": "agent",
+                    "phase": "Delivery",
                     "title": "Implement",
                     "instructions": "Implement the feature.",
                     "inputs": ["research.md"],
                     "output": "result.md",
+                    "execution_profile_id": null,
+                    "execution_profile_version": null
+                },
+                {
+                    "type": "agent",
+                    "phase": "Discovery",
+                    "title": "Review",
+                    "instructions": "Review the result.",
+                    "inputs": ["result.md"],
+                    "output": "review.md",
                     "execution_profile_id": null,
                     "execution_profile_version": null
                 }
@@ -127,11 +140,18 @@ async fn internal_workflow_run_creates_and_starts_a_linear_agent_workflow() {
         .list_nodes("wf_http_run")
         .await
         .expect("list nodes");
-    assert_eq!(nodes.len(), 2);
+    assert_eq!(nodes.len(), 3);
     assert_eq!(nodes[0].node_type, "agent");
+    assert_eq!(nodes[0].phase, "Discovery");
+    assert_eq!(nodes[1].phase, "Delivery");
+    assert_eq!(nodes[2].phase, "Discovery");
     assert_eq!(
         nodes[1].parent_node_id.as_deref(),
         Some(nodes[0].node_id.as_str())
+    );
+    assert_eq!(
+        nodes[2].parent_node_id.as_deref(),
+        Some(nodes[1].node_id.as_str())
     );
     assert_eq!(
         nodes[0].session_id.as_deref(),
@@ -145,5 +165,80 @@ async fn internal_workflow_run_creates_and_starts_a_linear_agent_workflow() {
         )
         .expect("read initial handoff"),
         "Build it.\n"
+    );
+}
+
+#[tokio::test]
+async fn internal_workflow_run_requires_a_valid_phase() {
+    for (workflow_id, phase, expected_message) in [
+        ("wf_empty_phase", "", "Agent Node phase must not be empty"),
+        (
+            "wf_blank_phase",
+            "   ",
+            "Agent Node phase must not be empty",
+        ),
+        (
+            "wf_long_phase",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "Agent Node phase must be at most 80 characters",
+        ),
+    ] {
+        let app = TestApp::new().await;
+        let (status, body) = post_run(
+            &app,
+            json!({
+                "workflow_id": workflow_id,
+                "title": "Invalid phase",
+                "cwd": app.workspace().path().display().to_string(),
+                "nodes": [{
+                    "type": "agent",
+                    "phase": phase,
+                    "title": "Worker",
+                    "instructions": "Do the work.",
+                    "inputs": [],
+                    "output": "result.md",
+                    "execution_profile_id": null,
+                    "execution_profile_version": null
+                }]
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains(expected_message)),
+            "{body}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn internal_workflow_run_rejects_a_missing_phase_during_json_decoding() {
+    let app = TestApp::new().await;
+    let (status, body) = post_run(
+        &app,
+        json!({
+            "workflow_id": "wf_missing_phase",
+            "title": "Missing phase",
+            "cwd": app.workspace().path().display().to_string(),
+            "nodes": [{
+                "type": "agent",
+                "title": "Worker",
+                "instructions": "Do the work.",
+                "inputs": [],
+                "output": "result.md",
+                "execution_profile_id": null,
+                "execution_profile_version": null
+            }]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("missing field `phase`")),
+        "{body}"
     );
 }

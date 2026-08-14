@@ -157,6 +157,7 @@ source = "./requirements.md"
 
 [[nodes]]
 type = "agent"
+phase = "Discovery"
 title = "Research"
 instructions = "Research the implementation."
 inputs = ["requirements.md"]
@@ -166,6 +167,7 @@ execution_profile_version = "1"
 
 [[nodes]]
 type = "agent"
+phase = "Delivery"
 title = "Implement"
 instructions = "Implement the feature."
 inputs = ["research.md"]
@@ -220,11 +222,48 @@ output = "result.md"
         serde_json::json!([{"name":"requirements.md", "content":"Build Workflow run.\n"}])
     );
     assert_eq!(body["nodes"][0]["type"], "agent");
+    assert_eq!(body["nodes"][0]["phase"], "Discovery");
+    assert_eq!(body["nodes"][1]["phase"], "Delivery");
     assert_eq!(body["nodes"][0]["execution_profile_id"], "researcher");
     assert_eq!(
         body["nodes"][1]["inputs"],
         serde_json::json!(["research.md"])
     );
+}
+
+#[test]
+fn workflow_run_rejects_missing_phase_and_unknown_fields_in_toml() {
+    let dir = temp_dir("run-invalid-definition");
+    for (name, extra, expected) in [
+        ("missing-phase", "", "missing field `phase`"),
+        (
+            "unknown-field",
+            "phase = \"Build\"\npriority = 1\n",
+            "unknown field `priority`",
+        ),
+    ] {
+        let definition = dir.path().join(format!("{name}.toml"));
+        fs::write(
+            &definition,
+            format!(
+                "title = \"Invalid\"\ncwd = \".\"\n\n[[nodes]]\ntype = \"agent\"\n{extra}title = \"Worker\"\ninstructions = \"Work.\"\noutput = \"result.md\"\n"
+            ),
+        )
+        .expect("write invalid workflow definition");
+
+        let output = pontiactl()
+            .args(["workflow", "run", definition.to_str().expect("utf-8 path")])
+            .env("PONTIA_HOME", dir.path())
+            .output()
+            .expect("run workflow");
+
+        assert!(!output.status.success(), "{name}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(expected),
+            "{name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
 
 #[test]

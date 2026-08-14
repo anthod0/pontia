@@ -16,6 +16,7 @@ pub struct InitialHandoff {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowNodeDefinition {
     pub node_type: String,
+    pub phase: String,
     pub title: String,
     pub instructions: String,
     pub inputs: Vec<String>,
