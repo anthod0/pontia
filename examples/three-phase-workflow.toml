@@ -1,0 +1,25 @@
+title = "Three-phase timeline validation"
+cwd = "."
+
+[[nodes]]
+type = "agent"
+phase = "Phase 1"
+title = "Phase 1 Writer"
+instructions = "Create ./phase-1.txt containing exactly: phase 1 complete. Then submit it with `pontiactl workflow submit --input ./phase-1.txt --output phase-1.txt`."
+output = "phase-1.txt"
+
+[[nodes]]
+type = "agent"
+phase = "Phase 2"
+title = "Phase 2 Writer"
+instructions = "Read the supplied Phase 1 handoff. Create ./phase-2.txt containing exactly: phase 2 received phase 1. Then submit it with `pontiactl workflow submit --input ./phase-2.txt --output phase-2.txt`."
+inputs = ["phase-1.txt"]
+output = "phase-2.txt"
+
+[[nodes]]
+type = "agent"
+phase = "Final"
+title = "Final Writer"
+instructions = "Read the supplied Phase 2 handoff. Create ./final.txt containing exactly: workflow timeline validation complete. Then submit it with `pontiactl workflow submit --input ./final.txt --output final.txt`."
+inputs = ["phase-2.txt"]
+output = "final.txt"

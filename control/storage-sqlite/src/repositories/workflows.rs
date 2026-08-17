@@ -150,7 +150,8 @@ impl SqliteWorkflowRepository {
         Ok(sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id, execution_profile_version, session_id,
-                      submitted_at, created_at
+                      submitted_at, submitted_runtime_instance_id, exit_request_started_at,
+                      created_at
                FROM workflow_nodes
                WHERE workflow_id = ?
                ORDER BY created_at, node_id"#,
@@ -164,7 +165,8 @@ impl SqliteWorkflowRepository {
         Ok(sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id, execution_profile_version, session_id,
-                      submitted_at, created_at
+                      submitted_at, submitted_runtime_instance_id, exit_request_started_at,
+                      created_at
                FROM workflow_nodes WHERE node_id = ?"#,
         )
         .bind(node_id)
@@ -176,7 +178,8 @@ impl SqliteWorkflowRepository {
         let nodes = sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id, execution_profile_version, session_id,
-                      submitted_at, created_at
+                      submitted_at, submitted_runtime_instance_id, exit_request_started_at,
+                      created_at
                FROM workflow_nodes WHERE session_id = ?
                ORDER BY created_at, node_id
                LIMIT 2"#,
@@ -209,10 +212,15 @@ impl SqliteWorkflowRepository {
         Ok(())
     }
 
-    pub async fn record_node_submission(&self, node_id: &str) -> Result<()> {
+    pub async fn record_node_submission(
+        &self,
+        node_id: &str,
+        runtime_instance_id: &str,
+    ) -> Result<()> {
         let result = sqlx::query(
             r#"UPDATE workflow_nodes
-               SET submitted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               SET submitted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                   submitted_runtime_instance_id = ?
                WHERE node_id = ?
                  AND submitted_at IS NULL
                  AND EXISTS (
@@ -221,6 +229,7 @@ impl SqliteWorkflowRepository {
                        AND workflows.state = 'running'
                  )"#,
         )
+        .bind(runtime_instance_id)
         .bind(node_id)
         .execute(&self.pool)
         .await?;
@@ -230,6 +239,30 @@ impl SqliteWorkflowRepository {
             )));
         }
         Ok(())
+    }
+
+    pub async fn claim_node_exit_request(
+        &self,
+        node_id: &str,
+        runtime_instance_id: &str,
+    ) -> Result<bool> {
+        let result = sqlx::query(
+            r#"UPDATE workflow_nodes
+               SET exit_request_started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE node_id = ?
+                 AND submitted_runtime_instance_id = ?
+                 AND exit_request_started_at IS NULL
+                 AND EXISTS (
+                     SELECT 1 FROM workflows
+                     WHERE workflows.workflow_id = workflow_nodes.workflow_id
+                       AND workflows.state = 'running'
+                 )"#,
+        )
+        .bind(node_id)
+        .bind(runtime_instance_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() == 1)
     }
 
     pub async fn append_event(

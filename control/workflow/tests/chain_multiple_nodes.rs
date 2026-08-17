@@ -110,15 +110,20 @@ impl TestAgentEvents {
         Self { sender }
     }
 
-    fn publish_session_exit(&self, event_id: &str, session_id: &str) {
+    fn publish(&self, event_id: &str, session_id: &str, event_type: EventType) {
+        let source = if event_type.is_turn_event() {
+            EventSource::AgentAdapter
+        } else {
+            EventSource::AgentClient
+        };
         self.sender
             .send(DomainEvent::new(
                 event_id.to_string(),
                 session_id.to_string(),
                 None,
-                EventSource::AgentClient,
+                source,
                 "pi".to_string(),
-                EventType::SessionExited,
+                event_type,
                 json!({ "runtime_instance_id": format!("runtime_{session_id}") }),
             ))
             .expect("workflow event subscriber");
@@ -275,7 +280,16 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     tokio::task::yield_now().await;
     assert_eq!(sessions.requests.lock().expect("requests lock").len(), 1);
 
-    events.publish_session_exit("evt_research_exit", "session_research");
+    events.publish(
+        "evt_research_completed",
+        "session_research",
+        EventType::TurnCompleted,
+    );
+    events.publish(
+        "evt_research_exit",
+        "session_research",
+        EventType::SessionExited,
+    );
     wait_for_session(&repository, "node_draft", "session_draft").await;
     assert_eq!(sessions.requests.lock().expect("requests lock").len(), 2);
 
@@ -291,7 +305,12 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     tokio::task::yield_now().await;
     assert_eq!(sessions.requests.lock().expect("requests lock").len(), 2);
 
-    events.publish_session_exit("evt_draft_exit", "session_draft");
+    events.publish(
+        "evt_draft_completed",
+        "session_draft",
+        EventType::TurnCompleted,
+    );
+    events.publish("evt_draft_exit", "session_draft", EventType::SessionExited);
     wait_for_session(&repository, "node_review", "session_review").await;
 
     let requests = sessions.requests.lock().expect("requests lock").clone();
@@ -365,8 +384,21 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
         "running"
     );
 
-    events.publish_session_exit("evt_review_exit", "session_review");
-    events.publish_session_exit("evt_review_exit_duplicate", "session_review");
+    events.publish(
+        "evt_review_completed",
+        "session_review",
+        EventType::TurnCompleted,
+    );
+    events.publish(
+        "evt_review_exit",
+        "session_review",
+        EventType::SessionExited,
+    );
+    events.publish(
+        "evt_review_exit_duplicate",
+        "session_review",
+        EventType::SessionExited,
+    );
     wait_for_completed(&repository, "wf_chain").await;
 
     let mut session_ids = Vec::new();
@@ -461,8 +493,16 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
     .execute(&pool)
     .await
     .expect("persist confirmed Session exit fixture");
-    events.publish_session_exit("evt_lagged_exit", "session_lagged");
-    events.publish_session_exit("evt_overwriting_notification", "session_other");
+    events.publish(
+        "evt_lagged_exit",
+        "session_lagged",
+        EventType::SessionExited,
+    );
+    events.publish(
+        "evt_overwriting_notification",
+        "session_other",
+        EventType::SessionExited,
+    );
 
     wait_for_completed(&repository, "wf_lagged").await;
 }

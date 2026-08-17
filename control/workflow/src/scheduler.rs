@@ -270,26 +270,8 @@ where
         )
         .await?;
         self.repository
-            .record_node_submission(&node.node_id)
+            .record_node_submission(&node.node_id, &request.runtime_instance_id)
             .await?;
-        if let Err(error) = self
-            .exits
-            .request_graceful_exit(&request.session_id, &request.runtime_instance_id)
-            .await
-        {
-            let failure_message = format!(
-                "graceful exit request failed for Workflow Session {}: {error}",
-                request.session_id
-            );
-            self.repository
-                .fail_workflow(
-                    &workflow.workflow_id,
-                    &Uuid::now_v7().to_string(),
-                    &failure_message,
-                )
-                .await?;
-            return Err(error);
-        }
         Ok(())
     }
 

@@ -351,6 +351,8 @@ mod tests {
             execution_profile_version: None,
             session_id: session_id.map(str::to_string),
             submitted_at: submitted.then(|| "2026-08-14T00:00:30Z".to_string()),
+            submitted_runtime_instance_id: submitted.then(|| "rtinst_test".to_string()),
+            exit_request_started_at: None,
             created_at: "2026-08-14T00:00:00Z".to_string(),
         }
     }

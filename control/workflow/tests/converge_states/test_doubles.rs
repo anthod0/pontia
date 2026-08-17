@@ -130,12 +130,17 @@ impl TestAgentEvents {
     }
 
     pub(super) fn publish(&self, session_id: &str, event_type: EventType) {
+        let source = if event_type.is_turn_event() {
+            EventSource::AgentAdapter
+        } else {
+            EventSource::AgentClient
+        };
         self.sender
             .send(DomainEvent::new(
                 format!("evt_{event_type}"),
                 session_id.to_string(),
                 Some("turn_root".to_string()),
-                EventSource::AgentClient,
+                source,
                 "pi".to_string(),
                 event_type,
                 json!({ "runtime_instance_id": format!("runtime_{session_id}") }),

@@ -19,10 +19,19 @@ enum AgentTerminal {
 
 impl AgentTerminal {
     fn from_event(event: &DomainEvent, session_id: &str) -> Option<Self> {
-        if event.session_id != session_id || event.source != EventSource::AgentClient {
+        if event.session_id != session_id {
             return None;
         }
-        Self::from_event_type(event.event_type)
+        match (event.event_type, event.source) {
+            (
+                EventType::TurnCompleted | EventType::TurnFailed | EventType::TurnInterrupted,
+                EventSource::AgentAdapter,
+            ) => Self::from_event_type(event.event_type),
+            (EventType::SessionExited, EventSource::AgentClient | EventSource::RuntimeManager) => {
+                Some(Self::SessionExited)
+            }
+            _ => None,
+        }
     }
 
     fn from_event_type(event_type: EventType) -> Option<Self> {
@@ -98,7 +107,7 @@ where
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
                     match self
                         .persisted_events
-                        .latest_agent_client_terminal_event(&self.session_id)
+                        .latest_workflow_terminal_event(&self.session_id)
                         .await
                     {
                         Ok(Some(event)) => {
@@ -165,8 +174,8 @@ where
                     continue;
                 }
             }
-            let submitted = match self.repository.get_node(&self.node_id).await {
-                Ok(Some(node)) => node.submitted_at.is_some(),
+            let node = match self.repository.get_node(&self.node_id).await {
+                Ok(Some(node)) => node,
                 Ok(None) => {
                     tracing::error!(
                         workflow_id = %self.workflow.workflow_id,
@@ -185,7 +194,7 @@ where
                     continue;
                 }
             };
-            if !submitted {
+            if node.submitted_at.is_none() {
                 match terminal {
                     AgentTerminal::TurnCompleted => {
                         if let Err(error) = self
@@ -266,6 +275,59 @@ where
             }
 
             if terminal != AgentTerminal::SessionExited {
+                let Some(runtime_instance_id) = node.submitted_runtime_instance_id.as_deref()
+                else {
+                    tracing::error!(
+                        workflow_id = %self.workflow.workflow_id,
+                        node_id = %self.node_id,
+                        "submitted Workflow Agent Node has no fenced runtime identity"
+                    );
+                    break;
+                };
+                match self
+                    .repository
+                    .claim_node_exit_request(&self.node_id, runtime_instance_id)
+                    .await
+                {
+                    Ok(true) => {}
+                    Ok(false) => continue,
+                    Err(error) => {
+                        tracing::error!(
+                            workflow_id = %self.workflow.workflow_id,
+                            node_id = %self.node_id,
+                            %error,
+                            "failed to claim deferred graceful Session exit request"
+                        );
+                        continue;
+                    }
+                }
+                if let Err(error) = self
+                    .exits
+                    .request_graceful_exit(&self.session_id, runtime_instance_id)
+                    .await
+                {
+                    let failure_message = format!(
+                        "graceful exit request failed for Workflow Session {}: {error}",
+                        self.session_id
+                    );
+                    if let Err(transition_error) = self
+                        .repository
+                        .fail_workflow(
+                            &self.workflow.workflow_id,
+                            &Uuid::now_v7().to_string(),
+                            &failure_message,
+                        )
+                        .await
+                    {
+                        tracing::error!(
+                            workflow_id = %self.workflow.workflow_id,
+                            node_id = %self.node_id,
+                            %transition_error,
+                            "failed to persist deferred graceful exit failure"
+                        );
+                    }
+                    break;
+                }
                 continue;
             }
 

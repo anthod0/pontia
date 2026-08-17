@@ -117,7 +117,7 @@ impl SqliteEventRepository {
             != 0)
     }
 
-    pub async fn latest_agent_client_terminal_event(
+    pub async fn latest_workflow_terminal_event(
         &self,
         session_id: &str,
     ) -> Result<Option<EventRow>> {
@@ -125,12 +125,14 @@ impl SqliteEventRepository {
             r#"SELECT event_id, session_id, turn_id, source, event_type, occurred_at, payload
                FROM events
                WHERE session_id = ?
-                 AND source = 'agent_client'
-                 AND event_type IN (
-                     'turn.completed',
-                     'turn.failed',
-                     'turn.interrupted',
-                     'session.exited'
+                 AND (
+                     (source = 'agent_adapter' AND event_type IN (
+                         'turn.completed',
+                         'turn.failed',
+                         'turn.interrupted'
+                     ))
+                     OR (source IN ('agent_client', 'runtime_manager')
+                         AND event_type = 'session.exited')
                  )
                ORDER BY CASE event_type WHEN 'session.exited' THEN 0 ELSE 1 END, rowid DESC
                LIMIT 1"#,

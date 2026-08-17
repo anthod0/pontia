@@ -175,15 +175,35 @@ fn event(
     event_type: EventType,
     runtime_instance_id: &str,
 ) -> DomainEvent {
+    let source = if event_type.is_turn_event() {
+        EventSource::AgentAdapter
+    } else {
+        EventSource::AgentClient
+    };
     DomainEvent::new(
         event_id.to_string(),
         session_id.to_string(),
         None,
-        EventSource::AgentClient,
+        source,
         "pi".to_string(),
         event_type,
         json!({ "runtime_instance_id": runtime_instance_id }),
     )
+}
+
+async fn wait_for_exit_request(exits: &RecordingExitRequester) {
+    for _ in 0..50 {
+        if !exits
+            .requests
+            .lock()
+            .expect("exit requests lock")
+            .is_empty()
+        {
+            return;
+        }
+        tokio::task::yield_now().await;
+    }
+    panic!("workflow did not request graceful exit");
 }
 
 async fn wait_for_state(repository: &SqliteWorkflowRepository, expected: &str) {
@@ -242,13 +262,13 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         .expect("read handoff"),
         "Complete UTF-8 handoff: 完成\n"
     );
-    assert_eq!(
+    assert!(
         exits
             .requests
             .lock()
             .expect("exit requests lock")
-            .as_slice(),
-        &[("session_submit".to_string(), "rtinst_submit".to_string())]
+            .is_empty(),
+        "submission must not exit pi before turn.completed timeline enrichment"
     );
     let node = repository
         .get_node("node_submit")
@@ -272,6 +292,31 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         EventType::TurnCompleted,
         "rtinst_submit",
     ));
+    wait_for_exit_request(&exits).await;
+    assert_eq!(
+        exits
+            .requests
+            .lock()
+            .expect("exit requests lock")
+            .as_slice(),
+        &[("session_submit".to_string(), "rtinst_submit".to_string())]
+    );
+    let node = repository
+        .get_node("node_submit")
+        .await
+        .expect("load node after Turn completion")
+        .expect("node exists");
+    assert_eq!(
+        node.submitted_runtime_instance_id.as_deref(),
+        Some("rtinst_submit")
+    );
+    assert!(node.exit_request_started_at.is_some());
+    events.publish(event(
+        "evt_turn_completed_duplicate",
+        "session_submit",
+        EventType::TurnCompleted,
+        "rtinst_replacement",
+    ));
     events.publish(event(
         "evt_turn_failed_after_submission",
         "session_submit",
@@ -285,6 +330,15 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         "rtinst_submit",
     ));
     tokio::task::yield_now().await;
+    assert_eq!(
+        exits
+            .requests
+            .lock()
+            .expect("exit requests lock")
+            .as_slice(),
+        &[("session_submit".to_string(), "rtinst_submit".to_string())],
+        "terminal duplicates must not request exit again or target a replacement runtime"
+    );
     assert_eq!(
         repository
             .get_workflow("wf_submit")
@@ -312,14 +366,14 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         "running"
     );
 
-    let mut unconfirmed_exit = event(
-        "evt_unconfirmed_session_exited",
+    let mut unauthorized_exit = event(
+        "evt_unauthorized_session_exited",
         "session_submit",
         EventType::SessionExited,
         "rtinst_submit",
     );
-    unconfirmed_exit.source = EventSource::RuntimeManager;
-    events.publish(unconfirmed_exit);
+    unauthorized_exit.source = EventSource::ExternalApi;
+    events.publish(unauthorized_exit);
     tokio::task::yield_now().await;
     assert_eq!(
         repository
@@ -331,12 +385,14 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         "running"
     );
 
-    events.publish(event(
+    let mut runtime_observed_exit = event(
         "evt_session_exited",
         "session_submit",
         EventType::SessionExited,
         "rtinst_submit",
-    ));
+    );
+    runtime_observed_exit.source = EventSource::RuntimeManager;
+    events.publish(runtime_observed_exit);
     wait_for_state(&repository, "completed").await;
 
     let workflow = repository

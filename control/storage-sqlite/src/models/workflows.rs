@@ -26,6 +26,8 @@ pub struct WorkflowNodeRow {
     pub execution_profile_version: Option<String>,
     pub session_id: Option<String>,
     pub submitted_at: Option<String>,
+    pub submitted_runtime_instance_id: Option<String>,
+    pub exit_request_started_at: Option<String>,
     pub created_at: String,
 }
 

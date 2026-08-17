@@ -60,84 +60,111 @@ async fn unsubmitted_failure_facts_fail_once_cleanup_once_and_never_start_a_chil
 }
 
 #[tokio::test]
-async fn submission_binding_and_exit_failures_fail_without_starting_a_child() {
-    for (workflow_id, exits, expected_message, expected_exit_requests) in [
-        (
-            "wf_missing_binding",
-            RecordingExitRequester::missing_runtime_binding(),
-            "runtime binding",
-            0,
-        ),
-        (
-            "wf_exit_failure",
-            RecordingExitRequester::failing_request(),
-            "graceful exit",
-            1,
-        ),
-    ] {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let pool = test_pool(&temp.path().join(format!("{workflow_id}.db"))).await;
-        let repository = SqliteWorkflowRepository::new(pool.clone());
-        seed_linear_workflow(&repository, workflow_id, "[]", true).await;
-        let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
-        let scheduler_task_owner = Arc::downgrade(&sessions.requests);
-        let events = TestAgentEvents::new();
-        let scheduler = WorkflowScheduler::with_services(
-            pool,
-            sessions.clone(),
-            exits.clone(),
-            events.clone(),
-            temp.path().join("pontia-home"),
-        );
-        scheduler.start(workflow_id).await.expect("start workflow");
+async fn submission_binding_failure_fails_without_starting_a_child() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let pool = test_pool(&temp.path().join("missing-binding.db")).await;
+    let repository = SqliteWorkflowRepository::new(pool.clone());
+    seed_linear_workflow(&repository, "wf_missing_binding", "[]", true).await;
+    let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
+    let exits = RecordingExitRequester::missing_runtime_binding();
+    let scheduler = WorkflowScheduler::with_services(
+        pool,
+        sessions.clone(),
+        exits.clone(),
+        TestAgentEvents::new(),
+        temp.path().join("pontia-home"),
+    );
+    scheduler
+        .start("wf_missing_binding")
+        .await
+        .expect("start workflow");
 
-        let error = scheduler
-            .submit(SubmitWorkflowNodeRequest {
-                session_id: "session_root".to_string(),
-                runtime_instance_id: "runtime_session_root".to_string(),
-                output: "root.md".to_string(),
-                content: "root output".to_string(),
-            })
-            .await
-            .expect_err("submission orchestration must fail");
-
-        let failure_message =
-            assert_transition(&repository, workflow_id, "failed", "workflow.failed")
-                .await
-                .expect("failure message");
-        assert!(
-            failure_message.contains(expected_message),
-            "{failure_message}; {error}"
-        );
-        assert_eq!(
-            sessions
-                .requests
-                .lock()
-                .expect("session requests lock")
-                .len(),
-            1
-        );
-        assert_eq!(
-            exits.requests.lock().expect("exit requests lock").len(),
-            expected_exit_requests
-        );
-        assert!(
-            repository
-                .get_node(&format!("{workflow_id}_child"))
-                .await
-                .expect("load child")
-                .expect("child exists")
-                .session_id
-                .is_none()
-        );
-        drop(scheduler);
-        drop(sessions);
-        tokio::time::timeout(Duration::from_secs(2), async {
-            while scheduler_task_owner.upgrade().is_some() {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
+    let error = scheduler
+        .submit(SubmitWorkflowNodeRequest {
+            session_id: "session_root".to_string(),
+            runtime_instance_id: "runtime_session_root".to_string(),
+            output: "root.md".to_string(),
+            content: "root output".to_string(),
         })
         .await
-        .expect("failed Workflow Scheduler task should end without another Agent fact");
-    }
+        .expect_err("submission without a runtime binding must fail");
+
+    let failure_message = assert_transition(
+        &repository,
+        "wf_missing_binding",
+        "failed",
+        "workflow.failed",
+    )
+    .await
+    .expect("failure message");
+    assert!(failure_message.contains("runtime binding"), "{error}");
+    assert!(
+        exits
+            .requests
+            .lock()
+            .expect("exit requests lock")
+            .is_empty()
+    );
+    assert_eq!(sessions.requests.lock().expect("requests lock").len(), 1);
+}
+
+#[tokio::test]
+async fn deferred_exit_failure_fails_without_starting_a_child() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let pool = test_pool(&temp.path().join("exit-failure.db")).await;
+    let repository = SqliteWorkflowRepository::new(pool.clone());
+    seed_linear_workflow(&repository, "wf_exit_failure", "[]", true).await;
+    let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
+    let scheduler_task_owner = Arc::downgrade(&sessions.requests);
+    let exits = RecordingExitRequester::failing_request();
+    let events = TestAgentEvents::new();
+    let scheduler = WorkflowScheduler::with_services(
+        pool,
+        sessions.clone(),
+        exits.clone(),
+        events.clone(),
+        temp.path().join("pontia-home"),
+    );
+    scheduler
+        .start("wf_exit_failure")
+        .await
+        .expect("start workflow");
+    scheduler
+        .submit(SubmitWorkflowNodeRequest {
+            session_id: "session_root".to_string(),
+            runtime_instance_id: "runtime_session_root".to_string(),
+            output: "root.md".to_string(),
+            content: "root output".to_string(),
+        })
+        .await
+        .expect("submission records output before Turn completion");
+
+    events.publish("session_root", EventType::TurnCompleted);
+    wait_for_state(&repository, "wf_exit_failure", "failed").await;
+
+    let failure_message =
+        assert_transition(&repository, "wf_exit_failure", "failed", "workflow.failed")
+            .await
+            .expect("failure message");
+    assert!(failure_message.contains("graceful exit"));
+    assert_eq!(exits.requests.lock().expect("exit requests lock").len(), 1);
+    assert_eq!(sessions.requests.lock().expect("requests lock").len(), 1);
+    assert!(
+        repository
+            .get_node("wf_exit_failure_child")
+            .await
+            .expect("load child")
+            .expect("child exists")
+            .session_id
+            .is_none()
+    );
+    drop(scheduler);
+    drop(sessions);
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while scheduler_task_owner.upgrade().is_some() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("failed Workflow Scheduler task should end");
 }

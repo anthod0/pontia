@@ -140,10 +140,9 @@ async fn post_submission_with_auth(
 }
 
 #[tokio::test]
-async fn internal_workflow_submission_saves_handoff_and_requests_exit() {
-    let mut app = TestApp::new().await;
+async fn internal_workflow_submission_saves_handoff_without_requesting_exit() {
+    let app = TestApp::new().await;
     seed_running_workflow(&app).await;
-    install_successful_tmux(&mut app);
 
     let (status, body) = post_submission(
         &app,

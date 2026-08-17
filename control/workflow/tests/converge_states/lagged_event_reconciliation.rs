@@ -34,7 +34,7 @@ async fn lagged_notifications_reconcile_persisted_turn_terminal_facts() {
         sqlx::query(
             r#"INSERT INTO events
                (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload)
-               VALUES (?, 'session_root', 'turn_root', 'agent_client', 'pi', ?,
+               VALUES (?, 'session_root', 'turn_root', 'agent_adapter', 'pi', ?,
                        '2026-07-31T00:00:00Z',
                        '{"runtime_instance_id":"runtime_session_root"}')"#,
         )
