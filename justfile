@@ -2,16 +2,19 @@ default:
     just --list
 
 dev:
-    ./scripts/dev-dashboard.sh
+    ./scripts/dev.sh
 
-backend:
+dev-backend:
     SQLX_OFFLINE=true PONTIA_EXTERNAL_API_TOKEN=${PONTIA_EXTERNAL_API_TOKEN:-dev-token} cargo run -p pontiad
 
-dashboard:
+dev-dashboard:
     pnpm --dir=apps/dashboard run dev
 
-website:
+dev-website:
     pnpm --dir=apps/website run dev
+
+install-local:
+    ./scripts/install-local.sh
 
 fmt:
     cargo fmt

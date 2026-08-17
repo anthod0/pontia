@@ -130,15 +130,33 @@ ignore_globs = [
 
 Environment-variable overrides are also supported. See [`.env.example`](.env.example) for a shell environment template; Pontia does not load `.env` files itself.
 
+### Install a local build
+
+Build the Dashboard and release binaries from this checkout, then install them beneath `$HOME/.local`:
+
+```bash
+just install-local
+```
+
+The command installs `pontia`, `pontiad`, and `pontiactl` into `$HOME/.local/bin`, installs the Dashboard into `$HOME/.local/share/pontia/dashboard`, and creates `$PONTIA_HOME/config.toml` with that Dashboard source when no config exists. Existing configuration is never overwritten. Set an absolute `PREFIX` or `PONTIA_HOME` to override the default locations.
+
+Installation does not start Pontia. Start it explicitly when ready:
+
+```bash
+pontia up
+```
+
 ### Run the daemon from source
 
-`pontiad` is the long-running Control Plane process. It runs in the foreground so a service manager can supervise it; `just backend` is the development entry point.
+`pontiad` is the long-running Control Plane process. It runs in the foreground so a service manager can supervise it; `just dev-backend` starts it from source for development.
 
 ```bash
 # Optional: omit this to use $HOME/.pontia.
 export PONTIA_HOME=/absolute/path/to/pontia-home
-just backend
+just dev-backend
 ```
+
+Use `just dev` to run the backend and Dashboard development server together, or `just dev-dashboard` and `just dev-website` to run either frontend separately.
 
 For an installed build, use the `pontia` lifecycle CLI. It manages a per-user systemd service on Linux or a per-user launchd LaunchAgent on macOS; `pontiad` remains a foreground daemon under the service manager.
 
