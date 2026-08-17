@@ -9,6 +9,7 @@ members = [
     "control/application",
     "control/http",
     "control/pontiactl",
+    "control/pontia",
     "control/workflow",
 ]
 default-members = ["control/pontiad"]

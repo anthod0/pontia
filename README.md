@@ -140,6 +140,18 @@ export PONTIA_HOME=/absolute/path/to/pontia-home
 just backend
 ```
 
+For an installed build, use the `pontia` lifecycle CLI. It manages a per-user systemd service on Linux or a per-user launchd LaunchAgent on macOS; `pontiad` remains a foreground daemon under the service manager.
+
+```bash
+# Optional: pontia up captures the effective absolute home in the service definition.
+export PONTIA_HOME=/absolute/path/to/pontia-home
+pontia up
+pontia status
+pontia down
+```
+
+Linux systems without systemd must supervise `pontiad` with another service manager such as OpenRC, runit, or s6.
+
 Check health:
 
 ```bash
