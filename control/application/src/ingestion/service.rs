@@ -7,8 +7,8 @@ use sqlx::SqlitePool;
 
 use pontia_core::{
     domain::{
-        DomainEvent, EventType, ProjectionState, ReportedEvent, SessionProjection, TurnProjection,
-        TurnTopology,
+        DomainEvent, EventType, ProjectionState, ReportedEvent, SessionProjection, SessionState,
+        TurnProjection, TurnTopology,
     },
     error::{Error, Result},
 };
@@ -54,8 +54,21 @@ impl EventIngestService {
     }
 
     pub async fn ingest_pontia_event(&self, event: PontiaEvent) -> Result<EventIngestResult> {
-        self.ingest_domain_event(event.into_reported_event().into(), None, false)
+        self.ingest_domain_event(event.into_reported_event().into(), None, false, None)
             .await
+            .map(|result| result.expect("unconditional event ingestion returns a result"))
+    }
+
+    pub(crate) async fn ingest_startup_timeout_event(&self, event: PontiaEvent) -> Result<bool> {
+        Ok(self
+            .ingest_domain_event(
+                event.into_reported_event().into(),
+                None,
+                false,
+                Some(SessionState::Starting),
+            )
+            .await?
+            .is_some())
     }
 
     /// Ingests a Pontia runtime observation while fencing it to the currently
@@ -64,8 +77,9 @@ impl EventIngestService {
         &self,
         event: PontiaEvent,
     ) -> Result<EventIngestResult> {
-        self.ingest_domain_event(event.into_reported_event().into(), None, true)
+        self.ingest_domain_event(event.into_reported_event().into(), None, true, None)
             .await
+            .map(|result| result.expect("unconditional event ingestion returns a result"))
     }
 
     /// Ingests a fact supplied by an explicit agent-client adapter.
@@ -74,7 +88,9 @@ impl EventIngestService {
     /// fencing. HTTP reports must use [`Self::ingest_confirmed_event`], while
     /// Pontia-owned callers must use [`Self::ingest_pontia_event`].
     pub async fn ingest_reported_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
-        self.ingest_domain_event(event.into(), None, false).await
+        self.ingest_domain_event(event.into(), None, false, None)
+            .await
+            .map(|result| result.expect("unconditional event ingestion returns a result"))
     }
 
     pub(crate) async fn ingest_in_process_ready_event(
@@ -97,7 +113,9 @@ impl EventIngestService {
     }
 
     pub async fn ingest_confirmed_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
-        self.ingest_domain_event(event.into(), None, true).await
+        self.ingest_domain_event(event.into(), None, true, None)
+            .await
+            .map(|result| result.expect("unconditional event ingestion returns a result"))
     }
 
     pub async fn ingest_event_with_topology(
@@ -107,7 +125,9 @@ impl EventIngestService {
     ) -> Result<EventIngestResult> {
         let mut event: DomainEvent = event.into();
         event.topology = Some(topology);
-        self.ingest_domain_event(event, None, false).await
+        self.ingest_domain_event(event, None, false, None)
+            .await
+            .map(|result| result.expect("unconditional event ingestion returns a result"))
     }
 
     pub(crate) async fn ingest_pontia_event_with_agent_binding(
@@ -115,8 +135,14 @@ impl EventIngestService {
         event: PontiaEvent,
         binding: UpsertAgentBindingRequest,
     ) -> Result<EventIngestResult> {
-        self.ingest_domain_event(event.into_reported_event().into(), Some(binding), false)
-            .await
+        self.ingest_domain_event(
+            event.into_reported_event().into(),
+            Some(binding),
+            false,
+            None,
+        )
+        .await
+        .map(|result| result.expect("unconditional event ingestion returns a result"))
     }
 
     async fn ingest_domain_event(
@@ -124,7 +150,8 @@ impl EventIngestService {
         mut event: DomainEvent,
         initial_agent_binding: Option<UpsertAgentBindingRequest>,
         enforce_runtime_fence: bool,
-    ) -> Result<EventIngestResult> {
+        expected_session_state: Option<SessionState>,
+    ) -> Result<Option<EventIngestResult>> {
         if event.event_type.is_turn_event() && event.turn_id.is_none() {
             return Err(Error::Domain(format!(
                 "{} must carry turn_id",
@@ -136,14 +163,14 @@ impl EventIngestService {
             .await?
         {
             clear_exited_session_tmux_markers(&self.pool, &event, false).await;
-            return Ok(EventIngestResult {
+            return Ok(Some(EventIngestResult {
                 accepted: true,
                 duplicate: true,
                 event_id: event.event_id,
                 session_id: event.session_id,
                 turn_id: event.turn_id,
                 state_version: existing_version,
-            });
+            }));
         }
 
         enrich_timeline_boundary(&self.pool, &mut event).await;
@@ -185,6 +212,13 @@ impl EventIngestService {
                 .into_iter()
                 .map(session_from_row)
                 .collect::<Result<Vec<_>>>()?;
+        if let Some(expected_state) = expected_session_state
+            && !sessions
+                .first()
+                .is_some_and(|session| session.state == expected_state)
+        {
+            return Ok(None);
+        }
         let turns = SqliteTurnRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
             .await?
             .into_iter()
@@ -232,14 +266,14 @@ impl EventIngestService {
                 .await?;
         }
 
-        Ok(EventIngestResult {
+        Ok(Some(EventIngestResult {
             accepted: true,
             duplicate: false,
             event_id: event.event_id,
             session_id: event.session_id,
             turn_id: event.turn_id,
             state_version,
-        })
+        }))
     }
 
     pub async fn ensure_confirmed_event_matches_session_boundary(

@@ -22,6 +22,14 @@ pub struct SessionProjectionUpsertRecord {
     pub metadata: String,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct StartingSessionRow {
+    pub session_id: String,
+    pub client_type: String,
+    pub runtime_instance_id: Option<String>,
+    pub runtime_handle: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SessionListOptions {
     pub include_archived: bool,
@@ -181,6 +189,28 @@ impl SqliteSessionRepository {
         )
         .bind(session_id)
         .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn starting_sessions_before(&self, cutoff: &str) -> Result<Vec<StartingSessionRow>> {
+        Ok(sqlx::query_as::<_, StartingSessionRow>(
+            r#"SELECT s.session_id, s.client_type,
+                      r.runtime_instance_id, r.runtime_handle
+               FROM sessions s
+               LEFT JOIN runtime_bindings r ON r.session_id = s.session_id
+               WHERE s.state = 'starting'
+                 AND (
+                     SELECT e.created_at
+                     FROM events e
+                     WHERE e.session_id = s.session_id
+                       AND e.event_type IN ('session.starting', 'session.resuming')
+                     ORDER BY e.rowid DESC
+                     LIMIT 1
+                 ) <= ?
+               ORDER BY s.session_id"#,
+        )
+        .bind(cutoff)
+        .fetch_all(&self.pool)
         .await?)
     }
 

@@ -9,7 +9,7 @@ use tokio::time::{Instant, sleep};
 
 use pontia_core::error::{Error, Result};
 
-const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_READY_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 #[derive(Debug, Clone)]
