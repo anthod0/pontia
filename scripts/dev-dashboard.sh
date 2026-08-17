@@ -52,14 +52,14 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-echo "Starting pontia backend with cargo run..."
+echo "Starting pontiad backend with cargo run..."
 if [[ -n "${PONTIA_HOME:-}" ]]; then
   echo "Using PONTIA_HOME=$PONTIA_HOME"
 else
   echo "Using the default Pontia home"
 fi
 echo "Using PONTIA_EXTERNAL_API_TOKEN=$PONTIA_EXTERNAL_API_TOKEN"
-cargo run &
+cargo run -p pontiad &
 backend_pid=$!
 
 echo "Starting dashboard Vite dev server..."

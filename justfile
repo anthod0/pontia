@@ -5,7 +5,7 @@ dev:
     ./scripts/dev-dashboard.sh
 
 backend:
-    SQLX_OFFLINE=true PONTIA_EXTERNAL_API_TOKEN=${PONTIA_EXTERNAL_API_TOKEN:-dev-token} cargo run
+    SQLX_OFFLINE=true PONTIA_EXTERNAL_API_TOKEN=${PONTIA_EXTERNAL_API_TOKEN:-dev-token} cargo run -p pontiad
 
 dashboard:
     pnpm --dir=apps/dashboard run dev

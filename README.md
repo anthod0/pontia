@@ -130,7 +130,9 @@ ignore_globs = [
 
 Environment-variable overrides are also supported. See [`.env.example`](.env.example) for a shell environment template; Pontia does not load `.env` files itself.
 
-### Run the server
+### Run the daemon from source
+
+`pontiad` is the long-running Control Plane process. It runs in the foreground so a service manager can supervise it; `just backend` is the development entry point.
 
 ```bash
 # Optional: omit this to use $HOME/.pontia.

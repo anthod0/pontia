@@ -23,14 +23,14 @@ You can also run the script directly:
 ./scripts/dev-dashboard.sh
 ```
 
-This starts `cargo run` for the backend and the SvelteKit development server for the dashboard. Open <http://127.0.0.1:5173/dashboard/> during development for HMR updates.
+This starts `cargo run -p pontiad` for the backend and the SvelteKit development server for the dashboard. Open <http://127.0.0.1:5173/dashboard/> during development for HMR updates.
 
 The development server proxies `/external/*` to `http://127.0.0.1:8080`.
 
 If you prefer separate terminals, run:
 
 ```bash
-PONTIA_EXTERNAL_API_TOKEN=dev-token cargo run
+PONTIA_EXTERNAL_API_TOKEN=dev-token cargo run -p pontiad
 pnpm --dir=apps/dashboard run dev
 ```
 
@@ -38,7 +38,7 @@ pnpm --dir=apps/dashboard run dev
 
 ```bash
 pnpm --dir=apps/dashboard run build
-PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist PONTIA_EXTERNAL_API_TOKEN=dev-token cargo run
+PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist PONTIA_EXTERNAL_API_TOKEN=dev-token cargo run -p pontiad
 ```
 
 Open <http://127.0.0.1:8080/dashboard>.

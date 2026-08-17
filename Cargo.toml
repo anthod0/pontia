@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "control/pontia",
+    "control/pontiad",
     "control/core",
     "control/storage-sqlite",
     "control/agent-clients",
@@ -11,7 +11,7 @@ members = [
     "control/pontiactl",
     "control/workflow",
 ]
-default-members = ["control/pontia"]
+default-members = ["control/pontiad"]
 resolver = "2"
 
 [workspace.package]
