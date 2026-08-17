@@ -1,61 +1,50 @@
 # @pontia/pi-client-plugin
 
-First-party pi extension for connecting pi sessions to pontia.
+Connect Pi coding-agent sessions to Pontia.
 
 ## Requirements
 
-- A locally running pontia server
-- A workspace registered in pontia
-- pi CLI
-- A tmux pane (`TMUX` and `TMUX_PANE` must be available)
-- An absolute Pontia home, resolved from `PONTIA_HOME` or defaulting to `$HOME/.pontia`
+- [Pontia](https://pontia.dev/) running locally
+- Pi CLI
+- tmux
 
-## Install locally
-
-From the pontia repository root, register this package in pi's user-level settings:
+## Install
 
 ```bash
-pi install ./clients/pi
+pi install npm:@pontia/pi-client-plugin
 ```
 
-Pi records the local package path without copying it, so keep the repository path available while using the plugin. The user-level install makes the plugin available in every workspace; the extension remains a silent no-op when neither a valid `PONTIA_HOME` nor a valid `HOME` is available, outside a tmux pane, or outside an active workspace registered in Pontia.
+## Configure
 
-## Use with pontia
-
-For sessions started by pontia, configure the pi command in `$PONTIA_HOME/config.toml`:
+Set the Pi command in `$PONTIA_HOME/config.toml`:
 
 ```toml
 [runtime.pi]
 tui_command = "pi"
 ```
 
-Pontia appends the required `--approve` and native session identity arguments when it starts pi. The plugin is loaded from pi's user-level package settings rather than through a per-launch extension path.
-
-Pontia supplies a Session hint when it starts pi. Pi exposes that hint as its native `client_session_key`; the extension uses this key to identify and bind the Pontia Session, and the backend returns the canonical Runtime Instance ID. Tmux pane markers are not a Session identity source.
-
-A new manually started pi session inside tmux is not persisted in Pontia until its first prompt starts. An exited session with the same native key can reconnect, while a second TUI for a key already bound to a non-exited Session is ignored. After binding succeeds, Pontia writes `@pontia_session_id` and `@pontia_runtime_instance_id` to the pane for runtime management and clears both markers when the Session exits.
-
-Regardless of where the start command came from, run pi in a tmux pane and in an active workspace registered in pontia. Outside tmux the extension is a silent no-op. If pontia is unavailable or the workspace is not registered, the extension leaves the pi session running without pontia reporting.
+Then launch Pi from Pontia, or run it in a tmux pane inside a workspace registered with Pontia. The extension loads automatically.
 
 ## Troubleshooting
 
-The extension writes diagnostics beneath the resolved Pontia home:
+If a session does not appear in Pontia, verify that:
+
+- Pontia is running
+- the current workspace is registered with Pontia
+- Pi is running inside tmux
+
+Extension logs are available at:
 
 ```text
 ${PONTIA_HOME:-$HOME/.pontia}/state/pi-hook.log
 ```
 
-Follow the log while reproducing a problem:
+Follow the log while reproducing an issue:
 
 ```bash
 tail -f "${PONTIA_HOME:-$HOME/.pontia}/state/pi-hook.log"
 ```
 
-## Development
+## License
 
-From the repository root:
-
-```bash
-pnpm --dir clients/pi test
-pnpm --dir clients/pi typecheck
-```
+[Apache License 2.0](LICENSE)

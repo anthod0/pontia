@@ -1,9 +1,30 @@
 {
   "name": "@pontia/pi-client-plugin",
   "version": "0.1.0",
-  "private": true,
+  "description": "Pi extension that connects coding-agent sessions to Pontia.",
   "license": "Apache-2.0",
+  "author": {
+    "name": "anthod0",
+    "url": "https://github.com/anthod0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anthod0/pontia.git",
+    "directory": "clients/pi"
+  },
+  "homepage": "https://pontia.dev/",
+  "bugs": {
+    "url": "https://github.com/anthod0/pontia/issues"
+  },
   "type": "module",
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": ["pi-package", "pontia-client-plugin"],
   "scripts": {
     "test": "vitest run",
