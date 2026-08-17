@@ -21,6 +21,10 @@ If `AGENTS.local.md` exists, read it before making changes.
 - Run backend Cargo checks through `just` so SQLx uses the committed `.sqlx/` metadata in offline mode.
 - Commit `.sqlx/`. After changing SQLx query macros or SQLite migrations, run `just sqlx-prepare` and include the refreshed metadata.
 
+## Agent documentation
+
+- Current SQLite table, column, trigger, and index definitions: [`docs/database-schema.md`](docs/database-schema.md). When adding a migration, you must update this document in the same change.
+
 ## Coding style
 
 - Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
