@@ -197,9 +197,7 @@ fn classifies_an_unsupported_or_unavailable_current_source() {
 fn rejects_ranges_with_no_primary_user_entry_or_multiple_user_entries() {
     let cases = [
         (
-            concat!(
-                "{\"type\":\"message\",\"id\":\"assistant\",\"parentId\":null,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"orphan\"}]}}\n"
-            ),
+            "{\"type\":\"message\",\"id\":\"assistant\",\"parentId\":null,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"orphan\"}]}}\n",
             "assistant",
             false,
         ),

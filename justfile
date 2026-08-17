@@ -29,18 +29,28 @@ sqlx-prepare-check:
     ./scripts/sqlx-prepare.sh --check
 
 sqlx-check:
-    SQLX_OFFLINE=true cargo check --all-targets --all-features
+    SQLX_OFFLINE=true cargo check --workspace --all-targets --all-features
 
 clippy:
-    SQLX_OFFLINE=true cargo clippy --all-targets --all-features -- -D warnings
+    SQLX_OFFLINE=true cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 test:
-    SQLX_OFFLINE=true cargo test
+    SQLX_OFFLINE=true cargo test --workspace
 
 dashboard-check:
     pnpm --dir=apps/dashboard run check
 
+dashboard-test:
+    pnpm --dir=apps/dashboard run test
+
+pi-client-test:
+    pnpm --dir=clients/pi run test
+    pnpm --dir=clients/pi run typecheck
+
+claude-client-test:
+    pnpm --dir=clients/claude run test
+
 website-check:
     pnpm --dir=apps/website run check
 
-check: fmt-check sqlx-check clippy test dashboard-check website-check
+check: fmt-check sqlx-check clippy test dashboard-check dashboard-test pi-client-test claude-client-test website-check
