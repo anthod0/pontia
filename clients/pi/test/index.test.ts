@@ -106,7 +106,7 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
     fetch: fetchWithManagedBinding,
     env,
   });
-  return { handlers, commands, sendUserMessage, reported };
+  return { handlers, commands, sendUserMessage, reported, env };
 }
 
 describe("pontia pi extension lifecycle", () => {
@@ -657,6 +657,50 @@ describe("pontia pi extension lifecycle", () => {
 
     expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+  });
+
+  test("session_start uses PONTIA_HOME loaded after extension registration", async () => {
+    const root = await tempDir();
+    const workspace = await realpath(await tempDir());
+    const stableHome = join(root, ".pontia-stable");
+    await mkdir(stableHome, { recursive: true });
+    await writeFile(join(stableHome, "config.toml"), 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "stable-token"\n');
+
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
+        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      }
+      if (url === "http://127.0.0.1:18080/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_late_env") {
+        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+      }
+      if (url === "http://127.0.0.1:18080/internal/v1/runtime-bindings/upsert") {
+        return new Response(JSON.stringify({
+          session: { session_id: "sess_late_env" },
+          runtime: { runtime_instance_id: "rtinst_late_env", internal_event_url: "http://127.0.0.1:18080/internal/v1/events" },
+        }), { status: 200 });
+      }
+      return new Response("unexpected", { status: 500 });
+    });
+    const { handlers, reported, env } = install({
+      env: { HOME: root, PONTIA_HOME: join(root, ".pontia") },
+      fetch: fetchImpl as any,
+      loadContext: vi.fn(async () => ({
+        ok: false as const,
+        reason: "current turn claim unavailable",
+        logFile: "fallback/pi-hook.log",
+        silent: true,
+      })),
+    });
+
+    env.PONTIA_HOME = stableHome;
+    const sessionManager = { getSessionId: () => "pi_session_late_env", getCwd: () => workspace };
+    await handlers.session_start({ reason: "startup" }, { sessionManager });
+    await handlers.before_agent_start({ prompt: "first message", systemPrompt: "Base prompt" }, {});
+    await handlers.agent_start({}, { sessionManager });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
+    expect(reported[0]).toMatchObject({ session_id: "sess_late_env" });
   });
 
   test("agent_start does not claim a turn from tmux marker identity alone", async () => {

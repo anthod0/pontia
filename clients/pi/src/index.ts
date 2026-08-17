@@ -99,11 +99,11 @@ function topologyContextFromHookContext(ctx: unknown): PiTopologyContext | undef
 
 export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPiExtensionDependencies = {}): void {
   const sourceEnv = dependencies.env ?? process.env;
-  const pontiaHome = pontiaHomeFromEnv(sourceEnv);
-  if (!pontiaHome) return;
-  const env = { ...sourceEnv, PONTIA_HOME: pontiaHome };
-  if (!hasTmuxPaneEnvironment(env)) return;
-  const hookLogFile = defaultHookLogFile(pontiaHome);
+  if (!pontiaHomeFromEnv(sourceEnv) || !hasTmuxPaneEnvironment(sourceEnv)) return;
+  // Environment extensions may load PONTIA_HOME after extension registration.
+  const currentPontiaHome = () => pontiaHomeFromEnv(sourceEnv)!;
+  const currentEnv = () => ({ ...sourceEnv, PONTIA_HOME: currentPontiaHome() });
+  const currentHookLogFile = () => defaultHookLogFile(currentPontiaHome());
 
   const contextLoader = dependencies.loadContext ?? ((contextEnv, sessionContext) => loadTurnContext(contextEnv, { sessionContext }));
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
@@ -123,15 +123,15 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   async function confirmManagedPane(refresh = false): Promise<boolean> {
     if (managedPaneConfirmed && !refresh) return true;
-    managedPaneConfirmed = await isManagedPane(env);
+    managedPaneConfirmed = await isManagedPane(currentEnv());
     return managedPaneConfirmed;
   }
 
   async function currentManagedSessionContext(): Promise<SessionContext | undefined> {
     if (boundSessionContext) return boundSessionContext;
-    const runtimeIdentity = await loadManagedRuntime(env);
+    const runtimeIdentity = await loadManagedRuntime(currentEnv());
     if (!runtimeIdentity) return undefined;
-    const connection = await resolvePontiaConnection({ pontiaHome, fetch: fetchImpl });
+    const connection = await resolvePontiaConnection({ pontiaHome: currentPontiaHome(), fetch: fetchImpl });
     if (!connection?.internalEventUrl) return undefined;
     return {
       sessionId: runtimeIdentity.sessionId,
@@ -145,7 +145,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     description: "Replay a Pontia Inbox message from a historical Pi entry",
     handler: async (args, ctx) => {
       const inboxMessageId = args.trim();
-      const logFile = hookLogFile;
+      const logFile = currentHookLogFile();
       if (!/^msg_[^\s]+$/.test(inboxMessageId)) {
         await logDiagnostic(logFile, {
           level: "error",
@@ -165,7 +165,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         return;
       }
       const loaded = { logFile };
-      const connection = await resolvePontiaConnection({ pontiaHome });
+      const connection = await resolvePontiaConnection({ pontiaHome: currentPontiaHome() });
       if (!connection?.externalApiToken) {
         await logDiagnostic(loaded.logFile, {
           level: "error",
@@ -286,14 +286,14 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const currentSystemPrompt = typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
     try {
       const profilePrompt = await loadProfileSystemPrompt(
-        pontiaHome,
+        currentPontiaHome(),
         fetchImpl,
         boundSessionContext?.sessionId,
       );
       if (!profilePrompt) return { systemPrompt: currentSystemPrompt };
       return { systemPrompt: `${currentSystemPrompt}\n\n${profilePrompt}` };
     } catch (error) {
-      await logDiagnostic(hookLogFile, {
+      await logDiagnostic(currentHookLogFile(), {
         level: "warn",
         code: "system_prompt_append_failed",
         message: "failed to append pontia execution profile system prompt",
@@ -312,8 +312,10 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
       deferredManualSessionDetails = sessionDetails;
-      const logFile = hookLogFile;
+      const logFile = currentHookLogFile();
       let context: SessionContext | undefined;
+      const pontiaHome = currentPontiaHome();
+      const env = currentEnv();
 
       const workspaceActive = await isActiveRegisteredWorkspace(pontiaHome, fetchImpl, sessionDetails.clientCwd);
       if (workspaceActive !== true) {
@@ -378,7 +380,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       boundSessionContext = context;
       readyReported = reportAccepted(await makeReporter(logFile).report(context, buildSessionReadyEvent(context)));
     } catch (error) {
-      const logFile = hookLogFile;
+      const logFile = currentHookLogFile();
       await logDiagnostic(logFile, {
         level: "error",
         code: "unexpected_extension_exception",
@@ -394,11 +396,11 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
 
     try {
-      const logFile = hookLogFile;
+      const logFile = currentHookLogFile();
       if (!boundSessionContext) return;
       await makeReporter(logFile).report(boundSessionContext, buildSessionExitedEvent(boundSessionContext, reason));
     } catch (error) {
-      const logFile = hookLogFile;
+      const logFile = currentHookLogFile();
       await logDiagnostic(logFile, {
         level: "error",
         code: "unexpected_extension_exception",
@@ -413,7 +415,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const previousLeafId = leafIdFromHookContext(ctx);
     if (reportingDisabled) return;
     try {
-      const loaded = await contextLoader(env, boundSessionContext);
+      const loaded = await contextLoader(currentEnv(), boundSessionContext);
       let turnContext: TurnContext | undefined;
       let logFile: string;
       if (loaded.ok) {
@@ -434,6 +436,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
             pendingPrompt = undefined;
             return;
           }
+          const pontiaHome = currentPontiaHome();
           const workspaceActive = await isActiveRegisteredWorkspace(pontiaHome, fetchImpl, sessionDetails.clientCwd);
           if (workspaceActive !== true) {
             reportingDisabled = true;
@@ -449,7 +452,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
             pendingPrompt = undefined;
             return;
           }
-          boundSessionContext = await bindSession(pontiaHome, env, fetchImpl, sessionDetails);
+          boundSessionContext = await bindSession(pontiaHome, currentEnv(), fetchImpl, sessionDetails);
           if (boundSessionContext && !readyReported) {
             readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
           }
@@ -501,7 +504,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     } catch (error) {
       pendingPrompt = undefined;
       activeTurn = undefined;
-      const logFile = hookLogFile;
+      const logFile = currentHookLogFile();
       await logDiagnostic(logFile, {
         level: "error",
         code: "unexpected_extension_exception",
