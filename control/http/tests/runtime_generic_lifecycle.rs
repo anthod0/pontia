@@ -56,14 +56,26 @@ async fn request(
     (status, body)
 }
 
-async fn binding_metadata(state: &AppState, session_id: &str) -> Value {
-    let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
-        .bind(session_id)
-        .fetch_one(&state.db())
-        .await
-        .expect("runtime binding");
-    let metadata: String = row.try_get("metadata").expect("metadata");
-    serde_json::from_str(&metadata).expect("metadata json")
+async fn binding_fields(state: &AppState, session_id: &str) -> Value {
+    let row = sqlx::query(
+        r#"SELECT r.runtime_kind, r.runtime_instance_id, r.started_at, r.restart_count,
+                  s.handle, s.role
+           FROM runtime_bindings r
+           JOIN sessions s ON s.session_id = r.session_id
+           WHERE r.session_id = ?"#,
+    )
+    .bind(session_id)
+    .fetch_one(&state.db())
+    .await
+    .expect("runtime binding");
+    serde_json::json!({
+        "backend": row.get::<String, _>("runtime_kind"),
+        "runtime_instance_id": row.get::<Option<String>, _>("runtime_instance_id"),
+        "started_at": row.get::<Option<String>, _>("started_at"),
+        "restart_count": row.get::<i64, _>("restart_count"),
+        "handle": row.get::<Option<String>, _>("handle"),
+        "role": row.get::<Option<String>, _>("role"),
+    })
 }
 
 async fn create_session_with_body(state: AppState, body: Value) -> String {
@@ -106,7 +118,7 @@ async fn generic_runtime_handle_includes_handle_role_and_short_session_id() {
         }),
     )
     .await;
-    let metadata = binding_metadata(&state, &session_id).await;
+    let metadata = binding_fields(&state, &session_id).await;
     let runtime_handle = scope.runtime_handle(&state, &session_id).await;
     let id_body = session_id.rsplit('_').next().unwrap_or(&session_id);
     let short_id = id_body[id_body.len() - 8..].to_string();
@@ -127,7 +139,7 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
     let state = test_state("generic_restart").await;
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
-    let first = binding_metadata(&state, &session_id).await;
+    let first = binding_fields(&state, &session_id).await;
     let runtime_handle = scope.runtime_handle(&state, &session_id).await;
     assert!(scope.is_runtime_alive(&runtime_handle));
 
@@ -138,7 +150,7 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
         None,
     )
     .await;
-    let second = binding_metadata(&state, &session_id).await;
+    let second = binding_fields(&state, &session_id).await;
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["data"]["session"]["state"], "idle");

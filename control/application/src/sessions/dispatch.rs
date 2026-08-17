@@ -49,13 +49,10 @@ impl SessionCommandService {
             .wait_until_bound_and_ready(session_id, client_type)
             .await;
         let dispatch_result = match readiness {
-            Ok(runtime_instance_id) if turn_context == TurnContextBehavior::InternalApiClaim => {
-                let mut metadata = runtime.metadata.clone();
-                metadata["runtime_instance_id"] = json!(runtime_instance_id);
+            Ok(_) if turn_context == TurnContextBehavior::InternalApiClaim => {
                 store_client_current_turn_context(
                     self.pool.clone(),
                     session_id,
-                    &metadata,
                     &agent_input,
                     client_type,
                     None,

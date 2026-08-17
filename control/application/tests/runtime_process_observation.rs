@@ -50,15 +50,15 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
     .expect("insert session");
     sqlx::query(
         r#"INSERT INTO runtime_bindings (
-               session_id, runtime_kind, runtime_instance_id,
-               tmux_socket_path, tmux_pane_id, metadata
-           ) VALUES (?, 'pi_tui', ?, ?, ?, ?)"#,
+               session_id, runtime_kind, runtime_instance_id, binding_state,
+               tmux_socket_path, tmux_pane_id, process_fingerprint
+           ) VALUES (?, 'pi_tui', ?, 'confirmed', ?, ?, ?)"#,
     )
     .bind("sess_observed")
     .bind("rtinst_observed")
     .bind(&socket_path)
     .bind(&pane_id)
-    .bind(json!({ "tmux_process_fingerprint": fingerprint }).to_string())
+    .bind(json!(fingerprint).to_string())
     .execute(&db)
     .await
     .expect("insert binding");
@@ -107,9 +107,9 @@ async fn active_tmux_session_without_a_fingerprint_exits_immediately() {
     .expect("insert session");
     sqlx::query(
         r#"INSERT INTO runtime_bindings (
-               session_id, runtime_kind, runtime_instance_id,
-               tmux_socket_path, tmux_pane_id, metadata
-           ) VALUES (?, 'pi_tui', ?, ?, ?, '{}')"#,
+               session_id, runtime_kind, runtime_instance_id, binding_state,
+               tmux_socket_path, tmux_pane_id
+           ) VALUES (?, 'pi_tui', ?, 'confirmed', ?, ?)"#,
     )
     .bind("sess_without_fingerprint")
     .bind("rtinst_without_fingerprint")

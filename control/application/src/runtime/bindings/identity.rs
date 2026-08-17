@@ -57,7 +57,7 @@ impl RuntimeBindingUpsertService {
                  AND a.id IS NULL
                  AND r.tmux_socket_path = ?
                  AND r.tmux_pane_id = ?
-                 AND COALESCE(json_extract(r.metadata, '$.binding_confirmed'), 0) = 0"#,
+                 AND r.binding_state = 'provisioned'"#,
         )
         .bind(&request.client_type)
         .bind(socket_path)
@@ -86,7 +86,7 @@ impl RuntimeBindingUpsertService {
                WHERE session_id = ?
                  AND tmux_socket_path = ?
                  AND tmux_pane_id = ?
-                 AND COALESCE(json_extract(metadata, '$.binding_confirmed'), 0) = 0"#,
+                 AND binding_state = 'provisioned'"#,
         )
         .bind(session_id)
         .bind(socket_path)

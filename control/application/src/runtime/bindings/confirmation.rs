@@ -5,14 +5,14 @@ use pontia_core::{
 };
 use pontia_runtime::{GenericRuntimeManager, configured_internal_event_url, pontia_log_paths};
 use pontia_storage_sqlite::repositories::runtime_bindings::{
-    RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository,
+    RuntimeBindingConfirmationRecord, SqliteRuntimeBindingRepository,
 };
 use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use super::{
     RuntimeBindingUpsertRequest,
-    metadata::{agent_binding_metadata, binding_metadata},
+    metadata::{adapter_details, agent_binding_metadata, runtime_diagnostics},
     ownership::fence_runtime_binding_write,
     request::non_empty,
     service::RuntimeBindingUpsertService,
@@ -77,19 +77,7 @@ impl RuntimeBindingUpsertService {
                     .await?
             }
         };
-        let mut confirmed_metadata = binding_metadata(
-            request,
-            &workspace.canonical_path,
-            &internal_event_url,
-            &log_paths.log_dir.display().to_string(),
-            &log_paths.runtime_log.display().to_string(),
-            hook_log_metadata_display
-                .as_ref()
-                .map(|(metadata_key, path)| (*metadata_key, path.as_str())),
-            &capabilities,
-        );
-        confirmed_metadata["tmux_process_fingerprint"] = Value::Null;
-        if let (Some(socket_path), Some(pane_id), Some(tmux_runtime)) = (
+        let process_fingerprint = if let (Some(socket_path), Some(pane_id), Some(tmux_runtime)) = (
             tmux_socket_path.as_deref(),
             tmux_pane_id.as_deref(),
             client_spec.tmux_runtime(),
@@ -99,9 +87,7 @@ impl RuntimeBindingUpsertService {
                 pane_id,
                 tmux_runtime.process_names,
             ) {
-                Some(fingerprint) => {
-                    confirmed_metadata["tmux_process_fingerprint"] = json!(fingerprint);
-                }
+                Some(fingerprint) => Some(serde_json::to_string(&fingerprint)?),
                 None => {
                     tracing::warn!(
                         session_id = %session_id,
@@ -109,9 +95,12 @@ impl RuntimeBindingUpsertService {
                         pane_id,
                         "could not capture agent process fingerprint for tmux runtime binding"
                     );
+                    None
                 }
             }
-        }
+        } else {
+            None
+        };
         let mut tx = self.pool.begin().await?;
         fence_runtime_binding_write(
             &mut tx,
@@ -121,33 +110,29 @@ impl RuntimeBindingUpsertService {
         .await?;
         let runtime_instance_id =
             requested_runtime_instance_id.unwrap_or_else(|| new_runtime_instance_id().to_string());
-        confirmed_metadata["runtime_instance_id"] = json!(runtime_instance_id);
-        confirmed_metadata["binding_confirmed"] = json!(true);
-        let mut metadata = SqliteRuntimeBindingRepository::metadata_in_tx(&mut tx, session_id)
-            .await?
-            .map(|metadata| serde_json::from_str::<Value>(&metadata))
-            .transpose()?
-            .unwrap_or_else(|| json!({}));
-        if let (Some(existing), Some(confirmed)) =
-            (metadata.as_object_mut(), confirmed_metadata.as_object())
-        {
-            existing.extend(confirmed.clone());
-        } else {
-            metadata = confirmed_metadata;
-        }
-
-        SqliteRuntimeBindingRepository::upsert_binding_in_tx(
+        let diagnostics = runtime_diagnostics(
+            &log_paths.log_dir.display().to_string(),
+            &log_paths.runtime_log.display().to_string(),
+            hook_log_metadata_display
+                .as_ref()
+                .map(|(metadata_key, path)| (*metadata_key, path.as_str())),
+        );
+        SqliteRuntimeBindingRepository::confirm_binding_in_tx(
             &mut tx,
-            RuntimeBindingUpsertRecord {
+            RuntimeBindingConfirmationRecord {
                 session_id: session_id.to_string(),
                 runtime_kind: runtime_kind.to_string(),
-                runtime_instance_id: Some(runtime_instance_id.clone()),
+                runtime_instance_id: runtime_instance_id.clone(),
                 start_command: non_empty(request.start_command.as_deref()),
-                launch_cwd: Some(workspace.canonical_path.clone()),
-                last_seen_at: Some(last_seen_at),
+                launch_cwd: workspace.canonical_path.clone(),
+                internal_event_url: internal_event_url.clone(),
+                last_seen_at,
                 tmux_socket_path: tmux_socket_path.clone(),
                 tmux_pane_id: tmux_pane_id.clone(),
-                metadata: serde_json::to_string(&metadata)?,
+                process_fingerprint,
+                capabilities: serde_json::to_string(&capabilities)?,
+                diagnostics: serde_json::to_string(&diagnostics)?,
+                adapter_details: serde_json::to_string(&adapter_details(request))?,
             },
         )
         .await?;

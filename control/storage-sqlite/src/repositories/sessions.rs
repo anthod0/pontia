@@ -1,6 +1,6 @@
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
-use crate::models::sessions::{RuntimeBindingMetadataRow, SessionProjectionRow, SessionRow};
+use crate::models::sessions::{RuntimeBindingCapabilitiesRow, SessionProjectionRow, SessionRow};
 
 use pontia_core::Result;
 
@@ -193,12 +193,12 @@ impl SqliteSessionRepository {
         Ok(exists != 0)
     }
 
-    pub async fn get_runtime_binding_metadata(
+    pub async fn get_runtime_binding_capabilities(
         &self,
         session_id: &str,
-    ) -> Result<Option<RuntimeBindingMetadataRow>> {
-        Ok(sqlx::query_as::<_, RuntimeBindingMetadataRow>(
-            "SELECT metadata FROM runtime_bindings WHERE session_id = ?",
+    ) -> Result<Option<RuntimeBindingCapabilitiesRow>> {
+        Ok(sqlx::query_as::<_, RuntimeBindingCapabilitiesRow>(
+            "SELECT capabilities, tmux_socket_path, tmux_pane_id FROM runtime_bindings WHERE session_id = ?",
         )
         .bind(session_id)
         .fetch_optional(&self.pool)

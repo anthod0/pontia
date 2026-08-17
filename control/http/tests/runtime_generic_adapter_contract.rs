@@ -154,15 +154,13 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
     assert_eq!(session["capabilities"]["interrupt"], true);
     assert_eq!(session["capabilities"]["stream_output"], true);
 
-    let metadata: String =
-        sqlx::query_scalar("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+    let runtime_kind: String =
+        sqlx::query_scalar("SELECT runtime_kind FROM runtime_bindings WHERE session_id = ?")
             .bind(&session_id)
             .fetch_one(&state.db())
             .await
-            .expect("runtime metadata");
-    let metadata: Value = serde_json::from_str(&metadata).expect("metadata json");
-    assert_eq!(metadata["backend"], "in_process");
-    assert!(metadata.get("tmux_session").is_none());
+            .expect("runtime kind");
+    assert_eq!(runtime_kind, "in_process");
 }
 
 #[tokio::test]

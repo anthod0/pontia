@@ -19,9 +19,8 @@ async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marke
     .expect("precreate session");
     sqlx::query(
         r#"INSERT INTO runtime_bindings
-           (session_id, runtime_kind, runtime_instance_id, launch_cwd, tmux_socket_path, tmux_pane_id, metadata)
-           VALUES (?, 'pi_tui', 'rtinst_precreated', ?, '/tmp/tmux-1000/default', '%42',
-                   '{"runtime_instance_id":"rtinst_precreated","binding_confirmed":false}')"#,
+           (session_id, runtime_kind, runtime_instance_id, binding_state, launch_cwd, tmux_socket_path, tmux_pane_id)
+           VALUES (?, 'pi_tui', 'rtinst_precreated', 'provisioned', ?, '/tmp/tmux-1000/default', '%42')"#,
     )
     .bind(session_id)
     .bind(&workspace)
@@ -69,9 +68,8 @@ async fn claude_client_session_key_binds_the_precreated_runtime_by_controlled_pa
     .expect("precreate session");
     sqlx::query(
         r#"INSERT INTO runtime_bindings
-           (session_id, runtime_kind, runtime_instance_id, launch_cwd, tmux_socket_path, tmux_pane_id, metadata)
-           VALUES (?, 'claude_tui', 'rtinst_precreated_claude', ?, '/tmp/tmux-1000/default', '%52',
-                   '{"runtime_instance_id":"rtinst_precreated_claude","binding_confirmed":false}')"#,
+           (session_id, runtime_kind, runtime_instance_id, binding_state, launch_cwd, tmux_socket_path, tmux_pane_id)
+           VALUES (?, 'claude_tui', 'rtinst_precreated_claude', 'provisioned', ?, '/tmp/tmux-1000/default', '%52')"#,
     )
     .bind(session_id)
     .bind(&workspace)
@@ -222,7 +220,7 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     );
 
     let row = sqlx::query(
-        "SELECT runtime_kind, runtime_instance_id, start_command, launch_cwd, tmux_socket_path, tmux_pane_id, metadata FROM runtime_bindings WHERE session_id = ?",
+        "SELECT runtime_kind, runtime_instance_id, binding_state, start_command, launch_cwd, internal_event_url, tmux_socket_path, tmux_pane_id, capabilities, diagnostics, adapter_details FROM runtime_bindings WHERE session_id = ?",
     )
     .bind(session_id)
     .fetch_one(&state.db())
@@ -240,22 +238,29 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
         "/tmp/tmux-1000/default"
     );
     assert_eq!(row.get::<String, _>("tmux_pane_id"), "%42");
-    let metadata: Value = serde_json::from_str(&row.get::<String, _>("metadata")).unwrap();
-    assert_eq!(metadata["client_session_key"], "pi_session_123");
-    assert_eq!(metadata["tmux"]["session_name"], "dev");
-    assert_eq!(metadata["capabilities"]["accept_task"], true);
-    assert_eq!(metadata["capabilities"]["context_usage"], "estimated");
+    assert_eq!(row.get::<String, _>("binding_state"), "confirmed");
+    assert!(
+        row.get::<String, _>("internal_event_url")
+            .ends_with("/internal/v1/events")
+    );
+    let capabilities: Value = serde_json::from_str(&row.get::<String, _>("capabilities")).unwrap();
+    assert_eq!(capabilities["accept_task"], true);
+    assert_eq!(capabilities["context_usage"], "estimated");
+    let adapter_details: Value =
+        serde_json::from_str(&row.get::<String, _>("adapter_details")).unwrap();
+    assert_eq!(adapter_details["tmux"]["session_name"], "dev");
+    let diagnostics: Value = serde_json::from_str(&row.get::<String, _>("diagnostics")).unwrap();
     let expected_state_dir = app.pontia_home().path().join("state");
     assert_eq!(
-        metadata["log_dir"],
+        diagnostics["log_dir"],
         expected_state_dir.display().to_string()
     );
     assert_eq!(
-        metadata["runtime_log"],
+        diagnostics["runtime_log"],
         expected_state_dir.join("runtime.log").display().to_string()
     );
     assert_eq!(
-        metadata["pi_hook_log"],
+        diagnostics["pi_hook_log"],
         expected_state_dir.join("pi-hook.log").display().to_string()
     );
 
@@ -472,7 +477,7 @@ async fn concurrent_first_upserts_for_one_pi_session_key_create_once_without_ove
 }
 
 #[tokio::test]
-async fn upsert_rejects_a_runtime_binding_that_disagrees_with_the_agent_binding() {
+async fn upsert_rejects_a_request_that_disagrees_with_the_agent_binding() {
     let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -486,24 +491,19 @@ async fn upsert_rejects_a_runtime_binding_that_disagrees_with_the_agent_binding(
     assert_eq!(first_status, StatusCode::OK, "{first:?}");
     let session_id = first["session"]["session_id"].as_str().expect("session id");
     sqlx::query(
-        "UPDATE runtime_bindings SET metadata = json_set(metadata, '$.client_session_key', 'pi_conflicting') WHERE session_id = ?",
+        "UPDATE agent_bindings SET client_session_key = 'pi_conflicting' WHERE session_id = ?",
     )
     .bind(session_id)
     .execute(&state.db())
     .await
-    .expect("corrupt runtime binding identity");
+    .expect("change agent binding identity");
 
-    let retry = upsert_body(&workspace, Some("%99"));
+    let mut retry = upsert_body(&workspace, Some("%99"));
+    retry["session_id"] = json!(session_id);
     let (status, body) = post_upsert(state.clone(), retry).await;
 
     assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
     assert_eq!(body["error"]["code"], "state_conflict");
-    assert!(
-        body["error"]["message"]
-            .as_str()
-            .expect("error message")
-            .contains("does not match")
-    );
     let runtime_instance_id: String =
         sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)

@@ -1,7 +1,6 @@
 use super::{
     AppState, StatusCode, Value, json, post_upsert, request_json, test_state, upsert_body,
 };
-use sqlx::Row;
 #[tokio::test]
 async fn current_runtime_exit_abandons_its_active_turn() {
     let (state, _app) = test_state().await;
@@ -389,14 +388,11 @@ async fn exit_and_resume(state: AppState, session_id: &str, runtime_instance_id:
 }
 
 async fn assert_persisted_start_command(state: &AppState, session_id: &str, expected: &str) {
-    let row =
-        sqlx::query("SELECT start_command, metadata FROM runtime_bindings WHERE session_id = ?")
+    let start_command: String =
+        sqlx::query_scalar("SELECT start_command FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())
             .await
             .expect("runtime start command");
-    assert_eq!(row.get::<String, _>("start_command"), expected);
-    let metadata: Value =
-        serde_json::from_str(&row.get::<String, _>("metadata")).expect("runtime metadata");
-    assert_eq!(metadata["start_command"], expected);
+    assert_eq!(start_command, expected);
 }

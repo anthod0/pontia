@@ -57,13 +57,13 @@ impl GenericClientTestScope {
     }
 
     pub async fn runtime_metadata(&self, state: &AppState, session_id: &str) -> Value {
-        let row = sqlx::query("SELECT metadata FROM runtime_bindings WHERE session_id = ?")
+        let row = sqlx::query("SELECT runtime_handle FROM runtime_bindings WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())
             .await
             .expect("runtime binding");
-        let metadata: String = row.try_get("metadata").expect("metadata");
-        serde_json::from_str(&metadata).expect("metadata json")
+        let runtime_handle: Option<String> = row.try_get("runtime_handle").expect("runtime handle");
+        serde_json::json!({ "in_process": { "runtime_handle": runtime_handle } })
     }
 }
 

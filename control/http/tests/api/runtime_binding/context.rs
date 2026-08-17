@@ -13,8 +13,8 @@ async fn internal_agent_binding_session_context_returns_stable_runtime_without_a
     .await
     .expect("insert session");
     sqlx::query(
-        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata)
-           VALUES ('sess_context', 'claude_tui', 'rtinst_stable', '{"internal_event_url":"http://127.0.0.1:18080/internal/v1/events"}')"#,
+        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, internal_event_url)
+           VALUES ('sess_context', 'claude_tui', 'rtinst_stable', 'http://127.0.0.1:18080/internal/v1/events')"#,
     )
     .execute(&state.db())
     .await
@@ -61,8 +61,8 @@ async fn internal_agent_binding_current_turn_returns_active_turn_context_by_clie
     .await
     .expect("insert turn");
     sqlx::query(
-        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, metadata)
-           VALUES ('sess_current', 'claude_tui', 'rtinst_current', '/repo', '{"internal_event_url":"http://127.0.0.1:18080/internal/v1/events","extra":"metadata"}')"#,
+        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, launch_cwd, internal_event_url)
+           VALUES ('sess_current', 'claude_tui', 'rtinst_current', '/repo', 'http://127.0.0.1:18080/internal/v1/events')"#,
     )
     .execute(&state.db())
     .await
@@ -89,7 +89,7 @@ async fn internal_agent_binding_current_turn_returns_active_turn_context_by_clie
         current_turn["internal_event_url"],
         "http://127.0.0.1:18080/internal/v1/events"
     );
-    assert_eq!(current_turn["runtime_metadata"]["extra"], "metadata");
+    assert_eq!(current_turn["runtime_metadata"]["launch_cwd"], "/repo");
     assert_eq!(
         current_turn["binding_metadata"]["transcript_path"],
         "/tmp/claude.jsonl"
@@ -114,8 +114,8 @@ async fn internal_agent_binding_current_turn_ignores_a_terminal_sticky_branch_le
     .await
     .expect("insert terminal branch leaf");
     sqlx::query(
-        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata)
-           VALUES ('sess_idle', 'claude_tui', 'rtinst_idle', '{}')"#,
+        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id)
+           VALUES ('sess_idle', 'claude_tui', 'rtinst_idle')"#,
     )
     .execute(&state.db())
     .await

@@ -243,7 +243,7 @@ async fn external_api_lists_and_gets_session_views() {
 }
 
 #[tokio::test]
-async fn external_api_falls_back_to_tmux_binding_capabilities_when_metadata_is_legacy() {
+async fn external_api_reads_runtime_binding_capabilities_column() {
     let state = test_state().await;
     let service = EventIngestService::new(state.db());
     service
@@ -273,16 +273,15 @@ async fn external_api_falls_back_to_tmux_binding_capabilities_when_metadata_is_l
     sqlx::query(
         r#"INSERT INTO runtime_bindings
            (session_id, runtime_kind, runtime_instance_id, start_command, launch_cwd, last_seen_at,
-            tmux_socket_path, tmux_pane_id, metadata)
+            tmux_socket_path, tmux_pane_id, capabilities)
            VALUES (?, 'tmux', 'rtinst_legacy_cap', 'pi --approve', '/tmp', '2026-06-22T00:00:00Z',
                    '/tmp/tmux-1000/default', '%150', ?)"#,
     )
     .bind("sess_external_queries_legacy_cap")
     .bind(
         json!({
-            "backend": "tmux",
-            "tmux_socket_path": "/tmp/tmux-1000/default",
-            "tmux_pane_id": "%150"
+            "accept_task": true,
+            "interrupt": true
         })
         .to_string(),
     )

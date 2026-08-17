@@ -26,33 +26,28 @@ impl CurrentTurnClaimService {
         session_id: &str,
         request: CurrentTurnClaimRequest,
     ) -> Result<Option<Value>> {
-        let repo = SqliteRuntimeBindingRepository::new(self.pool.clone());
-        let Some(metadata_json) = repo.metadata(session_id).await? else {
-            return Err(Error::NotFound(format!(
-                "runtime binding for session {session_id} not found"
-            )));
-        };
-        let mut metadata: Value = serde_json::from_str(&metadata_json)?;
-        if metadata["runtime_instance_id"].as_str() != Some(request.runtime_instance_id.as_str()) {
+        let repository = SqliteRuntimeBindingRepository::new(self.pool.clone());
+        let runtime_instance_id = repository
+            .runtime_instance_id(session_id)
+            .await?
+            .ok_or_else(|| {
+                Error::NotFound(format!(
+                    "runtime binding for session {session_id} not found"
+                ))
+            })?;
+        if runtime_instance_id != request.runtime_instance_id {
             return Err(Error::StateConflict(
                 "runtime_instance_id does not match active runtime binding".to_string(),
             ));
         }
-        let pending = metadata
-            .get("pending_current_turn")
-            .cloned()
-            .filter(|value| {
-                value.is_object()
-                    && value["client_type"].as_str() == Some(request.client_type.as_str())
-            });
-        if pending.is_none() {
-            return Ok(None);
-        }
-        if let Some(object) = metadata.as_object_mut() {
-            object.remove("pending_current_turn");
-        }
-        repo.update_metadata(session_id, &serde_json::to_string(&metadata)?)
-            .await?;
-        Ok(pending)
+        repository
+            .claim_pending_turn_context(
+                session_id,
+                &request.runtime_instance_id,
+                &request.client_type,
+            )
+            .await?
+            .map(|payload| serde_json::from_str(&payload).map_err(Into::into))
+            .transpose()
     }
 }

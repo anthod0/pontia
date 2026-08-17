@@ -83,11 +83,33 @@ async fn runtime_bindings_schema_uses_structured_runtime_fields_without_runtime_
         .map(|row| row.get::<String, _>("name"))
         .collect::<Vec<_>>();
 
-    assert!(columns.contains(&"runtime_instance_id".to_string()));
-    assert!(columns.contains(&"start_command".to_string()));
-    assert!(columns.contains(&"launch_cwd".to_string()));
-    assert!(columns.contains(&"last_seen_at".to_string()));
-    assert!(columns.contains(&"tmux_socket_path".to_string()));
-    assert!(columns.contains(&"tmux_pane_id".to_string()));
+    for column in [
+        "runtime_instance_id",
+        "binding_state",
+        "runtime_handle",
+        "start_command",
+        "launch_cwd",
+        "internal_event_url",
+        "started_at",
+        "last_seen_at",
+        "restart_count",
+        "tmux_socket_path",
+        "tmux_pane_id",
+        "process_fingerprint",
+        "capabilities",
+        "diagnostics",
+        "adapter_details",
+    ] {
+        assert!(columns.contains(&column.to_string()), "missing {column}");
+    }
+    assert!(!columns.contains(&"metadata".to_string()));
     assert!(!columns.contains(&"runtime_ref".to_string()));
+
+    let pending_context_table: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'pending_turn_contexts'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect pending_turn_contexts");
+    assert_eq!(pending_context_table, 1);
 }

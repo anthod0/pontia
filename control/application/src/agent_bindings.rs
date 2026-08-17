@@ -113,7 +113,8 @@ impl AgentBindingService {
         let Some(row) = sqlx::query(
             r#"SELECT s.state AS session_state,
                       r.runtime_instance_id,
-                      r.metadata AS runtime_metadata
+                      r.internal_event_url,
+                      r.launch_cwd
                FROM sessions s
                JOIN runtime_bindings r ON r.session_id = s.session_id
                WHERE s.session_id = ?"#,
@@ -154,7 +155,8 @@ impl AgentBindingService {
 
         let Some(row) = sqlx::query(
             r#"SELECT r.runtime_instance_id,
-                      r.metadata AS runtime_metadata
+                      r.internal_event_url,
+                      r.launch_cwd
                FROM runtime_bindings r
                WHERE r.session_id = ?"#,
         )
@@ -227,27 +229,16 @@ impl AgentBindingService {
             )));
         }
 
-        let Some(runtime_metadata) = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .metadata(&binding.session_id)
-            .await?
-        else {
-            return Ok(());
-        };
-        if runtime_binding_identity_disagrees(&runtime_metadata, &binding.client_session_key)? {
-            return Err(Error::StateConflict(format!(
-                "Session {} Runtime binding client identity does not match its Agent binding",
-                binding.session_id
-            )));
-        }
         Ok(())
     }
 }
 
 fn runtime_metadata_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Value> {
-    let runtime_metadata = row
-        .try_get::<Option<String>, _>("runtime_metadata")?
-        .unwrap_or_else(|| "{}".to_string());
-    Ok(serde_json::from_str(&runtime_metadata)?)
+    Ok(serde_json::json!({
+        "runtime_instance_id": row.try_get::<Option<String>, _>("runtime_instance_id")?,
+        "internal_event_url": row.try_get::<Option<String>, _>("internal_event_url")?,
+        "launch_cwd": row.try_get::<Option<String>, _>("launch_cwd")?,
+    }))
 }
 
 fn internal_event_url(runtime_metadata: &Value) -> String {
@@ -258,19 +249,6 @@ fn internal_event_url(runtime_metadata: &Value) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or("http://127.0.0.1:8080/internal/v1/events")
         .to_string()
-}
-
-pub(crate) fn runtime_binding_identity_disagrees(
-    runtime_metadata: &str,
-    client_session_key: &str,
-) -> Result<bool> {
-    let runtime_metadata: Value = serde_json::from_str(runtime_metadata)?;
-    Ok(runtime_metadata
-        .get("client_session_key")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .is_some_and(|runtime_client_session_key| runtime_client_session_key != client_session_key))
 }
 
 pub(crate) async fn register_agent_binding_for_ready_event_in_tx(
@@ -292,27 +270,15 @@ pub(crate) async fn register_agent_binding_for_ready_event_in_tx(
         return Ok(None);
     };
 
-    let runtime_metadata = SqliteRuntimeBindingRepository::metadata_in_tx(tx, &event.session_id)
+    let launch_cwd = SqliteRuntimeBindingRepository::launch_cwd_in_tx(tx, &event.session_id)
         .await?
+        .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| {
             Error::Domain(format!(
-                "session {} runtime binding missing",
+                "session {} runtime binding missing launch_cwd",
                 event.session_id
             ))
         })?;
-    let runtime_metadata: Value = serde_json::from_str(&runtime_metadata)?;
-    let launch_cwd = runtime_metadata
-        .get("workspace")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            Error::Domain(format!(
-                "session {} runtime binding missing workspace launch_cwd",
-                event.session_id
-            ))
-        })?
-        .to_string();
 
     let metadata = diagnostic_metadata_from_ready_payload(&event.payload);
     let binding = upsert_agent_binding_in_tx(

@@ -164,12 +164,12 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     let capabilities = pontia_agent_clients::AgentClientCapabilities::pi_m0_default();
     sqlx::query(
         r#"INSERT INTO runtime_bindings
-           (session_id, runtime_kind, runtime_instance_id, metadata)
-           VALUES (?, 'pi_tui', ?, ?)"#,
+           (session_id, runtime_kind, runtime_instance_id, tmux_socket_path, tmux_pane_id, capabilities)
+           VALUES (?, 'pi_tui', ?, '/tmp/branch-resolve.sock', '%1', ?)"#,
     )
     .bind(session_id)
     .bind(runtime_instance_id)
-    .bind(json!({"capabilities": capabilities}).to_string())
+    .bind(json!(capabilities).to_string())
     .execute(&state.db())
     .await
     .unwrap();
@@ -307,8 +307,8 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     let unsupported_capabilities = pontia_agent_clients::AgentClientCapabilities::pi_m0_default();
     let mut unsupported_capabilities = unsupported_capabilities;
     unsupported_capabilities.branch_control = false;
-    sqlx::query("UPDATE runtime_bindings SET metadata = ? WHERE session_id = ?")
-        .bind(json!({"capabilities": unsupported_capabilities}).to_string())
+    sqlx::query("UPDATE runtime_bindings SET capabilities = ? WHERE session_id = ?")
+        .bind(json!(unsupported_capabilities).to_string())
         .bind(session_id)
         .execute(&state.db())
         .await
@@ -324,8 +324,8 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     )
     .await;
     assert_eq!(non_writable_status, StatusCode::UNPROCESSABLE_ENTITY);
-    sqlx::query("UPDATE runtime_bindings SET metadata = ? WHERE session_id = ?")
-        .bind(json!({"capabilities": capabilities}).to_string())
+    sqlx::query("UPDATE runtime_bindings SET capabilities = ? WHERE session_id = ?")
+        .bind(json!(capabilities).to_string())
         .bind(session_id)
         .execute(&state.db())
         .await
@@ -504,22 +504,14 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
     let capabilities = pontia_agent_clients::AgentClientCapabilities::pi_m0_default();
     sqlx::query(
         r#"INSERT INTO runtime_bindings
-           (session_id, runtime_kind, runtime_instance_id, tmux_socket_path, tmux_pane_id, metadata)
+           (session_id, runtime_kind, runtime_instance_id, tmux_socket_path, tmux_pane_id, capabilities)
            VALUES (?, 'pi_tui', ?, ?, ?, ?)"#,
     )
     .bind(session_id)
     .bind(runtime_instance_id)
     .bind(&socket_path)
     .bind(&pane_id)
-    .bind(
-        json!({
-            "runtime_instance_id": runtime_instance_id,
-            "tmux_socket_path": socket_path,
-            "tmux_pane_id": pane_id,
-            "capabilities": capabilities
-        })
-        .to_string(),
-    )
+    .bind(json!(capabilities).to_string())
     .execute(&state.db())
     .await
     .unwrap();

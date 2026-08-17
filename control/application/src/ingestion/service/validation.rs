@@ -184,20 +184,6 @@ async fn ensure_ready_identity_matches_bindings(
         )));
     }
 
-    if let Some(runtime_metadata) = SqliteRuntimeBindingRepository::new(pool.clone())
-        .metadata(&event.session_id)
-        .await?
-        && crate::agent_bindings::runtime_binding_identity_disagrees(
-            &runtime_metadata,
-            client_session_key,
-        )?
-    {
-        return Err(Error::Domain(format!(
-            "session.ready client identity does not match session {} Runtime binding",
-            event.session_id
-        )));
-    }
-
     Ok(())
 }
 

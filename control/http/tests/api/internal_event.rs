@@ -46,17 +46,20 @@ async fn bind_runtime(state: &AppState, session_id: &str, runtime_instance_id: &
             session_id: session_id.to_string(),
             runtime_kind: "tmux".to_string(),
             runtime_instance_id: Some(runtime_instance_id.to_string()),
+            binding_state: "confirmed".to_string(),
+            runtime_handle: None,
             start_command: None,
             launch_cwd: Some("/tmp".to_string()),
+            internal_event_url: None,
+            started_at: None,
             last_seen_at: None,
+            restart_count: 0,
             tmux_socket_path: None,
             tmux_pane_id: None,
-            metadata: json!({
-                "runtime_instance_id": runtime_instance_id,
-                "binding_confirmed": true,
-                "workspace": "/tmp"
-            })
-            .to_string(),
+            process_fingerprint: None,
+            capabilities: "{}".to_string(),
+            diagnostics: "{}".to_string(),
+            adapter_details: "{}".to_string(),
         })
         .await
         .expect("bind runtime");

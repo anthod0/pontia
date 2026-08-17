@@ -1,92 +1,43 @@
 use serde_json::{Value, json};
 
 use super::{RuntimeBindingTmuxRequest, RuntimeBindingUpsertRequest, request::non_empty};
-use crate::SessionCapabilities;
 
-pub(super) fn binding_metadata(
-    request: &RuntimeBindingUpsertRequest,
-    launch_cwd: &str,
-    internal_event_url: &str,
+pub(super) fn runtime_diagnostics(
     log_dir: &str,
     runtime_log: &str,
     hook_log_metadata: Option<(&str, &str)>,
-    capabilities: &SessionCapabilities,
 ) -> Value {
-    let mut metadata = serde_json::Map::new();
-    metadata.insert(
-        "client_session_key".to_string(),
-        json!(request.client_session_key),
-    );
-    insert_optional(
-        &mut metadata,
-        "client_session_file",
-        &request.client_session_file,
-    );
-    insert_optional(
-        &mut metadata,
-        "client_session_dir",
-        &request.client_session_dir,
-    );
-    insert_optional(&mut metadata, "client_cwd", &request.client_cwd);
-    metadata.insert("launch_cwd".to_string(), json!(launch_cwd));
-    metadata.insert("workspace".to_string(), json!(launch_cwd));
-    insert_optional(&mut metadata, "start_command", &request.start_command);
-    insert_optional(&mut metadata, "start_kind", &request.start_kind);
-    insert_optional(
-        &mut metadata,
-        "parent_session_id",
-        &request.parent_session_id,
-    );
-    insert_optional(
-        &mut metadata,
-        "parent_client_session_key",
-        &request.parent_client_session_key,
-    );
-    insert_optional(
-        &mut metadata,
-        "forked_from_turn_id",
-        &request.forked_from_turn_id,
-    );
-    insert_optional(
-        &mut metadata,
-        "forked_from_client_node_id",
-        &request.forked_from_client_node_id,
-    );
-    metadata.insert("log_dir".to_string(), json!(log_dir));
-    metadata.insert("runtime_log".to_string(), json!(runtime_log));
+    let mut diagnostics = serde_json::Map::new();
+    diagnostics.insert("log_dir".to_string(), json!(log_dir));
+    diagnostics.insert("runtime_log".to_string(), json!(runtime_log));
     if let Some((metadata_key, hook_log_path)) = hook_log_metadata {
-        metadata.insert(metadata_key.to_string(), json!(hook_log_path));
+        diagnostics.insert(metadata_key.to_string(), json!(hook_log_path));
     }
-    metadata.insert("internal_event_url".to_string(), json!(internal_event_url));
-    metadata.insert("capabilities".to_string(), json!(capabilities));
-
-    if let Some(tmux) = &request.tmux {
-        if let Some(socket_path) = non_empty(tmux.socket_path.as_deref()) {
-            metadata.insert("tmux_socket_path".to_string(), json!(socket_path));
-        }
-        if let Some(pane_id) = non_empty(tmux.pane_id.as_deref()) {
-            metadata.insert("tmux_pane_id".to_string(), json!(pane_id));
-        }
-        metadata.insert("tmux".to_string(), tmux_metadata(tmux));
-    }
-
-    Value::Object(metadata)
+    Value::Object(diagnostics)
 }
 
-fn tmux_metadata(tmux: &RuntimeBindingTmuxRequest) -> Value {
-    let mut metadata = serde_json::Map::new();
-    insert_optional(&mut metadata, "session_id", &tmux.session_id);
-    insert_optional(&mut metadata, "session_name", &tmux.session_name);
-    insert_optional(&mut metadata, "window_id", &tmux.window_id);
+pub(super) fn adapter_details(request: &RuntimeBindingUpsertRequest) -> Value {
+    let mut details = serde_json::Map::new();
+    if let Some(tmux) = &request.tmux {
+        details.insert("tmux".to_string(), tmux_details(tmux));
+    }
+    Value::Object(details)
+}
+
+fn tmux_details(tmux: &RuntimeBindingTmuxRequest) -> Value {
+    let mut details = serde_json::Map::new();
+    insert_optional(&mut details, "session_id", &tmux.session_id);
+    insert_optional(&mut details, "session_name", &tmux.session_name);
+    insert_optional(&mut details, "window_id", &tmux.window_id);
     if let Some(window_index) = tmux.window_index {
-        metadata.insert("window_index".to_string(), json!(window_index));
+        details.insert("window_index".to_string(), json!(window_index));
     }
-    insert_optional(&mut metadata, "pane_id", &tmux.pane_id);
+    insert_optional(&mut details, "pane_id", &tmux.pane_id);
     if let Some(pane_index) = tmux.pane_index {
-        metadata.insert("pane_index".to_string(), json!(pane_index));
+        details.insert("pane_index".to_string(), json!(pane_index));
     }
-    insert_optional(&mut metadata, "pane_current_path", &tmux.pane_current_path);
-    Value::Object(metadata)
+    insert_optional(&mut details, "pane_current_path", &tmux.pane_current_path);
+    Value::Object(details)
 }
 
 pub(super) fn agent_binding_metadata(request: &RuntimeBindingUpsertRequest) -> Value {
@@ -120,35 +71,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn binding_metadata_uses_client_hook_log_metadata_key() {
-        let metadata = binding_metadata(
-            &RuntimeBindingUpsertRequest {
-                session_id: None,
-                runtime_instance_id: None,
-                client_type: "custom".to_string(),
-                client_session_key: "client-session".to_string(),
-                client_session_file: None,
-                client_session_dir: None,
-                client_cwd: None,
-                launch_cwd: None,
-                start_command: None,
-                start_kind: None,
-                parent_session_id: None,
-                parent_client_session_key: None,
-                forked_from_turn_id: None,
-                forked_from_client_node_id: None,
-                lineage_metadata: Value::Null,
-                tmux: None,
-            },
-            "/workspace",
-            "http://127.0.0.1:8080/internal/v1/events",
+    fn runtime_diagnostics_uses_client_hook_log_key() {
+        let diagnostics = runtime_diagnostics(
             "/pontia/state",
             "/pontia/state/runtime.log",
             Some(("custom_hook_log", "/pontia/state/custom-hook.log")),
-            &SessionCapabilities::default(),
         );
 
-        assert_eq!(metadata["custom_hook_log"], "/pontia/state/custom-hook.log");
-        assert!(metadata.get("pi_hook_log").is_none());
+        assert_eq!(
+            diagnostics["custom_hook_log"],
+            "/pontia/state/custom-hook.log"
+        );
+        assert!(diagnostics.get("pi_hook_log").is_none());
     }
 }

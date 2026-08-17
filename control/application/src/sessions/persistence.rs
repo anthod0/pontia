@@ -1,8 +1,7 @@
 use pontia_core::error::{Error, Result};
 use pontia_runtime::RuntimeStartResult;
 use pontia_storage_sqlite::repositories::{
-    runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
-    sessions::SqliteSessionRepository,
+    runtime_bindings::SqliteRuntimeBindingRepository, sessions::SqliteSessionRepository,
 };
 
 use super::SessionCommandService;
@@ -36,19 +35,9 @@ impl SessionCommandService {
         runtime: &RuntimeStartResult,
     ) -> Result<()> {
         let result = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .upsert_binding_guarded(RuntimeBindingUpsertRecord {
-                session_id: session_id.to_string(),
-                runtime_kind: runtime.runtime_kind.clone(),
-                runtime_instance_id: runtime.runtime_instance_id().map(ToString::to_string),
-                start_command: runtime.metadata["start_command"]
-                    .as_str()
-                    .map(ToString::to_string),
-                launch_cwd: runtime.launch_cwd().map(ToString::to_string),
-                last_seen_at: runtime.last_seen_at().map(ToString::to_string),
-                tmux_socket_path: runtime.tmux_socket_path().map(ToString::to_string),
-                tmux_pane_id: runtime.tmux_pane_id().map(ToString::to_string),
-                metadata: serde_json::to_string(&runtime.binding_metadata())?,
-            })
+            .upsert_binding_guarded(crate::runtime_control::runtime_binding_record(
+                session_id, runtime,
+            )?)
             .await;
         if result.is_err() {
             let _ = self.runtime.terminate_session(&runtime.runtime_handle);

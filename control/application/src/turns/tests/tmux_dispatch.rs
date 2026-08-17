@@ -94,20 +94,17 @@ async fn pi_tmux_turn_dispatch_requires_bound_tmux_pane_before_creating_turn() {
     .await;
 
     sqlx::query(
-        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata) VALUES (?, 'pi_tui', ?, ?)",
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, capabilities) VALUES (?, 'pi_tui', ?, ?)",
     )
     .bind(&session_id)
     .bind(runtime_instance_id)
     .bind(json!({
-        "runtime_instance_id": runtime_instance_id,
-        "capabilities": {
-            "accept_task": true,
-            "report_turn_started": true,
-            "report_turn_finished": true,
-            "interrupt": true,
-            "stream_output": true,
-            "heartbeat": false
-        }
+        "accept_task": true,
+        "report_turn_started": true,
+        "report_turn_finished": true,
+        "interrupt": true,
+        "stream_output": true,
+        "heartbeat": false
     }).to_string())
     .execute(&pool)
     .await
@@ -205,23 +202,19 @@ async fn pi_tmux_turn_dispatch_waits_for_agent_client_ready() {
     .await;
 
     sqlx::query(
-        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, tmux_socket_path, tmux_pane_id, metadata) VALUES (?, 'tmux', ?, ?, ?, ?)",
+        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, tmux_socket_path, tmux_pane_id, capabilities) VALUES (?, 'tmux', ?, ?, ?, ?)",
     )
     .bind(&session_id)
     .bind(runtime_instance_id)
     .bind(&socket_path)
     .bind(&pane_id)
     .bind(json!({
-        "runtime_instance_id": runtime_instance_id,
-        "tmux": { "session_name": tmux_session_name },
-        "capabilities": {
-            "accept_task": true,
-            "report_turn_started": true,
-            "report_turn_finished": true,
-            "interrupt": true,
-            "stream_output": true,
-            "heartbeat": false
-        }
+        "accept_task": true,
+        "report_turn_started": true,
+        "report_turn_finished": true,
+        "interrupt": true,
+        "stream_output": true,
+        "heartbeat": false
     }).to_string())
     .execute(&pool)
     .await

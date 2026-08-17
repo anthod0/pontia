@@ -5,6 +5,8 @@ use sqlx::SqlitePool;
 mod commands;
 mod persistence;
 
+pub(crate) use persistence::runtime_binding_record;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ControlCommandOutcome {
     pub data: Value,

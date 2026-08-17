@@ -1,7 +1,6 @@
 use pontia_agent_clients as agent_clients;
 use pontia_core::error::Result;
 use pontia_storage_sqlite::repositories::sessions::{SessionListOptions, SqliteSessionRepository};
-use serde_json::Value;
 use sqlx::Row;
 
 use super::ExternalQueryService;
@@ -46,18 +45,28 @@ impl ExternalQueryService {
     async fn enrich_session_view(&self, session: &mut SessionView) -> Result<()> {
         let repository = SqliteSessionRepository::new(self.pool.clone());
         let row = repository
-            .get_runtime_binding_metadata(&session.session_id)
+            .get_runtime_binding_capabilities(&session.session_id)
             .await?;
 
         if let Some(row) = row {
-            let metadata: Value = serde_json::from_str(&row.metadata)?;
-            if let Some(capabilities) = metadata.get("capabilities") {
-                session.capabilities = serde_json::from_value(capabilities.clone())?;
-            } else if let Some(capabilities) =
-                legacy_binding_capabilities(&session.client_type, &metadata)
+            let capabilities: SessionCapabilities = serde_json::from_str(&row.capabilities)?;
+            session.capabilities = if agent_clients::get_client_spec(&session.client_type)
+                .and_then(|spec| spec.tmux_runtime())
+                .is_some()
             {
-                session.capabilities = capabilities;
-            }
+                crate::runtime::bindings::writable_capabilities(
+                    capabilities,
+                    row.tmux_socket_path
+                        .as_deref()
+                        .is_some_and(|value| !value.trim().is_empty())
+                        && row
+                            .tmux_pane_id
+                            .as_deref()
+                            .is_some_and(|value| !value.trim().is_empty()),
+                )
+            } else {
+                capabilities
+            };
         }
 
         session.lineage = self.session_lineage(&session.session_id).await?;
@@ -90,23 +99,4 @@ impl ExternalQueryService {
         })
         .transpose()
     }
-}
-
-fn legacy_binding_capabilities(client_type: &str, metadata: &Value) -> Option<SessionCapabilities> {
-    let client_spec = agent_clients::get_client_spec(client_type)?;
-    let mut capabilities = client_spec.capabilities.clone();
-    if client_spec.tmux_runtime().is_some() {
-        let writable = non_empty_json_string(metadata, "tmux_socket_path").is_some()
-            && non_empty_json_string(metadata, "tmux_pane_id").is_some();
-        capabilities = crate::runtime::bindings::writable_capabilities(capabilities, writable);
-    }
-    Some(capabilities)
-}
-
-fn non_empty_json_string<'a>(metadata: &'a Value, key: &str) -> Option<&'a str> {
-    metadata
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
 }

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::json;
 use sqlx::SqlitePool;
 use tokio::sync::watch;
 
@@ -19,21 +19,6 @@ use crate::{
 
 const PROCESS_OBSERVATION_INTERVAL: Duration = Duration::from_secs(10);
 const PROCESS_OBSERVATION_RETRY_DELAY: Duration = Duration::from_secs(1);
-
-fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
-    metadata["in_process"]["runtime_handle"]
-        .as_str()
-        .or_else(|| metadata["in_process"]["runtime_key"].as_str())
-        .map(ToString::to_string)
-}
-
-fn process_fingerprint(metadata: &str) -> Option<TmuxProcessFingerprint> {
-    serde_json::from_str::<Value>(metadata)
-        .ok()?
-        .get("tmux_process_fingerprint")
-        .cloned()
-        .and_then(|fingerprint| serde_json::from_value(fingerprint).ok())
-}
 
 #[derive(Clone)]
 pub struct RuntimeObservationService {
@@ -119,9 +104,6 @@ impl RuntimeObservationService {
                 else {
                     return Ok(());
                 };
-                let Some(metadata) = repository.metadata(session_id).await? else {
-                    return Ok(());
-                };
                 let Some(runtime_instance_id) = row.runtime_instance_id else {
                     return Ok(());
                 };
@@ -132,20 +114,14 @@ impl RuntimeObservationService {
                         runtime_instance_id,
                         socket_path,
                         pane_id,
-                        metadata,
+                        process_fingerprint: row.process_fingerprint,
                     })
                     .await;
             }
             RuntimeBehavior::InProcess => {
-                let metadata = SqliteRuntimeBindingRepository::new(self.pool.clone())
-                    .metadata(session_id)
-                    .await?;
-                let Some(runtime_target) = metadata
-                    .map(|metadata| {
-                        serde_json::from_str::<Value>(&metadata).map(runtime_target_from_metadata)
-                    })
-                    .transpose()?
-                    .flatten()
+                let Some(runtime_target) = SqliteRuntimeBindingRepository::new(self.pool.clone())
+                    .runtime_handle(session_id)
+                    .await?
                 else {
                     return Ok(());
                 };
@@ -160,7 +136,11 @@ impl RuntimeObservationService {
     }
 
     async fn observe_tmux_process(&self, binding: ActiveTmuxProcessBindingRow) -> Result<()> {
-        let Some(fingerprint) = process_fingerprint(&binding.metadata) else {
+        let Some(fingerprint) = binding
+            .process_fingerprint
+            .as_deref()
+            .and_then(|value| serde_json::from_str::<TmuxProcessFingerprint>(value).ok())
+        else {
             return self
                 .record_process_exit(binding, "agent_process_fingerprint_unavailable")
                 .await;

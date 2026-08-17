@@ -12,6 +12,11 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 async fn insert_approval_context(state: &AppState, runtime_metadata: &str) {
+    let internal_event_url = serde_json::from_str::<Value>(runtime_metadata)
+        .expect("runtime context json")
+        .get("internal_event_url")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
     sqlx::query(
         r#"INSERT INTO sessions (session_id, client_type, state, current_turn_id, metadata)
            VALUES ('sess_approval', 'claude', 'busy', 'turn_approval', '{}')"#,
@@ -27,10 +32,10 @@ async fn insert_approval_context(state: &AppState, runtime_metadata: &str) {
     .await
     .expect("insert turn");
     sqlx::query(
-        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, metadata)
+        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, internal_event_url)
            VALUES ('sess_approval', 'claude_tui', 'rtinst_approval', ?)"#,
     )
-    .bind(runtime_metadata)
+    .bind(internal_event_url)
     .execute(&state.db())
     .await
     .expect("insert runtime binding");

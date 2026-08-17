@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 pub use pontia_agent_clients::{AgentClientCapabilities, AgentInput};
 
@@ -23,14 +23,6 @@ pub struct RuntimeStartResult {
 }
 
 impl RuntimeStartResult {
-    pub fn binding_metadata(&self) -> serde_json::Value {
-        let mut metadata = self.metadata.clone();
-        if let Some(object) = metadata.as_object_mut() {
-            object.insert("capabilities".to_string(), json!(self.capabilities));
-        }
-        metadata
-    }
-
     pub fn runtime_instance_id(&self) -> Option<&str> {
         self.metadata["runtime_instance_id"].as_str()
     }

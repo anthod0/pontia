@@ -4,16 +4,9 @@ use pontia_storage_sqlite::repositories::{
     agent_bindings::SqliteAgentBindingRepository,
     runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
 };
-use serde_json::Value;
+use serde_json::json;
 
 use super::RuntimeControlService;
-
-fn runtime_target_from_metadata(metadata: Value) -> Option<String> {
-    metadata["in_process"]["runtime_handle"]
-        .as_str()
-        .or_else(|| metadata["in_process"]["runtime_key"].as_str())
-        .map(ToString::to_string)
-}
 
 #[derive(Debug, Clone)]
 pub(super) struct TmuxPaneBinding {
@@ -23,16 +16,9 @@ pub(super) struct TmuxPaneBinding {
 
 impl RuntimeControlService {
     pub(super) async fn runtime_target(&self, session_id: &str) -> Result<Option<String>> {
-        let metadata = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .metadata(session_id)
-            .await?;
-        metadata
-            .map(|metadata| {
-                serde_json::from_str::<Value>(&metadata).map(runtime_target_from_metadata)
-            })
-            .transpose()
-            .map_err(Into::into)
-            .map(Option::flatten)
+        SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .runtime_handle(session_id)
+            .await
     }
 
     pub(super) async fn tmux_pane_binding(
@@ -102,16 +88,9 @@ impl RuntimeControlService {
     }
 
     pub(super) async fn restart_count(&self, session_id: &str) -> Result<Option<i64>> {
-        let metadata = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .metadata(session_id)
-            .await?;
-        metadata
-            .map(|metadata| {
-                serde_json::from_str::<Value>(&metadata)
-                    .map(|value| value["restart_count"].as_i64().unwrap_or(0))
-            })
-            .transpose()
-            .map_err(Into::into)
+        SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .restart_count(session_id)
+            .await
     }
 
     pub(super) async fn upsert_runtime_binding(
@@ -120,29 +99,10 @@ impl RuntimeControlService {
         runtime: &RuntimeStartResult,
         persisted_start_command: Option<String>,
     ) -> Result<()> {
-        let mut metadata = runtime.binding_metadata();
-        if let Some(object) = metadata.as_object_mut() {
-            match persisted_start_command.as_ref() {
-                Some(command) => {
-                    object.insert("start_command".to_string(), Value::String(command.clone()));
-                }
-                None => {
-                    object.remove("start_command");
-                }
-            }
-        }
+        let mut record = runtime_binding_record(session_id, runtime)?;
+        record.start_command = persisted_start_command;
         let result = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .upsert_binding_guarded(RuntimeBindingUpsertRecord {
-                session_id: session_id.to_string(),
-                runtime_kind: runtime.runtime_kind.clone(),
-                runtime_instance_id: runtime.runtime_instance_id().map(ToString::to_string),
-                start_command: persisted_start_command,
-                launch_cwd: runtime.launch_cwd().map(ToString::to_string),
-                last_seen_at: runtime.last_seen_at().map(ToString::to_string),
-                tmux_socket_path: runtime.tmux_socket_path().map(ToString::to_string),
-                tmux_pane_id: runtime.tmux_pane_id().map(ToString::to_string),
-                metadata: serde_json::to_string(&metadata)?,
-            })
+            .upsert_binding_guarded(record)
             .await;
         if result.is_err() {
             let _ = self.runtime.terminate_session(&runtime.runtime_handle);
@@ -158,19 +118,7 @@ impl RuntimeControlService {
     ) -> Result<()> {
         let result = SqliteRuntimeBindingRepository::upsert_binding_in_tx(
             tx,
-            RuntimeBindingUpsertRecord {
-                session_id: session_id.to_string(),
-                runtime_kind: runtime.runtime_kind.clone(),
-                runtime_instance_id: runtime.runtime_instance_id().map(ToString::to_string),
-                start_command: runtime.metadata["start_command"]
-                    .as_str()
-                    .map(ToString::to_string),
-                launch_cwd: runtime.launch_cwd().map(ToString::to_string),
-                last_seen_at: runtime.last_seen_at().map(ToString::to_string),
-                tmux_socket_path: runtime.tmux_socket_path().map(ToString::to_string),
-                tmux_pane_id: runtime.tmux_pane_id().map(ToString::to_string),
-                metadata: serde_json::to_string(&runtime.binding_metadata())?,
-            },
+            runtime_binding_record(session_id, runtime)?,
         )
         .await;
         if result.is_err() {
@@ -178,6 +126,54 @@ impl RuntimeControlService {
         }
         result
     }
+}
+
+pub(crate) fn runtime_binding_record(
+    session_id: &str,
+    runtime: &RuntimeStartResult,
+) -> Result<RuntimeBindingUpsertRecord> {
+    let metadata = &runtime.metadata;
+    let diagnostics = json!({
+        "launch_id": metadata.get("launch_id"),
+        "log_dir": metadata.get("log_dir"),
+        "runtime_log": metadata.get("runtime_log"),
+        "log_path": metadata.get("log_path"),
+        "pi_hook_log": metadata.get("pi_hook_log"),
+        "claude_hook_log": metadata.get("claude_hook_log"),
+    });
+    let adapter_details = json!({
+        "tmux": metadata.get("tmux"),
+        "in_process": metadata.get("in_process"),
+    });
+    Ok(RuntimeBindingUpsertRecord {
+        session_id: session_id.to_string(),
+        runtime_kind: runtime.runtime_kind.clone(),
+        runtime_instance_id: runtime.runtime_instance_id().map(ToString::to_string),
+        binding_state: if metadata["binding_confirmed"].as_bool() == Some(true) {
+            "confirmed".to_string()
+        } else {
+            "provisioned".to_string()
+        },
+        runtime_handle: Some(runtime.runtime_handle.clone()),
+        start_command: metadata["start_command"].as_str().map(ToString::to_string),
+        launch_cwd: runtime.launch_cwd().map(ToString::to_string),
+        internal_event_url: metadata["internal_event_url"]
+            .as_str()
+            .map(ToString::to_string),
+        started_at: metadata["started_at"].as_str().map(ToString::to_string),
+        last_seen_at: runtime.last_seen_at().map(ToString::to_string),
+        restart_count: metadata["restart_count"].as_i64().unwrap_or(0),
+        tmux_socket_path: runtime.tmux_socket_path().map(ToString::to_string),
+        tmux_pane_id: runtime.tmux_pane_id().map(ToString::to_string),
+        process_fingerprint: metadata
+            .get("tmux_process_fingerprint")
+            .filter(|value| !value.is_null())
+            .map(serde_json::to_string)
+            .transpose()?,
+        capabilities: serde_json::to_string(&runtime.capabilities)?,
+        diagnostics: serde_json::to_string(&diagnostics)?,
+        adapter_details: serde_json::to_string(&adapter_details)?,
+    })
 }
 
 fn shell_quote(value: &str) -> String {

@@ -45,12 +45,20 @@ impl SessionCreator for BoundSessionCreator {
                 session_id: self.session_id.clone(),
                 runtime_kind: "pi_tui".to_string(),
                 runtime_instance_id: Some(self.runtime_instance_id.clone()),
+                binding_state: "confirmed".to_string(),
+                runtime_handle: None,
                 start_command: None,
                 launch_cwd: Some("/workspace/project".to_string()),
+                internal_event_url: None,
+                started_at: None,
                 last_seen_at: None,
+                restart_count: 0,
                 tmux_socket_path: Some("/tmp/fake-tmux.sock".to_string()),
                 tmux_pane_id: Some("%42".to_string()),
-                metadata: "{}".to_string(),
+                process_fingerprint: None,
+                capabilities: "{}".to_string(),
+                diagnostics: "{}".to_string(),
+                adapter_details: "{}".to_string(),
             })
             .await
             .expect("bind workflow runtime");

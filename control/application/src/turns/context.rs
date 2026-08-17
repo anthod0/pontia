@@ -4,41 +4,36 @@ use sqlx::SqlitePool;
 use pontia_agent_clients::get_client_spec;
 use pontia_core::error::{Error, Result};
 use pontia_runtime::AgentInput;
-use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
+use pontia_storage_sqlite::repositories::runtime_bindings::{
+    PendingTurnContextRecord, SqliteRuntimeBindingRepository,
+};
 
 pub(crate) async fn store_client_current_turn_context(
     pool: SqlitePool,
     session_id: &str,
-    metadata: &Value,
     input: &AgentInput,
     client_type: &str,
     turn_metadata: Option<&Value>,
 ) -> Result<()> {
-    let mut metadata = metadata.clone();
-    let context = client_current_turn_context(&metadata, input, client_type, turn_metadata)?;
-    metadata["pending_current_turn"] = context;
-    SqliteRuntimeBindingRepository::new(pool)
-        .update_metadata(session_id, &serde_json::to_string(&metadata)?)
-        .await?;
-    Ok(())
-}
-
-fn client_current_turn_context(
-    metadata: &Value,
-    input: &AgentInput,
-    client_type: &str,
-    turn_metadata: Option<&Value>,
-) -> Result<Value> {
-    let internal_event_url = metadata["internal_event_url"]
-        .as_str()
-        .map(ToString::to_string)
-        .or_else(pontia_runtime::configured_internal_event_url)
-        .unwrap_or_else(|| "http://127.0.0.1:8080/internal/v1/events".to_string());
-    let runtime_instance_id = metadata["runtime_instance_id"].as_str().ok_or_else(|| {
+    let repository = SqliteRuntimeBindingRepository::new(pool);
+    let runtime = repository
+        .runtime_context(session_id)
+        .await?
+        .ok_or_else(|| {
+            Error::NotFound(format!(
+                "runtime binding for session {session_id} not found"
+            ))
+        })?;
+    let runtime_instance_id = runtime.runtime_instance_id.ok_or_else(|| {
         Error::Domain(format!(
-            "{client_type} runtime metadata missing runtime_instance_id"
+            "{client_type} runtime binding missing runtime_instance_id"
         ))
     })?;
+    let internal_event_url = runtime
+        .internal_event_url
+        .filter(|value| !value.trim().is_empty())
+        .or_else(pontia_runtime::configured_internal_event_url)
+        .unwrap_or_else(|| "http://127.0.0.1:8080/internal/v1/events".to_string());
     let mut context = json!({
         "session_id": input.session_id,
         "input": input.input,
@@ -58,5 +53,13 @@ fn client_current_turn_context(
     {
         context["inbox_message_id"] = json!(inbox_message_id);
     }
-    Ok(context)
+
+    repository
+        .store_pending_turn_context(PendingTurnContextRecord {
+            session_id: session_id.to_string(),
+            runtime_instance_id,
+            client_type: client_type.to_string(),
+            payload: serde_json::to_string(&context)?,
+        })
+        .await
 }

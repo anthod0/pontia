@@ -80,10 +80,8 @@ impl TurnCommandService {
         let plugin_owns_turn = client_spec.owns_interactive_tmux_turn();
 
         if plugin_owns_turn {
-            let binding_metadata = self
-                .runtime_binding_metadata(session_id)
-                .await?
-                .ok_or_else(|| {
+            let runtime_instance_id =
+                self.runtime_instance_id(session_id).await?.ok_or_else(|| {
                     Error::Domain(format!("{} runtime binding not found", session.client_type))
                 })?;
             let tmux_binding = tmux_binding
@@ -94,20 +92,13 @@ impl TurnCommandService {
                 dispatch_id: new_dispatch_id().to_string(),
                 input,
             };
-            self.wait_for_tui_readiness(&session.client_type, session_id, &binding_metadata)
+            self.wait_for_tui_readiness(&session.client_type, session_id, &runtime_instance_id)
                 .await?;
-            let binding_metadata = self
-                .runtime_binding_metadata(session_id)
-                .await?
-                .ok_or_else(|| {
-                    Error::Domain(format!("{} runtime binding not found", session.client_type))
-                })?;
             match client_spec.adapter.turn_context {
                 TurnContextBehavior::InternalApiClaim => {
                     store_client_current_turn_context(
                         self.pool.clone(),
                         session_id,
-                        &binding_metadata,
                         &agent_input,
                         &session.client_type,
                         Some(&metadata),
@@ -163,13 +154,12 @@ impl TurnCommandService {
         }
 
         if dispatch_mode == DispatchMode::TmuxPaste {
-            match self.runtime_binding_metadata(session_id).await? {
-                Some(binding_metadata) => {
+            match self.runtime_instance_id(session_id).await? {
+                Some(runtime_instance_id) => {
                     if client_spec.adapter.turn_context == TurnContextBehavior::InternalApiClaim {
                         store_client_current_turn_context(
                             self.pool.clone(),
                             session_id,
-                            &binding_metadata,
                             &agent_input,
                             &session.client_type,
                             Some(&metadata),
@@ -180,7 +170,11 @@ impl TurnCommandService {
                         .as_ref()
                         .expect("tmux binding was validated before turn creation");
                     match self
-                        .wait_for_tui_readiness(&session.client_type, session_id, &binding_metadata)
+                        .wait_for_tui_readiness(
+                            &session.client_type,
+                            session_id,
+                            &runtime_instance_id,
+                        )
                         .await
                         .map(|()| {
                             match client_spec.adapter.turn_context {
@@ -251,13 +245,10 @@ impl TurnCommandService {
             )));
         }
         let tmux_binding = self.required_tmux_pane_binding(session_id).await?;
-        let binding_metadata = self
-            .runtime_binding_metadata(session_id)
-            .await?
-            .ok_or_else(|| {
-                Error::Domain(format!("{} runtime binding not found", session.client_type))
-            })?;
-        self.wait_for_tui_readiness(&session.client_type, session_id, &binding_metadata)
+        let runtime_instance_id = self.runtime_instance_id(session_id).await?.ok_or_else(|| {
+            Error::Domain(format!("{} runtime binding not found", session.client_type))
+        })?;
+        self.wait_for_tui_readiness(&session.client_type, session_id, &runtime_instance_id)
             .await?;
         self.runtime.dispatch_tui_turn(
             &tmux_binding.socket_path,
@@ -275,27 +266,17 @@ impl TurnCommandService {
         &self,
         client_type: &str,
         session_id: &str,
-        metadata: &Value,
+        runtime_instance_id: &str,
     ) -> Result<()> {
-        let readiness = RuntimeReadinessService::new(self.pool.clone());
-        if let Some(runtime_instance_id) = metadata["runtime_instance_id"].as_str() {
-            readiness
-                .wait_until_ready(session_id, client_type, runtime_instance_id)
-                .await
-        } else {
-            readiness
-                .wait_until_bound_and_ready(session_id, client_type)
-                .await
-                .map(|_| ())
-        }
+        RuntimeReadinessService::new(self.pool.clone())
+            .wait_until_ready(session_id, client_type, runtime_instance_id)
+            .await
     }
 
-    async fn runtime_binding_metadata(&self, session_id: &str) -> Result<Option<Value>> {
+    async fn runtime_instance_id(&self, session_id: &str) -> Result<Option<String>> {
         SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .metadata(session_id)
-            .await?
-            .map(|metadata| serde_json::from_str(&metadata).map_err(Into::into))
-            .transpose()
+            .runtime_instance_id(session_id)
+            .await
     }
 
     async fn required_tmux_pane_binding(&self, session_id: &str) -> Result<TmuxPaneBinding> {
