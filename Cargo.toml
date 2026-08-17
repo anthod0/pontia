@@ -8,7 +8,6 @@ members = [
     "control/runtime",
     "control/application",
     "control/http",
-    "control/pontiactl",
     "control/pontia",
     "control/workflow",
 ]

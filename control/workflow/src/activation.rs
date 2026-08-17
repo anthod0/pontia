@@ -125,7 +125,7 @@ async fn render_initial_task(
          Complete the work, then create a source file in the Session cwd containing the full output. \
          Submit that file with:\n\n\
          ```bash\n\
-         pontiactl workflow submit --input <source-path> --output {}\n\
+         pontia workflow submit --input <source-path> --output {}\n\
          ```\n",
         node.instructions, rendered_inputs, node.output, node.output
     ))

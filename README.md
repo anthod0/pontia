@@ -138,7 +138,7 @@ Build the Dashboard and release binaries from this checkout, then install them b
 just install-local
 ```
 
-The command installs `pontia`, `pontiad`, and `pontiactl` into `$HOME/.local/bin`, installs the Dashboard into `$HOME/.local/share/pontia/dashboard`, and creates `$PONTIA_HOME/config.toml` with that Dashboard source when no config exists. Existing configuration is never overwritten. Set an absolute `PREFIX` or `PONTIA_HOME` to override the default locations.
+The command installs `pontia` and `pontiad` into `$HOME/.local/bin`, installs the Dashboard into `$HOME/.local/share/pontia/dashboard`, and creates `$PONTIA_HOME/config.toml` with that Dashboard source when no config exists. Existing configuration is never overwritten. Set an absolute `PREFIX` or `PONTIA_HOME` to override the default locations.
 
 Installation does not start Pontia. Start it explicitly when ready:
 

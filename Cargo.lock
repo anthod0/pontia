@@ -1329,6 +1329,13 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "pontia-config",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
+ "uuid",
 ]
 
 [[package]]
@@ -1454,21 +1461,6 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
- "uuid",
-]
-
-[[package]]
-name = "pontiactl"
-version = "0.1.0"
-dependencies = [
- "clap",
- "pontia-config",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "toml",
  "uuid",
 ]
 

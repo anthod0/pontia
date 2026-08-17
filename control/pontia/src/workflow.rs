@@ -5,29 +5,13 @@ use std::{
     process::Command,
 };
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Subcommand};
 use pontia_config::AppConfig;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Parser)]
-#[command(
-    name = "pontiactl",
-    version,
-    about = "Control Pontia from the command line"
-)]
-struct Cli {
-    #[command(subcommand)]
-    command: Option<CommandKind>,
-}
-
-#[derive(Debug, Subcommand)]
-enum CommandKind {
-    Workflow(WorkflowCommand),
-}
-
 #[derive(Debug, Args)]
-struct WorkflowCommand {
+pub(crate) struct WorkflowCommand {
     #[command(subcommand)]
     command: WorkflowCommandKind,
 }
@@ -117,22 +101,10 @@ struct WorkflowSubmissionRequest {
     content: String,
 }
 
-#[tokio::main]
-async fn main() {
-    let cli = Cli::parse();
-    let result = match cli.command {
-        None => Ok(()),
-        Some(CommandKind::Workflow(workflow)) => match AppConfig::from_env() {
-            Ok(config) => match workflow.command {
-                WorkflowCommandKind::Run(args) => run_workflow(args, &config).await,
-                WorkflowCommandKind::Submit(args) => submit_workflow(args, &config).await,
-            },
-            Err(error) => Err(error.to_string()),
-        },
-    };
-    if let Err(error) = result {
-        eprintln!("pontiactl: {error}");
-        std::process::exit(1);
+pub(crate) async fn run(workflow: WorkflowCommand, config: &AppConfig) -> Result<(), String> {
+    match workflow.command {
+        WorkflowCommandKind::Run(args) => run_workflow(args, config).await,
+        WorkflowCommandKind::Submit(args) => submit_workflow(args, config).await,
     }
 }
 

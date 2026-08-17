@@ -42,7 +42,7 @@
       {#if $workflowsLoading}
         <div class="space-y-2"><Skeleton class="h-12 w-full" /><Skeleton class="h-12 w-full" /><Skeleton class="h-12 w-full" /></div>
       {:else if !$workflows.length}
-        <Empty.Root><Empty.Header><Empty.Title>No workflows</Empty.Title><Empty.Description>Run a Workflow with pontiactl to observe it here.</Empty.Description></Empty.Header></Empty.Root>
+        <Empty.Root><Empty.Header><Empty.Title>No workflows</Empty.Title><Empty.Description>Run a Workflow with pontia to observe it here.</Empty.Description></Empty.Header></Empty.Root>
       {:else}
         <div class="overflow-x-auto">
           <Table.Root>

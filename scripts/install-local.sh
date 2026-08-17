@@ -39,14 +39,14 @@ echo "Building Dashboard..."
 pnpm --dir apps/dashboard run build
 
 echo "Building release binaries..."
-SQLX_OFFLINE=true cargo build --release -p pontia -p pontiad -p pontiactl
+SQLX_OFFLINE=true cargo build --release -p pontia -p pontiad
 
 if [[ "$TARGET_DIR" != /* ]]; then
   TARGET_DIR="$REPO_ROOT/$TARGET_DIR"
 fi
 
 mkdir -p "$BIN_DIR" "$(dirname "$DASHBOARD_DIR")"
-for binary in pontia pontiad pontiactl; do
+for binary in pontia pontiad; do
   source_path="$TARGET_DIR/release/$binary"
   destination="$BIN_DIR/$binary"
   temporary="$destination.tmp.$$"

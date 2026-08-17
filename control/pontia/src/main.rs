@@ -1,3 +1,5 @@
+mod workflow;
+
 use std::{
     env,
     path::{Component, Path, PathBuf},
@@ -18,7 +20,11 @@ use pontia::manager::SystemdManager;
 use pontia::manager::{CommandRunner, LaunchdManager};
 
 #[derive(Debug, Parser)]
-#[command(name = "pontia", version, about = "Manage the Pontia Control Plane")]
+#[command(
+    name = "pontia",
+    version,
+    about = "Control Pontia from the command line"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -32,11 +38,21 @@ enum Command {
     Down,
     /// Show the Pontia service and health state
     Status,
+    /// Run and interact with Workflows
+    Workflow(workflow::WorkflowCommand),
 }
 
-fn main() -> ExitCode {
+#[derive(Debug)]
+enum LifecycleCommand {
+    Up,
+    Down,
+    Status,
+}
+
+#[tokio::main]
+async fn main() -> ExitCode {
     let cli = Cli::parse();
-    match run(cli.command) {
+    match execute(cli.command).await {
         Ok(operational) if operational => ExitCode::SUCCESS,
         Ok(_) => ExitCode::FAILURE,
         Err(error) => {
@@ -46,7 +62,20 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(command: Command) -> Result<bool, String> {
+async fn execute(command: Command) -> Result<bool, String> {
+    match command {
+        Command::Workflow(command) => {
+            let config = AppConfig::from_env().map_err(|error| error.to_string())?;
+            workflow::run(command, &config).await?;
+            Ok(true)
+        }
+        Command::Up => run_lifecycle(LifecycleCommand::Up),
+        Command::Down => run_lifecycle(LifecycleCommand::Down),
+        Command::Status => run_lifecycle(LifecycleCommand::Status),
+    }
+}
+
+fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
     let runner = ProcessCommandRunner;
 
     #[cfg(target_os = "linux")]
@@ -76,13 +105,16 @@ fn run(command: Command) -> Result<bool, String> {
     }
 }
 
-fn run_with_manager<M: ServiceManager>(command: Command, manager: &M) -> Result<bool, String> {
+fn run_with_manager<M: ServiceManager>(
+    command: LifecycleCommand,
+    manager: &M,
+) -> Result<bool, String> {
     let definitions = FileDefinitionStore;
     let health = HttpHealthProbe;
     let lifecycle = Lifecycle::new(manager, &definitions, &health);
 
     match command {
-        Command::Up => {
+        LifecycleCommand::Up => {
             let config = AppConfig::from_env().map_err(|error| error.to_string())?;
             let user_home = user_home()?;
             let pontiad = sibling_pontiad()?;
@@ -90,12 +122,12 @@ fn run_with_manager<M: ServiceManager>(command: Command, manager: &M) -> Result<
             println!("Pontia is up and healthy.");
             Ok(true)
         }
-        Command::Down => {
+        LifecycleCommand::Down => {
             lifecycle.down()?;
             println!("Pontia is down.");
             Ok(true)
         }
-        Command::Status => {
+        LifecycleCommand::Status => {
             let status = lifecycle.status(&user_home()?)?;
             print_status(&status);
             Ok(status.is_operational())

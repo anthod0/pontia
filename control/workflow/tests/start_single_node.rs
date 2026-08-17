@@ -103,7 +103,7 @@ async fn start_launches_first_node_as_a_pi_session_with_handoff_protocol() {
     assert!(task.contains("Ship the workflow scheduler.\nKeep the notes short."));
     assert!(task.contains("Expected output: release.md"));
     assert!(task.contains("create a source file in the Session cwd"));
-    assert!(task.contains("pontiactl workflow submit --input <source-path> --output release.md"));
+    assert!(task.contains("pontia workflow submit --input <source-path> --output release.md"));
 
     let workflow = repository
         .get_workflow("wf_start")

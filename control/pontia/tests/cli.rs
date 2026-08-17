@@ -8,8 +8,8 @@ use std::{
     thread,
 };
 
-fn pontiactl() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_pontiactl"))
+fn pontia() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_pontia"))
 }
 
 fn temp_dir(_name: &str) -> tempfile::TempDir {
@@ -90,35 +90,32 @@ fn capture_one_request_with_response(
 }
 
 #[test]
-fn starts_without_a_command() {
-    let output = pontiactl().output().expect("run pontiactl");
+fn rejects_a_missing_command() {
+    let output = pontia().output().expect("run pontia");
 
-    assert!(output.status.success());
+    assert!(!output.status.success());
     assert!(output.stdout.is_empty());
-    assert!(output.stderr.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Usage: pontia <COMMAND>"));
 }
 
 #[test]
 fn help_describes_the_cli() {
-    let output = pontiactl().arg("--help").output().expect("run pontiactl");
+    let output = pontia().arg("--help").output().expect("run pontia");
 
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).expect("help is utf-8");
     assert!(stdout.contains("Control Pontia from the command line"));
-    assert!(stdout.contains("Usage: pontiactl"));
+    assert!(stdout.contains("Usage: pontia"));
 }
 
 #[test]
 fn version_reports_the_workspace_version() {
-    let output = pontiactl()
-        .arg("--version")
-        .output()
-        .expect("run pontiactl");
+    let output = pontia().arg("--version").output().expect("run pontia");
 
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).expect("version is utf-8"),
-        format!("pontiactl {}\n", env!("CARGO_PKG_VERSION"))
+        format!("pontia {}\n", env!("CARGO_PKG_VERSION"))
     );
 }
 
@@ -129,13 +126,14 @@ fn workflow_commands_reject_invalid_pontia_home_before_reading_inputs() {
         ("relative", "relative/pontia"),
         ("tilde", "~/.pontia"),
     ] {
-        let mut command = pontiactl();
+        let mut command = pontia();
         command
             .args(["workflow", "run", "/input/must-not-be-read.toml"])
             .env("PONTIA_HOME", pontia_home);
-        let output = command.output().expect("run pontiactl");
+        let output = command.output().expect("run pontia");
         assert!(!output.status.success(), "{name}");
         let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.starts_with("pontia: "), "{name}: {stderr}");
         assert!(stderr.contains("PONTIA_HOME"), "{name}: {stderr}");
         assert!(!stderr.contains("Workflow file"), "{name}: {stderr}");
     }
@@ -183,7 +181,7 @@ output = "result.md"
         r#"{"data":{"workflow_id":"wf_created","node_id":"node_root","session_id":"sess_root"}}"#,
     );
 
-    let output = pontiactl()
+    let output = pontia()
         .args(["workflow", "run", definition.to_str().expect("utf-8 path")])
         .env("PONTIA_HOME", dir.path())
         .output()
@@ -251,7 +249,7 @@ fn workflow_run_rejects_missing_phase_and_unknown_fields_in_toml() {
         )
         .expect("write invalid workflow definition");
 
-        let output = pontiactl()
+        let output = pontia()
             .args(["workflow", "run", definition.to_str().expect("utf-8 path")])
             .env("PONTIA_HOME", dir.path())
             .output()
@@ -284,7 +282,7 @@ fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
         std::env::var("PATH").unwrap_or_default()
     );
 
-    let output = pontiactl()
+    let output = pontia()
         .args([
             "workflow",
             "submit",
@@ -325,7 +323,7 @@ fn workflow_submit_rejects_missing_and_non_utf8_input_before_pane_discovery() {
         (missing, "failed to read UTF-8 input file"),
         (invalid, "stream did not contain valid UTF-8"),
     ] {
-        let output = pontiactl()
+        let output = pontia()
             .args([
                 "workflow",
                 "submit",
@@ -369,7 +367,7 @@ fn workflow_submit_rejects_a_pane_without_pontia_identity() {
         std::env::var("PATH").unwrap_or_default()
     );
 
-    let output = pontiactl()
+    let output = pontia()
         .args([
             "workflow",
             "submit",
