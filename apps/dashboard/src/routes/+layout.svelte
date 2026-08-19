@@ -7,7 +7,7 @@
   import { Toaster } from '$lib/components/ui/sonner/index.js';
   import { startEventStream, stopEventStream } from '../services/eventStream';
   import { loadAgentProfiles } from '../stores/agentProfiles';
-  import { token } from '../stores/auth';
+  import { consumeTokenFromUrl, token } from '../stores/auth';
   import { loadSessions } from '../stores/sessions';
   import { loadTasks } from '../stores/tasks';
   import { loadWorkspaces } from '../stores/workspaces';
@@ -25,6 +25,7 @@
   }
 
   onMount(() => {
+    consumeTokenFromUrl();
     unsubscribeToken = token.subscribe((value) => {
       const trimmed = value.trim();
       const previousToken = authenticatedToken;

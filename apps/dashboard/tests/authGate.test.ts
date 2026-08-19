@@ -77,6 +77,30 @@ test('blocks dashboard routes behind a token prompt when no token is saved', asy
   expect(mocks.startEventStream).not.toHaveBeenCalled();
 });
 
+test('stores a token from the URL and removes only that query parameter', async () => {
+  window.history.pushState({}, '', '/dashboard/tasks?token=url-token&phase=review#activity');
+
+  render(AppLayoutHost);
+
+  await waitFor(() => expect(localStorage.getItem('pontia.externalApiToken')).toBe('url-token'));
+  expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe('/dashboard/tasks?phase=review#activity');
+  expect(screen.queryByRole('heading', { name: /enter external api token/i })).not.toBeInTheDocument();
+  expect(mocks.loadTasks).toHaveBeenCalled();
+  expect(mocks.startEventStream).toHaveBeenCalled();
+});
+
+test('removes an empty URL token without replacing a saved token', async () => {
+  localStorage.setItem('pontia.externalApiToken', 'saved-token');
+  token.set('saved-token');
+  window.history.pushState({}, '', '/dashboard/tasks?token=&phase=review');
+
+  render(AppLayoutHost);
+
+  await waitFor(() => expect(window.location.search).toBe('?phase=review'));
+  expect(localStorage.getItem('pontia.externalApiToken')).toBe('saved-token');
+  expect(screen.queryByRole('heading', { name: /enter external api token/i })).not.toBeInTheDocument();
+});
+
 test('rejects an invalid entered token without opening the dashboard', async () => {
   const fetchMock = mockValidateToken(401);
   render(AppLayoutHost);
