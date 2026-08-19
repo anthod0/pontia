@@ -74,13 +74,21 @@ pnpm --dir=apps/dashboard run build
 
 ### Install the pi client plugin
 
-Register the first-party plugin in pi's user-level package settings:
+Install the published first-party plugin from npm:
+
+```bash
+pi install npm:@pontia/pi-client-plugin
+```
+
+Pi loads the plugin automatically after installation; Pontia does not need to pass an extension path on each launch.
+
+When developing the plugin from this checkout, install the local package instead:
 
 ```bash
 pi install ./clients/pi
 ```
 
-The local package remains in this checkout, so keep the repository path available while using it. Once installed, pi loads the plugin automatically; Pontia does not need to pass an extension path on each launch.
+The local development install references this checkout, so keep the repository path available while using it.
 
 ### Configure pontia
 
@@ -128,7 +136,7 @@ ignore_globs = [
 ]
 ```
 
-Environment-variable overrides are also supported. See [`.env.example`](.env.example) for a shell environment template; Pontia does not load `.env` files itself.
+Environment-variable overrides are also supported. See [`.env.example`](.env.example) for a shell environment template; Pontia does not load `.env` files itself. `pontia init` intentionally uses persisted daemon configuration rather than command-scoped overrides because the user service captures only `PONTIA_HOME`.
 
 ### Install a local build
 
@@ -140,7 +148,15 @@ just install-local
 
 The command installs `pontia` and `pontiad` into `$HOME/.local/bin`, installs the Dashboard into `$HOME/.local/share/pontia/dashboard`, and creates `$PONTIA_HOME/config.toml` with that Dashboard source when no config exists. Existing configuration is never overwritten. Set an absolute `PREFIX` or `PONTIA_HOME` to override the default locations.
 
-Installation does not start Pontia. Start it explicitly when ready:
+Installation does not start Pontia. For first-time setup, run the interactive initializer:
+
+```bash
+pontia init
+```
+
+Accepting the defaults installs the published pi integration, configures `$HOME` as the Workspace Browser root, generates an External API token, starts the `pontiad` user service, and opens an authenticated Dashboard URL. After startup, press Enter to open the same URL again. `Ctrl-C` exits the initializer without stopping Pontia; use `pontia down` to stop the service.
+
+If configuration is already managed separately, start the service directly instead:
 
 ```bash
 pontia up

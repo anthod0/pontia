@@ -1,13 +1,18 @@
 mod workflow;
 
 use std::{
+    collections::HashMap,
     env,
+    io::{self, Read, Write},
+    net::{SocketAddr, TcpStream},
     path::{Component, Path, PathBuf},
-    process::ExitCode,
+    process::{Command as ProcessCommand, ExitCode},
+    time::Duration,
 };
 
 use clap::{Parser, Subcommand};
 use pontia::{
+    init::{self, InitPlatform},
     lifecycle::{EnabledState, Lifecycle, LifecycleStatus, RunState, ServiceManager, UpOptions},
     manager::ProcessCommandRunner,
     runtime_io::{FileDefinitionStore, HttpHealthProbe},
@@ -32,6 +37,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Configure Pontia interactively and start its per-user service
+    Init,
     /// Install and start the per-user Pontia service
     Up,
     /// Stop and disable the per-user Pontia service
@@ -64,6 +71,7 @@ async fn main() -> ExitCode {
 
 async fn execute(command: Command) -> Result<bool, String> {
     match command {
+        Command::Init => run_init(),
         Command::Workflow(command) => {
             let config = AppConfig::from_env().map_err(|error| error.to_string())?;
             workflow::run(command, &config).await?;
@@ -76,16 +84,11 @@ async fn execute(command: Command) -> Result<bool, String> {
 }
 
 fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
+    service_manager_preflight()?;
     let runner = ProcessCommandRunner;
 
     #[cfg(target_os = "linux")]
     {
-        if !Path::new("/run/systemd/system").is_dir() {
-            return Err(
-                "automatic lifecycle management requires a running systemd user service manager; supervise pontiad with OpenRC, runit, or s6 on this Linux system"
-                    .to_string(),
-            );
-        }
         run_with_manager(command, &SystemdManager::new(&runner))
     }
 
@@ -105,6 +108,24 @@ fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
     }
 }
 
+fn service_manager_preflight() -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if !Path::new("/run/systemd/system").is_dir() {
+        return Err(
+            "automatic lifecycle management requires a running systemd user service manager; supervise pontiad with OpenRC, runit, or s6 on this Linux system"
+                .to_string(),
+        );
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    return Err(
+        "automatic lifecycle management is supported only on Linux with systemd and macOS"
+            .to_string(),
+    );
+
+    Ok(())
+}
+
 fn run_with_manager<M: ServiceManager>(
     command: LifecycleCommand,
     manager: &M,
@@ -116,9 +137,7 @@ fn run_with_manager<M: ServiceManager>(
     match command {
         LifecycleCommand::Up => {
             let config = AppConfig::from_env().map_err(|error| error.to_string())?;
-            let user_home = user_home()?;
-            let pontiad = sibling_pontiad()?;
-            lifecycle.up(&config, &pontiad, &user_home, UpOptions::default())?;
+            start_with_lifecycle(&lifecycle, &config, UpOptions::default())?;
             println!("Pontia is up and healthy.");
             Ok(true)
         }
@@ -133,6 +152,165 @@ fn run_with_manager<M: ServiceManager>(
             Ok(status.is_operational())
         }
     }
+}
+
+fn start_with_lifecycle<M: ServiceManager>(
+    lifecycle: &Lifecycle<'_, M, FileDefinitionStore, HttpHealthProbe>,
+    config: &AppConfig,
+    options: UpOptions,
+) -> Result<(), String> {
+    lifecycle.up(config, &sibling_pontiad()?, &user_home()?, options)
+}
+
+struct RealInitPlatform;
+
+impl InitPlatform for RealInitPlatform {
+    fn preflight(&self, install_pi: bool) -> Result<(), String> {
+        service_manager_preflight()?;
+        sibling_pontiad()?;
+        if install_pi {
+            let output = ProcessCommand::new("pi")
+                .arg("--version")
+                .output()
+                .map_err(|error| format!("pi must be installed and executable: {error}"))?;
+            if !output.status.success() {
+                return Err(format!("pi --version failed with {}", output.status));
+            }
+        }
+        Ok(())
+    }
+
+    fn fill_random(&self, bytes: &mut [u8]) -> Result<(), String> {
+        getrandom::fill(bytes)
+            .map_err(|error| format!("failed to generate a secure token: {error}"))
+    }
+
+    fn install_pi(&self) -> Result<(), String> {
+        let status = ProcessCommand::new("pi")
+            .args(["install", "npm:@pontia/pi-client-plugin"])
+            .status()
+            .map_err(|error| format!("failed to run pi install: {error}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!(
+                "pi install npm:@pontia/pi-client-plugin failed with {status}"
+            ))
+        }
+    }
+
+    fn start_service(&self, config: &AppConfig, config_changed: bool) -> Result<(), String> {
+        service_manager_preflight()?;
+        start_init_service(config, config_changed)
+    }
+
+    fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String> {
+        dashboard_available(addr)
+    }
+
+    fn open_browser(&self, url: &str) -> Result<(), String> {
+        open_browser(url)
+    }
+}
+
+fn start_init_with_manager<M: ServiceManager>(
+    manager: &M,
+    config: &AppConfig,
+    config_changed: bool,
+) -> Result<(), String> {
+    let definitions = FileDefinitionStore;
+    let health = HttpHealthProbe;
+    let lifecycle = Lifecycle::new(manager, &definitions, &health);
+    start_with_lifecycle(
+        &lifecycle,
+        config,
+        UpOptions {
+            daemon_config_changed: config_changed,
+        },
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn start_init_service(config: &AppConfig, config_changed: bool) -> Result<(), String> {
+    let runner = ProcessCommandRunner;
+    start_init_with_manager(&SystemdManager::new(&runner), config, config_changed)
+}
+
+#[cfg(target_os = "macos")]
+fn start_init_service(config: &AppConfig, config_changed: bool) -> Result<(), String> {
+    let runner = ProcessCommandRunner;
+    start_init_with_manager(
+        &LaunchdManager::new(&runner, current_uid(&runner)?),
+        config,
+        config_changed,
+    )
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn start_init_service(_config: &AppConfig, _config_changed: bool) -> Result<(), String> {
+    Err("automatic lifecycle management is unavailable".to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn open_browser(url: &str) -> Result<(), String> {
+    run_browser_opener("xdg-open", url)
+}
+
+#[cfg(target_os = "macos")]
+fn open_browser(url: &str) -> Result<(), String> {
+    run_browser_opener("open", url)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn open_browser(_url: &str) -> Result<(), String> {
+    Err("browser opening is supported only on Linux and macOS".to_string())
+}
+
+fn run_browser_opener(program: &str, url: &str) -> Result<(), String> {
+    let status = ProcessCommand::new(program)
+        .arg(url)
+        .status()
+        .map_err(|error| format!("failed to launch the browser opener: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("browser opener failed with {status}"))
+    }
+}
+
+fn run_init() -> Result<bool, String> {
+    let vars: HashMap<String, String> = env::vars().collect();
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    init::run(
+        &mut stdin.lock(),
+        &mut stdout.lock(),
+        &vars,
+        &RealInitPlatform,
+    )?;
+    Ok(true)
+}
+
+fn dashboard_available(addr: SocketAddr) -> Result<bool, String> {
+    let timeout = Duration::from_secs(2);
+    let mut stream = TcpStream::connect_timeout(&addr, timeout)
+        .map_err(|error| format!("failed to connect to Dashboard at {addr}: {error}"))?;
+    stream
+        .set_read_timeout(Some(timeout))
+        .map_err(|error| format!("failed to configure Dashboard connection: {error}"))?;
+    write!(
+        stream,
+        "GET /dashboard HTTP/1.0\r\nHost: {addr}\r\nConnection: close\r\n\r\n"
+    )
+    .map_err(|error| format!("failed to request Dashboard: {error}"))?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|error| format!("failed to read Dashboard response: {error}"))?;
+    Ok(response
+        .lines()
+        .next()
+        .is_some_and(|line| line.starts_with("HTTP/1.0 200 ") || line.starts_with("HTTP/1.1 200 ")))
 }
 
 fn print_status(status: &LifecycleStatus) {
