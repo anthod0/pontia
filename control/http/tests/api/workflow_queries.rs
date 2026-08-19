@@ -98,6 +98,52 @@ async fn external_workflow_queries_return_ordered_nodes_for_frontend_phase_group
 }
 
 #[tokio::test]
+async fn external_workflow_context_returns_current_node_instructions_and_handoffs() {
+    let app = TestApp::new().await;
+    let mut current = node("node_context", None, "Build", "Implement");
+    current.instructions = "Implement the requested change.".to_string();
+    current.inputs = r#"["requirements.md"]"#.to_string();
+    current.output = "result.md".to_string();
+    SqliteWorkflowRepository::new(app.db.clone())
+        .create_definition(
+            CreateWorkflowRecord {
+                workflow_id: "wf_observe".to_string(),
+                title: "Context workflow".to_string(),
+                cwd: app.workspace().path().display().to_string(),
+                state: "running".to_string(),
+            },
+            vec![current],
+        )
+        .await
+        .expect("create workflow");
+    let handoff_dir = app
+        .pontia_home()
+        .path()
+        .join("workflows/wf_observe/handoff");
+    std::fs::create_dir_all(&handoff_dir).expect("create handoff directory");
+    std::fs::write(handoff_dir.join("requirements.md"), "Build it compactly.\n")
+        .expect("write handoff");
+
+    let (status, body) = get(&app, "/external/v1/workflows/wf_observe/context").await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let context = &body["data"]["context"];
+    assert_eq!(context["workflow"]["workflow_id"], "wf_observe");
+    assert_eq!(
+        context["current_node"]["instructions"],
+        "Implement the requested change."
+    );
+    assert_eq!(context["current_node"]["output"], "result.md");
+    assert_eq!(
+        context["current_node"]["inputs"][0],
+        serde_json::json!({
+            "name": "requirements.md",
+            "content": "Build it compactly.\n"
+        })
+    );
+}
+
+#[tokio::test]
 async fn external_workflow_queries_reject_invalid_limits() {
     let app = TestApp::new().await;
     for value in ["0", "101", "nope", "-1"] {

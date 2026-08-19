@@ -130,6 +130,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             get(external::get_workflow),
         )
         .route(
+            "/external/v1/workflows/{workflow_id}/context",
+            get(external::get_workflow_context),
+        )
+        .route(
             "/external/v1/workspaces",
             get(external::list_workspaces).post(external::register_workspace),
         )

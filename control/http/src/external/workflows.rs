@@ -46,6 +46,20 @@ pub async fn get_workflow(
     Ok(ok(json!({ "workflow": workflow })))
 }
 
+pub async fn get_workflow_context(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(workflow_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let context = WorkflowQueryService::new(state.db())
+        .get_workflow_context(&workflow_id, state.pontia_home())
+        .await
+        .map_err(map_workflow_error)?
+        .ok_or_else(|| ExternalApiError::not_found(format!("workflow {workflow_id} not found")))?;
+    Ok(ok(json!({ "context": context })))
+}
+
 fn parse_limit(limit: Option<&str>) -> Result<u32, ExternalApiError> {
     let limit = match limit {
         None => 50,

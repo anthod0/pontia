@@ -39,7 +39,7 @@ pub use sessions::{
 pub use tasks::{cancel_task, create_task, get_task, interrupt_task, list_task_events, list_tasks};
 pub use timeline::{get_turn_timeline, get_turn_tree_history, get_turn_tree_updates};
 pub use turns::{get_turn, interrupt_turn, list_session_events, list_turn_events, list_turns};
-pub use workflows::{get_workflow, list_workflows};
+pub use workflows::{get_workflow, get_workflow_context, list_workflows};
 pub use workspaces::{
     delete_workspace, get_workspace, list_workspace_root_entries, list_workspace_roots,
     list_workspaces, pick_workspace_files, register_workspace, rename_workspace,

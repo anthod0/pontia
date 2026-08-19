@@ -265,6 +265,43 @@ fn workflow_run_rejects_missing_phase_and_unknown_fields_in_toml() {
 }
 
 #[test]
+fn workflow_show_prints_compact_agent_readable_context() {
+    let dir = temp_dir("show-success");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+    let addr = listener.local_addr().expect("test server address");
+    write_pontia_config(dir.path(), addr.port());
+    let request = capture_one_request_with_response(
+        listener,
+        r#"{"data":{"context":{"workflow":{"workflow_id":"wf_show","title":"Ship release","state":"running","failure_message":null,"agent_submitted_count":1,"agent_total_count":3,"current_node_id":"node_build","nodes":[{"node_id":"node_plan","phase":"Plan","title":"Plan release","status":"submitted"},{"node_id":"node_build","phase":"Build","title":"Build release","status":"running"},{"node_id":"node_review","phase":"Review","title":"Review release","status":"pending"}]},"current_node":{"instructions":"Build the release.","inputs":[{"name":"plan.md","content":"Use the compact plan.\n"}],"output":"result.md"}}}}"#,
+    );
+
+    let output = pontia()
+        .args(["workflow", "show", "wf_show"])
+        .env("PONTIA_HOME", dir.path())
+        .output()
+        .expect("run workflow show");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout");
+    assert!(stdout.contains("# Ship release"));
+    assert!(stdout.contains("Workflow: `wf_show` | State: running | Progress: 1/3"));
+    assert!(stdout.contains("## Current node: Build — Build release"));
+    assert!(stdout.contains("### Instructions\nBuild the release."));
+    assert!(stdout.contains("#### `plan.md`\nUse the compact plan."));
+    assert!(stdout.contains("- ✓ Plan — Plan release (submitted)"));
+    assert!(stdout.contains("- → Build — Build release (running)"));
+    assert!(stdout.contains("- · Review — Review release (pending)"));
+
+    let request = request.join().expect("request capture thread");
+    assert!(request.starts_with("GET /external/v1/workflows/wf_show/context HTTP/1.1"));
+    assert!(request.contains("authorization: Bearer cli-test-token"));
+}
+
+#[test]
 fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
     let dir = temp_dir("submit-success");
     let bin_dir = dir.path().join("bin");

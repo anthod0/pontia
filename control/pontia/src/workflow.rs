@@ -19,6 +19,8 @@ pub(crate) struct WorkflowCommand {
 #[derive(Debug, Subcommand)]
 enum WorkflowCommandKind {
     Run(RunArgs),
+    /// Show a compact, agent-readable Workflow context
+    Show(ShowArgs),
     Submit(SubmitArgs),
 }
 
@@ -34,6 +36,12 @@ struct SubmitArgs {
     input: String,
     #[arg(long, value_name = "HANDOFF_FILE")]
     output: String,
+}
+
+#[derive(Debug, Args)]
+struct ShowArgs {
+    #[arg(value_name = "WORKFLOW_ID")]
+    workflow_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,9 +109,59 @@ struct WorkflowSubmissionRequest {
     content: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct WorkflowContextResponse {
+    data: WorkflowContextResponseData,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowContextResponseData {
+    context: WorkflowContext,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowContext {
+    workflow: WorkflowContextSummary,
+    current_node: WorkflowNodeContext,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowContextSummary {
+    workflow_id: String,
+    title: String,
+    state: String,
+    failure_message: Option<String>,
+    agent_submitted_count: usize,
+    agent_total_count: usize,
+    current_node_id: Option<String>,
+    nodes: Vec<WorkflowNodeSummary>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowNodeSummary {
+    node_id: String,
+    phase: String,
+    title: String,
+    status: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowNodeContext {
+    instructions: String,
+    inputs: Vec<WorkflowInput>,
+    output: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowInput {
+    name: String,
+    content: Option<String>,
+}
+
 pub(crate) async fn run(workflow: WorkflowCommand, config: &AppConfig) -> Result<(), String> {
     match workflow.command {
         WorkflowCommandKind::Run(args) => run_workflow(args, config).await,
+        WorkflowCommandKind::Show(args) => show_workflow(args, config).await,
         WorkflowCommandKind::Submit(args) => submit_workflow(args, config).await,
     }
 }
@@ -184,6 +242,93 @@ async fn run_workflow(args: RunArgs, config: &AppConfig) -> Result<(), String> {
         .map_err(|error| format!("failed to decode Workflow run response: {error}"))?;
     println!("{}", response.data.workflow_id);
     Ok(())
+}
+
+async fn show_workflow(args: ShowArgs, config: &AppConfig) -> Result<(), String> {
+    let token = config
+        .external_api_token
+        .as_deref()
+        .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
+    let base = format!(
+        "http://{}/external/v1/workflows",
+        local_api_addr(config.bind_addr)
+    );
+    let mut url = reqwest::Url::parse(&base)
+        .map_err(|error| format!("failed to build Workflow URL: {error}"))?;
+    url.path_segments_mut()
+        .map_err(|_| "failed to build Workflow URL".to_string())?
+        .push(&args.workflow_id)
+        .push("context");
+    let response = reqwest::Client::new()
+        .get(url)
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| format!("failed to show Workflow: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Workflow show failed with HTTP {status}: {body}"));
+    }
+    let response = response
+        .json::<WorkflowContextResponse>()
+        .await
+        .map_err(|error| format!("failed to decode Workflow context response: {error}"))?;
+    println!("{}", render_workflow_context(&response.data.context));
+    Ok(())
+}
+
+fn render_workflow_context(context: &WorkflowContext) -> String {
+    let workflow = &context.workflow;
+    let current = workflow
+        .current_node_id
+        .as_deref()
+        .and_then(|id| workflow.nodes.iter().find(|node| node.node_id == id));
+    let mut document = format!(
+        "# {}\nWorkflow: `{}` | State: {} | Progress: {}/{}",
+        workflow.title,
+        workflow.workflow_id,
+        workflow.state,
+        workflow.agent_submitted_count,
+        workflow.agent_total_count
+    );
+    if let Some(message) = workflow.failure_message.as_deref() {
+        document.push_str(&format!("\nFailure: {message}"));
+    }
+    if let Some(node) = current {
+        document.push_str(&format!(
+            "\n\n## Current node: {} — {}\nStatus: {} | Output: `{}`",
+            node.phase, node.title, node.status, context.current_node.output
+        ));
+    }
+    document.push_str("\n\n### Instructions\n");
+    document.push_str(context.current_node.instructions.trim());
+    document.push_str("\n\n### Inputs");
+    if context.current_node.inputs.is_empty() {
+        document.push_str("\nNone.");
+    } else {
+        for input in &context.current_node.inputs {
+            document.push_str(&format!("\n\n#### `{}`\n", input.name));
+            document.push_str(input.content.as_deref().unwrap_or("Unavailable.").trim());
+        }
+    }
+    document.push_str("\n\n## Progress");
+    for node in &workflow.nodes {
+        let marker = if workflow.current_node_id.as_deref() == Some(node.node_id.as_str()) {
+            "→"
+        } else {
+            match node.status.as_str() {
+                "submitted" => "✓",
+                "failed" => "✗",
+                _ => "·",
+            }
+        };
+        document.push_str(&format!(
+            "\n- {marker} {} — {} ({})",
+            node.phase, node.title, node.status
+        ));
+    }
+    document
 }
 
 fn resolve_existing_path(base: &Path, path: &Path, description: &str) -> Result<PathBuf, String> {

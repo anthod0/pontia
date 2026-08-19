@@ -12,8 +12,8 @@ mod validation;
 pub use error::{Error, Result};
 pub use ports::{AgentEventSubscriber, GracefulExitRequester, SessionCreator};
 pub use query::{
-    WorkflowAgentStatus, WorkflowDetailView, WorkflowListItemView, WorkflowNodeView,
-    WorkflowQueryService,
+    WorkflowAgentStatus, WorkflowContextView, WorkflowDetailView, WorkflowInputView,
+    WorkflowListItemView, WorkflowNodeContextView, WorkflowNodeView, WorkflowQueryService,
 };
 pub use scheduler::WorkflowScheduler;
 pub use types::{
