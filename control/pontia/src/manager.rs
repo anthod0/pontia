@@ -126,12 +126,13 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
     fn apply(
         &self,
         _definition_path: &Path,
-        changed: bool,
-        previous: ServiceStatus,
+        _definition_changed: bool,
+        restart_running: bool,
+        _previous: ServiceStatus,
     ) -> Result<(), String> {
         self.require_systemctl(&["daemon-reload"])?;
         self.require_systemctl(&["enable", "--now", SYSTEMD_SERVICE_NAME])?;
-        if changed && previous.run_state == RunState::Running {
+        if restart_running {
             self.require_systemctl(&["restart", SYSTEMD_SERVICE_NAME])?;
         }
         Ok(())
@@ -252,15 +253,16 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
     fn apply(
         &self,
         definition_path: &Path,
-        changed: bool,
+        definition_changed: bool,
+        restart_running: bool,
         previous: ServiceStatus,
     ) -> Result<(), String> {
         let target = self.target();
         self.require_launchctl(vec!["enable".to_string(), target.clone()])?;
-        if changed && previous.loaded {
+        if definition_changed && previous.loaded {
             self.require_launchctl(vec!["bootout".to_string(), target.clone()])?;
         }
-        if changed || !previous.loaded {
+        if definition_changed || !previous.loaded {
             let path = definition_path.to_str().ok_or_else(|| {
                 format!(
                     "launchd definition path is not valid UTF-8: {}",
@@ -272,7 +274,7 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
                 self.domain(),
                 path.to_string(),
             ])?;
-        } else if previous.run_state != RunState::Running {
+        } else if restart_running || previous.run_state != RunState::Running {
             self.require_launchctl(vec!["kickstart".to_string(), "-k".to_string(), target])?;
         }
         Ok(())

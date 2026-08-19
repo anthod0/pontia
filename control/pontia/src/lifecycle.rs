@@ -31,6 +31,11 @@ pub struct ServiceStatus {
     pub run_state: RunState,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct UpOptions {
+    pub daemon_config_changed: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LifecycleStatus {
     pub definition_installed: bool,
@@ -58,7 +63,8 @@ pub trait ServiceManager {
     fn apply(
         &self,
         definition_path: &Path,
-        changed: bool,
+        definition_changed: bool,
+        restart_running: bool,
         previous: ServiceStatus,
     ) -> Result<(), String>;
     fn down(&self) -> Result<(), String>;
@@ -89,14 +95,23 @@ where
         }
     }
 
-    pub fn up(&self, config: &AppConfig, pontiad: &Path, user_home: &Path) -> Result<(), String> {
+    pub fn up(
+        &self,
+        config: &AppConfig,
+        pontiad: &Path,
+        user_home: &Path,
+        options: UpOptions,
+    ) -> Result<(), String> {
         let previous = self.manager.status()?;
         let path = self.manager.definition_path(user_home);
         let rendered = self
             .manager
             .render_definition(pontiad, &config.pontia_home)?;
-        let changed = self.definitions.install(&path, &rendered)?;
-        self.manager.apply(&path, changed, previous)?;
+        let definition_changed = self.definitions.install(&path, &rendered)?;
+        let restart_running = previous.run_state == RunState::Running
+            && (definition_changed || options.daemon_config_changed);
+        self.manager
+            .apply(&path, definition_changed, restart_running, previous)?;
 
         let addr = local_health_addr(config.bind_addr);
         if !self.health.wait_until_healthy(addr, READINESS_TIMEOUT)? {

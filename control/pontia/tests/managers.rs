@@ -71,6 +71,7 @@ fn systemd_reloads_enables_and_restarts_changed_running_service() {
         .apply(
             Path::new("/home/alice/.config/systemd/user/pontia.service"),
             true,
+            true,
             ServiceStatus {
                 enabled: EnabledState::Enabled,
                 loaded: true,
@@ -104,6 +105,40 @@ fn systemd_reloads_enables_and_restarts_changed_running_service() {
                     .collect()
             ),
         ]
+    );
+}
+
+#[test]
+fn systemd_restarts_running_service_when_lifecycle_requests_it() {
+    let runner = FakeRunner::with_outputs(vec![
+        output(0, "", ""),
+        output(0, "", ""),
+        output(0, "", ""),
+    ]);
+    let manager = SystemdManager::new(&runner);
+
+    manager
+        .apply(
+            Path::new("/home/alice/.config/systemd/user/pontia.service"),
+            false,
+            true,
+            ServiceStatus {
+                enabled: EnabledState::Enabled,
+                loaded: true,
+                run_state: RunState::Running,
+            },
+        )
+        .expect("apply succeeds");
+
+    assert_eq!(
+        runner.calls.into_inner().last(),
+        Some(&(
+            "systemctl".to_string(),
+            vec!["--user", "restart", "pontia.service"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+        ))
     );
 }
 
@@ -158,6 +193,7 @@ fn launchd_replaces_changed_loaded_definition() {
         .apply(
             Path::new("/Users/alice/Library/LaunchAgents/dev.pontia.pontiad.plist"),
             true,
+            true,
             ServiceStatus {
                 enabled: EnabledState::Enabled,
                 loaded: true,
@@ -193,6 +229,45 @@ fn launchd_replaces_changed_loaded_definition() {
                 .into_iter()
                 .map(String::from)
                 .collect()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn launchd_restarts_loaded_service_when_lifecycle_requests_it() {
+    let runner = FakeRunner::with_outputs(vec![output(0, "", ""), output(0, "", "")]);
+    let manager = LaunchdManager::new(&runner, 501);
+
+    manager
+        .apply(
+            Path::new("/Users/alice/Library/LaunchAgents/dev.pontia.pontiad.plist"),
+            false,
+            true,
+            ServiceStatus {
+                enabled: EnabledState::Enabled,
+                loaded: true,
+                run_state: RunState::Running,
+            },
+        )
+        .expect("apply succeeds");
+
+    assert_eq!(
+        runner.calls.into_inner(),
+        vec![
+            (
+                "launchctl".to_string(),
+                vec!["enable", "gui/501/dev.pontia.pontiad"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect()
+            ),
+            (
+                "launchctl".to_string(),
+                vec!["kickstart", "-k", "gui/501/dev.pontia.pontiad"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect()
             ),
         ]
     );

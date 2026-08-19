@@ -8,7 +8,7 @@ use std::{
 
 use clap::{Parser, Subcommand};
 use pontia::{
-    lifecycle::{EnabledState, Lifecycle, LifecycleStatus, RunState, ServiceManager},
+    lifecycle::{EnabledState, Lifecycle, LifecycleStatus, RunState, ServiceManager, UpOptions},
     manager::ProcessCommandRunner,
     runtime_io::{FileDefinitionStore, HttpHealthProbe},
 };
@@ -118,7 +118,7 @@ fn run_with_manager<M: ServiceManager>(
             let config = AppConfig::from_env().map_err(|error| error.to_string())?;
             let user_home = user_home()?;
             let pontiad = sibling_pontiad()?;
-            lifecycle.up(&config, &pontiad, &user_home)?;
+            lifecycle.up(&config, &pontiad, &user_home, UpOptions::default())?;
             println!("Pontia is up and healthy.");
             Ok(true)
         }

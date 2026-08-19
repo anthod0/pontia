@@ -7,6 +7,7 @@ use std::{
 
 use pontia::lifecycle::{
     DefinitionStore, EnabledState, HealthProbe, Lifecycle, RunState, ServiceManager, ServiceStatus,
+    UpOptions,
 };
 use pontia_config::AppConfig;
 
@@ -32,7 +33,7 @@ impl DefinitionStore for FakeStore {
 
 struct FakeManager {
     status: ServiceStatus,
-    apply_calls: RefCell<Vec<(PathBuf, bool, ServiceStatus)>>,
+    apply_calls: RefCell<Vec<(PathBuf, bool, bool, ServiceStatus)>>,
     down_calls: RefCell<usize>,
 }
 
@@ -59,12 +60,16 @@ impl ServiceManager for FakeManager {
     fn apply(
         &self,
         definition_path: &Path,
-        changed: bool,
+        definition_changed: bool,
+        restart_running: bool,
         previous: ServiceStatus,
     ) -> Result<(), String> {
-        self.apply_calls
-            .borrow_mut()
-            .push((definition_path.to_path_buf(), changed, previous));
+        self.apply_calls.borrow_mut().push((
+            definition_path.to_path_buf(),
+            definition_changed,
+            restart_running,
+            previous,
+        ));
         Ok(())
     }
 
@@ -133,6 +138,7 @@ fn up_renders_installs_applies_and_waits_for_health_without_real_io() {
             &config(pontia_home),
             Path::new("/opt/pontia/bin/pontiad"),
             Path::new("/home/alice"),
+            UpOptions::default(),
         )
         .expect("up succeeds");
 
@@ -148,12 +154,125 @@ fn up_renders_installs_applies_and_waits_for_health_without_real_io() {
         vec![(
             PathBuf::from("/home/alice/service-definition"),
             true,
+            true,
             previous,
         )]
     );
     assert_eq!(
         health.waits.into_inner(),
         vec![("127.0.0.1:8080".parse().unwrap(), Duration::from_secs(15))]
+    );
+}
+
+#[test]
+fn up_restarts_a_running_service_when_persisted_daemon_config_changed() {
+    let store = FakeStore::default();
+    let previous = ServiceStatus {
+        enabled: EnabledState::Enabled,
+        loaded: true,
+        run_state: RunState::Running,
+    };
+    let manager = manager(previous);
+    let health = FakeHealth {
+        healthy: true,
+        waits: RefCell::new(Vec::new()),
+        probes: RefCell::new(Vec::new()),
+    };
+    let lifecycle = Lifecycle::new(&manager, &store, &health);
+
+    lifecycle
+        .up(
+            &config(Path::new("/home/alice/.pontia")),
+            Path::new("/opt/pontiad"),
+            Path::new("/home/alice"),
+            UpOptions {
+                daemon_config_changed: true,
+            },
+        )
+        .expect("up succeeds");
+
+    assert_eq!(
+        manager.apply_calls.into_inner(),
+        vec![(
+            PathBuf::from("/home/alice/service-definition"),
+            false,
+            true,
+            previous,
+        )]
+    );
+}
+
+#[test]
+fn up_starts_without_requesting_a_restart_when_config_changed_while_stopped() {
+    let store = FakeStore::default();
+    let previous = ServiceStatus {
+        enabled: EnabledState::Disabled,
+        loaded: false,
+        run_state: RunState::Stopped,
+    };
+    let manager = manager(previous);
+    let health = FakeHealth {
+        healthy: true,
+        waits: RefCell::new(Vec::new()),
+        probes: RefCell::new(Vec::new()),
+    };
+    let lifecycle = Lifecycle::new(&manager, &store, &health);
+
+    lifecycle
+        .up(
+            &config(Path::new("/home/alice/.pontia")),
+            Path::new("/opt/pontiad"),
+            Path::new("/home/alice"),
+            UpOptions {
+                daemon_config_changed: true,
+            },
+        )
+        .expect("up succeeds");
+
+    assert_eq!(
+        manager.apply_calls.into_inner(),
+        vec![(
+            PathBuf::from("/home/alice/service-definition"),
+            false,
+            false,
+            previous,
+        )]
+    );
+}
+
+#[test]
+fn up_does_not_restart_a_running_service_when_nothing_changed() {
+    let store = FakeStore::default();
+    let previous = ServiceStatus {
+        enabled: EnabledState::Enabled,
+        loaded: true,
+        run_state: RunState::Running,
+    };
+    let manager = manager(previous);
+    let health = FakeHealth {
+        healthy: true,
+        waits: RefCell::new(Vec::new()),
+        probes: RefCell::new(Vec::new()),
+    };
+    let lifecycle = Lifecycle::new(&manager, &store, &health);
+
+    lifecycle
+        .up(
+            &config(Path::new("/home/alice/.pontia")),
+            Path::new("/opt/pontiad"),
+            Path::new("/home/alice"),
+            UpOptions::default(),
+        )
+        .expect("up succeeds");
+
+    assert_eq!(
+        manager.apply_calls.into_inner(),
+        vec![(
+            PathBuf::from("/home/alice/service-definition"),
+            false,
+            false,
+            previous,
+        )]
     );
 }
 
@@ -177,6 +296,7 @@ fn up_fails_when_health_does_not_become_ready() {
             &config(Path::new("/home/alice/.pontia")),
             Path::new("/opt/pontiad"),
             Path::new("/home/alice"),
+            UpOptions::default(),
         )
         .expect_err("unhealthy daemon must fail");
 
