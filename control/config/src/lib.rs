@@ -25,9 +25,7 @@ pub struct AppConfig {
 const DEFAULT_DASHBOARD_SOURCE: &str = concat!(
     "https://github.com/anthod0/pontia/releases/download/v",
     env!("CARGO_PKG_VERSION"),
-    "/pontia-dashboard-v",
-    env!("CARGO_PKG_VERSION"),
-    ".zip"
+    "/pontia-dashboard.tar.gz"
 );
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

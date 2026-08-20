@@ -374,9 +374,7 @@ fn provides_development_defaults_for_optional_values() {
         Some(concat!(
             "https://github.com/anthod0/pontia/releases/download/v",
             env!("CARGO_PKG_VERSION"),
-            "/pontia-dashboard-v",
-            env!("CARGO_PKG_VERSION"),
-            ".zip"
+            "/pontia-dashboard.tar.gz"
         ))
     );
     assert!(config.run_migrations);

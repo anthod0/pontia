@@ -3,6 +3,11 @@ name = "pontiad"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+
+[[package.metadata.dist.extra-artifacts]]
+artifacts = ["../../pontia-dashboard.tar.gz"]
+build = ["../../scripts/build-dashboard-release.sh"]
 
 [dependencies]
 axum = "0.8"
