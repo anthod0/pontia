@@ -1,13 +1,14 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File, OpenOptions},
-    io::{BufRead, ErrorKind, Write},
+    io::{self, BufRead, ErrorKind, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::atomic::{AtomicUsize, Ordering},
 };
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use dialoguer::{MultiSelect, console::Term};
 use pontia_config::{AppConfig, WorkspaceRootConfig};
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
@@ -28,6 +29,37 @@ pub fn run<R: BufRead, W: Write, P: InitPlatform>(
     vars: &HashMap<String, String>,
     platform: &P,
 ) -> Result<(), String> {
+    run_with_selector(input, output, vars, platform, line_agent_selection)
+}
+
+pub fn run_interactive<P: InitPlatform>(
+    vars: &HashMap<String, String>,
+    platform: &P,
+) -> Result<(), String> {
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    run_with_selector(
+        &mut stdin.lock(),
+        &mut stdout.lock(),
+        vars,
+        platform,
+        interactive_agent_selection,
+    )
+}
+
+fn run_with_selector<R, W, P, S>(
+    input: &mut R,
+    output: &mut W,
+    vars: &HashMap<String, String>,
+    platform: &P,
+    select_agents: S,
+) -> Result<(), String>
+where
+    R: BufRead,
+    W: Write,
+    P: InitPlatform,
+    S: FnOnce(&mut R, &mut W) -> Result<bool, String>,
+{
     let persistent_vars = persistent_vars(vars);
     let existing = load_persistent_config(&persistent_vars)?;
     if existing.bind_addr.port() == 0 {
@@ -48,17 +80,7 @@ pub fn run<R: BufRead, W: Write, P: InitPlatform>(
     };
 
     writeln!(output, "Pontia initialization\n").map_err(io_error)?;
-    writeln!(output, "Select Agent Clients:\n  [x] pi").map_err(io_error)?;
-    write!(
-        output,
-        "Press Enter to install all, or type 'none' to skip: "
-    )
-    .map_err(io_error)?;
-    let install_pi = match read_answer(input, output)?.trim() {
-        "" | "pi" => true,
-        "none" => false,
-        other => return Err(format!("unsupported Agent Client selection: {other}")),
-    };
+    let install_pi = select_agents(input, output)?;
 
     writeln!(output, "\nWorkspace Browser roots:").map_err(io_error)?;
     for root in &initial_roots {
@@ -156,42 +178,61 @@ pub fn run<R: BufRead, W: Write, P: InitPlatform>(
         .map_err(|error| format!("failed to build Dashboard URL: {error}"))?;
     url.query_pairs_mut().append_pair("token", &token);
     let url = url.to_string();
-    writeln!(output, "Dashboard: {url}").map_err(io_error)?;
-    match platform.open_browser(&url) {
-        Ok(()) => writeln!(output, "✓ Opened Dashboard in your browser").map_err(io_error)?,
-        Err(error) => writeln!(output, "Could not open Dashboard: {error}").map_err(io_error)?,
-    }
-    writeln!(
-        output,
-        "Press Enter to open Dashboard again. Press Ctrl-C to exit initialization."
-    )
-    .map_err(io_error)?;
-    writeln!(
-        output,
-        "Pontia will keep running. Use `pontia down` to stop it."
-    )
-    .map_err(io_error)?;
+    writeln!(output, "Dashboard:\n\n{url}\n").map_err(io_error)?;
+    write_browser_result(output, platform.open_browser(&url).is_ok())?;
 
     loop {
         let mut line = String::new();
         match input.read_line(&mut line).map_err(io_error)? {
             0 => return Ok(()),
-            _ if line.trim().is_empty() => match platform.open_browser(&url) {
-                Ok(()) => {
-                    writeln!(output, "✓ Opened Dashboard in your browser").map_err(io_error)?
-                }
-                Err(error) => {
-                    writeln!(output, "Could not open Dashboard: {error}").map_err(io_error)?
-                }
-            },
-            _ => writeln!(
-                output,
-                "Press Enter to open Dashboard again. Press Ctrl-C to exit initialization."
-            )
-            .map_err(io_error)?,
+            _ if line.trim().is_empty() => {
+                write_browser_result(output, platform.open_browser(&url).is_ok())?
+            }
+            _ => writeln!(output, "Press Enter to open Dashboard or Ctrl-C to exit.")
+                .map_err(io_error)?,
         }
         output.flush().map_err(io_error)?;
     }
+}
+
+fn write_browser_result<W: Write>(output: &mut W, opened: bool) -> Result<(), String> {
+    let message = if opened {
+        "✓ Dashboard opened; Enter reopens it, Ctrl-C exits, and `pontia down` stops it."
+    } else {
+        "Browser not opened; use the URL above or press Enter to retry; Ctrl-C exits, and `pontia down` stops it."
+    };
+    writeln!(output, "{message}").map_err(io_error)
+}
+
+fn line_agent_selection<R: BufRead, W: Write>(
+    input: &mut R,
+    output: &mut W,
+) -> Result<bool, String> {
+    writeln!(output, "Select Agent Clients:\n  [x] pi").map_err(io_error)?;
+    write!(
+        output,
+        "Press Enter to install all, or type 'none' to skip: "
+    )
+    .map_err(io_error)?;
+    match read_answer(input, output)?.trim() {
+        "" | "pi" => Ok(true),
+        "none" => Ok(false),
+        other => Err(format!("unsupported Agent Client selection: {other}")),
+    }
+}
+
+fn interactive_agent_selection<R: BufRead, W: Write>(
+    _input: &mut R,
+    output: &mut W,
+) -> Result<bool, String> {
+    output.flush().map_err(io_error)?;
+    let selected = MultiSelect::new()
+        .with_prompt("Select Agent Clients (Space to toggle, Enter to confirm)")
+        .item("pi")
+        .defaults(&[true])
+        .interact_on(&Term::stdout())
+        .map_err(|error| format!("Agent Client selection failed: {error}"))?;
+    Ok(selected.contains(&0))
 }
 
 fn load_persistent_config(vars: &HashMap<String, String>) -> Result<AppConfig, String> {

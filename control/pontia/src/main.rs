@@ -3,10 +3,10 @@ mod workflow;
 use std::{
     collections::HashMap,
     env,
-    io::{self, Read, Write},
+    io::{Read, Write},
     net::{SocketAddr, TcpStream},
     path::{Component, Path, PathBuf},
-    process::{Command as ProcessCommand, ExitCode},
+    process::{Command as ProcessCommand, ExitCode, Stdio},
     time::Duration,
 };
 
@@ -269,6 +269,8 @@ fn open_browser(_url: &str) -> Result<(), String> {
 fn run_browser_opener(program: &str, url: &str) -> Result<(), String> {
     let status = ProcessCommand::new(program)
         .arg(url)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .map_err(|error| format!("failed to launch the browser opener: {error}"))?;
     if status.success() {
@@ -280,14 +282,7 @@ fn run_browser_opener(program: &str, url: &str) -> Result<(), String> {
 
 fn run_init() -> Result<bool, String> {
     let vars: HashMap<String, String> = env::vars().collect();
-    let stdin = io::stdin();
-    let stdout = io::stdout();
-    init::run(
-        &mut stdin.lock(),
-        &mut stdout.lock(),
-        &vars,
-        &RealInitPlatform,
-    )?;
+    init::run_interactive(&vars, &RealInitPlatform)?;
     Ok(true)
 }
 
