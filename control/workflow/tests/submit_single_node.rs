@@ -506,6 +506,7 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
             execution_profile_version: None,
             metadata: json!({}),
             initial_task: None,
+            runtime_environment: Default::default(),
         })
         .await
         .expect("create bound session");

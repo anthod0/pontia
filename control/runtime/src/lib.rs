@@ -67,6 +67,7 @@ mod tests {
                     handle: None,
                     role: None,
                     start_command: None,
+                    environment: Default::default(),
                 },
             )
             .expect("generic runtime should start");
@@ -100,6 +101,7 @@ mod tests {
                     handle: Some("@reviewer".to_string()),
                     role: Some("execution reviewer".to_string()),
                     start_command: None,
+                    environment: Default::default(),
                 },
             )
             .expect("generic runtime should start");
@@ -121,6 +123,7 @@ mod tests {
             handle: None,
             role: None,
             start_command: None,
+            environment: Default::default(),
         };
 
         let first = manager
@@ -197,6 +200,7 @@ mod tests {
                     handle: None,
                     role: None,
                     start_command: Some(format!("printf reused > {}", output.display())),
+                    environment: Default::default(),
                 },
                 1,
                 Some((&binding.socket_path, &binding.pane_id)),

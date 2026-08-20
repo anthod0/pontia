@@ -304,6 +304,52 @@ fn workflow_show_prints_compact_agent_readable_context() {
 }
 
 #[test]
+fn workflow_show_uses_workflow_id_from_environment_when_argument_is_omitted() {
+    let dir = temp_dir("show-environment");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+    let addr = listener.local_addr().expect("test server address");
+    write_pontia_config(dir.path(), addr.port());
+    let request = capture_one_request_with_response(
+        listener,
+        r#"{"data":{"context":{"workflow":{"workflow_id":"wf_environment","title":"Environment workflow","state":"running","failure_message":null,"agent_submitted_count":0,"agent_total_count":1,"current_node_id":"node_current","nodes":[{"node_id":"node_current","phase":"Build","title":"Build","status":"running"}]},"current_node":{"instructions":"Build.","inputs":[],"output":"result.md"}}}}"#,
+    );
+
+    let output = pontia()
+        .args(["workflow", "show"])
+        .env("PONTIA_HOME", dir.path())
+        .env("PONTIA_WORKFLOW_ID", "wf_environment")
+        .output()
+        .expect("run workflow show");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let request = request.join().expect("request capture thread");
+    assert!(request.starts_with("GET /external/v1/workflows/wf_environment/context HTTP/1.1"));
+}
+
+#[test]
+fn workflow_show_requires_an_id_when_argument_and_environment_are_missing() {
+    let dir = temp_dir("show-missing-id");
+    write_pontia_config(dir.path(), 9);
+
+    let output = pontia()
+        .args(["workflow", "show"])
+        .env("PONTIA_HOME", dir.path())
+        .env_remove("PONTIA_WORKFLOW_ID")
+        .output()
+        .expect("run workflow show");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("WORKFLOW_ID is required when PONTIA_WORKFLOW_ID is not set")
+    );
+}
+
+#[test]
 fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
     let dir = temp_dir("submit-success");
     let bin_dir = dir.path().join("bin");

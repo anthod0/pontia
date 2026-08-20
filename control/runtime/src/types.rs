@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -12,6 +14,8 @@ pub struct RuntimeStartRequest {
     pub handle: Option<String>,
     pub role: Option<String>,
     pub start_command: Option<String>,
+    #[serde(default)]
+    pub environment: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

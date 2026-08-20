@@ -81,6 +81,7 @@ pub(super) fn write_launch_script(
     launch_id: &str,
     runtime_instance_id: &str,
 ) -> Result<()> {
+    let runtime_environment = render_runtime_environment(request)?;
     let client_spec = agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
         Error::Domain(format!("unsupported client_type: {}", request.client_type))
     })?;
@@ -121,9 +122,9 @@ pub(super) fn write_launch_script(
     };
     let content = format!(
         r#"#!/usr/bin/env sh
-unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG
+unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID
 export PONTIA_HOME={}
-if [ -n "${{TMUX:-}}" ] && [ -n "${{TMUX_PANE:-}}" ]; then
+{}if [ -n "${{TMUX:-}}" ] && [ -n "${{TMUX_PANE:-}}" ]; then
   tmux set-option -p -t "$TMUX_PANE" @pontia_session_id {} || exit 1
   tmux set-option -p -t "$TMUX_PANE" @pontia_runtime_instance_id {} || exit 1
 fi
@@ -139,6 +140,7 @@ cleanup_pontia_launch_script
 {}
 "#,
         shell_quote(&pontia_home.display().to_string()),
+        runtime_environment,
         shell_quote(&request.session_id),
         shell_quote(runtime_instance_id),
         log_setup,
@@ -152,6 +154,22 @@ cleanup_pontia_launch_script
         .open(path)?;
     file.write_all(content.as_bytes())?;
     Ok(())
+}
+
+fn render_runtime_environment(request: &RuntimeStartRequest) -> Result<String> {
+    let mut rendered = String::new();
+    for (name, value) in &request.environment {
+        let valid_name = name.bytes().enumerate().all(|(index, byte)| {
+            byte == b'_' || byte.is_ascii_alphabetic() || (index > 0 && byte.is_ascii_digit())
+        });
+        if !valid_name || name == "PONTIA_HOME" {
+            return Err(Error::Domain(format!(
+                "invalid runtime environment variable name: {name}"
+            )));
+        }
+        rendered.push_str(&format!("export {name}={}\n", shell_quote(value)));
+    }
+    Ok(rendered)
 }
 
 fn shell_quote(value: &str) -> String {
@@ -203,6 +221,9 @@ mod tests {
             handle: None,
             role: None,
             start_command: None,
+            environment: [("PONTIA_WORKFLOW_ID".to_string(), "wf_123".to_string())]
+                .into_iter()
+                .collect(),
         };
 
         write_launch_script(
@@ -222,8 +243,9 @@ mod tests {
         );
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
         assert!(script.contains("export PONTIA_HOME="));
+        assert!(script.contains("export PONTIA_WORKFLOW_ID='wf_123'"));
         assert!(script.contains(
-            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG"
+            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID"
         ));
         for name in [
             "PONTIA_SESSION_ID",
@@ -266,6 +288,7 @@ mod tests {
             handle: None,
             role: None,
             start_command: None,
+            environment: Default::default(),
         };
 
         write_launch_script(
@@ -300,6 +323,7 @@ mod tests {
             handle: None,
             role: None,
             start_command: Some("pi --resume-user-command".to_string()),
+            environment: Default::default(),
         };
         let script_path = tempdir.path().join("launch.sh");
 

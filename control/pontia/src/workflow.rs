@@ -41,7 +41,7 @@ struct SubmitArgs {
 #[derive(Debug, Args)]
 struct ShowArgs {
     #[arg(value_name = "WORKFLOW_ID")]
-    workflow_id: String,
+    workflow_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -245,6 +245,14 @@ async fn run_workflow(args: RunArgs, config: &AppConfig) -> Result<(), String> {
 }
 
 async fn show_workflow(args: ShowArgs, config: &AppConfig) -> Result<(), String> {
+    let workflow_id = args
+        .workflow_id
+        .or_else(|| {
+            env::var("PONTIA_WORKFLOW_ID")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .ok_or_else(|| "WORKFLOW_ID is required when PONTIA_WORKFLOW_ID is not set".to_string())?;
     let token = config
         .external_api_token
         .as_deref()
@@ -257,7 +265,7 @@ async fn show_workflow(args: ShowArgs, config: &AppConfig) -> Result<(), String>
         .map_err(|error| format!("failed to build Workflow URL: {error}"))?;
     url.path_segments_mut()
         .map_err(|_| "failed to build Workflow URL".to_string())?
-        .push(&args.workflow_id)
+        .push(&workflow_id)
         .push("context");
     let response = reqwest::Client::new()
         .get(url)

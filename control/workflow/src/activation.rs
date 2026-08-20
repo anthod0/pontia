@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 use pontia_application::{CreateSessionRequest, InitialTaskRequest};
 use pontia_storage_sqlite::{
@@ -51,6 +51,10 @@ fn session_request(
     node: &WorkflowNodeRow,
     initial_task: String,
 ) -> CreateSessionRequest {
+    let runtime_environment = BTreeMap::from([(
+        "PONTIA_WORKFLOW_ID".to_string(),
+        workflow.workflow_id.clone(),
+    )]);
     CreateSessionRequest {
         client_type: "pi".to_string(),
         title: Some(node.title.clone()),
@@ -66,6 +70,7 @@ fn session_request(
             input: initial_task,
             metadata: json!({}),
         }),
+        runtime_environment,
     }
 }
 

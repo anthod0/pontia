@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use pontia_runtime::GenericRuntimeManager;
 use serde::Deserialize;
@@ -27,6 +27,8 @@ pub struct CreateSessionRequest {
     #[serde(default)]
     pub metadata: Value,
     pub initial_task: Option<InitialTaskRequest>,
+    #[serde(skip)]
+    pub runtime_environment: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]

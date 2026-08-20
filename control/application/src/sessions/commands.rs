@@ -120,6 +120,7 @@ impl SessionCommandService {
                 handle: request.handle.clone(),
                 role: request.role.clone(),
                 start_command: None,
+                environment: request.runtime_environment.clone(),
             },
         )?;
         self.upsert_runtime_binding(&session_id, &runtime).await?;

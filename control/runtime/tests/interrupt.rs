@@ -69,6 +69,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
                 handle: None,
                 role: None,
                 start_command: None,
+                environment: Default::default(),
             },
         )
         .expect("start session");
@@ -131,6 +132,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
                 handle: None,
                 role: None,
                 start_command: None,
+                environment: Default::default(),
             },
         )
         .expect("start session");

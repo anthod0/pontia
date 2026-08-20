@@ -1,9 +1,11 @@
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 use pontia_agent_clients::{TerminateBehavior, get_client_spec};
 use pontia_core::error::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
-use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
+use pontia_storage_sqlite::repositories::{
+    turns::SqliteTurnRepository, workflows::SqliteWorkflowRepository,
+};
 use serde_json::json;
 
 use super::{ControlCommandOutcome, RuntimeControlService};
@@ -205,6 +207,7 @@ impl RuntimeControlService {
                     handle: session.handle.clone(),
                     role: session.role.clone(),
                     start_command: resume_start_command,
+                    environment: self.workflow_runtime_environment(session_id).await?,
                 },
                 prior_restart_count + 1,
                 tmux_binding
@@ -312,6 +315,7 @@ impl RuntimeControlService {
                 handle: session.handle.clone(),
                 role: session.role.clone(),
                 start_command: self.start_command(session_id).await?,
+                environment: self.workflow_runtime_environment(session_id).await?,
             },
             prior_restart_count + 1,
         )?;
@@ -356,5 +360,18 @@ impl RuntimeControlService {
             data,
             duplicate: false,
         })
+    }
+
+    async fn workflow_runtime_environment(
+        &self,
+        session_id: &str,
+    ) -> Result<BTreeMap<String, String>> {
+        let workflow_id = SqliteWorkflowRepository::new(self.pool.clone())
+            .get_node_by_session(session_id)
+            .await?
+            .map(|node| node.workflow_id);
+        Ok(workflow_id
+            .map(|workflow_id| BTreeMap::from([("PONTIA_WORKFLOW_ID".to_string(), workflow_id)]))
+            .unwrap_or_default())
     }
 }

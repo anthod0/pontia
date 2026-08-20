@@ -16,6 +16,7 @@ fn runtime_crate_exposes_manager_and_start_types() {
                 handle: None,
                 role: None,
                 start_command: None,
+                environment: Default::default(),
             },
         )
         .expect("generic runtime starts");

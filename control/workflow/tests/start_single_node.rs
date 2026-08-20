@@ -97,6 +97,13 @@ async fn start_launches_first_node_as_a_pi_session_with_handoff_protocol() {
     assert_eq!(request.workspace_id, None);
     assert_eq!(request.execution_profile_id.as_deref(), Some("writer"));
     assert_eq!(request.execution_profile_version.as_deref(), Some("3"));
+    assert_eq!(
+        request
+            .runtime_environment
+            .get("PONTIA_WORKFLOW_ID")
+            .map(String::as_str),
+        Some("wf_start")
+    );
     let task = &request.initial_task.as_ref().expect("initial task").input;
     assert!(task.contains("Turn the brief into concise release notes."));
     assert!(task.contains("Input file: brief.md"));
