@@ -338,6 +338,7 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 | `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 | `started_at` | TEXT | |
 | `completed_at` | TEXT | |
+| `activating_node_id` | TEXT | foreign key → `workflow_nodes.node_id`; transient database gate preventing pause from racing node dispatch |
 
 ## `workflow_nodes`
 

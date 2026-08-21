@@ -435,6 +435,106 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
 }
 
 #[tokio::test]
+async fn paused_monitor_ignores_expected_interrupt_and_defers_downstream_dispatch() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let pool = test_pool(&temp.path().join("paused.db")).await;
+    let repository = SqliteWorkflowRepository::new(pool.clone());
+    repository
+        .create_workflow(CreateWorkflowRecord {
+            workflow_id: "wf_paused".to_string(),
+            title: "Paused workflow".to_string(),
+            cwd: "/workspace/shared-project".to_string(),
+            state: "pending".to_string(),
+        })
+        .await
+        .expect("create workflow");
+    for (node_id, parent_node_id, output) in [
+        ("node_paused_root", None, "root.md"),
+        ("node_paused_child", Some("node_paused_root"), "child.md"),
+    ] {
+        repository
+            .create_node(CreateWorkflowNodeRecord {
+                node_id: node_id.to_string(),
+                workflow_id: "wf_paused".to_string(),
+                parent_node_id: parent_node_id.map(str::to_string),
+                phase: "Test Phase".to_string(),
+                title: node_id.to_string(),
+                instructions: "Produce output".to_string(),
+                inputs: if parent_node_id.is_some() {
+                    r#"["root.md"]"#.to_string()
+                } else {
+                    "[]".to_string()
+                },
+                output: output.to_string(),
+                execution_profile_id: None,
+                execution_profile_version: None,
+            })
+            .await
+            .expect("create node");
+    }
+
+    let events = TestAgentEvents::new();
+    let scheduler = WorkflowScheduler::with_services(
+        pool,
+        SequencedSessionCreator::new(&["session_paused_root", "session_paused_child"]),
+        RecordingExitRequester::default(),
+        events.clone(),
+        temp.path().join("pontia-home"),
+    );
+    scheduler.start("wf_paused").await.expect("start workflow");
+    scheduler
+        .submit(SubmitWorkflowNodeRequest {
+            session_id: "session_paused_root".to_string(),
+            runtime_instance_id: "runtime_session_paused_root".to_string(),
+            output: "root.md".to_string(),
+            content: "Root output".to_string(),
+        })
+        .await
+        .expect("submit root");
+    repository
+        .pause_workflow("wf_paused", "evt_workflow_paused")
+        .await
+        .expect("pause workflow");
+
+    events.publish(
+        "evt_turn_interrupted_paused",
+        "session_paused_root",
+        EventType::TurnInterrupted,
+    );
+    events.publish(
+        "evt_session_exited_paused",
+        "session_paused_root",
+        EventType::SessionExited,
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    assert_eq!(
+        repository
+            .get_workflow("wf_paused")
+            .await
+            .expect("load workflow")
+            .expect("workflow exists")
+            .state,
+        "paused"
+    );
+    assert!(
+        repository
+            .get_node("node_paused_child")
+            .await
+            .expect("load child")
+            .expect("child exists")
+            .session_id
+            .is_none()
+    );
+
+    repository
+        .resume_workflow("wf_paused", "evt_workflow_resumed")
+        .await
+        .expect("resume workflow");
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    wait_for_session(&repository, "node_paused_child", "session_paused_child").await;
+}
+
+#[tokio::test]
 async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("lagged.db")).await;

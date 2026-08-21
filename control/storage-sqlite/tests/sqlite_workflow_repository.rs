@@ -278,6 +278,65 @@ async fn completing_a_running_workflow_atomically_updates_state_and_appends_comp
 }
 
 #[tokio::test]
+async fn node_activation_claim_blocks_pause_until_the_session_is_bound() {
+    let (pool, _pontia_home) = test_pool().await;
+    let repository = SqliteWorkflowRepository::new(pool);
+    repository
+        .create_workflow(CreateWorkflowRecord {
+            workflow_id: "wf_activation_gate".to_string(),
+            title: "Activation gate".to_string(),
+            cwd: "/work/project".to_string(),
+            state: "running".to_string(),
+        })
+        .await
+        .expect("create workflow");
+    repository
+        .create_node(CreateWorkflowNodeRecord {
+            node_id: "node_activation_gate".to_string(),
+            workflow_id: "wf_activation_gate".to_string(),
+            parent_node_id: None,
+            phase: "Build".to_string(),
+            title: "Builder".to_string(),
+            instructions: "Build it".to_string(),
+            inputs: "[]".to_string(),
+            output: "result.md".to_string(),
+            execution_profile_id: None,
+            execution_profile_version: None,
+        })
+        .await
+        .expect("create node");
+
+    repository
+        .claim_node_activation("wf_activation_gate", "node_activation_gate")
+        .await
+        .expect("claim activation");
+    assert!(
+        repository
+            .pause_workflow("wf_activation_gate", "evt_pause_blocked")
+            .await
+            .is_err()
+    );
+
+    repository
+        .finish_node_activation("node_activation_gate", "session_activation_gate")
+        .await
+        .expect("finish activation");
+    repository
+        .pause_workflow("wf_activation_gate", "evt_paused")
+        .await
+        .expect("pause after activation");
+    assert_eq!(
+        repository
+            .get_workflow("wf_activation_gate")
+            .await
+            .expect("load workflow")
+            .expect("workflow exists")
+            .state,
+        "paused"
+    );
+}
+
+#[tokio::test]
 async fn phase_migration_backfills_existing_workflow_nodes_with_an_empty_label() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("workflow-phase-migration.db");

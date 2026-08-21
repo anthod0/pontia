@@ -6,8 +6,8 @@ export type TurnState = 'queued' | 'running' | 'completed' | 'failed' | 'interru
 export type TurnTopologyStatus = 'unknown' | 'root' | 'linked';
 export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now';
 export type InboxMessageState = 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed' | 'dismissed';
-export type WorkflowState = 'pending' | 'running' | 'idle' | 'completed' | 'failed';
-export type WorkflowAgentStatus = 'pending' | 'starting' | 'running' | 'idle' | 'exiting' | 'submitted' | 'failed' | 'unknown';
+export type WorkflowState = 'pending' | 'running' | 'paused' | 'idle' | 'completed' | 'failed';
+export type WorkflowAgentStatus = 'pending' | 'starting' | 'running' | 'paused' | 'idle' | 'exiting' | 'submitted' | 'failed' | 'unknown';
 
 export interface WorkflowListItemView {
   workflow_id: string;

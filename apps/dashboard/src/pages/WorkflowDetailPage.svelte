@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, RefreshCw, Workflow } from '@lucide/svelte'
+  import { CircleAlert, Pause, Play, RefreshCw, Workflow } from '@lucide/svelte'
   import { navigate } from '$lib/navigation'
   import { cn } from '$lib/utils.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
@@ -10,7 +10,7 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
-  import { workflowDetail, workflowDetailError, workflowDetailLoading, refreshWorkflow, selectedWorkflowId } from '../stores/workflows'
+  import { workflowDetail, workflowDetailError, workflowDetailLoading, pauseWorkflow, refreshWorkflow, resumeWorkflow, selectedWorkflowId } from '../stores/workflows'
   import { groupWorkflowPhases, selectedPhaseOrdinal } from './workflows/phases'
   import type { WorkflowAgentStatus, WorkflowDetailView } from '../api/types'
 
@@ -21,13 +21,14 @@
   let explicitOrdinal = $derived(selectedPhaseOrdinal(requestedPhase, phases))
   let selectedPhase = $derived(phases.find((phase) => phase.ordinal === explicitOrdinal) ?? phases.find((phase) => phase.current) ?? phases[0] ?? null)
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  let actionBusy = $state(false)
 
   function readPhaseQuery(): void {
     requestedPhase = new URLSearchParams(window.location.search).get('phase')
   }
 
   function syncPolling(detail: WorkflowDetailView | null): void {
-    const shouldPoll = detail?.workflow_id === routeWorkflowId && detail.state === 'running' && document.visibilityState === 'visible'
+    const shouldPoll = detail?.workflow_id === routeWorkflowId && ['running', 'paused'].includes(detail.state) && document.visibilityState === 'visible'
     if (shouldPoll && !pollTimer) {
       pollTimer = setInterval(() => void refreshWorkflow(routeWorkflowId, { showLoading: false }), 2000)
     } else if (!shouldPoll && pollTimer) {
@@ -38,7 +39,7 @@
 
   function handleVisibility(): void {
     syncPolling($workflowDetail)
-    if (document.visibilityState === 'visible' && snapshot?.state === 'running') void refreshWorkflow(routeWorkflowId, { showLoading: false })
+    if (document.visibilityState === 'visible' && snapshot && ['running', 'paused'].includes(snapshot.state)) void refreshWorkflow(routeWorkflowId, { showLoading: false })
   }
 
   onMount(() => {
@@ -62,8 +63,23 @@
     return hours ? `${hours}h ${minutes}m ${rest}s` : `${minutes}m ${rest}s`
   }
 
+  async function runControl(action: 'pause' | 'resume'): Promise<void> {
+    if (actionBusy) return
+    actionBusy = true
+    try {
+      if (action === 'pause') await pauseWorkflow(routeWorkflowId)
+      else await resumeWorkflow(routeWorkflowId)
+    } catch (error) {
+      await refreshWorkflow(routeWorkflowId, { showLoading: false })
+      workflowDetailError.set(error instanceof Error ? error.message : String(error))
+    } finally {
+      actionBusy = false
+    }
+  }
+
   function statusClass(status: WorkflowAgentStatus): string {
     if (status === 'submitted') return 'text-green-600 dark:text-green-400'
+    if (status === 'paused') return 'text-blue-600 dark:text-blue-400'
     if (status === 'idle') return 'text-emerald-600 dark:text-emerald-400'
     if (status === 'failed') return 'text-destructive'
     if (status === 'starting' || status === 'running') return 'text-amber-600 dark:text-amber-400'
@@ -85,7 +101,14 @@
       <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><Workflow class="size-7 shrink-0" /> <span class="truncate">{snapshot?.title ?? 'Workflow'}</span></h2>
       {#if snapshot}<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant={snapshot.state === 'failed' ? 'destructive' : 'secondary'}>{snapshot.state}</Badge><span>{snapshot.agent_submitted_count}/{snapshot.agent_total_count} agents</span><span>·</span><span>{formatElapsed(snapshot.elapsed_ms)}</span><span>·</span><span class="font-mono text-xs">{snapshot.workflow_id}</span></div>{/if}
     </div>
-    <Button variant="outline" onclick={() => void refreshWorkflow(routeWorkflowId)}><RefreshCw class="size-4" /> Refresh</Button>
+    <div class="flex shrink-0 gap-2">
+      {#if snapshot?.state === 'running'}
+        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('pause')}><Pause class="size-4" /> Pause</Button>
+      {:else if snapshot?.state === 'paused'}
+        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('resume')}><Play class="size-4" /> Resume</Button>
+      {/if}
+      <Button variant="outline" disabled={actionBusy} onclick={() => void refreshWorkflow(routeWorkflowId)}><RefreshCw class="size-4" /> Refresh</Button>
+    </div>
   </div>
 
   {#if $workflowDetailError}

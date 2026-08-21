@@ -6,6 +6,10 @@ use http_body_util::BodyExt;
 use pontia_agent_clients::{AgentClientCapabilities, GenericTestClient};
 use pontia_application::AppState;
 use pontia_http as http;
+use pontia_storage_sqlite::repositories::workflows::{
+    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
+};
+use pontia_workflow::WorkflowControlService;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
@@ -292,6 +296,77 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
             .iter()
             .all(|event| event["payload"].get("codex").is_none())
     );
+}
+
+#[tokio::test]
+async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() {
+    let _scope = GenericClientTestScope::new().await;
+    let state = test_state("generic_contract_workflow_resume").await;
+    let session_id = create_session(state.clone()).await;
+    let (turn_id, _) = submit_turn(state.clone(), &session_id, "initial workflow work").await;
+    let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
+    for event_type in ["turn.started", "turn.interrupted"] {
+        let (status, body) = post_json(
+            state.clone(),
+            "/internal/v1/events",
+            None,
+            json!({
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "type": event_type,
+                "data": { "runtime_instance_id": runtime_instance_id }
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+
+    let repository = SqliteWorkflowRepository::new(state.db());
+    repository
+        .create_definition(
+            CreateWorkflowRecord {
+                workflow_id: "wf_generic_resume".to_string(),
+                title: "Resume workflow".to_string(),
+                cwd: "/workspace/project".to_string(),
+                state: "paused".to_string(),
+            },
+            vec![CreateWorkflowNodeRecord {
+                node_id: "node_generic_resume".to_string(),
+                workflow_id: "wf_generic_resume".to_string(),
+                parent_node_id: None,
+                phase: "Build".to_string(),
+                title: "Worker".to_string(),
+                instructions: "Continue work".to_string(),
+                inputs: "[]".to_string(),
+                output: "result.md".to_string(),
+                execution_profile_id: None,
+                execution_profile_version: None,
+            }],
+        )
+        .await
+        .expect("create paused workflow");
+    repository
+        .bind_node_session("node_generic_resume", &session_id)
+        .await
+        .expect("bind interrupted session");
+
+    let outcome = WorkflowControlService::new(state.db())
+        .resume("wf_generic_resume")
+        .await
+        .expect("resume workflow");
+    assert!(outcome.continue_sent);
+    assert_eq!(outcome.state, "running");
+
+    for _ in 0..20 {
+        if GenericTestClient::recorded_inputs()
+            .iter()
+            .any(|input| input.session_id == session_id && input.input == "continue")
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("workflow resume did not dispatch continue");
 }
 
 #[tokio::test]

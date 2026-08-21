@@ -194,6 +194,14 @@ export async function getWorkflow(workflowId: string, options: ReadRequestOption
   return (await request<{ workflow: WorkflowDetailView }>(`/workflows/${encodeURIComponent(workflowId)}`, options)).workflow;
 }
 
+export async function pauseWorkflow(workflowId: string): Promise<WorkflowDetailView> {
+  return (await request<{ workflow: WorkflowDetailView }>(`/workflows/${encodeURIComponent(workflowId)}/pause`, { method: 'POST', mutating: true })).workflow;
+}
+
+export async function resumeWorkflow(workflowId: string): Promise<WorkflowDetailView> {
+  return (await request<{ workflow: WorkflowDetailView }>(`/workflows/${encodeURIComponent(workflowId)}/resume`, { method: 'POST', mutating: true })).workflow;
+}
+
 export async function listSessions(options: ListSessionsOptions = {}): Promise<SessionView[]> {
   const query = new URLSearchParams();
   if (options.includeArchived) query.set('include_archived', 'true');

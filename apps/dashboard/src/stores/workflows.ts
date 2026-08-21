@@ -1,5 +1,5 @@
 import { get, writable } from 'svelte/store';
-import { getWorkflow, listWorkflows } from '../api/client';
+import { getWorkflow, listWorkflows, pauseWorkflow as apiPauseWorkflow, resumeWorkflow as apiResumeWorkflow } from '../api/client';
 import type { WorkflowDetailView, WorkflowListItemView } from '../api/types';
 
 type LoadOptions = { showLoading?: boolean };
@@ -36,19 +36,7 @@ export async function refreshWorkflow(workflowId: string, options: LoadOptions =
   workflowDetailError.set(null);
   try {
     const loaded = await getWorkflow(workflowId);
-    workflowDetail.set(loaded);
-    workflows.update((items) => items.map((item) => item.workflow_id === loaded.workflow_id ? {
-      ...item,
-      title: loaded.title,
-      state: loaded.state,
-      failure_message: loaded.failure_message,
-      agent_submitted_count: loaded.agent_submitted_count,
-      agent_total_count: loaded.agent_total_count,
-      started_at: loaded.started_at,
-      completed_at: loaded.completed_at,
-      updated_at: loaded.updated_at,
-      elapsed_ms: loaded.elapsed_ms,
-    } : item));
+    applyWorkflowDetail(loaded);
     return loaded;
   } catch (error) {
     workflowDetailError.set(error instanceof Error ? error.message : String(error));
@@ -57,6 +45,46 @@ export async function refreshWorkflow(workflowId: string, options: LoadOptions =
   } finally {
     if (showLoading) workflowDetailLoading.set(false);
   }
+}
+
+export async function pauseWorkflow(workflowId: string): Promise<WorkflowDetailView> {
+  workflowDetailError.set(null);
+  try {
+    const loaded = await apiPauseWorkflow(workflowId);
+    applyWorkflowDetail(loaded);
+    return loaded;
+  } catch (error) {
+    workflowDetailError.set(error instanceof Error ? error.message : String(error));
+    throw error;
+  }
+}
+
+export async function resumeWorkflow(workflowId: string): Promise<WorkflowDetailView> {
+  workflowDetailError.set(null);
+  try {
+    const loaded = await apiResumeWorkflow(workflowId);
+    applyWorkflowDetail(loaded);
+    return loaded;
+  } catch (error) {
+    workflowDetailError.set(error instanceof Error ? error.message : String(error));
+    throw error;
+  }
+}
+
+function applyWorkflowDetail(loaded: WorkflowDetailView): void {
+  workflowDetail.set(loaded);
+  workflows.update((items) => items.map((item) => item.workflow_id === loaded.workflow_id ? {
+    ...item,
+    title: loaded.title,
+    state: loaded.state,
+    failure_message: loaded.failure_message,
+    agent_submitted_count: loaded.agent_submitted_count,
+    agent_total_count: loaded.agent_total_count,
+    started_at: loaded.started_at,
+    completed_at: loaded.completed_at,
+    updated_at: loaded.updated_at,
+    elapsed_ms: loaded.elapsed_ms,
+  } : item));
 }
 
 export function selectedWorkflowSessionIds(): string[] {

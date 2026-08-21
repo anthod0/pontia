@@ -76,12 +76,14 @@ where
     }
 
     async fn run(mut self) {
+        let mut deferred_terminal = None;
         loop {
             let received = tokio::select! {
-                received = self.agent_events.recv() => received,
+                received = self.agent_events.recv() => Some(received),
                 () = tokio::time::sleep(Duration::from_millis(250)) => {
                     match self.repository.get_workflow(&self.workflow.workflow_id).await {
-                        Ok(Some(workflow)) if workflow.state == "running" => continue,
+                        Ok(Some(workflow)) if workflow.state == "running" && deferred_terminal.is_some() => None,
+                        Ok(Some(workflow)) if matches!(workflow.state.as_str(), "running" | "paused") => continue,
                         Ok(Some(_)) | Ok(None) => break,
                         Err(error) => {
                             tracing::error!(
@@ -95,7 +97,10 @@ where
                 }
             };
             let (terminal, runtime_instance_id) = match received {
-                Ok(event) => match AgentTerminal::from_event(&event, &self.session_id) {
+                None => deferred_terminal
+                    .take()
+                    .expect("deferred terminal was checked"),
+                Some(Ok(event)) => match AgentTerminal::from_event(&event, &self.session_id) {
                     Some(terminal) => (
                         terminal,
                         event.payload["runtime_instance_id"]
@@ -104,7 +109,7 @@ where
                     ),
                     None => continue,
                 },
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                Some(Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped))) => {
                     match self
                         .persisted_events
                         .latest_workflow_terminal_event(&self.session_id)
@@ -149,7 +154,7 @@ where
                         }
                     }
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                Some(Err(tokio::sync::broadcast::error::RecvError::Closed)) => break,
             };
             match self
                 .repository
@@ -157,6 +162,12 @@ where
                 .await
             {
                 Ok(Some(workflow)) if workflow.state == "running" => {}
+                Ok(Some(workflow)) if workflow.state == "paused" => {
+                    if terminal != AgentTerminal::TurnInterrupted {
+                        deferred_terminal = Some((terminal, runtime_instance_id));
+                    }
+                    continue;
+                }
                 Ok(Some(_)) => break,
                 Ok(None) => {
                     tracing::error!(

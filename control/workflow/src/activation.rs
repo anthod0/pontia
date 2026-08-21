@@ -22,6 +22,40 @@ pub(crate) async fn activate_node<S: SessionCreator>(
     node: &WorkflowNodeRow,
     handoff_dir: &Path,
 ) -> std::result::Result<String, ActivationFailure> {
+    repository
+        .claim_node_activation(&workflow.workflow_id, &node.node_id)
+        .await
+        .map_err(|error| ActivationFailure {
+            failure_message: format!(
+                "failed to claim activation for Workflow Agent Node {}: {error}",
+                node.node_id
+            ),
+            error: error.into(),
+        })?;
+
+    let result = activate_claimed_node(sessions, repository, workflow, node, handoff_dir).await;
+    if result.is_err()
+        && let Err(error) = repository
+            .release_node_activation(&workflow.workflow_id, &node.node_id)
+            .await
+    {
+        tracing::error!(
+            workflow_id = %workflow.workflow_id,
+            node_id = %node.node_id,
+            %error,
+            "failed to release Workflow Agent Node activation claim"
+        );
+    }
+    result
+}
+
+async fn activate_claimed_node<S: SessionCreator>(
+    sessions: &S,
+    repository: &SqliteWorkflowRepository,
+    workflow: &WorkflowRow,
+    node: &WorkflowNodeRow,
+    handoff_dir: &Path,
+) -> std::result::Result<String, ActivationFailure> {
     let initial_task = render_initial_task(node, handoff_dir).await?;
     let session_id = sessions
         .create_session(session_request(workflow, node, initial_task))
@@ -34,7 +68,7 @@ pub(crate) async fn activate_node<S: SessionCreator>(
             error,
         })?;
     repository
-        .bind_node_session(&node.node_id, &session_id)
+        .finish_node_activation(&node.node_id, &session_id)
         .await
         .map_err(|error| ActivationFailure {
             failure_message: format!(

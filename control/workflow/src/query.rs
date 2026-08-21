@@ -85,6 +85,7 @@ pub enum WorkflowAgentStatus {
     Pending,
     Starting,
     Running,
+    Paused,
     Idle,
     Exiting,
     Submitted,
@@ -345,6 +346,9 @@ fn derive_status(
     if failure_location {
         return WorkflowAgentStatus::Failed;
     }
+    if workflow.state == "paused" && current && session_state == Some("interrupted") {
+        return WorkflowAgentStatus::Paused;
+    }
     if node.submitted_at.is_some() {
         return if session_state == Some("exited") || workflow.state == "completed" {
             WorkflowAgentStatus::Submitted
@@ -447,6 +451,26 @@ mod tests {
                 true
             ),
             WorkflowAgentStatus::Running
+        );
+        assert_eq!(
+            derive_status(
+                &workflow("paused"),
+                &node(Some("s"), false),
+                Some("interrupted"),
+                false,
+                true
+            ),
+            WorkflowAgentStatus::Paused
+        );
+        assert_eq!(
+            derive_status(
+                &workflow("paused"),
+                &node(Some("s"), true),
+                Some("interrupted"),
+                false,
+                true
+            ),
+            WorkflowAgentStatus::Paused
         );
         assert_eq!(
             derive_status(

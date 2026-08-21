@@ -212,6 +212,84 @@ impl SqliteWorkflowRepository {
         Ok(())
     }
 
+    pub async fn claim_node_activation(&self, workflow_id: &str, node_id: &str) -> Result<()> {
+        let result = sqlx::query(
+            r#"UPDATE workflows
+               SET activating_node_id = ?
+               WHERE workflow_id = ?
+                 AND state = 'running'
+                 AND activating_node_id IS NULL
+                 AND EXISTS (
+                     SELECT 1 FROM workflow_nodes
+                     WHERE workflow_nodes.workflow_id = workflows.workflow_id
+                       AND workflow_nodes.node_id = ?
+                       AND workflow_nodes.session_id IS NULL
+                 )"#,
+        )
+        .bind(node_id)
+        .bind(workflow_id)
+        .bind(node_id)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() != 1 {
+            return Err(Error::StateConflict(format!(
+                "workflow {workflow_id} must be running without another node activation"
+            )));
+        }
+        Ok(())
+    }
+
+    pub async fn finish_node_activation(&self, node_id: &str, session_id: &str) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        let node_result = sqlx::query(
+            r#"UPDATE workflow_nodes
+               SET session_id = ?
+               WHERE node_id = ?
+                 AND session_id IS NULL
+                 AND EXISTS (
+                     SELECT 1 FROM workflows
+                     WHERE workflows.workflow_id = workflow_nodes.workflow_id
+                       AND workflows.state = 'running'
+                       AND workflows.activating_node_id = workflow_nodes.node_id
+                 )"#,
+        )
+        .bind(session_id)
+        .bind(node_id)
+        .execute(&mut *tx)
+        .await?;
+        if node_result.rows_affected() != 1 {
+            return Err(Error::StateConflict(format!(
+                "workflow node {node_id} is not the claimed running activation"
+            )));
+        }
+        let workflow_result = sqlx::query(
+            r#"UPDATE workflows
+               SET activating_node_id = NULL
+               WHERE activating_node_id = ? AND state = 'running'"#,
+        )
+        .bind(node_id)
+        .execute(&mut *tx)
+        .await?;
+        if workflow_result.rows_affected() != 1 {
+            return Err(Error::StateConflict(format!(
+                "workflow node {node_id} activation claim disappeared"
+            )));
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn release_node_activation(&self, workflow_id: &str, node_id: &str) -> Result<()> {
+        sqlx::query(
+            "UPDATE workflows SET activating_node_id = NULL WHERE workflow_id = ? AND activating_node_id = ?",
+        )
+        .bind(workflow_id)
+        .bind(node_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn record_node_submission(
         &self,
         node_id: &str,
@@ -329,6 +407,75 @@ impl SqliteWorkflowRepository {
         )
         .bind(event_id)
         .bind(workflow_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn pause_workflow(&self, workflow_id: &str, event_id: &str) -> Result<()> {
+        self.transition_workflow_state(
+            workflow_id,
+            event_id,
+            "running",
+            "paused",
+            "workflow.paused",
+        )
+        .await
+    }
+
+    pub async fn resume_workflow(&self, workflow_id: &str, event_id: &str) -> Result<()> {
+        self.transition_workflow_state(
+            workflow_id,
+            event_id,
+            "paused",
+            "running",
+            "workflow.resumed",
+        )
+        .await
+    }
+
+    async fn transition_workflow_state(
+        &self,
+        workflow_id: &str,
+        event_id: &str,
+        expected_state: &str,
+        state: &str,
+        event_type: &str,
+    ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        let result = sqlx::query(
+            r#"UPDATE workflows
+               SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE workflow_id = ?
+                 AND state = ?
+                 AND activating_node_id IS NULL"#,
+        )
+        .bind(state)
+        .bind(workflow_id)
+        .bind(expected_state)
+        .execute(&mut *tx)
+        .await?;
+        if result.rows_affected() != 1 {
+            return Err(Error::StateConflict(format!(
+                "workflow {workflow_id} must be {expected_state} without a node activation"
+            )));
+        }
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_events WHERE workflow_id = ?",
+        )
+        .bind(workflow_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query(
+            r#"INSERT INTO workflow_events
+               (event_id, workflow_id, sequence, event_type, payload)
+               VALUES (?, ?, ?, ?, '{}')"#,
+        )
+        .bind(event_id)
+        .bind(workflow_id)
+        .bind(sequence)
+        .bind(event_type)
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;

@@ -1,6 +1,7 @@
 //! Workflow orchestration over Pontia application services.
 
 mod activation;
+mod control;
 mod error;
 mod monitor;
 mod ports;
@@ -9,6 +10,7 @@ mod scheduler;
 mod types;
 mod validation;
 
+pub use control::{WorkflowControlOutcome, WorkflowControlService};
 pub use error::{Error, Result};
 pub use ports::{AgentEventSubscriber, GracefulExitRequester, SessionCreator};
 pub use query::{
