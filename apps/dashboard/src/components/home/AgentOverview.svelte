@@ -94,7 +94,7 @@
     </Select.Root>
   </div>
 
-  <Card.Root class="gap-0 py-0">
+  <Card.Root class="gap-0 bg-transparent py-0 ring-0">
     {#if loading && !sessions.length}
       <Card.Content class="space-y-3 p-4">
         <Skeleton class="h-14 w-full" />

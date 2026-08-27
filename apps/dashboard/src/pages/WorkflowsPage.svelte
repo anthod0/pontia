@@ -36,7 +36,7 @@
     <Alert.Root variant="destructive"><CircleAlert class="size-4" /><Alert.Title>Workflows error</Alert.Title><Alert.Description>{$workflowsError}</Alert.Description></Alert.Root>
   {/if}
 
-  <Card.Root>
+  <Card.Root class="bg-transparent ring-0">
     <Card.Header><Card.Title>Workflow runs</Card.Title><Card.Description>{$workflows.length} recent workflows.</Card.Description></Card.Header>
     <Card.Content>
       {#if $workflowsLoading}
