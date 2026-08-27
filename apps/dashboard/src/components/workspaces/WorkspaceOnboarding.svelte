@@ -1,6 +1,14 @@
 <script lang="ts">
   import { FolderPlus } from '@lucide/svelte'
+  import { Button } from '$lib/components/ui/button/index.js'
   import WorkspaceBrowser from './WorkspaceBrowser.svelte'
+
+  interface Props {
+    canContinue: boolean
+    onContinue: () => void
+  }
+
+  let { canContinue, onContinue }: Props = $props()
 </script>
 
 <section class="mx-auto flex min-h-[calc(100svh-5.5rem)] max-w-5xl flex-col justify-center gap-6 md:min-h-[calc(100svh-6.5rem)]" aria-labelledby="workspace-onboarding-title">
@@ -15,4 +23,8 @@
   </div>
 
   <WorkspaceBrowser />
+
+  <div class="flex justify-end px-1">
+    <Button disabled={!canContinue} onclick={onContinue}>Continue to New Chat</Button>
+  </div>
 </section>

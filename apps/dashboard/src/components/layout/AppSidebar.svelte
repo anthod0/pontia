@@ -7,7 +7,7 @@
   import { sidebarMenuButtonVariants } from '$lib/components/ui/sidebar/sidebar-menu-button.svelte'
   import { cn } from '$lib/utils.js'
   import { archiveSession, pinSession, sessions, sessionsLoading, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
-  import { workspaces, workspacesLoading } from '../../stores/workspaces'
+  import { workspaces, workspacesInitialized, workspacesLoading } from '../../stores/workspaces'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
   import { workspaceTitle } from '../chat/sessionMetadata'
@@ -319,7 +319,7 @@
         <Sidebar.GroupLabel>Recent Workspaces</Sidebar.GroupLabel>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
-          {#if ($workspacesLoading || $sessionsLoading) && !recentWorkspaceGroups.length}
+          {#if (($workspacesLoading && !$workspacesInitialized) || $sessionsLoading) && !recentWorkspaceGroups.length}
             <Sidebar.MenuSkeleton />
             <Sidebar.MenuSkeleton />
           {:else if recentWorkspaceGroups.length}

@@ -21,6 +21,7 @@ import type {
 
 export const workspaces = writable<WorkspaceView[]>([]);
 export const workspacesLoading = writable(false);
+export const workspacesInitialized = writable(false);
 export const workspacesError = writable<string | null>(null);
 export const workspaceRoots = writable<WorkspaceRootView[]>([]);
 export const workspaceGitStatuses = writable<Record<string, WorkspaceGitStatusView>>({});
@@ -35,8 +36,12 @@ export async function loadWorkspaces(options: ReadRequestOptions = {}): Promise<
   workspacesError.set(null);
   try {
     workspaces.set(await listWorkspaces(options));
+    workspacesInitialized.set(true);
   } catch (error) {
-    if (!isAbortError(error)) workspacesError.set(error instanceof Error ? error.message : String(error));
+    if (!isAbortError(error)) {
+      workspacesError.set(error instanceof Error ? error.message : String(error));
+      workspacesInitialized.set(true);
+    }
   } finally {
     workspacesLoading.set(false);
   }

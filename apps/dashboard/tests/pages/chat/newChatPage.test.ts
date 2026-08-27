@@ -25,7 +25,7 @@ test('guides first-time users to activate a workspace instead of showing an unus
   expect(screen.queryByPlaceholderText('Ask the agent to implement, inspect, or explain something…')).not.toBeInTheDocument();
 });
 
-test('returns to New Chat immediately after the first workspace is activated', async () => {
+test('keeps first-time users in workspace setup until they continue explicitly', async () => {
   const user = userEvent.setup();
   const firstWorkspace = workspace();
   mocks.workspaces.set([]);
@@ -43,9 +43,18 @@ test('returns to New Chat immediately after the first workspace is activated', a
   });
 
   render(NewChatPage);
+  const continueButton = await screen.findByRole('button', { name: 'Continue to New Chat' });
+  expect(continueButton).toBeDisabled();
+
   await user.click(await screen.findByRole('button', { name: 'Activate pontia' }));
 
   await waitFor(() => expect(mocks.registerWorkspace).toHaveBeenCalledWith({ root_id: 'root-1', path: 'pontia', name: 'pontia' }));
+  expect(screen.getByRole('heading', { name: 'Set up your first workspace' })).toBeInTheDocument();
+  expect(screen.queryByPlaceholderText('Ask the agent to implement, inspect, or explain something…')).not.toBeInTheDocument();
+  expect(continueButton).toBeEnabled();
+
+  await user.click(continueButton);
+
   expect(await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Set up your first workspace' })).not.toBeInTheDocument();
 });

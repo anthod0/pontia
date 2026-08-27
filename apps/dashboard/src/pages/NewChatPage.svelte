@@ -36,6 +36,7 @@
   let overviewWorkspaceId: string | null = null
   let autofocusComposer = false
   let initialWorkspaceLoadComplete = false
+  let workspaceOnboardingActive = false
 
   const CLIENT_TYPE_OPTIONS = ['pi', 'claude']
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
@@ -51,7 +52,9 @@
         // The stores expose request failures; keep the page renderable without an unhandled rejection.
       })
       .finally(() => {
-        if (mounted) initialWorkspaceLoadComplete = true
+        if (!mounted) return
+        initialWorkspaceLoadComplete = true
+        workspaceOnboardingActive = !$workspaces.length && !$workspacesError
       })
     return () => {
       mounted = false
@@ -124,6 +127,12 @@
     void navigate('/', { workspace: workspaceId })
   }
 
+  function completeWorkspaceOnboarding(): void {
+    if (!$workspaces.length) return
+    ensureCreateWorkspaceSelection()
+    workspaceOnboardingActive = false
+  }
+
   function ensureCreateWorkspaceSelection(): void {
     if (!$workspaces.length) return
     const queryWorkspaceId = availableWorkspaceId(readQueryWorkspaceId())
@@ -177,8 +186,8 @@
       <Skeleton class="h-64 w-full" />
     </div>
   </section>
-{:else if !$workspaces.length && !$workspacesError}
-  <WorkspaceOnboarding />
+{:else if workspaceOnboardingActive}
+  <WorkspaceOnboarding canContinue={$workspaces.length > 0} onContinue={completeWorkspaceOnboarding} />
 {:else}
   <section class="flex min-h-[calc(100svh-5.5rem)] flex-col gap-8 md:min-h-[calc(100svh-6.5rem)]">
     <AgentOverview

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
 import AppSidebarHost from './components/layout/AppSidebarHost.svelte';
 import AppShellHost from './components/layout/AppShellHost.svelte';
@@ -37,6 +38,7 @@ const mocks = vi.hoisted(() => {
     terminateSession: vi.fn(async () => undefined),
     workspaces: writableStore([]),
     workspacesLoading: writableStore(false),
+    workspacesInitialized: writableStore(true),
   };
 });
 
@@ -58,6 +60,7 @@ vi.mock('../src/stores/sessions', () => ({
 vi.mock('../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
+  workspacesInitialized: mocks.workspacesInitialized,
 }));
 
 beforeEach(() => {
@@ -66,6 +69,7 @@ beforeEach(() => {
   mocks.sessionsLoading.set(false);
   mocks.workspaces.set([]);
   mocks.workspacesLoading.set(false);
+  mocks.workspacesInitialized.set(true);
   vi.clearAllMocks();
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -196,6 +200,18 @@ test('sidebar shows recent sessions with semantic status dot except exited sessi
   await fireEvent.click(screen.getByText('main · coder'));
 
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-active');
+});
+
+test('sidebar keeps its empty recent-workspaces state stable during a background workspace refresh', async () => {
+  render(AppSidebarHost);
+
+  expect(screen.getByText('No recent workspaces')).toBeInTheDocument();
+
+  mocks.workspacesLoading.set(true);
+  await tick();
+
+  expect(screen.getByText('No recent workspaces')).toBeInTheDocument();
+  expect(document.querySelector('[data-slot="sidebar-menu-skeleton"]')).not.toBeInTheDocument();
 });
 
 test('sidebar scrolls recent workspace and session groups together below fixed primary navigation', () => {
