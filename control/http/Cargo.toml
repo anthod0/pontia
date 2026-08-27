@@ -23,7 +23,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 http-body-util = "0.1"
-pontia-agent-clients = { path = "../agent-clients" }
+pontia-agent-clients = { path = "../agent-clients", features = ["generic-test-client"] }
 pontia-application = { path = "../application" }
 pontia-runtime = { path = "../runtime" }
 pontia-storage-sqlite = { path = "../storage-sqlite" }

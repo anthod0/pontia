@@ -13,4 +13,5 @@ serde_json.workspace = true
 time = { workspace = true, features = ["formatting"] }
 
 [dev-dependencies]
+pontia-agent-clients = { path = "../agent-clients", features = ["generic-test-client"] }
 tempfile = "3"

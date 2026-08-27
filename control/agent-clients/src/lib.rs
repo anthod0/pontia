@@ -1,10 +1,12 @@
 pub mod claude;
+#[cfg(any(test, feature = "generic-test-client"))]
 mod generic_test;
 pub mod pi;
 pub mod raw_transcripts;
 pub mod topology;
 mod types;
 
+#[cfg(any(test, feature = "generic-test-client"))]
 pub use generic_test::GenericTestClient;
 pub use topology::{
     TopologyDiagnostic, TopologyResolution, TopologyResolveRequest, TopologyResolveResult,
@@ -20,7 +22,12 @@ pub use types::{
 
 use raw_transcripts::{AgentBindingResolver, TimelineBoundaryCapturer, TurnTimelineReader};
 
-pub const AGENT_CLIENTS: &[AgentClientSpec] = &[generic_test::SPEC, pi::SPEC, claude::SPEC];
+pub const AGENT_CLIENTS: &[AgentClientSpec] = &[
+    #[cfg(any(test, feature = "generic-test-client"))]
+    generic_test::SPEC,
+    pi::SPEC,
+    claude::SPEC,
+];
 
 pub fn default_real_client_spec() -> &'static AgentClientSpec {
     &pi::SPEC
@@ -97,10 +104,12 @@ pub fn turn_timeline_backend_for(client_type: &str) -> Option<TurnTimelineBacken
 }
 
 pub fn in_process_capabilities(client_type: &str) -> Option<AgentClientCapabilities> {
-    match client_type {
-        "generic" => Some(GenericTestClient.capabilities()),
-        _ => None,
+    #[cfg(any(test, feature = "generic-test-client"))]
+    if client_type == "generic" {
+        return Some(GenericTestClient.capabilities());
     }
+    let _ = client_type;
+    None
 }
 
 pub fn in_process_ready_event(
@@ -108,22 +117,26 @@ pub fn in_process_ready_event(
     session_id: &str,
     runtime_instance_id: &str,
 ) -> Option<pontia_core::domain::ReportedEvent> {
-    match client_type {
-        "generic" => Some(GenericTestClient::ready_event(
+    #[cfg(any(test, feature = "generic-test-client"))]
+    if client_type == "generic" {
+        return Some(GenericTestClient::ready_event(
             session_id,
             runtime_instance_id,
-        )),
-        _ => None,
+        ));
     }
+    let _ = (client_type, session_id, runtime_instance_id);
+    None
 }
 
 pub fn accept_in_process_input(client_type: &str, input: AgentInput) -> pontia_core::Result<()> {
-    match client_type {
-        "generic" => GenericTestClient.accept_input(input),
-        _ => Err(pontia_core::error::Error::Domain(format!(
-            "{client_type} does not support in-process input dispatch"
-        ))),
+    #[cfg(any(test, feature = "generic-test-client"))]
+    if client_type == "generic" {
+        return GenericTestClient.accept_input(input);
     }
+    let _ = input;
+    Err(pontia_core::error::Error::Domain(format!(
+        "{client_type} does not support in-process input dispatch"
+    )))
 }
 
 pub fn run_startup_hooks(
@@ -137,23 +150,9 @@ pub fn run_startup_hooks(
 }
 
 pub fn get_client_spec(client_type: &str) -> Option<&'static AgentClientSpec> {
-    if client_type == "generic" && !generic_test_client_enabled() {
-        return None;
-    }
     AGENT_CLIENTS
         .iter()
         .find(|client| client.client_type == client_type)
-}
-
-fn generic_test_client_enabled() -> bool {
-    cfg!(test)
-        || std::env::current_exe().ok().is_some_and(|path| {
-            let path = path.to_string_lossy();
-            path.contains("/target/debug/deps/")
-                || path.contains("/target/release/deps/")
-                || path.contains("\\target\\debug\\deps\\")
-                || path.contains("\\target\\release\\deps\\")
-        })
 }
 
 pub fn is_supported_client_type(client_type: &str) -> bool {
