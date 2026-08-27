@@ -2,7 +2,7 @@ import { cleanup } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { SessionConsoleDetail } from '../../../src/stores/sessions';
 import type { TimelineState } from '../../../src/stores/timeline';
-import type { CreateSessionResult, InboxMessageView, SessionView, TimelineItem, TurnView, WorkspaceView } from '../../../src/api/types';
+import type { CreateSessionResult, InboxMessageView, SessionView, TimelineItem, TurnView, WorkspaceDirectoryListingView, WorkspaceRootView, WorkspaceView } from '../../../src/api/types';
 import { optimisticInitialMessages } from '../../../src/stores/optimisticChat';
 import {
   beginInboxSubmission,
@@ -57,6 +57,7 @@ const mocks = vi.hoisted(() => {
   const workspaces = writableStore<WorkspaceView[]>([]);
   const workspacesLoading = writableStore(false);
   const workspacesError = writableStore<string | null>(null);
+  const workspaceRoots = writableStore<WorkspaceRootView[]>([]);
   const workspaceGitStatuses = writableStore({});
   const workspaceGitStatusErrors = writableStore({});
   const timelineState = writableStore<TimelineState>(timelineStateValue());
@@ -72,6 +73,7 @@ const mocks = vi.hoisted(() => {
     workspaces,
     workspacesLoading,
     workspacesError,
+    workspaceRoots,
     workspaceGitStatuses,
     workspaceGitStatusErrors,
     timelineState,
@@ -96,6 +98,16 @@ const mocks = vi.hoisted(() => {
       mocks.timelineState.set(mocks.timelineStateValue({ sessionId }));
     }),
     loadWorkspaces: vi.fn(async () => undefined),
+    loadWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
+    browseWorkspaceRoot: vi.fn(async (): Promise<WorkspaceDirectoryListingView> => ({
+      root_id: 'root-1',
+      path: '',
+      canonical_path: '/repo',
+      parent_path: null,
+      entries: [],
+      warnings: [],
+    })),
+    registerWorkspace: vi.fn(async () => workspace()),
     refreshWorkspaceGitStatus: vi.fn(async () => undefined),
     loadAgentProfiles: vi.fn(async () => undefined),
     toastError: vi.fn(),
@@ -150,9 +162,13 @@ vi.mock('../../../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
   workspacesError: mocks.workspacesError,
+  workspaceRoots: mocks.workspaceRoots,
   workspaceGitStatuses: mocks.workspaceGitStatuses,
   workspaceGitStatusErrors: mocks.workspaceGitStatusErrors,
   loadWorkspaces: mocks.loadWorkspaces,
+  loadWorkspaceRoots: mocks.loadWorkspaceRoots,
+  browseWorkspaceRoot: mocks.browseWorkspaceRoot,
+  registerWorkspace: mocks.registerWorkspace,
   refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
 }));
 
@@ -301,6 +317,7 @@ beforeEach(() => {
   mocks.workspaces.set([workspace()]);
   mocks.workspacesLoading.set(false);
   mocks.workspacesError.set(null);
+  mocks.workspaceRoots.set([{ root_id: 'root-1', label: 'Projects', canonical_path: '/repo', state: 'available' }]);
   mocks.workspaceGitStatuses.set({});
   mocks.workspaceGitStatusErrors.set({});
   mocks.timelineState.set(mocks.timelineStateValue());
@@ -313,6 +330,16 @@ beforeEach(() => {
   mocks.refreshSessionTimeline.mockReset().mockResolvedValue(undefined);
   mocks.restoreSessionTimeline.mockReset().mockResolvedValue(false);
   mocks.createSession.mockResolvedValue({ session: activeSession, initial_turn: null } satisfies CreateSessionResult);
+  mocks.loadWorkspaceRoots.mockReset().mockImplementation(async () => mocks.workspaceRoots.get());
+  mocks.browseWorkspaceRoot.mockReset().mockResolvedValue({
+    root_id: 'root-1',
+    path: '',
+    canonical_path: '/repo',
+    parent_path: null,
+    entries: [],
+    warnings: [],
+  });
+  mocks.registerWorkspace.mockReset().mockResolvedValue(workspace());
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     const detail = mocks.sessionDetail.get();
     const turns = detail?.turns ?? [];

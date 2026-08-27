@@ -6,6 +6,61 @@ import type { CreateSessionResult } from '../../../src/api/types';
 
 const NewChatPage = (await import('../../../src/pages/NewChatPage.svelte')).default;
 
+test('guides first-time users to activate a workspace instead of showing an unusable composer', async () => {
+  mocks.workspaces.set([]);
+  mocks.browseWorkspaceRoot.mockResolvedValue({
+    root_id: 'root-1',
+    path: '',
+    canonical_path: '/repo',
+    parent_path: null,
+    entries: [{ name: 'pontia', path: 'pontia', kind: 'directory', is_workspace: false }],
+    warnings: [],
+  });
+
+  render(NewChatPage);
+
+  expect(await screen.findByRole('heading', { name: 'Set up your first workspace' })).toBeInTheDocument();
+  expect(screen.getByText(/workspace is the project directory/i)).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Activate pontia' })).toBeInTheDocument();
+  expect(screen.queryByPlaceholderText('Ask the agent to implement, inspect, or explain something…')).not.toBeInTheDocument();
+});
+
+test('returns to New Chat immediately after the first workspace is activated', async () => {
+  const user = userEvent.setup();
+  const firstWorkspace = workspace();
+  mocks.workspaces.set([]);
+  mocks.browseWorkspaceRoot.mockResolvedValue({
+    root_id: 'root-1',
+    path: '',
+    canonical_path: '/repo',
+    parent_path: null,
+    entries: [{ name: 'pontia', path: 'pontia', kind: 'directory', is_workspace: false }],
+    warnings: [],
+  });
+  mocks.registerWorkspace.mockImplementation(async () => {
+    mocks.workspaces.set([firstWorkspace]);
+    return firstWorkspace;
+  });
+
+  render(NewChatPage);
+  await user.click(await screen.findByRole('button', { name: 'Activate pontia' }));
+
+  await waitFor(() => expect(mocks.registerWorkspace).toHaveBeenCalledWith({ root_id: 'root-1', path: 'pontia', name: 'pontia' }));
+  expect(await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Set up your first workspace' })).not.toBeInTheDocument();
+});
+
+test('explains how to configure Pontia when no workspace roots exist', async () => {
+  mocks.workspaces.set([]);
+  mocks.workspaceRoots.set([]);
+
+  render(NewChatPage);
+
+  expect(await screen.findByText('No workspace roots configured')).toBeInTheDocument();
+  expect(screen.getByText('pontia init')).toBeInTheDocument();
+  expect(screen.getByText(/restart Pontia/i)).toBeInTheDocument();
+});
+
 test('focuses the prompt only on the first entry to the new chat page', async () => {
   const firstPage = render(NewChatPage);
 
