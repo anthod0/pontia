@@ -137,7 +137,13 @@ fn run_with_manager<M: ServiceManager>(
     match command {
         LifecycleCommand::Up => {
             let config = AppConfig::from_env().map_err(|error| error.to_string())?;
-            start_with_lifecycle(&lifecycle, &config, UpOptions::default())?;
+            start_with_lifecycle(
+                &lifecycle,
+                &config,
+                UpOptions {
+                    restart_running: true,
+                },
+            )?;
             println!("Pontia is up and healthy.");
             Ok(true)
         }
@@ -225,7 +231,7 @@ fn start_init_with_manager<M: ServiceManager>(
         &lifecycle,
         config,
         UpOptions {
-            daemon_config_changed: config_changed,
+            restart_running: config_changed,
         },
     )
 }

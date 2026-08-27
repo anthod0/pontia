@@ -33,7 +33,7 @@ pub struct ServiceStatus {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct UpOptions {
-    pub daemon_config_changed: bool,
+    pub restart_running: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,7 +109,7 @@ where
             .render_definition(pontiad, &config.pontia_home)?;
         let definition_changed = self.definitions.install(&path, &rendered)?;
         let restart_running = previous.run_state == RunState::Running
-            && (definition_changed || options.daemon_config_changed);
+            && (definition_changed || options.restart_running);
         self.manager
             .apply(&path, definition_changed, restart_running, previous)?;
 

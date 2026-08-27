@@ -165,7 +165,7 @@ fn up_renders_installs_applies_and_waits_for_health_without_real_io() {
 }
 
 #[test]
-fn up_restarts_a_running_service_when_persisted_daemon_config_changed() {
+fn up_restarts_a_running_service_when_restart_is_requested() {
     let store = FakeStore::default();
     let previous = ServiceStatus {
         enabled: EnabledState::Enabled,
@@ -186,7 +186,7 @@ fn up_restarts_a_running_service_when_persisted_daemon_config_changed() {
             Path::new("/opt/pontiad"),
             Path::new("/home/alice"),
             UpOptions {
-                daemon_config_changed: true,
+                restart_running: true,
             },
         )
         .expect("up succeeds");
@@ -224,7 +224,7 @@ fn up_starts_without_requesting_a_restart_when_config_changed_while_stopped() {
             Path::new("/opt/pontiad"),
             Path::new("/home/alice"),
             UpOptions {
-                daemon_config_changed: true,
+                restart_running: true,
             },
         )
         .expect("up succeeds");
