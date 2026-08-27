@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, CornerUpLeft, Folder, FolderBookmark, FolderOpen, Pencil, RefreshCw } from '@lucide/svelte'
+  import { CircleAlert, CornerUpLeft, Folder, FolderBookmark, FolderOpen, MoveRight, Pencil, RefreshCw } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
@@ -29,6 +29,7 @@
   let renamingWorkspaceName = ''
   let renameWorkspaceDialogOpen = false
   let savingRename = false
+  let showHiddenDirectories = false
 
   onMount(() => {
     mounted = true
@@ -194,7 +195,17 @@
           <Card.Title class="flex items-center gap-2"><FolderOpen class="size-5" /> Browser</Card.Title>
           <Card.Description class="mt-1">Select a root and browse directories. Active workspaces stay pinned at the top of the browser.</Card.Description>
         </div>
-        <Button size="sm" variant="outline" onclick={() => void refreshAll()}><RefreshCw class="size-4" /> Refresh</Button>
+        <div class="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={showHiddenDirectories ? 'secondary' : 'outline'}
+            aria-pressed={showHiddenDirectories}
+            onclick={() => { showHiddenDirectories = !showHiddenDirectories }}
+          >
+            Show hidden
+          </Button>
+          <Button size="sm" variant="outline" onclick={() => void refreshAll()}><RefreshCw class="size-4" /> Refresh</Button>
+        </div>
       </div>
     </Card.Header>
     <Card.Content class="space-y-4">
@@ -259,7 +270,7 @@
               <Table.Root>
                 <Table.Header><Table.Row><Table.Head>Directory</Table.Head><Table.Head class="text-right">Action</Table.Head></Table.Row></Table.Header>
                 <Table.Body>
-                  {#each [...listing.entries].sort((left, right) => Number(right.is_workspace) - Number(left.is_workspace) || left.name.localeCompare(right.name)) as entry (entry.path)}
+                  {#each listing.entries.filter((entry) => showHiddenDirectories || !entry.name.startsWith('.')).sort((left, right) => Number(right.is_workspace) - Number(left.is_workspace) || left.name.localeCompare(right.name)) as entry (entry.path)}
                     {@const entryWorkspace = workspaceForEntry(entry)}
                     <Table.Row>
                       <Table.Cell class="font-medium">
@@ -283,6 +294,7 @@
                           >
                             {registeringPath === entry.path ? 'Activating…' : entry.is_workspace ? 'Deactivate' : 'Activate'}
                           </Button>
+                          <Button size="icon-sm" variant="outline" aria-label={`Enter directory ${entry.name}`} title="Enter directory" onclick={() => void openPath(entry.path)}><MoveRight class="size-4" /></Button>
                         </div>
                       </Table.Cell>
                     </Table.Row>

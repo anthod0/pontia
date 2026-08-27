@@ -98,6 +98,7 @@ beforeEach(() => {
     entries: [
       { name: 'pontia', path: 'pontia', kind: 'directory', is_workspace: true },
       { name: 'sandbox', path: 'sandbox', kind: 'directory', is_workspace: false },
+      { name: '.scratch', path: '.scratch', kind: 'directory', is_workspace: false },
     ],
     warnings: [],
   };
@@ -145,8 +146,24 @@ test('renders a compact directory/action table and opens directories through the
   expect(within(table).queryByRole('columnheader', { name: 'Kind' })).not.toBeInTheDocument();
   expect(within(table).queryByRole('columnheader', { name: 'Workspace' })).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: 'Open directory sandbox' }));
+  expect(within(table).getByRole('button', { name: 'Enter directory sandbox' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Enter directory sandbox' }));
   expect(mocks.browseWorkspaceRoot).toHaveBeenLastCalledWith('root-1', 'sandbox', {});
+});
+
+test('hides dot-directories by default and allows showing them', async () => {
+  const user = userEvent.setup();
+  render(WorkspacesPage);
+
+  await screen.findByRole('table');
+  const showHiddenButton = screen.getByRole('button', { name: 'Show hidden' });
+  expect(showHiddenButton).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.queryByRole('button', { name: 'Open directory .scratch' })).not.toBeInTheDocument();
+
+  await user.click(showHiddenButton);
+
+  expect(showHiddenButton).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Open directory .scratch' })).toBeInTheDocument();
 });
 
 test('shows outside-root active workspace banner and revokes workspaces from the dialog', async () => {
