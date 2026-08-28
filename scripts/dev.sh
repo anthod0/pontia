@@ -9,7 +9,6 @@ if [[ -n "${PONTIA_HOME:-}" && ( "${PONTIA_HOME:-}" != /* || "${PONTIA_HOME:-}" 
   exit 1
 fi
 
-export PONTIA_EXTERNAL_API_TOKEN="${PONTIA_EXTERNAL_API_TOKEN:-dev-token}"
 export SQLX_OFFLINE=true
 
 backend_pid=""
@@ -58,12 +57,11 @@ if [[ -n "${PONTIA_HOME:-}" ]]; then
 else
   echo "Using the default Pontia home"
 fi
-echo "Using PONTIA_EXTERNAL_API_TOKEN=$PONTIA_EXTERNAL_API_TOKEN"
 cargo run -p pontiad &
 backend_pid=$!
 
 echo "Starting dashboard Vite dev server..."
-pnpm --dir apps/dashboard run dev -- --host 127.0.0.1 &
+pnpm --dir apps/dashboard run dev &
 frontend_pid=$!
 
 cat <<'EOF'

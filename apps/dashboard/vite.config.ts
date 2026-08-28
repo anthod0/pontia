@@ -13,7 +13,7 @@ export default defineConfig({
     setupFiles: ['./tests/setup.ts'],
   },
   server: {
-    host: '127.0.0.1',
+    host: true,
     proxy: {
       '/external': 'http://127.0.0.1:8080',
     },
