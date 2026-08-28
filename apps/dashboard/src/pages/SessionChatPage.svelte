@@ -65,7 +65,6 @@
   import { subscribeDashboardEvents } from '../services/eventStream'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
-  import InboxSheet from '../components/chat/InboxSheet.svelte'
   import RenameSessionDialog from '../components/chat/RenameSessionDialog.svelte'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
 
@@ -78,7 +77,6 @@
   let actionBusy = false
   let inboxActionMessageId: string | null = null
   let actionError: string | null = null
-  let inboxSheetOpen = false
   let renameSessionDialogOpen = false
   let unsubscribeDashboardEvents: (() => void) | null = null
   let autofocusComposer = false
@@ -143,7 +141,6 @@
   )
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
-  $: inboxActionableCount = visibleInboxMessages.filter((message) => message.state === 'pending' || message.state === 'failed').length
   $: canSend = canSendSessionMessage(selectedSession, $chatDraft) && !submitting
   $: currentMessagesRenderKey = chatMessagesRenderKey(messages)
   $: if (promptInputScrollBaselineKey !== null && currentMessagesRenderKey !== promptInputScrollBaselineKey) {
@@ -710,7 +707,7 @@
 
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
-<section class="flex flex-col gap-4 pb-40">
+<section class={`flex flex-col gap-4 ${visibleInboxMessages.length ? 'pb-92' : 'pb-40'}`}>
   <div class="mx-auto min-w-0 w-full max-w-4xl flex-1">
     <div class="flex min-w-0 flex-col rounded-xl bg-transparent">
       {#if $sessionDetailLoading && !selectedSession}
@@ -786,7 +783,7 @@
         {#if scrollDownButtonRendered}
           <div
             data-chat-scroll-down-container
-            class={`pointer-events-none fixed bottom-36 left-0 right-0 z-40 px-2 transition-[left] duration-200 ease-linear sm:px-4 md:left-[var(--sidebar-width)] md:px-6 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${showScrollDownButton ? 'chat-scroll-down-enter' : 'chat-scroll-down-exit'}`}
+            class={`pointer-events-none fixed left-0 right-0 z-40 px-2 transition-[left] duration-200 ease-linear sm:px-4 md:left-[var(--sidebar-width)] md:px-6 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${visibleInboxMessages.length ? 'bottom-88' : 'bottom-36'} ${showScrollDownButton ? 'chat-scroll-down-enter' : 'chat-scroll-down-exit'}`}
           >
             <div class="mx-auto flex w-full max-w-4xl justify-end">
               <Button
@@ -807,7 +804,7 @@
         {#if pendingApproval}
           <div
             data-chat-approval-dock="fixed"
-            class="pointer-events-none fixed bottom-36 left-0 right-0 z-50 px-2 transition-[left] duration-200 ease-linear sm:px-4 md:left-[var(--sidebar-width)] md:px-6 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]"
+            class={`pointer-events-none fixed left-0 right-0 z-50 px-2 transition-[left] duration-200 ease-linear sm:px-4 md:left-[var(--sidebar-width)] md:px-6 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${visibleInboxMessages.length ? 'bottom-88' : 'bottom-36'}`}
           >
             <div class="pointer-events-auto mx-auto max-h-[calc(100svh-11rem)] w-full max-w-4xl overflow-y-auto">
               {#key pendingApproval.requestEventId}
@@ -824,12 +821,15 @@
           workspaces={$workspaces}
           metadataItems={selectedSessionMetadataItems}
           metadataSummary={selectedSessionMetadataSummary}
-          {inboxActionableCount}
+          queuedMessages={visibleInboxMessages}
+          inboxBusyMessageId={inboxActionMessageId}
           {submitting}
           {actionBusy}
           {canSend}
           autofocus={autofocusComposer}
-          onOpenInbox={() => (inboxSheetOpen = true)}
+          onCancelInboxMessage={(message) => void cancelPendingInboxMessage(message)}
+          onRetryInboxMessage={(message) => void retryFailedInboxMessage(message)}
+          onDismissInboxMessage={(message) => void dismissFailedInboxMessage(message)}
           onExit={() => void runSessionLifecycle('exit')}
           onOpenConsole={openSessionConsole}
           onNewChat={() => openNewChat(selectedSession.workspace_id)}
@@ -860,16 +860,6 @@
   error={actionError}
   onConfirm={(title) => void renameSelectedSession(title)}
   onCancel={() => (actionError = null)}
-/>
-
-<InboxSheet
-  bind:open={inboxSheetOpen}
-  {inboxActionableCount}
-  {visibleInboxMessages}
-  busyMessageId={inboxActionMessageId}
-  onCancel={(message) => void cancelPendingInboxMessage(message)}
-  onRetry={(message) => void retryFailedInboxMessage(message)}
-  onDismiss={(message) => void dismissFailedInboxMessage(message)}
 />
 
 <style>

@@ -1431,7 +1431,7 @@ test('highlights fenced code blocks in assistant markdown and copies their text'
 });
 
 
-test('opens an inbox sheet with actionable pending, failed, and dispatching messages only', async () => {
+test('shows pending, failed, and dispatching messages above the composer without inbox controls', async () => {
   const selected = session({ session_id: 'session-2', state: 'idle' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
@@ -1476,50 +1476,28 @@ test('opens an inbox sheet with actionable pending, failed, and dispatching mess
     events: [],
       });
 
-  const { container } = render(SessionChatPage);
+  render(SessionChatPage);
 
-  const inboxButton = await screen.findByRole('button', { name: /open inbox, 2 messages/i });
-  expect(inboxButton).toHaveTextContent('Inbox');
-  expect(inboxButton).toHaveTextContent('2');
-  expect(inboxButton).toHaveAttribute('data-chat-desktop-inbox');
-  const primaryActions = screen.getByRole('group', { name: /primary session actions/i });
-  expect(primaryActions).toHaveClass('flex');
-  expect(Array.from(primaryActions.children).map((child) => child.getAttribute('data-slot'))).toEqual(['button', 'button', 'button', 'dropdown-menu-trigger']);
-  for (const button of within(primaryActions).getAllByRole('button')) {
-    expect(button.className.split(/\s+/)).not.toContain('border');
-  }
-
-  const advancedButton = screen.getByRole('button', { name: /advanced session controls, 2 inbox messages/i });
-  const advancedBubble = advancedButton.parentElement?.querySelector('[data-chat-mobile-inbox-count]');
-  expect(advancedBubble).toHaveTextContent('2');
-  expect(advancedBubble).toHaveClass('sm:hidden');
-
-  await fireEvent.click(advancedButton);
-  const mobileInboxMenuItem = await screen.findByRole('menuitem', { name: /open inbox, 2 messages/i });
-  expect(mobileInboxMenuItem).toHaveClass('sm:hidden');
-
-  await fireEvent.click(mobileInboxMenuItem);
-
-  expect(container.querySelector('button[data-chat-desktop-inbox]')).toBeInTheDocument();
-
-  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '3 queued messages' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /open inbox/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('menuitem', { name: /inbox/i })).not.toBeInTheDocument();
   expect(screen.getByText('Sending now')).toBeInTheDocument();
   expect(screen.getByText('Fix the failing dashboard test')).toBeInTheDocument();
   expect(screen.getByText('Continue implementation')).toBeInTheDocument();
   expect(screen.queryByText('Already sent')).not.toBeInTheDocument();
-  expect(screen.getByText('runtime unavailable')).toBeInTheDocument();
+  expect(screen.queryByText('failed')).not.toBeInTheDocument();
 
-  const articles = screen.getAllByRole('article');
-  expect(articles.map((article) => article.textContent)).toEqual([
+  const rows = screen.getAllByRole('listitem');
+  expect(rows[1]).toHaveAttribute('title', 'runtime unavailable');
+  expect(rows.map((row) => row.textContent)).toEqual([
     expect.stringContaining('Sending now'),
     expect.stringContaining('Fix the failing dashboard test'),
     expect.stringContaining('Continue implementation'),
   ]);
-  expect(articles[0]).not.toHaveTextContent('Cancel');
-  expect(articles[0]).not.toHaveTextContent('Retry');
-  expect(articles[1]).toHaveTextContent('Retry');
-  expect(articles[1]).not.toHaveTextContent('Cancel');
-  expect(articles[2]).toHaveTextContent('Cancel');
+  expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
+  expect(within(rows[1]).getByRole('button', { name: /retry inbox message/i }).parentElement).toHaveClass('sm:group-hover:opacity-100');
+  expect(within(rows[1]).queryByRole('button', { name: /cancel inbox message/i })).not.toBeInTheDocument();
+  expect(within(rows[2]).getByRole('button', { name: /cancel inbox message/i })).toBeInTheDocument();
 });
 
 
@@ -1552,7 +1530,6 @@ test('supports cancelling pending inbox messages and retrying or removing failed
       });
 
   render(SessionChatPage);
-  await userEvent.click(await screen.findByRole('button', { name: /open inbox, 2 messages/i }));
 
   await userEvent.click(await screen.findByRole('button', { name: /cancel inbox message continue implementation/i }));
   expect(mocks.cancelInboxMessage).toHaveBeenCalledWith('session-2', 'message-pending');
@@ -1592,9 +1569,9 @@ test('retries a failed branch delivery with its original target', async () => {
   });
 
   render(SessionChatPage);
-  await userEvent.click(await screen.findByRole('button', { name: /open inbox, 1 message/i }));
 
-  expect(screen.getByText('Pi navigation failed')).toBeInTheDocument();
+  const failedMessage = await screen.findByText('Corrected historical input');
+  expect(failedMessage.closest('li')).toHaveAttribute('title', 'Pi navigation failed');
   await userEvent.click(screen.getByRole('button', { name: /retry inbox message corrected historical input/i }));
 
   expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
@@ -2028,7 +2005,7 @@ test('does not scroll to the document bottom after retrying an inbox message', a
   render(SessionChatPage);
 
   await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
-  await user.click(await screen.findByRole('button', { name: /open inbox, 1 message/i }));
+  await screen.findByRole('heading', { name: '1 queued message' });
   scrollTo.mockClear();
   await user.click(await screen.findByRole('button', { name: /retry inbox message fix the failing dashboard test/i }));
 
