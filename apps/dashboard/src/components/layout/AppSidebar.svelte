@@ -74,7 +74,7 @@
   }
 
   function isSessionVisibleState(state: string) {
-    return state !== 'exited'
+    return state !== 'exited' && state !== 'error'
   }
 
   function isTerminalSessionState(state: string) {

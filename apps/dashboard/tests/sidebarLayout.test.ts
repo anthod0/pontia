@@ -145,7 +145,7 @@ test('sidebar session action appears on hover or focus-visible, not plain focus-
   expect(status).not.toHaveClass('group-focus-within/menu-item:opacity-0');
 });
 
-test('sidebar shows recent sessions with semantic status dot except exited sessions, and opens chat for the selected session', async () => {
+test('sidebar shows semantic status dots except for terminal sessions, and opens chat for the selected session', async () => {
   mocks.sessions.set([
     {
       session_id: 'session-active',
@@ -181,6 +181,23 @@ test('sidebar shows recent sessions with semantic status dot except exited sessi
       updated_at: '2026-05-14T02:00:00Z',
       metadata: {},
     },
+    {
+      session_id: 'session-error',
+      client_type: 'pi',
+      handle: 'failed',
+      role: null,
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: 'error',
+      current_turn_id: null,
+      workspace_id: 'workspace-3',
+      workspace: null,
+      capabilities: {},
+      created_at: '2026-05-14T00:00:00Z',
+      updated_at: '2026-05-14T03:00:00Z',
+      metadata: {},
+    },
   ]);
 
   render(AppSidebarHost);
@@ -194,6 +211,7 @@ test('sidebar shows recent sessions with semantic status dot except exited sessi
   expect(closedSessionButton?.querySelector('.lucide-message-circle')).not.toBeInTheDocument();
   expect(screen.getByLabelText('idle session')).toBeInTheDocument();
   expect(screen.queryByLabelText('exited session')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('error session')).not.toBeInTheDocument();
   expect(screen.queryByText('idle')).not.toBeInTheDocument();
   expect(screen.queryByText('exited')).not.toBeInTheDocument();
 
