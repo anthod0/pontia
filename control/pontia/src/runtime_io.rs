@@ -88,11 +88,19 @@ fn write_and_replace(temp_path: &Path, target: &Path, contents: &str) -> std::io
 pub struct HttpHealthProbe;
 
 impl HealthProbe for HttpHealthProbe {
-    fn wait_until_healthy(&self, addr: SocketAddr, timeout: Duration) -> Result<bool, String> {
+    fn wait_until_healthy(
+        &self,
+        addr: SocketAddr,
+        timeout: Duration,
+        keep_waiting: &mut dyn FnMut() -> Result<bool, String>,
+    ) -> Result<bool, String> {
         let deadline = Instant::now() + timeout;
         loop {
             if self.is_healthy(addr)? {
                 return Ok(true);
+            }
+            if !keep_waiting()? {
+                return Ok(false);
             }
             let now = Instant::now();
             if now >= deadline {

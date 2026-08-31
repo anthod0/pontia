@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     net::SocketAddr,
     path::{Path, PathBuf},
     time::Duration,
@@ -33,6 +33,9 @@ impl DefinitionStore for FakeStore {
 
 struct FakeManager {
     status: ServiceStatus,
+    status_after_apply: Option<ServiceStatus>,
+    applied: Cell<bool>,
+    status_calls: Cell<usize>,
     apply_calls: RefCell<Vec<(PathBuf, bool, bool, ServiceStatus)>>,
     down_calls: RefCell<usize>,
 }
@@ -54,7 +57,16 @@ impl ServiceManager for FakeManager {
     }
 
     fn status(&self) -> Result<ServiceStatus, String> {
-        Ok(self.status)
+        self.status_calls.set(self.status_calls.get() + 1);
+        Ok(if self.applied.get() {
+            self.status_after_apply.unwrap_or(self.status)
+        } else {
+            self.status
+        })
+    }
+
+    fn failure_diagnostic(&self) -> Result<String, String> {
+        Ok("Address already in use".to_string())
     }
 
     fn apply(
@@ -70,6 +82,7 @@ impl ServiceManager for FakeManager {
             restart_running,
             previous,
         ));
+        self.applied.set(true);
         Ok(())
     }
 
@@ -86,9 +99,18 @@ struct FakeHealth {
 }
 
 impl HealthProbe for FakeHealth {
-    fn wait_until_healthy(&self, addr: SocketAddr, timeout: Duration) -> Result<bool, String> {
+    fn wait_until_healthy(
+        &self,
+        addr: SocketAddr,
+        timeout: Duration,
+        keep_waiting: &mut dyn FnMut() -> Result<bool, String>,
+    ) -> Result<bool, String> {
         self.waits.borrow_mut().push((addr, timeout));
-        Ok(self.healthy)
+        if self.healthy || keep_waiting()? {
+            Ok(self.healthy)
+        } else {
+            Ok(false)
+        }
     }
 
     fn is_healthy(&self, addr: SocketAddr) -> Result<bool, String> {
@@ -108,6 +130,9 @@ fn config(home: &Path) -> AppConfig {
 fn manager(status: ServiceStatus) -> FakeManager {
     FakeManager {
         status,
+        status_after_apply: None,
+        applied: Cell::new(false),
+        status_calls: Cell::new(0),
         apply_calls: RefCell::new(Vec::new()),
         down_calls: RefCell::new(0),
     }
@@ -273,6 +298,43 @@ fn up_does_not_restart_a_running_service_when_nothing_changed() {
             false,
             previous,
         )]
+    );
+}
+
+#[test]
+fn up_stops_waiting_when_the_service_fails_during_readiness() {
+    let store = FakeStore::default();
+    let mut manager = manager(ServiceStatus {
+        enabled: EnabledState::Disabled,
+        loaded: false,
+        run_state: RunState::Stopped,
+    });
+    manager.status_after_apply = Some(ServiceStatus {
+        enabled: EnabledState::Enabled,
+        loaded: true,
+        run_state: RunState::Failed,
+    });
+    let health = FakeHealth {
+        healthy: false,
+        waits: RefCell::new(Vec::new()),
+        probes: RefCell::new(Vec::new()),
+    };
+    let lifecycle = Lifecycle::new(&manager, &store, &health);
+
+    let error = lifecycle
+        .up(
+            &config(Path::new("/home/alice/.pontia")),
+            Path::new("/opt/pontiad"),
+            Path::new("/home/alice"),
+            UpOptions::default(),
+        )
+        .expect_err("failed service must stop readiness waiting");
+
+    assert!(error.contains("failed to start"), "{error}");
+    assert!(error.contains("Address already in use"), "{error}");
+    assert!(
+        manager.status_calls.get() > 1,
+        "service status was not checked during readiness"
     );
 }
 

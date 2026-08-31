@@ -60,6 +60,7 @@ pub trait ServiceManager {
     fn render_definition(&self, pontiad: &Path, pontia_home: &Path) -> Result<String, String>;
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String>;
     fn status(&self) -> Result<ServiceStatus, String>;
+    fn failure_diagnostic(&self) -> Result<String, String>;
     fn apply(
         &self,
         definition_path: &Path,
@@ -71,7 +72,12 @@ pub trait ServiceManager {
 }
 
 pub trait HealthProbe {
-    fn wait_until_healthy(&self, addr: SocketAddr, timeout: Duration) -> Result<bool, String>;
+    fn wait_until_healthy(
+        &self,
+        addr: SocketAddr,
+        timeout: Duration,
+        keep_waiting: &mut dyn FnMut() -> Result<bool, String>,
+    ) -> Result<bool, String>;
     fn is_healthy(&self, addr: SocketAddr) -> Result<bool, String>;
 }
 
@@ -114,7 +120,20 @@ where
             .apply(&path, definition_changed, restart_running, previous)?;
 
         let addr = local_health_addr(config.bind_addr);
-        if !self.health.wait_until_healthy(addr, READINESS_TIMEOUT)? {
+        let mut service_failed = false;
+        let healthy = self
+            .health
+            .wait_until_healthy(addr, READINESS_TIMEOUT, &mut || {
+                service_failed = self.manager.status()?.run_state == RunState::Failed;
+                Ok(!service_failed)
+            })?;
+        if !healthy {
+            if service_failed {
+                return Err(format!(
+                    "pontiad failed to start: {}",
+                    self.manager.failure_diagnostic()?
+                ));
+            }
             return Err(format!(
                 "pontiad did not become healthy at http://{addr}/healthz within {} seconds",
                 READINESS_TIMEOUT.as_secs()

@@ -123,6 +123,12 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
         })
     }
 
+    fn failure_diagnostic(&self) -> Result<String, String> {
+        let args = ["status", SYSTEMD_SERVICE_NAME, "--no-pager", "--full"];
+        let output = self.systemctl(&args)?;
+        Ok(diagnostic_output("systemctl", &args, &output))
+    }
+
     fn apply(
         &self,
         _definition_path: &Path,
@@ -250,6 +256,14 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
         })
     }
 
+    fn failure_diagnostic(&self) -> Result<String, String> {
+        let target = self.target();
+        let args = vec!["print".to_string(), target];
+        let output = self.launchctl(args.clone())?;
+        let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+        Ok(diagnostic_output("launchctl", &refs, &output))
+    }
+
     fn apply(
         &self,
         definition_path: &Path,
@@ -304,6 +318,23 @@ fn property_with_spaces<'a>(contents: &'a str, name: &str) -> Option<&'a str> {
             .and_then(|rest| rest.trim().strip_prefix('='))
             .map(str::trim)
     })
+}
+
+fn diagnostic_output(program: &str, args: &[&str], output: &CommandOutput) -> String {
+    let stdout = output.stdout.trim();
+    let stderr = output.stderr.trim();
+    let detail = match (stdout.is_empty(), stderr.is_empty()) {
+        (false, false) => format!("{stdout}\n{stderr}"),
+        (false, true) => stdout.to_string(),
+        (true, false) => stderr.to_string(),
+        (true, true) => "no diagnostic output".to_string(),
+    };
+    format!(
+        "{} {} (exit code {}): {detail}",
+        program,
+        args.join(" "),
+        output.code
+    )
 }
 
 fn command_failure(program: &str, args: &[&str], output: &CommandOutput) -> String {

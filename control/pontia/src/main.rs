@@ -137,6 +137,7 @@ fn run_with_manager<M: ServiceManager>(
     match command {
         LifecycleCommand::Up => {
             let config = AppConfig::from_env().map_err(|error| error.to_string())?;
+            eprintln!("Starting Pontia service and waiting for it to become healthy...");
             start_with_lifecycle(
                 &lifecycle,
                 &config,

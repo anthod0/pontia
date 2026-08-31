@@ -59,6 +59,35 @@ fn systemd_reports_normalized_status() {
 }
 
 #[test]
+fn systemd_failure_diagnostic_includes_the_service_status_output() {
+    let runner = FakeRunner::with_outputs(vec![output(
+        3,
+        "× pontia.service - Pontia Control Plane\n  Error: Address already in use\n",
+        "",
+    )]);
+    let manager = SystemdManager::new(&runner);
+
+    let diagnostic = manager
+        .failure_diagnostic()
+        .expect("failure diagnostic succeeds");
+
+    assert!(
+        diagnostic.contains("Address already in use"),
+        "{diagnostic}"
+    );
+    assert_eq!(
+        runner.calls.into_inner(),
+        vec![(
+            "systemctl".to_string(),
+            vec!["--user", "status", "pontia.service", "--no-pager", "--full"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        )]
+    );
+}
+
+#[test]
 fn systemd_reloads_enables_and_restarts_changed_running_service() {
     let runner = FakeRunner::with_outputs(vec![
         output(0, "", ""),
@@ -177,6 +206,32 @@ fn launchd_reports_loaded_failed_service_and_disabled_override() {
             loaded: true,
             run_state: RunState::Failed,
         }
+    );
+}
+
+#[test]
+fn launchd_failure_diagnostic_includes_the_service_status_output() {
+    let runner = FakeRunner::with_outputs(vec![output(
+        0,
+        "gui/501/dev.pontia.pontiad = {\n state = exited\n last exit code = 48\n}\n",
+        "",
+    )]);
+    let manager = LaunchdManager::new(&runner, 501);
+
+    let diagnostic = manager
+        .failure_diagnostic()
+        .expect("failure diagnostic succeeds");
+
+    assert!(diagnostic.contains("last exit code = 48"), "{diagnostic}");
+    assert_eq!(
+        runner.calls.into_inner(),
+        vec![(
+            "launchctl".to_string(),
+            vec!["print", "gui/501/dev.pontia.pontiad"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        )]
     );
 }
 
