@@ -12,6 +12,7 @@ use crate::{
     AgentEventSubscriber, Error, GracefulExitRequester, Result, RunWorkflowOutcome,
     RunWorkflowRequest, SessionCreator, StartWorkflowOutcome, SubmitWorkflowNodeRequest,
     activation::activate_node,
+    definition::render_workflow_file,
     monitor::WorkflowMonitor,
     validation::{
         is_runtime_control_unavailable, validate_handoff_file_name, validate_run_request,
@@ -65,13 +66,17 @@ where
         }
     }
 
-    pub async fn run(&self, request: RunWorkflowRequest) -> Result<RunWorkflowOutcome>
+    pub async fn run(&self, mut request: RunWorkflowRequest) -> Result<RunWorkflowOutcome>
     where
         S: Clone + Send + Sync + 'static,
         X: Clone + Send + Sync + 'static,
     {
         validate_run_request(&request)?;
         validate_pontia_home_boundary(&self.pontia_home)?;
+        for node in &mut request.nodes {
+            node.phase = node.phase.trim().to_string();
+        }
+        let workflow_file = render_workflow_file(&request)?;
 
         let workflow_dir = self
             .pontia_home
@@ -100,6 +105,18 @@ where
                 let _ = self.remove_workflow_tree(&workflow_dir).await;
                 return Err(error.into());
             }
+        }
+        let workflow_file_path = workflow_dir.join("workflow.toml");
+        let pending_workflow_file_path = workflow_dir.join(".workflow.toml.tmp");
+        if let Err(error) = tokio::fs::write(&pending_workflow_file_path, workflow_file).await {
+            let _ = self.remove_workflow_tree(&workflow_dir).await;
+            return Err(error.into());
+        }
+        if let Err(error) =
+            tokio::fs::rename(&pending_workflow_file_path, &workflow_file_path).await
+        {
+            let _ = self.remove_workflow_tree(&workflow_dir).await;
+            return Err(error.into());
         }
 
         let mut parent_node_id = None;

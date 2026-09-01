@@ -13,15 +13,18 @@ pub struct InitialHandoff {
     pub content: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WorkflowNodeDefinition {
+    #[serde(rename = "type")]
     pub node_type: String,
     pub phase: String,
     pub title: String,
     pub instructions: String,
     pub inputs: Vec<String>,
     pub output: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_profile_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_profile_version: Option<String>,
 }
 

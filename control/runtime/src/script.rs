@@ -122,7 +122,7 @@ pub(super) fn write_launch_script(
     };
     let content = format!(
         r#"#!/usr/bin/env sh
-unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID
+unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_FILE
 export PONTIA_HOME={}
 {}if [ -n "${{TMUX:-}}" ] && [ -n "${{TMUX_PANE:-}}" ]; then
   tmux set-option -p -t "$TMUX_PANE" @pontia_session_id {} || exit 1
@@ -221,9 +221,15 @@ mod tests {
             handle: None,
             role: None,
             start_command: None,
-            environment: [("PONTIA_WORKFLOW_ID".to_string(), "wf_123".to_string())]
-                .into_iter()
-                .collect(),
+            environment: [
+                ("PONTIA_WORKFLOW_ID".to_string(), "wf_123".to_string()),
+                (
+                    "PONTIA_WORKFLOW_FILE".to_string(),
+                    "/pontia/workflows/wf_123/workflow.toml".to_string(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
         };
 
         write_launch_script(
@@ -244,8 +250,11 @@ mod tests {
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
         assert!(script.contains("export PONTIA_HOME="));
         assert!(script.contains("export PONTIA_WORKFLOW_ID='wf_123'"));
+        assert!(
+            script.contains("export PONTIA_WORKFLOW_FILE='/pontia/workflows/wf_123/workflow.toml'")
+        );
         assert!(script.contains(
-            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID"
+            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_FILE"
         ));
         for name in [
             "PONTIA_SESSION_ID",

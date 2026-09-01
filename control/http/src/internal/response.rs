@@ -67,7 +67,8 @@ impl ApiError {
             | WorkflowError::MissingCreatedSessionId
             | WorkflowError::RuntimeControlUnavailable { .. }
             | WorkflowError::Io(_)
-            | WorkflowError::Json(_) => Self {
+            | WorkflowError::Json(_)
+            | WorkflowError::TomlSerialization(_) => Self {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
                 code: "internal_error",
                 message: error.to_string(),

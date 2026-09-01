@@ -2,6 +2,7 @@
 
 mod activation;
 mod control;
+mod definition;
 mod error;
 mod monitor;
 mod ports;

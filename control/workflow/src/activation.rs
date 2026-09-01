@@ -57,8 +57,14 @@ async fn activate_claimed_node<S: SessionCreator>(
     handoff_dir: &Path,
 ) -> std::result::Result<String, ActivationFailure> {
     let initial_task = render_initial_task(node, handoff_dir).await?;
+    let workflow_file = handoff_dir.with_file_name("workflow.toml");
     let session_id = sessions
-        .create_session(session_request(workflow, node, initial_task))
+        .create_session(session_request(
+            workflow,
+            node,
+            initial_task,
+            &workflow_file,
+        ))
         .await
         .map_err(|error| ActivationFailure {
             failure_message: format!(
@@ -84,11 +90,18 @@ fn session_request(
     workflow: &WorkflowRow,
     node: &WorkflowNodeRow,
     initial_task: String,
+    workflow_file: &Path,
 ) -> CreateSessionRequest {
-    let runtime_environment = BTreeMap::from([(
-        "PONTIA_WORKFLOW_ID".to_string(),
-        workflow.workflow_id.clone(),
-    )]);
+    let runtime_environment = BTreeMap::from([
+        (
+            "PONTIA_WORKFLOW_FILE".to_string(),
+            workflow_file.display().to_string(),
+        ),
+        (
+            "PONTIA_WORKFLOW_ID".to_string(),
+            workflow.workflow_id.clone(),
+        ),
+    ]);
     CreateSessionRequest {
         client_type: "pi".to_string(),
         title: Some(node.title.clone()),
@@ -159,6 +172,8 @@ async fn render_initial_task(
         "# Workflow Agent Node\n\n\
          ## Instructions\n\n{}\n\
          {}\n\
+         ## Workflow definition\n\n\
+         The durable Workflow definition is available at `$PONTIA_WORKFLOW_FILE`.\n\n\
          ## Handoff protocol\n\n\
          Expected output: {}\n\n\
          Complete the work, then create a source file in the Session cwd containing the full output. \

@@ -1493,6 +1493,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "toml",
  "tracing",
  "uuid",
 ]

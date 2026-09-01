@@ -74,6 +74,10 @@ async fn start_launches_first_node_as_a_pi_session_with_handoff_protocol() {
         "Ship the workflow scheduler.\nKeep the notes short.",
     )
     .expect("write handoff input");
+    let workflow_file = pontia_home
+        .join("workflows/wf_start/workflow.toml")
+        .display()
+        .to_string();
     let sessions = RecordingSessionCreator::default();
     let scheduler = WorkflowScheduler::new(
         pool,
@@ -104,11 +108,19 @@ async fn start_launches_first_node_as_a_pi_session_with_handoff_protocol() {
             .map(String::as_str),
         Some("wf_start")
     );
+    assert_eq!(
+        request
+            .runtime_environment
+            .get("PONTIA_WORKFLOW_FILE")
+            .map(String::as_str),
+        Some(workflow_file.as_str())
+    );
     let task = &request.initial_task.as_ref().expect("initial task").input;
     assert!(task.contains("Turn the brief into concise release notes."));
     assert!(task.contains("Input file: brief.md"));
     assert!(task.contains("Ship the workflow scheduler.\nKeep the notes short."));
     assert!(task.contains("Expected output: release.md"));
+    assert!(task.contains("available at `$PONTIA_WORKFLOW_FILE`"));
     assert!(task.contains("create a source file in the Session cwd"));
     assert!(task.contains("pontia workflow submit --input <source-path> --output release.md"));
 
