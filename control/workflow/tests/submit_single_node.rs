@@ -192,34 +192,40 @@ fn event(
 }
 
 async fn wait_for_exit_request(exits: &RecordingExitRequester) {
-    for _ in 0..50 {
-        if !exits
-            .requests
-            .lock()
-            .expect("exit requests lock")
-            .is_empty()
-        {
-            return;
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            if !exits
+                .requests
+                .lock()
+                .expect("exit requests lock")
+                .is_empty()
+            {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         }
-        tokio::task::yield_now().await;
-    }
-    panic!("workflow did not request graceful exit");
+    })
+    .await
+    .expect("workflow did not request graceful exit");
 }
 
 async fn wait_for_state(repository: &SqliteWorkflowRepository, expected: &str) {
-    for _ in 0..50 {
-        let state = repository
-            .get_workflow("wf_submit")
-            .await
-            .expect("load workflow")
-            .expect("workflow exists")
-            .state;
-        if state == expected {
-            return;
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            let state = repository
+                .get_workflow("wf_submit")
+                .await
+                .expect("load workflow")
+                .expect("workflow exists")
+                .state;
+            if state == expected {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         }
-        tokio::task::yield_now().await;
-    }
-    panic!("workflow did not reach {expected}");
+    })
+    .await
+    .unwrap_or_else(|_| panic!("workflow did not reach {expected}"));
 }
 
 #[tokio::test]
