@@ -4,7 +4,6 @@ mod agent_bindings;
 mod agent_events;
 mod agent_profiles;
 pub mod app;
-mod approvals;
 mod branch_replay;
 mod git_status;
 mod idempotency;
@@ -31,11 +30,6 @@ pub use agent_profiles::{
     UpsertExecutionProfileRequest,
 };
 pub use app::{AppState, initialize};
-pub use approvals::{
-    ApprovalCommandService, ApprovalCoordinator, ApprovalDecisionRequest,
-    ApprovalObservationService, ApprovalRegistrationRequest, ApprovalRegistrationService,
-    ApprovalWaitOutcome, ClaudeToolDecisionObservation, PendingApproval,
-};
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use idempotency::{IdempotencyCoordinator, IdempotencyOutcome};

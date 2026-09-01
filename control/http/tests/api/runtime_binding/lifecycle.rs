@@ -1,6 +1,4 @@
-use super::{
-    AppState, StatusCode, Value, json, post_upsert, request_json, test_state, upsert_body,
-};
+use super::{AppState, StatusCode, json, post_upsert, request_json, test_state, upsert_body};
 #[tokio::test]
 async fn current_runtime_exit_abandons_its_active_turn() {
     let (state, _app) = test_state().await;
@@ -313,45 +311,6 @@ async fn repeated_webui_resume_of_manually_bound_pi_tui_does_not_persist_session
     )
     .await;
     assert_persisted_start_command(&state, session_id, "pi").await;
-}
-
-#[tokio::test]
-async fn repeated_webui_resume_of_manually_bound_claude_tui_does_not_persist_resume_argument() {
-    let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
-    let workspace = workspace
-        .path()
-        .canonicalize()
-        .expect("canonical workspace");
-    let workspace = workspace.display().to_string();
-
-    let mut body = upsert_body(&workspace, Some("%43"));
-    body["client_type"] = json!("claude");
-    body["client_session_key"] = json!("claude_session_123");
-    body["client_session_file"] = json!("/tmp/claude/session.jsonl");
-    body["client_session_dir"] = Value::Null;
-    body["start_command"] = json!("claude");
-    let (upsert_status, upsert) = post_upsert(state.clone(), body).await;
-    assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
-    let session_id = upsert["session"]["session_id"].as_str().unwrap();
-
-    let first_resumed_runtime_instance_id = exit_and_resume(
-        state.clone(),
-        session_id,
-        upsert["runtime"]["runtime_instance_id"]
-            .as_str()
-            .expect("initial runtime instance id"),
-    )
-    .await;
-    assert_persisted_start_command(&state, session_id, "claude").await;
-
-    exit_and_resume(
-        state.clone(),
-        session_id,
-        &first_resumed_runtime_instance_id,
-    )
-    .await;
-    assert_persisted_start_command(&state, session_id, "claude").await;
 }
 
 async fn exit_and_resume(state: AppState, session_id: &str, runtime_instance_id: &str) -> String {

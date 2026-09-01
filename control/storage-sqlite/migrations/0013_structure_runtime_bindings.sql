@@ -72,8 +72,7 @@ SELECT
         'log_dir', json_extract(metadata, '$.log_dir'),
         'runtime_log', json_extract(metadata, '$.runtime_log'),
         'log_path', json_extract(metadata, '$.log_path'),
-        'pi_hook_log', json_extract(metadata, '$.pi_hook_log'),
-        'claude_hook_log', json_extract(metadata, '$.claude_hook_log')
+        'pi_hook_log', json_extract(metadata, '$.pi_hook_log')
     ),
     json_object(
         'tmux', json_extract(metadata, '$.tmux'),

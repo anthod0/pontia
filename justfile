@@ -47,10 +47,7 @@ pi-client-test:
     pnpm --dir=clients/pi run test
     pnpm --dir=clients/pi run typecheck
 
-claude-client-test:
-    pnpm --dir=clients/claude run test
-
 website-check:
     pnpm --dir=apps/website run check
 
-check: fmt-check sqlx-check clippy test dashboard-check dashboard-test pi-client-test claude-client-test website-check
+check: fmt-check sqlx-check clippy test dashboard-check dashboard-test pi-client-test website-check

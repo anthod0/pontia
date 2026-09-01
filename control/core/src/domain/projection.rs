@@ -6,7 +6,6 @@ use serde_json::Value;
 use super::{DomainEvent, EventType, SessionState, TimelineBoundary, TurnState, TurnTopology};
 use crate::error::Error;
 
-mod approval;
 mod session;
 mod turn;
 
@@ -111,13 +110,9 @@ impl ProjectionState {
             EventType::SessionReady => self.apply_session(event, SessionState::Idle),
             EventType::SessionExited => {
                 self.abandon_active_turn_for_session_exit(event)?;
-                self.apply_session(event, SessionState::Exited)?;
-                self.clear_approval_interaction(&event.session_id, None)
+                self.apply_session(event, SessionState::Exited)
             }
-            EventType::SessionError => {
-                self.apply_session(event, SessionState::Error)?;
-                self.clear_approval_interaction(&event.session_id, None)
-            }
+            EventType::SessionError => self.apply_session(event, SessionState::Error),
             EventType::SessionTitleUpdated => self.apply_session(
                 event,
                 self.sessions
@@ -138,10 +133,6 @@ impl ProjectionState {
                 self.apply_turn(event, TurnState::Failed)
             }
             EventType::TurnInterrupted => self.apply_turn(event, TurnState::Interrupted),
-            EventType::ApprovalRequested => self.apply_approval_requested(event),
-            EventType::ApprovalAccepted
-            | EventType::ApprovalRejected
-            | EventType::ApprovalCancelled => self.apply_approval_final(event),
             EventType::InboxMessageQueued
             | EventType::InboxMessageDispatched
             | EventType::InboxMessageCancelled

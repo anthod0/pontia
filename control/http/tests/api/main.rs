@@ -2,7 +2,6 @@
 mod common;
 
 mod agent_profile;
-mod approval;
 mod external_event_stream;
 mod external_queries;
 mod health;

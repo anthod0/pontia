@@ -50,55 +50,6 @@ async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marke
 }
 
 #[tokio::test]
-async fn claude_client_session_key_binds_the_precreated_runtime_by_controlled_pane() {
-    let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
-    let workspace = workspace
-        .path()
-        .canonicalize()
-        .expect("canonical workspace");
-    let workspace = workspace.display().to_string();
-    let session_id = "sess_precreated_claude";
-    sqlx::query(
-        "INSERT INTO sessions (session_id, client_type, state, metadata) VALUES (?, 'claude', 'starting', '{}')",
-    )
-    .bind(session_id)
-    .execute(&state.db())
-    .await
-    .expect("precreate session");
-    sqlx::query(
-        r#"INSERT INTO runtime_bindings
-           (session_id, runtime_kind, runtime_instance_id, binding_state, launch_cwd, tmux_socket_path, tmux_pane_id)
-           VALUES (?, 'claude_tui', 'rtinst_precreated_claude', 'provisioned', ?, '/tmp/tmux-1000/default', '%52')"#,
-    )
-    .bind(session_id)
-    .bind(&workspace)
-    .execute(&state.db())
-    .await
-    .expect("precreate runtime binding");
-    let mut body = upsert_body(&workspace, Some("%52"));
-    body["client_type"] = json!("claude");
-    body["client_session_key"] = json!("claude_native_session");
-    body["start_command"] = json!("claude");
-
-    let (status, response) = post_upsert(state.clone(), body).await;
-
-    assert_eq!(status, StatusCode::OK, "{response:?}");
-    assert_eq!(response["session"]["session_id"], session_id);
-    assert_eq!(
-        response["runtime"]["runtime_instance_id"],
-        "rtinst_precreated_claude"
-    );
-    let bound_session: String = sqlx::query_scalar(
-        "SELECT session_id FROM agent_bindings WHERE client_type = 'claude' AND client_session_key = 'claude_native_session'",
-    )
-    .fetch_one(&state.db())
-    .await
-    .expect("Claude Agent binding");
-    assert_eq!(bound_session, session_id);
-}
-
-#[tokio::test]
 async fn fork_upsert_creates_independent_child_session_with_lineage() {
     let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");

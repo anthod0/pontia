@@ -91,12 +91,7 @@ pub async fn post_event(
         }));
     }
 
-    let terminal_candidate = reported_event.clone();
     let result = service.ingest_confirmed_event(reported_event).await?;
-    state
-        .approvals()
-        .resolve_terminal_event(&terminal_candidate)
-        .await;
 
     Ok(Json(InternalEventResponse {
         accepted: result.accepted,

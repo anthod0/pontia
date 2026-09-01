@@ -181,7 +181,7 @@ fn classifies_an_unsupported_or_unavailable_current_source() {
     let unsupported = PiTimelineAdapter::new()
         .resolve_user_entry(PiTurnUserEntryResolveRequest {
             source: ResolvedAgentBinding {
-                client_type: "claude".to_string(),
+                client_type: "generic".to_string(),
                 ..base_request.source
             },
             ..base_request

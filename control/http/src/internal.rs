@@ -4,7 +4,6 @@
 //! modules own each endpoint family and its policies.
 
 mod agent_binding;
-mod approval;
 mod authentication;
 mod branch_replay;
 mod event_ingestion;
@@ -16,8 +15,6 @@ pub use agent_binding::{
     AgentBindingQuery, claim_current_turn, get_agent_binding, get_agent_binding_current_turn,
     get_agent_binding_session_context,
 };
-pub use approval::post_claude_permission_request;
-pub(crate) use authentication::authenticate_internal_token;
 pub use branch_replay::resolve_branch_replay;
 pub use event_ingestion::{InternalEventRequest, InternalEventResponse, post_event};
 pub use response::ApiError;

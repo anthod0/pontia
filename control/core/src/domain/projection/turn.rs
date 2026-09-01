@@ -132,9 +132,6 @@ impl ProjectionState {
         }
         turn.state_version += 1;
 
-        if new_state.is_terminal() {
-            self.clear_approval_interaction(&event.session_id, None)?;
-        }
         let session = self
             .sessions
             .entry(event.session_id.clone())

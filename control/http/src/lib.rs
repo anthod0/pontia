@@ -18,7 +18,6 @@ pub mod dashboard;
 pub mod external;
 pub mod health;
 pub mod internal;
-mod otlp;
 pub mod state;
 
 pub async fn serve_with_shutdown_timeout<F>(
@@ -72,7 +71,6 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             "/internal/v1/workflow/submissions",
             post(internal::submit_workflow_output),
         )
-        .route("/internal/v1/otel/v1/logs", post(otlp::post_logs))
         .route(
             "/internal/v1/agent-bindings",
             get(internal::get_agent_binding),
@@ -84,10 +82,6 @@ pub fn router(state: impl Into<HttpState>) -> Router {
         .route(
             "/internal/v1/agent-bindings/session-context",
             get(internal::get_agent_binding_session_context),
-        )
-        .route(
-            "/internal/v1/claude/permission-request",
-            post(internal::post_claude_permission_request),
         )
         .route(
             "/internal/v1/runtime-bindings/upsert",
@@ -225,10 +219,6 @@ pub fn router(state: impl Into<HttpState>) -> Router {
         .route(
             "/external/v1/sessions/{session_id}/resume",
             post(external::resume_session),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/approvals/{request_event_id}/decision",
-            post(external::decide_approval),
         )
         // Read-only turn history. Direct turn dispatch via POST is intentionally not exposed:
         // Web input is submitted through the inbox API, and hook/internal events own turn lifecycle facts.

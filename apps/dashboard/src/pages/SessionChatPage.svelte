@@ -10,10 +10,6 @@
   import * as Alert from '$lib/components/ui/alert/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import ChatRuler from '$lib/components/session-chat/ChatRuler.svelte'
-  import ApprovalRequestCard from '$lib/components/session-chat/ApprovalRequestCard.svelte'
-  import { approvalRequestFromSnapshot } from '$lib/approvals'
-  import type { ApprovalDecisionInput } from '$lib/approvals'
-  import { decideApproval } from '../api/client'
   import type { DashboardStreamEvent, InboxMessageView, SessionView, TurnView } from '../api/types'
   import type { ChatMessageRole, SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
@@ -115,10 +111,6 @@
   $: selectedSessionGitStatus = selectedSession ? $workspaceGitStatuses[selectedSession.workspace_id ?? ''] : undefined
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, $workspaces, selectedSessionGitStatus, $workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
-  $: pendingApproval = approvalRequestFromSnapshot(
-    $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : null,
-    $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.events : [],
-  )
   $: timelineMessages = $timelineState.sessionId === selectedSessionId
     ? timelineItemsToChatMessages($timelineState.items, $timelineState.mode === 'tree')
     : []
@@ -152,11 +144,6 @@
     if (routeSessionId) return routeSessionId
     const pathMatch = window.location.pathname.match(/\/chat\/([^/?#]+)$/)
     return pathMatch ? decodeURIComponent(pathMatch[1]) : ''
-  }
-
-  async function submitApprovalDecision(decision: ApprovalDecisionInput): Promise<void> {
-    if (!selectedSessionId || !pendingApproval) return
-    await decideApproval(selectedSessionId, pendingApproval.requestEventId, decision)
   }
 
   function eligibleBranchActionInputs(
@@ -433,10 +420,6 @@
       if (streamEvent.event.type === 'turn.started') {
         void loadSessionDetail(selectedSessionId, { showLoading: false })
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
-        return
-      }
-      if (streamEvent.event.type.startsWith('approval.')) {
-        void loadSessionDetail(selectedSessionId, { showLoading: false })
         return
       }
       if (streamEvent.event.type !== 'session.message_updated') return
@@ -797,19 +780,6 @@
               >
                 <ChevronDown class="size-4" />
               </Button>
-            </div>
-          </div>
-        {/if}
-
-        {#if pendingApproval}
-          <div
-            data-chat-approval-dock="fixed"
-            class={`pointer-events-none fixed left-0 right-0 z-50 px-2 transition-[left] duration-200 ease-linear sm:px-4 md:left-[var(--sidebar-width)] md:px-6 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${visibleInboxMessages.length ? 'bottom-88' : 'bottom-36'}`}
-          >
-            <div class="pointer-events-auto mx-auto max-h-[calc(100svh-11rem)] w-full max-w-4xl overflow-y-auto">
-              {#key pendingApproval.requestEventId}
-                <ApprovalRequestCard approval={pendingApproval} onDecision={submitApprovalDecision} />
-              {/key}
             </div>
           </div>
         {/if}

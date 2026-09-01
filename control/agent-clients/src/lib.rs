@@ -1,4 +1,3 @@
-pub mod claude;
 #[cfg(any(test, feature = "generic-test-client"))]
 mod generic_test;
 pub mod pi;
@@ -26,7 +25,6 @@ pub const AGENT_CLIENTS: &[AgentClientSpec] = &[
     #[cfg(any(test, feature = "generic-test-client"))]
     generic_test::SPEC,
     pi::SPEC,
-    claude::SPEC,
 ];
 
 pub fn default_real_client_spec() -> &'static AgentClientSpec {
@@ -78,10 +76,6 @@ pub fn timeline_boundary_backend_for(client_type: &str) -> Option<TimelineBounda
             resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
             capturer: Box::new(pi::raw_transcripts::PiTimelineAdapter::new()),
         }),
-        TranscriptBehavior::ClaudeJsonl => Some(TimelineBoundaryBackend {
-            resolver: Box::new(claude::raw_transcripts::ClaudeAgentBindingResolver::new()),
-            capturer: Box::new(claude::raw_transcripts::ClaudeTimelineAdapter::new()),
-        }),
     }
 }
 
@@ -95,10 +89,6 @@ pub fn turn_timeline_backend_for(client_type: &str) -> Option<TurnTimelineBacken
         TranscriptBehavior::PiJsonl => Some(TurnTimelineBackend {
             resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
             reader: Box::new(pi::raw_transcripts::PiTimelineAdapter::new()),
-        }),
-        TranscriptBehavior::ClaudeJsonl => Some(TurnTimelineBackend {
-            resolver: Box::new(claude::raw_transcripts::ClaudeAgentBindingResolver::new()),
-            reader: Box::new(claude::raw_transcripts::ClaudeTimelineAdapter::new()),
         }),
     }
 }
@@ -167,66 +157,7 @@ mod tests {
     fn registry_knows_builtin_clients_and_rejects_unknown() {
         assert!(is_supported_client_type("generic"));
         assert!(is_supported_client_type("pi"));
-        assert!(is_supported_client_type("claude"));
         assert!(!is_supported_client_type("unsupported"));
-    }
-
-    #[test]
-    fn claude_spec_exposes_linear_transcript_timeline() {
-        let spec = get_client_spec("claude").expect("claude client spec registered");
-        assert_eq!(spec.client_type, "claude");
-        assert_eq!(
-            spec.capabilities,
-            AgentClientCapabilities {
-                accept_task: true,
-                report_turn_started: true,
-                report_turn_finished: true,
-                interrupt: true,
-                stream_output: false,
-                heartbeat: false,
-                timeline: true,
-                topology: false,
-                branch_control: false,
-                context_usage: ContextUsageCapability::Unsupported,
-            }
-        );
-        assert_eq!(spec.adapter.dispatch, DispatchBehavior::TmuxPaste);
-        assert_eq!(
-            spec.adapter.client_session_identity,
-            ClientSessionIdentityBehavior::RequiredOnReady
-        );
-        assert_eq!(
-            spec.adapter.turn_context,
-            TurnContextBehavior::InternalApiClaim
-        );
-        assert_eq!(spec.adapter.current_turn_id, CurrentTurnIdBehavior::Omit);
-        assert_eq!(
-            spec.adapter.turn_lifecycle,
-            TurnLifecycleBehavior::ClientManagedForInteractiveTmux
-        );
-        assert_eq!(spec.runtime_binding_kind(), Some("claude_tui"));
-        assert_eq!(
-            spec.adapter.system_prompt_injection,
-            SystemPromptInjectionBehavior::Disabled
-        );
-        assert_eq!(
-            spec.adapter.timeline_source,
-            TimelineSourceBehavior::Transcript
-        );
-        assert_eq!(spec.adapter.transcript, TranscriptBehavior::ClaudeJsonl);
-        assert!(timeline_boundary_backend_for("claude").is_some());
-        assert!(turn_timeline_backend_for("claude").is_some());
-
-        let runtime = spec.tmux_runtime().expect("claude uses tmux runtime");
-        assert_eq!(runtime.command_env, Some("PONTIA_CLAUDE_TUI_COMMAND"));
-        assert_eq!(runtime.default_command, "claude");
-        assert_eq!(runtime.startup_args, &[] as &[&str]);
-        assert_eq!(runtime.startup_session_identity_arg, None);
-        assert_eq!(runtime.resume_session_identity_arg, Some("--resume"));
-        assert_eq!(runtime.runtime_config_key, Some("claude"));
-        let hook_log = runtime.hook_log.expect("claude hook log configured");
-        assert_eq!(hook_log.file_name, "claude-hook.log");
-        assert_eq!(hook_log.metadata_key, "claude_hook_log");
     }
 
     #[test]
@@ -238,15 +169,8 @@ mod tests {
                 .topology
         );
         assert!(topology_backend_for("pi").is_some());
-        for client_type in ["generic", "claude"] {
-            assert!(
-                !get_client_spec(client_type)
-                    .expect("built-in client spec")
-                    .capabilities
-                    .topology,
-                "{client_type} must remain independently degraded"
-            );
-            assert!(topology_backend_for(client_type).is_none());
-        }
+        let generic = get_client_spec("generic").expect("generic test client spec");
+        assert!(!generic.capabilities.topology);
+        assert!(topology_backend_for("generic").is_none());
     }
 }

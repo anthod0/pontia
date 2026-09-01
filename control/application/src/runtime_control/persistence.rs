@@ -139,7 +139,6 @@ pub(crate) fn runtime_binding_record(
         "runtime_log": metadata.get("runtime_log"),
         "log_path": metadata.get("log_path"),
         "pi_hook_log": metadata.get("pi_hook_log"),
-        "claude_hook_log": metadata.get("claude_hook_log"),
     });
     let adapter_details = json!({
         "tmux": metadata.get("tmux"),

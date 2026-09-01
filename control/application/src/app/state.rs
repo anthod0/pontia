@@ -7,7 +7,7 @@ use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
 use sqlx::SqlitePool;
 
 use super::{AppStateBuilder, ShutdownSignal, VolatileEventBroker};
-use crate::{AgentEventBroker, ApprovalCoordinator, GitRefreshCoordinator, IdempotencyCoordinator};
+use crate::{AgentEventBroker, GitRefreshCoordinator, IdempotencyCoordinator};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -43,7 +43,6 @@ struct LifecycleState {
 }
 
 struct IntegrationState {
-    approvals: ApprovalCoordinator,
     git_refresh: GitRefreshCoordinator,
     idempotency: IdempotencyCoordinator,
 }
@@ -71,7 +70,6 @@ impl AppState {
                     shutdown: builder.shutdown,
                 },
                 integrations: IntegrationState {
-                    approvals: builder.approvals,
                     git_refresh: builder.git_refresh,
                     idempotency: builder.idempotency,
                 },
@@ -119,10 +117,6 @@ impl AppState {
         self.inner.integrations.idempotency.clone()
     }
 
-    pub fn approvals(&self) -> ApprovalCoordinator {
-        self.inner.integrations.approvals.clone()
-    }
-
     pub fn with_external_api_token(&self, external_api_token: Option<String>) -> Self {
         self.rebuild()
             .external_api_token(external_api_token)
@@ -139,6 +133,5 @@ impl AppState {
             .volatile_events(self.volatile_events())
             .git_refresh(self.git_refresh())
             .idempotency(self.idempotency())
-            .approvals(self.approvals())
     }
 }

@@ -4,7 +4,7 @@ use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
 use sqlx::SqlitePool;
 
 use super::{AppState, ShutdownSignal, VolatileEventBroker};
-use crate::{AgentEventBroker, ApprovalCoordinator, GitRefreshCoordinator, IdempotencyCoordinator};
+use crate::{AgentEventBroker, GitRefreshCoordinator, IdempotencyCoordinator};
 
 pub struct AppStateBuilder {
     pub(super) db: SqlitePool,
@@ -17,7 +17,6 @@ pub struct AppStateBuilder {
     pub(super) volatile_events: VolatileEventBroker,
     pub(super) git_refresh: GitRefreshCoordinator,
     pub(super) idempotency: IdempotencyCoordinator,
-    pub(super) approvals: ApprovalCoordinator,
 }
 
 impl AppStateBuilder {
@@ -33,7 +32,6 @@ impl AppStateBuilder {
             volatile_events: VolatileEventBroker::default(),
             git_refresh: GitRefreshCoordinator::default(),
             idempotency: IdempotencyCoordinator::default(),
-            approvals: ApprovalCoordinator::default(),
         }
     }
 
@@ -74,11 +72,6 @@ impl AppStateBuilder {
 
     pub fn idempotency(mut self, idempotency: IdempotencyCoordinator) -> Self {
         self.idempotency = idempotency;
-        self
-    }
-
-    pub fn approvals(mut self, approvals: ApprovalCoordinator) -> Self {
-        self.approvals = approvals;
         self
     }
 

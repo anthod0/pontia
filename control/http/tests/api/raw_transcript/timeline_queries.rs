@@ -198,9 +198,9 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
             "timeline_capability_unavailable",
         ),
         (
-            "claude",
-            "sess_turn_timeline_claude",
-            "turn_claude",
+            "pi",
+            "sess_turn_timeline_pi",
+            "turn_pi",
             StatusCode::SERVICE_UNAVAILABLE,
             "timeline_source_unavailable",
         ),

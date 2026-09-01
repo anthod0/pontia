@@ -283,42 +283,6 @@ mod tests {
     }
 
     #[test]
-    fn claude_runtime_script_starts_without_resuming_a_session() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let script_path = tempdir.path().join("launch.sh");
-        let paths = RuntimePaths {
-            log_path: &tempdir.path().join("runtime.log"),
-        };
-        let request = RuntimeStartRequest {
-            session_id: "sess_new_claude".to_string(),
-            client_type: "claude".to_string(),
-            workspace: Some(tempdir.path().display().to_string()),
-            workspace_name: None,
-            handle: None,
-            role: None,
-            start_command: None,
-            environment: Default::default(),
-        };
-
-        write_launch_script(
-            &script_path,
-            tempdir.path(),
-            &paths,
-            &request,
-            "launch_claude",
-            "runtime_instance_claude",
-        )
-        .expect("write script");
-
-        let script = std::fs::read_to_string(script_path).expect("script");
-        assert!(
-            script.contains("exec sh -lc 'claude'"),
-            "script was:\n{script}"
-        );
-        assert!(!script.contains("--resume"), "script was:\n{script}");
-    }
-
-    #[test]
     fn runtime_script_prefers_explicit_start_command() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let paths = RuntimePaths {
