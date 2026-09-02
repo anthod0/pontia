@@ -24,6 +24,32 @@ enum SessionManagementAction {
 }
 
 impl SessionCommandService {
+    /// Finds a Session created with a durable metadata token.
+    ///
+    /// This closes cross-service crash gaps without giving callers control over
+    /// Session identity or introducing domain-specific Session creation paths.
+    pub async fn find_session_by_creation_token(
+        &self,
+        metadata_key: &str,
+        token: &str,
+    ) -> Result<Option<String>> {
+        let json_path = format!("$.{metadata_key}");
+        let sessions = sqlx::query_scalar::<_, String>(
+            "SELECT session_id FROM sessions WHERE json_extract(metadata, ?) = ? ORDER BY created_at LIMIT 2",
+        )
+        .bind(json_path)
+        .bind(token)
+        .fetch_all(&self.pool)
+        .await?;
+        match sessions.as_slice() {
+            [] => Ok(None),
+            [session_id] => Ok(Some(session_id.clone())),
+            _ => Err(Error::StateConflict(format!(
+                "multiple Sessions use creation token {token}"
+            ))),
+        }
+    }
+
     pub async fn create_session(
         &self,
         request: CreateSessionRequest,

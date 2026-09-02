@@ -110,3 +110,16 @@ pub struct RequestWorkflowPatch {
 pub struct RequestWorkflowPatchOutcome {
     pub patch_id: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockWorkflowPatch {
+    pub session_id: String,
+    pub runtime_instance_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockWorkflowPatchOutcome {
+    pub patch_id: String,
+    pub workflow_id: String,
+}

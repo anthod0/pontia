@@ -54,6 +54,33 @@ async fn migration_upgrades_the_immediately_preceding_schema_without_an_active_p
 }
 
 #[tokio::test]
+async fn replanner_blocking_migration_upgrades_the_preceding_patch_schema() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("workflow-replanner-blocking-migration.db");
+    let pool = connect_sqlite(&format!("sqlite://{}", db_path.display()))
+        .await
+        .expect("connect");
+    sqlx::raw_sql("CREATE TABLE workflow_patches (patch_id TEXT PRIMARY KEY NOT NULL)")
+        .execute(&pool)
+        .await
+        .expect("create preceding Patch schema");
+
+    sqlx::raw_sql(include_str!(
+        "../migrations/0018_complete_workflow_replanner_blocking.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("apply Re-planner blocking migration");
+
+    let columns: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM pragma_table_info('workflow_patches') ORDER BY cid")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(columns, ["patch_id", "replanner_exit_requested_at"]);
+}
+
+#[tokio::test]
 async fn fresh_schema_enforces_one_active_patch_per_workflow() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("workflow-patch-constraints.db");

@@ -450,6 +450,74 @@ fn workflow_patch_request_reads_utf8_before_discovery_and_prints_patch_id() {
 }
 
 #[test]
+fn workflow_patch_block_reads_reason_before_discovery_and_uses_managed_identity() {
+    let dir = temp_dir("patch-block-success");
+    let bin_dir = dir.path().join("bin");
+    fs::create_dir(&bin_dir).expect("create bin dir");
+    install_fake_tmux(&bin_dir);
+    let reason = dir.path().join("reason.md");
+    fs::write(&reason, "No executable continuation. 完成\n").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    write_pontia_config(dir.path(), addr.port());
+    let request = capture_one_request_with_response(
+        listener,
+        r#"{"data":{"patch_id":"patch_cli_1","workflow_id":"wf_cli","state":"blocked"}}"#,
+    );
+    let path = format!(
+        "{}:{}",
+        bin_dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
+    let output = pontia()
+        .args([
+            "workflow",
+            "patch",
+            "block",
+            "--reason",
+            reason.to_str().unwrap(),
+        ])
+        .env("PATH", path)
+        .env("TMUX", "/tmp/tmux-test/default,1,0")
+        .env("TMUX_PANE", "%7")
+        .env("PONTIA_HOME", dir.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "blocked\n");
+    let request = request.join().unwrap();
+    assert!(request.starts_with("POST /internal/v1/workflow/patches/block HTTP/1.1"));
+    assert!(request.contains(
+        r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli","reason":"No executable continuation. 完成\n"}"#
+    ));
+
+    let invalid = dir.path().join("invalid-reason.md");
+    fs::write(&invalid, [0xff, 0xfe]).unwrap();
+    let output = pontia()
+        .args([
+            "workflow",
+            "patch",
+            "block",
+            "--reason",
+            invalid.to_str().unwrap(),
+        ])
+        .env("PONTIA_HOME", dir.path())
+        .env_remove("TMUX")
+        .env_remove("TMUX_PANE")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("failed to read UTF-8 Workflow Patch reason file"));
+    assert!(!stderr.contains("not running in a Pontia-managed tmux pane"));
+}
+
+#[test]
 fn workflow_patch_request_rejects_local_input_before_pane_discovery() {
     let dir = temp_dir("patch-request-source-errors");
     let invalid = dir.path().join("invalid.md");

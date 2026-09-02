@@ -5,8 +5,8 @@ use axum::{
 };
 use pontia_application::{AppState, SessionCommandService};
 use pontia_workflow::{
-    InitialHandoff, RequestWorkflowPatch, RunWorkflowRequest, SubmitWorkflowNodeRequest,
-    WorkflowNodeDefinition, WorkflowPatchService, WorkflowScheduler,
+    BlockWorkflowPatch, InitialHandoff, RequestWorkflowPatch, RunWorkflowRequest,
+    SubmitWorkflowNodeRequest, WorkflowNodeDefinition, WorkflowPatchService, WorkflowScheduler,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -61,6 +61,14 @@ pub struct WorkflowPatchRequest {
     session_id: String,
     runtime_instance_id: String,
     document: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowPatchBlockRequest {
+    session_id: String,
+    runtime_instance_id: String,
+    reason: String,
 }
 
 pub async fn run_workflow(
@@ -142,6 +150,34 @@ pub async fn request_workflow_patch(
         "data": {
             "patch_id": outcome.patch_id,
             "state": "requested",
+        }
+    })))
+}
+
+pub async fn block_workflow_patch(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    request: Result<Json<WorkflowPatchBlockRequest>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    authenticate_internal_token(
+        &state,
+        &headers,
+        "Internal Workflow API token is not configured",
+    )?;
+    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
+    let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
+        .block_patch(BlockWorkflowPatch {
+            session_id: request.session_id,
+            runtime_instance_id: request.runtime_instance_id,
+            reason: request.reason,
+        })
+        .await
+        .map_err(ApiError::from_workflow)?;
+    Ok(Json(json!({
+        "data": {
+            "patch_id": outcome.patch_id,
+            "workflow_id": outcome.workflow_id,
+            "state": "blocked",
         }
     })))
 }

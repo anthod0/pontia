@@ -76,6 +76,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             post(internal::request_workflow_patch),
         )
         .route(
+            "/internal/v1/workflow/patches/block",
+            post(internal::block_workflow_patch),
+        )
+        .route(
             "/internal/v1/agent-bindings",
             get(internal::get_agent_binding),
         )

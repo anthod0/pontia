@@ -65,7 +65,22 @@ pub struct WorkflowNodeView {
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkflowContextView {
     pub workflow: WorkflowDetailView,
+    pub definition_file: String,
+    pub active_patch: Option<WorkflowActivePatchView>,
     pub current_node: WorkflowNodeContextView,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowActivePatchView {
+    pub patch_id: String,
+    pub state: String,
+    pub base_revision: i64,
+    pub request_document_ref: String,
+    pub requesting_node_id: String,
+    pub requesting_session_id: String,
+    pub requesting_turn_id: String,
+    pub replanner_session_id: Option<String>,
+    pub replanner_turn_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -293,8 +308,31 @@ impl WorkflowQueryService {
             };
             inputs.push(WorkflowInputView { name, content });
         }
+        let definition_file = pontia_home
+            .join("workflows")
+            .join(workflow_id)
+            .join("workflow.toml")
+            .display()
+            .to_string();
+        let active_patch = self
+            .workflows
+            .get_active_patch(workflow_id)
+            .await?
+            .map(|patch| WorkflowActivePatchView {
+                patch_id: patch.patch_id,
+                state: patch.state,
+                base_revision: patch.base_revision,
+                request_document_ref: patch.request_document_ref,
+                requesting_node_id: patch.requesting_node_id,
+                requesting_session_id: patch.requesting_session_id,
+                requesting_turn_id: patch.requesting_turn_id,
+                replanner_session_id: patch.replanner_session_id,
+                replanner_turn_id: patch.replanner_turn_id,
+            });
         Ok(Some(WorkflowContextView {
             workflow,
+            definition_file,
+            active_patch,
             current_node: WorkflowNodeContextView {
                 instructions: node.instructions,
                 inputs,

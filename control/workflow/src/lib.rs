@@ -21,14 +21,15 @@ pub use ports::{
     AgentEventSubscriber, GracefulExitRequester, SessionCreator, TurnInterruptionRequester,
 };
 pub use query::{
-    WorkflowAgentStatus, WorkflowContextView, WorkflowDetailView, WorkflowGraphNodeView,
-    WorkflowGraphRevisionView, WorkflowInputView, WorkflowListItemView, WorkflowNodeContextView,
-    WorkflowNodeView, WorkflowQueryService,
+    WorkflowActivePatchView, WorkflowAgentStatus, WorkflowContextView, WorkflowDetailView,
+    WorkflowGraphNodeView, WorkflowGraphRevisionView, WorkflowInputView, WorkflowListItemView,
+    WorkflowNodeContextView, WorkflowNodeView, WorkflowQueryService,
 };
 pub use scheduler::WorkflowScheduler;
 pub use types::{
-    AcceptedWorkflowDefinition, AcceptedWorkflowNode, DefinitionChangePlan, InitialHandoff,
-    PlannedNodeParent, PlannedWorkflowNode, RequestWorkflowPatch, RequestWorkflowPatchOutcome,
-    RunWorkflowOutcome, RunWorkflowRequest, StartWorkflowOutcome, SubmitWorkflowNodeRequest,
-    WorkflowDefinitionHandoff, WorkflowNodeDefinition,
+    AcceptedWorkflowDefinition, AcceptedWorkflowNode, BlockWorkflowPatch,
+    BlockWorkflowPatchOutcome, DefinitionChangePlan, InitialHandoff, PlannedNodeParent,
+    PlannedWorkflowNode, RequestWorkflowPatch, RequestWorkflowPatchOutcome, RunWorkflowOutcome,
+    RunWorkflowRequest, StartWorkflowOutcome, SubmitWorkflowNodeRequest, WorkflowDefinitionHandoff,
+    WorkflowNodeDefinition,
 };

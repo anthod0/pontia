@@ -34,12 +34,19 @@ struct PatchArgs {
 #[derive(Debug, Subcommand)]
 enum PatchCommandKind {
     Request(PatchRequestArgs),
+    Block(PatchBlockArgs),
 }
 
 #[derive(Debug, Args)]
 struct PatchRequestArgs {
     #[arg(long, value_name = "REQUEST_FILE")]
     input: PathBuf,
+}
+
+#[derive(Debug, Args)]
+struct PatchBlockArgs {
+    #[arg(long, value_name = "REASON_FILE")]
+    reason: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -134,6 +141,13 @@ struct WorkflowPatchRequest {
     document: String,
 }
 
+#[derive(Debug, Serialize)]
+struct WorkflowPatchBlockRequest {
+    session_id: String,
+    runtime_instance_id: String,
+    reason: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct WorkflowPatchResponse {
     data: WorkflowPatchResponseData,
@@ -157,7 +171,19 @@ struct WorkflowContextResponseData {
 #[derive(Debug, Deserialize)]
 struct WorkflowContext {
     workflow: WorkflowContextSummary,
+    #[serde(default)]
+    definition_file: String,
+    active_patch: Option<WorkflowActivePatch>,
     current_node: WorkflowNodeContext,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowActivePatch {
+    patch_id: String,
+    state: String,
+    base_revision: i64,
+    request_document_ref: String,
+    replanner_session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -165,6 +191,8 @@ struct WorkflowContextSummary {
     workflow_id: String,
     title: String,
     state: String,
+    #[serde(default)]
+    current_revision: i64,
     failure_message: Option<String>,
     agent_submitted_count: usize,
     agent_total_count: usize,
@@ -200,6 +228,7 @@ pub(crate) async fn run(workflow: WorkflowCommand, config: &AppConfig) -> Result
         WorkflowCommandKind::Submit(args) => submit_workflow(args, config).await,
         WorkflowCommandKind::Patch(args) => match args.command {
             PatchCommandKind::Request(args) => request_workflow_patch(args, config).await,
+            PatchCommandKind::Block(args) => block_workflow_patch(args, config).await,
         },
     }
 }
@@ -331,13 +360,26 @@ fn render_workflow_context(context: &WorkflowContext) -> String {
         .as_deref()
         .and_then(|id| workflow.nodes.iter().find(|node| node.node_id == id));
     let mut document = format!(
-        "# {}\nWorkflow: `{}` | State: {} | Progress: {}/{}",
+        "# {}\nWorkflow: `{}` | State: {} | Progress: {}/{} | Revision: {}",
         workflow.title,
         workflow.workflow_id,
         workflow.state,
         workflow.agent_submitted_count,
-        workflow.agent_total_count
+        workflow.agent_total_count,
+        workflow.current_revision,
     );
+    if !context.definition_file.is_empty() {
+        document.push_str(&format!("\nDefinition: `{}`", context.definition_file));
+    }
+    if let Some(patch) = &context.active_patch {
+        document.push_str(&format!(
+            "\nActive Patch: `{}` | State: {} | Base revision: {} | Request: `{}`",
+            patch.patch_id, patch.state, patch.base_revision, patch.request_document_ref
+        ));
+        if let Some(session_id) = patch.replanner_session_id.as_deref() {
+            document.push_str(&format!(" | Re-planner: `{session_id}`"));
+        }
+    }
     if let Some(message) = workflow.failure_message.as_deref() {
         document.push_str(&format!("\nFailure: {message}"));
     }
@@ -464,6 +506,44 @@ async fn request_workflow_patch(args: PatchRequestArgs, config: &AppConfig) -> R
         .await
         .map_err(|error| format!("failed to decode Workflow Patch response: {error}"))?;
     println!("{}", response.data.patch_id);
+    Ok(())
+}
+
+async fn block_workflow_patch(args: PatchBlockArgs, config: &AppConfig) -> Result<(), String> {
+    let reason = fs::read_to_string(&args.reason).map_err(|error| {
+        format!(
+            "failed to read UTF-8 Workflow Patch reason file {}: {error}",
+            args.reason.display()
+        )
+    })?;
+    let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
+    let token = config
+        .external_api_token
+        .as_deref()
+        .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
+    let url = format!(
+        "http://{}/internal/v1/workflow/patches/block",
+        local_api_addr(config.bind_addr)
+    );
+    let response = reqwest::Client::new()
+        .post(url)
+        .bearer_auth(token)
+        .json(&WorkflowPatchBlockRequest {
+            session_id,
+            runtime_instance_id,
+            reason,
+        })
+        .send()
+        .await
+        .map_err(|error| format!("failed to block Workflow Patch: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Workflow Patch block failed with HTTP {status}: {body}"
+        ));
+    }
+    println!("blocked");
     Ok(())
 }
 

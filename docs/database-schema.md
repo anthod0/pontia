@@ -411,6 +411,7 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 | `replanning_unlocked_at` | TEXT | set only after the recorded requester Turn interruption is confirmed by a persisted Agent Client fact |
 | `continuation_message_id` | TEXT | |
 | `continuation_queued_at` | TEXT | |
+| `replanner_exit_requested_at` | TEXT | durable claim for graceful exit after a Re-planner Turn terminal fact |
 | `requested_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 | `planning_at` | TEXT | |
 | `resolved_at` | TEXT | |

@@ -1,11 +1,15 @@
-use std::{path::PathBuf, time::Duration};
+use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 
-use pontia_application::{AgentEventBroker, PiGracefulExitService, RuntimeControlService};
+use pontia_application::{
+    AgentEventBroker, CreateSessionRequest, InitialTaskRequest, PiGracefulExitService,
+    RuntimeControlService,
+};
 use pontia_core::domain::EventType;
 use pontia_storage_sqlite::{
     models::workflows::{WorkflowNodeRow, WorkflowRow},
     repositories::{events::SqliteEventRepository, workflows::SqliteWorkflowRepository},
 };
+use serde_json::json;
 use sqlx::SqlitePool;
 use tokio::sync::watch;
 use uuid::Uuid;
@@ -197,6 +201,9 @@ where
         if workflow.state == "replanning" {
             return self.reconcile_patch_request(workflow_id).await;
         }
+        if workflow.state == "blocked" {
+            return self.reconcile_blocked_replanner(workflow_id).await;
+        }
         if workflow.state != "running" {
             return Ok(());
         }
@@ -311,8 +318,9 @@ where
             .patch_requester_interrupted(&patch.patch_id)
             .await?
         {
-            // A persisted, client-confirmed interruption is the only fact that
-            // unlocks Re-planner creation. Issue 05 consumes this durable gate.
+            if patch.state == "requested" {
+                self.ensure_replanner(&patch).await?;
+            }
             return Ok(());
         }
         if !self
@@ -346,6 +354,168 @@ where
                     "failed to request Workflow Patch-owned Turn interruption; coordinator will retry"
                 );
             }
+        }
+        Ok(())
+    }
+
+    async fn ensure_replanner(
+        &self,
+        patch: &pontia_storage_sqlite::models::workflows::WorkflowPatchRow,
+    ) -> Result<()> {
+        let workflow = self
+            .repository
+            .get_workflow(&patch.workflow_id)
+            .await?
+            .ok_or_else(|| crate::Error::WorkflowNotFound(patch.workflow_id.clone()))?;
+        let workflow_dir = self.pontia_home.join("workflows").join(&patch.workflow_id);
+        let workflow_file = workflow_dir.join("workflow.toml");
+        let patch_dir = workflow_dir.join("patches").join(&patch.patch_id);
+        for path in [&workflow_dir, &patch_dir, &workflow_file] {
+            let metadata = std::fs::symlink_metadata(path)?;
+            if metadata.file_type().is_symlink() {
+                return Err(crate::Error::InvalidWorkflowId(path.display().to_string()));
+            }
+        }
+        let accepted_snapshot = patch_dir.join("accepted-definition.toml");
+        match std::fs::symlink_metadata(&accepted_snapshot) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                return Err(crate::Error::InvalidWorkflowId(
+                    accepted_snapshot.display().to_string(),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        if !accepted_snapshot.exists() {
+            let definition = tokio::fs::read(&workflow_file).await?;
+            let pending = patch_dir.join(".accepted-definition.toml.tmp");
+            tokio::fs::write(&pending, definition).await?;
+            match tokio::fs::rename(&pending, &accepted_snapshot).await {
+                Ok(()) => {}
+                Err(error) if accepted_snapshot.exists() => {
+                    let _ = tokio::fs::remove_file(&pending).await;
+                    tracing::debug!(%error, "another reconciliation preserved the accepted Workflow definition");
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+
+        let metadata_key = "workflow_replanner_creation_token";
+        let session_id = match self
+            .sessions
+            .find_session_by_creation_token(metadata_key, &patch.replanner_creation_token)
+            .await?
+        {
+            Some(session_id) => session_id,
+            None => {
+                let request_file = workflow_dir.join(&patch.request_document_ref);
+                let initial_task = "# Workflow Re-planner\n\nInspect the compact Workflow context with `pontia workflow show`. \
+                     Read the Patch request at `$PONTIA_WORKFLOW_PATCH_REQUEST_FILE`, edit \
+                     `$PONTIA_WORKFLOW_FILE`, then resolve this Patch by invoking either \
+                     `pontia workflow patch apply --decision <DECISION_FILE>` or \
+                     `pontia workflow patch block --reason <REASON_FILE>`.\n"
+                    .to_string();
+                self.sessions
+                    .create_session(CreateSessionRequest {
+                        client_type: "pi".into(),
+                        title: Some(format!("Re-plan {}", workflow.title)),
+                        workspace: Some(workflow.cwd.clone()),
+                        workspace_id: None,
+                        handle: None,
+                        role: Some("workflow_replanner".into()),
+                        description: Some(format!("Resolve Workflow Patch {}", patch.patch_id)),
+                        execution_profile_id: None,
+                        execution_profile_version: None,
+                        metadata: json!({
+                            "role": "workflow_replanner",
+                            "workflow_id": patch.workflow_id,
+                            "workflow_patch_id": patch.patch_id,
+                            "workflow_replanner_creation_token": patch.replanner_creation_token,
+                        }),
+                        initial_task: Some(InitialTaskRequest {
+                            input: initial_task,
+                            metadata: json!({ "workflow_patch_id": patch.patch_id }),
+                        }),
+                        runtime_environment: BTreeMap::from([
+                            ("PONTIA_WORKFLOW_ID".into(), patch.workflow_id.clone()),
+                            (
+                                "PONTIA_WORKFLOW_FILE".into(),
+                                workflow_file.display().to_string(),
+                            ),
+                            ("PONTIA_WORKFLOW_PATCH_ID".into(), patch.patch_id.clone()),
+                            (
+                                "PONTIA_WORKFLOW_PATCH_REQUEST_FILE".into(),
+                                request_file.display().to_string(),
+                            ),
+                        ]),
+                    })
+                    .await?
+            }
+        };
+        self.repository
+            .bind_patch_replanner(&patch.patch_id, &session_id, &Uuid::now_v7().to_string())
+            .await?;
+        Ok(())
+    }
+
+    async fn reconcile_blocked_replanner(&self, workflow_id: &str) -> Result<()> {
+        let Some(patch) = self
+            .repository
+            .get_blocked_patch_for_replanner(workflow_id)
+            .await?
+        else {
+            return Ok(());
+        };
+        if patch.replanner_exit_requested_at.is_some() {
+            return Ok(());
+        }
+        let (Some(session_id), Some(turn_id), Some(runtime_instance_id)) = (
+            patch.replanner_session_id.as_deref(),
+            patch.replanner_turn_id.as_deref(),
+            patch.replanner_runtime_instance_id.as_deref(),
+        ) else {
+            return Ok(());
+        };
+        let Some(event) = self
+            .persisted_events
+            .latest_workflow_terminal_event(session_id)
+            .await?
+        else {
+            return Ok(());
+        };
+        let terminal = AgentTerminal::from_event_type(&event.event_type);
+        if !matches!(
+            terminal,
+            Some(
+                AgentTerminal::TurnCompleted
+                    | AgentTerminal::TurnFailed
+                    | AgentTerminal::TurnInterrupted
+            )
+        ) || event.turn_id.as_deref() != Some(turn_id)
+        {
+            return Ok(());
+        }
+        let event_runtime = serde_json::from_str::<serde_json::Value>(&event.payload)
+            .ok()
+            .and_then(|payload| payload["runtime_instance_id"].as_str().map(str::to_string));
+        if event_runtime.as_deref() != Some(runtime_instance_id)
+            || !self
+                .repository
+                .claim_patch_replanner_exit(&patch.patch_id)
+                .await?
+        {
+            return Ok(());
+        }
+        if let Err(error) = self
+            .exits
+            .request_graceful_exit(session_id, runtime_instance_id)
+            .await
+        {
+            self.repository
+                .release_patch_replanner_exit(&patch.patch_id)
+                .await?;
+            tracing::warn!(patch_id = %patch.patch_id, session_id, %error, "failed to request graceful Re-planner exit; coordinator will retry");
         }
         Ok(())
     }

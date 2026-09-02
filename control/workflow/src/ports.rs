@@ -9,6 +9,14 @@ use pontia_core::domain::DomainEvent;
 use crate::{Error, Result};
 
 pub trait SessionCreator {
+    fn find_session_by_creation_token(
+        &self,
+        _metadata_key: &str,
+        _token: &str,
+    ) -> impl Future<Output = Result<Option<String>>> + Send {
+        async { Ok(None) }
+    }
+
     fn create_session(
         &self,
         request: CreateSessionRequest,
@@ -16,6 +24,17 @@ pub trait SessionCreator {
 }
 
 impl SessionCreator for SessionCommandService {
+    async fn find_session_by_creation_token(
+        &self,
+        metadata_key: &str,
+        token: &str,
+    ) -> Result<Option<String>> {
+        Ok(
+            SessionCommandService::find_session_by_creation_token(self, metadata_key, token)
+                .await?,
+        )
+    }
+
     async fn create_session(&self, request: CreateSessionRequest) -> Result<String> {
         let outcome = SessionCommandService::create_session(self, request).await?;
         outcome
