@@ -124,8 +124,8 @@ impl SqliteWorkflowRepository {
 
     pub async fn list_workflows(&self, limit: u32) -> Result<Vec<WorkflowRow>> {
         Ok(sqlx::query_as::<_, WorkflowRow>(
-            r#"SELECT workflow_id, title, cwd, state, failure_message, created_at, updated_at,
-                      started_at, completed_at
+            r#"SELECT workflow_id, title, cwd, state, current_revision, failure_message, created_at,
+                      updated_at, started_at, completed_at
                FROM workflows
                ORDER BY created_at DESC, workflow_id DESC
                LIMIT ?"#,
@@ -137,8 +137,8 @@ impl SqliteWorkflowRepository {
 
     pub async fn get_workflow(&self, workflow_id: &str) -> Result<Option<WorkflowRow>> {
         Ok(sqlx::query_as::<_, WorkflowRow>(
-            r#"SELECT workflow_id, title, cwd, state, failure_message, created_at, updated_at,
-                      started_at, completed_at
+            r#"SELECT workflow_id, title, cwd, state, current_revision, failure_message, created_at,
+                      updated_at, started_at, completed_at
                FROM workflows WHERE workflow_id = ?"#,
         )
         .bind(workflow_id)
@@ -147,16 +147,40 @@ impl SqliteWorkflowRepository {
     }
 
     pub async fn list_nodes(&self, workflow_id: &str) -> Result<Vec<WorkflowNodeRow>> {
+        let Some(workflow) = self.get_workflow(workflow_id).await? else {
+            return Ok(Vec::new());
+        };
+        self.list_nodes_at_revision(workflow_id, workflow.current_revision)
+            .await
+    }
+
+    pub async fn list_nodes_at_revision(
+        &self,
+        workflow_id: &str,
+        revision: i64,
+    ) -> Result<Vec<WorkflowNodeRow>> {
+        let Some(workflow) = self.get_workflow(workflow_id).await? else {
+            return Ok(Vec::new());
+        };
+        if revision < 1 || revision > workflow.current_revision {
+            return Err(Error::StateConflict(format!(
+                "workflow {workflow_id} does not have revision {revision}"
+            )));
+        }
         Ok(sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
-                      inputs, output, execution_profile_id, execution_profile_version, session_id,
-                      submitted_at, submitted_runtime_instance_id, exit_request_started_at,
-                      created_at
+                      inputs, output, execution_profile_id, execution_profile_version,
+                      introduced_revision, retired_revision, session_id, submitted_at,
+                      submitted_runtime_instance_id, exit_request_started_at, created_at
                FROM workflow_nodes
                WHERE workflow_id = ?
+                 AND introduced_revision <= ?
+                 AND (retired_revision IS NULL OR retired_revision > ?)
                ORDER BY created_at, node_id"#,
         )
         .bind(workflow_id)
+        .bind(revision)
+        .bind(revision)
         .fetch_all(&self.pool)
         .await?)
     }
@@ -164,9 +188,9 @@ impl SqliteWorkflowRepository {
     pub async fn get_node(&self, node_id: &str) -> Result<Option<WorkflowNodeRow>> {
         Ok(sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
-                      inputs, output, execution_profile_id, execution_profile_version, session_id,
-                      submitted_at, submitted_runtime_instance_id, exit_request_started_at,
-                      created_at
+                      inputs, output, execution_profile_id, execution_profile_version,
+                      introduced_revision, retired_revision, session_id, submitted_at,
+                      submitted_runtime_instance_id, exit_request_started_at, created_at
                FROM workflow_nodes WHERE node_id = ?"#,
         )
         .bind(node_id)
@@ -177,9 +201,9 @@ impl SqliteWorkflowRepository {
     pub async fn get_node_by_session(&self, session_id: &str) -> Result<Option<WorkflowNodeRow>> {
         let nodes = sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
-                      inputs, output, execution_profile_id, execution_profile_version, session_id,
-                      submitted_at, submitted_runtime_instance_id, exit_request_started_at,
-                      created_at
+                      inputs, output, execution_profile_id, execution_profile_version,
+                      introduced_revision, retired_revision, session_id, submitted_at,
+                      submitted_runtime_instance_id, exit_request_started_at, created_at
                FROM workflow_nodes WHERE session_id = ?
                ORDER BY created_at, node_id
                LIMIT 2"#,
@@ -198,7 +222,17 @@ impl SqliteWorkflowRepository {
 
     pub async fn bind_node_session(&self, node_id: &str, session_id: &str) -> Result<()> {
         let result = sqlx::query(
-            "UPDATE workflow_nodes SET session_id = ? WHERE node_id = ? AND session_id IS NULL",
+            r#"UPDATE workflow_nodes
+               SET session_id = ?
+               WHERE node_id = ?
+                 AND session_id IS NULL
+                 AND EXISTS (
+                     SELECT 1 FROM workflows
+                     WHERE workflows.workflow_id = workflow_nodes.workflow_id
+                       AND workflow_nodes.introduced_revision <= workflows.current_revision
+                       AND (workflow_nodes.retired_revision IS NULL
+                            OR workflow_nodes.retired_revision > workflows.current_revision)
+                 )"#,
         )
         .bind(session_id)
         .bind(node_id)
@@ -224,6 +258,9 @@ impl SqliteWorkflowRepository {
                      WHERE workflow_nodes.workflow_id = workflows.workflow_id
                        AND workflow_nodes.node_id = ?
                        AND workflow_nodes.session_id IS NULL
+                       AND workflow_nodes.introduced_revision <= workflows.current_revision
+                       AND (workflow_nodes.retired_revision IS NULL
+                            OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
         .bind(node_id)
@@ -251,6 +288,9 @@ impl SqliteWorkflowRepository {
                      WHERE workflows.workflow_id = workflow_nodes.workflow_id
                        AND workflows.state = 'running'
                        AND workflows.activating_node_id = workflow_nodes.node_id
+                       AND workflow_nodes.introduced_revision <= workflows.current_revision
+                       AND (workflow_nodes.retired_revision IS NULL
+                            OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
         .bind(session_id)
@@ -305,6 +345,9 @@ impl SqliteWorkflowRepository {
                      SELECT 1 FROM workflows
                      WHERE workflows.workflow_id = workflow_nodes.workflow_id
                        AND workflows.state = 'running'
+                       AND workflow_nodes.introduced_revision <= workflows.current_revision
+                       AND (workflow_nodes.retired_revision IS NULL
+                            OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
         .bind(runtime_instance_id)
@@ -334,6 +377,9 @@ impl SqliteWorkflowRepository {
                      SELECT 1 FROM workflows
                      WHERE workflows.workflow_id = workflow_nodes.workflow_id
                        AND workflows.state = 'running'
+                       AND workflow_nodes.introduced_revision <= workflows.current_revision
+                       AND (workflow_nodes.retired_revision IS NULL
+                            OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
         .bind(node_id)
@@ -595,6 +641,9 @@ impl SqliteWorkflowRepository {
                          WHERE workflow_nodes.workflow_id = workflows.workflow_id
                            AND workflow_nodes.node_id = ?
                            AND workflow_nodes.submitted_at IS NULL
+                           AND workflow_nodes.introduced_revision <= workflows.current_revision
+                           AND (workflow_nodes.retired_revision IS NULL
+                                OR workflow_nodes.retired_revision > workflows.current_revision)
                      )
                  )"#,
         )

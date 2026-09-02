@@ -333,6 +333,7 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 | `title` | TEXT | NOT NULL |
 | `cwd` | TEXT | NOT NULL |
 | `state` | TEXT | NOT NULL |
+| `current_revision` | INTEGER | NOT NULL, default `1`, check `current_revision >= 1` |
 | `failure_message` | TEXT | |
 | `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 | `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
@@ -353,6 +354,8 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 | `output` | TEXT | NOT NULL |
 | `execution_profile_id` | TEXT | |
 | `execution_profile_version` | TEXT | |
+| `introduced_revision` | INTEGER | NOT NULL, default `1`, check `introduced_revision >= 1` |
+| `retired_revision` | INTEGER | check `retired_revision IS NULL OR retired_revision > introduced_revision` |
 | `session_id` | TEXT | |
 | `submitted_at` | TEXT | |
 | `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
@@ -367,6 +370,17 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 |---|---|---|---|
 | `idx_workflow_nodes_session` | No | `session_id` | `session_id IS NOT NULL` |
 | `idx_workflow_nodes_workflow_parent` | No | `workflow_id`, `parent_node_id`, `created_at`, `node_id` |  |
+| `idx_workflow_nodes_workflow_revision` | No | `workflow_id`, `introduced_revision`, `retired_revision` |  |
+
+**Triggers**
+
+- `workflows_revision_monotonic` requires the current revision to advance exactly one revision at a time.
+- `workflow_nodes_validate_introduction` restricts new Node membership to the current or immediately next revision.
+- `workflow_nodes_validate_parent_insert` requires a parent Node to be active in the same Workflow at the child's introduction revision.
+- `workflow_nodes_immutable_definition` prevents changes to an accepted Node's Workflow, parent, type, phase, definition, profile, or introduction revision.
+- `workflow_nodes_immutable_retirement` permits retirement to be set once and prevents clearing or rewriting it.
+- `workflow_nodes_validate_retirement` restricts first retirement to the immediately next Workflow revision.
+- `workflow_nodes_history_prevents_delete` prevents accepted Node history from being physically deleted.
 
 ## `workflow_events`
 

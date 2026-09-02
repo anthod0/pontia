@@ -7,6 +7,7 @@ use pontia_http as http;
 use pontia_storage_sqlite::repositories::workflows::{
     CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
 };
+use pontia_workflow::WorkflowQueryService;
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -79,6 +80,7 @@ async fn external_workflow_queries_return_ordered_nodes_for_frontend_phase_group
     let (list_status, list) = get(&app, "/external/v1/workflows").await;
     assert_eq!(list_status, StatusCode::OK, "{list}");
     assert_eq!(list["data"]["workflows"][0]["workflow_id"], "wf_observe");
+    assert_eq!(list["data"]["workflows"][0]["current_revision"], 1);
     assert_eq!(
         list["data"]["workflows"][0]["current_phase_name"],
         "Research"
@@ -86,6 +88,7 @@ async fn external_workflow_queries_return_ordered_nodes_for_frontend_phase_group
 
     let (detail_status, detail) = get(&app, "/external/v1/workflows/wf_observe").await;
     assert_eq!(detail_status, StatusCode::OK, "{detail}");
+    assert_eq!(detail["data"]["workflow"]["current_revision"], 1);
     let nodes = detail["data"]["workflow"]["nodes"]
         .as_array()
         .expect("nodes");
@@ -129,6 +132,7 @@ async fn external_workflow_context_returns_current_node_instructions_and_handoff
     assert_eq!(status, StatusCode::OK, "{body}");
     let context = &body["data"]["context"];
     assert_eq!(context["workflow"]["workflow_id"], "wf_observe");
+    assert_eq!(context["workflow"]["current_revision"], 1);
     assert_eq!(
         context["current_node"]["instructions"],
         "Implement the requested change."
@@ -140,6 +144,81 @@ async fn external_workflow_context_returns_current_node_instructions_and_handoff
             "name": "requirements.md",
             "content": "Build it compactly.\n"
         })
+    );
+}
+
+#[tokio::test]
+async fn revision_membership_reconstructs_historical_and_current_node_chains() {
+    let app = TestApp::new().await;
+    create_observable_workflow(&app).await;
+
+    sqlx::query(
+        "UPDATE workflow_nodes SET retired_revision = 2 WHERE workflow_id = 'wf_observe' AND node_id IN ('node_b', 'node_c', 'node_d')",
+    )
+    .execute(&app.db)
+    .await
+    .expect("retire old suffix");
+    sqlx::query(
+        r#"INSERT INTO workflow_nodes
+           (node_id, workflow_id, parent_node_id, node_type, phase, title, instructions, inputs,
+            output, introduced_revision)
+           VALUES ('node_e', 'wf_observe', 'node_a', 'agent', 'Ship', 'Ship', 'Ship it', '[]',
+                   'node_e.md', 2)"#,
+    )
+    .execute(&app.db)
+    .await
+    .expect("introduce replacement suffix");
+    sqlx::query("UPDATE workflows SET current_revision = 2 WHERE workflow_id = 'wf_observe'")
+        .execute(&app.db)
+        .await
+        .expect("advance current revision");
+
+    let queries = WorkflowQueryService::new(app.db.clone());
+    let revision_one = queries
+        .get_workflow_revision("wf_observe", 1)
+        .await
+        .expect("query revision one")
+        .expect("workflow exists");
+    assert_eq!(revision_one.revision, 1);
+    assert!(!revision_one.current);
+    assert_eq!(
+        revision_one
+            .nodes
+            .iter()
+            .map(|node| node.node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["node_a", "node_b", "node_c", "node_d"]
+    );
+    assert_eq!(revision_one.nodes[1].introduced_revision, 1);
+    assert_eq!(revision_one.nodes[1].retired_revision, Some(2));
+
+    let revision_two = queries
+        .get_workflow_revision("wf_observe", 2)
+        .await
+        .expect("query revision two")
+        .expect("workflow exists");
+    assert!(revision_two.current);
+    assert_eq!(
+        revision_two
+            .nodes
+            .iter()
+            .map(|node| node.node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["node_a", "node_e"]
+    );
+
+    let (status, detail) = get(&app, "/external/v1/workflows/wf_observe").await;
+    assert_eq!(status, StatusCode::OK, "{detail}");
+    assert_eq!(detail["data"]["workflow"]["current_revision"], 2);
+    assert_eq!(detail["data"]["workflow"]["agent_total_count"], 2);
+    assert_eq!(
+        detail["data"]["workflow"]["nodes"]
+            .as_array()
+            .expect("current nodes")
+            .iter()
+            .map(|node| node["node_id"].as_str().expect("node id"))
+            .collect::<Vec<_>>(),
+        vec!["node_a", "node_e"]
     );
 }
 

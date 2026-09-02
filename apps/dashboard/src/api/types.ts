@@ -13,6 +13,7 @@ export interface WorkflowListItemView {
   workflow_id: string;
   title: string;
   state: WorkflowState;
+  current_revision: number;
   failure_message: string | null;
   agent_submitted_count: number;
   agent_total_count: number;
@@ -39,6 +40,7 @@ export interface WorkflowDetailView {
   workflow_id: string;
   title: string;
   state: WorkflowState;
+  current_revision: number;
   failure_message: string | null;
   cwd: string;
   agent_submitted_count: number;

@@ -15,8 +15,9 @@ pub use control::{WorkflowControlOutcome, WorkflowControlService};
 pub use error::{Error, Result};
 pub use ports::{AgentEventSubscriber, GracefulExitRequester, SessionCreator};
 pub use query::{
-    WorkflowAgentStatus, WorkflowContextView, WorkflowDetailView, WorkflowInputView,
-    WorkflowListItemView, WorkflowNodeContextView, WorkflowNodeView, WorkflowQueryService,
+    WorkflowAgentStatus, WorkflowContextView, WorkflowDetailView, WorkflowGraphNodeView,
+    WorkflowGraphRevisionView, WorkflowInputView, WorkflowListItemView, WorkflowNodeContextView,
+    WorkflowNodeView, WorkflowQueryService,
 };
 pub use scheduler::WorkflowScheduler;
 pub use types::{

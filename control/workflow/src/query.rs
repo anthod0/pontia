@@ -19,6 +19,7 @@ pub struct WorkflowListItemView {
     pub workflow_id: String,
     pub title: String,
     pub state: String,
+    pub current_revision: i64,
     pub failure_message: Option<String>,
     pub agent_submitted_count: usize,
     pub agent_total_count: usize,
@@ -36,6 +37,7 @@ pub struct WorkflowDetailView {
     pub workflow_id: String,
     pub title: String,
     pub state: String,
+    pub current_revision: i64,
     pub failure_message: Option<String>,
     pub cwd: String,
     pub agent_submitted_count: usize,
@@ -64,6 +66,30 @@ pub struct WorkflowNodeView {
 pub struct WorkflowContextView {
     pub workflow: WorkflowDetailView,
     pub current_node: WorkflowNodeContextView,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowGraphRevisionView {
+    pub workflow_id: String,
+    pub revision: i64,
+    pub current: bool,
+    pub nodes: Vec<WorkflowGraphNodeView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowGraphNodeView {
+    pub node_id: String,
+    pub parent_node_id: Option<String>,
+    pub node_type: String,
+    pub phase: String,
+    pub title: String,
+    pub instructions: String,
+    pub inputs: Vec<String>,
+    pub output: String,
+    pub execution_profile_id: Option<String>,
+    pub execution_profile_version: Option<String>,
+    pub introduced_revision: i64,
+    pub retired_revision: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -180,6 +206,7 @@ impl WorkflowQueryService {
             workflow_id: workflow.workflow_id.clone(),
             title: workflow.title.clone(),
             state: workflow.state.clone(),
+            current_revision: workflow.current_revision,
             failure_message: workflow.failure_message.clone(),
             cwd: workflow.cwd.clone(),
             agent_submitted_count: submitted,
@@ -190,6 +217,45 @@ impl WorkflowQueryService {
             created_at: workflow.created_at.clone(),
             updated_at: workflow.updated_at.clone(),
             elapsed_ms: elapsed_ms(&workflow),
+            nodes: views,
+        }))
+    }
+
+    pub async fn get_workflow_revision(
+        &self,
+        workflow_id: &str,
+        revision: i64,
+    ) -> Result<Option<WorkflowGraphRevisionView>> {
+        let Some(workflow) = self.workflows.get_workflow(workflow_id).await? else {
+            return Ok(None);
+        };
+        let nodes = ordered_nodes(
+            workflow_id,
+            self.workflows
+                .list_nodes_at_revision(workflow_id, revision)
+                .await?,
+        )?;
+        let mut views = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            views.push(WorkflowGraphNodeView {
+                node_id: node.node_id,
+                parent_node_id: node.parent_node_id,
+                node_type: node.node_type,
+                phase: node.phase,
+                title: node.title,
+                instructions: node.instructions,
+                inputs: serde_json::from_str(&node.inputs)?,
+                output: node.output,
+                execution_profile_id: node.execution_profile_id,
+                execution_profile_version: node.execution_profile_version,
+                introduced_revision: node.introduced_revision,
+                retired_revision: node.retired_revision,
+            });
+        }
+        Ok(Some(WorkflowGraphRevisionView {
+            workflow_id: workflow.workflow_id,
+            revision,
+            current: revision == workflow.current_revision,
             nodes: views,
         }))
     }
@@ -249,6 +315,7 @@ fn list_item(
         workflow_id: workflow.workflow_id.clone(),
         title: workflow.title.clone(),
         state: workflow.state.clone(),
+        current_revision: workflow.current_revision,
         failure_message: workflow.failure_message.clone(),
         agent_submitted_count: submitted,
         agent_total_count: total,
@@ -397,6 +464,7 @@ mod tests {
             title: "Test".to_string(),
             cwd: "/tmp".to_string(),
             state: state.to_string(),
+            current_revision: 1,
             failure_message: None,
             created_at: "2026-08-14T00:00:00Z".to_string(),
             updated_at: "2026-08-14T00:01:00Z".to_string(),
@@ -418,6 +486,8 @@ mod tests {
             output: "out.md".to_string(),
             execution_profile_id: None,
             execution_profile_version: None,
+            introduced_revision: 1,
+            retired_revision: None,
             session_id: session_id.map(str::to_string),
             submitted_at: submitted.then(|| "2026-08-14T00:00:30Z".to_string()),
             submitted_runtime_instance_id: submitted.then(|| "rtinst_test".to_string()),

@@ -95,11 +95,14 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
     assert_eq!(workflow.title, "Draft release notes");
     assert_eq!(workflow.cwd, "/work/project");
     assert_eq!(workflow.state, "running");
+    assert_eq!(workflow.current_revision, 1);
 
     let nodes = repository.list_nodes("wf_1").await.expect("list nodes");
     assert_eq!(nodes.len(), 2);
     assert_eq!(nodes[0].node_id, "node_1");
     assert_eq!(nodes[0].phase, "Drafting");
+    assert_eq!(nodes[0].introduced_revision, 1);
+    assert_eq!(nodes[0].retired_revision, None);
     assert_eq!(nodes[0].inputs, r#"["brief.md","changes.md"]"#);
     assert_eq!(nodes[0].session_id.as_deref(), Some("session_1"));
     assert!(nodes[0].submitted_at.is_some());
