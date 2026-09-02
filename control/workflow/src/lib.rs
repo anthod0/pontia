@@ -12,6 +12,7 @@ mod types;
 mod validation;
 
 pub use control::{WorkflowControlOutcome, WorkflowControlService};
+pub use definition::{plan_workflow_definition_change, render_accepted_workflow_definition};
 pub use error::{Error, Result};
 pub use ports::{AgentEventSubscriber, GracefulExitRequester, SessionCreator};
 pub use query::{
@@ -21,6 +22,8 @@ pub use query::{
 };
 pub use scheduler::WorkflowScheduler;
 pub use types::{
-    InitialHandoff, RunWorkflowOutcome, RunWorkflowRequest, StartWorkflowOutcome,
-    SubmitWorkflowNodeRequest, WorkflowNodeDefinition,
+    AcceptedWorkflowDefinition, AcceptedWorkflowNode, DefinitionChangePlan, InitialHandoff,
+    PlannedNodeParent, PlannedWorkflowNode, RunWorkflowOutcome, RunWorkflowRequest,
+    StartWorkflowOutcome, SubmitWorkflowNodeRequest, WorkflowDefinitionHandoff,
+    WorkflowNodeDefinition,
 };

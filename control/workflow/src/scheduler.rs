@@ -9,10 +9,11 @@ use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::{
-    AgentEventSubscriber, Error, GracefulExitRequester, Result, RunWorkflowOutcome,
-    RunWorkflowRequest, SessionCreator, StartWorkflowOutcome, SubmitWorkflowNodeRequest,
+    AcceptedWorkflowNode, AgentEventSubscriber, Error, GracefulExitRequester, Result,
+    RunWorkflowOutcome, RunWorkflowRequest, SessionCreator, StartWorkflowOutcome,
+    SubmitWorkflowNodeRequest,
     activation::activate_node,
-    definition::render_workflow_file,
+    definition::{accepted_definition_from_initial_request, render_accepted_workflow_definition},
     monitor::WorkflowMonitor,
     validation::{
         is_runtime_control_unavailable, validate_handoff_file_name, validate_run_request,
@@ -75,8 +76,36 @@ where
         validate_pontia_home_boundary(&self.pontia_home)?;
         for node in &mut request.nodes {
             node.phase = node.phase.trim().to_string();
+            node.inputs.sort();
         }
-        let workflow_file = render_workflow_file(&request)?;
+        let mut parent_node_id = None;
+        let mut accepted_nodes = Vec::with_capacity(request.nodes.len());
+        let mut nodes = Vec::with_capacity(request.nodes.len());
+        for definition in &request.nodes {
+            let node_id = format!("node_{}", Uuid::now_v7());
+            accepted_nodes.push(AcceptedWorkflowNode {
+                node_id: node_id.clone(),
+                parent_node_id: parent_node_id.clone(),
+                definition: definition.clone(),
+                activated: false,
+            });
+            nodes.push(CreateWorkflowNodeRecord {
+                node_id: node_id.clone(),
+                workflow_id: request.workflow_id.clone(),
+                parent_node_id: parent_node_id.clone(),
+                phase: definition.phase.clone(),
+                title: definition.title.clone(),
+                instructions: definition.instructions.clone(),
+                inputs: serde_json::to_string(&definition.inputs)?,
+                output: definition.output.clone(),
+                execution_profile_id: definition.execution_profile_id.clone(),
+                execution_profile_version: definition.execution_profile_version.clone(),
+            });
+            parent_node_id = Some(node_id);
+        }
+        let accepted_definition =
+            accepted_definition_from_initial_request(&request, accepted_nodes);
+        let workflow_file = render_accepted_workflow_definition(&accepted_definition)?;
 
         let workflow_dir = self
             .pontia_home
@@ -119,24 +148,6 @@ where
             return Err(error.into());
         }
 
-        let mut parent_node_id = None;
-        let mut nodes = Vec::with_capacity(request.nodes.len());
-        for definition in request.nodes {
-            let node_id = format!("node_{}", Uuid::now_v7());
-            nodes.push(CreateWorkflowNodeRecord {
-                node_id: node_id.clone(),
-                workflow_id: request.workflow_id.clone(),
-                parent_node_id: parent_node_id.clone(),
-                phase: definition.phase.trim().to_string(),
-                title: definition.title,
-                instructions: definition.instructions,
-                inputs: serde_json::to_string(&definition.inputs)?,
-                output: definition.output,
-                execution_profile_id: definition.execution_profile_id,
-                execution_profile_version: definition.execution_profile_version,
-            });
-            parent_node_id = Some(node_id);
-        }
         if let Err(error) = self
             .repository
             .create_definition(

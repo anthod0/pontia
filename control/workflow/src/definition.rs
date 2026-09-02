@@ -1,70 +1,299 @@
-use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 
-use crate::{Result, RunWorkflowRequest, WorkflowNodeDefinition};
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
-struct WorkflowFile<'a> {
-    title: &'a str,
-    cwd: &'a str,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+use crate::{
+    AcceptedWorkflowDefinition, AcceptedWorkflowNode, DefinitionChangePlan, Error, InitialHandoff,
+    PlannedNodeParent, PlannedWorkflowNode, Result, RunWorkflowRequest, WorkflowDefinitionHandoff,
+    WorkflowNodeDefinition, validation::validate_run_request,
+};
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowFile {
+    workflow_id: String,
+    revision: i64,
+    title: String,
+    cwd: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     handoffs: Vec<WorkflowFileHandoff>,
-    nodes: &'a [WorkflowNodeDefinition],
+    nodes: Vec<WorkflowFileNode>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct WorkflowFileHandoff {
     name: String,
     source: String,
 }
 
-pub(crate) fn render_workflow_file(request: &RunWorkflowRequest) -> Result<String> {
-    let handoffs = request
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowFileNode {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(flatten)]
+    definition: WorkflowNodeDefinition,
+}
+
+pub fn render_accepted_workflow_definition(
+    definition: &AcceptedWorkflowDefinition,
+) -> Result<String> {
+    let file = WorkflowFile {
+        workflow_id: definition.workflow_id.clone(),
+        revision: definition.revision,
+        title: definition.title.clone(),
+        cwd: definition.cwd.clone(),
+        handoffs: definition
+            .handoffs
+            .iter()
+            .map(|handoff| WorkflowFileHandoff {
+                name: handoff.name.clone(),
+                source: handoff.source.clone(),
+            })
+            .collect(),
+        nodes: definition
+            .nodes
+            .iter()
+            .map(|node| WorkflowFileNode {
+                id: Some(node.node_id.clone()),
+                definition: node.definition.clone(),
+            })
+            .collect(),
+    };
+    Ok(toml::to_string_pretty(&file)?)
+}
+
+pub fn plan_workflow_definition_change(
+    accepted: &AcceptedWorkflowDefinition,
+    candidate_bytes: &[u8],
+) -> Result<DefinitionChangePlan> {
+    let source = std::str::from_utf8(candidate_bytes).map_err(|_| {
+        Error::InvalidDefinition("candidate Workflow definition must be valid UTF-8".to_string())
+    })?;
+    let mut candidate: WorkflowFile = toml::from_str(source)
+        .map_err(|error| Error::InvalidDefinition(format!("invalid candidate TOML: {error}")))?;
+    normalize_file(&mut candidate);
+    validate_candidate_graph(&candidate)?;
+    validate_candidate_metadata(accepted, &candidate)?;
+
+    let accepted_by_id = accepted
+        .nodes
+        .iter()
+        .map(|node| (node.node_id.as_str(), node))
+        .collect::<HashMap<_, _>>();
+    let retired_ids = accepted
+        .retired_node_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let protected_ids = accepted
+        .nodes
+        .iter()
+        .filter(|node| node.activated)
+        .map(|node| node.node_id.as_str())
+        .collect::<HashSet<_>>();
+    let mut seen_ids = HashSet::new();
+    let mut retained_node_ids = Vec::new();
+    let mut introduced_nodes = Vec::new();
+    let mut previous_parent = None;
+
+    for (index, node) in candidate.nodes.iter().enumerate() {
+        match node.id.as_deref() {
+            Some(node_id) => {
+                if retired_ids.contains(node_id) {
+                    return Err(Error::InvalidDefinition(format!(
+                        "retired Workflow Node identity {node_id} cannot be reintroduced"
+                    )));
+                }
+                let Some(base_node) = accepted_by_id.get(node_id) else {
+                    return Err(Error::InvalidDefinition(format!(
+                        "candidate cannot introduce caller-provided Workflow Node identity {node_id}"
+                    )));
+                };
+                if !seen_ids.insert(node_id) {
+                    return Err(Error::InvalidDefinition(format!(
+                        "duplicate Workflow Node identity {node_id}"
+                    )));
+                }
+                if base_node.definition != node.definition {
+                    return Err(Error::InvalidDefinition(format!(
+                        "retained Workflow Node {node_id} definition cannot be changed; omit its identity to replace it"
+                    )));
+                }
+                let candidate_parent = match &previous_parent {
+                    None => None,
+                    Some(PlannedNodeParent::Retained(parent_id)) => Some(parent_id.as_str()),
+                    Some(PlannedNodeParent::Introduced(_)) => {
+                        return Err(Error::InvalidDefinition(format!(
+                            "retained Workflow Node {node_id} has a changed immutable parent; omit its identity to replace it"
+                        )));
+                    }
+                };
+                if base_node.parent_node_id.as_deref() != candidate_parent {
+                    return Err(Error::InvalidDefinition(format!(
+                        "retained Workflow Node {node_id} has a changed immutable parent; omit its identity to replace it"
+                    )));
+                }
+                retained_node_ids.push(node_id.to_string());
+                previous_parent = Some(PlannedNodeParent::Retained(node_id.to_string()));
+            }
+            None => {
+                if accepted
+                    .nodes
+                    .get(index)
+                    .is_some_and(|base_node| protected_ids.contains(base_node.node_id.as_str()))
+                {
+                    return Err(Error::InvalidDefinition(format!(
+                        "protected Workflow Node {} cannot be replaced",
+                        accepted.nodes[index].node_id
+                    )));
+                }
+                let introduced_index = introduced_nodes.len();
+                introduced_nodes.push(PlannedWorkflowNode {
+                    candidate_index: index,
+                    parent: previous_parent.clone(),
+                    definition: node.definition.clone(),
+                });
+                previous_parent = Some(PlannedNodeParent::Introduced(introduced_index));
+            }
+        }
+    }
+
+    for (index, protected_node) in accepted
+        .nodes
+        .iter()
+        .take_while(|node| node.activated)
+        .enumerate()
+    {
+        if candidate
+            .nodes
+            .get(index)
+            .and_then(|node| node.id.as_deref())
+            != Some(protected_node.node_id.as_str())
+        {
+            return Err(Error::InvalidDefinition(format!(
+                "protected Workflow Node {} and its position cannot be changed",
+                protected_node.node_id
+            )));
+        }
+    }
+
+    let retained = retained_node_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let retired_node_ids = accepted
+        .nodes
+        .iter()
+        .filter(|node| !retained.contains(node.node_id.as_str()))
+        .map(|node| node.node_id.clone())
+        .collect::<Vec<_>>();
+
+    if retired_node_ids.is_empty() && introduced_nodes.is_empty() {
+        Ok(DefinitionChangePlan::NoChange)
+    } else {
+        Ok(DefinitionChangePlan::Changed {
+            retained_node_ids,
+            retired_node_ids,
+            introduced_nodes,
+        })
+    }
+}
+
+fn normalize_file(file: &mut WorkflowFile) {
+    file.handoffs
+        .sort_by(|left, right| (&left.name, &left.source).cmp(&(&right.name, &right.source)));
+    for node in &mut file.nodes {
+        node.definition.phase = node.definition.phase.trim().to_string();
+        node.definition.inputs.sort();
+    }
+}
+
+fn validate_candidate_metadata(
+    accepted: &AcceptedWorkflowDefinition,
+    candidate: &WorkflowFile,
+) -> Result<()> {
+    if candidate.workflow_id != accepted.workflow_id {
+        return Err(Error::InvalidDefinition(
+            "Workflow identity cannot be changed".to_string(),
+        ));
+    }
+    if candidate.revision != accepted.revision {
+        return Err(Error::InvalidDefinition(format!(
+            "candidate revision {} does not match current revision {}",
+            candidate.revision, accepted.revision
+        )));
+    }
+    if candidate.title != accepted.title {
+        return Err(Error::InvalidDefinition(
+            "Workflow title cannot be changed".to_string(),
+        ));
+    }
+    if candidate.cwd != accepted.cwd {
+        return Err(Error::InvalidDefinition(
+            "Workflow launch directory cannot be changed".to_string(),
+        ));
+    }
+    let mut expected_handoffs = accepted
         .handoffs
         .iter()
         .map(|handoff| WorkflowFileHandoff {
             name: handoff.name.clone(),
-            source: format!("handoff/{}", handoff.name),
+            source: handoff.source.clone(),
         })
-        .collect();
-    Ok(toml::to_string_pretty(&WorkflowFile {
-        title: &request.title,
-        cwd: &request.cwd,
-        handoffs,
-        nodes: &request.nodes,
-    })?)
+        .collect::<Vec<_>>();
+    expected_handoffs
+        .sort_by(|left, right| (&left.name, &left.source).cmp(&(&right.name, &right.source)));
+    if candidate.handoffs != expected_handoffs {
+        return Err(Error::InvalidDefinition(
+            "initial Workflow Handoffs cannot be changed".to_string(),
+        ));
+    }
+    Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{InitialHandoff, WorkflowNodeDefinition};
+fn validate_candidate_graph(candidate: &WorkflowFile) -> Result<()> {
+    validate_run_request(&RunWorkflowRequest {
+        workflow_id: candidate.workflow_id.clone(),
+        title: candidate.title.clone(),
+        cwd: candidate.cwd.clone(),
+        handoffs: candidate
+            .handoffs
+            .iter()
+            .map(|handoff| InitialHandoff {
+                name: handoff.name.clone(),
+                content: String::new(),
+            })
+            .collect(),
+        nodes: candidate
+            .nodes
+            .iter()
+            .map(|node| node.definition.clone())
+            .collect(),
+    })
+}
 
-    #[test]
-    fn renders_a_self_contained_workflow_file() {
-        let rendered = render_workflow_file(&RunWorkflowRequest {
-            workflow_id: "wf_render".to_string(),
-            title: "Render workflow".to_string(),
-            cwd: "/workspace/project".to_string(),
-            handoffs: vec![InitialHandoff {
-                name: "brief.md".to_string(),
-                content: "Not embedded in the definition".to_string(),
-            }],
-            nodes: vec![WorkflowNodeDefinition {
-                node_type: "agent".to_string(),
-                phase: "Build".to_string(),
-                title: "Implement".to_string(),
-                instructions: "Implement it.".to_string(),
-                inputs: vec!["brief.md".to_string()],
-                output: "result.md".to_string(),
-                execution_profile_id: None,
-                execution_profile_version: None,
-            }],
+pub(crate) fn accepted_definition_from_initial_request(
+    request: &RunWorkflowRequest,
+    nodes: Vec<AcceptedWorkflowNode>,
+) -> AcceptedWorkflowDefinition {
+    let mut handoffs = request
+        .handoffs
+        .iter()
+        .map(|handoff| WorkflowDefinitionHandoff {
+            name: handoff.name.clone(),
+            source: format!("handoff/{}", handoff.name),
         })
-        .expect("render workflow file");
-
-        assert!(rendered.contains("cwd = \"/workspace/project\""));
-        assert!(rendered.contains("source = \"handoff/brief.md\""));
-        assert!(rendered.contains("type = \"agent\""));
-        assert!(!rendered.contains("Not embedded in the definition"));
+        .collect::<Vec<_>>();
+    handoffs.sort_by(|left, right| (&left.name, &left.source).cmp(&(&right.name, &right.source)));
+    AcceptedWorkflowDefinition {
+        workflow_id: request.workflow_id.clone(),
+        revision: 1,
+        title: request.title.clone(),
+        cwd: request.cwd.clone(),
+        handoffs,
+        nodes,
+        retired_node_ids: Vec::new(),
     }
 }

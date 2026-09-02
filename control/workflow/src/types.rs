@@ -13,19 +13,69 @@ pub struct InitialHandoff {
     pub content: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WorkflowNodeDefinition {
     #[serde(rename = "type")]
     pub node_type: String,
     pub phase: String,
     pub title: String,
     pub instructions: String,
+    #[serde(default)]
     pub inputs: Vec<String>,
     pub output: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_profile_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_profile_version: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowDefinitionHandoff {
+    pub name: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AcceptedWorkflowNode {
+    pub node_id: String,
+    pub parent_node_id: Option<String>,
+    pub definition: WorkflowNodeDefinition,
+    pub activated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AcceptedWorkflowDefinition {
+    pub workflow_id: String,
+    pub revision: i64,
+    pub title: String,
+    pub cwd: String,
+    pub handoffs: Vec<WorkflowDefinitionHandoff>,
+    pub nodes: Vec<AcceptedWorkflowNode>,
+    pub retired_node_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlannedNodeParent {
+    Retained(String),
+    Introduced(usize),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedWorkflowNode {
+    pub candidate_index: usize,
+    pub parent: Option<PlannedNodeParent>,
+    pub definition: WorkflowNodeDefinition,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefinitionChangePlan {
+    NoChange,
+    Changed {
+        retained_node_ids: Vec<String>,
+        retired_node_ids: Vec<String>,
+        introduced_nodes: Vec<PlannedWorkflowNode>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

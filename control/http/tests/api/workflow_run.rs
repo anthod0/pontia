@@ -165,11 +165,20 @@ async fn internal_workflow_run_creates_and_starts_a_linear_agent_workflow() {
     );
     let definition = fs::read_to_string(workflow_dir.join("workflow.toml"))
         .expect("read durable Workflow definition");
+    assert!(definition.contains("workflow_id = \"wf_http_run\""));
+    assert!(definition.contains("revision = 1"));
     assert!(definition.contains("title = \"HTTP Workflow run\""));
     assert!(definition.contains(&format!("cwd = {cwd:?}")));
     assert!(definition.contains("source = \"handoff/requirements.md\""));
     assert!(definition.contains("type = \"agent\""));
     assert!(definition.contains("phase = \"Discovery\""));
+    for node in &nodes {
+        assert!(
+            definition.contains(&format!("id = {:?}", node.node_id)),
+            "durable definition must contain accepted Node identity {}",
+            node.node_id
+        );
+    }
     assert!(!workflow_dir.join(".workflow.toml.tmp").exists());
 }
 
