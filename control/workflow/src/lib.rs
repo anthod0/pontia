@@ -5,6 +5,7 @@ mod control;
 mod coordinator;
 mod definition;
 mod error;
+mod patch;
 mod ports;
 mod query;
 mod scheduler;
@@ -15,7 +16,10 @@ pub use control::{WorkflowControlOutcome, WorkflowControlService};
 pub use coordinator::WorkflowCoordinator;
 pub use definition::{plan_workflow_definition_change, render_accepted_workflow_definition};
 pub use error::{Error, Result};
-pub use ports::{AgentEventSubscriber, GracefulExitRequester, SessionCreator};
+pub use patch::WorkflowPatchService;
+pub use ports::{
+    AgentEventSubscriber, GracefulExitRequester, SessionCreator, TurnInterruptionRequester,
+};
 pub use query::{
     WorkflowAgentStatus, WorkflowContextView, WorkflowDetailView, WorkflowGraphNodeView,
     WorkflowGraphRevisionView, WorkflowInputView, WorkflowListItemView, WorkflowNodeContextView,
@@ -24,7 +28,7 @@ pub use query::{
 pub use scheduler::WorkflowScheduler;
 pub use types::{
     AcceptedWorkflowDefinition, AcceptedWorkflowNode, DefinitionChangePlan, InitialHandoff,
-    PlannedNodeParent, PlannedWorkflowNode, RunWorkflowOutcome, RunWorkflowRequest,
-    StartWorkflowOutcome, SubmitWorkflowNodeRequest, WorkflowDefinitionHandoff,
-    WorkflowNodeDefinition,
+    PlannedNodeParent, PlannedWorkflowNode, RequestWorkflowPatch, RequestWorkflowPatchOutcome,
+    RunWorkflowOutcome, RunWorkflowRequest, StartWorkflowOutcome, SubmitWorkflowNodeRequest,
+    WorkflowDefinitionHandoff, WorkflowNodeDefinition,
 };

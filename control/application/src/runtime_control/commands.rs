@@ -31,6 +31,23 @@ impl RuntimeControlService {
         self.interrupt_turn(session_id, &active_turn.turn_id).await
     }
 
+    pub async fn interrupt_turn_for_runtime(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        runtime_instance_id: &str,
+    ) -> Result<ControlCommandOutcome> {
+        let current_runtime = pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository::new(self.pool.clone())
+            .runtime_instance_id(session_id)
+            .await?;
+        if current_runtime.as_deref() != Some(runtime_instance_id) {
+            return Err(Error::StateConflict(format!(
+                "runtime {runtime_instance_id} is not the current runtime for session {session_id}"
+            )));
+        }
+        self.interrupt_turn(session_id, turn_id).await
+    }
+
     pub async fn interrupt_turn(
         &self,
         session_id: &str,

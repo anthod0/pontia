@@ -35,6 +35,24 @@ pub struct WorkflowNodeRow {
 }
 
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+pub struct WorkflowPatchRow {
+    pub patch_id: String,
+    pub workflow_id: String,
+    pub requesting_node_id: String,
+    pub requesting_session_id: String,
+    pub requesting_turn_id: String,
+    pub requesting_runtime_instance_id: String,
+    pub base_revision: i64,
+    pub state: String,
+    pub request_document_ref: String,
+    pub request_size_bytes: i64,
+    pub interruption_attempted_at: Option<String>,
+    pub interruption_requested_at: Option<String>,
+    pub replanning_unlocked_at: Option<String>,
+    pub requested_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct WorkflowEventRow {
     pub event_id: String,
     pub workflow_id: String,

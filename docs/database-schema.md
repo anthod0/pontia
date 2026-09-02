@@ -340,6 +340,8 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 | `started_at` | TEXT | |
 | `completed_at` | TEXT | |
 | `activating_node_id` | TEXT | foreign key → `workflow_nodes.node_id`; transient database gate preventing pause from racing node dispatch |
+| `active_patch_id` | TEXT | foreign key → `workflow_patches.patch_id` |
+| `active_replanner_session_id` | TEXT | foreign key → `sessions.session_id` |
 
 ## `workflow_nodes`
 
@@ -381,6 +383,47 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 - `workflow_nodes_immutable_retirement` permits retirement to be set once and prevents clearing or rewriting it.
 - `workflow_nodes_validate_retirement` restricts first retirement to the immediately next Workflow revision.
 - `workflow_nodes_history_prevents_delete` prevents accepted Node history from being physically deleted.
+
+## `workflow_patches`
+
+| Column | Type | Constraints / default |
+|---|---|---|
+| `patch_id` | TEXT | primary key, NOT NULL |
+| `workflow_id` | TEXT | NOT NULL, foreign key → `workflows.workflow_id` |
+| `requesting_node_id` | TEXT | NOT NULL, foreign key → `workflow_nodes.node_id` |
+| `requesting_session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` |
+| `requesting_turn_id` | TEXT | NOT NULL, foreign key → `turns.turn_id` |
+| `requesting_runtime_instance_id` | TEXT | NOT NULL |
+| `replanner_creation_token` | TEXT | NOT NULL, unique |
+| `replanner_session_id` | TEXT | foreign key → `sessions.session_id` |
+| `replanner_turn_id` | TEXT | foreign key → `turns.turn_id` |
+| `replanner_runtime_instance_id` | TEXT | |
+| `base_revision` | INTEGER | NOT NULL, check `base_revision >= 1` |
+| `result_revision` | INTEGER | check `result_revision IS NULL OR result_revision >= base_revision` |
+| `state` | TEXT | NOT NULL, one of `requested`, `planning`, `applied`, `rejected`, `blocked` |
+| `request_document_ref` | TEXT | NOT NULL |
+| `request_size_bytes` | INTEGER | NOT NULL, check `request_size_bytes >= 0` |
+| `decision_document_ref` | TEXT | |
+| `reason_document_ref` | TEXT | |
+| `blocked_draft_ref` | TEXT | |
+| `interruption_attempted_at` | TEXT | |
+| `interruption_requested_at` | TEXT | |
+| `replanning_unlocked_at` | TEXT | set only after the recorded requester Turn interruption is confirmed by a persisted Agent Client fact |
+| `continuation_message_id` | TEXT | |
+| `continuation_queued_at` | TEXT | |
+| `requested_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
+| `planning_at` | TEXT | |
+| `resolved_at` | TEXT | |
+| `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
+| `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
+
+**Indexes**
+
+| Name | Unique | Columns | Condition |
+|---|---|---|---|
+| `idx_workflow_patches_one_active` | Yes | `workflow_id` | `state IN ('requested', 'planning')` |
+| `idx_workflow_patches_replanner_session` | Yes | `replanner_session_id` | `replanner_session_id IS NOT NULL` |
+| `idx_workflow_patches_workflow_requested` | No | `workflow_id`, `requested_at`, `patch_id` |  |
 
 ## `workflow_events`
 

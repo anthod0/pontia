@@ -22,6 +22,24 @@ enum WorkflowCommandKind {
     /// Show a compact, agent-readable Workflow context
     Show(ShowArgs),
     Submit(SubmitArgs),
+    Patch(PatchArgs),
+}
+
+#[derive(Debug, Args)]
+struct PatchArgs {
+    #[command(subcommand)]
+    command: PatchCommandKind,
+}
+
+#[derive(Debug, Subcommand)]
+enum PatchCommandKind {
+    Request(PatchRequestArgs),
+}
+
+#[derive(Debug, Args)]
+struct PatchRequestArgs {
+    #[arg(long, value_name = "REQUEST_FILE")]
+    input: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -109,6 +127,23 @@ struct WorkflowSubmissionRequest {
     content: String,
 }
 
+#[derive(Debug, Serialize)]
+struct WorkflowPatchRequest {
+    session_id: String,
+    runtime_instance_id: String,
+    document: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowPatchResponse {
+    data: WorkflowPatchResponseData,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowPatchResponseData {
+    patch_id: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct WorkflowContextResponse {
     data: WorkflowContextResponseData,
@@ -163,6 +198,9 @@ pub(crate) async fn run(workflow: WorkflowCommand, config: &AppConfig) -> Result
         WorkflowCommandKind::Run(args) => run_workflow(args, config).await,
         WorkflowCommandKind::Show(args) => show_workflow(args, config).await,
         WorkflowCommandKind::Submit(args) => submit_workflow(args, config).await,
+        WorkflowCommandKind::Patch(args) => match args.command {
+            PatchCommandKind::Request(args) => request_workflow_patch(args, config).await,
+        },
     }
 }
 
@@ -384,6 +422,48 @@ async fn submit_workflow(args: SubmitArgs, config: &AppConfig) -> Result<(), Str
             "Workflow submission failed with HTTP {status}: {body}"
         ));
     }
+    Ok(())
+}
+
+async fn request_workflow_patch(args: PatchRequestArgs, config: &AppConfig) -> Result<(), String> {
+    let document = fs::read_to_string(&args.input).map_err(|error| {
+        format!(
+            "failed to read UTF-8 Workflow Patch request file {}: {error}",
+            args.input.display()
+        )
+    })?;
+    let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
+    let token = config
+        .external_api_token
+        .as_deref()
+        .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
+    let url = format!(
+        "http://{}/internal/v1/workflow/patches/request",
+        local_api_addr(config.bind_addr)
+    );
+    let response = reqwest::Client::new()
+        .post(url)
+        .bearer_auth(token)
+        .json(&WorkflowPatchRequest {
+            session_id,
+            runtime_instance_id,
+            document,
+        })
+        .send()
+        .await
+        .map_err(|error| format!("failed to request Workflow Patch: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Workflow Patch request failed with HTTP {status}: {body}"
+        ));
+    }
+    let response = response
+        .json::<WorkflowPatchResponse>()
+        .await
+        .map_err(|error| format!("failed to decode Workflow Patch response: {error}"))?;
+    println!("{}", response.data.patch_id);
     Ok(())
 }
 

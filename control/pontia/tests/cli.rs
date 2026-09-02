@@ -398,6 +398,92 @@ fn workflow_submit_discovers_managed_pane_and_posts_utf8_handoff() {
 }
 
 #[test]
+fn workflow_patch_request_reads_utf8_before_discovery_and_prints_patch_id() {
+    let dir = temp_dir("patch-request-success");
+    let bin_dir = dir.path().join("bin");
+    fs::create_dir(&bin_dir).expect("create bin dir");
+    install_fake_tmux(&bin_dir);
+    let input = dir.path().join("request.md");
+    fs::write(&input, "Revise the remaining plan. 完成\n").expect("write request");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+    let addr = listener.local_addr().expect("test server address");
+    write_pontia_config(dir.path(), addr.port());
+    let request = capture_one_request_with_response(
+        listener,
+        r#"{"data":{"patch_id":"patch_cli_1","state":"requested"}}"#,
+    );
+    let path = format!(
+        "{}:{}",
+        bin_dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
+    let output = pontia()
+        .args([
+            "workflow",
+            "patch",
+            "request",
+            "--input",
+            input.to_str().expect("UTF-8 path"),
+        ])
+        .env("PATH", path)
+        .env("TMUX", "/tmp/tmux-test/default,1,0")
+        .env("TMUX_PANE", "%7")
+        .env("PONTIA_HOME", dir.path())
+        .output()
+        .expect("run Workflow Patch request");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("stdout"),
+        "patch_cli_1\n"
+    );
+    let request = request.join().expect("request capture thread");
+    assert!(request.starts_with("POST /internal/v1/workflow/patches/request HTTP/1.1"));
+    assert!(request.contains(
+        r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli","document":"Revise the remaining plan. 完成\n"}"#
+    ));
+}
+
+#[test]
+fn workflow_patch_request_rejects_local_input_before_pane_discovery() {
+    let dir = temp_dir("patch-request-source-errors");
+    let invalid = dir.path().join("invalid.md");
+    fs::write(&invalid, [0xff, 0xfe]).expect("write invalid UTF-8");
+
+    for input in [dir.path().join("missing.md"), invalid] {
+        let output = pontia()
+            .args([
+                "workflow",
+                "patch",
+                "request",
+                "--input",
+                input.to_str().expect("UTF-8 path"),
+            ])
+            .env("PONTIA_HOME", dir.path())
+            .env_remove("TMUX")
+            .env_remove("TMUX_PANE")
+            .output()
+            .expect("run Workflow Patch request");
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr)
+                .contains("failed to read UTF-8 Workflow Patch request file"),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            !String::from_utf8_lossy(&output.stderr)
+                .contains("not running in a Pontia-managed tmux pane")
+        );
+    }
+}
+
+#[test]
 fn workflow_submit_rejects_missing_and_non_utf8_input_before_pane_discovery() {
     let dir = temp_dir("source-errors");
     let missing = dir.path().join("missing.txt");

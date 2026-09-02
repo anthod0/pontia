@@ -98,3 +98,15 @@ pub struct StartWorkflowOutcome {
     pub node_id: String,
     pub session_id: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestWorkflowPatch {
+    pub session_id: String,
+    pub runtime_instance_id: String,
+    pub document: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestWorkflowPatchOutcome {
+    pub patch_id: String,
+}

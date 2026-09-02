@@ -1,7 +1,7 @@
 use pontia_core::{Error, Result};
 use sqlx::SqlitePool;
 
-use crate::models::workflows::{WorkflowEventRow, WorkflowNodeRow, WorkflowRow};
+use crate::models::workflows::{WorkflowEventRow, WorkflowNodeRow, WorkflowPatchRow, WorkflowRow};
 
 #[derive(Debug, Clone)]
 pub struct CreateWorkflowRecord {
@@ -28,6 +28,17 @@ pub struct CreateWorkflowNodeRecord {
 #[derive(Debug, Clone)]
 pub struct SqliteWorkflowRepository {
     pool: SqlitePool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RequestWorkflowPatchRecord {
+    pub patch_id: String,
+    pub session_id: String,
+    pub runtime_instance_id: String,
+    pub request_document_ref: String,
+    pub request_size_bytes: i64,
+    pub replanner_creation_token: String,
+    pub event_id: String,
 }
 
 struct RunningWorkflowTransition<'a> {
@@ -140,7 +151,7 @@ impl SqliteWorkflowRepository {
             r#"SELECT workflow_id, title, cwd, state, current_revision, failure_message, created_at,
                       updated_at, started_at, completed_at
                FROM workflows
-               WHERE state IN ('running', 'paused')
+               WHERE state IN ('running', 'paused', 'replanning')
                ORDER BY created_at, workflow_id"#,
         )
         .fetch_all(&self.pool)
@@ -668,6 +679,224 @@ impl SqliteWorkflowRepository {
             payload: &payload,
         })
         .await
+    }
+
+    pub async fn request_patch(
+        &self,
+        request: RequestWorkflowPatchRecord,
+    ) -> Result<WorkflowPatchRow> {
+        let mut tx = self.pool.begin().await?;
+        crate::repositories::turns::SqliteTurnRepository::serialize_session_turn_writes_in_tx(
+            &mut tx,
+            &request.session_id,
+        )
+        .await?;
+
+        let context = sqlx::query_as::<_, (String, String, String, i64)>(
+            r#"SELECT n.workflow_id, n.node_id, t.turn_id, w.current_revision
+               FROM workflow_nodes AS n
+               JOIN workflows AS w ON w.workflow_id = n.workflow_id
+               JOIN runtime_bindings AS r ON r.session_id = n.session_id
+               JOIN turns AS t ON t.session_id = n.session_id
+               WHERE n.session_id = ?
+                 AND n.submitted_at IS NULL
+                 AND n.introduced_revision <= w.current_revision
+                 AND (n.retired_revision IS NULL OR n.retired_revision > w.current_revision)
+                 AND w.state = 'running'
+                 AND w.active_patch_id IS NULL
+                 AND w.activating_node_id IS NULL
+                 AND r.binding_state = 'confirmed'
+                 AND r.runtime_instance_id = ?
+                 AND t.state IN ('queued', 'running')
+                 AND NOT EXISTS (
+                     SELECT 1 FROM workflow_nodes AS child
+                     WHERE child.workflow_id = n.workflow_id
+                       AND child.parent_node_id = n.node_id
+                       AND child.session_id IS NOT NULL
+                       AND child.introduced_revision <= w.current_revision
+                       AND (child.retired_revision IS NULL
+                            OR child.retired_revision > w.current_revision)
+                 )
+               ORDER BY t.turn_id
+               LIMIT 2"#,
+        )
+        .bind(&request.session_id)
+        .bind(&request.runtime_instance_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        let [(workflow_id, node_id, turn_id, base_revision)] = context.as_slice() else {
+            return Err(Error::StateConflict(format!(
+                "session {} is not the current unsubmitted Agent Node of a running Workflow with the supplied Runtime and one active Turn",
+                request.session_id
+            )));
+        };
+
+        sqlx::query(
+            r#"INSERT INTO workflow_patches
+               (patch_id, workflow_id, requesting_node_id, requesting_session_id,
+                requesting_turn_id, requesting_runtime_instance_id, replanner_creation_token,
+                base_revision, state, request_document_ref, request_size_bytes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?)"#,
+        )
+        .bind(&request.patch_id)
+        .bind(workflow_id)
+        .bind(node_id)
+        .bind(&request.session_id)
+        .bind(turn_id)
+        .bind(&request.runtime_instance_id)
+        .bind(&request.replanner_creation_token)
+        .bind(base_revision)
+        .bind(&request.request_document_ref)
+        .bind(request.request_size_bytes)
+        .execute(&mut *tx)
+        .await?;
+
+        let workflow_result = sqlx::query(
+            r#"UPDATE workflows
+               SET state = 'replanning', active_patch_id = ?,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE workflow_id = ? AND state = 'running'
+                 AND active_patch_id IS NULL AND activating_node_id IS NULL"#,
+        )
+        .bind(&request.patch_id)
+        .bind(workflow_id)
+        .execute(&mut *tx)
+        .await?;
+        if workflow_result.rows_affected() != 1 {
+            return Err(Error::StateConflict(format!(
+                "workflow {workflow_id} cannot accept a Patch request"
+            )));
+        }
+
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_events WHERE workflow_id = ?",
+        )
+        .bind(workflow_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let payload = serde_json::json!({
+            "patch_id": &request.patch_id,
+            "base_revision": base_revision,
+            "requesting_node_id": node_id,
+            "requesting_session_id": &request.session_id,
+            "requesting_turn_id": turn_id,
+            "request_document_ref": &request.request_document_ref,
+            "request_size_bytes": request.request_size_bytes,
+        });
+        sqlx::query(
+            r#"INSERT INTO workflow_events
+               (event_id, workflow_id, sequence, event_type, payload)
+               VALUES (?, ?, ?, 'workflow.patch_requested', ?)"#,
+        )
+        .bind(&request.event_id)
+        .bind(workflow_id)
+        .bind(sequence)
+        .bind(payload.to_string())
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        self.get_patch(&request.patch_id).await?.ok_or_else(|| {
+            Error::Domain(format!(
+                "accepted Workflow Patch {} is missing",
+                request.patch_id
+            ))
+        })
+    }
+
+    pub async fn get_patch(&self, patch_id: &str) -> Result<Option<WorkflowPatchRow>> {
+        Ok(sqlx::query_as::<_, WorkflowPatchRow>(
+            r#"SELECT patch_id, workflow_id, requesting_node_id, requesting_session_id,
+                      requesting_turn_id, requesting_runtime_instance_id, base_revision, state,
+                      request_document_ref, request_size_bytes, interruption_attempted_at,
+                      interruption_requested_at, replanning_unlocked_at, requested_at
+               FROM workflow_patches WHERE patch_id = ?"#,
+        )
+        .bind(patch_id)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_active_patch(&self, workflow_id: &str) -> Result<Option<WorkflowPatchRow>> {
+        Ok(sqlx::query_as::<_, WorkflowPatchRow>(
+            r#"SELECT p.patch_id, p.workflow_id, p.requesting_node_id, p.requesting_session_id,
+                      p.requesting_turn_id, p.requesting_runtime_instance_id, p.base_revision,
+                      p.state, p.request_document_ref, p.request_size_bytes,
+                      p.interruption_attempted_at, p.interruption_requested_at,
+                      p.replanning_unlocked_at, p.requested_at
+               FROM workflows AS w
+               JOIN workflow_patches AS p ON p.patch_id = w.active_patch_id
+               WHERE w.workflow_id = ? AND w.state = 'replanning'
+                 AND p.state IN ('requested', 'planning')"#,
+        )
+        .bind(workflow_id)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn patch_requester_interrupted(&self, patch_id: &str) -> Result<bool> {
+        let result = sqlx::query(
+            r#"UPDATE workflow_patches
+               SET replanning_unlocked_at = COALESCE(
+                       replanning_unlocked_at,
+                       strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                   ),
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE patch_id = ? AND state = 'requested'
+                 AND EXISTS (
+                     SELECT 1 FROM events
+                     WHERE events.session_id = workflow_patches.requesting_session_id
+                       AND events.turn_id = workflow_patches.requesting_turn_id
+                       AND events.event_type = 'turn.interrupted'
+                       AND events.source IN ('agent_adapter', 'agent_client')
+                       AND json_extract(events.payload, '$.runtime_instance_id') =
+                           workflow_patches.requesting_runtime_instance_id
+                 )"#,
+        )
+        .bind(patch_id)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 1 {
+            return Ok(true);
+        }
+        Ok(sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM workflow_patches WHERE patch_id = ? AND replanning_unlocked_at IS NOT NULL",
+        )
+        .bind(patch_id)
+        .fetch_one(&self.pool)
+        .await? == 1)
+    }
+
+    pub async fn mark_patch_interruption_attempted(&self, patch_id: &str) -> Result<bool> {
+        let result = sqlx::query(
+            r#"UPDATE workflow_patches
+               SET interruption_attempted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE patch_id = ? AND state = 'requested'
+                 AND replanning_unlocked_at IS NULL
+                 AND interruption_requested_at IS NULL
+                 AND (interruption_attempted_at IS NULL
+                      OR interruption_attempted_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 seconds'))"#,
+        )
+        .bind(patch_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    pub async fn mark_patch_interruption_requested(&self, patch_id: &str) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE workflow_patches
+               SET interruption_requested_at = COALESCE(
+                       interruption_requested_at,
+                       strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                   ),
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE patch_id = ? AND state = 'requested'"#,
+        )
+        .bind(patch_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     async fn transition_running_workflow(

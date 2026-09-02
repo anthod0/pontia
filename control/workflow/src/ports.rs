@@ -1,7 +1,8 @@
 use std::future::Future;
 
 use pontia_application::{
-    AgentEventBroker, CreateSessionRequest, PiGracefulExitService, SessionCommandService,
+    AgentEventBroker, CreateSessionRequest, PiGracefulExitService, RuntimeControlService,
+    SessionCommandService,
 };
 use pontia_core::domain::DomainEvent;
 
@@ -36,6 +37,28 @@ pub trait GracefulExitRequester {
         session_id: &str,
         runtime_instance_id: &str,
     ) -> impl Future<Output = Result<()>> + Send;
+}
+
+pub trait TurnInterruptionRequester {
+    fn request_turn_interruption(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        runtime_instance_id: &str,
+    ) -> impl Future<Output = Result<()>> + Send;
+}
+
+impl TurnInterruptionRequester for RuntimeControlService {
+    async fn request_turn_interruption(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        runtime_instance_id: &str,
+    ) -> Result<()> {
+        self.interrupt_turn_for_runtime(session_id, turn_id, runtime_instance_id)
+            .await?;
+        Ok(())
+    }
 }
 
 impl GracefulExitRequester for PiGracefulExitService {

@@ -16,7 +16,7 @@ use pontia_storage_sqlite::{
 };
 use pontia_workflow::{
     AgentEventSubscriber, GracefulExitRequester, SessionCreator, SubmitWorkflowNodeRequest,
-    WorkflowCoordinator, WorkflowScheduler,
+    TurnInterruptionRequester, WorkflowCoordinator, WorkflowScheduler,
 };
 use serde_json::json;
 use tokio::sync::broadcast;
@@ -106,6 +106,17 @@ impl GracefulExitRequester for RecordingExitRequester {
                 .push((session_id, runtime_instance_id));
             Ok(())
         }
+    }
+}
+
+impl TurnInterruptionRequester for RecordingExitRequester {
+    async fn request_turn_interruption(
+        &self,
+        _session_id: &str,
+        _turn_id: &str,
+        _runtime_instance_id: &str,
+    ) -> pontia_workflow::Result<()> {
+        Ok(())
     }
 }
 

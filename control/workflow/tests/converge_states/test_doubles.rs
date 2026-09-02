@@ -10,7 +10,8 @@ use pontia_core::{
     domain::{DomainEvent, EventSource, EventType},
 };
 use pontia_workflow::{
-    AgentEventSubscriber, GracefulExitRequester, SessionCreator, WorkflowCoordinator,
+    AgentEventSubscriber, GracefulExitRequester, SessionCreator, TurnInterruptionRequester,
+    WorkflowCoordinator,
 };
 use serde_json::json;
 use tokio::sync::broadcast;
@@ -116,6 +117,17 @@ impl GracefulExitRequester for RecordingExitRequester {
     }
 }
 
+impl TurnInterruptionRequester for RecordingExitRequester {
+    async fn request_turn_interruption(
+        &self,
+        _session_id: &str,
+        _turn_id: &str,
+        _runtime_instance_id: &str,
+    ) -> pontia_workflow::Result<()> {
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct TestAgentEvents {
     pool: sqlx::SqlitePool,
@@ -176,7 +188,7 @@ pub(super) fn spawn_coordinator<S, X>(
 ) -> tokio::task::JoinHandle<()>
 where
     S: SessionCreator + Clone + Send + Sync + 'static,
-    X: GracefulExitRequester + Clone + Send + Sync + 'static,
+    X: GracefulExitRequester + TurnInterruptionRequester + Clone + Send + Sync + 'static,
 {
     let (shutdown_tx, shutdown) = tokio::sync::watch::channel(false);
     tokio::spawn(async move {

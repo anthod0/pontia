@@ -1,6 +1,6 @@
 use std::{path::PathBuf, time::Duration};
 
-use pontia_application::{AgentEventBroker, PiGracefulExitService};
+use pontia_application::{AgentEventBroker, PiGracefulExitService, RuntimeControlService};
 use pontia_core::domain::EventType;
 use pontia_storage_sqlite::{
     models::workflows::{WorkflowNodeRow, WorkflowRow},
@@ -11,7 +11,8 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 use crate::{
-    AgentEventSubscriber, GracefulExitRequester, Result, SessionCreator, activation::activate_node,
+    AgentEventSubscriber, GracefulExitRequester, Result, SessionCreator, TurnInterruptionRequester,
+    activation::activate_node,
 };
 
 const RECONCILIATION_INTERVAL: Duration = Duration::from_millis(250);
@@ -50,16 +51,17 @@ impl AgentTerminal {
 /// Realtime events only wake the coordinator. SQLite is reloaded before every
 /// transition so startup recovery, missed notifications, and repeated passes
 /// all follow the same path.
-pub struct WorkflowCoordinator<S, X, B> {
+pub struct WorkflowCoordinator<S, X, I, B> {
     repository: SqliteWorkflowRepository,
     persisted_events: SqliteEventRepository,
     sessions: S,
     exits: X,
+    interruptions: I,
     agent_events: B,
     pontia_home: PathBuf,
 }
 
-impl<S> WorkflowCoordinator<S, PiGracefulExitService, AgentEventBroker>
+impl<S> WorkflowCoordinator<S, PiGracefulExitService, RuntimeControlService, AgentEventBroker>
 where
     S: SessionCreator + Send + Sync + 'static,
 {
@@ -70,14 +72,22 @@ where
         pontia_home: PathBuf,
     ) -> Self {
         let exits = PiGracefulExitService::new(pool.clone());
-        Self::with_services(pool, sessions, exits, agent_events, pontia_home)
+        let interruptions = RuntimeControlService::new(pool.clone());
+        Self::with_services_and_interruptions(
+            pool,
+            sessions,
+            exits,
+            interruptions,
+            agent_events,
+            pontia_home,
+        )
     }
 }
 
-impl<S, X, B> WorkflowCoordinator<S, X, B>
+impl<S, X, B> WorkflowCoordinator<S, X, X, B>
 where
     S: SessionCreator + Send + Sync + 'static,
-    X: GracefulExitRequester + Send + Sync + 'static,
+    X: GracefulExitRequester + TurnInterruptionRequester + Clone + Send + Sync + 'static,
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services(
@@ -87,11 +97,38 @@ where
         agent_events: B,
         pontia_home: PathBuf,
     ) -> Self {
+        Self::with_services_and_interruptions(
+            pool,
+            sessions,
+            exits.clone(),
+            exits,
+            agent_events,
+            pontia_home,
+        )
+    }
+}
+
+impl<S, X, I, B> WorkflowCoordinator<S, X, I, B>
+where
+    S: SessionCreator + Send + Sync + 'static,
+    X: GracefulExitRequester + Send + Sync + 'static,
+    I: TurnInterruptionRequester + Send + Sync + 'static,
+    B: AgentEventSubscriber + Send + Sync + 'static,
+{
+    pub fn with_services_and_interruptions(
+        pool: SqlitePool,
+        sessions: S,
+        exits: X,
+        interruptions: I,
+        agent_events: B,
+        pontia_home: PathBuf,
+    ) -> Self {
         Self {
             repository: SqliteWorkflowRepository::new(pool.clone()),
             persisted_events: SqliteEventRepository::new(pool),
             sessions,
             exits,
+            interruptions,
             agent_events,
             pontia_home,
         }
@@ -157,6 +194,9 @@ where
         let Some(workflow) = self.repository.get_workflow(workflow_id).await? else {
             return Ok(());
         };
+        if workflow.state == "replanning" {
+            return self.reconcile_patch_request(workflow_id).await;
+        }
         if workflow.state != "running" {
             return Ok(());
         }
@@ -258,6 +298,54 @@ where
                     &failure.failure_message,
                 )
                 .await?;
+        }
+        Ok(())
+    }
+
+    async fn reconcile_patch_request(&self, workflow_id: &str) -> Result<()> {
+        let Some(patch) = self.repository.get_active_patch(workflow_id).await? else {
+            return Ok(());
+        };
+        if self
+            .repository
+            .patch_requester_interrupted(&patch.patch_id)
+            .await?
+        {
+            // A persisted, client-confirmed interruption is the only fact that
+            // unlocks Re-planner creation. Issue 05 consumes this durable gate.
+            return Ok(());
+        }
+        if !self
+            .repository
+            .mark_patch_interruption_attempted(&patch.patch_id)
+            .await?
+        {
+            return Ok(());
+        }
+        match self
+            .interruptions
+            .request_turn_interruption(
+                &patch.requesting_session_id,
+                &patch.requesting_turn_id,
+                &patch.requesting_runtime_instance_id,
+            )
+            .await
+        {
+            Ok(()) => {
+                self.repository
+                    .mark_patch_interruption_requested(&patch.patch_id)
+                    .await?;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    workflow_id,
+                    patch_id = %patch.patch_id,
+                    session_id = %patch.requesting_session_id,
+                    turn_id = %patch.requesting_turn_id,
+                    %error,
+                    "failed to request Workflow Patch-owned Turn interruption; coordinator will retry"
+                );
+            }
         }
         Ok(())
     }
