@@ -15,7 +15,7 @@ use pontia_storage_sqlite::{
 };
 use pontia_workflow::{
     AgentEventSubscriber, GracefulExitRequester, SessionCreator, SubmitWorkflowNodeRequest,
-    WorkflowScheduler,
+    WorkflowCoordinator, WorkflowScheduler,
 };
 use serde_json::json;
 use tokio::sync::broadcast;
@@ -97,34 +97,51 @@ impl GracefulExitRequester for RecordingExitRequester {
 
 #[derive(Clone)]
 struct TestAgentEvents {
+    pool: sqlx::SqlitePool,
     sender: broadcast::Sender<DomainEvent>,
 }
 
 impl TestAgentEvents {
-    fn new() -> Self {
-        Self::with_capacity(16)
+    fn new(pool: sqlx::SqlitePool) -> Self {
+        Self::with_capacity(pool, 16)
     }
 
-    fn with_capacity(capacity: usize) -> Self {
+    fn with_capacity(pool: sqlx::SqlitePool, capacity: usize) -> Self {
         let (sender, _) = broadcast::channel(capacity);
-        Self { sender }
+        Self { pool, sender }
     }
 
-    fn publish(&self, event_id: &str, session_id: &str, event_type: EventType) {
+    async fn publish(&self, event_id: &str, session_id: &str, event_type: EventType) {
         let source = if event_type.is_turn_event() {
             EventSource::AgentAdapter
         } else {
             EventSource::AgentClient
         };
+        let payload = json!({ "runtime_instance_id": format!("runtime_{session_id}") });
+        let turn_id = event_type.is_turn_event().then_some("turn_root");
+        sqlx::query(
+            r#"INSERT OR IGNORE INTO events
+               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload)
+               VALUES (?, ?, ?, ?, 'pi', ?, '2026-07-31T00:00:00Z', ?)"#,
+        )
+        .bind(event_id)
+        .bind(session_id)
+        .bind(turn_id)
+        .bind(source.to_string())
+        .bind(event_type.to_string())
+        .bind(payload.to_string())
+        .execute(&self.pool)
+        .await
+        .expect("persist Agent fact before publishing wake-up hint");
         self.sender
             .send(DomainEvent::new(
                 event_id.to_string(),
                 session_id.to_string(),
-                None,
+                turn_id.map(str::to_string),
                 source,
                 "pi".to_string(),
                 event_type,
-                json!({ "runtime_instance_id": format!("runtime_{session_id}") }),
+                payload,
             ))
             .expect("workflow event subscriber");
     }
@@ -134,6 +151,22 @@ impl AgentEventSubscriber for TestAgentEvents {
     fn subscribe(&self) -> broadcast::Receiver<DomainEvent> {
         self.sender.subscribe()
     }
+}
+
+fn spawn_coordinator(
+    pool: sqlx::SqlitePool,
+    sessions: SequencedSessionCreator,
+    exits: RecordingExitRequester,
+    events: TestAgentEvents,
+    pontia_home: std::path::PathBuf,
+) -> tokio::task::JoinHandle<()> {
+    let (shutdown_tx, shutdown) = tokio::sync::watch::channel(false);
+    tokio::spawn(async move {
+        let _keepalive = shutdown_tx;
+        WorkflowCoordinator::with_services(pool, sessions, exits, events, pontia_home)
+            .run(shutdown)
+            .await;
+    })
 }
 
 async fn test_pool(path: &Path) -> sqlx::SqlitePool {
@@ -161,6 +194,16 @@ async fn wait_for_session(
         tokio::task::yield_now().await;
     }
     panic!("node {node_id} did not bind session {expected_session_id}");
+}
+
+async fn wait_for_exit_count(exits: &RecordingExitRequester, expected: usize) {
+    for _ in 0..100 {
+        if exits.requests.lock().expect("exit requests lock").len() == expected {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    panic!("Workflow Coordinator did not request {expected} graceful exits");
 }
 
 async fn wait_for_completed(repository: &SqliteWorkflowRepository, workflow_id: &str) {
@@ -247,14 +290,16 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     let sessions =
         SequencedSessionCreator::new(&["session_research", "session_draft", "session_review"]);
     let exits = RecordingExitRequester::default();
-    let events = TestAgentEvents::new();
-    let scheduler = WorkflowScheduler::with_services(
-        pool,
+    let events = TestAgentEvents::new(pool.clone());
+    let _coordinator = spawn_coordinator(
+        pool.clone(),
         sessions.clone(),
         exits.clone(),
         events.clone(),
-        pontia_home,
+        pontia_home.clone(),
     );
+    let scheduler =
+        WorkflowScheduler::with_services(pool, sessions.clone(), exits.clone(), pontia_home);
 
     scheduler.start("wf_chain").await.expect("start workflow");
     assert_eq!(sessions.requests.lock().expect("requests lock").len(), 1);
@@ -280,16 +325,21 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     tokio::task::yield_now().await;
     assert_eq!(sessions.requests.lock().expect("requests lock").len(), 1);
 
-    events.publish(
-        "evt_research_completed",
-        "session_research",
-        EventType::TurnCompleted,
-    );
-    events.publish(
-        "evt_research_exit",
-        "session_research",
-        EventType::SessionExited,
-    );
+    events
+        .publish(
+            "evt_research_completed",
+            "session_research",
+            EventType::TurnCompleted,
+        )
+        .await;
+    wait_for_exit_count(&exits, 1).await;
+    events
+        .publish(
+            "evt_research_exit",
+            "session_research",
+            EventType::SessionExited,
+        )
+        .await;
     wait_for_session(&repository, "node_draft", "session_draft").await;
     assert_eq!(sessions.requests.lock().expect("requests lock").len(), 2);
 
@@ -305,12 +355,17 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     tokio::task::yield_now().await;
     assert_eq!(sessions.requests.lock().expect("requests lock").len(), 2);
 
-    events.publish(
-        "evt_draft_completed",
-        "session_draft",
-        EventType::TurnCompleted,
-    );
-    events.publish("evt_draft_exit", "session_draft", EventType::SessionExited);
+    events
+        .publish(
+            "evt_draft_completed",
+            "session_draft",
+            EventType::TurnCompleted,
+        )
+        .await;
+    wait_for_exit_count(&exits, 2).await;
+    events
+        .publish("evt_draft_exit", "session_draft", EventType::SessionExited)
+        .await;
     wait_for_session(&repository, "node_review", "session_review").await;
 
     let requests = sessions.requests.lock().expect("requests lock").clone();
@@ -384,21 +439,28 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
         "running"
     );
 
-    events.publish(
-        "evt_review_completed",
-        "session_review",
-        EventType::TurnCompleted,
-    );
-    events.publish(
-        "evt_review_exit",
-        "session_review",
-        EventType::SessionExited,
-    );
-    events.publish(
-        "evt_review_exit_duplicate",
-        "session_review",
-        EventType::SessionExited,
-    );
+    events
+        .publish(
+            "evt_review_completed",
+            "session_review",
+            EventType::TurnCompleted,
+        )
+        .await;
+    wait_for_exit_count(&exits, 3).await;
+    events
+        .publish(
+            "evt_review_exit",
+            "session_review",
+            EventType::SessionExited,
+        )
+        .await;
+    events
+        .publish(
+            "evt_review_exit_duplicate",
+            "session_review",
+            EventType::SessionExited,
+        )
+        .await;
     wait_for_completed(&repository, "wf_chain").await;
 
     let mut session_ids = Vec::new();
@@ -435,7 +497,7 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
 }
 
 #[tokio::test]
-async fn paused_monitor_ignores_expected_interrupt_and_defers_downstream_dispatch() {
+async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dispatch() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("paused.db")).await;
     let repository = SqliteWorkflowRepository::new(pool.clone());
@@ -473,14 +535,18 @@ async fn paused_monitor_ignores_expected_interrupt_and_defers_downstream_dispatc
             .expect("create node");
     }
 
-    let events = TestAgentEvents::new();
-    let scheduler = WorkflowScheduler::with_services(
-        pool,
-        SequencedSessionCreator::new(&["session_paused_root", "session_paused_child"]),
-        RecordingExitRequester::default(),
+    let sessions = SequencedSessionCreator::new(&["session_paused_root", "session_paused_child"]);
+    let exits = RecordingExitRequester::default();
+    let events = TestAgentEvents::new(pool.clone());
+    let pontia_home = temp.path().join("pontia-home");
+    let _coordinator = spawn_coordinator(
+        pool.clone(),
+        sessions.clone(),
+        exits.clone(),
         events.clone(),
-        temp.path().join("pontia-home"),
+        pontia_home.clone(),
     );
+    let scheduler = WorkflowScheduler::with_services(pool, sessions, exits, pontia_home);
     scheduler.start("wf_paused").await.expect("start workflow");
     scheduler
         .submit(SubmitWorkflowNodeRequest {
@@ -496,16 +562,20 @@ async fn paused_monitor_ignores_expected_interrupt_and_defers_downstream_dispatc
         .await
         .expect("pause workflow");
 
-    events.publish(
-        "evt_turn_interrupted_paused",
-        "session_paused_root",
-        EventType::TurnInterrupted,
-    );
-    events.publish(
-        "evt_session_exited_paused",
-        "session_paused_root",
-        EventType::SessionExited,
-    );
+    events
+        .publish(
+            "evt_turn_interrupted_paused",
+            "session_paused_root",
+            EventType::TurnInterrupted,
+        )
+        .await;
+    events
+        .publish(
+            "evt_session_exited_paused",
+            "session_paused_root",
+            EventType::SessionExited,
+        )
+        .await;
     tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     assert_eq!(
         repository
@@ -565,14 +635,17 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
         .expect("create node");
 
     let sessions = SequencedSessionCreator::new(&["session_lagged"]);
-    let events = TestAgentEvents::with_capacity(1);
-    let scheduler = WorkflowScheduler::with_services(
+    let exits = RecordingExitRequester::default();
+    let events = TestAgentEvents::with_capacity(pool.clone(), 1);
+    let pontia_home = temp.path().join("pontia-home");
+    let _coordinator = spawn_coordinator(
         pool.clone(),
-        sessions,
-        RecordingExitRequester::default(),
+        sessions.clone(),
+        exits.clone(),
         events.clone(),
-        temp.path().join("pontia-home"),
+        pontia_home.clone(),
     );
+    let scheduler = WorkflowScheduler::with_services(pool.clone(), sessions, exits, pontia_home);
     scheduler.start("wf_lagged").await.expect("start workflow");
     scheduler
         .submit(SubmitWorkflowNodeRequest {
@@ -593,16 +666,20 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
     .execute(&pool)
     .await
     .expect("persist confirmed Session exit fixture");
-    events.publish(
-        "evt_lagged_exit",
-        "session_lagged",
-        EventType::SessionExited,
-    );
-    events.publish(
-        "evt_overwriting_notification",
-        "session_other",
-        EventType::SessionExited,
-    );
+    events
+        .publish(
+            "evt_lagged_exit",
+            "session_lagged",
+            EventType::SessionExited,
+        )
+        .await;
+    events
+        .publish(
+            "evt_overwriting_notification",
+            "session_other",
+            EventType::SessionExited,
+        )
+        .await;
 
     wait_for_completed(&repository, "wf_lagged").await;
 }

@@ -135,6 +135,18 @@ impl SqliteWorkflowRepository {
         .await?)
     }
 
+    pub async fn list_workflows_requiring_convergence(&self) -> Result<Vec<WorkflowRow>> {
+        Ok(sqlx::query_as::<_, WorkflowRow>(
+            r#"SELECT workflow_id, title, cwd, state, current_revision, failure_message, created_at,
+                      updated_at, started_at, completed_at
+               FROM workflows
+               WHERE state IN ('running', 'paused')
+               ORDER BY created_at, workflow_id"#,
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn get_workflow(&self, workflow_id: &str) -> Result<Option<WorkflowRow>> {
         Ok(sqlx::query_as::<_, WorkflowRow>(
             r#"SELECT workflow_id, title, cwd, state, current_revision, failure_message, created_at,
@@ -387,6 +399,42 @@ impl SqliteWorkflowRepository {
         .execute(&self.pool)
         .await?;
         Ok(result.rows_affected() == 1)
+    }
+
+    pub async fn terminal_event_precedes_latest_resume(
+        &self,
+        workflow_id: &str,
+        event_id: &str,
+    ) -> Result<bool> {
+        Ok(sqlx::query_scalar::<_, i64>(
+            r#"SELECT EXISTS (
+                   SELECT 1
+                   FROM events AS agent_event
+                   JOIN workflow_events AS resumed
+                     ON resumed.workflow_id = ?
+                    AND resumed.event_type = 'workflow.resumed'
+                   WHERE agent_event.event_id = ?
+                     AND resumed.sequence = (
+                         SELECT MAX(sequence)
+                         FROM workflow_events
+                         WHERE workflow_id = ? AND event_type = 'workflow.resumed'
+                     )
+                     AND agent_event.created_at <= resumed.created_at
+                     AND EXISTS (
+                         SELECT 1
+                         FROM workflow_events AS paused
+                         WHERE paused.workflow_id = resumed.workflow_id
+                           AND paused.event_type = 'workflow.paused'
+                           AND paused.sequence < resumed.sequence
+                     )
+               )"#,
+        )
+        .bind(workflow_id)
+        .bind(event_id)
+        .bind(workflow_id)
+        .fetch_one(&self.pool)
+        .await?
+            != 0)
     }
 
     pub async fn append_event(

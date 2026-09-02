@@ -1,12 +1,12 @@
-use std::{sync::Arc, time::Duration};
-
 use pontia_core::domain::EventType;
 use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use pontia_workflow::{SubmitWorkflowNodeRequest, WorkflowScheduler};
 
 use crate::{
     fixture::{assert_transition, seed_linear_workflow, test_pool, wait_for_state},
-    test_doubles::{RecordingExitRequester, SequencedSessionCreator, TestAgentEvents},
+    test_doubles::{
+        RecordingExitRequester, SequencedSessionCreator, TestAgentEvents, spawn_coordinator,
+    },
 };
 
 #[tokio::test]
@@ -22,18 +22,21 @@ async fn unsubmitted_failure_facts_fail_once_cleanup_once_and_never_start_a_chil
         seed_linear_workflow(&repository, "wf_failure", "[]", true).await;
         let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
         let exits = RecordingExitRequester::default();
-        let events = TestAgentEvents::new();
-        let scheduler = WorkflowScheduler::with_services(
-            pool,
+        let events = TestAgentEvents::new(pool.clone());
+        let pontia_home = temp.path().join("pontia-home");
+        let _coordinator = spawn_coordinator(
+            pool.clone(),
             sessions.clone(),
             exits.clone(),
             events.clone(),
-            temp.path().join("pontia-home"),
+            pontia_home.clone(),
         );
+        let scheduler =
+            WorkflowScheduler::with_services(pool, sessions.clone(), exits.clone(), pontia_home);
         scheduler.start("wf_failure").await.expect("start workflow");
 
-        events.publish("session_root", event_type);
-        events.publish("session_root", event_type);
+        events.publish("session_root", event_type).await;
+        events.publish("session_root", event_type).await;
         wait_for_state(&repository, "wf_failure", "failed").await;
 
         let failure_message =
@@ -71,7 +74,6 @@ async fn submission_binding_failure_fails_without_starting_a_child() {
         pool,
         sessions.clone(),
         exits.clone(),
-        TestAgentEvents::new(),
         temp.path().join("pontia-home"),
     );
     scheduler
@@ -115,16 +117,18 @@ async fn deferred_exit_failure_fails_without_starting_a_child() {
     let repository = SqliteWorkflowRepository::new(pool.clone());
     seed_linear_workflow(&repository, "wf_exit_failure", "[]", true).await;
     let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
-    let scheduler_task_owner = Arc::downgrade(&sessions.requests);
     let exits = RecordingExitRequester::failing_request();
-    let events = TestAgentEvents::new();
-    let scheduler = WorkflowScheduler::with_services(
-        pool,
+    let events = TestAgentEvents::new(pool.clone());
+    let pontia_home = temp.path().join("pontia-home");
+    let _coordinator = spawn_coordinator(
+        pool.clone(),
         sessions.clone(),
         exits.clone(),
         events.clone(),
-        temp.path().join("pontia-home"),
+        pontia_home.clone(),
     );
+    let scheduler =
+        WorkflowScheduler::with_services(pool, sessions.clone(), exits.clone(), pontia_home);
     scheduler
         .start("wf_exit_failure")
         .await
@@ -139,7 +143,9 @@ async fn deferred_exit_failure_fails_without_starting_a_child() {
         .await
         .expect("submission records output before Turn completion");
 
-    events.publish("session_root", EventType::TurnCompleted);
+    events
+        .publish("session_root", EventType::TurnCompleted)
+        .await;
     wait_for_state(&repository, "wf_exit_failure", "failed").await;
 
     let failure_message =
@@ -158,13 +164,4 @@ async fn deferred_exit_failure_fails_without_starting_a_child() {
             .session_id
             .is_none()
     );
-    drop(scheduler);
-    drop(sessions);
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while scheduler_task_owner.upgrade().is_some() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("failed Workflow Scheduler task should end");
 }

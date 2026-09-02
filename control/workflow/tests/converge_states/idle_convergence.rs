@@ -4,7 +4,9 @@ use pontia_workflow::WorkflowScheduler;
 
 use crate::{
     fixture::{assert_transition, seed_linear_workflow, test_pool, wait_for_state},
-    test_doubles::{RecordingExitRequester, SequencedSessionCreator, TestAgentEvents},
+    test_doubles::{
+        RecordingExitRequester, SequencedSessionCreator, TestAgentEvents, spawn_coordinator,
+    },
 };
 
 #[tokio::test]
@@ -15,17 +17,22 @@ async fn unsubmitted_completed_turn_enters_idle_and_keeps_the_current_session() 
     seed_linear_workflow(&repository, "wf_idle", "[]", true).await;
     let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
     let exits = RecordingExitRequester::default();
-    let events = TestAgentEvents::new();
-    let scheduler = WorkflowScheduler::with_services(
-        pool,
+    let events = TestAgentEvents::new(pool.clone());
+    let pontia_home = temp.path().join("pontia-home");
+    let _coordinator = spawn_coordinator(
+        pool.clone(),
         sessions.clone(),
         exits.clone(),
         events.clone(),
-        temp.path().join("pontia-home"),
+        pontia_home.clone(),
     );
+    let scheduler =
+        WorkflowScheduler::with_services(pool, sessions.clone(), exits.clone(), pontia_home);
     scheduler.start("wf_idle").await.expect("start workflow");
 
-    events.publish("session_root", EventType::TurnCompleted);
+    events
+        .publish("session_root", EventType::TurnCompleted)
+        .await;
     wait_for_state(&repository, "wf_idle", "idle").await;
 
     assert_transition(&repository, "wf_idle", "idle", "workflow.idle").await;

@@ -18,6 +18,7 @@ pontia-core = { path = "../core", default-features = false }
 pontia-http = { path = "../http" }
 pontia-runtime = { path = "../runtime", default-features = false }
 pontia-storage-sqlite = { path = "../storage-sqlite" }
+pontia-workflow = { path = "../workflow" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sqlx.workspace = true

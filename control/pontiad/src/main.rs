@@ -20,6 +20,16 @@ async fn main() -> Result<()> {
     let runtime_observer = application::RuntimeObservationService::new(app_state.db())
         .with_agent_events(app_state.agent_events());
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
+    let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
+        app_state.db(),
+        application::SessionCommandService::new(
+            app_state.db(),
+            app_state.pontia_home().to_path_buf(),
+        ),
+        app_state.agent_events(),
+        app_state.pontia_home().to_path_buf(),
+    );
+    tokio::spawn(workflow_coordinator.run(app_state.shutdown().subscribe()));
     let dashboard =
         http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;
     let state = http::HttpState::new(app_state, dashboard);

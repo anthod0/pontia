@@ -1,77 +1,54 @@
 use std::path::{Component, Path, PathBuf};
 
-use pontia_application::{AgentEventBroker, PiGracefulExitService};
-use pontia_storage_sqlite::repositories::{
-    events::SqliteEventRepository,
-    workflows::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository},
+use pontia_application::PiGracefulExitService;
+use pontia_storage_sqlite::repositories::workflows::{
+    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
 };
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::{
-    AcceptedWorkflowNode, AgentEventSubscriber, Error, GracefulExitRequester, Result,
-    RunWorkflowOutcome, RunWorkflowRequest, SessionCreator, StartWorkflowOutcome,
-    SubmitWorkflowNodeRequest,
+    AcceptedWorkflowNode, Error, GracefulExitRequester, Result, RunWorkflowOutcome,
+    RunWorkflowRequest, SessionCreator, StartWorkflowOutcome, SubmitWorkflowNodeRequest,
     activation::activate_node,
     definition::{accepted_definition_from_initial_request, render_accepted_workflow_definition},
-    monitor::WorkflowMonitor,
     validation::{
         is_runtime_control_unavailable, validate_handoff_file_name, validate_run_request,
     },
 };
 
-pub struct WorkflowScheduler<S, X, B> {
+pub struct WorkflowScheduler<S, X> {
     repository: SqliteWorkflowRepository,
-    persisted_events: SqliteEventRepository,
     sessions: S,
     exits: X,
-    agent_events: B,
     pontia_home: PathBuf,
 }
 
-impl<S> WorkflowScheduler<S, PiGracefulExitService, AgentEventBroker>
+impl<S> WorkflowScheduler<S, PiGracefulExitService>
 where
     S: SessionCreator,
 {
-    pub fn new(
-        pool: SqlitePool,
-        sessions: S,
-        agent_events: AgentEventBroker,
-        pontia_home: PathBuf,
-    ) -> Self {
+    pub fn new(pool: SqlitePool, sessions: S, pontia_home: PathBuf) -> Self {
         let exits = PiGracefulExitService::new(pool.clone());
-        Self::with_services(pool, sessions, exits, agent_events, pontia_home)
+        Self::with_services(pool, sessions, exits, pontia_home)
     }
 }
 
-impl<S, X, B> WorkflowScheduler<S, X, B>
+impl<S, X> WorkflowScheduler<S, X>
 where
     S: SessionCreator,
     X: GracefulExitRequester,
-    B: AgentEventSubscriber,
 {
-    pub fn with_services(
-        pool: SqlitePool,
-        sessions: S,
-        exits: X,
-        agent_events: B,
-        pontia_home: PathBuf,
-    ) -> Self {
+    pub fn with_services(pool: SqlitePool, sessions: S, exits: X, pontia_home: PathBuf) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(pool.clone()),
-            persisted_events: SqliteEventRepository::new(pool),
+            repository: SqliteWorkflowRepository::new(pool),
             sessions,
             exits,
-            agent_events,
             pontia_home,
         }
     }
 
-    pub async fn run(&self, mut request: RunWorkflowRequest) -> Result<RunWorkflowOutcome>
-    where
-        S: Clone + Send + Sync + 'static,
-        X: Clone + Send + Sync + 'static,
-    {
+    pub async fn run(&self, mut request: RunWorkflowRequest) -> Result<RunWorkflowOutcome> {
         validate_run_request(&request)?;
         validate_pontia_home_boundary(&self.pontia_home)?;
         for node in &mut request.nodes {
@@ -173,12 +150,7 @@ where
         })
     }
 
-    pub async fn start(&self, workflow_id: &str) -> Result<StartWorkflowOutcome>
-    where
-        S: Clone + Send + Sync + 'static,
-        X: Clone + Send + Sync + 'static,
-    {
-        let agent_events = self.agent_events.subscribe();
+    pub async fn start(&self, workflow_id: &str) -> Result<StartWorkflowOutcome> {
         let workflow = self
             .repository
             .get_workflow(workflow_id)
@@ -226,19 +198,6 @@ where
                 return Err(failure.error);
             }
         };
-
-        WorkflowMonitor {
-            repository: self.repository.clone(),
-            persisted_events: self.persisted_events.clone(),
-            sessions: self.sessions.clone(),
-            exits: self.exits.clone(),
-            agent_events,
-            workflow,
-            handoff_dir,
-            node_id: root.node_id.clone(),
-            session_id: session_id.clone(),
-        }
-        .spawn();
 
         Ok(StartWorkflowOutcome {
             node_id: root.node_id,

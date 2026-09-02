@@ -9,7 +9,9 @@ use pontia_core::{
     Error as PontiaError,
     domain::{DomainEvent, EventSource, EventType},
 };
-use pontia_workflow::{AgentEventSubscriber, GracefulExitRequester, SessionCreator};
+use pontia_workflow::{
+    AgentEventSubscriber, GracefulExitRequester, SessionCreator, WorkflowCoordinator,
+};
 use serde_json::json;
 use tokio::sync::broadcast;
 
@@ -116,37 +118,73 @@ impl GracefulExitRequester for RecordingExitRequester {
 
 #[derive(Clone)]
 pub(super) struct TestAgentEvents {
+    pool: sqlx::SqlitePool,
     sender: broadcast::Sender<DomainEvent>,
 }
 
 impl TestAgentEvents {
-    pub(super) fn new() -> Self {
-        Self::with_capacity(16)
+    pub(super) fn new(pool: sqlx::SqlitePool) -> Self {
+        Self::with_capacity(pool, 16)
     }
 
-    pub(super) fn with_capacity(capacity: usize) -> Self {
+    pub(super) fn with_capacity(pool: sqlx::SqlitePool, capacity: usize) -> Self {
         let (sender, _) = broadcast::channel(capacity);
-        Self { sender }
+        Self { pool, sender }
     }
 
-    pub(super) fn publish(&self, session_id: &str, event_type: EventType) {
+    pub(super) async fn publish(&self, session_id: &str, event_type: EventType) {
         let source = if event_type.is_turn_event() {
             EventSource::AgentAdapter
         } else {
             EventSource::AgentClient
         };
+        let event_id = format!("evt_{session_id}_{event_type}");
+        let payload = json!({ "runtime_instance_id": format!("runtime_{session_id}") });
+        sqlx::query(
+            r#"INSERT OR IGNORE INTO events
+               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload)
+               VALUES (?, ?, 'turn_root', ?, 'pi', ?, '2026-07-31T00:00:00Z', ?)"#,
+        )
+        .bind(&event_id)
+        .bind(session_id)
+        .bind(source.to_string())
+        .bind(event_type.to_string())
+        .bind(payload.to_string())
+        .execute(&self.pool)
+        .await
+        .expect("persist Agent fact before publishing wake-up hint");
         self.sender
             .send(DomainEvent::new(
-                format!("evt_{event_type}"),
+                event_id,
                 session_id.to_string(),
                 Some("turn_root".to_string()),
                 source,
                 "pi".to_string(),
                 event_type,
-                json!({ "runtime_instance_id": format!("runtime_{session_id}") }),
+                payload,
             ))
             .expect("workflow event subscriber");
     }
+}
+
+pub(super) fn spawn_coordinator<S, X>(
+    pool: sqlx::SqlitePool,
+    sessions: S,
+    exits: X,
+    events: TestAgentEvents,
+    pontia_home: std::path::PathBuf,
+) -> tokio::task::JoinHandle<()>
+where
+    S: SessionCreator + Clone + Send + Sync + 'static,
+    X: GracefulExitRequester + Clone + Send + Sync + 'static,
+{
+    let (shutdown_tx, shutdown) = tokio::sync::watch::channel(false);
+    tokio::spawn(async move {
+        let _keepalive = shutdown_tx;
+        WorkflowCoordinator::with_services(pool, sessions, exits, events, pontia_home)
+            .run(shutdown)
+            .await;
+    })
 }
 
 impl AgentEventSubscriber for TestAgentEvents {

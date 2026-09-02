@@ -16,7 +16,7 @@ use pontia_storage_sqlite::{
 };
 use pontia_workflow::{
     AgentEventSubscriber, GracefulExitRequester, SessionCreator, SubmitWorkflowNodeRequest,
-    WorkflowScheduler,
+    WorkflowCoordinator, WorkflowScheduler,
 };
 use serde_json::json;
 use tokio::sync::broadcast;
@@ -111,16 +111,38 @@ impl GracefulExitRequester for RecordingExitRequester {
 
 #[derive(Clone)]
 struct TestAgentEvents {
+    pool: sqlx::SqlitePool,
     sender: broadcast::Sender<DomainEvent>,
 }
 
 impl TestAgentEvents {
-    fn new() -> Self {
+    fn new(pool: sqlx::SqlitePool) -> Self {
         let (sender, _) = broadcast::channel(16);
-        Self { sender }
+        Self { pool, sender }
     }
 
-    fn publish(&self, event: DomainEvent) {
+    async fn publish(&self, event: DomainEvent) {
+        let turn_id = event.turn_id.clone().or_else(|| {
+            event
+                .event_type
+                .is_turn_event()
+                .then(|| "turn_root".to_string())
+        });
+        sqlx::query(
+            r#"INSERT OR IGNORE INTO events
+               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload)
+               VALUES (?, ?, ?, ?, ?, ?, '2026-07-31T00:00:00Z', ?)"#,
+        )
+        .bind(&event.event_id)
+        .bind(&event.session_id)
+        .bind(turn_id)
+        .bind(event.source.to_string())
+        .bind(&event.client_type)
+        .bind(event.event_type.to_string())
+        .bind(event.payload.to_string())
+        .execute(&self.pool)
+        .await
+        .expect("persist Agent fact before publishing wake-up hint");
         self.sender.send(event).expect("workflow event subscriber");
     }
 }
@@ -129,6 +151,22 @@ impl AgentEventSubscriber for TestAgentEvents {
     fn subscribe(&self) -> broadcast::Receiver<DomainEvent> {
         self.sender.subscribe()
     }
+}
+
+fn spawn_coordinator(
+    pool: sqlx::SqlitePool,
+    sessions: BoundSessionCreator,
+    exits: RecordingExitRequester,
+    events: TestAgentEvents,
+    pontia_home: std::path::PathBuf,
+) -> tokio::task::JoinHandle<()> {
+    let (shutdown_tx, shutdown) = tokio::sync::watch::channel(false);
+    tokio::spawn(async move {
+        let _keepalive = shutdown_tx;
+        WorkflowCoordinator::with_services(pool, sessions, exits, events, pontia_home)
+            .run(shutdown)
+            .await;
+    })
 }
 
 async fn test_pool(path: &Path) -> sqlx::SqlitePool {
@@ -240,14 +278,16 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         runtime_instance_id: "rtinst_submit".to_string(),
     };
     let exits = RecordingExitRequester::default();
-    let events = TestAgentEvents::new();
-    let scheduler = WorkflowScheduler::with_services(
-        pool,
-        sessions,
+    let events = TestAgentEvents::new(pool.clone());
+    let pontia_home = temp.path().join("pontia-home");
+    let _coordinator = spawn_coordinator(
+        pool.clone(),
+        sessions.clone(),
         exits.clone(),
         events.clone(),
-        temp.path().join("pontia-home"),
+        pontia_home.clone(),
     );
+    let scheduler = WorkflowScheduler::with_services(pool, sessions, exits.clone(), pontia_home);
     scheduler.start("wf_submit").await.expect("start workflow");
 
     scheduler
@@ -292,12 +332,14 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         "running"
     );
 
-    events.publish(event(
-        "evt_turn_completed",
-        "session_submit",
-        EventType::TurnCompleted,
-        "rtinst_submit",
-    ));
+    events
+        .publish(event(
+            "evt_turn_completed",
+            "session_submit",
+            EventType::TurnCompleted,
+            "rtinst_submit",
+        ))
+        .await;
     wait_for_exit_request(&exits).await;
     assert_eq!(
         exits
@@ -317,24 +359,30 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         Some("rtinst_submit")
     );
     assert!(node.exit_request_started_at.is_some());
-    events.publish(event(
-        "evt_turn_completed_duplicate",
-        "session_submit",
-        EventType::TurnCompleted,
-        "rtinst_replacement",
-    ));
-    events.publish(event(
-        "evt_turn_failed_after_submission",
-        "session_submit",
-        EventType::TurnFailed,
-        "rtinst_submit",
-    ));
-    events.publish(event(
-        "evt_turn_interrupted_after_submission",
-        "session_submit",
-        EventType::TurnInterrupted,
-        "rtinst_submit",
-    ));
+    events
+        .publish(event(
+            "evt_turn_completed_duplicate",
+            "session_submit",
+            EventType::TurnCompleted,
+            "rtinst_replacement",
+        ))
+        .await;
+    events
+        .publish(event(
+            "evt_turn_failed_after_submission",
+            "session_submit",
+            EventType::TurnFailed,
+            "rtinst_submit",
+        ))
+        .await;
+    events
+        .publish(event(
+            "evt_turn_interrupted_after_submission",
+            "session_submit",
+            EventType::TurnInterrupted,
+            "rtinst_submit",
+        ))
+        .await;
     tokio::task::yield_now().await;
     assert_eq!(
         exits
@@ -355,12 +403,14 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         "running"
     );
 
-    events.publish(event(
-        "evt_other_session_exited",
-        "session_other",
-        EventType::SessionExited,
-        "rtinst_other",
-    ));
+    events
+        .publish(event(
+            "evt_other_session_exited",
+            "session_other",
+            EventType::SessionExited,
+            "rtinst_other",
+        ))
+        .await;
     tokio::task::yield_now().await;
     assert_eq!(
         repository
@@ -379,7 +429,7 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         "rtinst_submit",
     );
     unauthorized_exit.source = EventSource::ExternalApi;
-    events.publish(unauthorized_exit);
+    events.publish(unauthorized_exit).await;
     tokio::task::yield_now().await;
     assert_eq!(
         repository
@@ -398,7 +448,7 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         "rtinst_submit",
     );
     runtime_observed_exit.source = EventSource::RuntimeManager;
-    events.publish(runtime_observed_exit);
+    events.publish(runtime_observed_exit).await;
     wait_for_state(&repository, "completed").await;
 
     let workflow = repository
@@ -436,7 +486,6 @@ async fn submission_rejects_wrong_session_runtime_and_output_without_writing_or_
         pool,
         sessions,
         exits.clone(),
-        TestAgentEvents::new(),
         temp.path().join("pontia-home"),
     );
     scheduler.start("wf_submit").await.expect("start workflow");
@@ -525,7 +574,6 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
         pool,
         sessions,
         exits.clone(),
-        TestAgentEvents::new(),
         temp.path().join("pontia-home"),
     );
 

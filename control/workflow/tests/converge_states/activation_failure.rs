@@ -4,7 +4,9 @@ use pontia_workflow::{SubmitWorkflowNodeRequest, WorkflowScheduler};
 
 use crate::{
     fixture::{assert_transition, seed_linear_workflow, test_pool, wait_for_state},
-    test_doubles::{RecordingExitRequester, SequencedSessionCreator, TestAgentEvents},
+    test_doubles::{
+        RecordingExitRequester, SequencedSessionCreator, TestAgentEvents, spawn_coordinator,
+    },
 };
 
 #[tokio::test]
@@ -52,7 +54,6 @@ async fn activation_errors_fail_with_clear_messages() {
             pool,
             SequencedSessionCreator::new(outcomes),
             RecordingExitRequester::default(),
-            TestAgentEvents::new(),
             temp.path().join("pontia-home"),
         );
 
@@ -79,14 +80,17 @@ async fn downstream_session_creation_failure_stops_the_workflow() {
     seed_linear_workflow(&repository, "wf_downstream_failure", "[]", true).await;
     let sessions = SequencedSessionCreator::new([Some("session_root"), None]);
     let exits = RecordingExitRequester::default();
-    let events = TestAgentEvents::new();
-    let scheduler = WorkflowScheduler::with_services(
-        pool,
+    let events = TestAgentEvents::new(pool.clone());
+    let pontia_home = temp.path().join("pontia-home");
+    let _coordinator = spawn_coordinator(
+        pool.clone(),
         sessions.clone(),
         exits.clone(),
         events.clone(),
-        temp.path().join("pontia-home"),
+        pontia_home.clone(),
     );
+    let scheduler =
+        WorkflowScheduler::with_services(pool, sessions.clone(), exits.clone(), pontia_home);
     scheduler
         .start("wf_downstream_failure")
         .await
@@ -101,8 +105,12 @@ async fn downstream_session_creation_failure_stops_the_workflow() {
         .await
         .expect("submit root output");
 
-    events.publish("session_root", EventType::TurnCompleted);
-    events.publish("session_root", EventType::SessionExited);
+    events
+        .publish("session_root", EventType::TurnCompleted)
+        .await;
+    events
+        .publish("session_root", EventType::SessionExited)
+        .await;
     wait_for_state(&repository, "wf_downstream_failure", "failed").await;
 
     let failure_message = assert_transition(
@@ -125,7 +133,14 @@ async fn downstream_session_creation_failure_stops_the_workflow() {
             .len(),
         2
     );
-    assert_eq!(exits.requests.lock().expect("exit requests lock").len(), 1);
+    assert!(
+        exits
+            .requests
+            .lock()
+            .expect("exit requests lock")
+            .is_empty(),
+        "a confirmed Session exit needs no graceful-exit request"
+    );
     assert!(
         repository
             .get_node("wf_downstream_failure_child")
