@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use pontia_storage_sqlite::models::workflows::{WorkflowNodeRow, WorkflowRow};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -270,6 +271,100 @@ fn validate_candidate_graph(candidate: &WorkflowFile) -> Result<()> {
             .nodes
             .iter()
             .map(|node| node.definition.clone())
+            .collect(),
+    })
+}
+
+pub(crate) fn accepted_definition_from_snapshot(
+    workflow: &WorkflowRow,
+    active_nodes: Vec<WorkflowNodeRow>,
+    node_history: &[WorkflowNodeRow],
+    snapshot_bytes: &[u8],
+) -> Result<AcceptedWorkflowDefinition> {
+    let source = std::str::from_utf8(snapshot_bytes).map_err(|_| {
+        Error::InvalidDefinition("accepted Workflow definition must be valid UTF-8".to_string())
+    })?;
+    let mut snapshot: WorkflowFile = toml::from_str(source).map_err(|error| {
+        Error::InvalidDefinition(format!("invalid accepted Workflow definition: {error}"))
+    })?;
+    normalize_file(&mut snapshot);
+    if snapshot.workflow_id != workflow.workflow_id
+        || snapshot.revision != workflow.current_revision
+        || snapshot.title != workflow.title
+        || snapshot.cwd != workflow.cwd
+    {
+        return Err(Error::InvalidDefinition(
+            "accepted Workflow definition metadata does not match durable state".to_string(),
+        ));
+    }
+
+    let mut remaining = active_nodes;
+    let mut ordered = Vec::with_capacity(remaining.len());
+    let mut parent: Option<String> = None;
+    while !remaining.is_empty() {
+        let matches = remaining
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node.parent_node_id == parent)
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        if matches.len() != 1 {
+            return Err(Error::InvalidDefinition(
+                "accepted Workflow graph is not one linear chain".to_string(),
+            ));
+        }
+        let node = remaining.remove(matches[0]);
+        parent = Some(node.node_id.clone());
+        ordered.push(AcceptedWorkflowNode {
+            node_id: node.node_id,
+            parent_node_id: node.parent_node_id,
+            definition: WorkflowNodeDefinition {
+                node_type: node.node_type,
+                phase: node.phase,
+                title: node.title,
+                instructions: node.instructions,
+                inputs: serde_json::from_str(&node.inputs)?,
+                output: node.output,
+                execution_profile_id: node.execution_profile_id,
+                execution_profile_version: node.execution_profile_version,
+            },
+            activated: node.session_id.is_some(),
+        });
+    }
+
+    let active_ids = ordered
+        .iter()
+        .map(|node| node.node_id.as_str())
+        .collect::<HashSet<_>>();
+    let snapshot_ids = snapshot
+        .nodes
+        .iter()
+        .filter_map(|node| node.id.as_deref())
+        .collect::<HashSet<_>>();
+    if active_ids != snapshot_ids {
+        return Err(Error::InvalidDefinition(
+            "accepted Workflow definition graph does not match durable state".to_string(),
+        ));
+    }
+
+    Ok(AcceptedWorkflowDefinition {
+        workflow_id: workflow.workflow_id.clone(),
+        revision: workflow.current_revision,
+        title: workflow.title.clone(),
+        cwd: workflow.cwd.clone(),
+        handoffs: snapshot
+            .handoffs
+            .into_iter()
+            .map(|handoff| WorkflowDefinitionHandoff {
+                name: handoff.name,
+                source: handoff.source,
+            })
+            .collect(),
+        nodes: ordered,
+        retired_node_ids: node_history
+            .iter()
+            .filter(|node| node.retired_revision.is_some())
+            .map(|node| node.node_id.clone())
             .collect(),
     })
 }

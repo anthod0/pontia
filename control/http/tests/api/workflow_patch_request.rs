@@ -84,7 +84,23 @@ async fn seed_requester(app: &TestApp) {
     fs::create_dir_all(&workflow_dir).expect("create Workflow directory");
     fs::write(
         workflow_dir.join("workflow.toml"),
-        "workflow_id = \"wf_patch_request\"\n",
+        format!(
+            r#"workflow_id = "wf_patch_request"
+revision = 1
+title = "Patch request"
+cwd = {:?}
+
+[[nodes]]
+id = "node_patch_request"
+type = "agent"
+phase = "Build"
+title = "Requester"
+instructions = "Request a correction"
+inputs = []
+output = "result.md"
+"#,
+            app.workspace().path().display().to_string()
+        ),
     )
     .expect("write accepted definition surface");
 }
@@ -122,6 +138,31 @@ async fn request_patch(app: &TestApp, runtime: &str) -> (StatusCode, Value) {
     )
 }
 
+async fn apply_patch(app: &TestApp, runtime: &str, decision: &str) -> (StatusCode, Value) {
+    let response = http::router(app.state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/internal/v1/workflow/patches/apply")
+                .header(header::AUTHORIZATION, "Bearer test-token")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "session_id": "sess_patch_replanner",
+                        "runtime_instance_id": runtime,
+                        "decision": decision,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, serde_json::from_slice(&bytes).unwrap())
+}
+
 async fn block_patch(app: &TestApp, runtime: &str, reason: &str) -> (StatusCode, Value) {
     let response = http::router(app.state.clone())
         .oneshot(
@@ -145,6 +186,51 @@ async fn block_patch(app: &TestApp, runtime: &str, reason: &str) -> (StatusCode,
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+async fn seed_active_replanner(app: &TestApp, patch_id: &str) {
+    sqlx::query("INSERT INTO sessions (session_id, client_type, state, current_turn_id) VALUES ('sess_patch_replanner', 'pi', 'busy', 'turn_patch_replanner')")
+        .execute(&app.db).await.unwrap();
+    sqlx::query("INSERT INTO turns (turn_id, session_id, state, topology_status) VALUES ('turn_patch_replanner', 'sess_patch_replanner', 'running', 'root')")
+        .execute(&app.db).await.unwrap();
+    SqliteRuntimeBindingRepository::new(app.db.clone())
+        .upsert_binding(RuntimeBindingUpsertRecord {
+            session_id: "sess_patch_replanner".into(),
+            runtime_kind: "pi_tui".into(),
+            runtime_instance_id: Some("runtime_patch_replanner".into()),
+            binding_state: "confirmed".into(),
+            runtime_handle: None,
+            start_command: None,
+            launch_cwd: None,
+            internal_event_url: None,
+            started_at: None,
+            last_seen_at: None,
+            restart_count: 0,
+            tmux_socket_path: None,
+            tmux_pane_id: None,
+            process_fingerprint: None,
+            capabilities: "{}".into(),
+            diagnostics: "{}".into(),
+            adapter_details: "{}".into(),
+        })
+        .await
+        .unwrap();
+    sqlx::query("UPDATE workflow_patches SET state = 'planning', replanner_session_id = 'sess_patch_replanner', replanner_runtime_instance_id = 'runtime_patch_replanner' WHERE patch_id = ?")
+        .bind(patch_id).execute(&app.db).await.unwrap();
+    sqlx::query("UPDATE workflows SET active_replanner_session_id = 'sess_patch_replanner' WHERE workflow_id = 'wf_patch_request'")
+        .execute(&app.db).await.unwrap();
+    let patch_dir = app
+        .pontia_home()
+        .path()
+        .join("workflows/wf_patch_request/patches")
+        .join(patch_id);
+    fs::copy(
+        app.pontia_home()
+            .path()
+            .join("workflows/wf_patch_request/workflow.toml"),
+        patch_dir.join("accepted-definition.toml"),
+    )
+    .unwrap();
 }
 
 #[tokio::test]
@@ -203,53 +289,56 @@ async fn request_is_durable_before_the_coordinator_interrupts() {
 }
 
 #[tokio::test]
+async fn active_replanner_can_reject_an_unchanged_definition_over_internal_api() {
+    let app = TestApp::new().await;
+    seed_requester(&app).await;
+    let (_, requested) = request_patch(&app, "runtime_patch_request").await;
+    let patch_id = requested["data"]["patch_id"].as_str().unwrap();
+    seed_active_replanner(&app, patch_id).await;
+
+    assert_eq!(
+        apply_patch(&app, "stale_runtime", "stale").await.0,
+        StatusCode::CONFLICT
+    );
+    let (status, body) = apply_patch(
+        &app,
+        "runtime_patch_replanner",
+        "The accepted definition remains valid.",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["patch_id"], patch_id);
+    assert_eq!(body["data"]["outcome"], "rejected");
+    assert_eq!(body["data"]["revision"], 1);
+    assert_eq!(
+        SqliteWorkflowRepository::new(app.db.clone())
+            .get_workflow("wf_patch_request")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "running"
+    );
+    assert_eq!(
+        apply_patch(&app, "runtime_patch_replanner", "again")
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+}
+
+#[tokio::test]
 async fn active_replanner_can_block_without_supplying_target_identifiers() {
     let app = TestApp::new().await;
     seed_requester(&app).await;
     let (_, requested) = request_patch(&app, "runtime_patch_request").await;
     let patch_id = requested["data"]["patch_id"].as_str().unwrap();
-    sqlx::query("INSERT INTO sessions (session_id, client_type, state, current_turn_id) VALUES ('sess_patch_replanner', 'pi', 'busy', 'turn_patch_replanner')")
-        .execute(&app.db).await.unwrap();
-    sqlx::query("INSERT INTO turns (turn_id, session_id, state, topology_status) VALUES ('turn_patch_replanner', 'sess_patch_replanner', 'running', 'root')")
-        .execute(&app.db).await.unwrap();
-    SqliteRuntimeBindingRepository::new(app.db.clone())
-        .upsert_binding(RuntimeBindingUpsertRecord {
-            session_id: "sess_patch_replanner".into(),
-            runtime_kind: "pi_tui".into(),
-            runtime_instance_id: Some("runtime_patch_replanner".into()),
-            binding_state: "confirmed".into(),
-            runtime_handle: None,
-            start_command: None,
-            launch_cwd: None,
-            internal_event_url: None,
-            started_at: None,
-            last_seen_at: None,
-            restart_count: 0,
-            tmux_socket_path: None,
-            tmux_pane_id: None,
-            process_fingerprint: None,
-            capabilities: "{}".into(),
-            diagnostics: "{}".into(),
-            adapter_details: "{}".into(),
-        })
-        .await
-        .unwrap();
-    sqlx::query("UPDATE workflow_patches SET state = 'planning', replanner_session_id = 'sess_patch_replanner', replanner_runtime_instance_id = 'runtime_patch_replanner' WHERE patch_id = ?")
-        .bind(patch_id).execute(&app.db).await.unwrap();
-    sqlx::query("UPDATE workflows SET active_replanner_session_id = 'sess_patch_replanner' WHERE workflow_id = 'wf_patch_request'")
-        .execute(&app.db).await.unwrap();
+    seed_active_replanner(&app, patch_id).await;
     let patch_dir = app
         .pontia_home()
         .path()
         .join("workflows/wf_patch_request/patches")
         .join(patch_id);
-    fs::copy(
-        app.pontia_home()
-            .path()
-            .join("workflows/wf_patch_request/workflow.toml"),
-        patch_dir.join("accepted-definition.toml"),
-    )
-    .unwrap();
 
     let (stale_status, _) = block_patch(&app, "stale_runtime", "stale").await;
     assert_eq!(stale_status, StatusCode::CONFLICT);

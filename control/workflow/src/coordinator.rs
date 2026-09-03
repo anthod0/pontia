@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 
 use pontia_application::{
-    AgentEventBroker, CreateSessionRequest, InitialTaskRequest, PiGracefulExitService,
-    RuntimeControlService,
+    AgentEventBroker, CreateSessionRequest, InboxCommandService, InitialTaskRequest,
+    PiGracefulExitService, RuntimeControlService, SubmitInboxMessageRequest,
 };
 use pontia_core::domain::EventType;
 use pontia_storage_sqlite::{
@@ -62,6 +62,7 @@ pub struct WorkflowCoordinator<S, X, I, B> {
     exits: X,
     interruptions: I,
     agent_events: B,
+    inbox: InboxCommandService,
     pontia_home: PathBuf,
 }
 
@@ -129,7 +130,8 @@ where
     ) -> Self {
         Self {
             repository: SqliteWorkflowRepository::new(pool.clone()),
-            persisted_events: SqliteEventRepository::new(pool),
+            persisted_events: SqliteEventRepository::new(pool.clone()),
+            inbox: InboxCommandService::new(pool),
             sessions,
             exits,
             interruptions,
@@ -202,11 +204,15 @@ where
             return self.reconcile_patch_request(workflow_id).await;
         }
         if workflow.state == "blocked" {
-            return self.reconcile_blocked_replanner(workflow_id).await;
+            return self.reconcile_resolved_replanner(workflow_id).await;
         }
         if workflow.state != "running" {
             return Ok(());
         }
+        if self.reconcile_patch_continuation(workflow_id).await? {
+            return Ok(());
+        }
+        self.reconcile_resolved_replanner(workflow_id).await?;
         let nodes = self.repository.list_nodes(workflow_id).await?;
         let Some(node) = current_bound_node(&nodes) else {
             return Ok(());
@@ -228,10 +234,14 @@ where
             .ok()
             .and_then(|payload| payload["runtime_instance_id"].as_str().map(str::to_string));
         if terminal == AgentTerminal::TurnInterrupted
-            && self
+            && (self
                 .repository
                 .terminal_event_precedes_latest_resume(workflow_id, &event.event_id)
                 .await?
+                || self
+                    .repository
+                    .terminal_event_is_resolved_patch_interruption(workflow_id, &event.event_id)
+                    .await?)
         {
             return Ok(());
         }
@@ -459,10 +469,72 @@ where
         Ok(())
     }
 
-    async fn reconcile_blocked_replanner(&self, workflow_id: &str) -> Result<()> {
+    async fn reconcile_patch_continuation(&self, workflow_id: &str) -> Result<bool> {
         let Some(patch) = self
             .repository
-            .get_blocked_patch_for_replanner(workflow_id)
+            .get_resolved_patch_awaiting_continuation(workflow_id)
+            .await?
+        else {
+            return Ok(false);
+        };
+        let Some(message_id) = patch.continuation_message_id.as_deref() else {
+            return Ok(false);
+        };
+        let Some(result_revision) = patch.result_revision else {
+            return Ok(false);
+        };
+        let decision_ref = patch
+            .decision_document_ref
+            .as_deref()
+            .unwrap_or("unavailable");
+        let decision_path = self
+            .pontia_home
+            .join("workflows")
+            .join(&patch.workflow_id)
+            .join(decision_ref);
+        let summary = match tokio::fs::read_to_string(&decision_path).await {
+            Ok(document) => bounded_summary(&document, 500),
+            Err(error) => {
+                tracing::warn!(patch_id = %patch.patch_id, %error, "cannot read Patch decision for continuation; coordinator will retry");
+                return Ok(true);
+            }
+        };
+        let input = format!(
+            "Workflow Patch {} was {}. Continue Agent Node {} on accepted revision {}. Decision summary: {} Decision document: {}",
+            patch.patch_id,
+            patch.state,
+            patch.requesting_node_id,
+            result_revision,
+            summary,
+            decision_ref,
+        );
+        self.inbox
+            .submit_message_once(
+                message_id,
+                &patch.requesting_session_id,
+                SubmitInboxMessageRequest {
+                    input,
+                    delivery_policy: "after_idle".into(),
+                    branch_target_turn_id: None,
+                    metadata: json!({
+                        "workflow_patch_id": patch.patch_id,
+                        "workflow_patch_outcome": patch.state,
+                        "workflow_revision": result_revision,
+                        "decision_document_ref": decision_ref,
+                    }),
+                },
+            )
+            .await?;
+        self.repository
+            .mark_patch_continuation_queued(&patch.patch_id, message_id)
+            .await?;
+        Ok(true)
+    }
+
+    async fn reconcile_resolved_replanner(&self, workflow_id: &str) -> Result<()> {
+        let Some(patch) = self
+            .repository
+            .get_resolved_patch_for_replanner(workflow_id)
             .await?
         else {
             return Ok(());
@@ -570,6 +642,17 @@ where
             }
         }
         Ok(())
+    }
+}
+
+fn bounded_summary(document: &str, max_chars: usize) -> String {
+    let normalized = document.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut chars = normalized.chars();
+    let summary = chars.by_ref().take(max_chars).collect::<String>();
+    if chars.next().is_some() {
+        format!("{summary}…")
+    } else {
+        summary
     }
 }
 

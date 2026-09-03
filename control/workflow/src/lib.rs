@@ -27,9 +27,9 @@ pub use query::{
 };
 pub use scheduler::WorkflowScheduler;
 pub use types::{
-    AcceptedWorkflowDefinition, AcceptedWorkflowNode, BlockWorkflowPatch,
-    BlockWorkflowPatchOutcome, DefinitionChangePlan, InitialHandoff, PlannedNodeParent,
-    PlannedWorkflowNode, RequestWorkflowPatch, RequestWorkflowPatchOutcome, RunWorkflowOutcome,
-    RunWorkflowRequest, StartWorkflowOutcome, SubmitWorkflowNodeRequest, WorkflowDefinitionHandoff,
-    WorkflowNodeDefinition,
+    AcceptedWorkflowDefinition, AcceptedWorkflowNode, ApplyWorkflowPatch,
+    ApplyWorkflowPatchOutcome, BlockWorkflowPatch, BlockWorkflowPatchOutcome, DefinitionChangePlan,
+    InitialHandoff, PlannedNodeParent, PlannedWorkflowNode, RequestWorkflowPatch,
+    RequestWorkflowPatchOutcome, RunWorkflowOutcome, RunWorkflowRequest, StartWorkflowOutcome,
+    SubmitWorkflowNodeRequest, WorkflowDefinitionHandoff, WorkflowNodeDefinition,
 };

@@ -20,6 +20,7 @@ pub use event_ingestion::{InternalEventRequest, InternalEventResponse, post_even
 pub use response::ApiError;
 pub use runtime_binding::upsert_runtime_binding;
 pub use workflow::{
-    WorkflowPatchBlockRequest, WorkflowPatchRequest, WorkflowRunRequest, WorkflowSubmissionRequest,
-    block_workflow_patch, request_workflow_patch, run_workflow, submit_workflow_output,
+    WorkflowPatchApplyRequest, WorkflowPatchBlockRequest, WorkflowPatchRequest, WorkflowRunRequest,
+    WorkflowSubmissionRequest, apply_workflow_patch, block_workflow_patch, request_workflow_patch,
+    run_workflow, submit_workflow_output,
 };

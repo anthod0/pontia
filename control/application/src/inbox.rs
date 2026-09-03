@@ -51,6 +51,28 @@ impl InboxCommandService {
         session_id: &str,
         request: SubmitInboxMessageRequest,
     ) -> Result<InboxCommandOutcome> {
+        self.submit_message_with_id(&new_message_id().to_string(), session_id, request)
+            .await
+    }
+
+    /// Queues a message under a caller-owned stable identity. Repeating that
+    /// identity for the same Session does not enqueue a second message.
+    pub async fn submit_message_once(
+        &self,
+        message_id: &str,
+        session_id: &str,
+        request: SubmitInboxMessageRequest,
+    ) -> Result<InboxCommandOutcome> {
+        self.submit_message_with_id(message_id, session_id, request)
+            .await
+    }
+
+    async fn submit_message_with_id(
+        &self,
+        message_id: &str,
+        session_id: &str,
+        request: SubmitInboxMessageRequest,
+    ) -> Result<InboxCommandOutcome> {
         if request.input.trim().is_empty() {
             return Err(Error::Domain(
                 "inbox message input must not be blank".to_string(),
@@ -93,18 +115,23 @@ impl InboxCommandService {
                 .await?;
         }
 
-        let message_id = new_message_id().to_string();
         let metadata = serde_json::to_string(&request.metadata)?;
 
         let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
+        if let Some(existing) = inbox_repository.get_message(session_id, message_id).await? {
+            return Ok(InboxCommandOutcome {
+                data: json!({ "inbox_message": row_to_view(existing)? }),
+                duplicate: true,
+            });
+        }
         if request.delivery_policy == "interrupt_now" {
             inbox_repository
-                .supersede_pending_interrupts(session_id, &message_id)
+                .supersede_pending_interrupts(session_id, message_id)
                 .await?;
         }
-        inbox_repository
-            .insert_message(
-                &message_id,
+        let inserted = inbox_repository
+            .insert_message_once(
+                message_id,
                 session_id,
                 &request.delivery_policy,
                 &request.input,
@@ -112,6 +139,20 @@ impl InboxCommandService {
                 request.branch_target_turn_id.as_deref(),
             )
             .await?;
+        if !inserted {
+            let existing = inbox_repository
+                .get_message(session_id, message_id)
+                .await?
+                .ok_or_else(|| {
+                    Error::StateConflict(format!(
+                        "inbox message identity {message_id} belongs to another Session"
+                    ))
+                })?;
+            return Ok(InboxCommandOutcome {
+                data: json!({ "inbox_message": row_to_view(existing)? }),
+                duplicate: true,
+            });
+        }
 
         self.audit(
             session_id,
@@ -127,7 +168,7 @@ impl InboxCommandService {
         if request.delivery_policy == "interrupt_now" && active_turn.is_some() {
             if !session.capabilities.interrupt {
                 self.mark_failed(
-                    &message_id,
+                    message_id,
                     "session ".to_string() + session_id + " runtime does not support interrupt",
                 )
                 .await?;
@@ -135,14 +176,14 @@ impl InboxCommandService {
                 .interrupt_current_turn(session_id)
                 .await
             {
-                self.mark_failed(&message_id, error.to_string()).await?;
+                self.mark_failed(message_id, error.to_string()).await?;
             }
         }
 
         self.drain_inbox(session_id).await?;
 
         let message = self
-            .get_message(session_id, &message_id)
+            .get_message(session_id, message_id)
             .await?
             .ok_or_else(|| Error::Domain("submitted inbox message missing".to_string()))?;
         Ok(InboxCommandOutcome {

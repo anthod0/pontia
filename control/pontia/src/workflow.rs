@@ -34,6 +34,7 @@ struct PatchArgs {
 #[derive(Debug, Subcommand)]
 enum PatchCommandKind {
     Request(PatchRequestArgs),
+    Apply(PatchApplyArgs),
     Block(PatchBlockArgs),
 }
 
@@ -41,6 +42,12 @@ enum PatchCommandKind {
 struct PatchRequestArgs {
     #[arg(long, value_name = "REQUEST_FILE")]
     input: PathBuf,
+}
+
+#[derive(Debug, Args)]
+struct PatchApplyArgs {
+    #[arg(long, value_name = "DECISION_FILE")]
+    decision: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -142,6 +149,13 @@ struct WorkflowPatchRequest {
 }
 
 #[derive(Debug, Serialize)]
+struct WorkflowPatchApplyRequest {
+    session_id: String,
+    runtime_instance_id: String,
+    decision: String,
+}
+
+#[derive(Debug, Serialize)]
 struct WorkflowPatchBlockRequest {
     session_id: String,
     runtime_instance_id: String,
@@ -156,6 +170,8 @@ struct WorkflowPatchResponse {
 #[derive(Debug, Deserialize)]
 struct WorkflowPatchResponseData {
     patch_id: String,
+    outcome: Option<String>,
+    revision: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -228,6 +244,7 @@ pub(crate) async fn run(workflow: WorkflowCommand, config: &AppConfig) -> Result
         WorkflowCommandKind::Submit(args) => submit_workflow(args, config).await,
         WorkflowCommandKind::Patch(args) => match args.command {
             PatchCommandKind::Request(args) => request_workflow_patch(args, config).await,
+            PatchCommandKind::Apply(args) => apply_workflow_patch(args, config).await,
             PatchCommandKind::Block(args) => block_workflow_patch(args, config).await,
         },
     }
@@ -506,6 +523,56 @@ async fn request_workflow_patch(args: PatchRequestArgs, config: &AppConfig) -> R
         .await
         .map_err(|error| format!("failed to decode Workflow Patch response: {error}"))?;
     println!("{}", response.data.patch_id);
+    Ok(())
+}
+
+async fn apply_workflow_patch(args: PatchApplyArgs, config: &AppConfig) -> Result<(), String> {
+    let decision = fs::read_to_string(&args.decision).map_err(|error| {
+        format!(
+            "failed to read UTF-8 Workflow Patch decision file {}: {error}",
+            args.decision.display()
+        )
+    })?;
+    let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
+    let token = config
+        .external_api_token
+        .as_deref()
+        .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
+    let url = format!(
+        "http://{}/internal/v1/workflow/patches/apply",
+        local_api_addr(config.bind_addr)
+    );
+    let response = reqwest::Client::new()
+        .post(url)
+        .bearer_auth(token)
+        .json(&WorkflowPatchApplyRequest {
+            session_id,
+            runtime_instance_id,
+            decision,
+        })
+        .send()
+        .await
+        .map_err(|error| format!("failed to apply Workflow Patch: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Workflow Patch apply failed with HTTP {status}: {body}"
+        ));
+    }
+    let response = response
+        .json::<WorkflowPatchResponse>()
+        .await
+        .map_err(|error| format!("failed to decode Workflow Patch response: {error}"))?;
+    let outcome = response
+        .data
+        .outcome
+        .ok_or_else(|| "Workflow Patch apply response did not include an outcome".to_string())?;
+    let revision = response
+        .data
+        .revision
+        .ok_or_else(|| "Workflow Patch apply response did not include a revision".to_string())?;
+    println!("{outcome} {revision}");
     Ok(())
 }
 

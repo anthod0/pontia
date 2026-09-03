@@ -56,6 +56,31 @@ impl SqliteInboxRepository {
         Ok(())
     }
 
+    pub async fn insert_message_once(
+        &self,
+        message_id: &str,
+        session_id: &str,
+        delivery_policy: &str,
+        input_summary: &str,
+        metadata: &str,
+        branch_target_turn_id: Option<&str>,
+    ) -> Result<bool> {
+        let result = sqlx::query(
+            r#"INSERT OR IGNORE INTO inbox_messages
+               (message_id, session_id, state, delivery_policy, input_summary, metadata, branch_target_turn_id)
+               VALUES (?, ?, 'pending', ?, ?, ?, ?)"#,
+        )
+        .bind(message_id)
+        .bind(session_id)
+        .bind(delivery_policy)
+        .bind(input_summary)
+        .bind(metadata)
+        .bind(branch_target_turn_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() == 1)
+    }
+
     pub async fn list_messages(&self, session_id: &str) -> Result<Vec<InboxMessageRow>> {
         Ok(
             sqlx::query_as::<_, InboxMessageRow>(SELECT_INBOX_MESSAGE_SQL_WITH_SESSION)
