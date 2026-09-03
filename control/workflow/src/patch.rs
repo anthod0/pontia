@@ -52,6 +52,38 @@ impl WorkflowPatchService {
             .join(&patch_id);
         self.write_request_document(&patch_dir, &request.document)
             .await?;
+        let workflow_file = patch_dir
+            .parent()
+            .and_then(Path::parent)
+            .expect("Patch directory has a Workflow parent")
+            .join("workflow.toml");
+        let workflow_metadata = match std::fs::symlink_metadata(&workflow_file) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                self.remove_unaccepted_document(&patch_dir).await;
+                return Err(error.into());
+            }
+        };
+        if workflow_metadata.file_type().is_symlink() || !workflow_metadata.is_file() {
+            self.remove_unaccepted_document(&patch_dir).await;
+            return Err(Error::InvalidWorkflowId(
+                workflow_file.display().to_string(),
+            ));
+        }
+        let accepted_definition = match tokio::fs::read(&workflow_file).await {
+            Ok(definition) => definition,
+            Err(error) => {
+                self.remove_unaccepted_document(&patch_dir).await;
+                return Err(error.into());
+            }
+        };
+        if let Err(error) = self
+            .write_atomic(&patch_dir, "accepted-definition.toml", &accepted_definition)
+            .await
+        {
+            self.remove_unaccepted_document(&patch_dir).await;
+            return Err(error);
+        }
 
         let accepted = self
             .repository
@@ -171,8 +203,9 @@ impl WorkflowPatchService {
                 (retired_node_ids, records)
             }
         };
-        let decision_document_ref = format!("patches/{}/decision.md", patch.patch_id);
-        self.write_atomic(&patch_dir, "decision.md", request.decision.as_bytes())
+        let decision_name = format!("decision-{}.md", Uuid::now_v7());
+        let decision_document_ref = format!("patches/{}/{}", patch.patch_id, decision_name);
+        self.write_atomic(&patch_dir, &decision_name, request.decision.as_bytes())
             .await?;
         let decision_size_bytes = i64::try_from(request.decision.len()).map_err(|_| {
             Error::InvalidDefinition("Workflow Patch decision document is too large".into())
@@ -246,7 +279,9 @@ impl WorkflowPatchService {
         let patch_dir = workflow_dir.join("patches").join(&patch.patch_id);
         self.validate_patch_directory(&workflow_dir, &patch_dir)?;
 
-        self.write_atomic(&patch_dir, "reason.md", request.reason.as_bytes())
+        let resolution_token = Uuid::now_v7();
+        let reason_name = format!("reason-{resolution_token}.md");
+        self.write_atomic(&patch_dir, &reason_name, request.reason.as_bytes())
             .await?;
         let workflow_file = workflow_dir.join("workflow.toml");
         let accepted_file = patch_dir.join("accepted-definition.toml");
@@ -259,13 +294,13 @@ impl WorkflowPatchService {
         let accepted = tokio::fs::read(&accepted_file).await?;
         let draft = tokio::fs::read(&workflow_file).await?;
         let blocked_draft_ref = if draft != accepted {
-            self.write_atomic(&patch_dir, "blocked-draft.toml", &draft)
-                .await?;
-            Some(format!("patches/{}/blocked-draft.toml", patch.patch_id))
+            let draft_name = format!("blocked-draft-{resolution_token}.toml");
+            self.write_atomic(&patch_dir, &draft_name, &draft).await?;
+            Some(format!("patches/{}/{}", patch.patch_id, draft_name))
         } else {
             None
         };
-        let reason_document_ref = format!("patches/{}/reason.md", patch.patch_id);
+        let reason_document_ref = format!("patches/{}/{}", patch.patch_id, reason_name);
         let blocked = self
             .repository
             .block_patch(BlockWorkflowPatchRecord {
@@ -352,6 +387,7 @@ impl WorkflowPatchService {
     async fn remove_unaccepted_document(&self, patch_dir: &Path) {
         let _ = tokio::fs::remove_file(patch_dir.join(".request.md.tmp")).await;
         let _ = tokio::fs::remove_file(patch_dir.join("request.md")).await;
+        let _ = tokio::fs::remove_file(patch_dir.join("accepted-definition.toml")).await;
         let _ = tokio::fs::remove_dir(patch_dir).await;
     }
 }
@@ -367,7 +403,7 @@ fn bounded_summary(document: &str, max_chars: usize) -> String {
     }
 }
 
-fn accepted_from_graph(
+pub(crate) fn accepted_from_graph(
     workflow: &WorkflowRow,
     mut rows: Vec<WorkflowNodeRow>,
     handoffs: Vec<WorkflowDefinitionHandoff>,

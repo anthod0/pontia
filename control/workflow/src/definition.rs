@@ -369,6 +369,26 @@ pub(crate) fn accepted_definition_from_snapshot(
     })
 }
 
+pub(crate) fn definition_handoffs(
+    definition_bytes: &[u8],
+) -> Result<Vec<WorkflowDefinitionHandoff>> {
+    let source = std::str::from_utf8(definition_bytes).map_err(|_| {
+        Error::InvalidDefinition("accepted Workflow definition must be valid UTF-8".to_string())
+    })?;
+    let mut definition: WorkflowFile = toml::from_str(source).map_err(|error| {
+        Error::InvalidDefinition(format!("invalid accepted Workflow definition: {error}"))
+    })?;
+    normalize_file(&mut definition);
+    Ok(definition
+        .handoffs
+        .into_iter()
+        .map(|handoff| WorkflowDefinitionHandoff {
+            name: handoff.name,
+            source: handoff.source,
+        })
+        .collect())
+}
+
 pub(crate) fn accepted_definition_from_initial_request(
     request: &RunWorkflowRequest,
     nodes: Vec<AcceptedWorkflowNode>,

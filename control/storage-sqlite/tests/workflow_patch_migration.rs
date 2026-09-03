@@ -81,6 +81,43 @@ async fn replanner_blocking_migration_upgrades_the_preceding_patch_schema() {
 }
 
 #[tokio::test]
+async fn replanner_creation_token_migration_rejects_duplicate_sessions() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("workflow-replanner-token-migration.db");
+    let pool = connect_sqlite(&format!("sqlite://{}", db_path.display()))
+        .await
+        .expect("connect");
+    sqlx::raw_sql(
+        r#"CREATE TABLE sessions (
+            session_id TEXT PRIMARY KEY NOT NULL,
+            metadata TEXT NOT NULL DEFAULT '{}'
+        )"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("create preceding Session schema");
+    sqlx::raw_sql(include_str!(
+        "../migrations/0019_fence_workflow_replanner_creation.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("apply creation-token fence");
+
+    sqlx::query("INSERT INTO sessions (session_id, metadata) VALUES (?, ?)")
+        .bind("sess_one")
+        .bind(r#"{"workflow_replanner_creation_token":"token_one"}"#)
+        .execute(&pool)
+        .await
+        .expect("first Session");
+    let duplicate = sqlx::query("INSERT INTO sessions (session_id, metadata) VALUES (?, ?)")
+        .bind("sess_two")
+        .bind(r#"{"workflow_replanner_creation_token":"token_one"}"#)
+        .execute(&pool)
+        .await;
+    assert!(duplicate.is_err());
+}
+
+#[tokio::test]
 async fn fresh_schema_enforces_one_active_patch_per_workflow() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("workflow-patch-constraints.db");

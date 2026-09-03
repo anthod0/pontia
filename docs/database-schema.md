@@ -61,6 +61,7 @@
 |---|---|---|---|
 | `idx_sessions_execution_profile` | No | `workspace_id`, `execution_profile_id`, `execution_profile_version`, `state`, `updated_at`, `session_id` |  |
 | `idx_sessions_management_list` | No | `archived_at`, `pinned_at`, `updated_at`, `session_id` |  |
+| `idx_sessions_workflow_replanner_creation_token` | Yes | `json_extract(metadata, '$.workflow_replanner_creation_token')` | token is not NULL |
 | `idx_sessions_workspace` | No | `workspace_id`, `state`, `updated_at`, `session_id` |  |
 | `idx_sessions_workspace_handle` | Yes | `workspace_id`, `handle` | `handle IS NOT NULL AND state NOT IN ('exited', 'error')` |
 

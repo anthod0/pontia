@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, path::PathBuf, time::Duration};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use pontia_application::{
     AgentEventBroker, CreateSessionRequest, InboxCommandService, InitialTaskRequest,
@@ -6,8 +10,14 @@ use pontia_application::{
 };
 use pontia_core::domain::EventType;
 use pontia_storage_sqlite::{
-    models::workflows::{WorkflowNodeRow, WorkflowRow},
-    repositories::{events::SqliteEventRepository, workflows::SqliteWorkflowRepository},
+    models::{
+        events::EventRow,
+        workflows::{WorkflowNodeRow, WorkflowPatchRow, WorkflowRow},
+    },
+    repositories::{
+        events::SqliteEventRepository,
+        workflows::{ImplicitBlockWorkflowPatchRecord, SqliteWorkflowRepository},
+    },
 };
 use serde_json::json;
 use sqlx::SqlitePool;
@@ -15,8 +25,9 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 use crate::{
-    AgentEventSubscriber, GracefulExitRequester, Result, SessionCreator, TurnInterruptionRequester,
-    activation::activate_node,
+    AgentEventSubscriber, Error, GracefulExitRequester, Result, SessionCreator,
+    TurnInterruptionRequester, activation::activate_node, definition::definition_handoffs,
+    patch::accepted_from_graph, render_accepted_workflow_definition,
 };
 
 const RECONCILIATION_INTERVAL: Duration = Duration::from_millis(250);
@@ -204,7 +215,9 @@ where
             return self.reconcile_patch_request(workflow_id).await;
         }
         if workflow.state == "blocked" {
-            return self.reconcile_resolved_replanner(workflow_id).await;
+            self.reconcile_resolved_replanner(workflow_id).await?;
+            self.reconcile_definition_file(workflow_id).await?;
+            return Ok(());
         }
         if workflow.state != "running" {
             return Ok(());
@@ -213,6 +226,7 @@ where
             return Ok(());
         }
         self.reconcile_resolved_replanner(workflow_id).await?;
+        self.reconcile_definition_file(workflow_id).await?;
         let nodes = self.repository.list_nodes(workflow_id).await?;
         let Some(node) = current_bound_node(&nodes) else {
             return Ok(());
@@ -329,8 +343,33 @@ where
             .await?
         {
             if patch.state == "requested" {
-                self.ensure_replanner(&patch).await?;
+                if let Err(error) = self.ensure_replanner(&patch).await {
+                    if is_permanent_side_effect_failure(&error) {
+                        self.implicitly_block_patch(
+                            &patch,
+                            None,
+                            &format!("Re-planner Session could not be created: {error}"),
+                        )
+                        .await?;
+                    } else {
+                        return Err(error);
+                    }
+                }
+            } else {
+                self.reconcile_unresolved_replanner(&patch).await?;
             }
+            return Ok(());
+        }
+        if let Some(event) = self.requester_terminal_before_interruption(&patch).await? {
+            self.implicitly_block_patch(
+                &patch,
+                None,
+                &format!(
+                    "Requester {} made continuation impossible before interruption was confirmed",
+                    event.event_type
+                ),
+            )
+            .await?;
             return Ok(());
         }
         if !self
@@ -353,6 +392,14 @@ where
                 self.repository
                     .mark_patch_interruption_requested(&patch.patch_id)
                     .await?;
+            }
+            Err(error) if is_permanent_side_effect_failure(&error) => {
+                self.implicitly_block_patch(
+                    &patch,
+                    None,
+                    &format!("Requester interruption is permanently unavailable: {error}"),
+                )
+                .await?;
             }
             Err(error) => {
                 tracing::warn!(
@@ -467,6 +514,169 @@ where
             .bind_patch_replanner(&patch.patch_id, &session_id, &Uuid::now_v7().to_string())
             .await?;
         Ok(())
+    }
+
+    async fn requester_terminal_before_interruption(
+        &self,
+        patch: &WorkflowPatchRow,
+    ) -> Result<Option<EventRow>> {
+        let Some(event) = self
+            .persisted_events
+            .latest_workflow_terminal_event(&patch.requesting_session_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+        if !event_has_runtime(&event, &patch.requesting_runtime_instance_id) {
+            return Ok(None);
+        }
+        let terminal = AgentTerminal::from_event_type(&event.event_type);
+        let belongs_to_requesting_turn =
+            event.turn_id.as_deref() == Some(patch.requesting_turn_id.as_str());
+        if terminal == Some(AgentTerminal::SessionExited)
+            || (belongs_to_requesting_turn
+                && matches!(
+                    terminal,
+                    Some(AgentTerminal::TurnCompleted | AgentTerminal::TurnFailed)
+                ))
+        {
+            Ok(Some(event))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn reconcile_unresolved_replanner(&self, patch: &WorkflowPatchRow) -> Result<()> {
+        let (Some(session_id), Some(runtime_instance_id)) = (
+            patch.replanner_session_id.as_deref(),
+            patch.replanner_runtime_instance_id.as_deref(),
+        ) else {
+            return Ok(());
+        };
+        let Some(event) = self
+            .persisted_events
+            .latest_workflow_terminal_event(session_id)
+            .await?
+        else {
+            return Ok(());
+        };
+        if !event_has_runtime(&event, runtime_instance_id) {
+            return Ok(());
+        }
+        let Some(terminal) = AgentTerminal::from_event_type(&event.event_type) else {
+            return Ok(());
+        };
+        let turn_id = if terminal == AgentTerminal::SessionExited {
+            event.turn_id.clone()
+        } else {
+            let Some(turn_id) = event.turn_id.clone() else {
+                return Ok(());
+            };
+            Some(turn_id)
+        };
+        self.implicitly_block_patch(
+            patch,
+            turn_id,
+            &format!(
+                "Re-planner reported {} before resolving the Workflow Patch",
+                event.event_type
+            ),
+        )
+        .await
+    }
+
+    async fn implicitly_block_patch(
+        &self,
+        patch: &WorkflowPatchRow,
+        replanner_turn_id: Option<String>,
+        reason: &str,
+    ) -> Result<()> {
+        let workflow_dir = self.pontia_home.join("workflows").join(&patch.workflow_id);
+        let patch_dir = workflow_dir.join("patches").join(&patch.patch_id);
+        validate_regular_directory(&workflow_dir)?;
+        validate_regular_directory(&patch_dir)?;
+        let token = Uuid::now_v7();
+        let reason_name = format!("reason-{token}.md");
+        write_atomic(&patch_dir, &reason_name, reason.as_bytes()).await?;
+        let reason_document_ref = format!("patches/{}/{}", patch.patch_id, reason_name);
+
+        let accepted_file = patch_dir.join("accepted-definition.toml");
+        validate_regular_file(&accepted_file)?;
+        let accepted = tokio::fs::read(&accepted_file).await?;
+        let workflow_file = workflow_dir.join("workflow.toml");
+        let draft = match std::fs::symlink_metadata(&workflow_file) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                return Err(Error::InvalidWorkflowId(
+                    workflow_file.display().to_string(),
+                ));
+            }
+            Ok(_) => Some(tokio::fs::read(&workflow_file).await?),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        let blocked_draft_ref = match draft {
+            Some(draft) if draft != accepted => {
+                let name = format!("blocked-draft-{token}.toml");
+                write_atomic(&patch_dir, &name, &draft).await?;
+                Some(format!("patches/{}/{}", patch.patch_id, name))
+            }
+            _ => None,
+        };
+        let blocked = self
+            .repository
+            .implicitly_block_patch(ImplicitBlockWorkflowPatchRecord {
+                patch_id: patch.patch_id.clone(),
+                replanner_turn_id,
+                reason_document_ref,
+                blocked_draft_ref,
+                reason_summary: bounded_summary(reason, 500),
+                event_id: Uuid::now_v7().to_string(),
+            })
+            .await?;
+        if blocked {
+            self.reconcile_definition_file(&patch.workflow_id).await?;
+        }
+        Ok(())
+    }
+
+    async fn reconcile_definition_file(&self, workflow_id: &str) -> Result<()> {
+        let Some(workflow) = self.repository.get_workflow(workflow_id).await? else {
+            return Ok(());
+        };
+        if workflow.state == "replanning" {
+            return Ok(());
+        }
+        let Some(patch) = self.repository.get_latest_patch(workflow_id).await? else {
+            return Ok(());
+        };
+        let workflow_dir = self.pontia_home.join("workflows").join(workflow_id);
+        let snapshot = workflow_dir
+            .join("patches")
+            .join(&patch.patch_id)
+            .join("accepted-definition.toml");
+        validate_regular_directory(&workflow_dir)?;
+        validate_regular_file(&snapshot)?;
+        let snapshot_bytes = tokio::fs::read(snapshot).await?;
+        let handoffs = definition_handoffs(&snapshot_bytes)?;
+        let nodes = self.repository.list_nodes(workflow_id).await?;
+        let accepted = accepted_from_graph(&workflow, nodes, handoffs)?;
+        let rendered = render_accepted_workflow_definition(&accepted)?;
+        let workflow_file = workflow_dir.join("workflow.toml");
+        match std::fs::symlink_metadata(&workflow_file) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                return Err(Error::InvalidWorkflowId(
+                    workflow_file.display().to_string(),
+                ));
+            }
+            Ok(_) => {
+                if tokio::fs::read(&workflow_file).await? == rendered.as_bytes() {
+                    return Ok(());
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        write_atomic(&workflow_dir, "workflow.toml", rendered.as_bytes()).await
     }
 
     async fn reconcile_patch_continuation(&self, workflow_id: &str) -> Result<bool> {
@@ -643,6 +853,52 @@ where
         }
         Ok(())
     }
+}
+
+fn event_has_runtime(event: &EventRow, expected_runtime_instance_id: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(&event.payload)
+        .ok()
+        .and_then(|payload| payload["runtime_instance_id"].as_str().map(str::to_string))
+        .as_deref()
+        == Some(expected_runtime_instance_id)
+}
+
+fn is_permanent_side_effect_failure(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::RuntimeControlUnavailable { .. }
+            | Error::Pontia(
+                pontia_core::Error::CapabilityUnavailable(_)
+                    | pontia_core::Error::NotFound(_)
+                    | pontia_core::Error::StateConflict(_)
+            )
+    )
+}
+
+fn validate_regular_directory(path: &Path) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(Error::InvalidWorkflowId(path.display().to_string()));
+    }
+    Ok(())
+}
+
+fn validate_regular_file(path: &Path) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(Error::InvalidWorkflowId(path.display().to_string()));
+    }
+    Ok(())
+}
+
+async fn write_atomic(directory: &Path, name: &str, content: &[u8]) -> Result<()> {
+    let pending = directory.join(format!(".{name}.tmp"));
+    tokio::fs::write(&pending, content).await?;
+    if let Err(error) = tokio::fs::rename(&pending, directory.join(name)).await {
+        let _ = tokio::fs::remove_file(&pending).await;
+        return Err(error.into());
+    }
+    Ok(())
 }
 
 fn bounded_summary(document: &str, max_chars: usize) -> String {

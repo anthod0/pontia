@@ -17,13 +17,33 @@ use crate::{
 struct PersistingSessionCreator {
     pool: sqlx::SqlitePool,
     requests: Arc<Mutex<Vec<CreateSessionRequest>>>,
+    session_id: &'static str,
+    turn_id: &'static str,
+    runtime_id: &'static str,
 }
 
 impl PersistingSessionCreator {
     fn new(pool: sqlx::SqlitePool) -> Self {
+        Self::with_identity(
+            pool,
+            "sess_replanner",
+            "turn_replanner",
+            "runtime_replanner",
+        )
+    }
+
+    fn with_identity(
+        pool: sqlx::SqlitePool,
+        session_id: &'static str,
+        turn_id: &'static str,
+        runtime_id: &'static str,
+    ) -> Self {
         Self {
             pool,
             requests: Arc::new(Mutex::new(Vec::new())),
+            session_id,
+            turn_id,
+            runtime_id,
         }
     }
 }
@@ -55,13 +75,13 @@ impl SessionCreator for PersistingSessionCreator {
             .push(request.clone());
         seed_replanner_session(
             &self.pool,
-            "sess_replanner",
-            "turn_replanner",
-            "runtime_replanner",
+            self.session_id,
+            self.turn_id,
+            self.runtime_id,
             &request.metadata,
         )
         .await;
-        Ok("sess_replanner".into())
+        Ok(self.session_id.into())
     }
 }
 
@@ -175,17 +195,19 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
         .expect("block Patch");
     assert_eq!(outcome.patch_id, patch_id);
     assert_eq!(std::fs::read_to_string(&workflow_file).unwrap(), accepted);
-    let patch_dir = pontia_home.join(format!("workflows/wf_block/patches/{patch_id}"));
+    let blocked = repository.get_patch(&patch_id).await.unwrap().unwrap();
+    let workflow_dir = pontia_home.join("workflows/wf_block");
     assert_eq!(
-        std::fs::read_to_string(patch_dir.join("reason.md")).unwrap(),
+        std::fs::read_to_string(workflow_dir.join(blocked.reason_document_ref.as_deref().unwrap()))
+            .unwrap(),
         "No executable continuation exists."
     );
     assert_eq!(
-        std::fs::read_to_string(patch_dir.join("blocked-draft.toml")).unwrap(),
+        std::fs::read_to_string(workflow_dir.join(blocked.blocked_draft_ref.as_deref().unwrap()))
+            .unwrap(),
         "unaccepted draft"
     );
 
-    let blocked = repository.get_patch(&patch_id).await.unwrap().unwrap();
     assert_eq!(blocked.state, "blocked");
     assert_eq!(blocked.replanner_turn_id.as_deref(), Some("turn_replanner"));
     assert_eq!(
@@ -217,7 +239,8 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
         .await;
     assert!(stale.is_err());
     assert_eq!(
-        std::fs::read_to_string(patch_dir.join("reason.md")).unwrap(),
+        std::fs::read_to_string(workflow_dir.join(blocked.reason_document_ref.as_deref().unwrap()))
+            .unwrap(),
         "No executable continuation exists."
     );
 
@@ -283,6 +306,12 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
 
     let workflow_file = pontia_home.join("workflows/wf_apply/workflow.toml");
     std::fs::write(&workflow_file, "not valid = [").unwrap();
+    coordinator.reconcile("wf_apply").await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&workflow_file).unwrap(),
+        "not valid = [",
+        "an active Re-planner draft must not be repaired"
+    );
     let invalid = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .apply_patch(ApplyWorkflowPatch {
             session_id: "sess_replanner".into(),
@@ -414,6 +443,278 @@ output = "replacement.md"
         "the Patch-owned interruption must not fail resumed execution"
     );
     assert!(exits.requests.lock().unwrap().is_empty());
+
+    std::fs::remove_file(&workflow_file).unwrap();
+    coordinator.reconcile("wf_apply").await.unwrap();
+    let repaired = std::fs::read_to_string(&workflow_file).unwrap();
+    assert!(repaired.contains("revision = 2"));
+    assert!(repaired.contains("title = \"Replacement\""));
+
+    sqlx::query("UPDATE turns SET state = 'interrupted' WHERE turn_id = 'turn_requester'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO turns (turn_id, session_id, state, topology_status) VALUES ('turn_requester_second', 'sess_requester', 'running', 'root')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("UPDATE sessions SET current_turn_id = 'turn_requester_second', state = 'busy' WHERE session_id = 'sess_requester'")
+        .execute(&pool).await.unwrap();
+    let second_patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
+        .request_patch(RequestWorkflowPatch {
+            session_id: "sess_requester".into(),
+            runtime_instance_id: "runtime_requester".into(),
+            document: "Refine the replacement once more.".into(),
+        })
+        .await
+        .unwrap()
+        .patch_id;
+    insert_fact(
+        &pool,
+        "evt_apply_interrupted_second",
+        "sess_requester",
+        "turn_requester_second",
+        "turn.interrupted",
+        "runtime_requester",
+    )
+    .await;
+    let second_coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
+        PersistingSessionCreator::with_identity(
+            pool.clone(),
+            "sess_replanner_second",
+            "turn_replanner_second",
+            "runtime_replanner_second",
+        ),
+        RecordingExitRequester::default(),
+        TestAgentEvents::new(pool.clone()),
+        pontia_home.clone(),
+    );
+    second_coordinator.reconcile("wf_apply").await.unwrap();
+    std::fs::write(
+        &workflow_file,
+        r#"workflow_id = "wf_apply"
+revision = 2
+title = "Convergence workflow"
+cwd = "/workspace/project"
+
+[[nodes]]
+id = "wf_apply_root"
+type = "agent"
+phase = "Test Phase"
+title = "Root"
+instructions = "Produce the root output."
+inputs = []
+output = "root.md"
+
+[[nodes]]
+type = "agent"
+phase = "Final plan"
+title = "Final replacement"
+instructions = "Complete the final replacement."
+inputs = ["root.md"]
+output = "final.md"
+"#,
+    )
+    .unwrap();
+    let second_outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
+        .apply_patch(ApplyWorkflowPatch {
+            session_id: "sess_replanner_second".into(),
+            runtime_instance_id: "runtime_replanner_second".into(),
+            decision: "Use the final replacement.".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(second_outcome.revision, 3);
+    let final_history = repository.list_node_history("wf_apply").await.unwrap();
+    assert_eq!(final_history.len(), 4);
+    assert_eq!(
+        final_history
+            .iter()
+            .find(|node| node.node_id == replacement.node_id)
+            .unwrap()
+            .retired_revision,
+        Some(3)
+    );
+    assert_eq!(
+        repository
+            .get_patch(&second_patch_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "applied"
+    );
+}
+
+#[tokio::test]
+async fn requester_terminal_fact_implicitly_blocks_and_preserves_the_accepted_outcome() {
+    let temp = tempfile::tempdir().unwrap();
+    let pontia_home = temp.path().join("pontia-home");
+    std::fs::create_dir(&pontia_home).unwrap();
+    let pool = test_pool(&temp.path().join("requester-terminal.db")).await;
+    let repository = SqliteWorkflowRepository::new(pool.clone());
+    seed_requester(
+        &pool,
+        &repository,
+        &pontia_home,
+        "wf_requester_terminal",
+        false,
+    )
+    .await;
+    let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
+        .request_patch(RequestWorkflowPatch {
+            session_id: "sess_requester".into(),
+            runtime_instance_id: "runtime_requester".into(),
+            document: "Re-plan before continuing".into(),
+        })
+        .await
+        .unwrap()
+        .patch_id;
+    insert_fact(
+        &pool,
+        "evt_requester_failed",
+        "sess_requester",
+        "turn_requester",
+        "turn.failed",
+        "runtime_requester",
+    )
+    .await;
+
+    let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
+        PersistingSessionCreator::new(pool.clone()),
+        RecordingExitRequester::default(),
+        TestAgentEvents::new(pool.clone()),
+        pontia_home.clone(),
+    );
+    coordinator
+        .reconcile("wf_requester_terminal")
+        .await
+        .unwrap();
+
+    let patch = repository.get_patch(&patch_id).await.unwrap().unwrap();
+    assert_eq!(patch.state, "blocked");
+    assert!(patch.reason_document_ref.is_some());
+    assert_eq!(
+        repository
+            .get_workflow("wf_requester_terminal")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "blocked"
+    );
+    let events = repository
+        .list_events("wf_requester_terminal")
+        .await
+        .unwrap();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.event_type == "workflow.patch_blocked")
+            .count(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM events WHERE event_type IN ('turn.completed', 'session.exited')"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0,
+        "the coordinator must not fabricate Agent lifecycle facts"
+    );
+}
+
+#[tokio::test]
+async fn unresolved_replanner_terminal_blocks_once_restores_definition_and_late_facts_do_not_change_it()
+ {
+    let temp = tempfile::tempdir().unwrap();
+    let pontia_home = temp.path().join("pontia-home");
+    std::fs::create_dir(&pontia_home).unwrap();
+    let pool = test_pool(&temp.path().join("replanner-terminal.db")).await;
+    let repository = SqliteWorkflowRepository::new(pool.clone());
+    seed_requester(
+        &pool,
+        &repository,
+        &pontia_home,
+        "wf_planner_terminal",
+        false,
+    )
+    .await;
+    let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
+        .request_patch(RequestWorkflowPatch {
+            session_id: "sess_requester".into(),
+            runtime_instance_id: "runtime_requester".into(),
+            document: "Re-plan".into(),
+        })
+        .await
+        .unwrap()
+        .patch_id;
+    insert_fact(
+        &pool,
+        "evt_requester_interrupted_terminal_case",
+        "sess_requester",
+        "turn_requester",
+        "turn.interrupted",
+        "runtime_requester",
+    )
+    .await;
+    let exits = RecordingExitRequester::default();
+    let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
+        PersistingSessionCreator::new(pool.clone()),
+        exits.clone(),
+        TestAgentEvents::new(pool.clone()),
+        pontia_home.clone(),
+    );
+    coordinator.reconcile("wf_planner_terminal").await.unwrap();
+    let workflow_file = pontia_home.join("workflows/wf_planner_terminal/workflow.toml");
+    let accepted = std::fs::read_to_string(&workflow_file).unwrap();
+    std::fs::write(&workflow_file, "unfinished draft").unwrap();
+    insert_fact(
+        &pool,
+        "evt_replanner_failed_unresolved",
+        "sess_replanner",
+        "turn_replanner",
+        "turn.failed",
+        "runtime_replanner",
+    )
+    .await;
+
+    coordinator.reconcile("wf_planner_terminal").await.unwrap();
+    coordinator.reconcile("wf_planner_terminal").await.unwrap();
+    let blocked = repository.get_patch(&patch_id).await.unwrap().unwrap();
+    assert_eq!(blocked.state, "blocked");
+    assert_eq!(blocked.replanner_turn_id.as_deref(), Some("turn_replanner"));
+    assert!(blocked.blocked_draft_ref.is_some());
+    assert_eq!(std::fs::read_to_string(&workflow_file).unwrap(), accepted);
+    assert_eq!(
+        repository
+            .list_events("wf_planner_terminal")
+            .await
+            .unwrap()
+            .iter()
+            .filter(|event| event.event_type == "workflow.patch_blocked")
+            .count(),
+        1
+    );
+    assert_eq!(exits.requests.lock().unwrap().len(), 1);
+
+    insert_fact(
+        &pool,
+        "evt_replanner_completed_late",
+        "sess_replanner",
+        "turn_replanner",
+        "turn.completed",
+        "runtime_replanner",
+    )
+    .await;
+    coordinator.reconcile("wf_planner_terminal").await.unwrap();
+    assert_eq!(
+        repository.get_patch(&patch_id).await.unwrap().unwrap(),
+        blocked
+    );
 }
 
 #[tokio::test]
@@ -535,16 +836,26 @@ async fn crash_gap_recovers_the_session_with_the_persisted_creation_token() {
     .await;
 
     let creator = PersistingSessionCreator::new(pool.clone());
-    WorkflowCoordinator::with_services(
+    let coordinator_one = WorkflowCoordinator::with_services(
         pool.clone(),
         creator.clone(),
         RecordingExitRequester::default(),
-        TestAgentEvents::new(pool),
+        TestAgentEvents::new(pool.clone()),
+        pontia_home.clone(),
+    );
+    let coordinator_two = WorkflowCoordinator::with_services(
+        pool.clone(),
+        creator.clone(),
+        RecordingExitRequester::default(),
+        TestAgentEvents::new(pool.clone()),
         pontia_home,
-    )
-    .reconcile("wf_recover")
-    .await
-    .unwrap();
+    );
+    let (first, second) = tokio::join!(
+        coordinator_one.reconcile("wf_recover"),
+        coordinator_two.reconcile("wf_recover")
+    );
+    first.unwrap();
+    second.unwrap();
 
     assert!(creator.requests.lock().unwrap().is_empty());
     let patch = repository.get_patch(&patch_id).await.unwrap().unwrap();
@@ -552,6 +863,57 @@ async fn crash_gap_recovers_the_session_with_the_persisted_creation_token() {
     assert_eq!(
         patch.replanner_session_id.as_deref(),
         Some("sess_recovered_replanner")
+    );
+    assert_eq!(
+        repository
+            .list_events("wf_recover")
+            .await
+            .unwrap()
+            .iter()
+            .filter(|event| event.event_type == "workflow.replanner_started")
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn simultaneous_patch_requests_accept_exactly_one_active_patch() {
+    let temp = tempfile::tempdir().unwrap();
+    let pontia_home = temp.path().join("pontia-home");
+    std::fs::create_dir(&pontia_home).unwrap();
+    let pool = test_pool(&temp.path().join("concurrent-patch-request.db")).await;
+    let repository = SqliteWorkflowRepository::new(pool.clone());
+    seed_requester(
+        &pool,
+        &repository,
+        &pontia_home,
+        "wf_concurrent_patch",
+        false,
+    )
+    .await;
+    let first = WorkflowPatchService::new(pool.clone(), pontia_home.clone());
+    let second = WorkflowPatchService::new(pool.clone(), pontia_home);
+    let (first, second) = tokio::join!(
+        first.request_patch(RequestWorkflowPatch {
+            session_id: "sess_requester".into(),
+            runtime_instance_id: "runtime_requester".into(),
+            document: "first".into(),
+        }),
+        second.request_patch(RequestWorkflowPatch {
+            session_id: "sess_requester".into(),
+            runtime_instance_id: "runtime_requester".into(),
+            document: "second".into(),
+        })
+    );
+    assert_eq!(usize::from(first.is_ok()) + usize::from(second.is_ok()), 1);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM workflow_patches WHERE workflow_id = 'wf_concurrent_patch' AND state IN ('requested', 'planning')"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
     );
 }
 

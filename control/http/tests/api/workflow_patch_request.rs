@@ -347,12 +347,20 @@ async fn active_replanner_can_block_without_supplying_target_identifiers() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["data"]["patch_id"], patch_id);
     assert_eq!(body["data"]["state"], "blocked");
+    let repository = SqliteWorkflowRepository::new(app.db.clone());
+    let blocked = repository.get_patch(patch_id).await.unwrap().unwrap();
     assert_eq!(
-        fs::read_to_string(patch_dir.join("reason.md")).unwrap(),
+        fs::read_to_string(
+            app.pontia_home()
+                .path()
+                .join("workflows/wf_patch_request")
+                .join(blocked.reason_document_ref.unwrap())
+        )
+        .unwrap(),
         "Cannot continue"
     );
     assert_eq!(
-        SqliteWorkflowRepository::new(app.db.clone())
+        repository
             .get_workflow("wf_patch_request")
             .await
             .unwrap()
