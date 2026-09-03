@@ -107,6 +107,7 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_opens_das
     let config: toml::Value = toml::from_str(&config_text).expect("valid TOML");
     let token = config["external_api_token"].as_str().expect("token");
     assert_eq!(token.len(), 43);
+    assert_eq!(config["bind_addr"].as_str(), Some("127.0.0.1:8080"));
     assert_eq!(
         config["workspace_browser"]["roots"][0]["root_id"].as_str(),
         Some("home")

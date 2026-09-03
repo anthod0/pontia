@@ -30,6 +30,28 @@ describe("resolvePontiaConnection", () => {
     });
   });
 
+  test("uses the daemon default when bind_addr is absent", async () => {
+    const pontiaHome = await tempDir("pontia-pi-discovery-default-");
+    await writeFile(join(pontiaHome, "config.toml"), 'external_api_token = "token"\n');
+
+    const result = await resolvePontiaConnection({ pontiaHome });
+
+    expect(result).toEqual({
+      baseUrl: "http://127.0.0.1:8080",
+      internalEventUrl: "http://127.0.0.1:8080/internal/v1/events",
+      bindingUpsertUrl: "http://127.0.0.1:8080/internal/v1/runtime-bindings/upsert",
+      externalApiUrl: "http://127.0.0.1:8080/external/v1",
+      externalApiToken: "token",
+    });
+  });
+
+  test("does not replace an explicitly invalid bind_addr with the default", async () => {
+    const pontiaHome = await tempDir("pontia-pi-discovery-invalid-bind-");
+    await writeFile(join(pontiaHome, "config.toml"), 'bind_addr = ""\nexternal_api_token = "token"\n');
+
+    await expect(resolvePontiaConnection({ pontiaHome })).resolves.toBeUndefined();
+  });
+
   test.each([
     ["empty", "   "],
     ["relative", "relative/pontia-home"],

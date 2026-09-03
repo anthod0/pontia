@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, join, parse, sep } from "node:path";
 import type { EnvLike } from "./context.js";
 
+const DEFAULT_BIND_ADDR = "127.0.0.1:8080";
+
 export interface PontiaConnection {
   baseUrl: string;
   internalEventUrl: string;
@@ -72,9 +74,9 @@ export async function resolvePontiaConnection(options: PontiaDiscoveryOptions = 
     return undefined;
   }
 
-  const bindAddr = parseTomlString(raw, "bind_addr");
-  if (!bindAddr) return undefined;
-  const baseUrl = baseUrlFromBindAddr(bindAddr);
+  const configuredBindAddr = parseTomlString(raw, "bind_addr");
+  if (!configuredBindAddr && /^\s*bind_addr\s*=/m.test(raw)) return undefined;
+  const baseUrl = baseUrlFromBindAddr(configuredBindAddr ?? DEFAULT_BIND_ADDR);
   if (!baseUrl) return undefined;
   return connectionFromBaseUrl(baseUrl, parseTomlString(raw, "external_api_token"));
 }

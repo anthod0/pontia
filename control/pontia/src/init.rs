@@ -157,6 +157,7 @@ where
     let config_path = existing.pontia_home.join("config.toml");
     let config_changed = write_config(
         &config_path,
+        existing.bind_addr,
         &token,
         &roots,
         existing.external_api_token.as_deref(),
@@ -365,6 +366,7 @@ fn generate_token<P: InitPlatform>(platform: &P) -> Result<String, String> {
 
 fn write_config(
     path: &Path,
+    bind_addr: SocketAddr,
     token: &str,
     roots: &[WorkspaceRootConfig],
     existing_token: Option<&str>,
@@ -382,6 +384,9 @@ fn write_config(
             .parse::<DocumentMut>()
             .map_err(|error| format!("failed to parse {}: {error}", path.display()))?
     };
+    if document.get("bind_addr").is_none() {
+        document["bind_addr"] = toml_edit::value(bind_addr.to_string());
+    }
     if existing_token != Some(token) || document.get("external_api_token").is_none() {
         document["external_api_token"] = toml_edit::value(token);
     }
