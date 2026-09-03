@@ -150,14 +150,26 @@ test('shows active agents and opens their chats from the overview', async () => 
 
   render(NewChatPage);
 
-  expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument();
-  expect(screen.getByText('1 agent wait for next step')).toBeInTheDocument();
-  expect(screen.getByText('Implement overview')).toBeInTheDocument();
+  expect(await screen.findByText('Implement overview')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument();
   expect(screen.getByText('Review changes')).toBeInTheDocument();
   expect(screen.queryByText('Old session')).not.toBeInTheDocument();
 
   await fireEvent.click(screen.getByRole('button', { name: 'Open Implement overview, Working' }));
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-working');
+});
+
+test('does not show an empty-state placeholder when there are no active agents', async () => {
+  mocks.sessions.set([
+    session({ session_id: 'session-exited', state: 'exited' }),
+  ]);
+
+  render(NewChatPage);
+
+  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Active agents' })).not.toBeInTheDocument();
+  expect(screen.queryByText('No active agents')).not.toBeInTheDocument();
 });
 
 test('filters the overview by workspace and syncs the new chat target', async () => {
