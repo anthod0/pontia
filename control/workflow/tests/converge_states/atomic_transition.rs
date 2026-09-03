@@ -25,7 +25,11 @@ async fn submission_and_terminal_transition_have_one_atomic_winner() {
         let (submission, terminal) = tokio::join!(
             async move {
                 submission_repository
-                    .record_node_submission(&submission_node_id, "runtime_session_root")
+                    .record_node_submission(
+                        &submission_node_id,
+                        "runtime_session_root",
+                        "evt_atomic_submission",
+                    )
                     .await
             },
             async move {

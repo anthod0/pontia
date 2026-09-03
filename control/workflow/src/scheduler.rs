@@ -257,7 +257,11 @@ where
         )
         .await?;
         self.repository
-            .record_node_submission(&node.node_id, &request.runtime_instance_id)
+            .record_node_submission(
+                &node.node_id,
+                &request.runtime_instance_id,
+                &Uuid::now_v7().to_string(),
+            )
             .await?;
         Ok(())
     }

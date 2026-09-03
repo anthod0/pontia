@@ -75,7 +75,7 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
         .await
         .expect("bind session");
     repository
-        .record_node_submission("node_1", "runtime_session_1")
+        .record_node_submission("node_1", "runtime_session_1", "evt_node_1_submitted")
         .await
         .expect("record submission");
     repository
@@ -133,14 +133,17 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
     );
 
     let events = repository.list_events("wf_1").await.expect("list events");
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), 4);
     assert_eq!(events[0].sequence, 1);
     assert_eq!(events[0].event_id, "evt_1");
     assert_eq!(events[0].event_type, "workflow.started");
     assert_eq!(events[1].sequence, 2);
-    assert_eq!(events[1].event_id, "evt_2");
+    assert_eq!(events[1].event_id, "evt_node_1_submitted");
+    assert_eq!(events[1].event_type, "workflow.node_submitted");
     assert_eq!(events[2].sequence, 3);
-    assert_eq!(events[2].event_id, "evt_3");
+    assert_eq!(events[2].event_id, "evt_2");
+    assert_eq!(events[3].sequence, 4);
+    assert_eq!(events[3].event_id, "evt_3");
 }
 
 #[tokio::test]
@@ -310,7 +313,11 @@ async fn node_activation_claim_blocks_pause_until_the_session_is_bound() {
         .expect("create node");
 
     repository
-        .claim_node_activation("wf_activation_gate", "node_activation_gate")
+        .claim_node_activation(
+            "wf_activation_gate",
+            "node_activation_gate",
+            "evt_activation_gate",
+        )
         .await
         .expect("claim activation");
     assert!(

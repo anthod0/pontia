@@ -99,7 +99,16 @@ pub(super) async fn assert_transition(
         .list_events(workflow_id)
         .await
         .expect("list workflow events");
-    assert_eq!(events.len(), 2);
-    assert_eq!(events[1].event_type, expected_event);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.event_type == expected_event)
+            .count(),
+        1
+    );
+    assert_eq!(
+        events.last().expect("terminal Workflow event").event_type,
+        expected_event
+    );
     workflow.failure_message
 }

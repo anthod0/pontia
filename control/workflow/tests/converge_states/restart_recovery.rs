@@ -21,7 +21,11 @@ async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
         .await
         .expect("bind existing Session");
     repository
-        .record_node_submission("wf_restart_root", "runtime_session_root")
+        .record_node_submission(
+            "wf_restart_root",
+            "runtime_session_root",
+            "evt_submit_restart",
+        )
         .await
         .expect("record existing submission");
     sqlx::query(
@@ -58,7 +62,11 @@ async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
             .iter()
             .map(|event| event.event_type.as_str())
             .collect::<Vec<_>>(),
-        vec!["workflow.started", "workflow.completed"]
+        vec![
+            "workflow.started",
+            "workflow.node_submitted",
+            "workflow.completed",
+        ]
     );
 }
 
@@ -77,7 +85,11 @@ async fn repeated_reconciliation_activates_a_downstream_node_once() {
         .await
         .expect("bind existing Session");
     repository
-        .record_node_submission("wf_repeat_root", "runtime_session_root")
+        .record_node_submission(
+            "wf_repeat_root",
+            "runtime_session_root",
+            "evt_submit_repeat",
+        )
         .await
         .expect("record existing submission");
     sqlx::query(
@@ -203,7 +215,11 @@ async fn periodic_reconciliation_recovers_a_missed_realtime_notification() {
         .await
         .expect("bind existing Session");
     repository
-        .record_node_submission("wf_missed_root", "runtime_session_root")
+        .record_node_submission(
+            "wf_missed_root",
+            "runtime_session_root",
+            "evt_submit_missed",
+        )
         .await
         .expect("record existing submission");
 

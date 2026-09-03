@@ -22,8 +22,9 @@ pub use ports::{
 };
 pub use query::{
     WorkflowActivePatchView, WorkflowAgentStatus, WorkflowContextView, WorkflowDetailView,
-    WorkflowGraphNodeView, WorkflowGraphRevisionView, WorkflowInputView, WorkflowListItemView,
-    WorkflowNodeContextView, WorkflowNodeView, WorkflowQueryService,
+    WorkflowDocumentView, WorkflowGraphNodeView, WorkflowGraphRevisionView, WorkflowInputView,
+    WorkflowListItemView, WorkflowNodeContextView, WorkflowNodeView, WorkflowPatchHistoryView,
+    WorkflowQueryService, WorkflowTimelineEntryView, WorkflowTimelineView,
 };
 pub use scheduler::WorkflowScheduler;
 pub use types::{

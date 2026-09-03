@@ -130,8 +130,9 @@ async fn start_launches_first_node_as_a_pi_session_with_handoff_protocol() {
         .list_events("wf_start")
         .await
         .expect("list workflow events");
-    assert_eq!(events.len(), 1);
+    assert_eq!(events.len(), 2);
     assert_eq!(events[0].event_type, "workflow.started");
+    assert_eq!(events[1].event_type, "workflow.node_activation_requested");
     let node = repository
         .get_node("node_writer")
         .await

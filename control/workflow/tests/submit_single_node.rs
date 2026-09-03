@@ -477,7 +477,12 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
             .iter()
             .map(|event| event.event_type.as_str())
             .collect::<Vec<_>>(),
-        vec!["workflow.started", "workflow.completed"]
+        vec![
+            "workflow.started",
+            "workflow.node_activation_requested",
+            "workflow.node_submitted",
+            "workflow.completed",
+        ]
     );
 }
 

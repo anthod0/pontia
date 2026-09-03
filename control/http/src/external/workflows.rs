@@ -21,6 +21,11 @@ pub struct ListWorkflowsQuery {
     limit: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct WorkflowDocumentQuery {
+    r#ref: String,
+}
+
 pub async fn list_workflows(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -42,11 +47,68 @@ pub async fn get_workflow(
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
     let workflow = WorkflowQueryService::new(state.db())
-        .get_workflow(&workflow_id)
+        .get_workflow_snapshot(&workflow_id, state.pontia_home())
         .await
         .map_err(map_workflow_error)?
         .ok_or_else(|| ExternalApiError::not_found(format!("workflow {workflow_id} not found")))?;
     Ok(ok(json!({ "workflow": workflow })))
+}
+
+pub async fn get_workflow_revision(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((workflow_id, revision)): Path<(String, i64)>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let revision = WorkflowQueryService::new(state.db())
+        .get_workflow_revision(&workflow_id, revision)
+        .await
+        .map_err(map_workflow_error)?
+        .ok_or_else(|| ExternalApiError::not_found(format!("workflow {workflow_id} not found")))?;
+    Ok(ok(json!({ "revision": revision })))
+}
+
+pub async fn list_workflow_patches(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(workflow_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let patches = WorkflowQueryService::new(state.db())
+        .list_workflow_patches(&workflow_id)
+        .await
+        .map_err(map_workflow_error)?
+        .ok_or_else(|| ExternalApiError::not_found(format!("workflow {workflow_id} not found")))?;
+    Ok(ok(json!({ "patches": patches })))
+}
+
+pub async fn get_workflow_timeline(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(workflow_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let timeline = WorkflowQueryService::new(state.db())
+        .get_workflow_timeline(&workflow_id)
+        .await
+        .map_err(map_workflow_error)?
+        .ok_or_else(|| ExternalApiError::not_found(format!("workflow {workflow_id} not found")))?;
+    Ok(ok(json!({ "timeline": timeline })))
+}
+
+pub async fn get_workflow_document(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(workflow_id): Path<String>,
+    Query(query): Query<WorkflowDocumentQuery>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let document = WorkflowQueryService::new(state.db())
+        .read_workflow_document(&workflow_id, &query.r#ref, state.pontia_home())
+        .await
+        .map_err(map_workflow_error)?
+        .ok_or_else(|| ExternalApiError::not_found(format!("workflow {workflow_id} not found")))?;
+    Ok(ok(json!({ "document": document })))
 }
 
 pub async fn pause_workflow(

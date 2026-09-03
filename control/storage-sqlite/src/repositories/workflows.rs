@@ -1,7 +1,9 @@
 use pontia_core::{Error, Result};
 use sqlx::SqlitePool;
 
-use crate::models::workflows::{WorkflowEventRow, WorkflowNodeRow, WorkflowPatchRow, WorkflowRow};
+use crate::models::workflows::{
+    WorkflowAgentEventRow, WorkflowEventRow, WorkflowNodeRow, WorkflowPatchRow, WorkflowRow,
+};
 
 #[derive(Debug, Clone)]
 pub struct CreateWorkflowRecord {
@@ -327,7 +329,13 @@ impl SqliteWorkflowRepository {
         Ok(())
     }
 
-    pub async fn claim_node_activation(&self, workflow_id: &str, node_id: &str) -> Result<()> {
+    pub async fn claim_node_activation(
+        &self,
+        workflow_id: &str,
+        node_id: &str,
+        event_id: &str,
+    ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
         let result = sqlx::query(
             r#"UPDATE workflows
                SET activating_node_id = ?
@@ -347,13 +355,31 @@ impl SqliteWorkflowRepository {
         .bind(node_id)
         .bind(workflow_id)
         .bind(node_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
         if result.rows_affected() != 1 {
             return Err(Error::StateConflict(format!(
                 "workflow {workflow_id} must be running without another node activation"
             )));
         }
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_events WHERE workflow_id = ?",
+        )
+        .bind(workflow_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query(
+            r#"INSERT INTO workflow_events
+               (event_id, workflow_id, sequence, event_type, payload)
+               VALUES (?, ?, ?, 'workflow.node_activation_requested', ?)"#,
+        )
+        .bind(event_id)
+        .bind(workflow_id)
+        .bind(sequence)
+        .bind(serde_json::json!({ "node_id": node_id }).to_string())
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -415,7 +441,18 @@ impl SqliteWorkflowRepository {
         &self,
         node_id: &str,
         runtime_instance_id: &str,
+        event_id: &str,
     ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        let context: Option<(String, Option<String>, Option<String>)> = sqlx::query_as(
+            r#"SELECT n.workflow_id, n.session_id, s.current_turn_id
+               FROM workflow_nodes AS n
+               LEFT JOIN sessions AS s ON s.session_id = n.session_id
+               WHERE n.node_id = ?"#,
+        )
+        .bind(node_id)
+        .fetch_optional(&mut *tx)
+        .await?;
         let result = sqlx::query(
             r#"UPDATE workflow_nodes
                SET submitted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
@@ -433,13 +470,42 @@ impl SqliteWorkflowRepository {
         )
         .bind(runtime_instance_id)
         .bind(node_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
         if result.rows_affected() != 1 {
             return Err(Error::StateConflict(format!(
                 "workflow node {node_id} must be unsubmitted in a running workflow"
             )));
         }
+        let (workflow_id, session_id, turn_id) = context.ok_or_else(|| {
+            Error::Domain(format!("submitted Workflow Node {node_id} is missing"))
+        })?;
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_events WHERE workflow_id = ?",
+        )
+        .bind(&workflow_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query(
+            r#"INSERT INTO workflow_events
+               (event_id, workflow_id, sequence, event_type, payload)
+               VALUES (?, ?, ?, 'workflow.node_submitted', ?)"#,
+        )
+        .bind(event_id)
+        .bind(&workflow_id)
+        .bind(sequence)
+        .bind(
+            serde_json::json!({
+                "node_id": node_id,
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "runtime_instance_id": runtime_instance_id,
+            })
+            .to_string(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -541,6 +607,50 @@ impl SqliteWorkflowRepository {
             r#"SELECT event_id, workflow_id, sequence, event_type, payload, created_at
                FROM workflow_events WHERE workflow_id = ? ORDER BY sequence"#,
         )
+        .bind(workflow_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn list_patches(&self, workflow_id: &str) -> Result<Vec<WorkflowPatchRow>> {
+        Ok(sqlx::query_as::<_, WorkflowPatchRow>(
+            r#"SELECT patch_id, workflow_id, requesting_node_id, requesting_session_id,
+                      requesting_turn_id, requesting_runtime_instance_id, replanner_creation_token,
+                      replanner_session_id, replanner_turn_id, replanner_runtime_instance_id,
+                      base_revision, result_revision, state, request_document_ref,
+                      request_size_bytes, decision_document_ref, reason_document_ref,
+                      blocked_draft_ref, interruption_attempted_at, interruption_requested_at,
+                      replanning_unlocked_at, continuation_message_id, continuation_queued_at,
+                      replanner_exit_requested_at, requested_at, planning_at, resolved_at
+               FROM workflow_patches
+               WHERE workflow_id = ?
+               ORDER BY requested_at, patch_id"#,
+        )
+        .bind(workflow_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn list_workflow_agent_events(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<WorkflowAgentEventRow>> {
+        Ok(sqlx::query_as::<_, WorkflowAgentEventRow>(
+            r#"SELECT e.rowid, e.event_id, e.session_id, e.turn_id, e.source, e.event_type,
+                      e.occurred_at, e.payload, e.created_at
+               FROM events AS e
+               WHERE EXISTS (
+                   SELECT 1 FROM workflow_nodes AS n
+                   WHERE n.workflow_id = ? AND n.session_id = e.session_id
+               ) OR EXISTS (
+                   SELECT 1 FROM workflow_patches AS p
+                   WHERE p.workflow_id = ?
+                     AND (p.requesting_session_id = e.session_id
+                          OR p.replanner_session_id = e.session_id)
+               )
+               ORDER BY e.rowid"#,
+        )
+        .bind(workflow_id)
         .bind(workflow_id)
         .fetch_all(&self.pool)
         .await?)

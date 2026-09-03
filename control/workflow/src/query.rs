@@ -1,12 +1,15 @@
 use std::{
     collections::{HashMap, HashSet},
-    path::Path,
+    path::{Component, Path},
 };
 
 use pontia_core::time::utc_now;
 use pontia_storage_sqlite::{
     models::workflows::{WorkflowNodeRow, WorkflowRow},
-    repositories::{sessions::SqliteSessionRepository, workflows::SqliteWorkflowRepository},
+    repositories::{
+        sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
+        workflows::SqliteWorkflowRepository,
+    },
 };
 use serde::Serialize;
 use sqlx::SqlitePool;
@@ -38,6 +41,8 @@ pub struct WorkflowDetailView {
     pub title: String,
     pub state: String,
     pub current_revision: i64,
+    pub definition_file: Option<String>,
+    pub active_patch: Option<WorkflowActivePatchView>,
     pub failure_message: Option<String>,
     pub cwd: String,
     pub agent_submitted_count: usize,
@@ -67,7 +72,7 @@ pub struct WorkflowContextView {
     pub workflow: WorkflowDetailView,
     pub definition_file: String,
     pub active_patch: Option<WorkflowActivePatchView>,
-    pub current_node: WorkflowNodeContextView,
+    pub current_node: Option<WorkflowNodeContextView>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -96,6 +101,8 @@ pub struct WorkflowGraphNodeView {
     pub node_id: String,
     pub parent_node_id: Option<String>,
     pub node_type: String,
+    pub session_id: Option<String>,
+    pub turn_ids: Vec<String>,
     pub phase: String,
     pub title: String,
     pub instructions: String,
@@ -112,6 +119,61 @@ pub struct WorkflowNodeContextView {
     pub instructions: String,
     pub inputs: Vec<WorkflowInputView>,
     pub output: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowPatchHistoryView {
+    pub patch_id: String,
+    pub state: String,
+    pub outcome: Option<String>,
+    pub base_revision: i64,
+    pub result_revision: Option<i64>,
+    pub requesting_node_id: String,
+    pub requesting_session_id: String,
+    pub requesting_turn_id: String,
+    pub requesting_runtime_instance_id: String,
+    pub replanner_session_id: Option<String>,
+    pub replanner_turn_id: Option<String>,
+    pub replanner_runtime_instance_id: Option<String>,
+    pub added_node_ids: Vec<String>,
+    pub retired_node_ids: Vec<String>,
+    pub request_document_ref: String,
+    pub decision_document_ref: Option<String>,
+    pub reason_document_ref: Option<String>,
+    pub blocked_draft_ref: Option<String>,
+    pub requested_at: String,
+    pub planning_at: Option<String>,
+    pub resolved_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowTimelineView {
+    pub workflow_id: String,
+    pub entries: Vec<WorkflowTimelineEntryView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowTimelineEntryView {
+    pub fact_kind: String,
+    pub source: String,
+    pub event_id: String,
+    pub event_type: String,
+    pub persisted_at: String,
+    pub occurred_at: Option<String>,
+    pub workflow_sequence: Option<i64>,
+    pub agent_event_order: Option<i64>,
+    pub session_id: Option<String>,
+    pub turn_id: Option<String>,
+    pub node_id: Option<String>,
+    pub patch_ids: Vec<String>,
+    pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowDocumentView {
+    pub workflow_id: String,
+    pub document_ref: String,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -138,13 +200,15 @@ pub enum WorkflowAgentStatus {
 pub struct WorkflowQueryService {
     workflows: SqliteWorkflowRepository,
     sessions: SqliteSessionRepository,
+    turns: SqliteTurnRepository,
 }
 
 impl WorkflowQueryService {
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             workflows: SqliteWorkflowRepository::new(pool.clone()),
-            sessions: SqliteSessionRepository::new(pool),
+            sessions: SqliteSessionRepository::new(pool.clone()),
+            turns: SqliteTurnRepository::new(pool),
         }
     }
 
@@ -222,6 +286,8 @@ impl WorkflowQueryService {
             title: workflow.title.clone(),
             state: workflow.state.clone(),
             current_revision: workflow.current_revision,
+            definition_file: None,
+            active_patch: None,
             failure_message: workflow.failure_message.clone(),
             cwd: workflow.cwd.clone(),
             agent_submitted_count: submitted,
@@ -234,6 +300,19 @@ impl WorkflowQueryService {
             elapsed_ms: elapsed_ms(&workflow),
             nodes: views,
         }))
+    }
+
+    pub async fn get_workflow_snapshot(
+        &self,
+        workflow_id: &str,
+        pontia_home: &Path,
+    ) -> Result<Option<WorkflowDetailView>> {
+        let Some(mut workflow) = self.get_workflow(workflow_id).await? else {
+            return Ok(None);
+        };
+        workflow.definition_file = Some(definition_file(pontia_home, workflow_id));
+        workflow.active_patch = self.active_patch(workflow_id).await?;
+        Ok(Some(workflow))
     }
 
     pub async fn get_workflow_revision(
@@ -252,10 +331,22 @@ impl WorkflowQueryService {
         )?;
         let mut views = Vec::with_capacity(nodes.len());
         for node in nodes {
+            let turn_ids = match node.session_id.as_deref() {
+                Some(session_id) => self
+                    .turns
+                    .list_turns(session_id)
+                    .await?
+                    .into_iter()
+                    .map(|turn| turn.turn_id)
+                    .collect(),
+                None => Vec::new(),
+            };
             views.push(WorkflowGraphNodeView {
                 node_id: node.node_id,
                 parent_node_id: node.parent_node_id,
                 node_type: node.node_type,
+                session_id: node.session_id,
+                turn_ids,
                 phase: node.phase,
                 title: node.title,
                 instructions: node.instructions,
@@ -280,41 +371,317 @@ impl WorkflowQueryService {
         workflow_id: &str,
         pontia_home: &Path,
     ) -> Result<Option<WorkflowContextView>> {
-        let Some(workflow) = self.get_workflow(workflow_id).await? else {
+        let Some(workflow) = self.get_workflow_snapshot(workflow_id, pontia_home).await? else {
             return Ok(None);
         };
-        let current_node_id = workflow
-            .current_node_id
-            .as_deref()
-            .ok_or_else(|| Error::InvalidObservation(workflow_id.to_string()))?;
-        let node = self
-            .workflows
-            .get_node(current_node_id)
-            .await?
-            .filter(|node| node.workflow_id == workflow_id)
-            .ok_or_else(|| Error::InvalidObservation(workflow_id.to_string()))?;
-        let input_names: Vec<String> = serde_json::from_str(&node.inputs)?;
-        let handoff_dir = pontia_home
-            .join("workflows")
-            .join(workflow_id)
-            .join("handoff");
-        let mut inputs = Vec::with_capacity(input_names.len());
-        for name in input_names {
-            validate_handoff_file_name(&name)?;
-            let content = match tokio::fs::read(handoff_dir.join(&name)).await {
-                Ok(bytes) => String::from_utf8(bytes).ok(),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                Err(error) => return Err(error.into()),
-            };
-            inputs.push(WorkflowInputView { name, content });
+        let current_node = match workflow.current_node_id.as_deref() {
+            Some(current_node_id) => {
+                let node = self
+                    .workflows
+                    .get_node(current_node_id)
+                    .await?
+                    .filter(|node| node.workflow_id == workflow_id)
+                    .ok_or_else(|| Error::InvalidObservation(workflow_id.to_string()))?;
+                let input_names: Vec<String> = serde_json::from_str(&node.inputs)?;
+                let handoff_dir = pontia_home
+                    .join("workflows")
+                    .join(workflow_id)
+                    .join("handoff");
+                let mut inputs = Vec::with_capacity(input_names.len());
+                for name in input_names {
+                    validate_handoff_file_name(&name)?;
+                    let content = match tokio::fs::read(handoff_dir.join(&name)).await {
+                        Ok(bytes) => String::from_utf8(bytes).ok(),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                        Err(error) => return Err(error.into()),
+                    };
+                    inputs.push(WorkflowInputView { name, content });
+                }
+                Some(WorkflowNodeContextView {
+                    instructions: node.instructions,
+                    inputs,
+                    output: node.output,
+                })
+            }
+            None => None,
+        };
+        let definition_file = definition_file(pontia_home, workflow_id);
+        let active_patch = workflow.active_patch.clone();
+        Ok(Some(WorkflowContextView {
+            workflow,
+            definition_file,
+            active_patch,
+            current_node,
+        }))
+    }
+
+    pub async fn list_workflow_patches(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<Vec<WorkflowPatchHistoryView>>> {
+        if self.workflows.get_workflow(workflow_id).await?.is_none() {
+            return Ok(None);
         }
-        let definition_file = pontia_home
-            .join("workflows")
-            .join(workflow_id)
-            .join("workflow.toml")
-            .display()
-            .to_string();
-        let active_patch = self
+        let nodes = self.workflows.list_node_history(workflow_id).await?;
+        let patches = self.workflows.list_patches(workflow_id).await?;
+        Ok(Some(
+            patches
+                .into_iter()
+                .map(|patch| {
+                    let changed_revision = patch
+                        .result_revision
+                        .filter(|revision| *revision > patch.base_revision);
+                    let added_node_ids = changed_revision
+                        .map(|revision| {
+                            nodes
+                                .iter()
+                                .filter(|node| node.introduced_revision == revision)
+                                .map(|node| node.node_id.clone())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let retired_node_ids = changed_revision
+                        .map(|revision| {
+                            nodes
+                                .iter()
+                                .filter(|node| node.retired_revision == Some(revision))
+                                .map(|node| node.node_id.clone())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    WorkflowPatchHistoryView {
+                        patch_id: patch.patch_id,
+                        outcome: matches!(patch.state.as_str(), "applied" | "rejected" | "blocked")
+                            .then(|| patch.state.clone()),
+                        state: patch.state,
+                        base_revision: patch.base_revision,
+                        result_revision: patch.result_revision,
+                        requesting_node_id: patch.requesting_node_id,
+                        requesting_session_id: patch.requesting_session_id,
+                        requesting_turn_id: patch.requesting_turn_id,
+                        requesting_runtime_instance_id: patch.requesting_runtime_instance_id,
+                        replanner_session_id: patch.replanner_session_id,
+                        replanner_turn_id: patch.replanner_turn_id,
+                        replanner_runtime_instance_id: patch.replanner_runtime_instance_id,
+                        added_node_ids,
+                        retired_node_ids,
+                        request_document_ref: patch.request_document_ref,
+                        decision_document_ref: patch.decision_document_ref,
+                        reason_document_ref: patch.reason_document_ref,
+                        blocked_draft_ref: patch.blocked_draft_ref,
+                        requested_at: patch.requested_at,
+                        planning_at: patch.planning_at,
+                        resolved_at: patch.resolved_at,
+                    }
+                })
+                .collect(),
+        ))
+    }
+
+    pub async fn get_workflow_timeline(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<WorkflowTimelineView>> {
+        if self.workflows.get_workflow(workflow_id).await?.is_none() {
+            return Ok(None);
+        }
+        let nodes = self.workflows.list_node_history(workflow_id).await?;
+        let patches = self.workflows.list_patches(workflow_id).await?;
+        let node_by_session: HashMap<&str, &str> = nodes
+            .iter()
+            .filter_map(|node| {
+                node.session_id
+                    .as_deref()
+                    .map(|session_id| (session_id, node.node_id.as_str()))
+            })
+            .collect();
+        let workflow_events = self.workflows.list_events(workflow_id).await?;
+        let agent_events = self
+            .workflows
+            .list_workflow_agent_events(workflow_id)
+            .await?;
+        let mut entries = Vec::with_capacity(workflow_events.len() + agent_events.len());
+
+        for event in workflow_events {
+            let payload: serde_json::Value = serde_json::from_str(&event.payload)?;
+            let patch_ids = payload
+                .get("patch_id")
+                .and_then(serde_json::Value::as_str)
+                .map(|id| vec![id.to_string()])
+                .unwrap_or_default();
+            let node_id = payload
+                .get("node_id")
+                .or_else(|| payload.get("requesting_node_id"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            let session_id = payload
+                .get("requesting_session_id")
+                .or_else(|| payload.get("replanner_session_id"))
+                .or_else(|| payload.get("session_id"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            let turn_id = payload
+                .get("requesting_turn_id")
+                .or_else(|| payload.get("replanner_turn_id"))
+                .or_else(|| payload.get("turn_id"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            entries.push(WorkflowTimelineEntryView {
+                fact_kind: "pontia_orchestration".to_string(),
+                source: "pontia_workflow".to_string(),
+                event_id: event.event_id,
+                event_type: event.event_type,
+                persisted_at: event.created_at,
+                occurred_at: None,
+                workflow_sequence: Some(event.sequence),
+                agent_event_order: None,
+                session_id,
+                turn_id,
+                node_id,
+                patch_ids,
+                payload,
+            });
+        }
+        for event in agent_events {
+            let patch_ids = patches
+                .iter()
+                .filter(|patch| match event.turn_id.as_deref() {
+                    Some(turn_id) => {
+                        patch.requesting_turn_id == turn_id
+                            || patch.replanner_turn_id.as_deref() == Some(turn_id)
+                    }
+                    None => {
+                        patch.requesting_session_id == event.session_id
+                            || patch.replanner_session_id.as_deref()
+                                == Some(event.session_id.as_str())
+                    }
+                })
+                .map(|patch| patch.patch_id.clone())
+                .collect();
+            let fact_kind = if matches!(
+                event.source.as_str(),
+                "agent_client" | "agent_adapter" | "runtime_manager"
+            ) {
+                "agent_lifecycle"
+            } else {
+                "pontia_orchestration"
+            };
+            entries.push(WorkflowTimelineEntryView {
+                fact_kind: fact_kind.to_string(),
+                source: event.source,
+                event_id: event.event_id,
+                event_type: event.event_type,
+                persisted_at: event.created_at,
+                occurred_at: Some(event.occurred_at),
+                workflow_sequence: None,
+                agent_event_order: Some(event.rowid),
+                node_id: node_by_session
+                    .get(event.session_id.as_str())
+                    .map(|id| (*id).to_string()),
+                session_id: Some(event.session_id),
+                turn_id: event.turn_id,
+                patch_ids,
+                payload: serde_json::from_str(&event.payload)?,
+            });
+        }
+        entries.sort_by(|left, right| {
+            let left_source = (left.fact_kind == "agent_lifecycle") as u8;
+            let right_source = (right.fact_kind == "agent_lifecycle") as u8;
+            (&left.persisted_at, left_source, &left.event_id).cmp(&(
+                &right.persisted_at,
+                right_source,
+                &right.event_id,
+            ))
+        });
+        Ok(Some(WorkflowTimelineView {
+            workflow_id: workflow_id.to_string(),
+            entries,
+        }))
+    }
+
+    pub async fn read_workflow_document(
+        &self,
+        workflow_id: &str,
+        document_ref: &str,
+        pontia_home: &Path,
+    ) -> Result<Option<WorkflowDocumentView>> {
+        if self.workflows.get_workflow(workflow_id).await?.is_none() {
+            return Ok(None);
+        }
+        let safe_ref = Path::new(document_ref);
+        if document_ref.is_empty()
+            || safe_ref.is_absolute()
+            || safe_ref
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(pontia_core::Error::Domain(
+                "invalid Workflow document reference".to_string(),
+            )
+            .into());
+        }
+        let patches = self.workflows.list_patches(workflow_id).await?;
+        let authorized = document_ref == "workflow.toml"
+            || patches.iter().any(|patch| {
+                patch.request_document_ref == document_ref
+                    || patch.decision_document_ref.as_deref() == Some(document_ref)
+                    || patch.reason_document_ref.as_deref() == Some(document_ref)
+                    || patch.blocked_draft_ref.as_deref() == Some(document_ref)
+            });
+        if !authorized {
+            return Err(pontia_core::Error::NotFound(format!(
+                "Workflow document {document_ref} not found"
+            ))
+            .into());
+        }
+        let workflow_dir = pontia_home.join("workflows").join(workflow_id);
+        let canonical_dir = tokio::fs::canonicalize(&workflow_dir)
+            .await
+            .map_err(|error| {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    Error::Pontia(pontia_core::Error::NotFound(format!(
+                        "Workflow document {document_ref} not found"
+                    )))
+                } else {
+                    error.into()
+                }
+            })?;
+        let path = workflow_dir.join(safe_ref);
+        let canonical_path = tokio::fs::canonicalize(&path).await.map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                Error::Pontia(pontia_core::Error::NotFound(format!(
+                    "Workflow document {document_ref} not found"
+                )))
+            } else {
+                error.into()
+            }
+        })?;
+        if !canonical_path.starts_with(canonical_dir) {
+            return Err(pontia_core::Error::NotFound(format!(
+                "Workflow document {document_ref} not found"
+            ))
+            .into());
+        }
+        let content = tokio::fs::read_to_string(canonical_path)
+            .await
+            .map_err(|error| {
+                if error.kind() == std::io::ErrorKind::InvalidData {
+                    Error::Pontia(pontia_core::Error::Domain(format!(
+                        "Workflow document {document_ref} is not UTF-8"
+                    )))
+                } else {
+                    error.into()
+                }
+            })?;
+        Ok(Some(WorkflowDocumentView {
+            workflow_id: workflow_id.to_string(),
+            document_ref: document_ref.to_string(),
+            content,
+        }))
+    }
+
+    async fn active_patch(&self, workflow_id: &str) -> Result<Option<WorkflowActivePatchView>> {
+        Ok(self
             .workflows
             .get_active_patch(workflow_id)
             .await?
@@ -328,18 +695,17 @@ impl WorkflowQueryService {
                 requesting_turn_id: patch.requesting_turn_id,
                 replanner_session_id: patch.replanner_session_id,
                 replanner_turn_id: patch.replanner_turn_id,
-            });
-        Ok(Some(WorkflowContextView {
-            workflow,
-            definition_file,
-            active_patch,
-            current_node: WorkflowNodeContextView {
-                instructions: node.instructions,
-                inputs,
-                output: node.output,
-            },
-        }))
+            }))
     }
+}
+
+fn definition_file(pontia_home: &Path, workflow_id: &str) -> String {
+    pontia_home
+        .join("workflows")
+        .join(workflow_id)
+        .join("workflow.toml")
+        .display()
+        .to_string()
 }
 
 fn list_item(

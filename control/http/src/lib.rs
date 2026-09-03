@@ -140,6 +140,22 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             get(external::get_workflow_context),
         )
         .route(
+            "/external/v1/workflows/{workflow_id}/revisions/{revision}",
+            get(external::get_workflow_revision),
+        )
+        .route(
+            "/external/v1/workflows/{workflow_id}/patches",
+            get(external::list_workflow_patches),
+        )
+        .route(
+            "/external/v1/workflows/{workflow_id}/timeline",
+            get(external::get_workflow_timeline),
+        )
+        .route(
+            "/external/v1/workflows/{workflow_id}/documents",
+            get(external::get_workflow_document),
+        )
+        .route(
             "/external/v1/workflows/{workflow_id}/pause",
             post(external::pause_workflow),
         )

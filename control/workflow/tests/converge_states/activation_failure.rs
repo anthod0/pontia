@@ -106,9 +106,6 @@ async fn downstream_session_creation_failure_stops_the_workflow() {
         .expect("submit root output");
 
     events
-        .publish("session_root", EventType::TurnCompleted)
-        .await;
-    events
         .publish("session_root", EventType::SessionExited)
         .await;
     wait_for_state(&repository, "wf_downstream_failure", "failed").await;

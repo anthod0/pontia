@@ -23,7 +23,11 @@ pub(crate) async fn activate_node<S: SessionCreator>(
     handoff_dir: &Path,
 ) -> std::result::Result<String, ActivationFailure> {
     repository
-        .claim_node_activation(&workflow.workflow_id, &node.node_id)
+        .claim_node_activation(
+            &workflow.workflow_id,
+            &node.node_id,
+            &uuid::Uuid::now_v7().to_string(),
+        )
         .await
         .map_err(|error| ActivationFailure {
             failure_message: format!(

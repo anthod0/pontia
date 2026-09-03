@@ -502,7 +502,16 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
             .iter()
             .map(|event| event.event_type.as_str())
             .collect::<Vec<_>>(),
-        vec!["workflow.started", "workflow.completed"]
+        vec![
+            "workflow.started",
+            "workflow.node_activation_requested",
+            "workflow.node_submitted",
+            "workflow.node_activation_requested",
+            "workflow.node_submitted",
+            "workflow.node_activation_requested",
+            "workflow.node_submitted",
+            "workflow.completed",
+        ]
     );
     assert_eq!(exits.requests.lock().expect("exit requests lock").len(), 3);
 }

@@ -74,3 +74,16 @@ pub struct WorkflowEventRow {
     pub payload: String,
     pub created_at: String,
 }
+
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+pub struct WorkflowAgentEventRow {
+    pub rowid: i64,
+    pub event_id: String,
+    pub session_id: String,
+    pub turn_id: Option<String>,
+    pub source: String,
+    pub event_type: String,
+    pub occurred_at: String,
+    pub payload: String,
+    pub created_at: String,
+}
