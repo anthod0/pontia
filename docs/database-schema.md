@@ -286,7 +286,7 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 | `tmux_pane_id` | TEXT | |
 | `process_fingerprint` | TEXT | CHECK `process_fingerprint IS NULL OR json_valid(process_fingerprint)` |
 | `capabilities` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(capabilities)` |
-| `diagnostics` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(diagnostics)` |
+| `diagnostics` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(diagnostics)`; migration 0020 removes the obsolete `claude_hook_log` key from existing rows |
 | `adapter_details` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(adapter_details)` |
 | `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 

@@ -39,6 +39,8 @@ async fn migration_splits_runtime_binding_metadata_without_losing_process_or_tur
             "capabilities": {"accept_task": true},
             "log_dir": "/state",
             "runtime_log": "/state/runtime.log",
+            "pi_hook_log": "/state/pi-hook.log",
+            "claude_hook_log": "/state/claude-hook.log",
             "tmux": {"session_name": "pontia"},
             "pending_current_turn": {
                 "session_id": "sess_migrated",
@@ -84,6 +86,26 @@ async fn migration_splits_runtime_binding_metadata_without_losing_process_or_tur
         serde_json::from_str::<Value>(&row.4).unwrap()["tmux"]["session_name"],
         "pontia"
     );
+    let diagnostics = serde_json::from_str::<Value>(&row.3).unwrap();
+    assert_eq!(diagnostics["pi_hook_log"], "/state/pi-hook.log");
+    assert_eq!(diagnostics["claude_hook_log"], "/state/claude-hook.log");
+
+    sqlx::raw_sql(include_str!(
+        "../migrations/0020_remove_claude_runtime_diagnostics.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("remove Claude runtime diagnostics");
+
+    let diagnostics: String = sqlx::query_scalar(
+        "SELECT diagnostics FROM runtime_bindings WHERE session_id = 'sess_migrated'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("load cleaned runtime diagnostics");
+    let diagnostics = serde_json::from_str::<Value>(&diagnostics).unwrap();
+    assert_eq!(diagnostics["pi_hook_log"], "/state/pi-hook.log");
+    assert!(diagnostics.get("claude_hook_log").is_none());
 
     let pending: (String, String, String) = sqlx::query_as(
         r#"SELECT runtime_instance_id, client_type, payload
