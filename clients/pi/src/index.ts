@@ -563,7 +563,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
     const state = activeTurn;
     const terminalLeafId = leafIdFromHookContext(ctx);
-    if (agentEndWasInterrupted(event)) {
+    if (agentEndWasInterrupted(event, ctx?.signal)) {
       await state.reporter.report(state.context, buildTurnInterruptedEvent(state.context, terminalLeafId));
       await reportFinalMessageRefresh(state);
       return;

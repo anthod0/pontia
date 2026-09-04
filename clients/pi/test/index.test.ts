@@ -1427,6 +1427,25 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported[2]).toMatchObject({ data: { reason: "final" } });
   });
 
+  test("reports turn.interrupted when Pi surfaces an aborted operation as an error", async () => {
+    const { handlers, reported } = install();
+    const abortController = new AbortController();
+    abortController.abort();
+
+    await handlers.agent_start({}, {});
+    await handlers.agent_end({
+      messages: [{
+        role: "assistant",
+        content: [],
+        stopReason: "error",
+        errorMessage: "This operation was aborted",
+      }],
+    }, { signal: abortController.signal });
+
+    expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.interrupted", "session.message_updated"]);
+    expect(reported[1].data).toEqual({ terminal_leaf_id: null });
+  });
+
   test("reports turn.failed when Pi ends with an errored assistant message", async () => {
     const { handlers, reported } = install();
 

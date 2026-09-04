@@ -65,8 +65,8 @@ function lastAssistantMessageFromAgentEnd(event: PiAgentEndEventLike): Record<st
   return undefined;
 }
 
-export function agentEndWasInterrupted(event: PiAgentEndEventLike): boolean {
-  return lastAssistantMessageFromAgentEnd(event)?.stopReason === "aborted";
+export function agentEndWasInterrupted(event: PiAgentEndEventLike, signal?: AbortSignal): boolean {
+  return signal?.aborted === true || lastAssistantMessageFromAgentEnd(event)?.stopReason === "aborted";
 }
 
 export function errorMessageFromAgentEnd(event: PiAgentEndEventLike): string | undefined {
