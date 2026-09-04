@@ -20,7 +20,16 @@ function fakePi() {
     sendUserMessage,
     pi: {
       on: vi.fn((event: string, handler: HandlerMap[string]) => {
-        handlers[event] = handler;
+        handlers[event] = event === "session_start"
+          ? (sessionEvent, ctx = {}) => handler(sessionEvent, {
+              mode: "tui",
+              ...ctx,
+              sessionManager: {
+                getSessionFile: () => "/tmp/pi/default-session.jsonl",
+                ...(ctx.sessionManager ?? {}),
+              },
+            })
+          : handler;
       }),
       registerTool: vi.fn(),
       registerCommand: vi.fn((name: string, command: { handler: (args: string, ctx: any) => Promise<void> | void }) => {
@@ -28,6 +37,17 @@ function fakePi() {
       }),
       sendUserMessage,
     },
+  };
+}
+
+function persistentTuiContext<T extends Record<string, unknown>>(ctx: T): T & {
+  mode: "tui";
+  sessionManager: { getSessionFile(): string };
+} {
+  return {
+    mode: "tui",
+    sessionManager: { getSessionFile: () => "/tmp/pi/default-session.jsonl" },
+    ...ctx,
   };
 }
 
@@ -154,7 +174,7 @@ describe("pontia pi extension lifecycle", () => {
       ui: { setEditorText: vi.fn(() => calls.push("clear")) },
     };
 
-    await commands["pontia-edit"].handler("msg_replay", commandContext);
+    await commands["pontia-edit"].handler("msg_replay", persistentTuiContext(commandContext));
 
     expect(fetchImpl.mock.calls[0][0]).toBe("http://localhost/internal/v1/inbox/branch-replay/resolve");
     expect(commandContext.waitForIdle).toHaveBeenCalledOnce();
@@ -193,11 +213,11 @@ describe("pontia pi extension lifecycle", () => {
       ? vi.fn(async () => { throw navigationError; })
       : vi.fn(async () => navigationResult);
 
-    await commands["pontia-edit"].handler("msg_replay", {
+    await commands["pontia-edit"].handler("msg_replay", persistentTuiContext({
       waitForIdle: vi.fn(async () => undefined),
       navigateTree,
       ui: { setEditorText: vi.fn() },
-    });
+    }));
 
     expect(sendUserMessage).not.toHaveBeenCalled();
     expect(logDiagnostic).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ code }));
@@ -214,11 +234,11 @@ describe("pontia pi extension lifecycle", () => {
       logDiagnostic: resolveDiagnostic,
     });
     const resolveNavigation = vi.fn();
-    await failedResolve.commands["pontia-edit"].handler("msg_replay", {
+    await failedResolve.commands["pontia-edit"].handler("msg_replay", persistentTuiContext({
       waitForIdle: vi.fn(),
       navigateTree: resolveNavigation,
       ui: { setEditorText: vi.fn() },
-    });
+    }));
     expect(resolveNavigation).not.toHaveBeenCalled();
     expect(failedResolve.sendUserMessage).not.toHaveBeenCalled();
     expect(resolveDiagnostic).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
@@ -249,11 +269,11 @@ describe("pontia pi extension lifecycle", () => {
       throw new Error("send failed");
     });
     const submitNavigation = vi.fn(async () => ({ cancelled: false }));
-    await failedSubmit.commands["pontia-edit"].handler("msg_replay", {
+    await failedSubmit.commands["pontia-edit"].handler("msg_replay", persistentTuiContext({
       waitForIdle: vi.fn(async () => undefined),
       navigateTree: submitNavigation,
       ui: { setEditorText: vi.fn() },
-    });
+    }));
     expect(submitNavigation).toHaveBeenCalledOnce();
     expect(submitDiagnostic).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
       code: "branch_replay_submission_failed",
@@ -294,6 +314,37 @@ describe("pontia pi extension lifecycle", () => {
         client_cwd: workspace,
       },
     });
+  });
+
+  test.each([
+    ["print mode", "print", "/tmp/pi/session.jsonl"],
+    ["json mode", "json", "/tmp/pi/session.jsonl"],
+    ["rpc mode", "rpc", "/tmp/pi/session.jsonl"],
+    ["--no-session", "tui", undefined],
+  ])("session_start ignores %s", async (_case, mode, sessionFile) => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      data: { workspaces: [{ canonical_path: "/workspace", state: "active" }] },
+    }), { status: 200 }));
+    const { handlers, reported } = install({
+      env: {
+        PONTIA_SESSION_ID: "sess_ignored",
+        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_ignored",
+      },
+      fetch: fetchImpl as any,
+    });
+
+    await handlers.session_start({ reason: "startup" }, {
+      mode,
+      sessionManager: {
+        getSessionId: () => "pi_session_ignored",
+        getSessionFile: () => sessionFile,
+        getSessionDir: () => "/tmp/pi",
+        getCwd: () => "/workspace",
+      },
+    });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(reported).toEqual([]);
   });
 
   test("session_start new reports agent client ready from runtime env", async () => {
@@ -682,7 +733,7 @@ describe("pontia pi extension lifecycle", () => {
       return new Response("unexpected", { status: 500 });
     });
     const { handlers, reported, env } = install({
-      env: { HOME: root, PONTIA_HOME: join(root, ".pontia") },
+      env: { PONTIA_HOME: join(root, ".pontia") },
       fetch: fetchImpl as any,
       loadContext: vi.fn(async () => ({
         ok: false as const,

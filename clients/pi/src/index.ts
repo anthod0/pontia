@@ -20,6 +20,12 @@ function reportAccepted(result: EventReportResult | boolean): boolean {
   return typeof result === "boolean" ? result : result.accepted;
 }
 
+function isPersistentTuiContext(ctx: unknown): boolean {
+  if (!ctx || typeof ctx !== "object") return false;
+  if ((ctx as Record<string, unknown>).mode !== "tui") return false;
+  return piSessionDetailsFromHookContext(ctx).clientSessionFile !== undefined;
+}
+
 export interface PontiaPiExtensionDependencies {
   env?: EnvLike;
   loadContext?: (env: EnvLike, sessionContext?: SessionContext) => Promise<LoadTurnContextResult>;
@@ -144,6 +150,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   pi.registerCommand("pontia-edit", {
     description: "Replay a Pontia Inbox message from a historical Pi entry",
     handler: async (args, ctx) => {
+      if (!isPersistentTuiContext(ctx)) return;
       const inboxMessageId = args.trim();
       const logFile = currentHookLogFile();
       if (!/^msg_[^\s]+$/.test(inboxMessageId)) {
@@ -308,6 +315,10 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
     if (readyReported && reason !== "fork" && reason !== "resume") return;
     if (reason !== "startup" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
+    if (!isPersistentTuiContext(ctx)) {
+      reportingDisabled = true;
+      return;
+    }
 
     try {
       const sessionDetails = piSessionDetailsFromHookContext(ctx);
