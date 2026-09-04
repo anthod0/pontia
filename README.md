@@ -146,9 +146,9 @@ Build the Dashboard and release binaries from this checkout, then install them b
 just install-local
 ```
 
-The command installs `pontia` and `pontiad` into `$HOME/.local/bin`, installs the Dashboard into `$HOME/.local/share/pontia/dashboard`, and creates `$PONTIA_HOME/config.toml` with that Dashboard source when no config exists. Existing configuration is never overwritten. Set an absolute `PREFIX` or `PONTIA_HOME` to override the default locations.
+The command installs `pontia` and `pontiad` into `$HOME/.local/bin`, installs the Dashboard into `$HOME/.local/share/pontia/dashboard`, registers `./clients/pi` as a local pi package, and creates `$PONTIA_HOME/config.toml` with that Dashboard source when no config exists. Before registering the local package, it removes `npm:@pontia/pi-client-plugin` from the user's pi settings when present. The local pi package references this checkout, rather than the published npm package. Existing Pontia configuration is never overwritten. Set an absolute `PREFIX`, `PONTIA_HOME`, or `PI_CODING_AGENT_DIR` to override the default locations.
 
-Installation does not start Pontia. For first-time setup, run the interactive initializer:
+Installation does not start Pontia. For first-time setup, run the interactive initializer and select `none` for Agent Clients because the local pi integration is already installed:
 
 ```bash
 pontia init

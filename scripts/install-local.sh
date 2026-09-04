@@ -9,6 +9,8 @@ PONTIA_HOME="${PONTIA_HOME:-$HOME_DIR/.pontia}"
 BIN_DIR="$PREFIX/bin"
 DASHBOARD_DIR="$PREFIX/share/pontia/dashboard"
 CONFIG_FILE="$PONTIA_HOME/config.toml"
+PI_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME_DIR/.pi/agent}"
+PI_SETTINGS_FILE="$PI_AGENT_DIR/settings.json"
 TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 
 validate_root() {
@@ -23,7 +25,7 @@ validate_root() {
 validate_root PREFIX "$PREFIX"
 validate_root PONTIA_HOME "$PONTIA_HOME"
 
-for command in cargo install pnpm; do
+for command in cargo install pnpm pi; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 1
@@ -92,6 +94,15 @@ else
   echo "Existing config left unchanged: $CONFIG_FILE"
   echo "Ensure [dashboard].source points to: $DASHBOARD_DIR"
 fi
+
+if [[ -f "$PI_SETTINGS_FILE" ]] && grep -Eq '"npm:@pontia/pi-client-plugin(@[^"]+)?"' "$PI_SETTINGS_FILE"; then
+  echo "Removing published pi client plugin..."
+  pi remove npm:@pontia/pi-client-plugin
+fi
+
+echo "Installing local pi client plugin..."
+pi install "$REPO_ROOT/clients/pi"
+echo "Installed local pi client plugin: $REPO_ROOT/clients/pi"
 
 printf '\nLocal installation complete. Start it explicitly when ready:\n  PONTIA_HOME=%q %q up\n' \
   "$PONTIA_HOME" "$BIN_DIR/pontia"
