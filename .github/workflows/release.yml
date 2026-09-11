@@ -1,9 +1,6 @@
 name: Release
-permissions:
-  "contents": "write"
 
 on:
-  pull_request:
   push:
     branches:
       - main
@@ -12,33 +9,30 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('release-pr-{0}', github.event.pull_request.number) || 'release' }}
+  group: release
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  release-metadata:
-    runs-on: "ubuntu-22.04"
+  detect:
+    name: Detect version change
+    runs-on: ubuntu-24.04
     outputs:
-      publishing: ${{ steps.release.outputs.publishing }}
-      tag: ${{ steps.release.outputs.tag }}
+      publish: ${{ steps.version.outputs.publish }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - id: release
-        name: Resolve release version
+      - id: version
         shell: bash
         env:
           BEFORE_COMMIT: ${{ github.event.before }}
         run: |
           set -euo pipefail
-
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            echo "publishing=false" >> "$GITHUB_OUTPUT"
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
 
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "Releases must run from the main branch" >&2
@@ -65,26 +59,20 @@ jobs:
             exit 1
           fi
 
-          package_count="$(cargo metadata --no-deps --format-version 1 | jq '[.packages[] | select(.name == "pontia" or .name == "pontiad")] | length')"
-          mapfile -t package_versions < <(cargo metadata --no-deps --format-version 1 | jq -r '[.packages[] | select(.name == "pontia" or .name == "pontiad") | .version] | unique[]')
-          if [[ "$package_count" != "2" || "${#package_versions[@]}" != "1" || "${package_versions[0]}" != "$version" ]]; then
-            echo "pontia and pontiad must both inherit the root workspace version" >&2
-            exit 1
-          fi
-
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             if [[ -z "$BEFORE_COMMIT" || "$BEFORE_COMMIT" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE_COMMIT:Cargo.toml"; then
               echo "Cannot read Cargo.toml from the commit before this push" >&2
               exit 1
             fi
+
             previous_version="$(git show "$BEFORE_COMMIT:Cargo.toml" | workspace_version)"
             if [[ "$previous_version" == "$version" ]]; then
-              echo "Root workspace version remains $version; skipping release"
-              echo "publishing=false" >> "$GITHUB_OUTPUT"
+              echo "Workspace version remains $version; skipping release"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
               echo "tag=" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "Root workspace version changed from $previous_version to $version"
+            echo "Workspace version changed from $previous_version to $version"
           fi
 
           if ! grep -Fq "## [$version]" CHANGELOG.md; then
@@ -98,232 +86,112 @@ jobs:
             exit 1
           fi
 
-          echo "publishing=true" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-  plan:
-    needs:
-      - release-metadata
-    if: ${{ github.event_name == 'pull_request' || needs.release-metadata.outputs.publishing == 'true' }}
-    runs-on: "ubuntu-22.04"
-    outputs:
-      val: ${{ steps.plan.outputs.manifest }}
-      tag: ${{ needs.release-metadata.outputs.tag }}
-      tag-flag: ${{ needs.release-metadata.outputs.publishing == 'true' && format('--tag={0}', needs.release-metadata.outputs.tag) || '' }}
-      publishing: ${{ needs.release-metadata.outputs.publishing }}
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          submodules: recursive
-      - name: Install dist
-        shell: bash
-        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh"
-      - name: Cache dist
-        uses: actions/upload-artifact@v7
-        with:
-          name: cargo-dist-cache
-          path: ~/.cargo/bin/dist
-      - id: plan
-        run: |
-          dist ${{ needs.release-metadata.outputs.publishing == 'true' && format('host --steps=create --tag={0}', needs.release-metadata.outputs.tag) || 'plan' }} --output-format=json > plan-dist-manifest.json
-          echo "dist ran successfully"
-          cat plan-dist-manifest.json
-          echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
-      - name: "Upload dist-manifest.json"
-        uses: actions/upload-artifact@v7
-        with:
-          name: artifacts-plan-dist-manifest
-          path: plan-dist-manifest.json
-
-  build-local-artifacts:
-    name: build-local-artifacts (${{ join(matrix.targets, ', ') }})
-    needs:
-      - plan
-    if: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix.include != null && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload') }}
+  build:
+    name: Build (${{ matrix.target }})
+    needs: detect
+    if: ${{ needs.detect.outputs.publish == 'true' }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix }}
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
     runs-on: ${{ matrix.runner }}
-    container: ${{ matrix.container && matrix.container.image || null }}
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
-    steps:
-      - name: enable windows longpaths
-        run: |
-          git config --global core.longpaths true
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          submodules: recursive
-      - name: Install Rust non-interactively if not already installed
-        if: ${{ matrix.container }}
-        run: |
-          if ! command -v cargo > /dev/null 2>&1; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          fi
-      - name: Install dist
-        run: ${{ matrix.install_dist.run }}
-      - name: Fetch local artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: artifacts-*
-          path: target/distrib/
-          merge-multiple: true
-      - name: Install dependencies
-        run: |
-          ${{ matrix.packages_install }}
-      - name: Build artifacts
-        run: |
-          dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
-          echo "dist ran successfully"
-      - id: cargo-dist
-        name: Post-build
-        shell: bash
-        run: |
-          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          dist print-upload-files-from-manifest --manifest dist-manifest.json >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-          cp dist-manifest.json "$BUILD_MANIFEST_NAME"
-      - name: "Upload artifacts"
-        uses: actions/upload-artifact@v7
-        with:
-          name: artifacts-build-local-${{ join(matrix.targets, '_') }}
-          path: |
-            ${{ steps.cargo-dist.outputs.paths }}
-            ${{ env.BUILD_MANIFEST_NAME }}
-
-  build-global-artifacts:
-    needs:
-      - plan
-      - build-local-artifacts
-    runs-on: "ubuntu-22.04"
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      BUILD_MANIFEST_NAME: target/distrib/global-dist-manifest.json
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          submodules: recursive
-      - name: Install cached dist
-        uses: actions/download-artifact@v8
-        with:
-          name: cargo-dist-cache
-          path: ~/.cargo/bin/
-      - run: chmod +x ~/.cargo/bin/dist
-      - name: Fetch local artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: artifacts-*
-          path: target/distrib/
-          merge-multiple: true
-      - id: cargo-dist
+      - name: Build binaries
+        run: cargo build --release --locked --package pontia --package pontiad
+      - name: Package binaries
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
-          dist build ${{ needs.plan.outputs.tag-flag }} --output-format=json "--artifacts=global" > dist-manifest.json
-          echo "dist ran successfully"
-
-          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          jq --raw-output ".upload_files[]" dist-manifest.json >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-          cp dist-manifest.json "$BUILD_MANIFEST_NAME"
-      - name: "Upload artifacts"
-        uses: actions/upload-artifact@v7
+          set -euo pipefail
+          mkdir dist
+          for binary in pontia pontiad; do
+            tar -C target/release -czf "dist/$binary-$TARGET.tar.gz" "$binary"
+          done
+      - uses: actions/upload-artifact@v7
         with:
-          name: artifacts-build-global
-          path: |
-            ${{ steps.cargo-dist.outputs.paths }}
-            ${{ env.BUILD_MANIFEST_NAME }}
-  host:
+          name: binaries-${{ matrix.target }}
+          path: dist/*.tar.gz
+          compression-level: 0
+
+  build-dashboard:
+    name: Build Dashboard
+    needs: detect
+    if: ${{ needs.detect.outputs.publish == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Build Dashboard
+        run: scripts/build-dashboard-release.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dashboard
+          path: pontia-dashboard.tar.gz
+          compression-level: 0
+
+  release:
+    name: Publish GitHub Release
     needs:
-      - plan
-      - build-local-artifacts
-      - build-global-artifacts
-    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    runs-on: "ubuntu-22.04"
-    outputs:
-      val: ${{ steps.host.outputs.manifest }}
+      - detect
+      - build
+      - build-dashboard
+    if: ${{ needs.detect.outputs.publish == 'true' }}
+    runs-on: ubuntu-24.04
     permissions:
-      "attestations": "write"
-      "contents": "write"
-      "id-token": "write"
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          submodules: recursive
-      - name: Install cached dist
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
-          name: cargo-dist-cache
-          path: ~/.cargo/bin/
-      - run: chmod +x ~/.cargo/bin/dist
-      - name: Fetch artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: artifacts-*
-          path: target/distrib/
-          merge-multiple: true
-      - id: host
-        shell: bash
-        run: |
-          dist host ${{ needs.plan.outputs.tag-flag }} --steps=upload --steps=release --output-format=json > dist-manifest.json
-          echo "artifacts uploaded and released successfully"
-          cat dist-manifest.json
-          echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
-      - name: "Upload dist-manifest.json"
-        uses: actions/upload-artifact@v7
-        with:
-          name: artifacts-dist-manifest
-          path: dist-manifest.json
-      - name: "Download GitHub Artifacts"
-        uses: actions/download-artifact@v8
-        with:
-          pattern: artifacts-*
+          pattern: binaries-*
           path: artifacts
           merge-multiple: true
-      - name: Cleanup
-        run: |
-          rm -f artifacts/*-dist-manifest.json
-      - name: Attest
-        uses: actions/attest@v4
+      - uses: actions/download-artifact@v8
         with:
-          subject-path: |
-            artifacts/*.tar.gz
-            artifacts/*.tar.xz
-            artifacts/*.sha256
-            artifacts/*.sum
-            artifacts/*.json
+          name: dashboard
+          path: artifacts
+      - name: Generate checksums
+        run: cd artifacts && sha256sum *.tar.gz > SHA256SUMS
+      - name: Extract release notes
+        shell: bash
+        env:
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          awk -v heading="## [$version]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
       - name: Create GitHub Release
         env:
-          PRERELEASE_FLAG: "${{ fromJson(steps.host.outputs.manifest).announcement_is_prerelease && '--prerelease' || '' }}"
-          ANNOUNCEMENT_TITLE: "${{ fromJson(steps.host.outputs.manifest).announcement_title }}"
-          ANNOUNCEMENT_BODY: "${{ fromJson(steps.host.outputs.manifest).announcement_github_body }}"
-          RELEASE_COMMIT: "${{ github.sha }}"
-        run: |
-          echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
-
-          gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
-
-  announce:
-    needs:
-      - plan
-      - host
-    if: ${{ always() && needs.host.result == 'success' }}
-    runs-on: "ubuntu-22.04"
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          submodules: recursive
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file release-notes.md artifacts/*
