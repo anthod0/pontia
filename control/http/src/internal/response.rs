@@ -61,7 +61,7 @@ impl ApiError {
             }
             WorkflowError::WorkflowNotRunning { .. }
             | WorkflowError::RuntimeMismatch { .. }
-            | WorkflowError::OutputMismatch { .. } => Self {
+            | WorkflowError::AgentFileUnavailable { .. } => Self {
                 status: StatusCode::CONFLICT,
                 code: "state_conflict",
                 message: error.to_string(),

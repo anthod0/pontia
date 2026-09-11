@@ -187,6 +187,18 @@ async fn test_pool(path: &Path) -> sqlx::SqlitePool {
     pool
 }
 
+fn write_output(pontia_home: &Path, workflow_id: &str, name: &str, content: &str) {
+    std::fs::write(
+        pontia_home
+            .join("workflows")
+            .join(workflow_id)
+            .join("handoff")
+            .join(name),
+        content,
+    )
+    .expect("write Agent output");
+}
+
 async fn wait_for_session(
     repository: &SqliteWorkflowRepository,
     node_id: &str,
@@ -309,8 +321,12 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler =
-        WorkflowScheduler::with_services(pool, sessions.clone(), exits.clone(), pontia_home);
+    let scheduler = WorkflowScheduler::with_services(
+        pool,
+        sessions.clone(),
+        exits.clone(),
+        pontia_home.clone(),
+    );
 
     scheduler.start("wf_chain").await.expect("start workflow");
     assert_eq!(sessions.requests.lock().expect("requests lock").len(), 1);
@@ -324,12 +340,16 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
         None
     );
 
+    write_output(
+        &pontia_home,
+        "wf_chain",
+        "research.md",
+        "研究结果：真实提交内容。",
+    );
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_research".to_string(),
             runtime_instance_id: "runtime_session_research".to_string(),
-            output: "research.md".to_string(),
-            content: "研究结果：真实提交内容。".to_string(),
         })
         .await
         .expect("submit research");
@@ -354,12 +374,16 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     wait_for_session(&repository, "node_draft", "session_draft").await;
     assert_eq!(sessions.requests.lock().expect("requests lock").len(), 2);
 
+    write_output(
+        &pontia_home,
+        "wf_chain",
+        "draft.md",
+        "Adjacent draft content must not be inferred by the reviewer.",
+    );
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_draft".to_string(),
             runtime_instance_id: "runtime_session_draft".to_string(),
-            output: "draft.md".to_string(),
-            content: "Adjacent draft content must not be inferred by the reviewer.".to_string(),
         })
         .await
         .expect("submit draft");
@@ -414,12 +438,11 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
         vec![Some("1"), Some("2"), Some("3")]
     );
 
+    write_output(&pontia_home, "wf_chain", "review.md", "Review complete.");
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_review".to_string(),
             runtime_instance_id: "runtime_session_review".to_string(),
-            output: "review.md".to_string(),
-            content: "Review complete.".to_string(),
         })
         .await
         .expect("submit review");
@@ -549,14 +572,13 @@ async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dis
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler = WorkflowScheduler::with_services(pool, sessions, exits, pontia_home);
+    let scheduler = WorkflowScheduler::with_services(pool, sessions, exits, pontia_home.clone());
     scheduler.start("wf_paused").await.expect("start workflow");
+    write_output(&pontia_home, "wf_paused", "root.md", "Root output");
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_paused_root".to_string(),
             runtime_instance_id: "runtime_session_paused_root".to_string(),
-            output: "root.md".to_string(),
-            content: "Root output".to_string(),
         })
         .await
         .expect("submit root");
@@ -648,14 +670,14 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler = WorkflowScheduler::with_services(pool.clone(), sessions, exits, pontia_home);
+    let scheduler =
+        WorkflowScheduler::with_services(pool.clone(), sessions, exits, pontia_home.clone());
     scheduler.start("wf_lagged").await.expect("start workflow");
+    write_output(&pontia_home, "wf_lagged", "result.md", "Done.");
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_lagged".to_string(),
             runtime_instance_id: "runtime_session_lagged".to_string(),
-            output: "result.md".to_string(),
-            content: "Done.".to_string(),
         })
         .await
         .expect("submit output");

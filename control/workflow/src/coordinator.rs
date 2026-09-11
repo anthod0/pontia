@@ -471,13 +471,15 @@ where
         {
             Some(session_id) => session_id,
             None => {
-                let request_file = workflow_dir.join(&patch.request_document_ref);
-                let initial_task = "# Workflow Re-planner\n\nInspect the compact Workflow context with `pontia workflow show`. \
-                     Read the Patch request at `$PONTIA_WORKFLOW_PATCH_REQUEST_FILE`, edit \
-                     `$PONTIA_WORKFLOW_FILE`, then resolve this Patch by invoking either \
-                     `pontia workflow patch apply --decision <DECISION_FILE>` or \
-                     `pontia workflow patch block --reason <REASON_FILE>`.\n"
-                    .to_string();
+                let request =
+                    tokio::fs::read_to_string(workflow_dir.join(&patch.request_document_ref))
+                        .await?;
+                let definition = tokio::fs::read_to_string(&workflow_file).await?;
+                let decision_file = patch_dir.join("decision.md");
+                let reason_file = patch_dir.join("reason.md");
+                let initial_task = format!(
+                    "# Workflow Re-planner\n\n## Patch request\n\n{request}\n\n## Current Workflow definition\n\n{definition}\n\n## Instructions\n\nInspect the compact Workflow context with `pontia workflow show` and write the revised definition directly to `$PONTIA_WORKFLOW_FILE`. To apply it, write the decision directly to `$PONTIA_WORKFLOW_PATCH_DECISION_FILE`, then run `pontia workflow patch apply`. To block the Patch instead, write the reason directly to `$PONTIA_WORKFLOW_PATCH_REASON_FILE`, then run `pontia workflow patch block`.\n"
+                );
                 self.sessions
                     .create_session(CreateSessionRequest {
                         client_type: "pi".into(),
@@ -507,8 +509,12 @@ where
                             ),
                             ("PONTIA_WORKFLOW_PATCH_ID".into(), patch.patch_id.clone()),
                             (
-                                "PONTIA_WORKFLOW_PATCH_REQUEST_FILE".into(),
-                                request_file.display().to_string(),
+                                "PONTIA_WORKFLOW_PATCH_DECISION_FILE".into(),
+                                decision_file.display().to_string(),
+                            ),
+                            (
+                                "PONTIA_WORKFLOW_PATCH_REASON_FILE".into(),
+                                reason_file.display().to_string(),
                             ),
                         ]),
                     })
@@ -704,21 +710,16 @@ where
             .join("workflows")
             .join(&patch.workflow_id)
             .join(decision_ref);
-        let summary = match tokio::fs::read_to_string(&decision_path).await {
-            Ok(document) => bounded_summary(&document, 500),
+        let decision = match tokio::fs::read_to_string(&decision_path).await {
+            Ok(document) => document,
             Err(error) => {
                 tracing::warn!(patch_id = %patch.patch_id, %error, "cannot read Patch decision for continuation; coordinator will retry");
                 return Ok(true);
             }
         };
         let input = format!(
-            "Workflow Patch {} was {}. Continue Agent Node {} on accepted revision {}. Decision summary: {} Decision document: {}",
-            patch.patch_id,
-            patch.state,
-            patch.requesting_node_id,
-            result_revision,
-            summary,
-            decision_ref,
+            "Workflow Patch {} was {}. Continue Agent Node {} on accepted revision {}.\n\n## Re-planner decision\n\n{}",
+            patch.patch_id, patch.state, patch.requesting_node_id, result_revision, decision,
         );
         self.inbox
             .submit_message_once(
@@ -732,7 +733,6 @@ where
                         "workflow_patch_id": patch.patch_id,
                         "workflow_patch_outcome": patch.state,
                         "workflow_revision": result_revision,
-                        "decision_document_ref": decision_ref,
                     }),
                 },
             )

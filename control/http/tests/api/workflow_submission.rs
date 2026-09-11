@@ -140,17 +140,22 @@ async fn post_submission_with_auth(
 }
 
 #[tokio::test]
-async fn internal_workflow_submission_saves_handoff_without_requesting_exit() {
+async fn internal_workflow_submission_accepts_the_node_owned_output_file() {
     let app = TestApp::new().await;
     seed_running_workflow(&app).await;
+    fs::write(
+        app.pontia_home()
+            .path()
+            .join("workflows/wf_http_submit/handoff/result.md"),
+        "Submitted through HTTP: 完成\n",
+    )
+    .expect("write Agent output");
 
     let (status, body) = post_submission(
         &app,
         json!({
             "session_id": "sess_http_submit",
-            "runtime_instance_id": "rtinst_http_submit",
-            "output": "result.md",
-            "content": "Submitted through HTTP: 完成\n"
+            "runtime_instance_id": "rtinst_http_submit"
         }),
     )
     .await;
@@ -179,9 +184,7 @@ async fn internal_workflow_submission_requires_local_api_authentication() {
     let app = TestApp::new().await;
     let request = json!({
         "session_id": "sess_http_submit",
-        "runtime_instance_id": "rtinst_http_submit",
-        "output": "result.md",
-        "content": "must not be accepted"
+        "runtime_instance_id": "rtinst_http_submit"
     });
 
     for authorization in [None, Some("Bearer wrong-token")] {
@@ -201,9 +204,7 @@ async fn internal_workflow_submission_preserves_service_conflicts() {
         &app,
         json!({
             "session_id": "sess_http_submit",
-            "runtime_instance_id": "rtinst_http_submit",
-            "output": "unexpected.md",
-            "content": "must not be written"
+            "runtime_instance_id": "rtinst_http_submit"
         }),
     )
     .await;
@@ -214,7 +215,7 @@ async fn internal_workflow_submission_preserves_service_conflicts() {
         body["error"]["message"]
             .as_str()
             .expect("error message")
-            .contains("declared output")
+            .contains("is unavailable")
     );
     assert!(
         !app.pontia_home()

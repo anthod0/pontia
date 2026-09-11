@@ -108,6 +108,16 @@ output = "result.md"
 }
 
 async fn request_patch(app: &TestApp, runtime: &str) -> (StatusCode, Value) {
+    let node_dir = app
+        .pontia_home()
+        .path()
+        .join("workflows/wf_patch_request/nodes/node_patch_request");
+    fs::create_dir_all(&node_dir).expect("create Node directory");
+    fs::write(
+        node_dir.join("problem-report.md"),
+        "The remaining plan must change. 完成\n",
+    )
+    .expect("write problem report");
     let response = http::router(app.state.clone())
         .oneshot(
             Request::builder()
@@ -118,8 +128,7 @@ async fn request_patch(app: &TestApp, runtime: &str) -> (StatusCode, Value) {
                 .body(Body::from(
                     json!({
                         "session_id": "sess_patch_request",
-                        "runtime_instance_id": runtime,
-                        "document": "The remaining plan must change. 完成\n"
+                        "runtime_instance_id": runtime
                     })
                     .to_string(),
                 ))
@@ -141,6 +150,21 @@ async fn request_patch(app: &TestApp, runtime: &str) -> (StatusCode, Value) {
 }
 
 async fn apply_patch(app: &TestApp, runtime: &str, decision: &str) -> (StatusCode, Value) {
+    let patch_id: String = sqlx::query_scalar(
+        "SELECT patch_id FROM workflow_patches WHERE workflow_id = 'wf_patch_request' AND replanner_session_id = 'sess_patch_replanner' ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_one(&app.db)
+    .await
+    .expect("active Patch");
+    fs::write(
+        app.pontia_home()
+            .path()
+            .join("workflows/wf_patch_request/patches")
+            .join(patch_id)
+            .join("decision.md"),
+        decision,
+    )
+    .expect("write decision");
     let response = http::router(app.state.clone())
         .oneshot(
             Request::builder()
@@ -151,8 +175,7 @@ async fn apply_patch(app: &TestApp, runtime: &str, decision: &str) -> (StatusCod
                 .body(Body::from(
                     json!({
                         "session_id": "sess_patch_replanner",
-                        "runtime_instance_id": runtime,
-                        "decision": decision,
+                        "runtime_instance_id": runtime
                     })
                     .to_string(),
                 ))
@@ -166,6 +189,21 @@ async fn apply_patch(app: &TestApp, runtime: &str, decision: &str) -> (StatusCod
 }
 
 async fn block_patch(app: &TestApp, runtime: &str, reason: &str) -> (StatusCode, Value) {
+    let patch_id: String = sqlx::query_scalar(
+        "SELECT patch_id FROM workflow_patches WHERE workflow_id = 'wf_patch_request' AND replanner_session_id = 'sess_patch_replanner' ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_one(&app.db)
+    .await
+    .expect("active Patch");
+    fs::write(
+        app.pontia_home()
+            .path()
+            .join("workflows/wf_patch_request/patches")
+            .join(patch_id)
+            .join("reason.md"),
+        reason,
+    )
+    .expect("write reason");
     let response = http::router(app.state.clone())
         .oneshot(
             Request::builder()
@@ -176,8 +214,7 @@ async fn block_patch(app: &TestApp, runtime: &str, reason: &str) -> (StatusCode,
                 .body(Body::from(
                     json!({
                         "session_id": "sess_patch_replanner",
-                        "runtime_instance_id": runtime,
-                        "reason": reason,
+                        "runtime_instance_id": runtime
                     })
                     .to_string(),
                 ))
@@ -336,15 +373,17 @@ async fn active_replanner_can_block_without_supplying_target_identifiers() {
     let (_, requested) = request_patch(&app, "runtime_patch_request").await;
     let patch_id = requested["data"]["patch_id"].as_str().unwrap();
     seed_active_replanner(&app, patch_id).await;
-    let patch_dir = app
-        .pontia_home()
-        .path()
-        .join("workflows/wf_patch_request/patches")
-        .join(patch_id);
-
     let (stale_status, _) = block_patch(&app, "stale_runtime", "stale").await;
     assert_eq!(stale_status, StatusCode::CONFLICT);
-    assert!(!patch_dir.join("reason.md").exists());
+    assert!(
+        SqliteWorkflowRepository::new(app.db.clone())
+            .get_patch(patch_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .reason_document_ref
+            .is_none()
+    );
     let (status, body) = block_patch(&app, "runtime_patch_replanner", "Cannot continue").await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["data"]["patch_id"], patch_id);

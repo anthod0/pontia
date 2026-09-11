@@ -98,11 +98,13 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
     )
     .expect("definition surface");
 
+    let node_dir = workflow_dir.join("nodes/wf_patch_interrupt_root");
+    fs::create_dir_all(&node_dir).expect("Node directory");
+    fs::write(node_dir.join("problem-report.md"), "Need a corrected plan").expect("problem report");
     let outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .request_patch(RequestWorkflowPatch {
             session_id: "sess_patch_interrupt".into(),
             runtime_instance_id: "runtime_patch_interrupt".into(),
-            document: "Need a corrected plan".into(),
         })
         .await
         .expect("request Patch");

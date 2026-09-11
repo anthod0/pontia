@@ -86,8 +86,6 @@ async fn submission_binding_failure_fails_without_starting_a_child() {
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_root".to_string(),
             runtime_instance_id: "runtime_session_root".to_string(),
-            output: "root.md".to_string(),
-            content: "root output".to_string(),
         })
         .await
         .expect_err("submission without a runtime binding must fail");
@@ -128,18 +126,25 @@ async fn deferred_exit_failure_fails_without_starting_a_child() {
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler =
-        WorkflowScheduler::with_services(pool, sessions.clone(), exits.clone(), pontia_home);
+    let scheduler = WorkflowScheduler::with_services(
+        pool,
+        sessions.clone(),
+        exits.clone(),
+        pontia_home.clone(),
+    );
     scheduler
         .start("wf_exit_failure")
         .await
         .expect("start workflow");
+    std::fs::write(
+        pontia_home.join("workflows/wf_exit_failure/handoff/root.md"),
+        "root output",
+    )
+    .expect("write root output");
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_root".to_string(),
             runtime_instance_id: "runtime_session_root".to_string(),
-            output: "root.md".to_string(),
-            content: "root output".to_string(),
         })
         .await
         .expect("submission records output before Turn completion");

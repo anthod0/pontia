@@ -187,6 +187,17 @@ async fn test_pool(path: &Path) -> sqlx::SqlitePool {
     pool
 }
 
+fn write_output(pontia_home: &Path, workflow_id: &str, content: &str) {
+    std::fs::write(
+        pontia_home
+            .join("workflows")
+            .join(workflow_id)
+            .join("handoff/result.md"),
+        content,
+    )
+    .expect("write Agent output");
+}
+
 async fn seed_running_single_node(
     repository: &SqliteWorkflowRepository,
     workflow_id: &str,
@@ -278,7 +289,7 @@ async fn wait_for_state(repository: &SqliteWorkflowRepository, expected: &str) {
 }
 
 #[tokio::test]
-async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_completion() {
+async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit_before_completion() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("submit.db")).await;
     let repository = SqliteWorkflowRepository::new(pool.clone());
@@ -298,15 +309,15 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler = WorkflowScheduler::with_services(pool, sessions, exits.clone(), pontia_home);
+    let scheduler =
+        WorkflowScheduler::with_services(pool, sessions, exits.clone(), pontia_home.clone());
     scheduler.start("wf_submit").await.expect("start workflow");
+    write_output(&pontia_home, "wf_submit", "Complete UTF-8 handoff: 完成\n");
 
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_submit".to_string(),
             runtime_instance_id: "rtinst_submit".to_string(),
-            output: "result.md".to_string(),
-            content: "Complete UTF-8 handoff: 完成\n".to_string(),
         })
         .await
         .expect("submit output");
@@ -487,7 +498,7 @@ async fn submission_writes_handoff_and_waits_for_confirmed_session_exit_before_c
 }
 
 #[tokio::test]
-async fn submission_rejects_wrong_session_runtime_and_output_without_writing_or_exiting() {
+async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownership() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("reject.db")).await;
     let repository = SqliteWorkflowRepository::new(pool.clone());
@@ -506,37 +517,45 @@ async fn submission_rejects_wrong_session_runtime_and_output_without_writing_or_
     );
     scheduler.start("wf_submit").await.expect("start workflow");
 
-    for (session_id, runtime_instance_id, output, expected) in [
-        (
-            "session_other",
-            "rtinst_submit",
-            "result.md",
-            "session_other",
-        ),
-        (
-            "session_submit",
-            "rtinst_stale",
-            "result.md",
-            "current runtime",
-        ),
-        (
-            "session_submit",
-            "rtinst_submit",
-            "other.md",
-            "declared output",
-        ),
+    for (session_id, runtime_instance_id, expected) in [
+        ("session_other", "rtinst_submit", "session_other"),
+        ("session_submit", "rtinst_stale", "current runtime"),
+        ("session_submit", "rtinst_submit", "is unavailable"),
     ] {
         let error = scheduler
             .submit(SubmitWorkflowNodeRequest {
                 session_id: session_id.to_string(),
                 runtime_instance_id: runtime_instance_id.to_string(),
-                output: output.to_string(),
-                content: "must not be written".to_string(),
             })
             .await
             .expect_err("invalid submission must fail");
         assert!(error.to_string().contains(expected), "{error}");
     }
+
+    repository
+        .create_node(CreateWorkflowNodeRecord {
+            node_id: "node_conflict".to_string(),
+            workflow_id: "wf_submit".to_string(),
+            parent_node_id: Some("node_submit".to_string()),
+            phase: "Test Phase".to_string(),
+            title: "Conflicting writer".to_string(),
+            instructions: "Produce output".to_string(),
+            inputs: r#"["result.md"]"#.to_string(),
+            output: "result.md".to_string(),
+            execution_profile_id: None,
+            execution_profile_version: None,
+        })
+        .await
+        .expect("create conflicting Node");
+    let error = scheduler
+        .submit(SubmitWorkflowNodeRequest {
+            session_id: "session_submit".to_string(),
+            runtime_instance_id: "rtinst_submit".to_string(),
+        })
+        .await
+        .expect_err("duplicate output ownership must fail");
+    assert!(error.to_string().contains("Conflicting writer"), "{error}");
+    assert!(error.to_string().contains("unique output name"), "{error}");
 
     assert!(
         !temp
@@ -597,8 +616,6 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_submit".to_string(),
             runtime_instance_id: "rtinst_submit".to_string(),
-            output: "result.md".to_string(),
-            content: "must not be written".to_string(),
         })
         .await
         .expect_err("pending workflow submission must fail");

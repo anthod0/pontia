@@ -222,6 +222,18 @@ where
                 state: workflow.state,
             });
         }
+        if let Some(conflicting) = self
+            .repository
+            .list_nodes(&workflow.workflow_id)
+            .await?
+            .into_iter()
+            .find(|candidate| candidate.node_id != node.node_id && candidate.output == node.output)
+        {
+            return Err(Error::InvalidDefinition(format!(
+                "Agent Node {} output {} conflicts with Agent Node {}; every Agent Node must use a unique output name so each Handoff file has exactly one writer",
+                node.title, node.output, conflicting.title
+            )));
+        }
         if let Err(error) = self
             .exits
             .ensure_current_runtime(&request.session_id, &request.runtime_instance_id)
@@ -242,20 +254,21 @@ where
             }
             return Err(error);
         }
-        if request.output != node.output {
-            return Err(Error::OutputMismatch {
-                expected: node.output,
-                actual: request.output,
+        validate_handoff_file_name(&node.output)?;
+        validate_pontia_home_boundary(&self.pontia_home)?;
+        let output_file = self.handoff_dir(&workflow.workflow_id).join(&node.output);
+        let metadata = tokio::fs::symlink_metadata(&output_file)
+            .await
+            .map_err(|error| Error::AgentFileUnavailable {
+                path: output_file.display().to_string(),
+                message: error.to_string(),
+            })?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(Error::AgentFileUnavailable {
+                path: output_file.display().to_string(),
+                message: "expected a regular file written by the Agent Node".to_string(),
             });
         }
-        validate_handoff_file_name(&request.output)?;
-        validate_pontia_home_boundary(&self.pontia_home)?;
-        tokio::fs::write(
-            self.handoff_dir(&workflow.workflow_id)
-                .join(&request.output),
-            request.content,
-        )
-        .await?;
         self.repository
             .record_node_submission(
                 &node.node_id,

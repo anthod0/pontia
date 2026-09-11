@@ -21,7 +21,7 @@ enum WorkflowCommandKind {
     Run(RunArgs),
     /// Show a compact, agent-readable Workflow context
     Show(ShowArgs),
-    Submit(SubmitArgs),
+    Submit,
     Patch(PatchArgs),
 }
 
@@ -33,41 +33,15 @@ struct PatchArgs {
 
 #[derive(Debug, Subcommand)]
 enum PatchCommandKind {
-    Request(PatchRequestArgs),
-    Apply(PatchApplyArgs),
-    Block(PatchBlockArgs),
-}
-
-#[derive(Debug, Args)]
-struct PatchRequestArgs {
-    #[arg(long, value_name = "REQUEST_FILE")]
-    input: PathBuf,
-}
-
-#[derive(Debug, Args)]
-struct PatchApplyArgs {
-    #[arg(long, value_name = "DECISION_FILE")]
-    decision: PathBuf,
-}
-
-#[derive(Debug, Args)]
-struct PatchBlockArgs {
-    #[arg(long, value_name = "REASON_FILE")]
-    reason: PathBuf,
+    Request,
+    Apply,
+    Block,
 }
 
 #[derive(Debug, Args)]
 struct RunArgs {
     #[arg(value_name = "WORKFLOW_FILE")]
     workflow_file: PathBuf,
-}
-
-#[derive(Debug, Args)]
-struct SubmitArgs {
-    #[arg(long, value_name = "PATH")]
-    input: String,
-    #[arg(long, value_name = "HANDOFF_FILE")]
-    output: String,
 }
 
 #[derive(Debug, Args)]
@@ -137,29 +111,24 @@ struct RunWorkflowResponseData {
 struct WorkflowSubmissionRequest {
     session_id: String,
     runtime_instance_id: String,
-    output: String,
-    content: String,
 }
 
 #[derive(Debug, Serialize)]
 struct WorkflowPatchRequest {
     session_id: String,
     runtime_instance_id: String,
-    document: String,
 }
 
 #[derive(Debug, Serialize)]
 struct WorkflowPatchApplyRequest {
     session_id: String,
     runtime_instance_id: String,
-    decision: String,
 }
 
 #[derive(Debug, Serialize)]
 struct WorkflowPatchBlockRequest {
     session_id: String,
     runtime_instance_id: String,
-    reason: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -187,8 +156,6 @@ struct WorkflowContextResponseData {
 #[derive(Debug, Deserialize)]
 struct WorkflowContext {
     workflow: WorkflowContextSummary,
-    #[serde(default)]
-    definition_file: String,
     active_patch: Option<WorkflowActivePatch>,
     current_node: WorkflowNodeContext,
 }
@@ -198,7 +165,6 @@ struct WorkflowActivePatch {
     patch_id: String,
     state: String,
     base_revision: i64,
-    request_document_ref: String,
     replanner_session_id: Option<String>,
 }
 
@@ -241,11 +207,11 @@ pub(crate) async fn run(workflow: WorkflowCommand, config: &AppConfig) -> Result
     match workflow.command {
         WorkflowCommandKind::Run(args) => run_workflow(args, config).await,
         WorkflowCommandKind::Show(args) => show_workflow(args, config).await,
-        WorkflowCommandKind::Submit(args) => submit_workflow(args, config).await,
+        WorkflowCommandKind::Submit => submit_workflow(config).await,
         WorkflowCommandKind::Patch(args) => match args.command {
-            PatchCommandKind::Request(args) => request_workflow_patch(args, config).await,
-            PatchCommandKind::Apply(args) => apply_workflow_patch(args, config).await,
-            PatchCommandKind::Block(args) => block_workflow_patch(args, config).await,
+            PatchCommandKind::Request => request_workflow_patch(config).await,
+            PatchCommandKind::Apply => apply_workflow_patch(config).await,
+            PatchCommandKind::Block => block_workflow_patch(config).await,
         },
     }
 }
@@ -385,13 +351,10 @@ fn render_workflow_context(context: &WorkflowContext) -> String {
         workflow.agent_total_count,
         workflow.current_revision,
     );
-    if !context.definition_file.is_empty() {
-        document.push_str(&format!("\nDefinition: `{}`", context.definition_file));
-    }
     if let Some(patch) = &context.active_patch {
         document.push_str(&format!(
-            "\nActive Patch: `{}` | State: {} | Base revision: {} | Request: `{}`",
-            patch.patch_id, patch.state, patch.base_revision, patch.request_document_ref
+            "\nActive Patch: `{}` | State: {} | Base revision: {}",
+            patch.patch_id, patch.state, patch.base_revision
         ));
         if let Some(session_id) = patch.replanner_session_id.as_deref() {
             document.push_str(&format!(" | Re-planner: `{session_id}`"));
@@ -450,9 +413,7 @@ fn resolve_existing_path(base: &Path, path: &Path, description: &str) -> Result<
     })
 }
 
-async fn submit_workflow(args: SubmitArgs, config: &AppConfig) -> Result<(), String> {
-    let content = fs::read_to_string(&args.input)
-        .map_err(|error| format!("failed to read UTF-8 input file {}: {error}", args.input))?;
+async fn submit_workflow(config: &AppConfig) -> Result<(), String> {
     let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
     let token = config
         .external_api_token
@@ -468,8 +429,6 @@ async fn submit_workflow(args: SubmitArgs, config: &AppConfig) -> Result<(), Str
         .json(&WorkflowSubmissionRequest {
             session_id,
             runtime_instance_id,
-            output: args.output,
-            content,
         })
         .send()
         .await
@@ -484,13 +443,7 @@ async fn submit_workflow(args: SubmitArgs, config: &AppConfig) -> Result<(), Str
     Ok(())
 }
 
-async fn request_workflow_patch(args: PatchRequestArgs, config: &AppConfig) -> Result<(), String> {
-    let document = fs::read_to_string(&args.input).map_err(|error| {
-        format!(
-            "failed to read UTF-8 Workflow Patch request file {}: {error}",
-            args.input.display()
-        )
-    })?;
+async fn request_workflow_patch(config: &AppConfig) -> Result<(), String> {
     let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
     let token = config
         .external_api_token
@@ -506,7 +459,6 @@ async fn request_workflow_patch(args: PatchRequestArgs, config: &AppConfig) -> R
         .json(&WorkflowPatchRequest {
             session_id,
             runtime_instance_id,
-            document,
         })
         .send()
         .await
@@ -526,13 +478,7 @@ async fn request_workflow_patch(args: PatchRequestArgs, config: &AppConfig) -> R
     Ok(())
 }
 
-async fn apply_workflow_patch(args: PatchApplyArgs, config: &AppConfig) -> Result<(), String> {
-    let decision = fs::read_to_string(&args.decision).map_err(|error| {
-        format!(
-            "failed to read UTF-8 Workflow Patch decision file {}: {error}",
-            args.decision.display()
-        )
-    })?;
+async fn apply_workflow_patch(config: &AppConfig) -> Result<(), String> {
     let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
     let token = config
         .external_api_token
@@ -548,7 +494,6 @@ async fn apply_workflow_patch(args: PatchApplyArgs, config: &AppConfig) -> Resul
         .json(&WorkflowPatchApplyRequest {
             session_id,
             runtime_instance_id,
-            decision,
         })
         .send()
         .await
@@ -576,13 +521,7 @@ async fn apply_workflow_patch(args: PatchApplyArgs, config: &AppConfig) -> Resul
     Ok(())
 }
 
-async fn block_workflow_patch(args: PatchBlockArgs, config: &AppConfig) -> Result<(), String> {
-    let reason = fs::read_to_string(&args.reason).map_err(|error| {
-        format!(
-            "failed to read UTF-8 Workflow Patch reason file {}: {error}",
-            args.reason.display()
-        )
-    })?;
+async fn block_workflow_patch(config: &AppConfig) -> Result<(), String> {
     let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
     let token = config
         .external_api_token
@@ -598,7 +537,6 @@ async fn block_workflow_patch(args: PatchBlockArgs, config: &AppConfig) -> Resul
         .json(&WorkflowPatchBlockRequest {
             session_id,
             runtime_instance_id,
-            reason,
         })
         .send()
         .await

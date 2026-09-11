@@ -42,16 +42,16 @@ impl WorkflowPatchService {
             .get_node_by_session(&request.session_id)
             .await?
             .ok_or_else(|| Error::NodeForSessionNotFound(request.session_id.clone()))?;
+        let workflow_dir = self.pontia_home.join("workflows").join(&node.workflow_id);
+        let source_file = workflow_dir
+            .join("nodes")
+            .join(&node.node_id)
+            .join("problem-report.md");
+        let document = read_agent_file(&source_file, "Workflow Patch problem report").await?;
         let patch_id = format!("patch_{}", Uuid::now_v7());
         let request_document_ref = format!("patches/{patch_id}/request.md");
-        let patch_dir = self
-            .pontia_home
-            .join("workflows")
-            .join(&node.workflow_id)
-            .join("patches")
-            .join(&patch_id);
-        self.write_request_document(&patch_dir, &request.document)
-            .await?;
+        let patch_dir = workflow_dir.join("patches").join(&patch_id);
+        self.write_request_document(&patch_dir, &document).await?;
         let workflow_file = patch_dir
             .parent()
             .and_then(Path::parent)
@@ -92,7 +92,7 @@ impl WorkflowPatchService {
                 session_id: request.session_id,
                 runtime_instance_id: request.runtime_instance_id,
                 request_document_ref,
-                request_size_bytes: i64::try_from(request.document.len()).map_err(|_| {
+                request_size_bytes: i64::try_from(document.len()).map_err(|_| {
                     Error::InvalidDefinition("Workflow Patch request document is too large".into())
                 })?,
                 replanner_creation_token: format!("workflow_replanner_{}", Uuid::now_v7()),
@@ -114,11 +114,6 @@ impl WorkflowPatchService {
         &self,
         request: ApplyWorkflowPatch,
     ) -> Result<ApplyWorkflowPatchOutcome> {
-        if request.decision.trim().is_empty() {
-            return Err(Error::InvalidDefinition(
-                "Workflow Patch decision must not be empty".into(),
-            ));
-        }
         validate_pontia_home_boundary(&self.pontia_home)?;
         let patch = self
             .repository
@@ -146,6 +141,13 @@ impl WorkflowPatchService {
         let workflow_dir = self.pontia_home.join("workflows").join(&patch.workflow_id);
         let patch_dir = workflow_dir.join("patches").join(&patch.patch_id);
         self.validate_patch_directory(&workflow_dir, &patch_dir)?;
+        let decision_file = patch_dir.join("decision.md");
+        let decision = read_agent_file(&decision_file, "Workflow Patch decision").await?;
+        if decision.trim().is_empty() {
+            return Err(Error::InvalidDefinition(
+                "Workflow Patch decision must not be empty".into(),
+            ));
+        }
         let workflow_file = workflow_dir.join("workflow.toml");
         let accepted_file = patch_dir.join("accepted-definition.toml");
         for path in [&workflow_file, &accepted_file] {
@@ -203,14 +205,11 @@ impl WorkflowPatchService {
                 (retired_node_ids, records)
             }
         };
-        let decision_name = format!("decision-{}.md", Uuid::now_v7());
-        let decision_document_ref = format!("patches/{}/{}", patch.patch_id, decision_name);
-        self.write_atomic(&patch_dir, &decision_name, request.decision.as_bytes())
-            .await?;
-        let decision_size_bytes = i64::try_from(request.decision.len()).map_err(|_| {
+        let decision_document_ref = format!("patches/{}/decision.md", patch.patch_id);
+        let decision_size_bytes = i64::try_from(decision.len()).map_err(|_| {
             Error::InvalidDefinition("Workflow Patch decision document is too large".into())
         })?;
-        let decision_summary = bounded_summary(&request.decision, 500);
+        let decision_summary = bounded_summary(&decision, 500);
         let resolved = self
             .repository
             .apply_patch(ApplyWorkflowPatchRecord {
@@ -259,11 +258,6 @@ impl WorkflowPatchService {
         &self,
         request: BlockWorkflowPatch,
     ) -> Result<BlockWorkflowPatchOutcome> {
-        if request.reason.trim().is_empty() {
-            return Err(Error::InvalidDefinition(
-                "Workflow Patch block reason must not be empty".into(),
-            ));
-        }
         validate_pontia_home_boundary(&self.pontia_home)?;
         let patch = self
             .repository
@@ -278,11 +272,15 @@ impl WorkflowPatchService {
         let workflow_dir = self.pontia_home.join("workflows").join(&patch.workflow_id);
         let patch_dir = workflow_dir.join("patches").join(&patch.patch_id);
         self.validate_patch_directory(&workflow_dir, &patch_dir)?;
+        let reason_file = patch_dir.join("reason.md");
+        let reason = read_agent_file(&reason_file, "Workflow Patch block reason").await?;
+        if reason.trim().is_empty() {
+            return Err(Error::InvalidDefinition(
+                "Workflow Patch block reason must not be empty".into(),
+            ));
+        }
 
         let resolution_token = Uuid::now_v7();
-        let reason_name = format!("reason-{resolution_token}.md");
-        self.write_atomic(&patch_dir, &reason_name, request.reason.as_bytes())
-            .await?;
         let workflow_file = workflow_dir.join("workflow.toml");
         let accepted_file = patch_dir.join("accepted-definition.toml");
         for path in [&accepted_file, &workflow_file] {
@@ -300,7 +298,7 @@ impl WorkflowPatchService {
         } else {
             None
         };
-        let reason_document_ref = format!("patches/{}/{}", patch.patch_id, reason_name);
+        let reason_document_ref = format!("patches/{}/reason.md", patch.patch_id);
         let blocked = self
             .repository
             .block_patch(BlockWorkflowPatchRecord {
@@ -390,6 +388,28 @@ impl WorkflowPatchService {
         let _ = tokio::fs::remove_file(patch_dir.join("accepted-definition.toml")).await;
         let _ = tokio::fs::remove_dir(patch_dir).await;
     }
+}
+
+async fn read_agent_file(path: &Path, description: &str) -> Result<String> {
+    let metadata =
+        tokio::fs::symlink_metadata(path)
+            .await
+            .map_err(|error| Error::AgentFileUnavailable {
+                path: path.display().to_string(),
+                message: format!("{description}: {error}"),
+            })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(Error::AgentFileUnavailable {
+            path: path.display().to_string(),
+            message: format!("{description} must be a regular file"),
+        });
+    }
+    tokio::fs::read_to_string(path)
+        .await
+        .map_err(|error| Error::AgentFileUnavailable {
+            path: path.display().to_string(),
+            message: format!("failed to read {description}: {error}"),
+        })
 }
 
 fn bounded_summary(document: &str, max_chars: usize) -> String {

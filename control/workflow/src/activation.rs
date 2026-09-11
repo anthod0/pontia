@@ -60,14 +60,43 @@ async fn activate_claimed_node<S: SessionCreator>(
     node: &WorkflowNodeRow,
     handoff_dir: &Path,
 ) -> std::result::Result<String, ActivationFailure> {
+    let output_file = handoff_dir.join(&node.output);
+    match tokio::fs::remove_file(&output_file).await {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(ActivationFailure {
+                failure_message: format!(
+                    "failed to prepare output file for Workflow Agent Node {}: {error}",
+                    node.node_id
+                ),
+                error: error.into(),
+            });
+        }
+    }
+    let node_dir = handoff_dir
+        .parent()
+        .expect("Handoff directory has a Workflow parent")
+        .join("nodes")
+        .join(&node.node_id);
+    tokio::fs::create_dir_all(&node_dir)
+        .await
+        .map_err(|error| ActivationFailure {
+            failure_message: format!(
+                "failed to prepare files for Workflow Agent Node {}: {error}",
+                node.node_id
+            ),
+            error: error.into(),
+        })?;
+    let problem_report_file = node_dir.join("problem-report.md");
     let initial_task = render_initial_task(node, handoff_dir).await?;
-    let workflow_file = handoff_dir.with_file_name("workflow.toml");
     let session_id = sessions
         .create_session(session_request(
             workflow,
             node,
             initial_task,
-            &workflow_file,
+            &output_file,
+            &problem_report_file,
         ))
         .await
         .map_err(|error| ActivationFailure {
@@ -94,16 +123,21 @@ fn session_request(
     workflow: &WorkflowRow,
     node: &WorkflowNodeRow,
     initial_task: String,
-    workflow_file: &Path,
+    output_file: &Path,
+    problem_report_file: &Path,
 ) -> CreateSessionRequest {
     let runtime_environment = BTreeMap::from([
         (
-            "PONTIA_WORKFLOW_FILE".to_string(),
-            workflow_file.display().to_string(),
-        ),
-        (
             "PONTIA_WORKFLOW_ID".to_string(),
             workflow.workflow_id.clone(),
+        ),
+        (
+            "PONTIA_WORKFLOW_OUTPUT_FILE".to_string(),
+            output_file.display().to_string(),
+        ),
+        (
+            "PONTIA_WORKFLOW_PROBLEM_REPORT_FILE".to_string(),
+            problem_report_file.display().to_string(),
         ),
     ]);
     CreateSessionRequest {
@@ -177,14 +211,14 @@ async fn render_initial_task(
          ## Instructions\n\n{}\n\
          {}\n\
          ## Problem report\n\n\
-         If blocked by an unexpected issue, write the problem, evidence, and proposed changes to a UTF-8 file, then run:\n\n\
-         pontia workflow patch request --input <request-path>\n\n\
+         If blocked by an unexpected issue, write the problem, evidence, and proposed changes directly to `$PONTIA_WORKFLOW_PROBLEM_REPORT_FILE`, then run:\n\n\
+         pontia workflow patch request\n\n\
          On success, stop work without submitting output; Pontia handles interruption and replanning.\n\n\
          ## Task completion\n\n\
          Expected output: {}\n\n\
-         The task is not complete until you create a source file in the Session cwd containing the full output and successfully submit it with:\n\n\
-         pontia workflow submit --input <source-path> --output {}\n\n\
+         Write the full output directly to `$PONTIA_WORKFLOW_OUTPUT_FILE`. The task is not complete until that file exists and you successfully run:\n\n\
+         pontia workflow submit\n\n\
          After the command succeeds, stop work.\n",
-        node.instructions, rendered_inputs, node.output, node.output
+        node.instructions, rendered_inputs, node.output
     ))
 }

@@ -52,8 +52,6 @@ struct WorkflowRunNode {
 pub struct WorkflowSubmissionRequest {
     session_id: String,
     runtime_instance_id: String,
-    output: String,
-    content: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -61,7 +59,6 @@ pub struct WorkflowSubmissionRequest {
 pub struct WorkflowPatchRequest {
     session_id: String,
     runtime_instance_id: String,
-    document: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,7 +66,6 @@ pub struct WorkflowPatchRequest {
 pub struct WorkflowPatchApplyRequest {
     session_id: String,
     runtime_instance_id: String,
-    decision: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,7 +73,6 @@ pub struct WorkflowPatchApplyRequest {
 pub struct WorkflowPatchBlockRequest {
     session_id: String,
     runtime_instance_id: String,
-    reason: String,
 }
 
 pub async fn run_workflow(
@@ -151,7 +146,6 @@ pub async fn request_workflow_patch(
         .request_patch(RequestWorkflowPatch {
             session_id: request.session_id,
             runtime_instance_id: request.runtime_instance_id,
-            document: request.document,
         })
         .await
         .map_err(ApiError::from_workflow)?;
@@ -178,7 +172,6 @@ pub async fn apply_workflow_patch(
         .apply_patch(ApplyWorkflowPatch {
             session_id: request.session_id,
             runtime_instance_id: request.runtime_instance_id,
-            decision: request.decision,
         })
         .await
         .map_err(ApiError::from_workflow)?;
@@ -207,7 +200,6 @@ pub async fn block_workflow_patch(
         .block_patch(BlockWorkflowPatch {
             session_id: request.session_id,
             runtime_instance_id: request.runtime_instance_id,
-            reason: request.reason,
         })
         .await
         .map_err(ApiError::from_workflow)?;
@@ -240,8 +232,6 @@ pub async fn submit_workflow_output(
         .submit(SubmitWorkflowNodeRequest {
             session_id: request.session_id,
             runtime_instance_id: request.runtime_instance_id,
-            output: request.output,
-            content: request.content,
         })
         .await
         .map_err(ApiError::from_workflow)?;

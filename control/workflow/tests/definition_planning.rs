@@ -318,11 +318,19 @@ fn candidate_rejects_unsafe_handoffs_and_invalid_agent_nodes() {
         &candidate_node(Some("node_current"), "Current", "brief.md", "current.md")
             .replace("type = \"agent\"", "type = \"control\""),
     );
+    let duplicate_output = candidate_with_nodes(
+        &[
+            candidate_node(Some("node_current"), "Current", "brief.md", "current.md"),
+            candidate_node(None, "Duplicate writer", "current.md", "current.md"),
+        ]
+        .join("\n"),
+    );
 
     for (candidate, expected) in [
         (unsafe_handoff, "invalid Handoff file name"),
         (unsafe_initial_handoff, "invalid Handoff file name"),
         (unsupported_node, "unsupported Workflow Node type"),
+        (duplicate_output, "each Handoff file has exactly one writer"),
     ] {
         let error = plan_workflow_definition_change(&accepted_definition(), &candidate)
             .expect_err("candidate must be rejected");

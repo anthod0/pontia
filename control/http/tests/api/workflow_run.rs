@@ -77,6 +77,48 @@ async fn internal_workflow_run_rejects_unsupported_node_types_before_creation() 
 }
 
 #[tokio::test]
+async fn internal_workflow_run_rejects_duplicate_output_owners_with_an_actionable_error() {
+    let app = TestApp::new().await;
+
+    let (status, body) = post_run(
+        &app,
+        json!({
+            "workflow_id": "wf_duplicate_outputs",
+            "title": "Duplicate outputs",
+            "cwd": app.workspace().path().display().to_string(),
+            "nodes": [
+                {
+                    "type": "agent",
+                    "phase": "Build",
+                    "title": "First writer",
+                    "instructions": "Write the first result.",
+                    "inputs": [],
+                    "output": "result.md"
+                },
+                {
+                    "type": "agent",
+                    "phase": "Review",
+                    "title": "Second writer",
+                    "instructions": "Write the second result.",
+                    "inputs": ["result.md"],
+                    "output": "result.md"
+                }
+            ]
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    let message = body["error"]["message"].as_str().expect("error message");
+    assert!(
+        message.contains("Second writer output result.md"),
+        "{message}"
+    );
+    assert!(message.contains("First writer"), "{message}");
+    assert!(message.contains("unique output name"), "{message}");
+}
+
+#[tokio::test]
 async fn internal_workflow_run_creates_and_starts_a_linear_agent_workflow() {
     let app = TestApp::builder().pi_runtime_stub(true).build().await;
     let cwd = app.workspace().path().display().to_string();

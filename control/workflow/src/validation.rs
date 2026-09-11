@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     path::{Component, Path},
 };
 
@@ -18,10 +18,13 @@ pub(crate) fn validate_run_request(request: &RunWorkflowRequest) -> Result<()> {
         ));
     }
 
-    let mut available_handoffs = HashSet::new();
+    let mut available_handoffs = HashMap::new();
     for handoff in &request.handoffs {
         validate_handoff_file_name(&handoff.name)?;
-        if !available_handoffs.insert(handoff.name.clone()) {
+        if available_handoffs
+            .insert(handoff.name.clone(), "an initial Handoff".to_string())
+            .is_some()
+        {
             return Err(Error::InvalidDefinition(format!(
                 "duplicate initial Handoff file {}",
                 handoff.name
@@ -62,7 +65,7 @@ pub(crate) fn validate_run_request(request: &RunWorkflowRequest) -> Result<()> {
         }
         for input in &node.inputs {
             validate_handoff_file_name(input)?;
-            if !available_handoffs.contains(input) {
+            if !available_handoffs.contains_key(input) {
                 return Err(Error::InvalidDefinition(format!(
                     "Agent Node {} input {input} is not an initial Handoff or prior Agent Node output",
                     node.title
@@ -70,7 +73,13 @@ pub(crate) fn validate_run_request(request: &RunWorkflowRequest) -> Result<()> {
             }
         }
         validate_handoff_file_name(&node.output)?;
-        available_handoffs.insert(node.output.clone());
+        if let Some(owner) = available_handoffs.get(&node.output) {
+            return Err(Error::InvalidDefinition(format!(
+                "Agent Node {} output {} conflicts with {owner}; every Agent Node must use a unique output name so each Handoff file has exactly one writer",
+                node.title, node.output
+            )));
+        }
+        available_handoffs.insert(node.output.clone(), format!("Agent Node {}", node.title));
     }
     Ok(())
 }

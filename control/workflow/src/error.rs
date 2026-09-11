@@ -53,6 +53,6 @@ pub enum Error {
     #[error("runtime control is unavailable for session {session_id}: {message}")]
     RuntimeControlUnavailable { session_id: String, message: String },
 
-    #[error("output {actual} does not match Agent Node declared output {expected}")]
-    OutputMismatch { expected: String, actual: String },
+    #[error("Pontia-managed Agent file {path} is unavailable: {message}")]
+    AgentFileUnavailable { path: String, message: String },
 }

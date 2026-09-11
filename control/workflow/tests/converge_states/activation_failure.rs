@@ -89,18 +89,25 @@ async fn downstream_session_creation_failure_stops_the_workflow() {
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler =
-        WorkflowScheduler::with_services(pool, sessions.clone(), exits.clone(), pontia_home);
+    let scheduler = WorkflowScheduler::with_services(
+        pool,
+        sessions.clone(),
+        exits.clone(),
+        pontia_home.clone(),
+    );
     scheduler
         .start("wf_downstream_failure")
         .await
         .expect("start workflow");
+    std::fs::write(
+        pontia_home.join("workflows/wf_downstream_failure/handoff/root.md"),
+        "root output",
+    )
+    .expect("write root output");
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_root".to_string(),
             runtime_instance_id: "runtime_session_root".to_string(),
-            output: "root.md".to_string(),
-            content: "root output".to_string(),
         })
         .await
         .expect("submit root output");
