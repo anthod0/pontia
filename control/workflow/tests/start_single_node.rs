@@ -37,7 +37,7 @@ async fn test_pool(path: &Path) -> sqlx::SqlitePool {
 }
 
 #[tokio::test]
-async fn start_launches_first_node_as_a_pi_session_with_handoff_protocol() {
+async fn start_launches_first_node_with_required_task_completion_instructions() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("workflow.db")).await;
     let repository = SqliteWorkflowRepository::new(pool.clone());
@@ -109,6 +109,29 @@ async fn start_launches_first_node_as_a_pi_session_with_handoff_protocol() {
             .get("PONTIA_WORKFLOW_FILE")
             .map(String::as_str),
         Some(workflow_file.as_str())
+    );
+    assert_eq!(
+        request
+            .initial_task
+            .as_ref()
+            .map(|task| task.input.as_str()),
+        Some(
+            "You are an worker node in a workflow, managed by pontia\n\n\
+             ## Instructions\n\n\
+             Turn the brief into concise release notes.\n\n\
+             ## Input file: brief.md\n\n\
+             Ship the workflow scheduler.\n\
+             Keep the notes short.\n\n\
+             ## Problem report\n\n\
+             If blocked by an unexpected issue, write the problem, evidence, and proposed changes to a UTF-8 file, then run:\n\n\
+             pontia workflow patch request --input <request-path>\n\n\
+             On success, stop work without submitting output; Pontia handles interruption and replanning.\n\n\
+             ## Task completion\n\n\
+             Expected output: release.md\n\n\
+             The task is not complete until you create a source file in the Session cwd containing the full output and successfully submit it with:\n\n\
+             pontia workflow submit --input <source-path> --output release.md\n\n\
+             After the command succeeds, stop work.\n"
+        )
     );
 
     let workflow = repository

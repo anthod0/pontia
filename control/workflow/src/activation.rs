@@ -173,24 +173,18 @@ async fn render_initial_task(
     })?;
 
     Ok(format!(
-        "# Workflow Agent Node\n\n\
+        "You are an worker node in a workflow, managed by pontia\n\n\
          ## Instructions\n\n{}\n\
          {}\n\
-         ## Workflow definition\n\n\
-         The durable Workflow definition is available at `$PONTIA_WORKFLOW_FILE`.\n\n\
-         ## Replanning protocol\n\n\
-         If blocked by a plan-level issue, write the problem, evidence, and proposed changes to a UTF-8 file, then run:\n\n\
-         ```bash\n\
-         pontia workflow patch request --input <request-path>\n\
-         ```\n\n\
+         ## Problem report\n\n\
+         If blocked by an unexpected issue, write the problem, evidence, and proposed changes to a UTF-8 file, then run:\n\n\
+         pontia workflow patch request --input <request-path>\n\n\
          On success, stop work without submitting output; Pontia handles interruption and replanning.\n\n\
-         ## Handoff protocol\n\n\
+         ## Task completion\n\n\
          Expected output: {}\n\n\
-         Complete the work, then create a source file in the Session cwd containing the full output. \
-         Submit that file with:\n\n\
-         ```bash\n\
-         pontia workflow submit --input <source-path> --output {}\n\
-         ```\n",
+         The task is not complete until you create a source file in the Session cwd containing the full output and successfully submit it with:\n\n\
+         pontia workflow submit --input <source-path> --output {}\n\n\
+         After the command succeeds, stop work.\n",
         node.instructions, rendered_inputs, node.output, node.output
     ))
 }
