@@ -122,7 +122,7 @@ pub(super) fn write_launch_script(
     };
     let content = format!(
         r#"#!/usr/bin/env sh
-unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_FILE PONTIA_WORKFLOW_OUTPUT_FILE PONTIA_WORKFLOW_PROBLEM_REPORT_FILE PONTIA_WORKFLOW_PATCH_ID PONTIA_WORKFLOW_PATCH_DECISION_FILE PONTIA_WORKFLOW_PATCH_REASON_FILE
+unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_PATCH_ID
 export PONTIA_HOME={}
 {}if [ -n "${{TMUX:-}}" ] && [ -n "${{TMUX_PANE:-}}" ]; then
   tmux set-option -p -t "$TMUX_PANE" @pontia_session_id {} || exit 1
@@ -224,8 +224,8 @@ mod tests {
             environment: [
                 ("PONTIA_WORKFLOW_ID".to_string(), "wf_123".to_string()),
                 (
-                    "PONTIA_WORKFLOW_FILE".to_string(),
-                    "/pontia/workflows/wf_123/workflow.toml".to_string(),
+                    "PONTIA_WORKFLOW_PATCH_ID".to_string(),
+                    "patch_123".to_string(),
                 ),
             ]
             .into_iter()
@@ -250,11 +250,9 @@ mod tests {
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
         assert!(script.contains("export PONTIA_HOME="));
         assert!(script.contains("export PONTIA_WORKFLOW_ID='wf_123'"));
-        assert!(
-            script.contains("export PONTIA_WORKFLOW_FILE='/pontia/workflows/wf_123/workflow.toml'")
-        );
+        assert!(script.contains("export PONTIA_WORKFLOW_PATCH_ID='patch_123'"));
         assert!(script.contains(
-            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_FILE PONTIA_WORKFLOW_OUTPUT_FILE PONTIA_WORKFLOW_PROBLEM_REPORT_FILE PONTIA_WORKFLOW_PATCH_ID PONTIA_WORKFLOW_PATCH_DECISION_FILE PONTIA_WORKFLOW_PATCH_REASON_FILE"
+            "unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_PATCH_ID"
         ));
         for name in [
             "PONTIA_SESSION_ID",

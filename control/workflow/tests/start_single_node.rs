@@ -99,52 +99,41 @@ async fn start_launches_first_node_with_required_task_completion_instructions() 
             .map(String::as_str),
         Some("wf_start")
     );
-    assert_eq!(
-        request
-            .runtime_environment
-            .get("PONTIA_WORKFLOW_OUTPUT_FILE")
-            .map(String::as_str),
-        Some(
-            temp.path()
-                .join("pontia-home/workflows/wf_start/handoff/release.md")
-                .to_str()
-                .expect("output path")
-        )
-    );
-    assert_eq!(
-        request
-            .runtime_environment
-            .get("PONTIA_WORKFLOW_PROBLEM_REPORT_FILE")
-            .map(String::as_str),
-        Some(
-            temp.path()
-                .join("pontia-home/workflows/wf_start/nodes/node_writer/problem-report.md")
-                .to_str()
-                .expect("problem report path")
-        )
+    let problem_report_file = temp
+        .path()
+        .join("pontia-home/workflows/wf_start/nodes/node_writer/problem-report.md");
+    let output_file = temp
+        .path()
+        .join("pontia-home/workflows/wf_start/handoff/release.md");
+    let expected_task = format!(
+        "You are an worker node in a workflow, managed by pontia\n\n\
+         ## Instructions\n\n\
+         Turn the brief into concise release notes.\n\n\
+         ## Input file: brief.md\n\n\
+         Ship the workflow scheduler.\n\
+         Keep the notes short.\n\n\
+         ## Problem report\n\n\
+         If blocked by an unexpected issue, write the problem, evidence, and proposed changes directly to:\n\n\
+         `{}`\n\n\
+         Then run:\n\n\
+         pontia workflow patch request\n\n\
+         On success, stop work without submitting output; Pontia handles interruption and replanning.\n\n\
+         ## Task completion\n\n\
+         Expected output: release.md\n\n\
+         Write the full output directly to:\n\n\
+         `{}`\n\n\
+         The task is not complete until that file exists and you successfully run:\n\n\
+         pontia workflow submit\n\n\
+         After the command succeeds, stop work.\n",
+        problem_report_file.display(),
+        output_file.display(),
     );
     assert_eq!(
         request
             .initial_task
             .as_ref()
             .map(|task| task.input.as_str()),
-        Some(
-            "You are an worker node in a workflow, managed by pontia\n\n\
-             ## Instructions\n\n\
-             Turn the brief into concise release notes.\n\n\
-             ## Input file: brief.md\n\n\
-             Ship the workflow scheduler.\n\
-             Keep the notes short.\n\n\
-             ## Problem report\n\n\
-             If blocked by an unexpected issue, write the problem, evidence, and proposed changes directly to `$PONTIA_WORKFLOW_PROBLEM_REPORT_FILE`, then run:\n\n\
-             pontia workflow patch request\n\n\
-             On success, stop work without submitting output; Pontia handles interruption and replanning.\n\n\
-             ## Task completion\n\n\
-             Expected output: release.md\n\n\
-             Write the full output directly to `$PONTIA_WORKFLOW_OUTPUT_FILE`. The task is not complete until that file exists and you successfully run:\n\n\
-             pontia workflow submit\n\n\
-             After the command succeeds, stop work.\n"
-        )
+        Some(expected_task.as_str())
     );
 
     let workflow = repository

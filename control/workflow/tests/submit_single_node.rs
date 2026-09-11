@@ -289,7 +289,8 @@ async fn wait_for_state(repository: &SqliteWorkflowRepository, expected: &str) {
 }
 
 #[tokio::test]
-async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit_before_completion() {
+async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit_before_completion()
+{
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("submit.db")).await;
     let repository = SqliteWorkflowRepository::new(pool.clone());

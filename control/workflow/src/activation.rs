@@ -89,15 +89,10 @@ async fn activate_claimed_node<S: SessionCreator>(
             error: error.into(),
         })?;
     let problem_report_file = node_dir.join("problem-report.md");
-    let initial_task = render_initial_task(node, handoff_dir).await?;
+    let initial_task =
+        render_initial_task(node, handoff_dir, &output_file, &problem_report_file).await?;
     let session_id = sessions
-        .create_session(session_request(
-            workflow,
-            node,
-            initial_task,
-            &output_file,
-            &problem_report_file,
-        ))
+        .create_session(session_request(workflow, node, initial_task))
         .await
         .map_err(|error| ActivationFailure {
             failure_message: format!(
@@ -123,23 +118,11 @@ fn session_request(
     workflow: &WorkflowRow,
     node: &WorkflowNodeRow,
     initial_task: String,
-    output_file: &Path,
-    problem_report_file: &Path,
 ) -> CreateSessionRequest {
-    let runtime_environment = BTreeMap::from([
-        (
-            "PONTIA_WORKFLOW_ID".to_string(),
-            workflow.workflow_id.clone(),
-        ),
-        (
-            "PONTIA_WORKFLOW_OUTPUT_FILE".to_string(),
-            output_file.display().to_string(),
-        ),
-        (
-            "PONTIA_WORKFLOW_PROBLEM_REPORT_FILE".to_string(),
-            problem_report_file.display().to_string(),
-        ),
-    ]);
+    let runtime_environment = BTreeMap::from([(
+        "PONTIA_WORKFLOW_ID".to_string(),
+        workflow.workflow_id.clone(),
+    )]);
     CreateSessionRequest {
         client_type: "pi".to_string(),
         title: Some(node.title.clone()),
@@ -162,6 +145,8 @@ fn session_request(
 async fn render_initial_task(
     node: &WorkflowNodeRow,
     handoff_dir: &Path,
+    output_file: &Path,
+    problem_report_file: &Path,
 ) -> std::result::Result<String, ActivationFailure> {
     let inputs: Vec<String> =
         serde_json::from_str(&node.inputs).map_err(|error| ActivationFailure {
@@ -211,14 +196,22 @@ async fn render_initial_task(
          ## Instructions\n\n{}\n\
          {}\n\
          ## Problem report\n\n\
-         If blocked by an unexpected issue, write the problem, evidence, and proposed changes directly to `$PONTIA_WORKFLOW_PROBLEM_REPORT_FILE`, then run:\n\n\
+         If blocked by an unexpected issue, write the problem, evidence, and proposed changes directly to:\n\n\
+         `{}`\n\n\
+         Then run:\n\n\
          pontia workflow patch request\n\n\
          On success, stop work without submitting output; Pontia handles interruption and replanning.\n\n\
          ## Task completion\n\n\
          Expected output: {}\n\n\
-         Write the full output directly to `$PONTIA_WORKFLOW_OUTPUT_FILE`. The task is not complete until that file exists and you successfully run:\n\n\
+         Write the full output directly to:\n\n\
+         `{}`\n\n\
+         The task is not complete until that file exists and you successfully run:\n\n\
          pontia workflow submit\n\n\
          After the command succeeds, stop work.\n",
-        node.instructions, rendered_inputs, node.output
+        node.instructions,
+        rendered_inputs,
+        problem_report_file.display(),
+        node.output,
+        output_file.display()
     ))
 }

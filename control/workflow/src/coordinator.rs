@@ -478,7 +478,10 @@ where
                 let decision_file = patch_dir.join("decision.md");
                 let reason_file = patch_dir.join("reason.md");
                 let initial_task = format!(
-                    "# Workflow Re-planner\n\n## Patch request\n\n{request}\n\n## Current Workflow definition\n\n{definition}\n\n## Instructions\n\nInspect the compact Workflow context with `pontia workflow show` and write the revised definition directly to `$PONTIA_WORKFLOW_FILE`. To apply it, write the decision directly to `$PONTIA_WORKFLOW_PATCH_DECISION_FILE`, then run `pontia workflow patch apply`. To block the Patch instead, write the reason directly to `$PONTIA_WORKFLOW_PATCH_REASON_FILE`, then run `pontia workflow patch block`.\n"
+                    "# Workflow Re-planner\n\n## Patch request\n\n{request}\n\n## Current Workflow definition\n\n{definition}\n\n## Instructions\n\nInspect the compact Workflow context with `pontia workflow show` and write the revised definition directly to:\n\n`{}`\n\nTo apply it, write the decision directly to:\n\n`{}`\n\nThen run:\n\n`pontia workflow patch apply`\n\nTo block the Patch instead, write the reason directly to:\n\n`{}`\n\nThen run:\n\n`pontia workflow patch block`\n",
+                    workflow_file.display(),
+                    decision_file.display(),
+                    reason_file.display(),
                 );
                 self.sessions
                     .create_session(CreateSessionRequest {
@@ -503,19 +506,7 @@ where
                         }),
                         runtime_environment: BTreeMap::from([
                             ("PONTIA_WORKFLOW_ID".into(), patch.workflow_id.clone()),
-                            (
-                                "PONTIA_WORKFLOW_FILE".into(),
-                                workflow_file.display().to_string(),
-                            ),
                             ("PONTIA_WORKFLOW_PATCH_ID".into(), patch.patch_id.clone()),
-                            (
-                                "PONTIA_WORKFLOW_PATCH_DECISION_FILE".into(),
-                                decision_file.display().to_string(),
-                            ),
-                            (
-                                "PONTIA_WORKFLOW_PATCH_REASON_FILE".into(),
-                                reason_file.display().to_string(),
-                            ),
                         ]),
                     })
                     .await?

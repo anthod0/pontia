@@ -153,23 +153,35 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
             request.runtime_environment["PONTIA_WORKFLOW_PATCH_ID"],
             patch_id
         );
-        assert!(
-            request.runtime_environment["PONTIA_WORKFLOW_FILE"]
-                .ends_with("/workflows/wf_block/workflow.toml")
-        );
-        assert!(
-            request.runtime_environment["PONTIA_WORKFLOW_PATCH_DECISION_FILE"]
-                .ends_with(&format!("/patches/{patch_id}/decision.md"))
-        );
-        assert!(
-            request.runtime_environment["PONTIA_WORKFLOW_PATCH_REASON_FILE"]
-                .ends_with(&format!("/patches/{patch_id}/reason.md"))
-        );
         let initial_task = request.initial_task.as_ref().expect("initial task");
         assert!(
             initial_task
                 .input
                 .contains("The remaining plan cannot be completed safely.")
+        );
+        assert!(
+            initial_task.input.contains(
+                &pontia_home
+                    .join("workflows/wf_block/workflow.toml")
+                    .display()
+                    .to_string()
+            )
+        );
+        assert!(
+            initial_task.input.contains(
+                &pontia_home
+                    .join(format!("workflows/wf_block/patches/{patch_id}/decision.md"))
+                    .display()
+                    .to_string()
+            )
+        );
+        assert!(
+            initial_task.input.contains(
+                &pontia_home
+                    .join(format!("workflows/wf_block/patches/{patch_id}/reason.md"))
+                    .display()
+                    .to_string()
+            )
         );
     }
 

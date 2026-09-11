@@ -5,14 +5,14 @@ cwd = "."
 type = "agent"
 phase = "Phase 1"
 title = "Phase 1 Writer"
-instructions = "Write exactly `phase 1 complete` to `$PONTIA_WORKFLOW_OUTPUT_FILE`, then run `pontia workflow submit`."
+instructions = "The output must contain exactly: phase 1 complete."
 output = "phase-1.txt"
 
 [[nodes]]
 type = "agent"
 phase = "Phase 2"
 title = "Phase 2 Writer"
-instructions = "Read the supplied Phase 1 handoff, write exactly `phase 2 received phase 1` to `$PONTIA_WORKFLOW_OUTPUT_FILE`, then run `pontia workflow submit`."
+instructions = "Read the supplied Phase 1 handoff. The output must contain exactly: phase 2 received phase 1."
 inputs = ["phase-1.txt"]
 output = "phase-2.txt"
 
@@ -20,6 +20,6 @@ output = "phase-2.txt"
 type = "agent"
 phase = "Final"
 title = "Final Writer"
-instructions = "Read the supplied Phase 2 handoff, write exactly `workflow timeline validation complete` to `$PONTIA_WORKFLOW_OUTPUT_FILE`, then run `pontia workflow submit`."
+instructions = "Read the supplied Phase 2 handoff. The output must contain exactly: workflow timeline validation complete."
 inputs = ["phase-2.txt"]
 output = "final.txt"
