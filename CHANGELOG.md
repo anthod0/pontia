@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-11
+
+### Added
+
+- Added an Active Workspaces dialog to the Dashboard.
+
+### Changed
+
+- Redesigned Workflow history around direct revision selection, per-phase historical views, and replanning records grouped by revision.
+- Simplified Workflow file handoffs by giving agents exact input, output, and problem-report paths and removing file arguments from submission and patch commands.
+- Clarified Workflow worker completion and replanning instructions.
+- Simplified the product and Pi plugin setup documentation.
+- Automated Pi plugin releases through npm Trusted Publishing.
+
+### Fixed
+
+- Bounded persisted turn input summaries to prevent large Workflow prompts from exceeding event payload limits.
+- Made turn-start reporting failures fail affected Workflows instead of leaving submitted nodes waiting indefinitely.
+
 ## [0.2.0] - 2026-09-09
 
 ### Added
@@ -47,6 +66,7 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/anthod0/pontia/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/anthod0/pontia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/anthod0/pontia/releases/tag/v0.1.0

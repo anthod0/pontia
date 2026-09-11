@@ -1353,7 +1353,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "pontia"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64",
  "clap",
@@ -1373,7 +1373,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-agent-clients"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "pontia-core",
  "serde",
@@ -1383,7 +1383,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-application"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "ignore",
  "nucleo-matcher",
@@ -1405,7 +1405,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-config"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "pontia-agent-clients",
  "pontia-core",
@@ -1416,7 +1416,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1428,7 +1428,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-http"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "flate2",
@@ -1457,7 +1457,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-runtime"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "pontia-agent-clients",
  "pontia-config",
@@ -1470,7 +1470,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-storage-sqlite"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "pontia-core",
  "serde_json",
@@ -1481,7 +1481,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-workflow"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "pontia-application",
  "pontia-core",
@@ -1500,7 +1500,7 @@ dependencies = [
 
 [[package]]
 name = "pontiad"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "http-body-util",
