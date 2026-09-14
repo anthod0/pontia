@@ -9,6 +9,7 @@ mod git_status;
 mod idempotency;
 mod inbox;
 pub mod ingestion;
+pub mod live_output;
 mod pi_control;
 pub mod queries;
 mod raw_transcripts;
@@ -37,6 +38,11 @@ pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequ
 pub use ingestion::{
     EventIngestResult, EventIngestService, EventReportNormalizer, InternalEventValidationService,
     PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
+};
+pub use live_output::{
+    LiveOutputBatch, LiveOutputClose, LiveOutputIdentity, LiveOutputItem, LiveOutputProducer,
+    LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshot, LiveOutputSnapshotReplacement,
+    LiveOutputUpdate,
 };
 pub use pi_control::PiGracefulExitService;
 pub use queries::ExternalQueryService;

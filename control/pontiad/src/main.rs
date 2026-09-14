@@ -18,7 +18,8 @@ async fn main() -> Result<()> {
     let bound_addr = listener.local_addr()?;
     let app_state = application::initialize(&config).await?;
     let runtime_observer = application::RuntimeObservationService::new(app_state.db())
-        .with_agent_events(app_state.agent_events());
+        .with_agent_events(app_state.agent_events())
+        .with_live_output(app_state.live_output());
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
     let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
         app_state.db(),

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
 import { loadTurnContext, type TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
+import type { LiveOutputPublisherLike } from "../src/live-output.js";
 import { tempDir as isolatedTempDir } from "./temp-dir.js";
 
 interface HandlerMap {
@@ -122,6 +123,11 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
     logDiagnostic: vi.fn(async () => undefined),
     loadManagedRuntime: vi.fn(async () => managedRuntime),
     isManagedPane: vi.fn(async () => paneManaged),
+    makeLiveOutputPublisher: vi.fn((): LiveOutputPublisherLike => ({
+      appendText: vi.fn(),
+      appendToolCall: vi.fn(),
+      close: vi.fn(async () => undefined),
+    })),
     ...overrides,
     fetch: fetchWithManagedBinding,
     env,
@@ -1312,6 +1318,38 @@ describe("pontia pi extension lifecycle", () => {
       "session.message_updated",
     ]);
     expect(reported[7]).toMatchObject({ data: { reason: "final" } });
+  });
+
+  test("publishes assistant deltas and only complete tool calls to the turn live stream", async () => {
+    const appendText = vi.fn();
+    const appendToolCall = vi.fn();
+    const close = vi.fn(async () => undefined);
+    const { handlers } = install({
+      makeLiveOutputPublisher: vi.fn(() => ({ appendText, appendToolCall, close })),
+    });
+
+    await handlers.agent_start({}, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "hello" } }, {});
+    await handlers.message_end({ message: { role: "assistant", content: "hello" } }, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "toolcall_delta", contentIndex: 0, delta: "{\"path\":" } }, {});
+    expect(appendToolCall).not.toHaveBeenCalled();
+    await handlers.message_update({
+      assistantMessageEvent: {
+        type: "toolcall_end",
+        contentIndex: 1,
+        toolCall: { id: "call_1", name: "read", arguments: { path: "README.md" } },
+      },
+    }, {});
+    await handlers.message_update({ assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "done" } }, {});
+    await handlers.agent_end({ messages: [] }, {});
+
+    expect(appendText.mock.calls).toEqual([["hello"], ["done"]]);
+    expect(appendToolCall).toHaveBeenCalledWith({
+      callId: "call_1",
+      toolName: "read",
+      arguments: { path: "README.md" },
+    });
+    expect(close).toHaveBeenCalledOnce();
   });
 
   test("reports transcript refresh hints when tool calls start and finish successfully or with errors", async () => {

@@ -7,6 +7,7 @@ mod agent_binding;
 mod authentication;
 mod branch_replay;
 mod event_ingestion;
+mod live_output;
 mod reporting_failure;
 mod response;
 mod runtime_binding;
@@ -18,6 +19,7 @@ pub use agent_binding::{
 };
 pub use branch_replay::resolve_branch_replay;
 pub use event_ingestion::{InternalEventRequest, InternalEventResponse, post_event};
+pub use live_output::{InternalLiveOutputRequest, InternalLiveOutputResponse, post_live_output};
 pub use reporting_failure::report_turn_start_failure;
 pub use response::ApiError;
 pub use runtime_binding::upsert_runtime_binding;

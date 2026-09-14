@@ -107,7 +107,9 @@ async fn ingest_event(
     InternalEventValidationService::new()
         .validate(&event)
         .map_err(domain_error_as_invalid_request)?;
-    let service = EventIngestService::new(state.db()).with_agent_events(state.agent_events());
+    let service = EventIngestService::new(state.db())
+        .with_agent_events(state.agent_events())
+        .with_live_output(state.live_output());
     service
         .ensure_confirmed_event_matches_session_boundary(&event)
         .await

@@ -24,6 +24,7 @@ describe("pi message helpers", () => {
 
   test("extracts assistant deltas and recognizes transcript boundaries", () => {
     expect(assistantDeltaFromEvent({ assistantMessageEvent: { textDelta: "hi" } })).toBe("hi");
+    expect(assistantDeltaFromEvent({ assistantMessageEvent: { type: "toolcall_delta", delta: "{}" } })).toBeUndefined();
     expect(isTranscriptBoundaryMessageUpdate({ assistantMessageEvent: { type: "toolcall_start" } })).toBe(true);
     expect(isTranscriptBoundaryMessageUpdate({ assistantMessageEvent: { type: "text_delta" } })).toBe(false);
   });

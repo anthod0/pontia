@@ -15,8 +15,8 @@ use pontia_storage_sqlite::repositories::{
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
-    AgentEventBroker, EventIngestService, ExternalQueryService, PontiaEvent, PontiaEventSource,
-    PontiaEventType,
+    AgentEventBroker, EventIngestService, ExternalQueryService, LiveOutputService, PontiaEvent,
+    PontiaEventSource, PontiaEventType,
 };
 
 const PROCESS_OBSERVATION_INTERVAL: Duration = Duration::from_secs(10);
@@ -29,6 +29,7 @@ pub struct RuntimeObservationService {
     pool: SqlitePool,
     runtime: GenericRuntimeManager,
     agent_events: Option<AgentEventBroker>,
+    live_output: Option<LiveOutputService>,
 }
 
 impl RuntimeObservationService {
@@ -37,11 +38,17 @@ impl RuntimeObservationService {
             pool,
             runtime: GenericRuntimeManager,
             agent_events: None,
+            live_output: None,
         }
     }
 
     pub fn with_agent_events(mut self, agent_events: AgentEventBroker) -> Self {
         self.agent_events = Some(agent_events);
+        self
+    }
+
+    pub fn with_live_output(mut self, live_output: LiveOutputService) -> Self {
+        self.live_output = Some(live_output);
         self
     }
 
@@ -276,11 +283,14 @@ impl RuntimeObservationService {
     }
 
     fn ingest_service(&self) -> EventIngestService {
-        let ingest = EventIngestService::new(self.pool.clone());
-        match &self.agent_events {
-            Some(agent_events) => ingest.with_agent_events(agent_events.clone()),
-            None => ingest,
+        let mut ingest = EventIngestService::new(self.pool.clone());
+        if let Some(agent_events) = &self.agent_events {
+            ingest = ingest.with_agent_events(agent_events.clone());
         }
+        if let Some(live_output) = &self.live_output {
+            ingest = ingest.with_live_output(live_output.clone());
+        }
+        ingest
     }
 }
 

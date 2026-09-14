@@ -4,6 +4,7 @@ import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
+import { completeToolCallFromMessageUpdate, LiveOutputPublisher, type LiveOutputPublisherLike } from "./live-output.js";
 import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity, type ManagedRuntimeIdentity } from "./managed-runtime.js";
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
@@ -34,12 +35,14 @@ export interface PontiaPiExtensionDependencies {
   fetch?: typeof fetch;
   loadManagedRuntime?: (env: EnvLike) => Promise<ManagedRuntimeIdentity | undefined>;
   isManagedPane?: (env: EnvLike) => Promise<boolean>;
+  makeLiveOutputPublisher?: (context: TurnContext & { turnId: string }) => LiveOutputPublisherLike;
 }
 
 interface ActiveTurnState {
   context: TurnContext & { turnId: string };
   logFile: string;
   reporter: ReporterLike;
+  liveOutput: LiveOutputPublisherLike;
   output: string;
   ended: boolean;
 }
@@ -117,6 +120,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   const fetchImpl = dependencies.fetch ?? fetch;
   const loadManagedRuntime = dependencies.loadManagedRuntime ?? loadPontiaManagedRuntimeIdentity;
   const isManagedPane = dependencies.isManagedPane ?? isPontiaManagedTmuxPane;
+  const makeLiveOutputPublisher = dependencies.makeLiveOutputPublisher
+    ?? ((context: TurnContext & { turnId: string }) => new LiveOutputPublisher(context, { fetch: fetchImpl }));
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
@@ -505,10 +510,12 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         });
         return;
       }
+      const activeContext = { ...turnContext, turnId: canonicalTurnId };
       activeTurn = {
-        context: { ...turnContext, turnId: canonicalTurnId },
+        context: activeContext,
         logFile,
         reporter,
+        liveOutput: makeLiveOutputPublisher(activeContext),
         output: "",
         ended: false,
       };
@@ -529,12 +536,16 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     if (!activeTurn || activeTurn.ended) return;
     await reportContextUsageFromHookEvent(event, ctx);
 
+    const delta = assistantDeltaFromEvent(event);
+    if (delta) activeTurn.liveOutput.appendText(delta);
+    const toolCall = completeToolCallFromMessageUpdate(event);
+    if (toolCall) activeTurn.liveOutput.appendToolCall(toolCall);
+
     const fullText = assistantTextFromMessage((event as unknown as Record<string, unknown> | undefined)?.message);
     if (fullText) {
       activeTurn.output = fullText;
-    } else {
-      const delta = assistantDeltaFromEvent(event);
-      if (delta) activeTurn.output += delta;
+    } else if (delta) {
+      activeTurn.output += delta;
     }
 
     if (isTranscriptBoundaryMessageUpdate(event)) await scheduleMessageRefresh("update");
@@ -562,33 +573,37 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     activeTurn.ended = true;
 
     const state = activeTurn;
-    const terminalLeafId = leafIdFromHookContext(ctx);
-    if (agentEndWasInterrupted(event, ctx?.signal)) {
-      await state.reporter.report(state.context, buildTurnInterruptedEvent(state.context, terminalLeafId));
+    try {
+      const terminalLeafId = leafIdFromHookContext(ctx);
+      if (agentEndWasInterrupted(event, ctx?.signal)) {
+        await state.reporter.report(state.context, buildTurnInterruptedEvent(state.context, terminalLeafId));
+        await reportFinalMessageRefresh(state);
+        return;
+      }
+
+      const failureMessage = errorMessageFromAgentEnd(event);
+      if (failureMessage) {
+        await state.reporter.report(state.context, buildTurnFailedEvent(state.context, failureMessage, terminalLeafId));
+        await reportFinalMessageRefresh(state);
+        return;
+      }
+
+      if (!state.output) {
+        const finalText = lastAssistantTextFromMessages((event as unknown as Record<string, unknown> | undefined)?.messages);
+        if (finalText) state.output = finalText;
+      }
+
+      const output = state.output.trim();
+      if (output.length > 0) {
+        const outputResult = await state.reporter.report(state.context, buildTurnOutputEvent(state.context, output));
+        if (!reportAccepted(outputResult)) return;
+      }
+
+      await state.reporter.report(state.context, buildTurnCompletedEvent(state.context, terminalLeafId));
       await reportFinalMessageRefresh(state);
-      return;
+    } finally {
+      await state.liveOutput.close();
     }
-
-    const failureMessage = errorMessageFromAgentEnd(event);
-    if (failureMessage) {
-      await state.reporter.report(state.context, buildTurnFailedEvent(state.context, failureMessage, terminalLeafId));
-      await reportFinalMessageRefresh(state);
-      return;
-    }
-
-    if (!state.output) {
-      const finalText = lastAssistantTextFromMessages((event as unknown as Record<string, unknown> | undefined)?.messages);
-      if (finalText) state.output = finalText;
-    }
-
-    const output = state.output.trim();
-    if (output.length > 0) {
-      const outputResult = await state.reporter.report(state.context, buildTurnOutputEvent(state.context, output));
-      if (!reportAccepted(outputResult)) return;
-    }
-
-    await state.reporter.report(state.context, buildTurnCompletedEvent(state.context, terminalLeafId));
-    await reportFinalMessageRefresh(state);
   });
 }
 

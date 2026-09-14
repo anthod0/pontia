@@ -33,12 +33,13 @@ use super::{
     EventIngestResult, PontiaEvent,
     projection_rows::{event_from_row, session_from_row, turn_from_row},
 };
-use crate::{AgentEventBroker, InboxCommandService, UpsertAgentBindingRequest};
+use crate::{AgentEventBroker, InboxCommandService, LiveOutputService, UpsertAgentBindingRequest};
 
 #[derive(Clone)]
 pub struct EventIngestService {
     pool: SqlitePool,
     agent_events: Option<AgentEventBroker>,
+    live_output: Option<LiveOutputService>,
 }
 
 impl EventIngestService {
@@ -46,11 +47,17 @@ impl EventIngestService {
         Self {
             pool,
             agent_events: None,
+            live_output: None,
         }
     }
 
     pub fn with_agent_events(mut self, agent_events: AgentEventBroker) -> Self {
         self.agent_events = Some(agent_events);
+        self
+    }
+
+    pub fn with_live_output(mut self, live_output: LiveOutputService) -> Self {
+        self.live_output = Some(live_output);
         self
     }
 
@@ -275,6 +282,23 @@ impl EventIngestService {
 
         if let Some(agent_events) = &self.agent_events {
             agent_events.publish(event.clone());
+        }
+        if let Some(live_output) = &self.live_output {
+            match event.event_type {
+                EventType::TurnCompleted
+                | EventType::TurnFailed
+                | EventType::TurnDispatchFailed
+                | EventType::TurnAbandoned
+                | EventType::TurnInterrupted => {
+                    if let Some(turn_id) = event.turn_id.as_deref() {
+                        live_output.discard_turn(&event.session_id, turn_id);
+                    }
+                }
+                EventType::SessionExited | EventType::SessionError => {
+                    live_output.discard_session(&event.session_id);
+                }
+                _ => {}
+            }
         }
 
         clear_exited_session_tmux_markers(&self.pool, &event, true).await;

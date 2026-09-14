@@ -7,7 +7,10 @@ use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
 use sqlx::SqlitePool;
 
 use super::{AppStateBuilder, ShutdownSignal, VolatileEventBroker};
-use crate::{AgentEventBroker, GitRefreshCoordinator, IdempotencyCoordinator};
+use crate::{
+    AgentEventBroker, GitRefreshCoordinator, IdempotencyCoordinator, LiveOutputService,
+    live_output::LiveOutputStore,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -36,6 +39,7 @@ struct AppRuntimeState {
 struct EventState {
     agent_events: AgentEventBroker,
     volatile_events: VolatileEventBroker,
+    live_output: LiveOutputStore,
 }
 
 struct LifecycleState {
@@ -65,6 +69,7 @@ impl AppState {
                 events: EventState {
                     agent_events: builder.agent_events,
                     volatile_events: builder.volatile_events,
+                    live_output: builder.live_output,
                 },
                 lifecycle: LifecycleState {
                     shutdown: builder.shutdown,
@@ -109,6 +114,10 @@ impl AppState {
         self.inner.events.agent_events.clone()
     }
 
+    pub fn live_output(&self) -> LiveOutputService {
+        LiveOutputService::new(self.db(), self.inner.events.live_output.clone())
+    }
+
     pub fn git_refresh(&self) -> GitRefreshCoordinator {
         self.inner.integrations.git_refresh.clone()
     }
@@ -131,6 +140,7 @@ impl AppState {
             .shutdown(self.shutdown())
             .agent_events(self.agent_events())
             .volatile_events(self.volatile_events())
+            .live_output(self.inner.events.live_output.clone())
             .git_refresh(self.git_refresh())
             .idempotency(self.idempotency())
     }

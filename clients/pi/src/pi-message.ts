@@ -26,6 +26,7 @@ export function assistantDeltaFromEvent(event: unknown): string | undefined {
   const streamEvent = record.assistantMessageEvent;
   if (streamEvent && typeof streamEvent === "object") {
     const streamRecord = streamEvent as Record<string, unknown>;
+    if (typeof streamRecord.type === "string" && streamRecord.type !== "text_delta") return undefined;
     for (const key of ["text_delta", "textDelta", "delta", "text"] as const) {
       const value = streamRecord[key];
       if (typeof value === "string" && value.length > 0) return value;
