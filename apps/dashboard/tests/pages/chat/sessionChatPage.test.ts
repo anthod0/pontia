@@ -1166,7 +1166,7 @@ test('mobile composer resize button opens a fullscreen follow-up composer sharin
 
     const fullscreenComposer = screen.getByRole('dialog', { name: 'Expanded message composer' });
     const fullscreenInput = within(fullscreenComposer).getByPlaceholderText('Send a follow-up message…');
-    expect(fullscreenInput).toHaveValue('mobile draft');
+    expect(fullscreenInput).toHaveTextContent('mobile draft');
     expect(fullscreenInput).toHaveClass('h-full');
     expect(fullscreenInput).toHaveClass('min-h-0');
 
@@ -1706,8 +1706,9 @@ test('follow-up composer submits with Enter while preserving modified Enter for 
   expect(composerToolbar).not.toHaveClass('pt-2');
 
   await user.type(followUpInput, 'continue this session');
-  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', shiftKey: true })).toBe(true);
-  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', ctrlKey: true })).toBe(true);
+  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', shiftKey: true })).toBe(false);
+  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', ctrlKey: true })).toBe(false);
+  expect(followUpInput.querySelectorAll('br:not(.ProseMirror-trailingBreak)')).toHaveLength(2);
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
   expect(await fireEvent.keyDown(followUpInput, { key: 'Enter' })).toBe(false);
@@ -2021,8 +2022,8 @@ test('hides exit on exited sessions and waits for idle after automatic resume be
   await user.click(screen.getByRole('button', { name: /send/i }));
 
   await waitFor(() => expect(mocks.resumeSession).toHaveBeenCalledWith('session-2'));
-  expect(followUpInput).toHaveValue('continue this session');
-  expect(followUpInput).toBeDisabled();
+  expect(followUpInput).toHaveTextContent('continue this session');
+  expect(followUpInput).toHaveAttribute('contenteditable', 'false');
   expect(screen.getByRole('button', { name: /send/i })).toBeDisabled();
   await Promise.resolve();
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();

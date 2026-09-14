@@ -200,7 +200,7 @@ test('renders a bottom-aligned prompt input with inline workspace and client sel
   render(NewChatPage);
 
   const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  expect(promptInput).toHaveValue('');
+  expect(promptInput).toHaveTextContent('');
   expect(screen.queryByRole('heading', { name: /new chat/i })).not.toBeInTheDocument();
   expect(screen.queryByText('Start a new agent session from a prompt, workspace, and client.')).not.toBeInTheDocument();
   expect(screen.getByText('Start a new agent session from')).toBeInTheDocument();

@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import { Maximize2, Minimize2, Square } from '@lucide/svelte'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
-  import FileMentionTextarea from '$lib/components/file-picker/FileMentionTextarea.svelte'
+  import FileMentionEditor from '$lib/components/file-picker/FileMentionEditor.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
+  import type { FilePickerFileView } from '../../api/types'
 
   interface Props {
     value: string
@@ -43,6 +45,14 @@
   }: Props = $props()
 
   let fullscreenOpen = $state(false)
+  const mentionIdentities = new Map<string, FilePickerFileView>()
+  let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)
+
+  async function openFullscreen(): Promise<void> {
+    fullscreenOpen = true
+    await tick()
+    fullscreenEditor?.focusEnd()
+  }
 
   function submit(): void {
     if (disabled || submitDisabled || busy) return
@@ -69,8 +79,6 @@
     if (nextValue !== null) {
       event.preventDefault()
       value = nextValue
-      const textarea = event.currentTarget instanceof HTMLTextAreaElement ? event.currentTarget : null
-      queueMicrotask(() => textarea?.setSelectionRange(nextValue.length, nextValue.length))
       return
     }
 
@@ -82,9 +90,9 @@
 <PromptInput.Root class="w-full" onSubmit={submit}>
   <PromptInput.Body>
     <div class="relative">
-      <FileMentionTextarea id={inputId} bind:value {workspaceId} {placeholder} {disabled} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-10 pr-10' : 'min-h-10'} />
+      <FileMentionEditor id={inputId} bind:value {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-10 pr-10' : 'min-h-10'} />
       {#if fullscreen}
-        <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={() => (fullscreenOpen = true)}>
+        <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={() => void openFullscreen()}>
           <Maximize2 class="size-4" />
         </Button>
       {/if}
@@ -116,7 +124,7 @@
 
       <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
         <PromptInput.Body class="min-h-0 flex-1">
-          <FileMentionTextarea bind:value {workspaceId} {placeholder} {disabled} shortcutFocusTarget onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
+          <FileMentionEditor bind:this={fullscreenEditor} bind:value {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
         </PromptInput.Body>
         <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
           {#if interruptMode}

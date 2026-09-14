@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import MessageComposer from '../../src/components/chat/MessageComposer.svelte';
 
@@ -12,15 +13,29 @@ function renderComposer() {
   });
 }
 
-test('message composer textarea grows with content using field sizing', () => {
+test('message composer editor grows until its scrolling height limit', () => {
   renderComposer();
 
-  const textarea = screen.getByPlaceholderText('Send a follow-up message…');
+  const editor = screen.getByPlaceholderText('Send a follow-up message…');
 
-  expect(textarea).toHaveClass('field-sizing-content');
-  expect(textarea).toHaveClass('max-h-48');
-  expect(textarea).toHaveClass('overflow-y-auto');
-  expect(textarea).not.toHaveClass('h-10');
+  expect(editor).toHaveAttribute('contenteditable', 'true');
+  expect(editor).toHaveClass('min-h-10');
+  expect(editor).toHaveClass('max-h-48');
+  expect(editor).toHaveClass('overflow-y-auto');
+  expect(editor).not.toHaveClass('h-10');
+});
+
+test('backslash plus Enter inserts a newline instead of submitting', async () => {
+  const onSubmit = vi.fn();
+  render(MessageComposer, { props: { value: '', onSubmit } });
+  const editor = screen.getByRole('textbox');
+  await userEvent.type(editor, 'first line\\');
+
+  expect(await fireEvent.keyDown(editor, { key: 'Enter' })).toBe(false);
+
+  await waitFor(() => expect(editor.querySelector('br:not(.ProseMirror-trailingBreak)')).toBeInTheDocument());
+  expect(editor).toHaveTextContent('first line');
+  expect(onSubmit).not.toHaveBeenCalled();
 });
 
 test('message composer keeps resize control mobile-only', () => {

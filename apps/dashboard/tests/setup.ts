@@ -26,6 +26,12 @@ class TestResizeObserver {
 Object.defineProperty(window, 'ResizeObserver', { writable: true, value: TestResizeObserver });
 Object.defineProperty(globalThis, 'ResizeObserver', { writable: true, value: TestResizeObserver });
 Object.defineProperty(window, 'scrollTo', { writable: true, value: () => {} });
+Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => null });
+Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [] });
+Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+  configurable: true,
+  value: () => ({ bottom: 0, height: 0, left: 0, right: 0, top: 0, width: 0, x: 0, y: 0, toJSON: () => ({}) }),
+});
 
 afterEach(async () => {
   cleanup();

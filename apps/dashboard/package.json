@@ -38,6 +38,15 @@
     "vitest": "^4.1.7"
   },
   "dependencies": {
+    "@tiptap/core": "^3.31.3",
+    "@tiptap/extension-document": "^3.31.3",
+    "@tiptap/extension-hard-break": "^3.31.3",
+    "@tiptap/extension-mention": "^3.31.3",
+    "@tiptap/extension-paragraph": "^3.31.3",
+    "@tiptap/extension-placeholder": "^3.31.3",
+    "@tiptap/extension-text": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/suggestion": "^3.31.3",
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",
     "rehype-highlight": "^7.0.2",
