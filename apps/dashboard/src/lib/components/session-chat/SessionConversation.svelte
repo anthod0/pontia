@@ -14,6 +14,7 @@
   interface Props {
     messages: SessionChatMessage[]
     sessionState?: string | null
+    activeTurnId?: string | null
     loading?: boolean
     hasMoreHistory?: boolean
     historyLoading?: boolean
@@ -27,6 +28,7 @@
   let {
     messages,
     sessionState = null,
+    activeTurnId = null,
     loading = false,
     hasMoreHistory = false,
     historyLoading = false,
@@ -45,7 +47,7 @@
   const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
   const displayGroups = $derived(conversationDisplayGroups(displayItems))
   const latestAssistantGroupId = $derived([...displayGroups].reverse().find((group) => group.kind === 'assistant_group')?.id ?? null)
-  const activeLoadingMessageId = $derived(lastEmptyPendingAssistantMessageId(displayMessages))
+  const activeLoadingMessageId = $derived(activePendingAssistantMessageId(displayMessages, activeTurnId))
   const branchActionMessageIdSet = $derived(new Set(Object.keys(branchActionInputs)))
   let topHistoryLoadInFlight = false
   let topHistorySentinelVisible = $state(false)
@@ -57,10 +59,12 @@
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
   })
 
-  function lastEmptyPendingAssistantMessageId(chatMessages: SessionChatMessage[]): string | null {
+  function activePendingAssistantMessageId(chatMessages: SessionChatMessage[], turnId: string | null): string | null {
+    if (turnId) {
+      return chatMessages.findLast((message) => message.turnId === turnId && message.role === 'assistant' && message.status === 'pending')?.id ?? null
+    }
     const message = chatMessages.at(-1)
-    if (message?.role === 'assistant' && message.status === 'pending' && !message.content.trim()) return message.id
-    return null
+    return message?.role === 'assistant' && message.status === 'pending' ? message.id : null
   }
 
   async function copyMessage(message: SessionChatMessage): Promise<void> {
@@ -278,8 +282,8 @@
         {#if displayItem.showAgentStatus}
           <AgentStatus state={sessionState} />
         {/if}
-        {#if chatMessage.role === 'assistant' && (chatMessage.thoughtSteps?.length || chatMessage.workedDurationMs !== undefined)}
-          <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps ?? []} workedDurationMs={chatMessage.workedDurationMs} showStepCountFallback={chatMessage.status === 'pending'} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
+        {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
+          <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
         {/if}
         {#if chatMessage.content.trim()}
           {#if chatMessage.role === 'user' && editingMessageId === chatMessage.id}

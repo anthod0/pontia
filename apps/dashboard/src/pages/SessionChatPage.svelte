@@ -804,6 +804,7 @@
                 <SessionConversation
                   {messages}
                   sessionState={selectedSession.state}
+                  activeTurnId={selectedSession.current_turn_id}
                   loading={(initialChatScrollPending || $sessionDetailLoading || $timelineState.loading) && !messages.length}
                   hasMoreHistory={$timelineState.hasMore}
                   historyLoading={$timelineState.refreshKind === 'history'}

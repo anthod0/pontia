@@ -23,7 +23,6 @@ export interface SessionChatMessage {
   status: ChatMessageStatus;
   createdAt: string;
   thoughtSteps?: SessionChatThoughtStep[];
-  workedDurationMs?: number;
 }
 
 const terminalStates = new Set(['exited', 'error']);
@@ -108,8 +107,6 @@ export function timelineItemsToChatMessages(
   let pendingTurnId: string | null = null;
   let pendingAssistantItems: TimelineItem[] = [];
   let pendingThoughtSteps: SessionChatThoughtStep[] = [];
-  let pendingStartedAt: number | null = null;
-  let pendingStartObserved = false;
 
   const movePendingAssistantToThoughts = () => {
     for (const item of pendingAssistantItems) {
@@ -135,10 +132,6 @@ export function timelineItemsToChatMessages(
         .map((item) => item.content_preview?.trim())
         .filter(Boolean)
         .join('\n\n');
-      const completedAt = timestampMilliseconds(finalAssistant.occurred_at);
-      const workedDurationMs = pendingStartedAt !== null && completedAt !== null && completedAt >= pendingStartedAt
-        ? completedAt - pendingStartedAt
-        : undefined;
       messages.push({
         id: finalAssistant.item_id,
         turnId,
@@ -147,7 +140,6 @@ export function timelineItemsToChatMessages(
         status: finalAssistant.status === 'error' ? 'failed' : 'sent',
         createdAt: finalAssistant.occurred_at ?? '',
         ...(pendingThoughtSteps.length ? { thoughtSteps: pendingThoughtSteps } : {}),
-        ...(workedDurationMs !== undefined ? { workedDurationMs } : {}),
       });
     } else {
       messages.push({
@@ -164,16 +156,7 @@ export function timelineItemsToChatMessages(
     pendingTurnId = null;
     pendingAssistantItems = [];
     pendingThoughtSteps = [];
-    pendingStartedAt = null;
-    pendingStartObserved = false;
   };
-
-  const firstActivityTimestamps = new Map<string, number | null>();
-  for (const item of items) {
-    if (item.turn_id && (item.kind === 'assistant' || isThoughtStepKind(item.kind)) && !firstActivityTimestamps.has(item.turn_id)) {
-      firstActivityTimestamps.set(item.turn_id, timestampMilliseconds(item.occurred_at));
-    }
-  }
 
   const orderedItems = preserveTurnOrder
     ? items
@@ -197,12 +180,6 @@ export function timelineItemsToChatMessages(
 
     if (item.kind === 'assistant' || isThoughtStepKind(item.kind)) {
       pendingTurnId ??= item.turn_id ?? item.item_id;
-      if (!pendingStartObserved) {
-        pendingStartedAt = item.turn_id && firstActivityTimestamps.has(item.turn_id)
-          ? firstActivityTimestamps.get(item.turn_id) ?? null
-          : timestampMilliseconds(item.occurred_at);
-        pendingStartObserved = true;
-      }
     }
 
     if (item.kind === 'assistant') {
@@ -273,12 +250,6 @@ function formatReadTarget(path: string, startLine?: number | null, endLine?: num
 
 function timelineTimestamp(item: TimelineItem): string {
   return item.occurred_at ?? item.item_id;
-}
-
-function timestampMilliseconds(timestamp: string | null): number | null {
-  if (!timestamp) return null;
-  const milliseconds = Date.parse(timestamp);
-  return Number.isFinite(milliseconds) ? milliseconds : null;
 }
 
 function assistantMessageForTurn(turn: TurnView): SessionChatMessage {

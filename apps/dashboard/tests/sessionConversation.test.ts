@@ -360,6 +360,40 @@ test('conversation shows agent status for a busy pending assistant message with 
   expect(screen.queryByText('Working…')).not.toBeInTheDocument();
 });
 
+test('conversation keeps the active Turn work expanded when a queued user message follows it', () => {
+  render(SessionConversation, {
+    props: {
+      sessionState: 'busy',
+      activeTurnId: 'turn-live',
+      messages: [
+        ...messages,
+        {
+          id: 'turn-live:assistant',
+          turnId: 'turn-live',
+          role: 'assistant',
+          content: 'Streaming response',
+          status: 'pending',
+          createdAt: '2026-06-11T00:00:00Z',
+          thoughtSteps: [
+            { id: 'tool-live', kind: 'tool_call', title: 'read', status: 'started', content: 'README.md', occurredAt: null },
+          ],
+        },
+        {
+          id: 'queued:user',
+          turnId: 'turn-queued',
+          role: 'user',
+          content: 'Queued follow-up',
+          status: 'pending',
+          createdAt: '2026-06-11T00:01:00Z',
+        },
+      ],
+    },
+  });
+
+  expect(screen.getByRole('button', { name: 'Hide agent work steps' })).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByText('README.md')).toBeInTheDocument();
+});
+
 test('conversation shows agent working only once after an interrupted pending thought summary', () => {
   render(SessionConversation, {
     props: {

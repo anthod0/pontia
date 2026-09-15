@@ -57,7 +57,7 @@ test('applies token deltas and replaces transcript assistant content without hid
   expect(messages.some((message) => message.thoughtSteps?.[0]?.id === 'old-tool')).toBe(false);
 });
 
-test('keeps text, tool call, then text in live item order', () => {
+test('aggregates streamed text and appended tool calls into one assistant message', () => {
   let overlays = applyLiveOutputEvent({}, 'session-1', snapshot());
   overlays = applyLiveOutputEvent(overlays, 'session-1', {
     type: 'updates',
@@ -68,12 +68,18 @@ test('keeps text, tool call, then text in live item order', () => {
     updates: [
       { type: 'tool_call', item_id: 'tool-1', call_id: 'call-1', tool_name: 'read', arguments: { path: 'README.md' } },
       { type: 'assistant_text_delta', item_id: 'text-2', delta: 'Done' },
+      { type: 'tool_call', item_id: 'tool-2', call_id: 'call-2', tool_name: 'bash', arguments: { command: 'pnpm test' } },
     ],
   });
 
   const live = mergeLiveOutputMessages(transcript, [turn], overlays).slice(1);
-  expect(live.map((message) => message.content)).toEqual(['Hello', '', 'Done']);
-  expect(live[1].thoughtSteps?.[0]).toMatchObject({ title: 'read', content: '{\n  "path": "README.md"\n}' });
+  expect(live).toHaveLength(1);
+  expect(live[0].content).toBe('Hello\n\nDone');
+  expect(live[0].status).toBe('pending');
+  expect(live[0].thoughtSteps).toMatchObject([
+    { title: 'read', content: '{\n  "path": "README.md"\n}' },
+    { title: 'bash', content: '{\n  "command": "pnpm test"\n}' },
+  ]);
 });
 
 test('waits for a reconnect snapshot instead of applying deltas twice', () => {
@@ -131,7 +137,8 @@ test('keeps a closed overlay until timeline convergence removes it', () => {
     sequence: 1,
     reason: 'producer_closed',
   });
-  expect(mergeLiveOutputMessages(transcript, [{ ...turn, state: 'completed' }], overlays).at(-1)?.content).toBe('Hello');
+  const closedMessage = mergeLiveOutputMessages(transcript, [{ ...turn, state: 'completed' }], overlays).at(-1);
+  expect(closedMessage).toMatchObject({ content: 'Hello', status: 'pending' });
   expect(removeLiveOutputOverlay(overlays, 'turn-live')).toEqual({});
 
   const expired = applyLiveOutputEvent(applyLiveOutputEvent({}, 'session-1', snapshot()), 'session-1', {

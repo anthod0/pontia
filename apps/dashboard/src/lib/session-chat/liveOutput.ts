@@ -133,35 +133,32 @@ export function mergeLiveOutputMessages(
 }
 
 function liveItemsToMessages(overlay: LiveOutputOverlay): SessionChatMessage[] {
-  return overlay.items.map((item): SessionChatMessage => {
-    if (item.kind === 'assistant_text') {
-      return {
-        id: `live:${overlay.stream_id}:${item.item_id}`,
-        turnId: overlay.turn_id,
-        role: 'assistant',
-        content: item.text,
-        status: 'pending',
-        createdAt: '',
-      };
-    }
-    const thought: SessionChatThoughtStep = {
+  if (!overlay.items.length) return [];
+
+  const content = overlay.items
+    .filter((item): item is Extract<LiveOutputItem, { kind: 'assistant_text' }> => item.kind === 'assistant_text')
+    .map((item) => item.text)
+    .join('\n\n');
+  const thoughtSteps = overlay.items
+    .filter((item): item is Extract<LiveOutputItem, { kind: 'tool_call' }> => item.kind === 'tool_call')
+    .map((item): SessionChatThoughtStep => ({
       id: `live:${overlay.stream_id}:${item.item_id}`,
       kind: 'tool_call',
       title: item.tool_name,
       status: 'started',
       content: formatArguments(item.arguments),
       occurredAt: null,
-    };
-    return {
-      id: `live:${overlay.stream_id}:${item.item_id}:tool`,
-      turnId: overlay.turn_id,
-      role: 'assistant',
-      content: '',
-      status: 'pending',
-      createdAt: '',
-      thoughtSteps: [thought],
-    };
-  });
+    }));
+
+  return [{
+    id: `live:${overlay.stream_id}:assistant`,
+    turnId: overlay.turn_id,
+    role: 'assistant',
+    content,
+    status: 'pending',
+    createdAt: '',
+    ...(thoughtSteps.length ? { thoughtSteps } : {}),
+  }];
 }
 
 function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): void {

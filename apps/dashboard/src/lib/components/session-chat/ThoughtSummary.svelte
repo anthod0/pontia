@@ -11,8 +11,6 @@
   interface Props {
     steps: SessionChatThoughtStep[]
     active?: boolean
-    workedDurationMs?: number
-    showStepCountFallback?: boolean
     class?: string
   }
 
@@ -27,31 +25,14 @@
 
   type DisplayStep = SessionChatThoughtStep | GroupedFileSteps
 
-  let { steps, active = false, workedDurationMs, showStepCountFallback = false, class: className }: Props = $props()
+  let { steps, active = false, class: className }: Props = $props()
   let open = $state(false)
 
   const visibleSteps = $derived(groupFileSteps(steps.filter((step) => step.kind !== 'tool_result')))
-  const label = $derived(workedDurationMs !== undefined
-    ? `Worked for ${formatDuration(workedDurationMs)}`
-    : active
-      ? 'Working'
-      : `Worked for ${visibleSteps.length} ${visibleSteps.length === 1 ? 'step' : 'steps'}`)
 
   $effect(() => {
     open = active
   })
-
-  function formatDuration(milliseconds: number): string {
-    const totalSeconds = Math.max(1, Math.round(milliseconds / 1_000))
-    const hours = Math.floor(totalSeconds / 3_600)
-    const minutes = Math.floor((totalSeconds % 3_600) / 60)
-    const seconds = totalSeconds % 60
-    return [
-      hours ? `${hours}h` : '',
-      minutes ? `${minutes}m` : '',
-      seconds || (!hours && !minutes) ? `${seconds}s` : '',
-    ].filter(Boolean).join(' ')
-  }
 
   function groupFileSteps(source: SessionChatThoughtStep[]): DisplayStep[] {
     const grouped: DisplayStep[] = []
@@ -94,13 +75,13 @@
   }
 </script>
 
-{#if visibleSteps.length || workedDurationMs !== undefined || showStepCountFallback}
+{#if visibleSteps.length}
   <Collapsible.Root bind:open class={cn('not-prose min-w-0', className)}>
     <Collapsible.Trigger
       class="group inline-flex min-w-0 items-center gap-1.5 py-2.5 pr-3 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={open ? 'Hide agent work steps' : 'Show agent work steps'}
     >
-      <span class="truncate">{label}</span>
+      <span class="truncate">{active ? 'Working' : 'Agent work'}</span>
       <ChevronRight class={cn('size-4 shrink-0 transition-transform', open && 'rotate-90')} aria-hidden="true" />
     </Collapsible.Trigger>
 

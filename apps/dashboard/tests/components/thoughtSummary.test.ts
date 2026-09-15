@@ -16,7 +16,7 @@ function step(overrides: Partial<SessionChatThoughtStep> = {}): SessionChatThoug
   };
 }
 
-test('completed work expands inline from its elapsed-time heading', async () => {
+test('completed work expands inline from its summary heading', async () => {
   const user = userEvent.setup();
   render(ThoughtSummary, {
     props: {
@@ -27,12 +27,11 @@ test('completed work expands inline from its elapsed-time heading', async () => 
         step({ id: 'unknown-1', kind: 'tool_call', title: 'Custom tool', content: 'secret input' }),
         step({ id: 'result-1', kind: 'tool_result', title: 'Read file', content: 'File contents' }),
       ],
-      workedDurationMs: 128_000,
     },
   });
 
   const trigger = screen.getByRole('button', { name: 'Show agent work steps' });
-  expect(trigger).toHaveTextContent('Worked for 2m 8s');
+  expect(trigger).toHaveTextContent('Agent work');
   expect(screen.getByText('Inspecting the project.')).not.toBeVisible();
 
   await user.click(trigger);
@@ -51,17 +50,6 @@ test('completed work expands inline from its elapsed-time heading', async () => 
 
   expect(screen.getByRole('button', { name: 'Hide Custom tool parameters' })).toHaveAttribute('aria-expanded', 'true');
   expect(screen.getByText('secret input')).toBeInTheDocument();
-});
-
-test('pending stream summaries retain the step count fallback', () => {
-  render(ThoughtSummary, {
-    props: {
-      steps: [step({ kind: 'tool_call', title: 'Run command' })],
-      showStepCountFallback: true,
-    },
-  });
-
-  expect(screen.getByRole('button', { name: 'Show agent work steps' })).toHaveTextContent('Worked for 1 step');
 });
 
 test('groups adjacent file operations by type and reveals their file lists', async () => {

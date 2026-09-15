@@ -1251,7 +1251,7 @@ test('shows idle thought summary trigger above the final assistant response', as
   render(SessionChatPage);
 
   expect(await screen.findByText('Final answer')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /show agent work steps/i })).toHaveTextContent('Worked for 2s');
+  expect(screen.getByRole('button', { name: /show agent work steps/i })).toHaveAttribute('aria-expanded', 'false');
   expect(screen.getByText('I should inspect the code.')).not.toBeVisible();
   expect(screen.queryByText('started')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('started')).not.toBeInTheDocument();
@@ -2084,12 +2084,18 @@ test('renders ordered live output over the active Turn transcript while preservi
     updates: [
       { type: 'tool_call', item_id: 'tool-1', call_id: 'call-1', tool_name: 'read', arguments: { path: 'README.md' } },
       { type: 'assistant_text_delta', item_id: 'text-2', delta: 'Done' },
+      { type: 'tool_call', item_id: 'tool-2', call_id: 'call-2', tool_name: 'bash', arguments: { command: 'pnpm test' } },
     ],
   });
 
   await waitFor(() => expect(screen.getByText('Hello')).toBeInTheDocument());
   expect(screen.getByText('hello')).toBeInTheDocument();
   expect(screen.getByText('Done')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /hide agent work steps/i })).toHaveTextContent('Working');
+  expect(screen.getAllByRole('button', { name: /hide agent work steps/i })).toHaveLength(1);
+  expect(screen.getByText('read')).toBeInTheDocument();
+  expect(screen.getByText('bash')).toBeInTheDocument();
+  expect(screen.queryByText(/Worked for/)).not.toBeInTheDocument();
   expect(screen.queryByText('transcript partial')).not.toBeInTheDocument();
 });
 
