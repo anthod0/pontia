@@ -94,13 +94,14 @@ export async function restoreSessionTimeline(
 }
 
 type TimelineUpdateQueue = {
-  promise: Promise<void>;
-  resolve: () => void;
+  promise: Promise<boolean>;
+  resolve: (succeeded: boolean) => void;
   reject: (error: unknown) => void;
   timer: ReturnType<typeof setTimeout> | null;
   running: boolean;
   dirty: boolean;
   turnId: string | null;
+  succeeded: boolean;
 };
 
 const timelineUpdateQueues = new Map<string, TimelineUpdateQueue>();
@@ -352,7 +353,7 @@ async function loadForwardPages(sessionId: string, initialTurnId: string): Promi
   return items;
 }
 
-async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: string): Promise<void> {
+async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: string): Promise<boolean> {
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
     refreshing: true,
@@ -380,22 +381,23 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
     });
     cachedRefreshCursorSessions.delete(sessionId);
     await persistTimelineSnapshot(sessionId);
+    return true;
   } catch (error) {
     if (cachedRefreshCursorSessions.has(sessionId)) {
       if (isStaleCachedCursorError(error)) {
         cachedRefreshCursorSessions.delete(sessionId);
         cachedHistoryCursorSessions.delete(sessionId);
-        await loadSessionTimeline(sessionId, { mode: 'rebuild' });
-        return;
+        return (await loadSessionTimeline(sessionId, { mode: 'rebuild' })) !== null;
       }
       retainCachedTimelineAfterError(sessionId);
-      return;
+      return false;
     }
     applyTimelineError(sessionId, error);
+    return false;
   }
 }
 
-async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string): Promise<void> {
+async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string): Promise<boolean> {
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
     mode: 'tree',
@@ -430,22 +432,23 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
     });
     cachedRefreshCursorSessions.delete(sessionId);
     await persistTimelineSnapshot(sessionId);
+    return true;
   } catch (error) {
     if (cachedRefreshCursorSessions.has(sessionId)) {
       if (isStaleCachedCursorError(error)) {
         cachedRefreshCursorSessions.delete(sessionId);
         cachedHistoryCursorSessions.delete(sessionId);
-        await loadSessionTimeline(sessionId, { mode: 'rebuild', topology: true });
-        return;
+        return (await loadSessionTimeline(sessionId, { mode: 'rebuild', topology: true })) !== null;
       }
       retainCachedTimelineAfterError(sessionId);
-      return;
+      return false;
     }
     applyTimelineError(sessionId, error);
+    return false;
   }
 }
 
-export function refreshSessionTimeline(sessionId: string, turnId: string | null = null): Promise<void> {
+export function refreshSessionTimeline(sessionId: string, turnId: string | null = null): Promise<boolean> {
   const existing = timelineUpdateQueues.get(sessionId);
   if (existing) {
     existing.dirty = true;
@@ -454,10 +457,10 @@ export function refreshSessionTimeline(sessionId: string, turnId: string | null 
     return existing.promise;
   }
 
-  let resolveQueue: () => void = () => {};
+  let resolveQueue: (succeeded: boolean) => void = () => {};
   let rejectQueue: (error: unknown) => void = () => {};
   const queue: TimelineUpdateQueue = {
-    promise: new Promise<void>((resolve, reject) => {
+    promise: new Promise<boolean>((resolve, reject) => {
       resolveQueue = resolve;
       rejectQueue = reject;
     }),
@@ -467,6 +470,7 @@ export function refreshSessionTimeline(sessionId: string, turnId: string | null 
     running: false,
     dirty: true,
     turnId,
+    succeeded: true,
   };
   timelineUpdateQueues.set(sessionId, queue);
   scheduleTimelineUpdate(sessionId, queue);
@@ -486,14 +490,14 @@ async function runTimelineUpdateQueue(sessionId: string, queue: TimelineUpdateQu
   queue.running = true;
   queue.dirty = false;
   try {
-    await refreshSessionTimelineNow(sessionId, queue.turnId);
+    queue.succeeded = await refreshSessionTimelineNow(sessionId, queue.turnId);
     queue.running = false;
     if (queue.dirty && timelineUpdateQueues.get(sessionId) === queue) {
       scheduleTimelineUpdate(sessionId, queue);
       return;
     }
     if (timelineUpdateQueues.get(sessionId) === queue) timelineUpdateQueues.delete(sessionId);
-    queue.resolve();
+    queue.resolve(queue.succeeded);
   } catch (error) {
     queue.running = false;
     if (timelineUpdateQueues.get(sessionId) === queue) timelineUpdateQueues.delete(sessionId);
@@ -506,7 +510,7 @@ function clearTimelineUpdateQueue(sessionId: string): void {
   if (!queue) return;
   if (queue.timer) clearTimeout(queue.timer);
   timelineUpdateQueues.delete(sessionId);
-  if (!queue.running) queue.resolve();
+  if (!queue.running) queue.resolve(false);
 }
 
 function retainCachedTimelineAfterError(sessionId: string): void {
@@ -544,23 +548,20 @@ async function persistTimelineSnapshot(sessionId: string): Promise<void> {
   });
 }
 
-async function refreshSessionTimelineNow(sessionId: string, turnId: string | null): Promise<void> {
+async function refreshSessionTimelineNow(sessionId: string, turnId: string | null): Promise<boolean> {
   const current = get(timelineState);
-  if (current.sessionId && current.sessionId !== sessionId) return;
+  if (current.sessionId && current.sessionId !== sessionId) return false;
 
   if (current.mode === 'tree') {
     if (!current.latestTurnId) {
-      await loadSessionTimeline(sessionId, { mode: 'rebuild', topology: true });
-      return;
+      return (await loadSessionTimeline(sessionId, { mode: 'rebuild', topology: true })) !== null;
     }
-    await refreshSessionTreeUpdates(sessionId, current.latestTurnId);
-    return;
+    return refreshSessionTreeUpdates(sessionId, current.latestTurnId);
   }
 
   const forwardAnchorTurnId = turnId ?? current.latestTurnId;
   if (!forwardAnchorTurnId) {
-    await loadSessionTimeline(sessionId, { mode: 'rebuild' });
-    return;
+    return (await loadSessionTimeline(sessionId, { mode: 'rebuild' })) !== null;
   }
-  await refreshSessionTimelineUpdates(sessionId, forwardAnchorTurnId);
+  return refreshSessionTimelineUpdates(sessionId, forwardAnchorTurnId);
 }

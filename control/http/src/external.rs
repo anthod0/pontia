@@ -6,6 +6,7 @@ mod events;
 mod git_status;
 mod idempotency;
 mod inbox;
+mod live_output;
 mod response;
 mod session_guard;
 mod sessions;
@@ -28,6 +29,7 @@ pub use inbox::{
     cancel_inbox_message, dismiss_inbox_message, get_inbox_message, list_inbox_messages,
     submit_inbox_message,
 };
+pub use live_output::stream_live_output;
 pub use response::{ApiResponse, ExternalApiError};
 pub use sessions::{
     archive_session, create_session, get_session, interrupt_session, list_sessions, pin_session,

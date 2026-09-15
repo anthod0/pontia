@@ -16,6 +16,13 @@
     canSendSessionMessage,
     timelineItemsToChatMessages,
   } from '$lib/session-chat/sessionChat'
+  import type { LiveOutputEvent, LiveOutputOverlays } from '$lib/session-chat/liveOutput'
+  import {
+    applyLiveOutputEvent,
+    markLiveOutputDisconnected,
+    mergeLiveOutputMessages,
+    removeLiveOutputOverlay,
+  } from '$lib/session-chat/liveOutput'
   import {
     chatMessagesWithOptimistic,
     optimisticInitialMessages,
@@ -59,6 +66,7 @@
     timelineState,
   } from '../stores/timeline'
   import { subscribeDashboardEvents } from '../services/eventStream'
+  import { openLiveOutputStream } from '../services/liveOutputStream'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import RenameSessionDialog from '../components/chat/RenameSessionDialog.svelte'
@@ -75,6 +83,8 @@
   let actionError: string | null = null
   let renameSessionDialogOpen = false
   let unsubscribeDashboardEvents: (() => void) | null = null
+  let closeLiveOutputStream: (() => void) | null = null
+  let liveOutputOverlays: LiveOutputOverlays = {}
   let autofocusComposer = false
   let showScrollDownButton = false
   let scrollDownButtonRendered = false
@@ -103,6 +113,7 @@
   onDestroy(() => {
     destroyed = true
     unsubscribeDashboardEvents?.()
+    closeLiveOutputStream?.()
     bottomIntersectionObserver?.disconnect()
     if (scrollDownButtonHideTimer) clearTimeout(scrollDownButtonHideTimer)
   })
@@ -111,9 +122,16 @@
   $: selectedSessionGitStatus = selectedSession ? $workspaceGitStatuses[selectedSession.workspace_id ?? ''] : undefined
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, $workspaces, selectedSessionGitStatus, $workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
-  $: timelineMessages = $timelineState.sessionId === selectedSessionId
+  $: transcriptMessages = $timelineState.sessionId === selectedSessionId
     ? timelineItemsToChatMessages($timelineState.items, $timelineState.mode === 'tree')
     : []
+  $: selectedTurns = $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.turns : []
+  $: timelineMessages = mergeLiveOutputMessages(
+    transcriptMessages,
+    selectedTurns,
+    liveOutputOverlays,
+    selectedSession?.current_turn_id ?? null,
+  )
   $: reconcileOptimisticMessages(selectedSessionId, timelineMessages)
   $: reconcileInboxSubmissions(selectedSessionId, timelineMessages)
   $: messages = inboxSubmissionMessages(
@@ -397,11 +415,48 @@
     }
   }
 
-  function isSessionIdleEvent(eventType: string): boolean {
-    return eventType === 'session.ready'
-      || eventType === 'turn.completed'
+  function isTerminalTurnEvent(eventType: string): boolean {
+    return eventType === 'turn.completed'
       || eventType === 'turn.failed'
       || eventType === 'turn.interrupted'
+      || eventType === 'turn.abandoned'
+  }
+
+  function isSessionIdleEvent(eventType: string): boolean {
+    return eventType === 'session.ready' || isTerminalTurnEvent(eventType)
+  }
+
+  async function convergeTerminalTurn(turnId: string): Promise<void> {
+    const sessionId = selectedSessionId
+    const [, timelineSucceeded] = await Promise.all([
+      loadSessionDetail(sessionId, { showLoading: false }),
+      refreshSessionTimeline(sessionId, turnId),
+    ])
+    if (!timelineSucceeded || selectedSessionId !== sessionId) return
+    const timeline = get(timelineState)
+    const detail = get(sessionDetail)
+    const terminalTurn = detail?.session.session_id === sessionId
+      ? detail.turns.find((turn) => turn.turn_id === turnId)
+      : null
+    if (!terminalTurn || !['completed', 'failed', 'interrupted', 'abandoned'].includes(terminalTurn.state)) return
+    if (timeline.sessionId !== sessionId || !timeline.items.some((item) => item.turn_id === turnId)) return
+    liveOutputOverlays = removeLiveOutputOverlay(liveOutputOverlays, turnId)
+  }
+
+  function handleLiveOutputEvent(event: LiveOutputEvent): void {
+    liveOutputOverlays = applyLiveOutputEvent(liveOutputOverlays, selectedSessionId, event)
+  }
+
+  function startSelectedLiveOutput(session: SessionView | null): void {
+    closeLiveOutputStream?.()
+    closeLiveOutputStream = null
+    if (!session || session.session_id !== selectedSessionId || session.capabilities.stream_output !== true) return
+    closeLiveOutputStream = openLiveOutputStream(session.session_id, {
+      onEvent: handleLiveOutputEvent,
+      onDisconnected: () => {
+        liveOutputOverlays = markLiveOutputDisconnected(liveOutputOverlays)
+      },
+    })
   }
 
   function handleDashboardEvent(streamEvent: DashboardStreamEvent): void {
@@ -411,6 +466,10 @@
       if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
         const inboxMessageId = (metadata as Record<string, unknown>).inbox_message_id
         if (typeof inboxMessageId === 'string') consumeInboxSubmission(inboxMessageId, streamEvent.event.session_id)
+      }
+      if (isTerminalTurnEvent(streamEvent.event.type) && streamEvent.event.turn_id) {
+        void convergeTerminalTurn(streamEvent.event.turn_id)
+        return
       }
       if (isSessionIdleEvent(streamEvent.event.type)) {
         void loadSessionDetail(selectedSessionId, { showLoading: false })
@@ -477,6 +536,9 @@
   async function selectSessionFromLocation(): Promise<void> {
     const nextSessionId = requestedSessionIdFromLocation()
     if (nextSessionId === selectedSessionId) return
+    closeLiveOutputStream?.()
+    closeLiveOutputStream = null
+    liveOutputOverlays = {}
     selectedSessionId = nextSessionId
     actionError = null
     branchActionError = null
@@ -511,6 +573,7 @@
         redirectToSessionDetail(sessionId)
         return
       }
+      startSelectedLiveOutput(loadedSession)
 
       let currentTimeline = get(timelineState)
       const latestTurnId = latestProjectedTurnId()

@@ -16,8 +16,10 @@ use pontia_storage_sqlite::repositories::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::SqlitePool;
+use tokio::sync::broadcast;
 
 const MAX_STREAMS: usize = 256;
+const SUBSCRIBER_CAPACITY: usize = 64;
 const MAX_ITEMS_PER_STREAM: usize = 256;
 const MAX_UPDATES_PER_BATCH: usize = 256;
 const MAX_TOTAL_TEXT_BYTES: usize = 1024 * 1024;
@@ -65,7 +67,7 @@ pub enum LiveOutputUpdate {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LiveOutputIdentity {
     pub session_id: String,
     pub turn_id: String,
@@ -98,11 +100,54 @@ pub struct LiveOutputClose {
     pub sequence: u64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct LiveOutputSnapshot {
+    #[serde(flatten)]
     pub identity: LiveOutputIdentity,
     pub sequence: u64,
     pub items: Vec<LiveOutputItem>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LiveOutputCloseReason {
+    ProducerClosed,
+    Invalidated,
+    Expired,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum LiveOutputStreamEvent {
+    Snapshot {
+        #[serde(flatten)]
+        snapshot: LiveOutputSnapshot,
+    },
+    Updates {
+        #[serde(flatten)]
+        identity: LiveOutputIdentity,
+        first_sequence: u64,
+        updates: Vec<LiveOutputUpdate>,
+    },
+    Closed {
+        #[serde(flatten)]
+        identity: LiveOutputIdentity,
+        sequence: u64,
+        reason: LiveOutputCloseReason,
+    },
+}
+
+pub struct LiveOutputSubscription {
+    pub initial_snapshot: Option<LiveOutputSnapshot>,
+    receiver: broadcast::Receiver<LiveOutputStreamEvent>,
+}
+
+impl LiveOutputSubscription {
+    pub async fn recv(
+        &mut self,
+    ) -> std::result::Result<LiveOutputStreamEvent, broadcast::error::RecvError> {
+        self.receiver.recv().await
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,9 +161,26 @@ pub enum LiveOutputPublishOutcome {
     },
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct LiveOutputStore {
-    inner: Arc<Mutex<HashMap<StreamKey, StreamState>>>,
+    inner: Arc<Mutex<LiveOutputState>>,
+}
+
+struct LiveOutputState {
+    streams: HashMap<StreamKey, StreamState>,
+    sender: broadcast::Sender<LiveOutputStreamEvent>,
+}
+
+impl Default for LiveOutputStore {
+    fn default() -> Self {
+        let (sender, _) = broadcast::channel(SUBSCRIBER_CAPACITY);
+        Self {
+            inner: Arc::new(Mutex::new(LiveOutputState {
+                streams: HashMap::new(),
+                sender,
+            })),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -159,10 +221,10 @@ impl LiveOutputStore {
             validate_update(update)?;
         }
 
-        let mut streams = self.lock();
-        prune_expired(&mut streams);
+        let mut state = self.lock();
+        prune_expired(&mut state);
         let key = stream_key(&batch.producer.identity);
-        let Some(existing) = streams.get(&key) else {
+        let Some(existing) = state.streams.get(&key) else {
             return Ok(LiveOutputPublishOutcome::SnapshotRequired {
                 accepted_sequence: 0,
             });
@@ -204,8 +266,9 @@ impl LiveOutputStore {
             });
         }
 
+        let updates = batch.updates;
         let mut next = existing.clone();
-        for (offset, update) in batch.updates.into_iter().enumerate() {
+        for (offset, update) in updates.iter().cloned().enumerate() {
             apply_update(&mut next.items, update.clone())?;
             next.accepted_updates
                 .push_back((batch.first_sequence + offset as u64, update));
@@ -216,7 +279,12 @@ impl LiveOutputStore {
         validate_items(&next.items)?;
         next.sequence = last_sequence;
         next.updated_at = Instant::now();
-        streams.insert(key, next);
+        state.streams.insert(key, next);
+        let _ = state.sender.send(LiveOutputStreamEvent::Updates {
+            identity: batch.producer.identity,
+            first_sequence: batch.first_sequence,
+            updates,
+        });
         Ok(LiveOutputPublishOutcome::Accepted {
             accepted_sequence: last_sequence,
             duplicate: false,
@@ -235,22 +303,24 @@ impl LiveOutputStore {
         }
         validate_items(&replacement.items)?;
 
-        let mut streams = self.lock();
-        prune_expired(&mut streams);
+        let mut state = self.lock();
+        prune_expired(&mut state);
         let key = stream_key(&replacement.producer.identity);
-        if let Some(existing) = streams.get(&key)
-            && replacement.sequence < existing.sequence
+        if let Some(existing) = state.streams.get(&key)
+            && (replacement.sequence < existing.sequence
+                || (replacement.sequence == existing.sequence
+                    && (existing.closed || replacement.items == existing.items)))
         {
             return Ok(LiveOutputPublishOutcome::Accepted {
                 accepted_sequence: existing.sequence,
                 duplicate: true,
             });
         }
-        if !streams.contains_key(&key)
-            && streams.iter().any(|(existing, state)| {
+        if !state.streams.contains_key(&key)
+            && state.streams.iter().any(|(existing, stream)| {
                 existing.session_id == replacement.producer.identity.session_id
                     && existing.turn_id == replacement.producer.identity.turn_id
-                    && !state.closed
+                    && !stream.closed
             })
         {
             return Err(Error::StateConflict(format!(
@@ -258,22 +328,30 @@ impl LiveOutputStore {
                 replacement.producer.identity.turn_id
             )));
         }
-        if !streams.contains_key(&key) && streams.len() >= MAX_STREAMS {
+        if !state.streams.contains_key(&key) && state.streams.len() >= MAX_STREAMS {
             return Err(Error::StateConflict(format!(
                 "live output stream capacity of {MAX_STREAMS} has been reached"
             )));
         }
 
-        streams.insert(
+        let snapshot = LiveOutputSnapshot {
+            identity: replacement.producer.identity,
+            sequence: replacement.sequence,
+            items: replacement.items,
+        };
+        state.streams.insert(
             key,
             StreamState {
-                sequence: replacement.sequence,
-                items: replacement.items,
+                sequence: snapshot.sequence,
+                items: snapshot.items.clone(),
                 accepted_updates: VecDeque::new(),
                 closed: false,
                 updated_at: Instant::now(),
             },
         );
+        let _ = state
+            .sender
+            .send(LiveOutputStreamEvent::Snapshot { snapshot });
         Ok(LiveOutputPublishOutcome::Accepted {
             accepted_sequence: replacement.sequence,
             duplicate: false,
@@ -288,10 +366,10 @@ impl LiveOutputStore {
             ));
         }
 
-        let mut streams = self.lock();
-        prune_expired(&mut streams);
+        let mut state = self.lock();
+        prune_expired(&mut state);
         let key = stream_key(&close.producer.identity);
-        let Some(existing) = streams.get_mut(&key) else {
+        let Some(existing) = state.streams.get_mut(&key) else {
             return Ok(LiveOutputPublishOutcome::SnapshotRequired {
                 accepted_sequence: 0,
             });
@@ -313,6 +391,11 @@ impl LiveOutputStore {
         existing.accepted_updates.clear();
         existing.closed = true;
         existing.updated_at = Instant::now();
+        let _ = state.sender.send(LiveOutputStreamEvent::Closed {
+            identity: close.producer.identity,
+            sequence: close.sequence,
+            reason: LiveOutputCloseReason::ProducerClosed,
+        });
         Ok(LiveOutputPublishOutcome::Accepted {
             accepted_sequence: close.sequence,
             duplicate: false,
@@ -320,32 +403,41 @@ impl LiveOutputStore {
     }
 
     pub fn snapshot(&self, session_id: &str, turn_id: &str) -> Option<LiveOutputSnapshot> {
-        let mut streams = self.lock();
-        prune_expired(&mut streams);
-        let (key, state) = streams.iter().find(|(key, state)| {
-            key.session_id == session_id && key.turn_id == turn_id && !state.closed
-        })?;
-        Some(LiveOutputSnapshot {
-            identity: LiveOutputIdentity {
-                session_id: session_id.to_string(),
-                turn_id: turn_id.to_string(),
-                stream_id: key.stream_id.clone(),
-            },
-            sequence: state.sequence,
-            items: state.items.clone(),
-        })
+        let mut state = self.lock();
+        prune_expired(&mut state);
+        snapshot_for_turn(&state.streams, session_id, turn_id)
+    }
+
+    pub fn subscribe_session(&self, session_id: &str) -> LiveOutputSubscription {
+        let mut state = self.lock();
+        let receiver = state.sender.subscribe();
+        prune_expired(&mut state);
+        let initial_snapshot = snapshot_for_session(&state.streams, session_id);
+        LiveOutputSubscription {
+            initial_snapshot,
+            receiver,
+        }
     }
 
     pub fn discard_turn(&self, session_id: &str, turn_id: &str) {
-        self.lock()
-            .retain(|key, _| key.session_id != session_id || key.turn_id != turn_id);
+        let mut state = self.lock();
+        close_matching(
+            &mut state,
+            |key| key.session_id == session_id && key.turn_id == turn_id,
+            LiveOutputCloseReason::Invalidated,
+        );
     }
 
     pub fn discard_session(&self, session_id: &str) {
-        self.lock().retain(|key, _| key.session_id != session_id);
+        let mut state = self.lock();
+        close_matching(
+            &mut state,
+            |key| key.session_id == session_id,
+            LiveOutputCloseReason::Invalidated,
+        );
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<StreamKey, StreamState>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, LiveOutputState> {
         self.inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -383,6 +475,10 @@ impl LiveOutputService {
 
     pub fn snapshot(&self, session_id: &str, turn_id: &str) -> Option<LiveOutputSnapshot> {
         self.store.snapshot(session_id, turn_id)
+    }
+
+    pub fn subscribe_session(&self, session_id: &str) -> LiveOutputSubscription {
+        self.store.subscribe_session(session_id)
     }
 
     pub fn discard_turn(&self, session_id: &str, turn_id: &str) {
@@ -620,16 +716,92 @@ fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Re
     Ok(())
 }
 
-fn prune_expired(streams: &mut HashMap<StreamKey, StreamState>) {
+fn snapshot_for_turn(
+    streams: &HashMap<StreamKey, StreamState>,
+    session_id: &str,
+    turn_id: &str,
+) -> Option<LiveOutputSnapshot> {
+    let (key, state) = streams.iter().find(|(key, state)| {
+        key.session_id == session_id && key.turn_id == turn_id && !state.closed
+    })?;
+    Some(snapshot_from_state(key, state))
+}
+
+fn snapshot_for_session(
+    streams: &HashMap<StreamKey, StreamState>,
+    session_id: &str,
+) -> Option<LiveOutputSnapshot> {
+    let (key, state) = streams
+        .iter()
+        .filter(|(key, state)| key.session_id == session_id && !state.closed)
+        .max_by_key(|(_, state)| state.updated_at)?;
+    Some(snapshot_from_state(key, state))
+}
+
+fn snapshot_from_state(key: &StreamKey, state: &StreamState) -> LiveOutputSnapshot {
+    LiveOutputSnapshot {
+        identity: LiveOutputIdentity {
+            session_id: key.session_id.clone(),
+            turn_id: key.turn_id.clone(),
+            stream_id: key.stream_id.clone(),
+        },
+        sequence: state.sequence,
+        items: state.items.clone(),
+    }
+}
+
+fn close_matching(
+    state: &mut LiveOutputState,
+    matches: impl Fn(&StreamKey) -> bool,
+    reason: LiveOutputCloseReason,
+) {
+    let closed = state
+        .streams
+        .iter()
+        .filter(|(key, stream)| matches(key) && !stream.closed)
+        .map(|(key, stream)| LiveOutputStreamEvent::Closed {
+            identity: LiveOutputIdentity {
+                session_id: key.session_id.clone(),
+                turn_id: key.turn_id.clone(),
+                stream_id: key.stream_id.clone(),
+            },
+            sequence: stream.sequence,
+            reason,
+        })
+        .collect::<Vec<_>>();
+    state.streams.retain(|key, _| !matches(key));
+    for event in closed {
+        let _ = state.sender.send(event);
+    }
+}
+
+fn prune_expired(state: &mut LiveOutputState) {
     let now = Instant::now();
-    streams.retain(|_, state| {
-        now.duration_since(state.updated_at)
-            < if state.closed {
-                CLOSED_STREAM_TTL
-            } else {
-                ACTIVE_STREAM_TTL
-            }
-    });
+    let expired = state
+        .streams
+        .iter()
+        .filter(|(_, stream)| {
+            now.duration_since(stream.updated_at)
+                >= if stream.closed {
+                    CLOSED_STREAM_TTL
+                } else {
+                    ACTIVE_STREAM_TTL
+                }
+        })
+        .map(|(key, _)| key.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let expired_active = state
+        .streams
+        .iter()
+        .filter(|(key, stream)| expired.contains(key) && !stream.closed)
+        .map(|(key, _)| key.clone())
+        .collect::<std::collections::HashSet<_>>();
+    close_matching(
+        state,
+        |key| expired_active.contains(key),
+        LiveOutputCloseReason::Expired,
+    );
+    state.streams.retain(|key, _| !expired.contains(key));
 }
 
 #[cfg(test)]
@@ -854,7 +1026,7 @@ mod tests {
     #[test]
     fn expired_streams_are_removed_lazily() {
         let store = LiveOutputStore::default();
-        store.lock().insert(
+        store.lock().streams.insert(
             stream_key(&identity()),
             StreamState {
                 sequence: 1,
@@ -866,6 +1038,116 @@ mod tests {
         );
 
         assert!(store.snapshot("sess_1", "turn_1").is_none());
-        assert!(store.lock().is_empty());
+        assert!(store.lock().streams.is_empty());
+    }
+
+    #[tokio::test]
+    async fn subscription_starts_with_an_atomic_snapshot_then_receives_updates() {
+        let store = LiveOutputStore::default();
+        store
+            .replace_snapshot(LiveOutputSnapshotReplacement {
+                producer: producer(),
+                sequence: 1,
+                items: vec![LiveOutputItem::AssistantText {
+                    item_id: "text_1".into(),
+                    text: "a".into(),
+                }],
+            })
+            .unwrap();
+
+        let mut subscription = store.subscribe_session("sess_1");
+        assert_eq!(subscription.initial_snapshot.as_ref().unwrap().sequence, 1);
+        store
+            .publish_batch(LiveOutputBatch {
+                producer: producer(),
+                first_sequence: 2,
+                updates: vec![LiveOutputUpdate::AssistantTextDelta {
+                    item_id: "text_1".into(),
+                    delta: "b".into(),
+                }],
+            })
+            .unwrap();
+
+        assert!(matches!(
+            subscription.recv().await.unwrap(),
+            LiveOutputStreamEvent::Updates {
+                first_sequence: 2,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn retries_do_not_publish_and_session_discard_notifies_subscribers() {
+        let store = LiveOutputStore::default();
+        let replacement = LiveOutputSnapshotReplacement {
+            producer: producer(),
+            sequence: 1,
+            items: Vec::new(),
+        };
+        store.replace_snapshot(replacement.clone()).unwrap();
+        let mut subscription = store.subscribe_session("sess_1");
+        assert!(subscription.initial_snapshot.take().is_some());
+
+        assert_eq!(
+            store.replace_snapshot(replacement).unwrap(),
+            LiveOutputPublishOutcome::Accepted {
+                accepted_sequence: 1,
+                duplicate: true,
+            }
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), subscription.recv())
+                .await
+                .is_err()
+        );
+
+        store.discard_session("sess_1");
+        assert!(matches!(
+            subscription.recv().await.unwrap(),
+            LiveOutputStreamEvent::Closed { sequence: 1, .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn lagged_subscriber_can_recover_from_the_current_snapshot() {
+        let store = LiveOutputStore::default();
+        store
+            .replace_snapshot(LiveOutputSnapshotReplacement {
+                producer: producer(),
+                sequence: 1,
+                items: vec![LiveOutputItem::AssistantText {
+                    item_id: "text_1".into(),
+                    text: "a".into(),
+                }],
+            })
+            .unwrap();
+        let mut subscription = store.subscribe_session("sess_1");
+
+        for sequence in 2..=(SUBSCRIBER_CAPACITY as u64 + 2) {
+            store
+                .publish_batch(LiveOutputBatch {
+                    producer: producer(),
+                    first_sequence: sequence,
+                    updates: vec![LiveOutputUpdate::AssistantTextDelta {
+                        item_id: "text_1".into(),
+                        delta: "x".into(),
+                    }],
+                })
+                .unwrap();
+        }
+
+        assert!(matches!(
+            subscription.recv().await,
+            Err(broadcast::error::RecvError::Lagged(_))
+        ));
+        assert_eq!(
+            store
+                .subscribe_session("sess_1")
+                .initial_snapshot
+                .unwrap()
+                .sequence,
+            SUBSCRIBER_CAPACITY as u64 + 2
+        );
     }
 }

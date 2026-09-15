@@ -40,9 +40,9 @@ pub use ingestion::{
     PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
 };
 pub use live_output::{
-    LiveOutputBatch, LiveOutputClose, LiveOutputIdentity, LiveOutputItem, LiveOutputProducer,
-    LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshot, LiveOutputSnapshotReplacement,
-    LiveOutputUpdate,
+    LiveOutputBatch, LiveOutputClose, LiveOutputCloseReason, LiveOutputIdentity, LiveOutputItem,
+    LiveOutputProducer, LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshot,
+    LiveOutputSnapshotReplacement, LiveOutputStreamEvent, LiveOutputSubscription, LiveOutputUpdate,
 };
 pub use pi_control::PiGracefulExitService;
 pub use queries::ExternalQueryService;

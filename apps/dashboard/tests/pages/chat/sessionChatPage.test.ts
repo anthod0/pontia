@@ -2066,3 +2066,113 @@ test('scrolls to a message selected from the conversation ruler', async () => {
   expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
 });
+
+test('renders ordered live output over the active Turn transcript while preserving its user message', async () => {
+  const runningTurn = turn({ turn_id: 'turn-live', session_id: 'session-live', state: 'running', completed_at: null, output: { summary: 'transcript partial' } });
+  const selected = session({
+    session_id: 'session-live',
+    state: 'busy',
+    current_turn_id: runningTurn.turn_id,
+    capabilities: { accept_task: true, timeline: true, stream_output: true },
+  });
+  window.history.pushState({}, '', '/dashboard/chat/session-live');
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [runningTurn], inboxMessages: [], events: [] });
+
+  render(SessionChatPage);
+  await waitFor(() => expect(mocks.liveOutputListeners.has('session-live')).toBe(true));
+  const live = mocks.liveOutputListeners.get('session-live')!;
+  live.onEvent({
+    type: 'snapshot', session_id: 'session-live', turn_id: 'turn-live', stream_id: 'stream-live', sequence: 1,
+    items: [{ kind: 'assistant_text', item_id: 'text-1', text: 'Hello' }],
+  });
+  live.onEvent({
+    type: 'updates', session_id: 'session-live', turn_id: 'turn-live', stream_id: 'stream-live', first_sequence: 2,
+    updates: [
+      { type: 'tool_call', item_id: 'tool-1', call_id: 'call-1', tool_name: 'read', arguments: { path: 'README.md' } },
+      { type: 'assistant_text_delta', item_id: 'text-2', delta: 'Done' },
+    ],
+  });
+
+  await waitFor(() => expect(screen.getByText('Hello')).toBeInTheDocument());
+  expect(screen.getByText('hello')).toBeInTheDocument();
+  expect(screen.getByText('Done')).toBeInTheDocument();
+  expect(screen.queryByText('transcript partial')).not.toBeInTheDocument();
+});
+
+test('retains terminal live output after a failed timeline refresh and removes it after successful convergence', async () => {
+  const runningTurn = turn({ turn_id: 'turn-live', session_id: 'session-live', state: 'running', completed_at: null, output: null });
+  const selected = session({
+    session_id: 'session-live',
+    state: 'busy',
+    current_turn_id: runningTurn.turn_id,
+    capabilities: { accept_task: true, timeline: true, stream_output: true },
+  });
+  window.history.pushState({}, '', '/dashboard/chat/session-live');
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [runningTurn], inboxMessages: [], events: [] });
+
+  render(SessionChatPage);
+  await waitFor(() => expect(mocks.liveOutputListeners.has('session-live')).toBe(true));
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  mocks.liveOutputListeners.get('session-live')!.onEvent({
+    type: 'snapshot', session_id: 'session-live', turn_id: 'turn-live', stream_id: 'stream-live', sequence: 1,
+    items: [{ kind: 'assistant_text', item_id: 'text-1', text: 'Temporary answer' }],
+  });
+  await waitFor(() => expect(screen.getByText('Temporary answer')).toBeInTheDocument());
+
+  mocks.refreshSessionTimeline.mockResolvedValueOnce(false);
+  for (const listener of mocks.dashboardEventListeners) listener({
+    kind: 'session_event',
+    event: { session_id: 'session-live', turn_id: 'turn-live', type: 'turn.completed', payload: {} },
+  });
+  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalled());
+  expect(screen.getByText('Temporary answer')).toBeInTheDocument();
+
+  mocks.sessionDetail.set({
+    session: { ...selected, state: 'idle', current_turn_id: 'turn-live' },
+    turns: [{ ...runningTurn, state: 'completed', completed_at: '2026-05-14T00:00:03Z' }],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.refreshSessionTimeline.mockImplementationOnce(async () => {
+    mocks.timelineState.set(timelineStateValue({
+      sessionId: 'session-live',
+      status: 'ready',
+      latestTurnId: 'turn-live',
+      items: timelineItemsFromTurns([{ ...runningTurn, state: 'completed', output: { summary: 'Final answer' }, completed_at: '2026-05-14T00:00:03Z' }]),
+    }));
+    return true;
+  });
+  for (const listener of mocks.dashboardEventListeners) listener({
+    kind: 'session_event',
+    event: { session_id: 'session-live', turn_id: 'turn-live', type: 'turn.completed', payload: {} },
+  });
+
+  await waitFor(() => expect(screen.getByText('Final answer')).toBeInTheDocument());
+  expect(screen.queryByText('Temporary answer')).not.toBeInTheDocument();
+});
+
+test('closes the old live output stream when navigating to another Session', async () => {
+  const first = session({ session_id: 'session-1', capabilities: { timeline: true, stream_output: true } });
+  const second = session({ session_id: 'session-2', capabilities: { timeline: true, stream_output: true } });
+  window.history.pushState({}, '', '/dashboard/chat/session-1');
+  mocks.loadedSessions = [first, second];
+  mocks.sessions.set([first, second]);
+  mocks.sessionDetail.set({ session: first, turns: [], inboxMessages: [], events: [] });
+  mocks.loadSessionDetail.mockImplementation(async (sessionId: string) => {
+    const selected = sessionId === 'session-1' ? first : second;
+    mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+    return null;
+  });
+
+  render(SessionChatPage);
+  await waitFor(() => expect(mocks.liveOutputListeners.has('session-1')).toBe(true));
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+
+  await waitFor(() => expect(mocks.liveOutputListeners.has('session-2')).toBe(true));
+  expect(mocks.liveOutputListeners.has('session-1')).toBe(false);
+});

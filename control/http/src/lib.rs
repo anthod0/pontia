@@ -264,6 +264,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             get(external::get_turn_timeline),
         )
         .route(
+            "/external/v1/sessions/{session_id}/live-output/stream",
+            get(external::stream_live_output),
+        )
+        .route(
             "/external/v1/sessions/{session_id}/turns/tree/history",
             get(external::get_turn_tree_history),
         )

@@ -62,6 +62,10 @@ const mocks = vi.hoisted(() => {
   const workspaceGitStatusErrors = writableStore({});
   const timelineState = writableStore<TimelineState>(timelineStateValue());
   const dashboardEventListeners = new Set<(event: unknown) => void>();
+  const liveOutputListeners = new Map<string, {
+    onEvent: (event: unknown) => void;
+    onDisconnected: () => void;
+  }>();
 
   return {
     sessions,
@@ -79,6 +83,7 @@ const mocks = vi.hoisted(() => {
     timelineState,
     timelineStateValue,
     dashboardEventListeners,
+    liveOutputListeners,
     loadedSessions: [] as SessionView[],
     loadSessions: vi.fn(async () => mocks.loadedSessions),
     loadSessionDetail: vi.fn(async () => null),
@@ -92,7 +97,7 @@ const mocks = vi.hoisted(() => {
     updateSessionTitle: vi.fn(),
     createSession: vi.fn(),
     loadSessionTimeline: vi.fn(async (sessionId: string) => null),
-    refreshSessionTimeline: vi.fn(async () => undefined),
+    refreshSessionTimeline: vi.fn(async () => true),
     restoreSessionTimeline: vi.fn(async () => false),
     resetTimelineState: vi.fn((sessionId = '') => {
       mocks.timelineState.set(mocks.timelineStateValue({ sessionId }));
@@ -184,6 +189,16 @@ vi.mock('../../../src/services/eventStream', () => ({
   subscribeDashboardEvents: (listener: (event: unknown) => void) => {
     mocks.dashboardEventListeners.add(listener);
     return () => mocks.dashboardEventListeners.delete(listener);
+  },
+}));
+
+vi.mock('../../../src/services/liveOutputStream', () => ({
+  openLiveOutputStream: (sessionId: string, handlers: {
+    onEvent: (event: unknown) => void;
+    onDisconnected: () => void;
+  }) => {
+    mocks.liveOutputListeners.set(sessionId, handlers);
+    return () => mocks.liveOutputListeners.delete(sessionId);
   },
 }));
 
@@ -318,10 +333,11 @@ beforeEach(() => {
   optimisticInitialMessages.set({});
   optimisticInboxSubmissions.set({});
   mocks.dashboardEventListeners.clear();
+  mocks.liveOutputListeners.clear();
   mocks.pathParams = {};
   mocks.loadSessionDetail.mockReset().mockResolvedValue(null);
   mocks.loadSessionTimeline.mockReset();
-  mocks.refreshSessionTimeline.mockReset().mockResolvedValue(undefined);
+  mocks.refreshSessionTimeline.mockReset().mockResolvedValue(true);
   mocks.restoreSessionTimeline.mockReset().mockResolvedValue(false);
   mocks.createSession.mockResolvedValue({ session: activeSession, initial_turn: null } satisfies CreateSessionResult);
   mocks.loadWorkspaceRoots.mockReset().mockImplementation(async () => mocks.workspaceRoots.get());
