@@ -7,16 +7,20 @@
   interface Props {
     steps: SessionChatThoughtStep[]
     active?: boolean
+    workedDurationMs?: number
+    showStepCountFallback?: boolean
     class?: string
   }
 
-  let { steps, active = false, class: className }: Props = $props()
+  let { steps, active = false, workedDurationMs, showStepCountFallback = false, class: className }: Props = $props()
   let sheetOpen = $state(false)
 </script>
 
 {#if active}
   <ThoughtSummaryCollapsed {steps} {active} class={className} onOpen={() => (sheetOpen = true)} />
-{:else}
+{:else if workedDurationMs !== undefined}
+  <ThoughtSummaryIdle durationMs={workedDurationMs} class={className} onOpen={() => (sheetOpen = true)} />
+{:else if showStepCountFallback}
   <ThoughtSummaryIdle count={steps.length} class={className} onOpen={() => (sheetOpen = true)} />
 {/if}
 <ThoughtSummarySheet bind:open={sheetOpen} {steps} {active} />

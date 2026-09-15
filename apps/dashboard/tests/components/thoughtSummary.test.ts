@@ -15,7 +15,7 @@ function step(overrides: Partial<SessionChatThoughtStep> = {}): SessionChatThoug
   };
 }
 
-test('idle thought summary renders a worked steps trigger', () => {
+test('idle thought summary renders the elapsed work time', () => {
   render(ThoughtSummary, {
     props: {
       steps: [
@@ -24,15 +24,27 @@ test('idle thought summary renders a worked steps trigger', () => {
         step({ id: 'thought-3', kind: 'tool_result', title: 'bash result' }),
       ],
       active: false,
+      workedDurationMs: 128_000,
     },
   });
 
   const trigger = screen.getByRole('button', { name: 'View thought details' });
 
-  expect(trigger).toHaveTextContent('Worked for 3 steps');
-  expect(screen.queryByText('Thought for 3 steps')).not.toBeInTheDocument();
+  expect(trigger).toHaveTextContent('Worked for 2m 8s');
   expect(screen.queryByText('bash')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
+});
+
+test('pending stream summaries retain the step count fallback', () => {
+  render(ThoughtSummary, {
+    props: {
+      steps: [step({ kind: 'tool_call', title: 'bash' })],
+      active: false,
+      showStepCountFallback: true,
+    },
+  });
+
+  expect(screen.getByRole('button', { name: 'View thought details' })).toHaveTextContent('Worked for 1 step');
 });
 
 test('busy thought summary shows the latest step without the step count trigger', () => {

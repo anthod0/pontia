@@ -1251,8 +1251,7 @@ test('shows idle thought summary trigger above the final assistant response', as
   render(SessionChatPage);
 
   expect(await screen.findByText('Final answer')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /view thought details/i })).toHaveTextContent('Worked for 2 steps');
-  expect(screen.queryByText('Thought for 2 steps')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /view thought details/i })).toHaveTextContent('Worked for 2s');
   expect(screen.queryByText('I should inspect the code.')).not.toBeInTheDocument();
   expect(screen.queryByText('read {"path":"src/app.ts"}')).not.toBeInTheDocument();
   expect(screen.queryByText('started')).not.toBeInTheDocument();

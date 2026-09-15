@@ -157,6 +157,41 @@ test('maps timeline items into primary chat messages with assistant thought step
     { id: '3', kind: 'tool_call', title: 'read', status: 'started', content: 'read {"path":"src/app.ts"}', occurredAt: '2026-01-01T00:00:02Z' },
     { id: '4', kind: 'tool_result', title: 'read', status: 'completed', content: 'file contents', occurredAt: '2026-01-01T00:00:03Z' },
   ]);
+  expect(messages[1].workedDurationMs).toBe(3_000);
+});
+
+test('collapses intermediate assistant output and all work into the final Turn response', () => {
+  const messages = timelineItemsToChatMessages([
+    timelineItem({ item_id: '1', kind: 'user', role: 'user', turn_id: 'turn-1', content_preview: 'Build it', occurred_at: '2026-01-01T00:00:00Z' }),
+    timelineItem({ item_id: '2', kind: 'thinking', role: 'assistant', turn_id: 'turn-1', content_preview: 'Planning', occurred_at: '2026-01-01T00:00:01Z' }),
+    timelineItem({ item_id: '3', kind: 'assistant', role: 'assistant', turn_id: 'turn-1', content_preview: 'Intermediate update', occurred_at: '2026-01-01T00:00:03Z' }),
+    timelineItem({ item_id: '4', kind: 'tool_call', role: 'tool', turn_id: 'turn-1', title: 'bash', content_preview: 'run tests', occurred_at: '2026-01-01T00:00:04Z' }),
+    timelineItem({ item_id: '5', kind: 'tool_result', role: 'tool', turn_id: 'turn-1', title: 'bash', content_preview: 'passed', occurred_at: '2026-01-01T00:00:06Z' }),
+    timelineItem({ item_id: '6', kind: 'assistant', role: 'assistant', turn_id: 'turn-1', content_preview: 'Almost done', occurred_at: '2026-01-01T00:00:07Z' }),
+    timelineItem({ item_id: '7', kind: 'assistant', role: 'assistant', turn_id: 'turn-1', content_preview: 'Final answer', occurred_at: '2026-01-01T00:00:08Z' }),
+  ]);
+
+  expect(messages.map((message) => [message.role, message.content])).toEqual([
+    ['user', 'Build it'],
+    ['assistant', 'Final answer'],
+  ]);
+  expect(messages[1].thoughtSteps?.map((step) => step.id)).toEqual(['2', '4', '5']);
+  expect(messages[1].workedDurationMs).toBe(7_000);
+});
+
+test('times assistant-only work but omits elapsed time when the first timestamp is invalid', () => {
+  const completed = timelineItemsToChatMessages([
+    timelineItem({ item_id: '1', kind: 'assistant', role: 'assistant', turn_id: 'turn-1', content_preview: 'Intermediate', occurred_at: '2026-01-01T00:00:01Z' }),
+    timelineItem({ item_id: '2', kind: 'assistant', role: 'assistant', turn_id: 'turn-1', content_preview: 'Final', occurred_at: '2026-01-01T00:00:04Z' }),
+  ]);
+  const invalid = timelineItemsToChatMessages([
+    timelineItem({ item_id: '3', kind: 'thinking', role: 'assistant', turn_id: 'turn-2', content_preview: 'Planning', occurred_at: null }),
+    timelineItem({ item_id: '4', kind: 'tool_call', role: 'tool', turn_id: 'turn-2', content_preview: 'run', occurred_at: '2026-01-01T00:00:02Z' }),
+    timelineItem({ item_id: '5', kind: 'assistant', role: 'assistant', turn_id: 'turn-2', content_preview: 'Final', occurred_at: '2026-01-01T00:00:04Z' }),
+  ]);
+
+  expect(completed).toMatchObject([{ content: 'Final', workedDurationMs: 3_000 }]);
+  expect(invalid[0].workedDurationMs).toBeUndefined();
 });
 
 test('keeps managed tool use data and formats display content from structured inputs', () => {

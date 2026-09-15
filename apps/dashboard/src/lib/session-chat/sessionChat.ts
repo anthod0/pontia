@@ -23,6 +23,7 @@ export interface SessionChatMessage {
   status: ChatMessageStatus;
   createdAt: string;
   thoughtSteps?: SessionChatThoughtStep[];
+  workedDurationMs?: number;
 }
 
 const terminalStates = new Set(['exited', 'error']);
@@ -104,16 +105,36 @@ export function timelineItemsToChatMessages(
   preserveTurnOrder = false,
 ): SessionChatMessage[] {
   const messages: SessionChatMessage[] = [];
+  let pendingTurnId: string | null = null;
+  let pendingAssistantItems: TimelineItem[] = [];
   let pendingThoughtSteps: SessionChatThoughtStep[] = [];
-  let pendingThoughtTurnId: string | null = null;
-  let pendingThoughtOccurredAt: string | null = null;
+  let pendingStartedAt: number | null = null;
+  let pendingStartObserved = false;
 
-  const flushPendingWorkingMessage = () => {
-    if (!pendingThoughtSteps.length) return;
-    const turnId = pendingThoughtTurnId ?? pendingThoughtSteps[0]?.id ?? 'pending';
-    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && message.turnId === turnId);
-    if (lastAssistant) {
-      lastAssistant.thoughtSteps = [...(lastAssistant.thoughtSteps ?? []), ...pendingThoughtSteps];
+  const flushPendingTurn = () => {
+    if (!pendingAssistantItems.length && !pendingThoughtSteps.length) return;
+    const turnId = pendingTurnId ?? pendingAssistantItems[0]?.item_id ?? pendingThoughtSteps[0]?.id ?? 'pending';
+    const finalAssistant = pendingAssistantItems.at(-1);
+
+    if (finalAssistant) {
+      const finalContent = pendingAssistantItems
+        .map((item) => item.content_preview?.trim())
+        .filter(Boolean)
+        .join('\n\n');
+      const completedAt = timestampMilliseconds(finalAssistant.occurred_at);
+      const workedDurationMs = pendingStartedAt !== null && completedAt !== null && completedAt >= pendingStartedAt
+        ? completedAt - pendingStartedAt
+        : undefined;
+      messages.push({
+        id: finalAssistant.item_id,
+        turnId,
+        role: 'assistant',
+        content: finalContent || 'No assistant output was reported.',
+        status: finalAssistant.status === 'error' ? 'failed' : 'sent',
+        createdAt: finalAssistant.occurred_at ?? '',
+        ...(pendingThoughtSteps.length ? { thoughtSteps: pendingThoughtSteps } : {}),
+        ...(workedDurationMs !== undefined ? { workedDurationMs } : {}),
+      });
     } else {
       messages.push({
         id: `${turnId}:working`,
@@ -121,21 +142,33 @@ export function timelineItemsToChatMessages(
         role: 'assistant',
         content: '',
         status: 'pending',
-        createdAt: pendingThoughtOccurredAt ?? '',
+        createdAt: pendingThoughtSteps[0]?.occurredAt ?? '',
         thoughtSteps: pendingThoughtSteps,
       });
     }
+
+    pendingTurnId = null;
+    pendingAssistantItems = [];
     pendingThoughtSteps = [];
-    pendingThoughtTurnId = null;
-    pendingThoughtOccurredAt = null;
+    pendingStartedAt = null;
+    pendingStartObserved = false;
   };
+
+  const firstActivityTimestamps = new Map<string, number | null>();
+  for (const item of items) {
+    if (item.turn_id && (item.kind === 'assistant' || isThoughtStepKind(item.kind)) && !firstActivityTimestamps.has(item.turn_id)) {
+      firstActivityTimestamps.set(item.turn_id, timestampMilliseconds(item.occurred_at));
+    }
+  }
 
   const orderedItems = preserveTurnOrder
     ? items
     : items.slice().sort((a, b) => timelineTimestamp(a).localeCompare(timelineTimestamp(b)));
   for (const item of orderedItems) {
+    if (pendingTurnId && item.turn_id && item.turn_id !== pendingTurnId) flushPendingTurn();
+
     if (item.kind === 'user') {
-      flushPendingWorkingMessage();
+      flushPendingTurn();
       const content = item.content_preview ?? '';
       messages.push({
         id: item.item_id,
@@ -148,28 +181,22 @@ export function timelineItemsToChatMessages(
       continue;
     }
 
-    if (item.kind === 'assistant') {
-      const message: SessionChatMessage = {
-        id: item.item_id,
-        turnId: item.turn_id ?? item.item_id,
-        role: item.kind,
-        content: item.content_preview?.trim() || 'No assistant output was reported.',
-        status: item.status === 'error' ? 'failed' : 'sent',
-        createdAt: item.occurred_at ?? '',
-      };
-      if (pendingThoughtSteps.length) {
-        message.thoughtSteps = pendingThoughtSteps;
-        pendingThoughtSteps = [];
-        pendingThoughtTurnId = null;
-        pendingThoughtOccurredAt = null;
+    if (item.kind === 'assistant' || isThoughtStepKind(item.kind)) {
+      pendingTurnId ??= item.turn_id ?? item.item_id;
+      if (!pendingStartObserved) {
+        pendingStartedAt = item.turn_id && firstActivityTimestamps.has(item.turn_id)
+          ? firstActivityTimestamps.get(item.turn_id) ?? null
+          : timestampMilliseconds(item.occurred_at);
+        pendingStartObserved = true;
       }
-      messages.push(message);
+    }
+
+    if (item.kind === 'assistant') {
+      pendingAssistantItems = [item];
       continue;
     }
 
     if (isThoughtStepKind(item.kind)) {
-      pendingThoughtTurnId = item.turn_id ?? pendingThoughtTurnId;
-      pendingThoughtOccurredAt ??= item.occurred_at;
       const managedToolUse = item.kind === 'tool_call' ? item.managed_tool_use ?? undefined : undefined;
       pendingThoughtSteps.push({
         id: item.item_id,
@@ -183,7 +210,7 @@ export function timelineItemsToChatMessages(
     }
   }
 
-  flushPendingWorkingMessage();
+  flushPendingTurn();
 
   return messages;
 }
@@ -230,6 +257,12 @@ function formatReadTarget(path: string, startLine?: number | null, endLine?: num
 
 function timelineTimestamp(item: TimelineItem): string {
   return item.occurred_at ?? item.item_id;
+}
+
+function timestampMilliseconds(timestamp: string | null): number | null {
+  if (!timestamp) return null;
+  const milliseconds = Date.parse(timestamp);
+  return Number.isFinite(milliseconds) ? milliseconds : null;
 }
 
 function assistantMessageForTurn(turn: TurnView): SessionChatMessage {

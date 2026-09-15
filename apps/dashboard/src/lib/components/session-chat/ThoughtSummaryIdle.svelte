@@ -3,14 +3,29 @@
   import { cn } from '$lib/utils.js'
 
   interface Props {
-    count: number
+    durationMs?: number
+    count?: number
     class?: string
     onOpen: () => void
   }
 
-  let { count, class: className, onOpen }: Props = $props()
+  let { durationMs, count = 0, class: className, onOpen }: Props = $props()
 
-  const label = $derived(`Worked for ${count} ${count === 1 ? 'step' : 'steps'}`)
+  const label = $derived(durationMs === undefined
+    ? `Worked for ${count} ${count === 1 ? 'step' : 'steps'}`
+    : `Worked for ${formatDuration(durationMs)}`)
+
+  function formatDuration(milliseconds: number): string {
+    const totalSeconds = Math.max(1, Math.round(milliseconds / 1_000))
+    const hours = Math.floor(totalSeconds / 3_600)
+    const minutes = Math.floor((totalSeconds % 3_600) / 60)
+    const seconds = totalSeconds % 60
+    return [
+      hours ? `${hours}h` : '',
+      minutes ? `${minutes}m` : '',
+      seconds || (!hours && !minutes) ? `${seconds}s` : '',
+    ].filter(Boolean).join(' ')
+  }
 </script>
 
 <button

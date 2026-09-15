@@ -278,8 +278,8 @@
         {#if displayItem.showAgentStatus}
           <AgentStatus state={sessionState} />
         {/if}
-        {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
-          <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
+        {#if chatMessage.role === 'assistant' && (chatMessage.thoughtSteps?.length || chatMessage.workedDurationMs !== undefined)}
+          <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps ?? []} workedDurationMs={chatMessage.workedDurationMs} showStepCountFallback={chatMessage.status === 'pending'} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
         {/if}
         {#if chatMessage.content.trim()}
           {#if chatMessage.role === 'user' && editingMessageId === chatMessage.id}
