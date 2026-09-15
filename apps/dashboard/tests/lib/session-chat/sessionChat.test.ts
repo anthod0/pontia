@@ -160,7 +160,7 @@ test('maps timeline items into primary chat messages with assistant thought step
   expect(messages[1].workedDurationMs).toBe(3_000);
 });
 
-test('collapses intermediate assistant output and all work into the final Turn response', () => {
+test('keeps intermediate assistant output distinct from thinking in the final Turn response', () => {
   const messages = timelineItemsToChatMessages([
     timelineItem({ item_id: '1', kind: 'user', role: 'user', turn_id: 'turn-1', content_preview: 'Build it', occurred_at: '2026-01-01T00:00:00Z' }),
     timelineItem({ item_id: '2', kind: 'thinking', role: 'assistant', turn_id: 'turn-1', content_preview: 'Planning', occurred_at: '2026-01-01T00:00:01Z' }),
@@ -177,10 +177,10 @@ test('collapses intermediate assistant output and all work into the final Turn r
   ]);
   expect(messages[1].thoughtSteps?.map((step) => [step.id, step.kind, step.content])).toEqual([
     ['2', 'thinking', 'Planning'],
-    ['3', 'thinking', 'Intermediate update'],
+    ['3', 'assistant', 'Intermediate update'],
     ['4', 'tool_call', 'run tests'],
     ['5', 'tool_result', 'passed'],
-    ['6', 'thinking', 'Almost done'],
+    ['6', 'assistant', 'Almost done'],
   ]);
   expect(messages[1].workedDurationMs).toBe(7_000);
 });
@@ -199,7 +199,7 @@ test('times assistant-only work but omits elapsed time when the first timestamp 
   expect(completed).toMatchObject([{
     content: 'Final',
     workedDurationMs: 3_000,
-    thoughtSteps: [{ kind: 'thinking', content: 'Intermediate' }],
+    thoughtSteps: [{ kind: 'assistant', content: 'Intermediate' }],
   }]);
   expect(invalid[0].workedDurationMs).toBeUndefined();
 });

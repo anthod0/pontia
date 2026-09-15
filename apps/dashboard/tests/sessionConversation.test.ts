@@ -354,7 +354,7 @@ test('conversation shows agent status for a busy pending assistant message with 
 
   expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
   expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
-  expect(screen.queryByText('bash')).not.toBeInTheDocument();
+  expect(screen.getByText('bash')).toBeInTheDocument();
   expect(screen.getByText('read')).toBeInTheDocument();
   expect(screen.queryByText('Waiting for the agent to report its next output.')).not.toBeInTheDocument();
   expect(screen.queryByText('Working…')).not.toBeInTheDocument();
@@ -392,7 +392,7 @@ test('conversation shows agent working only once after an interrupted pending th
   expect(screen.getAllByText('Agent working')).toHaveLength(1);
   expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
   expect(screen.queryByText('Thought for 1 step')).not.toBeInTheDocument();
-  expect(screen.queryByText('Interrupted work')).not.toBeInTheDocument();
+  expect(screen.getByText('Interrupted work')).not.toBeVisible();
 });
 
 test('conversation keeps non-trailing empty pending thought summaries idle while the session is busy', () => {
@@ -428,8 +428,8 @@ test('conversation keeps non-trailing empty pending thought summaries idle while
   expect(screen.getByText('Agent working')).toBeInTheDocument();
   expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
   expect(screen.queryByText('Thought for 2 steps')).not.toBeInTheDocument();
-  expect(screen.queryByText('Reading old file')).not.toBeInTheDocument();
-  expect(screen.queryByText('Running old command')).not.toBeInTheDocument();
+  expect(screen.getByText('Reading old file')).not.toBeVisible();
+  expect(screen.getByText('Running old command')).not.toBeVisible();
 });
 
 test('conversation renders agent status without an assistant loading placeholder after the latest user message', async () => {

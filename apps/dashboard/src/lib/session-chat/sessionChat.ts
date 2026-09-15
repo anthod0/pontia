@@ -7,7 +7,7 @@ export type ChatMessageStatus = 'sent' | 'pending' | 'failed';
 
 export interface SessionChatThoughtStep {
   id: string;
-  kind: 'thinking' | 'tool_call' | 'tool_result';
+  kind: 'assistant' | 'thinking' | 'tool_call' | 'tool_result';
   title: string;
   status: string | null;
   content: string;
@@ -115,8 +115,8 @@ export function timelineItemsToChatMessages(
     for (const item of pendingAssistantItems) {
       pendingThoughtSteps.push({
         id: item.item_id,
-        kind: 'thinking',
-        title: 'Thinking',
+        kind: 'assistant',
+        title: 'Assistant update',
         status: item.status,
         content: item.content_preview?.trim() || 'No details reported.',
         occurredAt: item.occurred_at,
@@ -235,11 +235,11 @@ export function canSendSessionMessage(session: Pick<SessionView, 'state' | 'capa
   return Boolean(session && session.state !== 'error' && session.capabilities?.accept_task === true && input.trim());
 }
 
-function isThoughtStepKind(kind: string): kind is SessionChatThoughtStep['kind'] {
+function isThoughtStepKind(kind: string): kind is Exclude<SessionChatThoughtStep['kind'], 'assistant'> {
   return kind === 'thinking' || kind === 'tool_call' || kind === 'tool_result';
 }
 
-function defaultThoughtStepTitle(kind: SessionChatThoughtStep['kind']): string {
+function defaultThoughtStepTitle(kind: Exclude<SessionChatThoughtStep['kind'], 'assistant'>): string {
   if (kind === 'thinking') return 'Thinking';
   if (kind === 'tool_call') return 'Tool call';
   return 'Tool result';
