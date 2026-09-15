@@ -111,6 +111,20 @@ export function timelineItemsToChatMessages(
   let pendingStartedAt: number | null = null;
   let pendingStartObserved = false;
 
+  const movePendingAssistantToThoughts = () => {
+    for (const item of pendingAssistantItems) {
+      pendingThoughtSteps.push({
+        id: item.item_id,
+        kind: 'thinking',
+        title: 'Thinking',
+        status: item.status,
+        content: item.content_preview?.trim() || 'No details reported.',
+        occurredAt: item.occurred_at,
+      });
+    }
+    pendingAssistantItems = [];
+  };
+
   const flushPendingTurn = () => {
     if (!pendingAssistantItems.length && !pendingThoughtSteps.length) return;
     const turnId = pendingTurnId ?? pendingAssistantItems[0]?.item_id ?? pendingThoughtSteps[0]?.id ?? 'pending';
@@ -192,11 +206,13 @@ export function timelineItemsToChatMessages(
     }
 
     if (item.kind === 'assistant') {
+      movePendingAssistantToThoughts();
       pendingAssistantItems = [item];
       continue;
     }
 
     if (isThoughtStepKind(item.kind)) {
+      movePendingAssistantToThoughts();
       const managedToolUse = item.kind === 'tool_call' ? item.managed_tool_use ?? undefined : undefined;
       pendingThoughtSteps.push({
         id: item.item_id,

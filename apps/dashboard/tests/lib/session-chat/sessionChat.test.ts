@@ -175,7 +175,13 @@ test('collapses intermediate assistant output and all work into the final Turn r
     ['user', 'Build it'],
     ['assistant', 'Final answer'],
   ]);
-  expect(messages[1].thoughtSteps?.map((step) => step.id)).toEqual(['2', '4', '5']);
+  expect(messages[1].thoughtSteps?.map((step) => [step.id, step.kind, step.content])).toEqual([
+    ['2', 'thinking', 'Planning'],
+    ['3', 'thinking', 'Intermediate update'],
+    ['4', 'tool_call', 'run tests'],
+    ['5', 'tool_result', 'passed'],
+    ['6', 'thinking', 'Almost done'],
+  ]);
   expect(messages[1].workedDurationMs).toBe(7_000);
 });
 
@@ -190,7 +196,11 @@ test('times assistant-only work but omits elapsed time when the first timestamp 
     timelineItem({ item_id: '5', kind: 'assistant', role: 'assistant', turn_id: 'turn-2', content_preview: 'Final', occurred_at: '2026-01-01T00:00:04Z' }),
   ]);
 
-  expect(completed).toMatchObject([{ content: 'Final', workedDurationMs: 3_000 }]);
+  expect(completed).toMatchObject([{
+    content: 'Final',
+    workedDurationMs: 3_000,
+    thoughtSteps: [{ kind: 'thinking', content: 'Intermediate' }],
+  }]);
   expect(invalid[0].workedDurationMs).toBeUndefined();
 });
 
