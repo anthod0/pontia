@@ -2082,9 +2082,9 @@ test('renders ordered live output over the active Turn transcript while preservi
   live.onEvent({
     type: 'updates', session_id: 'session-live', turn_id: 'turn-live', stream_id: 'stream-live', first_sequence: 2,
     updates: [
-      { type: 'tool_call', item_id: 'tool-1', call_id: 'call-1', tool_name: 'read', arguments: { path: 'README.md' } },
+      { type: 'tool_call', item_id: 'tool-1', call_id: 'call-1', tool_name: 'read', arguments: { path: 'README.md' }, managed_tool_use: { tool_name: 'read', input: { type: 'read', path: 'README.md' } } },
       { type: 'assistant_text_delta', item_id: 'text-2', delta: 'Done' },
-      { type: 'tool_call', item_id: 'tool-2', call_id: 'call-2', tool_name: 'bash', arguments: { command: 'pnpm test' } },
+      { type: 'tool_call', item_id: 'tool-2', call_id: 'call-2', tool_name: 'bash', arguments: { command: 'pnpm test' }, managed_tool_use: { tool_name: 'bash', input: { type: 'bash', command: 'pnpm test' } } },
     ],
   });
 
@@ -2093,8 +2093,8 @@ test('renders ordered live output over the active Turn transcript while preservi
   expect(screen.getByText('Done')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /hide agent work steps/i })).toHaveTextContent('Working');
   expect(screen.getAllByRole('button', { name: /hide agent work steps/i })).toHaveLength(1);
-  expect(screen.getByText('read')).toBeInTheDocument();
-  expect(screen.getByText('bash')).toBeInTheDocument();
+  expect(screen.getByText('Read 1 file')).toBeInTheDocument();
+  expect(screen.getByText('Run command')).toBeInTheDocument();
   expect(screen.queryByText(/Worked for/)).not.toBeInTheDocument();
   expect(screen.queryByText('transcript partial')).not.toBeInTheDocument();
 });

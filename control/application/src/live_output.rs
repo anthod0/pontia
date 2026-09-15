@@ -4,7 +4,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use pontia_agent_clients::get_client_spec;
+use pontia_agent_clients::{
+    get_client_spec,
+    raw_transcripts::{ManagedToolUse, ManagedToolUseInput},
+};
 use pontia_core::{
     domain::TurnState,
     error::{Error, Result},
@@ -41,6 +44,8 @@ pub enum LiveOutputItem {
         call_id: String,
         tool_name: String,
         arguments: Value,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        managed_tool_use: Option<ManagedToolUse>,
     },
 }
 
@@ -64,6 +69,8 @@ pub enum LiveOutputUpdate {
         call_id: String,
         tool_name: String,
         arguments: Value,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        managed_tool_use: Option<ManagedToolUse>,
     },
 }
 
@@ -586,11 +593,12 @@ fn validate_update(update: &LiveOutputUpdate) -> Result<()> {
             call_id,
             tool_name,
             arguments,
+            managed_tool_use,
         } => {
             validate_non_empty("item_id", item_id)?;
             validate_non_empty("call_id", call_id)?;
             validate_non_empty("tool_name", tool_name)?;
-            validate_tool_arguments(arguments)?;
+            validate_tool_call(tool_name, arguments, managed_tool_use.as_ref())?;
         }
     }
     Ok(())
@@ -625,13 +633,15 @@ fn validate_items(items: &[LiveOutputItem]) -> Result<()> {
                 call_id,
                 tool_name,
                 arguments,
+                managed_tool_use,
                 ..
             } => {
                 validate_non_empty("call_id", call_id)?;
                 validate_non_empty("tool_name", tool_name)?;
-                let argument_bytes = validate_tool_arguments(arguments)?;
+                let tool_bytes =
+                    validate_tool_call(tool_name, arguments, managed_tool_use.as_ref())?;
                 total_tool_bytes = total_tool_bytes
-                    .checked_add(argument_bytes)
+                    .checked_add(tool_bytes)
                     .ok_or_else(|| Error::Domain("live output tool size overflow".into()))?;
                 if !call_ids.insert(call_id) {
                     return Err(Error::Domain(format!(
@@ -654,11 +664,29 @@ fn validate_items(items: &[LiveOutputItem]) -> Result<()> {
     Ok(())
 }
 
-fn validate_tool_arguments(arguments: &Value) -> Result<usize> {
-    let size = serde_json::to_vec(arguments)?.len();
+fn validate_tool_call(
+    tool_name: &str,
+    arguments: &Value,
+    managed_tool_use: Option<&ManagedToolUse>,
+) -> Result<usize> {
+    if let Some(managed_tool_use) = managed_tool_use {
+        let input_matches_tool = matches!(
+            (tool_name, &managed_tool_use.input),
+            ("read", ManagedToolUseInput::Read { .. })
+                | ("edit", ManagedToolUseInput::Edit { .. })
+                | ("write", ManagedToolUseInput::Write { .. })
+                | ("bash", ManagedToolUseInput::Bash { .. })
+        );
+        if managed_tool_use.tool_name != tool_name || !input_matches_tool {
+            return Err(Error::Domain(
+                "managed tool use must match tool_name and input type".into(),
+            ));
+        }
+    }
+    let size = serde_json::to_vec(&(arguments, managed_tool_use))?.len();
     if size > MAX_TOOL_CALL_BYTES {
         return Err(Error::Domain(format!(
-            "tool call arguments exceed {MAX_TOOL_CALL_BYTES} bytes"
+            "tool call payload exceeds {MAX_TOOL_CALL_BYTES} bytes"
         )));
     }
     Ok(size)
@@ -692,6 +720,7 @@ fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Re
             call_id,
             tool_name,
             arguments,
+            managed_tool_use,
         } => {
             if items.iter().any(|item| item.item_id() == item_id) {
                 return Err(Error::StateConflict(format!(
@@ -710,6 +739,7 @@ fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Re
                 call_id,
                 tool_name,
                 arguments,
+                managed_tool_use,
             });
         }
     }
@@ -847,6 +877,7 @@ mod tests {
                         call_id: "call_1".into(),
                         tool_name: "read".into(),
                         arguments: serde_json::json!({"path": "README.md"}),
+                        managed_tool_use: None,
                     },
                     LiveOutputUpdate::AssistantTextDelta {
                         item_id: "text_2".into(),
@@ -875,6 +906,7 @@ mod tests {
                     call_id: "call_1".into(),
                     tool_name: "read".into(),
                     arguments: serde_json::json!({"path": "README.md"}),
+                    managed_tool_use: None,
                 },
                 LiveOutputItem::AssistantText {
                     item_id: "text_2".into(),

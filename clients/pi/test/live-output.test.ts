@@ -77,6 +77,38 @@ describe("LiveOutputPublisher", () => {
     });
   });
 
+  test("maps supported Pi tools before reporting live output", async () => {
+    vi.useFakeTimers();
+    const bodies: any[] = [];
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      bodies.push(body);
+      return accepted(body.sequence);
+    });
+    const publisher = new LiveOutputPublisher(context, {
+      fetch: fetchImpl as typeof fetch,
+      streamId: "stream_1",
+      batchDelayMs: 75,
+    });
+
+    publisher.appendToolCall({ callId: "read_1", toolName: "read", arguments: { path: "src/app.ts", start_line: 4 } });
+    publisher.appendToolCall({ callId: "edit_1", toolName: "edit", arguments: { path: "src/app.ts", edits: [{ oldText: "a", newText: "b" }] } });
+    publisher.appendToolCall({ callId: "write_1", toolName: "write", arguments: { path: "out.txt", content: "done" } });
+    publisher.appendToolCall({ callId: "bash_1", toolName: "bash", arguments: { command: "pnpm test", timeout: 30 } });
+    publisher.appendToolCall({ callId: "custom_1", toolName: "custom", arguments: { value: true } });
+    publisher.appendToolCall({ callId: "edit_2", toolName: "edit", arguments: { path: "broken.ts" } });
+    await vi.advanceTimersByTimeAsync(75);
+
+    expect(bodies[0].items.map((item: any) => item.managed_tool_use)).toEqual([
+      { tool_name: "read", input: { type: "read", path: "src/app.ts", start_line: 4 } },
+      { tool_name: "edit", input: { type: "edit", path: "src/app.ts", edits_count: 1 } },
+      { tool_name: "write", input: { type: "write", path: "out.txt" } },
+      { tool_name: "bash", input: { type: "bash", command: "pnpm test", timeout: 30 } },
+      undefined,
+      undefined,
+    ]);
+  });
+
   test("recovers a failed request with the latest complete snapshot", async () => {
     vi.useFakeTimers();
     const bodies: any[] = [];

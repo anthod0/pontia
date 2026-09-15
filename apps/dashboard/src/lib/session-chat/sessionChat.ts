@@ -222,7 +222,7 @@ function defaultThoughtStepTitle(kind: Exclude<SessionChatThoughtStep['kind'], '
   return 'Tool result';
 }
 
-function managedToolUseTitle(toolUse: ManagedToolUse): string {
+export function managedToolUseTitle(toolUse: ManagedToolUse): string {
   switch (toolUse.input.type) {
     case 'read': return 'Read file';
     case 'edit': return 'Edit file';
@@ -231,7 +231,7 @@ function managedToolUseTitle(toolUse: ManagedToolUse): string {
   }
 }
 
-function managedToolUseContent(toolUse: ManagedToolUse): string {
+export function managedToolUseContent(toolUse: ManagedToolUse): string {
   const input = toolUse.input;
   switch (input.type) {
     case 'read': return formatReadTarget(input.path, input.start_line, input.end_line);

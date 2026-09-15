@@ -5,13 +5,22 @@ import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
 const DEFAULT_BATCH_DELAY_MS = 75;
 const RETRY_DELAY_MS = 500;
 
+export type ManagedToolUse = {
+  tool_name: string;
+  input:
+    | { type: "read"; path: string; start_line?: number; end_line?: number }
+    | { type: "edit"; path: string; edits_count: number }
+    | { type: "write"; path: string }
+    | { type: "bash"; command: string; timeout?: number };
+};
+
 export type LiveOutputItem =
   | { kind: "assistant_text"; item_id: string; text: string }
-  | { kind: "tool_call"; item_id: string; call_id: string; tool_name: string; arguments: unknown };
+  | { kind: "tool_call"; item_id: string; call_id: string; tool_name: string; arguments: unknown; managed_tool_use?: ManagedToolUse };
 
 export type LiveOutputUpdate =
   | { type: "assistant_text_delta"; item_id: string; delta: string }
-  | { type: "tool_call"; item_id: string; call_id: string; tool_name: string; arguments: unknown };
+  | { type: "tool_call"; item_id: string; call_id: string; tool_name: string; arguments: unknown; managed_tool_use?: ManagedToolUse };
 
 export interface CompleteToolCall {
   callId: string;
@@ -86,12 +95,14 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
       this.disabled ||
       this.items.some((item) => item.kind === "tool_call" && item.call_id === toolCall.callId)
     ) return;
+    const managedToolUse = managedToolUseFor(toolCall);
     const item: LiveOutputItem = {
       kind: "tool_call",
       item_id: this.nextItemId("tool"),
       call_id: toolCall.callId,
       tool_name: toolCall.toolName,
       arguments: toolCall.arguments,
+      ...(managedToolUse ? { managed_tool_use: managedToolUse } : {}),
     };
     this.items.push(item);
     this.enqueue({
@@ -100,6 +111,7 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
       call_id: item.call_id,
       tool_name: item.tool_name,
       arguments: item.arguments,
+      ...(item.managed_tool_use ? { managed_tool_use: item.managed_tool_use } : {}),
     });
   }
 
@@ -255,6 +267,64 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
 
 function isPermanentRejection(status: number): boolean {
   return status >= 400 && status < 500 && status !== 429;
+}
+
+function managedToolUseFor(toolCall: CompleteToolCall): ManagedToolUse | undefined {
+  const input = asRecord(toolCall.arguments);
+  if (!input) return undefined;
+
+  switch (toolCall.toolName) {
+    case "read": {
+      const path = optionalString(input.path);
+      if (!path) return undefined;
+      const startLine = optionalNonNegativeInteger(input.start_line);
+      const endLine = optionalNonNegativeInteger(input.end_line);
+      return {
+        tool_name: toolCall.toolName,
+        input: {
+          type: "read",
+          path,
+          ...(startLine !== undefined ? { start_line: startLine } : {}),
+          ...(endLine !== undefined ? { end_line: endLine } : {}),
+        },
+      };
+    }
+    case "edit": {
+      const path = optionalString(input.path);
+      if (!path || !Array.isArray(input.edits)) return undefined;
+      return {
+        tool_name: toolCall.toolName,
+        input: {
+          type: "edit",
+          path,
+          edits_count: input.edits.length,
+        },
+      };
+    }
+    case "write": {
+      const path = optionalString(input.path);
+      return path ? { tool_name: toolCall.toolName, input: { type: "write", path } } : undefined;
+    }
+    case "bash": {
+      const command = optionalString(input.command);
+      if (!command) return undefined;
+      const timeout = optionalNonNegativeInteger(input.timeout);
+      return {
+        tool_name: toolCall.toolName,
+        input: {
+          type: "bash",
+          command,
+          ...(timeout !== undefined ? { timeout } : {}),
+        },
+      };
+    }
+    default:
+      return undefined;
+  }
+}
+
+function optionalNonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 export function completeToolCallFromMessageUpdate(event: unknown): CompleteToolCall | undefined {

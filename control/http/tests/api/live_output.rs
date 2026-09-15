@@ -4,6 +4,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
+use pontia_agent_clients::raw_transcripts::{ManagedToolUse, ManagedToolUseInput};
 use pontia_application::{
     AppState, EventIngestService, LiveOutputBatch, LiveOutputItem, LiveOutputSnapshotReplacement,
     LiveOutputUpdate,
@@ -242,6 +243,39 @@ async fn external_live_output_stream_sends_snapshot_updates_and_closed() {
 }
 
 #[tokio::test]
+async fn live_output_ingress_rejects_managed_input_that_contradicts_the_tool_name() {
+    let state = state_with_running_turn().await;
+    let (status, _) = post(
+        state.clone(),
+        "/internal/v1/live-output",
+        identity(json!({
+            "type": "snapshot",
+            "sequence": 1,
+            "items": [{
+                "kind": "tool_call",
+                "item_id": "tool_1",
+                "call_id": "call_1",
+                "tool_name": "read",
+                "arguments": {"path": "README.md"},
+                "managed_tool_use": {
+                    "tool_name": "read",
+                    "input": {"type": "bash", "command": "cat README.md"}
+                }
+            }]
+        })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(
+        state
+            .live_output()
+            .snapshot("sess_live", "turn_live")
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn live_output_ingress_applies_ordered_updates_and_recovers_from_a_gap() {
     let state = state_with_running_turn().await;
     let path = "/internal/v1/live-output";
@@ -264,7 +298,7 @@ async fn live_output_ingress_applies_ordered_updates_and_recovers_from_a_gap() {
         "first_sequence": 2,
         "updates": [
             {"type": "assistant_text_delta", "item_id": "text_1", "delta": " world"},
-            {"type": "tool_call", "item_id": "tool_1", "call_id": "call_1", "tool_name": "read", "arguments": {"path": "README.md"}},
+            {"type": "tool_call", "item_id": "tool_1", "call_id": "call_1", "tool_name": "read", "arguments": {"path": "README.md"}, "managed_tool_use": {"tool_name": "read", "input": {"type": "read", "path": "README.md"}}},
             {"type": "assistant_text_delta", "item_id": "text_2", "delta": "done"}
         ]
     }));
@@ -294,6 +328,14 @@ async fn live_output_ingress_applies_ordered_updates_and_recovers_from_a_gap() {
                 call_id: "call_1".into(),
                 tool_name: "read".into(),
                 arguments: json!({"path": "README.md"}),
+                managed_tool_use: Some(ManagedToolUse {
+                    tool_name: "read".into(),
+                    input: ManagedToolUseInput::Read {
+                        path: "README.md".into(),
+                        start_line: None,
+                        end_line: None,
+                    },
+                }),
             },
             LiveOutputItem::AssistantText {
                 item_id: "text_2".into(),

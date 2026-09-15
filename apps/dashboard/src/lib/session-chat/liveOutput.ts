@@ -1,13 +1,18 @@
-import type { JsonObject, TurnView } from '../../api/types';
-import type { SessionChatMessage, SessionChatThoughtStep } from './sessionChat';
+import type { ManagedToolUse, TurnView } from '../../api/types';
+import {
+  managedToolUseContent,
+  managedToolUseTitle,
+  type SessionChatMessage,
+  type SessionChatThoughtStep,
+} from './sessionChat';
 
 export type LiveOutputItem =
   | { kind: 'assistant_text'; item_id: string; text: string }
-  | { kind: 'tool_call'; item_id: string; call_id: string; tool_name: string; arguments: unknown };
+  | { kind: 'tool_call'; item_id: string; call_id: string; tool_name: string; arguments: unknown; managed_tool_use?: ManagedToolUse };
 
 export type LiveOutputUpdate =
   | { type: 'assistant_text_delta'; item_id: string; delta: string }
-  | { type: 'tool_call'; item_id: string; call_id: string; tool_name: string; arguments: unknown };
+  | { type: 'tool_call'; item_id: string; call_id: string; tool_name: string; arguments: unknown; managed_tool_use?: ManagedToolUse };
 
 interface LiveOutputIdentity {
   session_id: string;
@@ -144,10 +149,11 @@ function liveItemsToMessages(overlay: LiveOutputOverlay): SessionChatMessage[] {
     .map((item): SessionChatThoughtStep => ({
       id: `live:${overlay.stream_id}:${item.item_id}`,
       kind: 'tool_call',
-      title: item.tool_name,
+      title: item.managed_tool_use ? managedToolUseTitle(item.managed_tool_use) : item.tool_name,
       status: 'started',
-      content: formatArguments(item.arguments),
+      content: item.managed_tool_use ? managedToolUseContent(item.managed_tool_use) : formatArguments(item.arguments),
       occurredAt: null,
+      ...(item.managed_tool_use ? { managedToolUse: item.managed_tool_use } : {}),
     }));
 
   return [{
@@ -177,12 +183,18 @@ function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): void {
 }
 
 function cloneItem(item: LiveOutputItem): LiveOutputItem {
-  return item.kind === 'assistant_text' ? { ...item } : { ...item, arguments: cloneJson(item.arguments) };
+  return item.kind === 'assistant_text'
+    ? { ...item }
+    : {
+        ...item,
+        arguments: cloneJson(item.arguments),
+        ...(item.managed_tool_use ? { managed_tool_use: cloneJson(item.managed_tool_use) } : {}),
+      };
 }
 
-function cloneJson(value: unknown): unknown {
+function cloneJson<T>(value: T): T {
   if (typeof structuredClone === 'function') return structuredClone(value);
-  return JSON.parse(JSON.stringify(value)) as JsonObject;
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function formatArguments(argumentsValue: unknown): string {

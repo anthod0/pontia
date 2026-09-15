@@ -66,9 +66,9 @@ test('aggregates streamed text and appended tool calls into one assistant messag
     stream_id: 'stream-1',
     first_sequence: 2,
     updates: [
-      { type: 'tool_call', item_id: 'tool-1', call_id: 'call-1', tool_name: 'read', arguments: { path: 'README.md' } },
+      { type: 'tool_call', item_id: 'tool-1', call_id: 'call-1', tool_name: 'read', arguments: { path: 'README.md' }, managed_tool_use: { tool_name: 'read', input: { type: 'read', path: 'README.md' } } },
       { type: 'assistant_text_delta', item_id: 'text-2', delta: 'Done' },
-      { type: 'tool_call', item_id: 'tool-2', call_id: 'call-2', tool_name: 'bash', arguments: { command: 'pnpm test' } },
+      { type: 'tool_call', item_id: 'tool-2', call_id: 'call-2', tool_name: 'bash', arguments: { command: 'pnpm test' }, managed_tool_use: { tool_name: 'bash', input: { type: 'bash', command: 'pnpm test' } } },
     ],
   });
 
@@ -77,8 +77,8 @@ test('aggregates streamed text and appended tool calls into one assistant messag
   expect(live[0].content).toBe('Hello\n\nDone');
   expect(live[0].status).toBe('pending');
   expect(live[0].thoughtSteps).toMatchObject([
-    { title: 'read', content: '{\n  "path": "README.md"\n}' },
-    { title: 'bash', content: '{\n  "command": "pnpm test"\n}' },
+    { title: 'Read file', content: 'README.md', managedToolUse: { input: { type: 'read' } } },
+    { title: 'Run command', content: 'pnpm test', managedToolUse: { input: { type: 'bash' } } },
   ]);
 });
 
