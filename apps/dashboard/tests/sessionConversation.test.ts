@@ -127,7 +127,7 @@ test('conversation constrains assistant code blocks to the message width', async
   expect(await screen.findByRole('button', { name: /copy code block/i })).toBeInTheDocument();
   expect(document.querySelector('[data-chat-conversation-content]')).toHaveClass('min-w-0');
   expect(document.querySelector('[data-role="assistant"]')).toHaveClass('min-w-0');
-  expect(document.querySelector('pre')).toHaveClass('max-w-full');
+  expect(document.querySelector('[data-code-block]')).toHaveClass('max-w-full');
   expect(document.querySelector('[data-code-block-body]')).toHaveClass('max-w-full', 'overflow-x-auto');
 });
 

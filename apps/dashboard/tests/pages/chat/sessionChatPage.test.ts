@@ -1305,20 +1305,14 @@ test('highlights fenced code blocks in assistant markdown and copies their text'
   const { container } = render(SessionChatPage);
 
   expect(await screen.findByText(/answer/)).toBeInTheDocument();
-  expect(container.querySelector('code.hljs.language-ts')).toBeInTheDocument();
-  expect(container.querySelector('.hljs-keyword')?.textContent).toBe('const');
-  const markdownContainer = Array.from(container.querySelectorAll('div')).find((element) =>
-    element.className.includes('[&_pre]:'),
-  );
-  expect(markdownContainer?.className).not.toContain('[&_pre]:bg-muted');
-  expect(markdownContainer?.className).not.toContain('[&_pre]:p-3');
-  expect(markdownContainer?.className).not.toContain('[&_pre_code]:bg-transparent');
-  expect(markdownContainer?.className).not.toContain('[&_pre_code]:p-0');
+  expect(container.querySelector('pre.shiki')).toBeInTheDocument();
+  expect(container.querySelector('pre.shiki span[style*="--shiki-light"]')?.textContent).toContain('const');
   const copyCodeButton = await screen.findByRole('button', { name: /copy code block/i });
   const pre = container.querySelector('pre');
-  expect(pre).toHaveClass('w-full');
-  expect(pre).toHaveClass('border');
-  expect(pre).toHaveClass('border-border');
+  const codeBlock = container.querySelector('[data-code-block]');
+  expect(codeBlock).toHaveClass('w-full');
+  expect(codeBlock).toHaveClass('border');
+  expect(codeBlock).toHaveClass('border-border');
   const assistantContent = pre?.closest('[data-role="assistant"]')?.firstElementChild;
   expect(assistantContent).toHaveClass('group-[.is-assistant]:w-full');
   expect(assistantContent).not.toHaveClass('group-[.is-assistant]:px-3');

@@ -306,7 +306,12 @@
               </div>
             </div>
           {:else}
-            <Message.Response content={chatMessage.content} markdown={chatMessage.role === 'assistant'} />
+            <Message.Response
+              content={chatMessage.content}
+              markdown={chatMessage.role === 'assistant'}
+              streaming={chatMessage.role === 'assistant' && chatMessage.status === 'pending'}
+              streamId={chatMessage.id}
+            />
           {/if}
           {#if chatMessage.role === 'assistant'}
             {@const isCopied = copiedMessageId === chatMessage.id}
