@@ -1,7 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-labelledby="title desc">
   <title id="title">Pontia</title>
-  <desc id="desc">Four shores divided by two curved channels, with the upper-right shore highlighted in Pontia Violet.</desc>
+  <desc id="desc">An irregular tilted oval divided into four shores by two curved channels, with the upper-right shore in vermilion red and the other three in charcoal, finished with subtly ink-bitten edges on a transparent background.</desc>
   <defs>
+    <filter id="ink-edge" filterUnits="userSpaceOnUse" x="0" y="0" width="100" height="100" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="3" seed="17" result="grain"/>
+      <feDisplacementMap in="SourceGraphic" in2="grain" scale="1.35" xChannelSelector="R" yChannelSelector="G" result="bitten"/>
+      <feComposite in="bitten" in2="SourceGraphic" operator="in"/>
+    </filter>
     <mask id="four-shores-mask">
       <rect width="100" height="100" fill="white"/>
       <path d="M50 9C35 33 66 63 50 91" fill="none" stroke="black" stroke-width="10" stroke-linecap="round"/>
@@ -11,6 +16,8 @@
       <path d="M50 4H96V50C77 54 65 55 52 48C45 37 44 20 50 4Z"/>
     </clipPath>
   </defs>
-  <path d="M50 12C62 12 88 38 88 50C88 62 62 88 50 88C38 88 12 62 12 50C12 38 38 12 50 12Z" fill="currentColor" mask="url(#four-shores-mask)"/>
-  <path d="M50 12C62 12 88 38 88 50C88 62 62 88 50 88C38 88 12 62 12 50C12 38 38 12 50 12Z" fill="#6b48fe" mask="url(#four-shores-mask)" clip-path="url(#upper-right-shore)"/>
+  <g filter="url(#ink-edge)">
+    <path d="M23.402 21.477C35.763 7.284 60.471 10.906 73.770 25.168C88.021 35.875 92.571 63.628 76.598 78.523C61.955 94.844 38.199 87.668 26.230 74.832C10.649 62.699 6.477 39.926 23.402 21.477Z" fill="#2A2A28" mask="url(#four-shores-mask)"/>
+    <path d="M23.402 21.477C35.763 7.284 60.471 10.906 73.770 25.168C88.021 35.875 92.571 63.628 76.598 78.523C61.955 94.844 38.199 87.668 26.230 74.832C10.649 62.699 6.477 39.926 23.402 21.477Z" fill="#C41E3A" mask="url(#four-shores-mask)" clip-path="url(#upper-right-shore)"/>
+  </g>
 </svg>
