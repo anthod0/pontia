@@ -1,13 +1,29 @@
+> [!IMPORTANT]
+> DEVELOPMENT MODE
+> This project is still in active development. When choosing an approach, prefer long-term planning over short-term gains.
+> Major changes are allowed if necessary. Obsolete branches or approaches should be deprecated and removed promptly; backward compatibility is not required unless explicitly requested.
+
 ## Local instructions
 
 If `AGENTS.local.md` exists, read it before making changes.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked as local Markdown files under `.scratch/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the five canonical status strings. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Domain documentation uses the single-context layout. See `docs/agents/domain.md`.
+
 ## Project snapshot
 
-- `pontia` is a Rust console/control plane for coding agents with a web dashboard and client integrations.
-- Backend: Rust 2024, Axum, Tokio, SQLx/SQLite.
-- Frontend/dashboard and client plugins use pnpm.
-- Use `pnpm dlx` (not `npx`) to run package binaries.
+`pontia` is a Rust console/control plane for coding agents with a web dashboard and client integrations.
 
 ## Dashboard UI rules
 
@@ -24,11 +40,3 @@ If `AGENTS.local.md` exists, read it before making changes.
 ## Agent documentation
 
 - Current SQLite table, column, trigger, and index definitions: [`docs/database-schema.md`](docs/database-schema.md). When adding a migration, you must update this document in the same change.
-
-## Coding style
-
-- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
-- Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.
-- Grow the system in layers. Start from the smallest version that works end to end, and add each new capability on top of a product that already works.
-- Keep components modular and concerns clearly separated.
-- Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.
