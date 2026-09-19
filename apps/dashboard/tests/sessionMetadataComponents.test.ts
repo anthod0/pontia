@@ -99,7 +99,7 @@ function metadataProps() {
 describe('session metadata component boundaries', () => {
 
 
-  test('composer dock renders compact metadata and opens advanced controls from the component menu', async () => {
+  test('composer dock shows metadata without session action buttons', () => {
     render(SessionComposerDock, {
       props: {
         ...metadataProps(),
@@ -109,39 +109,16 @@ describe('session metadata component boundaries', () => {
         onCancelInboxMessage: vi.fn(),
         onRetryInboxMessage: vi.fn(),
         onDismissInboxMessage: vi.fn(),
-        onExit: vi.fn(),
-        onOpenConsole: vi.fn(),
-        onNewChat: vi.fn(),
-        onRename: vi.fn(),
-        onRestart: vi.fn(),
         onSend: vi.fn(),
         onInterrupt: vi.fn(),
         onFocus: vi.fn(),
       },
     });
 
-    expect(screen.getByRole('group', { name: 'Session status and controls' })).toBeInTheDocument();
-    const composerDock = document.querySelector('[data-chat-composer-dock="fixed"]');
-    expect(composerDock).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ })).toBeInTheDocument();
-    expect(screen.queryByLabelText(/session state:/i)).not.toBeInTheDocument();
-    expect(screen.queryByText('Session state:')).not.toBeInTheDocument();
-
-    const primaryActions = screen.getByRole('group', { name: /primary session actions/i });
-    expect(within(primaryActions).getByRole('button', { name: /new chat/i })).toBeInTheDocument();
-    expect(within(primaryActions).queryByRole('button', { name: /inbox/i })).not.toBeInTheDocument();
-    expect(within(primaryActions).getByRole('button', { name: /exit session/i })).toBeInTheDocument();
-    expect(within(primaryActions).getByRole('button', { name: /advanced session controls/i })).toBeInTheDocument();
-
-    await fireEvent.click(screen.getByRole('button', { name: /advanced session controls/i }));
-
-    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
-      'New Chat',
-      'Rename session',
-      'Restart session',
-      'Session Console',
-      'Exit session',
-    ]);
+    expect(screen.queryByRole('button', { name: /exit session/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /new chat/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /advanced session controls/i })).not.toBeInTheDocument();
   });
 
   test('session metadata details render as an accessible popover dialog', async () => {

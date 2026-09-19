@@ -3,7 +3,6 @@
   import { canSendSessionMessage } from '$lib/session-chat/sessionChat'
   import MessageComposer from './MessageComposer.svelte'
   import QueuedMessages from './QueuedMessages.svelte'
-  import SessionActions from './SessionActions.svelte'
   import SessionMetadata from './SessionMetadata.svelte'
   import { type SessionMetadataItem } from './sessionMetadata'
 
@@ -23,11 +22,6 @@
     onCancelInboxMessage: (message: InboxMessageView) => void
     onRetryInboxMessage: (message: InboxMessageView) => void
     onDismissInboxMessage: (message: InboxMessageView) => void
-    onExit: () => void
-    onOpenConsole: () => void
-    onNewChat: () => void
-    onRename: () => void
-    onRestart: () => void
     onSend: () => void
     onInterrupt: () => void
     onFocus: () => void
@@ -49,11 +43,6 @@
     onCancelInboxMessage,
     onRetryInboxMessage,
     onDismissInboxMessage,
-    onExit,
-    onOpenConsole,
-    onNewChat,
-    onRename,
-    onRestart,
     onSend,
     onInterrupt,
     onFocus,
@@ -73,13 +62,8 @@
       onRetry={onRetryInboxMessage}
       onDismiss={onDismissInboxMessage}
     />
-    <div role="group" aria-label="Session status and controls" class="mb-2 flex min-w-0 items-center justify-between gap-2">
-      <div class="flex min-w-0 flex-1 items-center gap-2">
-        <SessionMetadata {gitStatus} {metadataItems} {metadataSummary} />
-      </div>
-      <div class="flex shrink-0 items-center justify-end gap-2">
-        <SessionActions {session} {actionBusy} {onExit} {onOpenConsole} {onNewChat} {onRename} {onRestart} />
-      </div>
+    <div class="mb-2 flex min-w-0 items-center gap-2">
+      <SessionMetadata {gitStatus} {metadataItems} {metadataSummary} />
     </div>
     <MessageComposer bind:value={input} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus} />
     {#if canSendSessionMessage(session, 'x') === false}

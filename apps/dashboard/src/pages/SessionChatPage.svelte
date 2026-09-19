@@ -50,14 +50,11 @@
     loadSessionDetail,
     loadSessions,
     interruptSession,
-    restartSession,
     resumeSession,
     sessionDetail,
     sessionDetailLoading,
     sessions,
     submitInboxMessage,
-    terminateSession,
-    updateSessionTitle,
   } from '../stores/sessions'
   import {
     hasTimelineSnapshot,
@@ -71,7 +68,6 @@
   import { openLiveOutputStream } from '../services/liveOutputStream'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
-  import RenameSessionDialog from '../components/chat/RenameSessionDialog.svelte'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
 
   export let routeSessionId: string | null = null
@@ -84,7 +80,6 @@
   let actionBusy = false
   let inboxActionMessageId: string | null = null
   let actionError: string | null = null
-  let renameSessionDialogOpen = false
   let unsubscribeDashboardEvents: (() => void) | null = null
   let closeLiveOutputStream: (() => void) | null = null
   let liveOutputOverlays: LiveOutputOverlays = {}
@@ -235,11 +230,6 @@
     }
 
     target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  function availableWorkspaceId(workspaceId: string | null): string | null {
-    if (!workspaceId) return null
-    return $workspaces.some((workspace) => workspace.workspace_id === workspaceId) ? workspaceId : null
   }
 
   function currentSelectedSession(): SessionView | null {
@@ -500,39 +490,9 @@
     )
   }
 
-  function openRenameSelectedSessionDialog(): void {
-    if (!selectedSessionId || !selectedSession) return
-    actionError = null
-    renameSessionDialogOpen = true
-  }
-
-  async function renameSelectedSession(title: string | null): Promise<void> {
-    if (!selectedSessionId || !selectedSession) return
-    actionBusy = true
-    actionError = null
-    try {
-      await updateSessionTitle(selectedSessionId, title)
-      renameSessionDialogOpen = false
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error)
-    } finally {
-      actionBusy = false
-    }
-  }
-
-  function openSessionConsole(): void {
-    navigate(selectedSessionId ? `/sessions/${selectedSessionId}` : '/sessions')
-  }
-
-  function openNewChat(workspaceId?: string | null): void {
-    const queryWorkspaceId = workspaceId?.trim() || null
+  function openNewChat(): void {
     actionError = null
     resetTimelineState()
-    if (queryWorkspaceId) {
-      const availableQueryWorkspaceId = availableWorkspaceId(queryWorkspaceId)
-      navigate('/', { workspace: availableQueryWorkspaceId ?? queryWorkspaceId })
-      return
-    }
     navigate('/')
   }
 
@@ -628,21 +588,6 @@
     try {
       await interruptSession(selectedSessionId)
       await refreshSessionTimeline(selectedSessionId, selectedSession?.current_turn_id ?? latestProjectedTurnId())
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error)
-    } finally {
-      actionBusy = false
-    }
-  }
-
-  async function runSessionLifecycle(action: 'exit' | 'resume' | 'restart'): Promise<void> {
-    if (!selectedSessionId) return
-    actionBusy = true
-    actionError = null
-    try {
-      if (action === 'exit') await terminateSession(selectedSessionId)
-      if (action === 'resume') await resumeSession(selectedSessionId)
-      if (action === 'restart') await restartSession(selectedSessionId)
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -760,7 +705,7 @@
   {#if selectedSession}
     <h1 class="truncate pt-1 text-base font-normal text-heading" title={sessionChatTitle(selectedSession)}>{sessionChatTitle(selectedSession)}</h1>
   {/if}
-  {#if actionError && !renameSessionDialogOpen}
+  {#if actionError}
     <Alert.Root variant="destructive" role="alert" class="mx-auto w-full max-w-[760px]">
       <WarningCircleIcon class="size-4" />
       <Alert.Title>Session action failed</Alert.Title>
@@ -878,11 +823,6 @@
           onCancelInboxMessage={(message) => void cancelPendingInboxMessage(message)}
           onRetryInboxMessage={(message) => void retryFailedInboxMessage(message)}
           onDismissInboxMessage={(message) => void dismissFailedInboxMessage(message)}
-          onExit={() => void runSessionLifecycle('exit')}
-          onOpenConsole={openSessionConsole}
-          onNewChat={() => openNewChat(selectedSession.workspace_id)}
-          onRename={openRenameSelectedSessionDialog}
-          onRestart={() => void runSessionLifecycle('restart')}
           onSend={() => void sendMessage()}
           onInterrupt={() => void interruptSelectedSession()}
           onFocus={() => void refreshCurrentSessionGitStatus()}
@@ -900,15 +840,6 @@
     onNavigate={navigateFromRuler}
   />
 {/if}
-
-<RenameSessionDialog
-  bind:open={renameSessionDialogOpen}
-  session={selectedSession}
-  busy={actionBusy}
-  error={actionError}
-  onConfirm={(title) => void renameSelectedSession(title)}
-  onCancel={() => (actionError = null)}
-/>
 
 <style>
   :global([data-chat-scroll-down-container].chat-scroll-down-enter) {

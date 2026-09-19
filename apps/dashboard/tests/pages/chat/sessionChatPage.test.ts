@@ -105,23 +105,6 @@ async function triggerLatestBottomIntersection(isIntersecting: boolean): Promise
   TestIntersectionObserver.instances.at(-1)?.trigger(isIntersecting);
 }
 
-test('opens new chat from a session menu with the current workspace query parameter', async () => {
-  const selected = session({ session_id: 'session-2', workspace_id: 'workspace-2' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-
-  render(SessionChatPage);
-
-  await fireEvent.click(await screen.findByRole('button', { name: /advanced session controls/i }));
-  await fireEvent.click(await screen.findByRole('menuitem', { name: /new chat/i }));
-
-  expect(mocks.navigate).toHaveBeenCalledWith('/', { workspace: 'workspace-2' });
-});
-
-
 test('replaces Send with Interrupt in the empty composer for a busy interruptible session', async () => {
   const busySession = session({ state: 'busy', current_turn_id: 'turn-1', capabilities: { interrupt: true, timeline: true } });
   mocks.loadedSessions = [busySession];
@@ -671,29 +654,6 @@ test('keeps the divergent suffix until a projected tree update replaces it', asy
 });
 
 
-test('renames the selected chat session from advanced controls', async () => {
-  const user = userEvent.setup();
-  const selected = session({ session_id: 'session-2', title: 'Old title' });
-  const renamed = session({ session_id: 'session-2', title: 'New title' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.updateSessionTitle.mockResolvedValue(renamed);
-  render(SessionChatPage);
-
-  await fireEvent.click(await screen.findByRole('button', { name: /advanced session controls/i }));
-  await fireEvent.click(await screen.findByRole('menuitem', { name: /rename session/i }));
-  const titleInput = await screen.findByLabelText(/session title/i);
-  await user.clear(titleInput);
-  await user.type(titleInput, 'New title');
-  await user.click(screen.getByRole('button', { name: /rename session/i }));
-
-  await waitFor(() => expect(mocks.updateSessionTitle).toHaveBeenCalledWith('session-2', 'New title'));
-});
-
-
 test('shows the initial prompt immediately after starting a chat while timeline is empty', async () => {
   const user = userEvent.setup();
   const created = session({ session_id: 'session-new', state: 'busy', current_turn_id: 'turn-new' });
@@ -813,7 +773,7 @@ test('does not show the empty conversation state while the selected chat is init
   try {
     render(SessionChatPage);
 
-    await screen.findByRole('button', { name: /advanced session controls/i });
+    await screen.findByPlaceholderText('Continue the thread…');
     expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
     expect(document.querySelector('[data-chat-conversation-skeleton]')).toBeInTheDocument();
   } finally {
@@ -1500,8 +1460,6 @@ test('loads and renders an existing chat session with metadata and workspace nam
   const followUpInput = screen.getByPlaceholderText('Continue the thread…');
   expect(screen.queryByText('State: busy')).not.toBeInTheDocument();
   expect(sessionDetailsButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByRole('button', { name: /new chat/i })).toBeInTheDocument();
-  expect(screen.queryByRole('heading', { name: /new chat/i })).not.toBeInTheDocument();
 });
 
 
@@ -1549,39 +1507,6 @@ test('shows supported context usage in chat session metadata while hiding unsupp
   await screen.findByPlaceholderText('Continue the thread…');
   expect(screen.queryByText(/context/i)).not.toBeInTheDocument();
   expect(screen.queryByText('example-model')).not.toBeInTheDocument();
-});
-
-
-test('places session controls near the prompt input and keeps advanced controls in a menu', async () => {
-  const user = userEvent.setup();
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-
-  render(SessionChatPage);
-
-  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
-  const exitButton = screen.getByRole('button', { name: /exit session/i });
-  const advancedButton = screen.getByRole('button', { name: /advanced session controls/i });
-  expect(exitButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(advancedButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.queryByRole('button', { name: /resume session/i })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /restart session/i })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /session console/i })).not.toBeInTheDocument();
-
-  await fireEvent.click(advancedButton);
-  await fireEvent.click(await screen.findByRole('menuitem', { name: /restart session/i }));
-  expect(mocks.restartSession).toHaveBeenCalledWith('session-2');
-
-  await fireEvent.click(advancedButton);
-  await fireEvent.click(await screen.findByRole('menuitem', { name: /session console/i }));
-  expect(mocks.navigate).toHaveBeenCalledWith('/sessions/session-2');
-
-  await fireEvent.click(exitButton);
-  expect(mocks.terminateSession).toHaveBeenCalledWith('session-2');
 });
 
 
