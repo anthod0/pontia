@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-labelledby="title desc">
-  <title id="title">Gruvbox Light 蒸汽波落日图标</title>
-  <desc id="desc">白色背景，使用所提供色板的基础色，自上而下依次为橙 #d65d0e、黄 #d79921、绿 #98971a、蓝 #458588、紫 #b16286。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img">
   <rect id="background" width="1254" height="1254" fill="#ffffff"/>
   <g id="sunset">
     <path id="sun-dome" fill="#d65d0e" d="M 145.62 586.5 A 482.929 477.5 0 0 1 1108.217 586.5 Z"/>

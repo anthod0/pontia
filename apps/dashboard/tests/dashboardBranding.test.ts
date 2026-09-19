@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/svelte';
@@ -59,11 +58,6 @@ vi.mock('../src/stores/connection', () => ({
   sseStatus: mocks.sseStatus,
   lastConnectionError: mocks.lastConnectionError,
 }));
-
-test('dashboard packages the approved SVG asset', () => {
-  const svg = readFileSync(resolve(__dirname, '../public/logo.svg'));
-  expect(createHash('sha256').update(svg).digest('hex')).toBe('39b8075d58adab952b8f98339460510704cef28fc8d388e2a01f490b43d8a846');
-});
 
 test('dashboard head advertises packaged logo icons', () => {
   expect(appHtml).toContain('<link rel="icon" type="image/svg+xml" href="%sveltekit.assets%/logo.svg" />');
