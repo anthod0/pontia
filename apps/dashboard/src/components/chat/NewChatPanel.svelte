@@ -38,19 +38,20 @@
   }: Props = $props()
 </script>
 
-<div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class="flex min-h-0 flex-1 flex-col">
-  <div class="mx-auto w-full max-w-4xl space-y-4">
+<div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class="flex min-h-0 shrink-0 flex-col">
+  <div class={`mx-auto w-full space-y-3 ${fixedWorkspace ? 'max-w-4xl' : 'max-w-[720px]'}`}>
     <SessionTargetSelector bind:workspaceId bind:clientType {workspaces} {workspacesLoading} {selectedWorkspace} {clientTypeOptions} {fixedWorkspace} />
     <MessageComposer
       bind:value={prompt}
       {workspaceId}
       inputId="chat-prompt"
       {autofocus}
-      placeholder="Ask the agent to implement, inspect, or explain something…"
+      placeholder="What should the agent do?"
       disabled={promptDisabled}
       submitDisabled={!canCreate}
       busy={creating}
-      submitLabel={creating ? 'Starting chat' : 'Start chat'}
+      submitLabel={creating ? 'Starting session' : 'Start session'}
+      startSession
       onSubmit={onStartChat}
     />
   </div>

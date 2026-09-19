@@ -114,7 +114,7 @@
 
     <div class="space-y-3 py-2">
       {#each shortcuts as shortcut}
-        <div class="flex items-start justify-between gap-4 rounded-lg border bg-card/50 p-3">
+        <div class="flex items-start justify-between gap-4 rounded-none border bg-card/50 p-3">
           <div class="min-w-0 space-y-1">
             <div class="text-sm font-medium">{shortcut.label}</div>
             <div class="text-xs text-muted-foreground">{shortcut.description}</div>

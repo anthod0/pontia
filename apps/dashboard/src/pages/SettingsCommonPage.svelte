@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, KeyRound, RadioTower } from '@lucide/svelte'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import KeyIcon from 'phosphor-svelte/lib/KeyIcon'
+  import BroadcastIcon from 'phosphor-svelte/lib/BroadcastIcon'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -48,7 +50,7 @@
 
   {#if !$token.trim()}
     <Alert.Root variant="destructive">
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>Missing bearer token</Alert.Title>
       <Alert.Description>API requests and SSE updates need an External API token. Paste it below; it is stored only in this browser's localStorage.</Alert.Description>
     </Alert.Root>
@@ -57,7 +59,7 @@
   <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.75fr)]">
     <Card.Root>
       <Card.Header>
-        <Card.Title class="flex items-center gap-2"><KeyRound class="size-5" /> External API token</Card.Title>
+        <Card.Title class="flex items-center gap-2"><KeyIcon class="size-5" /> External API token</Card.Title>
         <Card.Description>Sent as Authorization: Bearer &lt;token&gt; to /external/v1/*.</Card.Description>
       </Card.Header>
       <Card.Content class="space-y-4">
@@ -76,7 +78,7 @@
 
     <Card.Root>
       <Card.Header>
-        <Card.Title class="flex items-center gap-2"><RadioTower class="size-5" /> Live stream</Card.Title>
+        <Card.Title class="flex items-center gap-2"><BroadcastIcon class="size-5" /> Live stream</Card.Title>
         <Card.Description>Dashboard SSE connection state.</Card.Description>
       </Card.Header>
       <Card.Content class="space-y-3 text-sm">
@@ -92,7 +94,7 @@
           <span class="text-muted-foreground">Last cursor</span>
           <span class="max-w-48 truncate" title={$dashboardStreamCursor ?? ''}>{$dashboardStreamCursor ?? '—'}</span>
         </div>
-        {#if $lastConnectionError}<p class="rounded-md bg-destructive/10 p-2 text-destructive">{$lastConnectionError}</p>{/if}
+        {#if $lastConnectionError}<p class="rounded-none bg-destructive/10 p-2 text-destructive">{$lastConnectionError}</p>{/if}
         <div class="flex flex-wrap gap-2 pt-2">
           <Button variant="outline" onclick={reconnect} disabled={!$token.trim()}>Reconnect</Button>
           <Button variant="ghost" onclick={stopEventStream}>Disconnect</Button>
@@ -107,8 +109,8 @@
       <Card.Description>Use the SvelteKit static SPA build as the configured dashboard source.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-2 text-sm text-muted-foreground">
-      <p>Build this app with <code class="rounded bg-muted px-1 py-0.5">pnpm --dir=apps/dashboard run build</code>.</p>
-      <p>Serve it with <code class="rounded bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> or <code class="rounded bg-muted px-1 py-0.5">PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
+      <p>Build this app with <code class="rounded-none bg-muted px-1 py-0.5">pnpm --dir=apps/dashboard run build</code>.</p>
+      <p>Serve it with <code class="rounded-none bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> or <code class="rounded-none bg-muted px-1 py-0.5">PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
     </Card.Content>
   </Card.Root>
 </section>

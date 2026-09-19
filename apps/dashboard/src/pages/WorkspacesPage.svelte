@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CircleAlert } from '@lucide/svelte'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -116,7 +116,7 @@
 
   {#if deleteError}
     <Alert.Root variant="destructive">
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>Workspace error</Alert.Title>
       <Alert.Description>{deleteError}</Alert.Description>
     </Alert.Root>
@@ -124,7 +124,7 @@
 
   {#if workspaceAvailabilityProblems.length}
     <Alert.Root>
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>{workspaceAvailabilityProblems.length} unavailable active workspace{workspaceAvailabilityProblems.length === 1 ? '' : 's'}</Alert.Title>
       <Alert.Description>
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -151,7 +151,7 @@
     {:else if activeWorkspaces.length}
       <ul class="max-h-[28rem] space-y-2 overflow-auto">
         {#each activeWorkspaces as workspace (workspace.workspace_id)}
-          <li class="space-y-1 rounded-lg border p-3">
+          <li class="space-y-1 rounded-none border p-3">
             <p class="break-all font-medium">{workspace.name ?? workspace.display_path}</p>
             <p class="break-all text-xs text-muted-foreground">{workspace.canonical_path}</p>
           </li>
@@ -175,7 +175,7 @@
     <div class="mt-4 max-h-[28rem] space-y-2 overflow-auto pr-1">
       {#each workspaceAvailabilityProblems as problem (problem.workspace.workspace_id)}
         {@const workspace = problem.workspace}
-        <div class="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+        <div class="flex items-center justify-between gap-3 rounded-none border bg-card p-3">
           <div class="min-w-0 space-y-1">
             <div class="flex min-w-0 flex-wrap items-center gap-2">
               <span class="truncate font-medium">{workspace.name ?? workspace.display_path}</span>

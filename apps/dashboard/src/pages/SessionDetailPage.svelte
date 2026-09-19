@@ -1,6 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, MessageCircle, RefreshCw, Send, TerminalSquare } from '@lucide/svelte'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import ChatCircleIcon from 'phosphor-svelte/lib/ChatCircleIcon'
+  import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon'
+  import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon'
+  import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon'
   import { navigate } from '$lib/navigation'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -61,8 +65,8 @@
 
   function contextUsageTone(usage: ContextUsageView): string {
     const ratio = contextUsageRatio(usage)
-    if (ratio === null || ratio < 0.7) return 'bg-emerald-500'
-    if (ratio <= 0.9) return 'bg-amber-500'
+    if (ratio === null || ratio < 0.7) return 'bg-success'
+    if (ratio <= 0.9) return 'bg-warning'
     return 'bg-destructive'
   }
 
@@ -152,18 +156,18 @@
 <section class="space-y-6">
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
     <div class="space-y-2">
-      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TerminalSquare class="size-7" /> Session detail</h2>
+      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TerminalWindowIcon class="size-7" /> Session detail</h2>
     </div>
     <div class="flex gap-2">
       <Button variant="outline" onclick={() => navigate('/sessions')}>Back to Sessions</Button>
-      <Button variant="outline" disabled={selectedSession?.capabilities?.timeline !== true} onclick={openSelectedSessionChat}><MessageCircle class="size-4" /> Open Chat</Button>
-      <Button variant="outline" onclick={() => void refreshAll()}><RefreshCw class="size-4" /> Refresh</Button>
+      <Button variant="outline" disabled={selectedSession?.capabilities?.timeline !== true} onclick={openSelectedSessionChat}><ChatCircleIcon class="size-4" /> Open Chat</Button>
+      <Button variant="outline" onclick={() => void refreshAll()}><ArrowsClockwiseIcon class="size-4" /> Refresh</Button>
     </div>
   </div>
 
   {#if $sessionDetailError || actionError}
     <Alert.Root variant="destructive">
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>Session detail error</Alert.Title>
       <Alert.Description>{actionError ?? $sessionDetailError}</Alert.Description>
     </Alert.Root>
@@ -227,7 +231,7 @@
               ['Profile', $sessionDetail.session.execution_profile_id ?? '—'],
               ['Current branch turn', $sessionDetail.session.current_turn_id ?? '—'],
             ] as [label, value]}
-              <div class="rounded-lg border p-3"><div class="text-xs uppercase tracking-wide text-muted-foreground">{label}</div><div class="mt-1 break-words font-medium">{value}</div></div>
+              <div class="rounded-none border p-3"><div class="text-xs uppercase tracking-wide text-muted-foreground">{label}</div><div class="mt-1 break-words font-medium">{value}</div></div>
             {/each}
           </div>
           <div class="flex flex-wrap gap-2">
@@ -246,7 +250,7 @@
         <Card.Content class="space-y-4">
           <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
             {#each capabilityRows($sessionDetail.session.capabilities) as capability}
-              <div class="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+              <div class="flex items-center justify-between gap-3 rounded-none border p-3 text-sm">
                 <span class="font-medium">{capability.label}</span>
                 <Badge variant={capability.supported ? 'default' : 'secondary'}>{capability.value}</Badge>
               </div>
@@ -303,12 +307,12 @@
           <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
             <div class="w-full space-y-2 sm:w-48">
               <Label for="inbox-policy">Delivery policy</Label>
-              <select id="inbox-policy" bind:value={inboxPolicy} class="h-9 w-full rounded-md border bg-transparent px-3 text-sm">
+              <select id="inbox-policy" bind:value={inboxPolicy} class="h-9 w-full rounded-none border bg-transparent px-3 text-sm">
                 <option value="after_idle">after_idle</option>
                 <option value="interrupt_now">interrupt_now</option>
               </select>
             </div>
-            <Button class="sm:mb-0" onclick={submitInbox} disabled={!canSubmitInbox}><Send class="size-4" /> {submittingInbox ? 'Submitting…' : 'Submit inbox message'}</Button>
+            <Button class="sm:mb-0" onclick={submitInbox} disabled={!canSubmitInbox}><PaperPlaneTiltIcon class="size-4" /> {submittingInbox ? 'Submitting…' : 'Submit inbox message'}</Button>
           </div>
           {#if inboxPolicy === 'interrupt_now' && !$sessionDetail.session.capabilities?.interrupt}
             <p class="text-xs text-muted-foreground">This session may not support immediate interruption; the message may be queued or fail.</p>
@@ -336,7 +340,7 @@
                   {#if $sessionDetail.session.model}<Badge variant="secondary">{$sessionDetail.session.model}</Badge>{/if}
                 </div>
                 {#if ratio !== null}
-                  <div class="h-2 overflow-hidden rounded-full bg-muted" aria-label="Context usage progress">
+                  <div class="h-2 overflow-hidden rounded-none bg-muted" aria-label="Context usage progress">
                     <div class={`h-full ${contextUsageTone(usage)}`} style={`width: ${Math.min(100, Math.max(0, ratio * 100))}%`}></div>
                   </div>
                 {/if}
@@ -351,7 +355,7 @@
           <Card.Content class="space-y-3">
             {#if $sessionDetail.inboxMessages.length}
               {#each $sessionDetail.inboxMessages.slice().reverse() as message}
-                <div class="rounded-lg border p-3 text-sm">
+                <div class="rounded-none border p-3 text-sm">
                   <div class="flex flex-wrap items-center justify-between gap-2"><span class="font-medium">{message.input.summary}</span><Badge variant="secondary">{message.state}</Badge></div>
                   <div class="mt-1 text-xs text-muted-foreground">{message.delivery_policy} · turn {shortId(message.turn_id)} · {formatDateTime(message.updated_at)}</div>
                   {#if message.failure_message}<p class="mt-2 text-xs text-destructive">{message.failure_message}</p>{/if}
@@ -370,7 +374,7 @@
         <Card.Header><Card.Title>Session events</Card.Title><Card.Description>{$sessionDetail.events.length} events shown as compact log lines. Expand a row for full details.</Card.Description></Card.Header>
         <Card.Content>
           {#if $sessionDetail.events.length}
-            <div class="overflow-hidden rounded-lg border">
+            <div class="overflow-hidden rounded-none border">
               {#each $sessionDetail.events.slice(0, 50) as event}
                 <details class="group border-b last:border-b-0">
                   <summary class="grid cursor-pointer list-none gap-2 px-3 py-2 text-sm hover:bg-muted/50 md:grid-cols-[11rem_minmax(10rem,16rem)_7rem_7rem_minmax(0,1fr)] md:items-center">
@@ -383,7 +387,7 @@
                   <div class="space-y-3 border-t bg-muted/20 p-3 text-sm">
                     <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                       {#each sessionEventDetailRows(event) as [label, value]}
-                        <div class="rounded-md border bg-background p-2">
+                        <div class="rounded-none border bg-background p-2">
                           <div class="text-[0.7rem] uppercase tracking-wide text-muted-foreground">{label}</div>
                           <div class="mt-1 break-words font-mono text-xs">{value}</div>
                         </div>
@@ -391,7 +395,7 @@
                     </div>
                     <div>
                       <div class="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Raw payload</div>
-                      <pre class="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-background p-2 text-xs">{JSON.stringify(event.payload, null, 2)}</pre>
+                      <pre class="max-h-64 overflow-auto whitespace-pre-wrap rounded-none bg-background p-2 text-xs">{JSON.stringify(event.payload, null, 2)}</pre>
                     </div>
                   </div>
                 </details>

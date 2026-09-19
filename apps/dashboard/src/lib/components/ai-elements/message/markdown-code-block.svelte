@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import { Check, Copy } from '@lucide/svelte'
+  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
+  import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import { copyText } from '$lib/copyText'
   import { highlightMarkdownCode } from './markdownHighlighter'
 
@@ -40,25 +41,25 @@
   }
 </script>
 
-<div class="my-4 w-full max-w-full overflow-hidden rounded-lg border border-border bg-background" data-code-block>
-  <div class="flex items-center justify-between gap-3 px-3 py-1.5 text-xs text-muted-foreground" data-code-block-header>
+<div class="my-4 w-full max-w-full overflow-hidden rounded-none border border-border bg-muted" data-code-block>
+  <div class="flex items-center justify-between gap-3 px-3 py-1.5 font-mono text-[11px] text-muted-foreground" data-code-block-header>
     <span class="truncate font-medium uppercase tracking-wide">{language}</span>
     <button
       type="button"
-      class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      class="inline-flex items-center gap-1.5 rounded-none px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={copied ? 'Code block copied' : 'Copy code block'}
       title={copied ? 'Code block copied' : 'Copy code block'}
       onclick={copyCode}
     >
       {#if copied}
-        <Check class="size-3.5" /> <span>Copied</span>
+        <CheckIcon class="size-3.5" /> <span>Copied</span>
       {:else}
-        <Copy class="size-3.5" /> <span>Copy</span>
+        <CopyIcon class="size-3.5" /> <span>Copy</span>
       {/if}
     </button>
   </div>
   <div class="max-w-full overflow-x-auto" data-code-block-body>
-    <div class="markdown-code-highlight min-w-full text-sm">{@html highlightedCode}</div>
+    <div class="markdown-code-highlight min-w-full font-mono text-xs leading-relaxed">{@html highlightedCode}</div>
   </div>
 </div>
 
@@ -68,8 +69,7 @@
     width: max-content;
     margin: 0;
     padding: 1rem;
-    background-color: var(--shiki-light-bg, transparent);
-    color: var(--shiki-light, inherit);
+    background-color: transparent !important;
   }
 
   .markdown-code-highlight :global(pre.shiki code) {
@@ -79,18 +79,4 @@
     background: transparent;
   }
 
-  .markdown-code-highlight :global(pre.shiki span) {
-    color: var(--shiki-light, inherit);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .markdown-code-highlight :global(pre.shiki) {
-      background-color: var(--shiki-dark-bg, transparent);
-      color: var(--shiki-dark, inherit);
-    }
-
-    .markdown-code-highlight :global(pre.shiki span) {
-      color: var(--shiki-dark, inherit);
-    }
-  }
 </style>

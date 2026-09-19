@@ -12,6 +12,6 @@
   let { class: className, children, ref = $bindable(null), ...restProps }: PromptInputToolbarProps = $props()
 </script>
 
-<div bind:this={ref} class={cn('flex items-center justify-between gap-2 pt-2', className)} {...restProps}>
+<div bind:this={ref} class={cn('flex items-center justify-between gap-2 px-3 pb-3 pt-2', className)} {...restProps}>
   {@render children?.()}
 </div>

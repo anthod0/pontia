@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onDestroy, tick } from 'svelte'
-  import { Bot, Check, Copy, Pencil } from '@lucide/svelte'
+  import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
+  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
+  import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
+  import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import * as Conversation from '$lib/components/ai-elements/conversation/index.js'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -46,7 +49,6 @@
   const displayMessages = $derived(messages)
   const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
   const displayGroups = $derived(conversationDisplayGroups(displayItems))
-  const latestAssistantGroupId = $derived([...displayGroups].reverse().find((group) => group.kind === 'assistant_group')?.id ?? null)
   const activeLoadingMessageId = $derived(activePendingAssistantMessageId(displayMessages, activeTurnId))
   const branchActionMessageIdSet = $derived(new Set(Object.keys(branchActionInputs)))
   let topHistoryLoadInFlight = false
@@ -322,16 +324,17 @@
             <div class="mt-2 flex justify-start">
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                class="h-8 text-[11px] text-muted-foreground"
                 aria-label={isCopied ? 'Assistant reply copied' : 'Copy assistant reply'}
                 title={isCopied ? 'Copied' : 'Copy assistant reply'}
                 onclick={() => copyMessage(chatMessage)}
               >
                 {#if isCopied}
-                  <Check class="size-3.5" /> Copied
+                  <CheckIcon class="size-3.5" /> Copied
                 {:else}
-                  <Copy class="size-3.5" /> Copy
+                  <CopyIcon class="size-3.5" /> Copy
                 {/if}
               </Button>
             </div>
@@ -341,7 +344,7 @@
       {#if chatMessage.role === 'user' && editingMessageId !== chatMessage.id}
         {@const isCopied = copiedMessageId === chatMessage.id}
         <div
-          class="pointer-events-none absolute right-0 top-full z-10 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          class="flex justify-end gap-0.5 text-muted-foreground"
           data-user-message-actions
         >
           {#if branchActionMessageIdSet.has(chatMessage.id)}
@@ -354,7 +357,7 @@
               title="Edit message"
               onclick={() => beginEditing(chatMessage)}
             >
-              <Pencil class="size-3.5" />
+              <PencilSimpleIcon class="size-3.5" />
             </Button>
           {/if}
           <Button
@@ -366,9 +369,9 @@
             onclick={() => copyMessage(chatMessage)}
           >
             {#if isCopied}
-              <Check class="size-3.5" />
+              <CheckIcon class="size-3.5" />
             {:else}
-              <Copy class="size-3.5" />
+              <CopyIcon class="size-3.5" />
             {/if}
           </Button>
         </div>
@@ -384,13 +387,13 @@
   {:else if !displayMessages.length}
     <Empty.Root class="h-full">
       <Empty.Header>
-        <Empty.Media><Bot class="size-6" /></Empty.Media>
+        <Empty.Media><RobotIcon class="size-6" /></Empty.Media>
         <Empty.Title>No messages yet</Empty.Title>
         <Empty.Description>This session has no turn history yet.</Empty.Description>
       </Empty.Header>
     </Empty.Root>
   {:else}
-    <Conversation.Content bind:ref={scrollContainer} data-chat-conversation-content class="min-w-0 overflow-visible px-0 py-4 sm:p-4">
+    <Conversation.Content bind:ref={scrollContainer} data-chat-conversation-content class="min-w-0 gap-6 overflow-visible px-0 py-4">
       {#if historyObserverEnabled && hasMoreHistory}
         <div aria-hidden="true" class="h-px w-px" data-chat-history-top-sentinel use:observeTopHistorySentinel></div>
       {/if}
@@ -405,7 +408,7 @@
         {#if displayGroup.kind === 'user_message'}
           {@render conversationItem(displayGroup.item)}
         {:else}
-          <div class={displayGroup.id === latestAssistantGroupId ? 'chat-turn-tail-space' : ''} data-chat-assistant-group>
+          <div class="space-y-3" data-chat-assistant-group>
             {#each displayGroup.items as displayItem (displayItem.id)}
               {@render conversationItem(displayItem)}
             {/each}
@@ -415,14 +418,3 @@
     </Conversation.Content>
   {/if}
 </Conversation.Root>
-
-<style>
-  :global(.chat-turn-tail-space) {
-    /*
-      Keep the latest turn high enough to pin fresh user input near the top,
-      while accounting for the sticky header, a one-line user bubble, inline
-      agent status, and a collapsed thought summary inside the live turn.
-    */
-    min-height: calc(100dvh - 31rem);
-  }
-</style>

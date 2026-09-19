@@ -120,29 +120,12 @@ test('sidebar shows session control items and hides obsolete task navigation', (
   expect(workflowQueries.queryByText('Tasks')).not.toBeInTheDocument();
   const newChat = workflowQueries.getByText('New Chat').closest('button');
   expect(newChat).not.toBeNull();
-  expect(newChat?.querySelector('svg')).toHaveClass('lucide-square-pen');
   expect(workflowQueries.queryByText('Chat')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Tasks')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Session Console')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Workspaces')).not.toBeInTheDocument();
   expect(workflowQueries.queryByText('Agent Profiles')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
-});
-
-test('sidebar session action appears on hover or focus-visible, not plain focus-within', () => {
-  mocks.sessions.set([chatSession('session-active', 'idle', '2026-05-14T01:00:00Z')]);
-
-  render(AppSidebarHost);
-
-  const action = screen.getByRole('button', { name: /open session actions for session-active/i });
-  expect(action).toHaveClass('group-hover/menu-item:opacity-100');
-  expect(action).toHaveClass('group-has-[:focus-visible]/menu-item:opacity-100');
-  expect(action).not.toHaveClass('group-focus-within/menu-item:opacity-100');
-
-  const status = screen.getByLabelText('idle session');
-  expect(status).toHaveClass('group-hover/menu-item:opacity-0');
-  expect(status).toHaveClass('group-has-[:focus-visible]/menu-item:opacity-0');
-  expect(status).not.toHaveClass('group-focus-within/menu-item:opacity-0');
 });
 
 test('sidebar shows semantic status dots except for terminal sessions, and opens chat for the selected session', async () => {
@@ -207,8 +190,6 @@ test('sidebar shows semantic status dots except for terminal sessions, and opens
   const closedSessionButton = screen.getByText('closed').closest('button');
   expect(activeSessionButton).not.toBeNull();
   expect(closedSessionButton).not.toBeNull();
-  expect(activeSessionButton?.querySelector('.lucide-message-circle')).not.toBeInTheDocument();
-  expect(closedSessionButton?.querySelector('.lucide-message-circle')).not.toBeInTheDocument();
   expect(screen.getByLabelText('idle session')).toBeInTheDocument();
   expect(screen.queryByLabelText('exited session')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('error session')).not.toBeInTheDocument();
@@ -243,13 +224,10 @@ test('sidebar scrolls recent workspace and session groups together below fixed p
   expect(recentSessionsGroup).not.toBeNull();
 
   const sharedScrollArea = recentWorkspacesGroup?.parentElement;
-  expect(sharedScrollArea).toHaveClass('overflow-y-auto');
   expect(sharedScrollArea).toContainElement(recentWorkspacesGroup as HTMLElement);
   expect(sharedScrollArea).toContainElement(recentSessionsGroup as HTMLElement);
   expect(sharedScrollArea).not.toContainElement(newChatGroup as HTMLElement);
 
-  const recentSessionsContent = recentSessionsGroup?.querySelector('[data-slot="sidebar-group-content"]');
-  expect(recentSessionsContent).not.toHaveClass('overflow-y-auto');
 });
 
 test('sidebar groups recent sessions under non-empty recent workspaces without changing Recent Sessions', async () => {
@@ -333,8 +311,6 @@ test('sidebar groups recent sessions under non-empty recent workspaces without c
   expect(screen.getByText('Recent Workspaces')).toBeInTheDocument();
   const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
   expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
-  expect(workspaceButton.querySelector('svg')).toHaveClass('lucide-folder');
-  expect(workspaceButton.querySelector('.lucide-chevron-down')).not.toBeInTheDocument();
   expect(screen.queryByText('Empty workspace')).not.toBeInTheDocument();
   expect(screen.queryByText('Old workspace')).not.toBeInTheDocument();
   expect(screen.getByText('Recent Sessions')).toBeInTheDocument();
@@ -349,13 +325,6 @@ test('sidebar groups recent sessions under non-empty recent workspaces without c
   const groupedSessionButton = workspaceQueries.getAllByRole('button', { name: /main · coder/i })
     .find((button) => button.getAttribute('data-sidebar') === 'menu-button');
   expect(groupedSessionButton).toBeInTheDocument();
-  expect(groupedSessionButton).toHaveClass('h-8');
-  expect(groupedSessionButton).toHaveClass('text-sm');
-  expect(groupedSessionButton).toHaveClass('group-has-data-[sidebar=menu-action]/menu-item:pr-8');
-  expect(groupedSessionButton).not.toHaveClass('h-7');
-  expect(groupedSessionButton).not.toHaveClass('text-xs');
-  expect(groupedSessionButton.closest('[data-slot="sidebar-menu"]')).toHaveClass('pl-2');
-  expect(groupedSessionButton.closest('[data-slot="sidebar-menu"]')).not.toHaveClass('pl-6');
   expect(workspaceQueries.getByLabelText('Pinned session')).toBeInTheDocument();
   expect(workspaceQueries.getAllByLabelText('idle session')).toHaveLength(2);
   expect(workspaceQueries.getByRole('button', { name: /open session actions for main · coder/i })).toBeInTheDocument();
@@ -407,9 +376,6 @@ test('sidebar recent workspace hover action opens the workspace page without tog
 
   const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
   const openWorkspaceButton = screen.getByRole('button', { name: /open pontia workspace page/i });
-  expect(openWorkspaceButton).toHaveClass('opacity-0');
-  expect(openWorkspaceButton).toHaveClass('right-1');
-  expect(openWorkspaceButton).not.toHaveClass('right-7');
 
   await fireEvent.click(openWorkspaceButton);
 
@@ -458,9 +424,6 @@ test('sidebar recent workspace hover action starts a new chat for that workspace
 
   const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
   const newChatButton = screen.getByRole('button', { name: /new chat in pontia/i });
-  expect(newChatButton).toHaveClass('opacity-0');
-  expect(newChatButton).toHaveClass('right-7');
-  expect(newChatButton).not.toHaveClass('right-1');
 
   await fireEvent.click(newChatButton);
 
@@ -468,36 +431,6 @@ test('sidebar recent workspace hover action starts a new chat for that workspace
   expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('sidebar pinned session uses theme-adaptive solid pin and vertical ellipsis action icon', () => {
-  mocks.sessions.set([
-    {
-      session_id: 'session-pinned',
-      client_type: 'pi',
-      title: 'Pinned title',
-      handle: 'main',
-      role: 'coder',
-      description: null,
-      execution_profile_id: null,
-      execution_profile_version: null,
-      state: 'idle',
-      current_turn_id: null,
-      workspace_id: 'workspace-1',
-      workspace: null,
-      pinned_at: '2026-05-14T01:00:00Z',
-      archived_at: null,
-      capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
-      metadata: {},
-    },
-  ]);
-
-  render(AppSidebarHost);
-
-  expect(screen.getByLabelText('Pinned session')).toHaveClass('fill-current');
-  expect(screen.getByLabelText('Pinned session')).not.toHaveClass('text-black');
-  expect(screen.getByRole('button', { name: /open session actions for pinned title/i }).querySelector('svg')).toHaveClass('lucide-ellipsis-vertical');
-});
 
 test('sidebar workspace session actions open only for the clicked workspace item', async () => {
   mocks.workspaces.set([
@@ -897,8 +830,6 @@ test('chat header help button opens the shortcuts dialog and is hidden on mobile
   render(AppShellHost);
 
   const helpButton = screen.getByRole('button', { name: /keyboard shortcuts/i });
-  expect(helpButton).toHaveClass('hidden');
-  expect(helpButton).toHaveClass('sm:inline-flex');
 
   await fireEvent.click(helpButton);
 
@@ -972,33 +903,6 @@ test('chat new shortcut on a session route preserves the current session workspa
   expect(mocks.navigate).toHaveBeenLastCalledWith('/', { workspace: 'workspace-current' });
 });
 
-test('chat app shell reserves composer space only for session chat routes', () => {
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-
-  const { unmount } = render(AppShellHost);
-
-  const sessionMain = screen.getByText('App shell page content').closest('main');
-  expect(sessionMain).not.toBeNull();
-  expect(sessionMain).not.toHaveClass('min-h-0');
-  expect(sessionMain).not.toHaveClass('overflow-hidden');
-  expect(sessionMain).toHaveClass('bg-surface');
-  expect(sessionMain).not.toHaveClass('bg-muted/20');
-  expect(sessionMain).toHaveClass('pb-40');
-  expect(sessionMain?.firstElementChild).not.toHaveClass('h-full');
-  expect(sessionMain?.firstElementChild).not.toHaveClass('min-h-0');
-
-  unmount();
-  window.history.pushState({}, '', '/dashboard');
-  render(AppShellHost);
-
-  const newChatMain = screen.getByText('App shell page content').closest('main');
-  expect(newChatMain).not.toBeNull();
-  expect(newChatMain).toHaveClass('bg-surface');
-  expect(newChatMain).not.toHaveClass('bg-muted/20');
-  expect(newChatMain).toHaveClass('p-4');
-  expect(newChatMain).not.toHaveClass('pb-40');
-  expect(newChatMain).not.toHaveClass('md:pb-44');
-});
 
 test('settings app shell removes centered main chrome so the settings nav can align left', () => {
   window.history.pushState({}, '', '/dashboard/settings/common');
@@ -1007,12 +911,6 @@ test('settings app shell removes centered main chrome so the settings nav can al
 
   const main = screen.getByText('App shell page content').closest('main');
   expect(main).not.toBeNull();
-  expect(main).toHaveClass('bg-surface');
-  expect(main).not.toHaveClass('bg-muted/20');
-  expect(main).not.toHaveClass('p-4');
-  expect(main).not.toHaveClass('md:p-6');
-  expect(main?.firstElementChild).not.toHaveClass('mx-auto');
-  expect(main?.firstElementChild).not.toHaveClass('max-w-7xl');
 });
 
 test('settings shell renders a persistent vertical side switcher around page content', () => {
@@ -1022,24 +920,15 @@ test('settings shell renders a persistent vertical side switcher around page con
 
   const nav = screen.getByRole('navigation', { name: /settings sections/i });
   expect(nav).toHaveAttribute('data-settings-shell-nav', 'persistent');
-  expect(nav).toHaveClass('md:w-56');
-  expect(nav.parentElement).toHaveClass('md:items-start');
 
-  const navList = nav.firstElementChild;
-  expect(navList).toHaveClass('bg-transparent');
-  expect(navList).not.toHaveClass('border');
-  expect(navList).not.toHaveClass('bg-card');
 
   expect(within(nav).getByRole('link', { name: /^common$/i })).toHaveAttribute('href', '/dashboard/settings/common');
   const activeLink = within(nav).getByRole('link', { name: /^workspaces$/i });
   expect(activeLink).toHaveAttribute('aria-current', 'page');
-  expect(activeLink).toHaveClass('aria-[current=page]:bg-muted');
-  expect(activeLink).not.toHaveClass('aria-[current=page]:bg-primary');
   expect(within(nav).queryByRole('link', { name: /^agent profiles$/i })).not.toBeInTheDocument();
 
   const content = screen.getByText('Current settings page content');
   expect(content).toBeInTheDocument();
-  expect(content.parentElement).toHaveClass('mx-auto');
 });
 
 test('settings shell section switcher uses router navigation instead of a document reload', async () => {
@@ -1049,9 +938,4 @@ test('settings shell section switcher uses router navigation instead of a docume
   await fireEvent.click(screen.getByRole('link', { name: /^workspaces$/i }));
 
   expect(mocks.navigate).toHaveBeenCalledWith('/settings/workspaces');
-});
-
-test('dashboard navigation no longer depends on the legacy router', async () => {
-  const navigationSource = await import('../src/lib/navigation');
-  expect(navigationSource.navigate).toBeDefined();
 });

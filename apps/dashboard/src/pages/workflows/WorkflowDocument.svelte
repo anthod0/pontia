@@ -35,7 +35,7 @@
       <p class="break-all font-mono text-xs text-muted-foreground">Document ref: {documentRef}</p>
       {#if loading}<p role="status">Loading document…</p>
       {:else if error}<p role="alert" class="text-sm text-destructive">Could not read {label}: {error}</p><Button variant="outline" size="sm" onclick={() => retry++}>Retry document</Button>
-      {:else if content !== null}<pre class="max-h-96 overflow-auto rounded-md bg-muted p-3 text-sm whitespace-pre-wrap break-words">{content || 'Empty document'}</pre>{/if}
+      {:else if content !== null}<pre class="max-h-96 overflow-auto rounded-none bg-muted p-3 text-sm whitespace-pre-wrap break-words">{content || 'Empty document'}</pre>{/if}
     </Collapsible.Content>
   </Collapsible.Root>
 {:else}<p class="text-sm text-muted-foreground">{label}: not provided</p>{/if}

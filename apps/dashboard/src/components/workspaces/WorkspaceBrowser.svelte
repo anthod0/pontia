@@ -1,6 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, CornerUpLeft, Folder, FolderBookmark, FolderOpen, MoveRight, Pencil, RefreshCw } from '@lucide/svelte'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon'
+  import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
+  import FolderStarIcon from 'phosphor-svelte/lib/FolderStarIcon'
+  import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon'
+  import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon'
+  import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
+  import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
@@ -182,7 +189,7 @@
 <div class="space-y-4">
   {#if $workspacesError || browserError || registerError || renameError || deleteError}
     <Alert.Root variant="destructive">
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>Workspace error</Alert.Title>
       <Alert.Description>{deleteError ?? renameError ?? registerError ?? browserError ?? $workspacesError}</Alert.Description>
     </Alert.Root>
@@ -192,7 +199,7 @@
     <Card.Header>
       <div class="flex items-start justify-between gap-3">
         <div>
-          <Card.Title class="flex items-center gap-2"><FolderOpen class="size-5" /> Browser</Card.Title>
+          <Card.Title class="flex items-center gap-2"><FolderOpenIcon class="size-5" /> Browser</Card.Title>
           <Card.Description class="mt-1">Select a root and browse directories. Active workspaces stay pinned at the top of the browser.</Card.Description>
         </div>
         <div class="flex items-center gap-2">
@@ -204,7 +211,7 @@
           >
             Show hidden
           </Button>
-          <Button size="sm" variant="outline" onclick={() => void refreshAll()}><RefreshCw class="size-4" /> Refresh</Button>
+          <Button size="sm" variant="outline" onclick={() => void refreshAll()}><ArrowsClockwiseIcon class="size-4" /> Refresh</Button>
         </div>
       </div>
     </Card.Header>
@@ -217,16 +224,16 @@
       {:else if !$workspaceRoots.length}
         <Empty.Root class="min-h-56 border">
           <Empty.Header>
-            <Empty.Media variant="icon"><Folder class="size-4" /></Empty.Media>
+            <Empty.Media variant="icon"><FolderIcon class="size-4" /></Empty.Media>
             <Empty.Title>No workspace roots configured</Empty.Title>
-            <Empty.Description>Run <code class="rounded bg-muted px-1 py-0.5 text-foreground">pontia init</code> on the Pontia host, configure at least one workspace root, then restart Pontia.</Empty.Description>
+            <Empty.Description>Run <code class="rounded-none bg-muted px-1 py-0.5 text-foreground">pontia init</code> on the Pontia host, configure at least one workspace root, then restart Pontia.</Empty.Description>
           </Empty.Header>
         </Empty.Root>
       {:else}
         <div class="grid gap-3 md:grid-cols-[220px_1fr_auto] md:items-end">
           <div class="space-y-2">
             <Label for="workspace-root">Root</Label>
-            <select id="workspace-root" bind:value={rootId} onchange={() => void openPath('')} class="h-9 w-full rounded-md border bg-transparent px-3 text-sm">
+            <select id="workspace-root" bind:value={rootId} onchange={() => void openPath('')} class="h-9 w-full rounded-none border bg-transparent px-3 text-sm">
               {#each $workspaceRoots as root (root.root_id)}
                 <option value={root.root_id}>{root.label}</option>
               {/each}
@@ -247,11 +254,11 @@
         {#if browserLoading}
           <div class="space-y-2"><Skeleton class="h-9 w-full" /><Skeleton class="h-9 w-full" /><Skeleton class="h-9 w-full" /></div>
         {:else if listing}
-          <div class="rounded-lg border">
+          <div class="rounded-none border">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b p-3 text-sm">
               <div class="flex min-w-0 items-center gap-2">
                 {#if listing.parent_path !== null}
-                  <Button size="icon-sm" variant="ghost" aria-label="Open parent directory" title="Open parent directory" onclick={() => void openPath(listing?.parent_path ?? '')}><CornerUpLeft class="size-4" /></Button>
+                  <Button size="icon-sm" variant="ghost" aria-label="Open parent directory" title="Open parent directory" onclick={() => void openPath(listing?.parent_path ?? '')}><ArrowBendUpLeftIcon class="size-4" /></Button>
                 {/if}
                 <span class="truncate font-medium" title={listing.canonical_path}>{listing.canonical_path}</span>
               </div>
@@ -275,14 +282,14 @@
                     <Table.Row>
                       <Table.Cell class="font-medium">
                         <button type="button" class="flex min-w-0 cursor-pointer items-center gap-2 text-left hover:underline" aria-label="Open directory {entry.name}" title="Open directory" onclick={() => void openPath(entry.path)}>
-                          {#if entry.is_workspace}<FolderBookmark class="size-4 shrink-0 text-foreground/80" aria-hidden="true" />{:else}<Folder class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />{/if}
+                          {#if entry.is_workspace}<FolderStarIcon class="size-4 shrink-0 text-foreground/80" aria-hidden="true" />{:else}<FolderIcon class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />{/if}
                           <span class="truncate">{entry.name}/</span>
                         </button>
                       </Table.Cell>
                       <Table.Cell class="text-right">
                         <div class="flex justify-end gap-2">
                           {#if entryWorkspace}
-                            <Button size="icon-sm" variant="outline" aria-label={`Rename ${entryWorkspace.name ?? entry.name}`} title="Rename workspace" onclick={() => startRenamingWorkspace(entryWorkspace)}><Pencil class="size-4" /></Button>
+                            <Button size="icon-sm" variant="outline" aria-label={`Rename ${entryWorkspace.name ?? entry.name}`} title="Rename workspace" onclick={() => startRenamingWorkspace(entryWorkspace)}><PencilSimpleIcon class="size-4" /></Button>
                           {/if}
                           <Button
                             size="sm"
@@ -294,7 +301,7 @@
                           >
                             {registeringPath === entry.path ? 'Activating…' : entry.is_workspace ? 'Deactivate' : 'Activate'}
                           </Button>
-                          <Button size="icon-sm" variant="outline" aria-label={`Enter directory ${entry.name}`} title="Enter directory" onclick={() => void openPath(entry.path)}><MoveRight class="size-4" /></Button>
+                          <Button size="icon-sm" variant="outline" aria-label={`Enter directory ${entry.name}`} title="Enter directory" onclick={() => void openPath(entry.path)}><ArrowRightIcon class="size-4" /></Button>
                         </div>
                       </Table.Cell>
                     </Table.Row>

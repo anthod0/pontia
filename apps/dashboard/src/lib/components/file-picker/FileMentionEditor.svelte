@@ -8,7 +8,8 @@
   import Text from '@tiptap/extension-text'
   import { PluginKey } from '@tiptap/pm/state'
   import { exitSuggestion, type SuggestionProps } from '@tiptap/suggestion'
-  import { File, Folder } from '@lucide/svelte'
+  import FileIcon from 'phosphor-svelte/lib/FileIcon'
+  import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import { listWorkspaceFilePickerEntries } from '../../../api/client'
   import type { FilePickerFileView } from '../../../api/types'
   import { cn } from '$lib/utils.js'
@@ -248,7 +249,7 @@
   <div bind:this={editorElement}></div>
 
   {#if open}
-    <div bind:this={listbox} class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg" role="listbox" aria-label="File suggestions">
+    <div bind:this={listbox} class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto rounded-none border bg-popover p-1 text-popover-foreground shadow-none" role="listbox" aria-label="File suggestions">
       {#if loading && files.length === 0}
         <div class="px-3 py-2 text-sm text-muted-foreground">Searching files…</div>
       {:else if files.length === 0}
@@ -257,7 +258,7 @@
         {#each files as file, index (file.path)}
           <button
             type="button"
-            class={`flex w-full min-w-0 items-center gap-2 rounded-md px-3 py-2 text-left text-sm ${index === selectedIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent hover:text-accent-foreground'}`}
+            class={`flex w-full min-w-0 items-center gap-2 rounded-none px-3 py-2 text-left text-sm ${index === selectedIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent hover:text-accent-foreground'}`}
             role="option"
             aria-selected={index === selectedIndex}
             data-file-suggestion-index={index}
@@ -265,9 +266,9 @@
             onmousedown={(event) => { event.preventDefault(); void choose(file) }}
           >
             {#if file.kind === 'directory'}
-              <Folder class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <FolderIcon class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             {:else}
-              <File class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <FileIcon class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             {/if}
             <span class="min-w-0 truncate">@{file.path}</span>
           </button>

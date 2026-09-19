@@ -27,14 +27,9 @@
     return path === '/dashboard' || path === '/dashboard/' || path.startsWith('/dashboard/chat/')
   }
 
-  function isChatSessionPath(path: string): boolean {
-    return path.startsWith('/dashboard/chat/')
-  }
-
   const settingsPath = $derived(isSettingsPath(currentPath))
   const chatPath = $derived(isChatPath(currentPath))
-  const chatSessionPath = $derived(isChatSessionPath(currentPath))
-  const mainClass = $derived(settingsPath ? 'min-w-0 flex-1 bg-surface' : chatSessionPath ? 'min-w-0 flex-1 bg-surface p-4 pb-40 md:p-6 md:pb-44' : chatPath ? 'min-w-0 flex-1 bg-surface p-4 md:p-6' : 'min-w-0 flex-1 bg-surface p-4 md:p-6')
+  const mainClass = $derived(settingsPath ? 'min-w-0 flex-1 bg-surface' : chatPath ? 'min-w-0 flex-1 bg-surface px-4 pb-5 md:px-8' : 'min-w-0 flex-1 bg-surface p-4 md:p-6')
 
   let uninstallVisualViewportCssVars: (() => void) | null = null
 
@@ -45,7 +40,7 @@
   onDestroy(() => {
     uninstallVisualViewportCssVars?.()
   })
-  const contentClass = $derived(settingsPath ? 'min-w-0 w-full' : 'mx-auto min-w-0 w-full max-w-7xl')
+  const contentClass = $derived(settingsPath || chatPath ? 'min-w-0 w-full' : 'mx-auto min-w-0 w-full max-w-7xl')
 </script>
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />

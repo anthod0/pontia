@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { navigate, routeParam } from '$lib/navigation'
-  import { CircleAlert, Folder } from '@lucide/svelte'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
@@ -88,8 +89,8 @@
     <div class="min-w-0 space-y-2">
       {#if selectedWorkspace}
         <div class="flex min-w-0 items-center gap-3">
-          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-            <Folder class="size-5" />
+          <div class="flex size-10 shrink-0 items-center justify-center rounded-none bg-muted text-muted-foreground">
+            <FolderIcon class="size-5" />
           </div>
           <div class="min-w-0">
             <h2 class="truncate text-3xl font-semibold tracking-tight">{workspaceTitle(selectedWorkspace)}</h2>
@@ -107,7 +108,7 @@
 
   {#if errorMessage}
     <Alert.Root variant="destructive">
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>Workspace page error</Alert.Title>
       <Alert.Description>{errorMessage}</Alert.Description>
     </Alert.Root>

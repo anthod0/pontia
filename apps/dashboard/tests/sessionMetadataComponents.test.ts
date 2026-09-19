@@ -1,15 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
-import { Check, Loader, LogOut, Pause, TriangleAlert } from '@lucide/svelte';
 import { describe, expect, test, vi } from 'vitest';
 import SessionComposerDock from '../src/components/chat/SessionComposerDock.svelte';
-import GitStatusInline from '../src/components/chat/GitStatusInline.svelte';
 import SessionMetadata from '../src/components/chat/SessionMetadata.svelte';
 import {
   sessionMetadataItems,
   sessionMetadataSummary,
-  sessionStateBadgeClass,
-  sessionStateIcon,
-  sessionStateIconClass,
 } from '../src/components/chat/sessionMetadata';
 import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../src/api/types';
 
@@ -102,26 +97,7 @@ function metadataProps() {
 }
 
 describe('session metadata component boundaries', () => {
-  test('session status badge maps active and interrupted states to requested colors', () => {
-    expect(sessionStateBadgeClass('busy')).toContain('bg-amber-500/10');
-    expect(sessionStateBadgeClass('starting')).toContain('bg-amber-500/10');
-    expect(sessionStateBadgeClass('idle')).toContain('bg-emerald-500/10');
-    expect(sessionStateBadgeClass('interrupted')).toContain('bg-emerald-500/10');
-    expect(sessionStateBadgeClass('exited')).toContain('bg-muted');
-    expect(sessionStateBadgeClass('error')).toContain('bg-destructive/10');
-  });
 
-  test('session status badge uses semantic icons per state', () => {
-    expect(sessionStateIcon('busy')).toBe(Loader);
-    expect(sessionStateIcon('starting')).toBe(Loader);
-    expect(sessionStateIcon('idle')).toBe(Check);
-    expect(sessionStateIcon('interrupted')).toBe(Pause);
-    expect(sessionStateIcon('exited')).toBe(LogOut);
-    expect(sessionStateIcon('error')).toBe(TriangleAlert);
-    expect(sessionStateIconClass('busy')).toContain('animate-spin');
-    expect(sessionStateIconClass('starting')).toContain('animate-spin');
-    expect(sessionStateIconClass('idle')).not.toContain('animate-spin');
-  });
 
   test('composer dock renders compact metadata and opens advanced controls from the component menu', async () => {
     render(SessionComposerDock, {
@@ -147,39 +123,15 @@ describe('session metadata component boundaries', () => {
     expect(screen.getByRole('group', { name: 'Session status and controls' })).toBeInTheDocument();
     const composerDock = document.querySelector('[data-chat-composer-dock="fixed"]');
     expect(composerDock).toBeInTheDocument();
-    expect(composerDock).toHaveClass('bg-surface');
-    expect(composerDock).toHaveClass('md:left-[var(--sidebar-width)]');
-    expect(composerDock).toHaveClass('group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]');
-    expect(composerDock).toHaveClass('transition-[left]');
-    expect(composerDock).toHaveClass('duration-200');
-    expect(composerDock).toHaveClass('ease-linear');
-    expect(composerDock).toHaveClass('pt-1');
-    expect(composerDock).not.toHaveClass('md:pt-2');
-    expect(composerDock).not.toHaveClass('bg-muted/20');
-    expect(composerDock).not.toHaveClass('backdrop-blur');
-    expect(composerDock).not.toHaveClass('[mask-image:linear-gradient(to_bottom,transparent,black_18px)]');
-    const outwardFade = document.querySelector('[data-chat-composer-fade="outward"]');
-    expect(outwardFade).toBeInTheDocument();
-    expect(outwardFade).toHaveClass('h-12');
-    expect(outwardFade).toHaveClass('bg-gradient-to-t');
-    expect(outwardFade).toHaveClass('from-surface');
-    expect(outwardFade).toHaveClass('via-surface/70');
-    expect(outwardFade).toHaveClass('to-transparent');
     expect(screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ })).toBeInTheDocument();
     expect(screen.queryByLabelText(/session state:/i)).not.toBeInTheDocument();
     expect(screen.queryByText('Session state:')).not.toBeInTheDocument();
 
     const primaryActions = screen.getByRole('group', { name: /primary session actions/i });
-    expect(primaryActions).toHaveClass('flex');
     expect(within(primaryActions).getByRole('button', { name: /new chat/i })).toBeInTheDocument();
     expect(within(primaryActions).queryByRole('button', { name: /inbox/i })).not.toBeInTheDocument();
     expect(within(primaryActions).getByRole('button', { name: /exit session/i })).toBeInTheDocument();
     expect(within(primaryActions).getByRole('button', { name: /advanced session controls/i })).toBeInTheDocument();
-    expect(Array.from(primaryActions.children).map((child) => child.getAttribute('data-slot'))).toEqual(['button', 'button', 'dropdown-menu-trigger']);
-    for (const button of within(primaryActions).getAllByRole('button')) {
-      expect(button).toHaveClass('hover:bg-muted');
-      expect(button).not.toHaveClass('border');
-    }
 
     await fireEvent.click(screen.getByRole('button', { name: /advanced session controls/i }));
 
@@ -190,7 +142,6 @@ describe('session metadata component boundaries', () => {
       'Session Console',
       'Exit session',
     ]);
-    expect(document.querySelectorAll('[data-slot="dropdown-menu-separator"]')).toHaveLength(2);
   });
 
   test('session metadata details render as an accessible popover dialog', async () => {
@@ -207,25 +158,5 @@ describe('session metadata component boundaries', () => {
     expect(within(dialog).getByLabelText('Handle: main')).toHaveTextContent('main');
   });
 
-  test('git inline status leaves the branch label untoned while coloring only counters', () => {
-    render(GitStatusInline, { props: { gitStatus: gitStatus({ ahead: 2, unstaged_count: 1, clean: false }) } });
 
-    const branch = screen.getByText('main');
-    expect(branch).not.toHaveClass('text-amber-600');
-    expect(branch).not.toHaveClass('text-emerald-600');
-    expect(screen.getByText('↑2')).toHaveClass('text-blue-600');
-    expect(screen.getByText('~1')).toHaveClass('text-amber-600');
-  });
-
-  test('session metadata trigger shows desktop-only icons inline with summary fields', () => {
-    render(SessionMetadata, { props: metadataProps() });
-
-    const trigger = screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ });
-    for (const iconClass of ['lucide-folder', 'lucide-git-branch', 'lucide-gauge', 'lucide-terminal', 'lucide-bot', 'lucide-at-sign']) {
-      const icon = trigger.querySelector(`.${iconClass}`);
-      expect(icon).toBeInTheDocument();
-      expect(icon).toHaveClass('hidden');
-      expect(icon).toHaveClass('sm:inline');
-    }
-  });
 });

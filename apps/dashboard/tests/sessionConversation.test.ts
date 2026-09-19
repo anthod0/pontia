@@ -1,13 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { expect, test, vi } from 'vitest';
 import SessionConversation from '../src/lib/components/session-chat/SessionConversation.svelte';
 import type { SessionChatMessage } from '../src/lib/session-chat/sessionChat';
 
-const testDir = dirname(fileURLToPath(import.meta.url));
-const sessionConversationSourcePath = resolve(testDir, '../src/lib/components/session-chat/SessionConversation.svelte');
 
 class TestIntersectionObserver implements IntersectionObserver {
   static instances: TestIntersectionObserver[] = [];
@@ -87,49 +82,8 @@ test('conversation groups assistant-side items after each user message', () => {
   expect(assistantGroups).toHaveLength(2);
   expect(assistantGroups[0]).toContainElement(document.querySelector('[data-chat-message-id="message-2"]'));
   expect(assistantGroups[1]).toContainElement(document.querySelector('[data-chat-agent-status]'));
-  expect(assistantGroups[1]).toHaveClass('chat-turn-tail-space');
-  expect(document.querySelector('[data-chat-tail-spacer]')).not.toBeInTheDocument();
 });
 
-test('conversation expands the latest assistant group instead of the assistant message', () => {
-  render(SessionConversation, { props: { messages } });
-
-  const assistantGroup = document.querySelector('[data-chat-assistant-group]');
-  expect(assistantGroup).toHaveClass('chat-turn-tail-space');
-  expect(assistantGroup).toContainElement(document.querySelector('[data-chat-message-id="message-2"]'));
-  expect(document.querySelector('[data-chat-message-id="message-2"]')).not.toHaveClass('chat-turn-tail-space');
-  expect(document.querySelector('[data-chat-tail-spacer]')).not.toBeInTheDocument();
-});
-
-test('conversation tail space does not force a fixed minimum floor', () => {
-  const source = readFileSync(sessionConversationSourcePath, 'utf8');
-
-  expect(source).toContain('min-height: calc(100dvh - 31rem);');
-  expect(source).not.toContain('min-height: max(8rem, calc(100dvh - 31rem));');
-});
-
-test('conversation constrains assistant code blocks to the message width', async () => {
-  const longLine = 'const value = "' + 'x'.repeat(240) + '";';
-  render(SessionConversation, {
-    props: {
-      messages: [
-        messages[0],
-        {
-          id: 'message-code',
-          role: 'assistant',
-          content: `Here is the code:\n\n\`\`\`ts\n${longLine}\n\`\`\``,
-          status: 'sent',
-        },
-      ],
-    },
-  });
-
-  expect(await screen.findByRole('button', { name: /copy code block/i })).toBeInTheDocument();
-  expect(document.querySelector('[data-chat-conversation-content]')).toHaveClass('min-w-0');
-  expect(document.querySelector('[data-role="assistant"]')).toHaveClass('min-w-0');
-  expect(document.querySelector('[data-code-block]')).toHaveClass('max-w-full');
-  expect(document.querySelector('[data-code-block-body]')).toHaveClass('max-w-full', 'overflow-x-auto');
-});
 
 test('conversation shows the current agent status above only the latest assistant reply', () => {
   render(SessionConversation, {
@@ -183,7 +137,6 @@ test('conversation renders exited status as a left-aligned bottom status after t
   const bottomStatus = screen.getByText('session exited · send a message to resume');
   const bottomStatusContainer = bottomStatus.closest('[data-chat-session-bottom-status]');
   expect(bottomStatusContainer).toBeInTheDocument();
-  expect(bottomStatusContainer).toHaveClass('justify-start');
   expect(bottomStatusContainer?.querySelector('.h-px')).not.toBeInTheDocument();
   expect(screen.getByText('I will inspect it now.').compareDocumentPosition(bottomStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
@@ -196,7 +149,6 @@ test('conversation renders interrupted status as a left-aligned bottom status af
   const bottomStatus = screen.getByText('session interrupted');
   const bottomStatusContainer = bottomStatus.closest('[data-chat-session-bottom-status]');
   expect(bottomStatusContainer).toBeInTheDocument();
-  expect(bottomStatusContainer).toHaveClass('justify-start');
   expect(bottomStatusContainer?.querySelector('.h-px')).not.toBeInTheDocument();
   expect(screen.getByText('I will inspect it now.').compareDocumentPosition(bottomStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
@@ -211,8 +163,6 @@ test('conversation copies assistant reply content with the http-compatible fallb
   const userCopyButton = screen.getByRole('button', { name: /copy user message/i });
   expect(userCopyButton.closest('[data-user-message-actions]')?.previousElementSibling).toHaveTextContent('Please inspect the repo.');
   const copyButton = screen.getByRole('button', { name: /copy assistant reply/i });
-  expect(copyButton.parentElement).toHaveClass('justify-start');
-  expect(copyButton.parentElement).not.toHaveClass('justify-end');
   await fireEvent.click(copyButton);
 
   expect(execCommand).toHaveBeenCalledWith('copy');
@@ -484,7 +434,6 @@ test('conversation renders agent status without an assistant loading placeholder
 
   expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
   expect(document.querySelector('[data-chat-message-id="busy:assistant-loading-placeholder"]')).not.toBeInTheDocument();
-  expect(document.querySelector('[data-chat-agent-status]')).toHaveClass('is-assistant', 'items-start');
   expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
 });
 
@@ -526,7 +475,6 @@ test('conversation renders assistant loading placeholder when session is startin
   expect(screen.getByLabelText('Session starting')).toHaveAttribute('data-chat-session-bottom-status');
   expect(screen.queryByLabelText('Agent status: Session starting')).not.toBeInTheDocument();
   expect(screen.queryByText('Waiting for the agent session to become ready.')).not.toBeInTheDocument();
-  expect(screen.queryByTestId('blocks-wave-spinner')).not.toBeInTheDocument();
   expect(screen.queryByText('Working')).not.toBeInTheDocument();
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });

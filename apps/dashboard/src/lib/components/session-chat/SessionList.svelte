@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { MessageCircle } from '@lucide/svelte'
+  import ChatCircleIcon from 'phosphor-svelte/lib/ChatCircleIcon'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -22,7 +22,7 @@
   const stateLabel = (session: SessionView) => isTerminalChatSession(session) ? 'Closed' : session.state
 </script>
 
-<div class="flex h-full flex-col rounded-xl border bg-card">
+<div class="flex h-full flex-col rounded-none border bg-card">
   <div class="border-b p-4">
     <div class="flex items-center justify-between gap-3">
       <div>
@@ -47,7 +47,7 @@
     {:else if !sessions.length}
       <Empty.Root class="py-10">
         <Empty.Header>
-          <Empty.Media><MessageCircle class="size-6" /></Empty.Media>
+          <Empty.Media><ChatCircleIcon class="size-6" /></Empty.Media>
           <Empty.Title>No sessions</Empty.Title>
           <Empty.Description>Create one from Session Console first.</Empty.Description>
         </Empty.Header>
@@ -57,7 +57,7 @@
         {#each sessions as session}
           <button
             type="button"
-            class="w-full rounded-xl border p-3 text-left transition hover:bg-muted/70 {selectedSessionId === session.session_id ? 'border-primary bg-muted' : 'bg-background'}"
+            class="w-full rounded-none border p-3 text-left transition hover:bg-muted/70 {selectedSessionId === session.session_id ? 'border-primary bg-muted' : 'bg-background'}"
             onclick={() => onSelect(session.session_id)}
           >
             <div class="flex items-start justify-between gap-2">

@@ -129,7 +129,7 @@ test('saves the entered token and opens the requested dashboard route after vali
 
   await waitFor(() => expect(localStorage.getItem('pontia.externalApiToken')).toBe('dev-token'));
   await waitFor(() => expect(screen.queryByRole('heading', { name: /enter external api token/i })).not.toBeInTheDocument());
-  expect(screen.getByText('PONTIA')).toBeInTheDocument();
+  expect(screen.getByText('Pontia')).toBeInTheDocument();
   expect(mocks.loadTasks).toHaveBeenCalled();
   expect(mocks.loadWorkspaces).toHaveBeenCalled();
   expect(mocks.loadAgentProfiles).toHaveBeenCalled();
@@ -145,7 +145,7 @@ test('opens dashboard immediately when a saved token exists without startup vali
   render(AppLayoutHost);
 
   expect(screen.queryByRole('heading', { name: /enter external api token/i })).not.toBeInTheDocument();
-  expect(screen.getByText('PONTIA')).toBeInTheDocument();
+  expect(screen.getByText('Pontia')).toBeInTheDocument();
   expect(localStorage.getItem('pontia.externalApiToken')).toBe('saved-token');
   expect(fetchMock).not.toHaveBeenCalled();
   expect(mocks.loadTasks).toHaveBeenCalled();

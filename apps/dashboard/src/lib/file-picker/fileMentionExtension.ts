@@ -64,7 +64,7 @@ export function createFileMentionExtension(options: FileMentionExtensionOptions)
     renderHTML: ({ options: mentionOptions, node }) => [
       'span',
       mergeAttributes(mentionOptions.HTMLAttributes, {
-        class: 'inline-flex max-w-full cursor-default items-center rounded-md bg-secondary px-1.5 py-0.5 align-baseline text-secondary-foreground',
+        class: 'inline-flex max-w-full cursor-default items-center rounded-none bg-secondary px-1.5 py-0.5 align-baseline text-secondary-foreground',
         title: String(node.attrs.path ?? ''),
         'aria-label': `${node.attrs.kind === 'directory' ? 'Directory' : 'File'} ${String(node.attrs.path ?? '')}`,
       }),

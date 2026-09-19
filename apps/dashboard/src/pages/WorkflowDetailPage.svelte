@@ -3,7 +3,10 @@
   import WorkflowVersions from './workflows/WorkflowVersions.svelte'
   import WorkflowReplanning from './workflows/WorkflowReplanning.svelte'
   import { revisionSelection, workflowRevisions } from './workflows/revisions'
-  import { CircleAlert, Pause, Play, Workflow } from '@lucide/svelte'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import PauseIcon from 'phosphor-svelte/lib/PauseIcon'
+  import PlayIcon from 'phosphor-svelte/lib/PlayIcon'
+  import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import { navigate } from '$lib/navigation'
   import { cn } from '$lib/utils.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
@@ -91,11 +94,11 @@
   }
 
   function statusClass(status: WorkflowAgentStatus): string {
-    if (status === 'submitted') return 'text-green-600 dark:text-green-400'
-    if (status === 'paused') return 'text-blue-600 dark:text-blue-400'
-    if (status === 'idle') return 'text-emerald-600 dark:text-emerald-400'
+    if (status === 'submitted') return 'text-success '
+    if (status === 'paused') return 'text-primary '
+    if (status === 'idle') return 'text-success '
     if (status === 'failed') return 'text-destructive'
-    if (status === 'starting' || status === 'running') return 'text-amber-600 dark:text-amber-400'
+    if (status === 'starting' || status === 'running') return 'text-warning '
     return 'text-muted-foreground'
   }
 
@@ -111,24 +114,24 @@
 <section class="space-y-6">
   <div class="flex items-start justify-between gap-4">
     <div class="min-w-0 space-y-2">
-      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><Workflow class="size-7 shrink-0" /> <span class="truncate">{snapshot?.title ?? 'Workflow'}</span></h2>
+      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TreeStructureIcon class="size-7 shrink-0" /> <span class="truncate">{snapshot?.title ?? 'Workflow'}</span></h2>
       {#if snapshot}<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant={snapshot.state === 'failed' ? 'destructive' : 'secondary'}>{snapshot.state}</Badge><Badge variant="outline">Current v{snapshot.current_revision}</Badge><span>{snapshot.agent_submitted_count}/{snapshot.agent_total_count} agents</span><span>·</span><span>{formatElapsed(snapshot.elapsed_ms)}</span><span>·</span><span class="font-mono text-xs">{snapshot.workflow_id}</span></div>{/if}
     </div>
     <div class="flex shrink-0 gap-2">
       {#if snapshot?.state === 'running'}
-        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('pause')}><Pause class="size-4" /> Pause</Button>
+        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('pause')}><PauseIcon class="size-4" /> Pause</Button>
       {:else if snapshot?.state === 'paused'}
-        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('resume')}><Play class="size-4" /> Resume</Button>
+        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('resume')}><PlayIcon class="size-4" /> Resume</Button>
       {/if}
     </div>
   </div>
 
   {#if $workflowDetailError}
-    <Alert.Root variant="destructive"><CircleAlert class="size-4" /><Alert.Title>Workflow error</Alert.Title><Alert.Description>{$workflowDetailError}</Alert.Description></Alert.Root>
+    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflow error</Alert.Title><Alert.Description>{$workflowDetailError}</Alert.Description></Alert.Root>
     <Button variant="outline" onclick={() => void refreshWorkflow(routeWorkflowId)}>Retry workflow</Button>
   {/if}
   {#if snapshot?.failure_message}
-    <Alert.Root variant="destructive"><CircleAlert class="size-4" /><Alert.Title>Workflow failed</Alert.Title><Alert.Description>{snapshot.failure_message}</Alert.Description></Alert.Root>
+    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflow failed</Alert.Title><Alert.Description>{snapshot.failure_message}</Alert.Description></Alert.Root>
   {/if}
 
   <div class="space-y-3">
@@ -161,7 +164,7 @@
                 <span class="w-5 shrink-0 text-xs text-muted-foreground">{phase.ordinal}</span>
                 <span class="min-w-0 flex-1 truncate">{phase.name}</span>
                 {#if phase.submittedCount > 0 || phase.current}
-                  <span class={cn('text-xs tabular-nums', phase.submittedCount === phase.nodes.length ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground')}>{phase.submittedCount}/{phase.nodes.length}</span>
+                  <span class={cn('text-xs tabular-nums', phase.submittedCount === phase.nodes.length ? 'text-success ' : 'text-muted-foreground')}>{phase.submittedCount}/{phase.nodes.length}</span>
                 {/if}
               </Button>
             {/each}
@@ -176,7 +179,7 @@
               <button
                 type="button"
                 disabled={!node.session_id}
-                class="flex w-full items-center gap-3 rounded-md px-2 py-4 text-left disabled:cursor-default enabled:hover:bg-muted/50"
+                class="flex w-full items-center gap-3 rounded-none px-2 py-4 text-left disabled:cursor-default enabled:hover:bg-muted/50"
                 onclick={() => node.session_id && navigate(`/chat/${node.session_id}`)}
               >
                 <span class={cn('w-4 shrink-0 text-center text-lg leading-none', statusClass(node.status))}>{statusGlyph(node.status)}</span>

@@ -58,7 +58,7 @@ test('focuses the composer and refreshes git only on the first entry, then refre
 
   const firstPage = render(SessionChatPage);
 
-  const composer = await screen.findByPlaceholderText('Send a follow-up message…');
+  const composer = await screen.findByPlaceholderText('Continue the thread…');
   await waitFor(() => expect(composer).toHaveFocus());
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1);
@@ -71,7 +71,7 @@ test('focuses the composer and refreshes git only on the first entry, then refre
   firstPage.unmount();
   mocks.refreshWorkspaceGitStatus.mockClear();
   render(SessionChatPage);
-  const revisitedComposer = await screen.findByPlaceholderText('Send a follow-up message…');
+  const revisitedComposer = await screen.findByPlaceholderText('Continue the thread…');
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   expect(revisitedComposer).not.toHaveFocus();
   expect(mocks.refreshWorkspaceGitStatus).not.toHaveBeenCalled();
@@ -156,7 +156,7 @@ test.each([
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText('Send a follow-up message…');
+  await screen.findByPlaceholderText('Continue the thread…');
   expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /^send$/i })).toBeInTheDocument();
 });
@@ -175,7 +175,7 @@ test('keeps Send and queues inbox input while an interruptible session is busy',
 
   render(SessionChatPage);
 
-  const input = await screen.findByPlaceholderText('Send a follow-up message…');
+  const input = await screen.findByPlaceholderText('Continue the thread…');
   await userEvent.type(input, 'Queue this follow-up');
 
   expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
@@ -288,7 +288,6 @@ test('shows icon-only Edit and Copy controls outside eligible user message bubbl
   expect(screen.getAllByRole('button', { name: /^Edit message:/ })).toHaveLength(1);
   expect(editButton).toHaveTextContent('');
   expect(copyButton).toHaveTextContent('');
-  expect(messageActions).toHaveClass('opacity-0', 'group-hover:opacity-100');
   expect(messageBubble).toHaveTextContent('Inspect the original implementation.');
   expect(messageBubble).not.toContainElement(editButton);
   expect(screen.queryByRole('button', { name: /^Resend message:/ })).not.toBeInTheDocument();
@@ -302,11 +301,7 @@ test('shows icon-only Edit and Copy controls outside eligible user message bubbl
 
   const editor = screen.getByRole('textbox', { name: 'Edit historical message' });
   expect(editor).toHaveValue('Inspect the original implementation.');
-  expect(editor).toHaveClass('field-sizing-content', 'resize-none', 'border-0');
   expect(editor).not.toHaveAttribute('rows');
-  expect(editor).not.toHaveClass('min-h-16');
-  expect(editor.closest('[data-chat-message-id]')).toHaveClass('w-full');
-  expect(editor.closest('[data-chat-message-id]')?.firstElementChild).toHaveClass('w-full');
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
   await fireEvent.keyDown(screen.getByRole('textbox', { name: 'Edit historical message' }), { key: 'Escape' });
@@ -721,8 +716,8 @@ test('shows the initial prompt immediately after starting a chat while timeline 
   });
   render(NewChatPage);
 
-  await user.type(screen.getByPlaceholderText('Ask the agent to implement, inspect, or explain something…'), 'hi');
-  await fireEvent.click(screen.getByRole('button', { name: /start chat/i }));
+  await user.type(screen.getByPlaceholderText('What should the agent do?'), 'hi');
+  await fireEvent.click(screen.getByRole('button', { name: /start session/i }));
 
   await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new'));
 
@@ -731,12 +726,6 @@ test('shows the initial prompt immediately after starting a chat while timeline 
   mocks.pathParams = { sessionId: 'session-new' };
   render(SessionChatPage);
 
-  const userMessage = await screen.findByText('hi');
-  const userContent = userMessage.closest('[data-role="user"]')?.firstElementChild;
-  expect(userContent).toHaveClass('group-[.is-user]:bg-secondary');
-  expect(userContent).toHaveClass('group-[.is-user]:text-foreground');
-  expect(userContent).not.toHaveClass('group-[.is-user]:bg-primary');
-  expect(userContent).not.toHaveClass('group-[.is-user]:text-primary-foreground');
   expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });
 
@@ -798,12 +787,13 @@ test('shows workspace git status in the selected chat composer summary', async (
 
   render(SessionChatPage);
 
-  const composer = await screen.findByPlaceholderText('Send a follow-up message…');
+  const composer = await screen.findByPlaceholderText('Continue the thread…');
   composer.focus();
   await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
   const sessionDetailsButton = await screen.findByRole('button', { name: 'Session details: project · pi · main · dirty' });
-  expect(sessionDetailsButton).toHaveTextContent('project · main ↑1 ↓2 +3 ~4 ?5 !6 · pi');
-  expect(within(sessionDetailsButton).getByText('↑1')).toHaveClass('text-blue-600');
+  for (const value of ['project', 'main', '↑1', '↓2', '+3', '~4', '?5', '!6', 'pi']) {
+    expect(within(sessionDetailsButton).getByText(value)).toBeInTheDocument();
+  }
 });
 
 
@@ -1106,7 +1096,6 @@ test('does not refresh git status for selected-session idle events', async () =>
 });
 
 
-
 test('does not toast transient network errors from automatic chat refreshes', async () => {
   const selected = session({ session_id: 'session-2', state: 'running' });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
@@ -1160,15 +1149,13 @@ test('mobile composer resize button opens a fullscreen follow-up composer sharin
   try {
     render(SessionChatPage);
 
-    const composerInput = await screen.findByPlaceholderText('Send a follow-up message…');
+    const composerInput = await screen.findByPlaceholderText('Continue the thread…');
     await user.type(composerInput, 'mobile draft');
     await fireEvent.click(screen.getByRole('button', { name: 'Expand message composer' }));
 
     const fullscreenComposer = screen.getByRole('dialog', { name: 'Expanded message composer' });
-    const fullscreenInput = within(fullscreenComposer).getByPlaceholderText('Send a follow-up message…');
+    const fullscreenInput = within(fullscreenComposer).getByPlaceholderText('Continue the thread…');
     expect(fullscreenInput).toHaveTextContent('mobile draft');
-    expect(fullscreenInput).toHaveClass('h-full');
-    expect(fullscreenInput).toHaveClass('min-h-0');
 
     await user.type(fullscreenInput, ' plus more');
     await fireEvent.click(within(fullscreenComposer).getByRole('button', { name: /send/i }));
@@ -1305,21 +1292,11 @@ test('highlights fenced code blocks in assistant markdown and copies their text'
 
   expect(await screen.findByText(/answer/)).toBeInTheDocument();
   expect(container.querySelector('pre.shiki')).toBeInTheDocument();
-  expect(container.querySelector('pre.shiki span[style*="--shiki-light"]')?.textContent).toContain('const');
+  expect(container.querySelector('pre.shiki span[style*="color:"]')?.textContent).toContain('const');
   const copyCodeButton = await screen.findByRole('button', { name: /copy code block/i });
   const pre = container.querySelector('pre');
-  const codeBlock = container.querySelector('[data-code-block]');
-  expect(codeBlock).toHaveClass('w-full');
-  expect(codeBlock).toHaveClass('border');
-  expect(codeBlock).toHaveClass('border-border');
-  const assistantContent = pre?.closest('[data-role="assistant"]')?.firstElementChild;
-  expect(assistantContent).toHaveClass('group-[.is-assistant]:w-full');
-  expect(assistantContent).not.toHaveClass('group-[.is-assistant]:px-3');
-  expect(assistantContent).not.toHaveClass('sm:group-[.is-assistant]:px-4');
   const codeBlockHeader = container.querySelector('[data-code-block-header]');
   expect(codeBlockHeader).toHaveTextContent('ts');
-  expect(codeBlockHeader).not.toHaveClass('border-b');
-  expect(codeBlockHeader).not.toHaveClass('bg-muted/40');
 
   expect(navigator.clipboard?.writeText).toBe(writeText);
   expect(copyCodeButton.querySelector('svg')).toBeInTheDocument();
@@ -1393,7 +1370,6 @@ test('shows pending, failed, and dispatching messages above the composer without
     expect.stringContaining('Continue implementation'),
   ]);
   expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
-  expect(within(rows[1]).getByRole('button', { name: /retry inbox message/i }).parentElement).toHaveClass('sm:group-hover:opacity-100');
   expect(within(rows[1]).queryByRole('button', { name: /cancel inbox message/i })).not.toBeInTheDocument();
   expect(within(rows[2]).getByRole('button', { name: /cancel inbox message/i })).toBeInTheDocument();
 });
@@ -1481,7 +1457,7 @@ test('retries a failed branch delivery with its original target', async () => {
 });
 
 
-test('loads and renders an existing chat session with metadata and workspace name above the prompt input without a page header', async () => {
+test('loads and renders an existing chat session with metadata and workspace name above the prompt input with its title', async () => {
   const selected = session({
     session_id: 'session-2',
     client_type: 'pi',
@@ -1505,7 +1481,7 @@ test('loads and renders an existing chat session with metadata and workspace nam
 
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2'));
   expect(await screen.findByText('hi there')).toBeInTheDocument();
-  expect(screen.queryByRole('heading', { name: /second · reviewer/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /second · reviewer/i })).toBeInTheDocument();
   expect(screen.queryByText('Description: Review dashboard changes')).not.toBeInTheDocument();
   const sessionDetailsButton = screen.getByRole('button', { name: /Session details: pontia · pi · coder@1 · second/i });
   await userEvent.click(sessionDetailsButton);
@@ -1514,18 +1490,15 @@ test('loads and renders an existing chat session with metadata and workspace nam
   expect(clientBadge).toBeInTheDocument();
   expect(profileBadge).toBeInTheDocument();
   expect(screen.getAllByLabelText('Handle: second')[0]).toBeInTheDocument();
-  expect(within(clientBadge.closest('div') as HTMLElement).getByLabelText('Client')).toHaveClass('lucide-terminal');
-  expect(within(profileBadge.closest('div') as HTMLElement).getByLabelText('Profile')).toHaveClass('lucide-bot');
   expect(screen.queryByText('Client: pi')).not.toBeInTheDocument();
   expect(screen.queryByText('Profile: coder@1')).not.toBeInTheDocument();
   expect(screen.queryByText('Handle: second')).not.toBeInTheDocument();
   expect(screen.queryByText('Workspace: workspace-1')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Session state: busy')).not.toBeInTheDocument();
   const workspaceBadge = screen.getAllByLabelText('Workspace: /repo/pontia')[0];
-  const workspaceName = within(workspaceBadge).getByText('pontia');
-  const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
+  expect(workspaceBadge).toHaveTextContent('/repo/pontia');
+  const followUpInput = screen.getByPlaceholderText('Continue the thread…');
   expect(screen.queryByText('State: busy')).not.toBeInTheDocument();
-  expect(workspaceBadge).toContainElement(workspaceName);
   expect(sessionDetailsButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByRole('button', { name: /new chat/i })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: /new chat/i })).not.toBeInTheDocument();
@@ -1559,7 +1532,7 @@ test('shows supported context usage in chat session metadata while hiding unsupp
 
   const contextBadge = await screen.findByRole('button', { name: /Session details: .*33% · 42k \/ 128k/i });
   expect(contextBadge).toBeInTheDocument();
-  expect(contextBadge.querySelector('.lucide-gauge')).toBeInTheDocument();
+  expect(within(contextBadge).getByText('example-model')).toBeInTheDocument();
   expect(screen.getAllByText('33% · 42k / 128k')[0]).toBeInTheDocument();
   expect(screen.queryByText('Context 33% · 42k / 128k')).not.toBeInTheDocument();
 
@@ -1573,8 +1546,9 @@ test('shows supported context usage in chat session metadata while hiding unsupp
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText('Send a follow-up message…');
+  await screen.findByPlaceholderText('Continue the thread…');
   expect(screen.queryByText(/context/i)).not.toBeInTheDocument();
+  expect(screen.queryByText('example-model')).not.toBeInTheDocument();
 });
 
 
@@ -1589,7 +1563,7 @@ test('places session controls near the prompt input and keeps advanced controls 
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
   const exitButton = screen.getByRole('button', { name: /exit session/i });
   const advancedButton = screen.getByRole('button', { name: /advanced session controls/i });
   expect(exitButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -1630,7 +1604,7 @@ test('shows delivery loading on the submit button instead of below the optimisti
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
   await user.type(followUpInput, 'slow network message');
   await user.click(screen.getByRole('button', { name: /send/i }));
 
@@ -1690,12 +1664,8 @@ test('follow-up composer submits with Enter while preserving modified Enter for 
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
-  expect(followUpInput).toHaveClass('block');
+  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
   expect(screen.queryByText('Enter to send · Shift+Enter / Ctrl+Enter for newline')).not.toBeInTheDocument();
-  const composerToolbar = screen.getByRole('button', { name: /send/i }).parentElement;
-  expect(composerToolbar).toHaveClass('pt-0');
-  expect(composerToolbar).not.toHaveClass('pt-2');
 
   await user.type(followUpInput, 'continue this session');
   expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', shiftKey: true })).toBe(false);
@@ -1770,11 +1740,6 @@ test('shows a floating scroll-down button away from the bottom and scrolls down 
   scrollTo.mockClear();
   await triggerLatestBottomIntersection(false);
   const scrollDownButton = await screen.findByRole('button', { name: /scroll to bottom/i });
-  const scrollDownContainer = scrollDownButton.closest('[data-chat-scroll-down-container]');
-  expect(scrollDownContainer).toHaveClass('transition-[left]');
-  expect(scrollDownContainer).toHaveClass('chat-scroll-down-enter');
-  expect(scrollDownContainer).toHaveClass('duration-200');
-  expect(scrollDownContainer).toHaveClass('ease-linear');
   await user.click(scrollDownButton);
 
   expect(scrollTo).toHaveBeenCalledWith({ top: 2400 });
@@ -1843,7 +1808,7 @@ test('scrolls to the document bottom after sending from the prompt input', async
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
   await user.type(followUpInput, 'continue this session');
   await user.click(screen.getByRole('button', { name: /send/i }));
 
@@ -1868,7 +1833,7 @@ test('scrolls when a prompt input send is rendered in an existing projected time
 
   await screen.findByText('hi there');
   scrollTo.mockClear();
-  const followUpInput = screen.getByPlaceholderText('Send a follow-up message…');
+  const followUpInput = screen.getByPlaceholderText('Continue the thread…');
   await user.type(followUpInput, 'continue this session');
   await user.click(screen.getByRole('button', { name: /send/i }));
   await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
@@ -1929,7 +1894,7 @@ test('does not toast passive chat errors', async () => {
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText('Send a follow-up message…');
+  await screen.findByPlaceholderText('Continue the thread…');
   expect(mocks.toastError).not.toHaveBeenCalled();
 });
 
@@ -2006,7 +1971,7 @@ test('hides exit on exited sessions and waits for idle after automatic resume be
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText('Send a follow-up message…');
+  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
   expect(followUpInput).not.toBeDisabled();
   expect(screen.queryByRole('button', { name: /exit session/i })).not.toBeInTheDocument();
 

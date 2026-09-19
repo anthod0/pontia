@@ -6,8 +6,8 @@
   "start_url": "/dashboard/",
   "scope": "/dashboard/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#6b48fe",
+  "background_color": "#fafaf8",
+  "theme_color": "#fafaf8",
   "icons": [
     {
       "src": "/dashboard/logo-192.png",

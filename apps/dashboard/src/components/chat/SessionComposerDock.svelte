@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { InboxMessageView, SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
+  import type { InboxMessageView, SessionView, WorkspaceGitStatusView } from '../../api/types'
   import { canSendSessionMessage } from '$lib/session-chat/sessionChat'
   import MessageComposer from './MessageComposer.svelte'
   import QueuedMessages from './QueuedMessages.svelte'
@@ -10,12 +10,12 @@
   interface Props {
     session: SessionView
     gitStatus?: WorkspaceGitStatusView
-    workspaces: WorkspaceView[]
     metadataItems: SessionMetadataItem[]
     metadataSummary: string
     queuedMessages: InboxMessageView[]
     inboxBusyMessageId: string | null
     input: string
+    height?: number
     submitting?: boolean
     actionBusy?: boolean
     canSend?: boolean
@@ -36,12 +36,12 @@
   let {
     session,
     gitStatus,
-    workspaces,
     metadataItems,
     metadataSummary,
     queuedMessages,
     inboxBusyMessageId,
     input = $bindable(''),
+    height = $bindable(0),
     submitting = false,
     actionBusy = false,
     canSend = false,
@@ -64,9 +64,8 @@
   let interruptMode = $derived(session.state === 'busy' && session.capabilities?.interrupt === true && input.trim() === '')
 </script>
 
-<div data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-surface px-2 pb-2 pt-1 sm:px-4 md:left-[var(--sidebar-width)] md:px-6 md:pb-3 transition-[left] duration-200 ease-linear group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]">
-  <div aria-hidden="true" data-chat-composer-fade="outward" class="pointer-events-none absolute inset-x-0 bottom-full h-12 bg-gradient-to-t from-surface via-surface/70 to-transparent"></div>
-  <div class="mx-auto w-full max-w-4xl">
+<div bind:clientHeight={height} data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-surface px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 md:left-[var(--sidebar-width)] md:px-8 transition-[left] duration-200 ease-linear group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]">
+  <div class="mx-auto w-full max-w-[760px]">
     <QueuedMessages
       messages={queuedMessages}
       busyMessageId={inboxBusyMessageId}
@@ -74,9 +73,9 @@
       onRetry={onRetryInboxMessage}
       onDismiss={onDismissInboxMessage}
     />
-    <div role="group" aria-label="Session status and controls" class="mb-1 flex min-w-0 items-center justify-between gap-2 px-2">
+    <div role="group" aria-label="Session status and controls" class="mb-2 flex min-w-0 items-center justify-between gap-2">
       <div class="flex min-w-0 flex-1 items-center gap-2">
-        <SessionMetadata {session} {gitStatus} {workspaces} {metadataItems} {metadataSummary} />
+        <SessionMetadata {gitStatus} {metadataItems} {metadataSummary} />
       </div>
       <div class="flex shrink-0 items-center justify-end gap-2">
         <SessionActions {session} {actionBusy} {onExit} {onOpenConsole} {onNewChat} {onRename} {onRestart} />

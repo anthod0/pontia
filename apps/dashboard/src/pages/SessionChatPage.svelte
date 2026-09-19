@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
-  import { ChevronDown, CircleAlert } from '@lucide/svelte'
+  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -14,6 +15,7 @@
   import type { ChatMessageRole, SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
     canSendSessionMessage,
+    sessionChatTitle,
     timelineItemsToChatMessages,
   } from '$lib/session-chat/sessionChat'
   import type { LiveOutputEvent, LiveOutputOverlays } from '$lib/session-chat/liveOutput'
@@ -75,6 +77,7 @@
   export let routeSessionId: string | null = null
 
   let selectedSessionId = ''
+  let composerHeight = 180
   let submitting = false
   let branchActionSubmitting = false
   let branchActionError: string | null = null
@@ -753,9 +756,19 @@
 
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
-<section class={`flex flex-col gap-4 ${visibleInboxMessages.length ? 'pb-92' : 'pb-40'}`}>
-  <div class="mx-auto min-w-0 w-full max-w-4xl flex-1">
-    <div class="flex min-w-0 flex-col rounded-xl bg-transparent">
+<section class="flex flex-col gap-4" style={`padding-bottom: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
+  {#if selectedSession}
+    <h1 class="truncate pt-1 text-base font-normal text-heading" title={sessionChatTitle(selectedSession)}>{sessionChatTitle(selectedSession)}</h1>
+  {/if}
+  {#if actionError && !renameSessionDialogOpen}
+    <Alert.Root variant="destructive" role="alert" class="mx-auto w-full max-w-[760px]">
+      <WarningCircleIcon class="size-4" />
+      <Alert.Title>Session action failed</Alert.Title>
+      <Alert.Description>{actionError}</Alert.Description>
+    </Alert.Root>
+  {/if}
+  <div class="mx-auto min-w-0 w-full max-w-[760px] flex-1">
+    <div class="flex min-w-0 flex-col rounded-none bg-transparent">
       {#if $sessionDetailLoading && !selectedSession}
         <div class="space-y-4 p-6"><Skeleton class="h-10 w-1/3" /><Skeleton class="h-80 w-full" /></div>
       {:else if !selectedSession}
@@ -774,17 +787,17 @@
           {#if initialChatScrollPending}
             <div
               data-chat-conversation-skeleton
-              class="pointer-events-none absolute inset-x-0 top-0 z-10 space-y-8 py-4 sm:p-4"
+              class="pointer-events-none absolute inset-x-0 top-0 z-10 space-y-8 py-4 "
               role="status"
               aria-label="Loading conversation"
             >
-              <div class="flex justify-end"><Skeleton class="h-14 w-3/5 max-w-xl rounded-xl" /></div>
+              <div class="flex justify-end"><Skeleton class="h-14 w-3/5 max-w-xl rounded-none" /></div>
               <div class="w-4/5 max-w-2xl space-y-3">
                 <Skeleton class="h-4 w-full" />
                 <Skeleton class="h-4 w-11/12" />
                 <Skeleton class="h-4 w-2/3" />
               </div>
-              <div class="flex justify-end"><Skeleton class="h-10 w-2/5 max-w-md rounded-xl" /></div>
+              <div class="flex justify-end"><Skeleton class="h-10 w-2/5 max-w-md rounded-none" /></div>
               <div class="w-3/4 max-w-xl space-y-3">
                 <Skeleton class="h-4 w-full" />
                 <Skeleton class="h-4 w-4/5" />
@@ -820,7 +833,7 @@
         </div>
         {#if branchActionError}
           <Alert.Root variant="destructive" role="alert" class="mx-4 mb-4">
-            <CircleAlert class="size-4" />
+            <WarningCircleIcon class="size-4" />
             <Alert.Title>Branch action failed</Alert.Title>
             <Alert.Description>{branchActionError}</Alert.Description>
           </Alert.Root>
@@ -830,29 +843,30 @@
         {#if scrollDownButtonRendered}
           <div
             data-chat-scroll-down-container
-            class={`pointer-events-none fixed left-0 right-0 z-40 px-2 transition-[left] duration-200 ease-linear sm:px-4 md:left-[var(--sidebar-width)] md:px-6 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${visibleInboxMessages.length ? 'bottom-88' : 'bottom-36'} ${showScrollDownButton ? 'chat-scroll-down-enter' : 'chat-scroll-down-exit'}`}
+            style="bottom: calc(var(--chat-composer-height) + 0.5rem)"
+            class={`pointer-events-none fixed left-0 right-0 z-40 px-4 transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] md:px-8 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${showScrollDownButton ? 'chat-scroll-down-enter' : 'chat-scroll-down-exit'}`}
           >
-            <div class="mx-auto flex w-full max-w-4xl justify-end">
+            <div class="mx-auto flex w-full max-w-[760px] justify-end">
               <Button
                 type="button"
                 variant="secondary"
                 size="icon"
-                class="pointer-events-auto rounded-full shadow-lg"
+                class="pointer-events-auto rounded-none shadow-none"
                 aria-label="Scroll to bottom"
                 title="Scroll to bottom"
                 onclick={scrollChatToBottom}
               >
-                <ChevronDown class="size-4" />
+                <CaretDownIcon class="size-4" />
               </Button>
             </div>
           </div>
         {/if}
 
         <SessionComposerDock
+          bind:height={composerHeight}
           bind:input={$chatDraft}
           session={selectedSession}
           gitStatus={selectedSessionGitStatus}
-          workspaces={$workspaces}
           metadataItems={selectedSessionMetadataItems}
           metadataSummary={selectedSessionMetadataSummary}
           queuedMessages={visibleInboxMessages}

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { ChevronRight, Lightbulb } from '@lucide/svelte'
+  import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
+  import LightbulbIcon from 'phosphor-svelte/lib/LightbulbIcon'
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import { cn } from '$lib/utils.js'
@@ -82,7 +83,7 @@
       aria-label={open ? 'Hide agent work steps' : 'Show agent work steps'}
     >
       <span class="truncate">{active ? 'Working' : 'Agent work'}</span>
-      <ChevronRight class={cn('size-4 shrink-0 transition-transform', open && 'rotate-90')} aria-hidden="true" />
+      <CaretRightIcon class={cn('size-4 shrink-0 transition-transform', open && 'rotate-90')} aria-hidden="true" />
     </Collapsible.Trigger>
 
     <Collapsible.Content class="pb-2 pt-1">
@@ -104,7 +105,7 @@
                 class="relative z-10 flex size-6 shrink-0 items-center justify-center bg-background text-muted-foreground"
                 aria-label="Thinking"
               >
-                <Lightbulb class="size-4" aria-hidden="true" />
+                <LightbulbIcon class="size-4" aria-hidden="true" />
               </span>
               {#if hasConnectorAfter(index)}
                 <span class="absolute bottom-[-0.625rem] left-[0.71875rem] top-6 w-px bg-border" aria-hidden="true"></span>

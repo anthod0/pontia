@@ -4,6 +4,7 @@ import type { SessionConsoleDetail } from '../../../src/stores/sessions';
 import type { TimelineState } from '../../../src/stores/timeline';
 import type { CreateSessionResult, InboxMessageView, SessionView, TimelineItem, TurnView, WorkspaceDirectoryListingView, WorkspaceRootView, WorkspaceView } from '../../../src/api/types';
 import { optimisticInitialMessages } from '../../../src/stores/optimisticChat';
+import { chatDraft } from '../../../src/stores/chatDraft';
 import {
   beginInboxSubmission,
   confirmInboxSubmission,
@@ -330,6 +331,7 @@ beforeEach(() => {
   mocks.workspaceGitStatuses.set({});
   mocks.workspaceGitStatusErrors.set({});
   mocks.timelineState.set(mocks.timelineStateValue());
+  chatDraft.set('');
   optimisticInitialMessages.set({});
   optimisticInboxSubmissions.set({});
   mocks.dashboardEventListeners.clear();

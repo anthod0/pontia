@@ -1,11 +1,12 @@
 export function sessionStateDotClass(state: string): string {
   switch (state) {
     case 'busy':
+      return 'bg-success';
     case 'starting':
-      return 'bg-amber-500';
     case 'idle':
+      return 'bg-warning';
     case 'interrupted':
-      return 'bg-emerald-500';
+      return 'bg-interrupted';
     case 'error':
       return 'bg-destructive';
     default:

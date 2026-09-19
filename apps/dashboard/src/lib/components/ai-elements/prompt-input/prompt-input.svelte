@@ -18,6 +18,6 @@
   }
 </script>
 
-<form bind:this={ref} class={cn('rounded-2xl border bg-background p-2 shadow-sm', className)} onsubmit={handleSubmit} {...restProps}>
+<form bind:this={ref} class={cn('border bg-background focus-within:border-primary', className)} onsubmit={handleSubmit} {...restProps}>
   {@render children?.()}
 </form>

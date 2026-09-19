@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, RefreshCw, TerminalSquare } from '@lucide/svelte'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon'
+  import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon'
   import { navigate } from '$lib/navigation'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -37,15 +39,15 @@
 <section class="space-y-6">
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
     <div class="space-y-2">
-      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TerminalSquare class="size-7" /> Sessions</h2>
+      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TerminalWindowIcon class="size-7" /> Sessions</h2>
       <p class="max-w-3xl text-muted-foreground">Browse sessions. Select a row to open the dedicated session detail page.</p>
     </div>
-    <Button variant="outline" onclick={() => void loadSessions()}><RefreshCw class="size-4" /> Refresh</Button>
+    <Button variant="outline" onclick={() => void loadSessions()}><ArrowsClockwiseIcon class="size-4" /> Refresh</Button>
   </div>
 
   {#if $sessionsError}
     <Alert.Root variant="destructive">
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>Sessions error</Alert.Title>
       <Alert.Description>{$sessionsError}</Alert.Description>
     </Alert.Root>

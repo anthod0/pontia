@@ -1,4 +1,3 @@
-import { Activity, Check, Loader, LogOut, Pause, TriangleAlert } from '@lucide/svelte'
 import { contextUsageSummary } from '$lib/contextUsage'
 import type { InboxMessageView, SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
 
@@ -21,45 +20,6 @@ export function sessionContextUsageLabel(session: SessionView): string | null {
   if ((session.capabilities?.context_usage ?? 'unsupported') === 'unsupported') return null
   const summary = session.context_usage ? contextUsageSummary(session.context_usage, { includeConfidence: false }) : 'Context waiting…'
   return summary.replace(/^Context\s+/, '')
-}
-
-export function sessionStateBadgeClass(state: string): string {
-  switch (state) {
-    case 'busy':
-    case 'starting':
-      return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-    case 'idle':
-    case 'interrupted':
-      return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-    case 'exited':
-      return 'border-muted-foreground/25 bg-muted text-muted-foreground'
-    case 'error':
-      return 'border-destructive/30 bg-destructive/10 text-destructive'
-    default:
-      return ''
-  }
-}
-
-export function sessionStateIcon(state: string): typeof Activity {
-  switch (state) {
-    case 'busy':
-    case 'starting':
-      return Loader
-    case 'idle':
-      return Check
-    case 'interrupted':
-      return Pause
-    case 'exited':
-      return LogOut
-    case 'error':
-      return TriangleAlert
-    default:
-      return Activity
-  }
-}
-
-export function sessionStateIconClass(state: string): string {
-  return state === 'busy' || state === 'starting' ? 'size-4 animate-spin' : 'size-4'
 }
 
 export function sessionProfileTitle(session: SessionView): string | null {
@@ -127,7 +87,7 @@ export function gitStatusTitle(session: SessionView, status: WorkspaceGitStatusV
 export function gitStatusToneClass(status: WorkspaceGitStatusView | undefined): string {
   if (!status || status.state === 'unknown') return 'text-muted-foreground'
   if (status.state === 'error') return 'text-destructive'
-  return status.clean ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+  return status.clean ? 'text-success ' : 'text-warning '
 }
 
 export function sessionMetadataItems(session: SessionView, workspaces: WorkspaceView[], gitStatus: WorkspaceGitStatusView | undefined, gitStatusErrors: Record<string, string | null | undefined>): SessionMetadataItem[] {
@@ -135,6 +95,7 @@ export function sessionMetadataItems(session: SessionView, workspaces: Workspace
     { key: 'workspace', label: 'Workspace', value: sessionWorkspaceTitle(session, workspaces), title: sessionWorkspacePath(session, workspaces) },
     { key: 'client', label: 'Client', value: session.client_type, title: session.client_type },
   ]
+  if (session.model) items.push({ key: 'model', label: 'Model', value: session.model, title: session.model })
   if (gitStatus) items.push({ key: 'git', label: 'Git', value: `${gitBranchLabel(gitStatus)} · ${gitStatusLabel(gitStatus)}`, title: gitStatusTitle(session, gitStatus, gitStatusErrors) })
   const contextUsageLabel = sessionContextUsageLabel(session)
   if (contextUsageLabel) items.push({ key: 'context', label: 'Usage', value: contextUsageLabel, title: `Context usage: ${contextUsageLabel}` })

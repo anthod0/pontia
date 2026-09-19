@@ -96,7 +96,7 @@
                       onclick={() => activate(turn, role)}
                     >
                       <span
-                        class={`h-px rounded-full transition-[width,background-color] ${role === 'user' ? 'w-[10px]' : 'w-[5px]'} ${branchMark ? 'bg-gray-500 group-hover:bg-gray-600' : 'bg-gray-300 group-hover:bg-gray-400'}`}
+                        class={`h-px rounded-none transition-[width,background-color] ${role === 'user' ? 'w-[10px]' : 'w-[5px]'} ${branchMark ? 'bg-muted-foreground group-hover:bg-foreground' : 'bg-border group-hover:bg-muted-foreground'}`}
                         aria-hidden="true"
                         data-chat-ruler-line
                         data-chat-ruler-branch={branchMark ? 'true' : undefined}
@@ -107,12 +107,12 @@
                 <Tooltip.Content
                   side="left"
                   sideOffset={8}
-                  class="max-w-80 whitespace-normal border border-gray-200 bg-gray-100 text-gray-900 shadow-md"
+                  class="max-w-80 whitespace-normal border border-border bg-popover text-popover-foreground"
                   arrowClasses="hidden"
                 >
                   <div class="flex flex-col items-start gap-1.5">
                     <span class="font-medium">{roleLabel(role)}</span>
-                    <span class="line-clamp-3 text-gray-600">{summary}</span>
+                    <span class="line-clamp-3 text-muted-foreground">{summary}</span>
                   </div>
                 </Tooltip.Content>
               </Tooltip.Root>

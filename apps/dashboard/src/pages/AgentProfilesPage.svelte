@@ -1,6 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { Bot, CircleAlert, CopyPlus, Pencil, Plus, RefreshCw, Trash2 } from '@lucide/svelte'
+  import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import CopySimpleIcon from 'phosphor-svelte/lib/CopySimpleIcon'
+  import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
+  import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
+  import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon'
+  import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -249,14 +255,14 @@
       <p class="max-w-3xl text-muted-foreground">Manage execution profiles, versions, client support, prompts, and policy metadata from the External API.</p>
     </div>
     <div class="flex flex-wrap gap-2">
-      <Button onclick={startCreate}><Plus class="size-4" /> Create profile</Button>
-      <Button variant="outline" onclick={() => void refreshAll()}><RefreshCw class="size-4" /> Refresh</Button>
+      <Button onclick={startCreate}><PlusIcon class="size-4" /> Create profile</Button>
+      <Button variant="outline" onclick={() => void refreshAll()}><ArrowsClockwiseIcon class="size-4" /> Refresh</Button>
     </div>
   </div>
 
   {#if $agentProfilesError}
     <Alert.Root variant="destructive">
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>Unable to load profiles</Alert.Title>
       <Alert.Description>{$agentProfilesError}</Alert.Description>
     </Alert.Root>
@@ -264,7 +270,7 @@
 
   {#if versionsError}
     <Alert.Root variant="destructive">
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>Unable to load versions</Alert.Title>
       <Alert.Description>{versionsError}</Alert.Description>
     </Alert.Root>
@@ -272,7 +278,7 @@
 
   {#if mutationError}
     <Alert.Root variant="destructive">
-      <CircleAlert class="size-4" />
+      <WarningCircleIcon class="size-4" />
       <Alert.Title>Profile operation failed</Alert.Title>
       <Alert.Description>{mutationError}</Alert.Description>
     </Alert.Root>
@@ -322,7 +328,7 @@
           </div>
           <div class="space-y-2">
             <Label for="profile-agent-kind">Agent kind</Label>
-            <select id="profile-agent-kind" bind:value={draft.agent_kind} class="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs">
+            <select id="profile-agent-kind" bind:value={draft.agent_kind} class="h-9 w-full rounded-none border border-input bg-background px-3 py-1 text-sm shadow-none">
               <option value="executor">executor</option>
             </select>
           </div>
@@ -397,11 +403,11 @@
   {:else}
     <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
       <Card.Root>
-        <Card.Header><Card.Title class="flex items-center gap-2"><Bot class="size-5" /> Profiles</Card.Title><Card.Description>{sortedProfiles.length} configured profiles.</Card.Description></Card.Header>
+        <Card.Header><Card.Title class="flex items-center gap-2"><RobotIcon class="size-5" /> Profiles</Card.Title><Card.Description>{sortedProfiles.length} configured profiles.</Card.Description></Card.Header>
         <Card.Content class="space-y-2">
           {#each sortedProfiles as profile}
             <button
-              class="w-full rounded-lg border p-3 text-left transition hover:bg-muted {selectedProfile?.profile_id === profile.profile_id ? 'border-primary bg-muted' : ''}"
+              class="w-full rounded-none border p-3 text-left transition hover:bg-muted {selectedProfile?.profile_id === profile.profile_id ? 'border-primary bg-muted' : ''}"
               onclick={() => selectProfile(profile.profile_id)}
             >
               <div class="flex items-start justify-between gap-2">
@@ -432,10 +438,10 @@
                   <Card.Description>{selectedVersionProfile.description ?? 'No description provided.'}</Card.Description>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                  <Button variant="outline" onclick={() => startNewVersion(selectedVersionProfile)} disabled={saving || builtinSelected}><CopyPlus class="size-4" /> New version</Button>
-                  <Button variant="outline" onclick={() => startEdit(selectedVersionProfile)} disabled={saving || builtinSelected || !selectedVersionProfile.active}><Pencil class="size-4" /> Edit</Button>
-                  <Button variant="outline" onclick={requestArchiveSelectedVersion} disabled={saving || builtinSelected || !selectedVersionProfile.active}><Trash2 class="size-4" /> Delete version</Button>
-                  <Button variant="destructive" onclick={requestArchiveSelectedProfile} disabled={saving || builtinSelected}><Trash2 class="size-4" /> Delete profile</Button>
+                  <Button variant="outline" onclick={() => startNewVersion(selectedVersionProfile)} disabled={saving || builtinSelected}><CopySimpleIcon class="size-4" /> New version</Button>
+                  <Button variant="outline" onclick={() => startEdit(selectedVersionProfile)} disabled={saving || builtinSelected || !selectedVersionProfile.active}><PencilSimpleIcon class="size-4" /> Edit</Button>
+                  <Button variant="outline" onclick={requestArchiveSelectedVersion} disabled={saving || builtinSelected || !selectedVersionProfile.active}><TrashIcon class="size-4" /> Delete version</Button>
+                  <Button variant="destructive" onclick={requestArchiveSelectedProfile} disabled={saving || builtinSelected}><TrashIcon class="size-4" /> Delete profile</Button>
                 </div>
               </div>
             </Card.Header>
@@ -450,7 +456,7 @@
                   ['State', selectedVersionProfile.active ? 'Active' : 'Archived'],
                   ['Updated', formatDateTime(selectedVersionProfile.updated_at)],
                 ] as [label, value]}
-                  <div class="rounded-lg border p-3">
+                  <div class="rounded-none border p-3">
                     <div class="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
                     <div class="mt-1 break-words font-medium">{value}</div>
                   </div>
@@ -463,7 +469,7 @@
             <Card.Header><Card.Title>Versions</Card.Title><Card.Description>{versionsLoading ? 'Loading versions…' : `${sortedVersions.length} version(s) for this profile.`}</Card.Description></Card.Header>
             <Card.Content class="space-y-2">
               {#each sortedVersions as version}
-                <button class="w-full rounded-lg border p-3 text-left transition hover:bg-muted {selectedVersionProfile?.version === version.version ? 'border-primary bg-muted' : ''}" onclick={() => selectedVersion = version.version}>
+                <button class="w-full rounded-none border p-3 text-left transition hover:bg-muted {selectedVersionProfile?.version === version.version ? 'border-primary bg-muted' : ''}" onclick={() => selectedVersion = version.version}>
                   <div class="flex items-center justify-between gap-2">
                     <span class="font-medium">v{version.version}</span>
                     <span class="text-xs text-muted-foreground">{formatDateTime(version.updated_at)}</span>
@@ -493,8 +499,8 @@
           <Card.Root>
             <Card.Header><Card.Title>Prompt templates</Card.Title><Card.Description>Selected profile version detail.</Card.Description></Card.Header>
             <Card.Content class="grid gap-4 xl:grid-cols-2">
-              <div class="space-y-2"><div class="text-sm font-medium">System prompt</div><pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.system_prompt_template)}</pre></div>
-              <div class="space-y-2"><div class="text-sm font-medium">Turn prompt</div><pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.turn_prompt_template)}</pre></div>
+              <div class="space-y-2"><div class="text-sm font-medium">System prompt</div><pre class="max-h-72 overflow-auto rounded-none bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.system_prompt_template)}</pre></div>
+              <div class="space-y-2"><div class="text-sm font-medium">Turn prompt</div><pre class="max-h-72 overflow-auto rounded-none bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.turn_prompt_template)}</pre></div>
             </Card.Content>
           </Card.Root>
 

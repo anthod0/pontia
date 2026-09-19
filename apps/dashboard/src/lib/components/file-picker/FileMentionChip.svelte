@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { File, Folder } from '@lucide/svelte'
+  import FileIcon from 'phosphor-svelte/lib/FileIcon'
+  import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
 
@@ -18,13 +19,13 @@
       <Badge
         {...props}
         variant="secondary"
-        class="h-auto max-w-full cursor-default rounded-md px-1.5 py-0.5 align-baseline text-sm font-normal"
+        class="h-auto max-w-full cursor-default rounded-none px-1.5 py-0.5 align-baseline text-sm font-normal"
         aria-label={`${kind === 'directory' ? 'Directory' : 'File'} ${path}`}
       >
         {#if kind === 'directory'}
-          <Folder class="size-3 shrink-0" aria-hidden="true" />
+          <FolderIcon class="size-3 shrink-0" aria-hidden="true" />
         {:else}
-          <File class="size-3 shrink-0" aria-hidden="true" />
+          <FileIcon class="size-3 shrink-0" aria-hidden="true" />
         {/if}
         <span class="truncate">@{path}</span>
       </Badge>

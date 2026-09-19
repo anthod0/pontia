@@ -1,23 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-labelledby="title desc">
-  <title id="title">Pontia</title>
-  <desc id="desc">An irregular tilted oval divided into four shores by two curved channels, with the upper-right shore in vermilion red and the other three in charcoal, finished with subtly ink-bitten edges on a transparent background.</desc>
-  <defs>
-    <filter id="ink-edge" filterUnits="userSpaceOnUse" x="0" y="0" width="100" height="100" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="3" seed="17" result="grain"/>
-      <feDisplacementMap in="SourceGraphic" in2="grain" scale="1.35" xChannelSelector="R" yChannelSelector="G" result="bitten"/>
-      <feComposite in="bitten" in2="SourceGraphic" operator="in"/>
-    </filter>
-    <mask id="four-shores-mask">
-      <rect width="100" height="100" fill="white"/>
-      <path d="M50 9C35 33 66 63 50 91" fill="none" stroke="black" stroke-width="10" stroke-linecap="round"/>
-      <path d="M9 50C34 35 64 66 91 50" fill="none" stroke="black" stroke-width="10" stroke-linecap="round"/>
-    </mask>
-    <clipPath id="upper-right-shore">
-      <path d="M50 4H96V50C77 54 65 55 52 48C45 37 44 20 50 4Z"/>
-    </clipPath>
-  </defs>
-  <g filter="url(#ink-edge)">
-    <path d="M23.402 21.477C35.763 7.284 60.471 10.906 73.770 25.168C88.021 35.875 92.571 63.628 76.598 78.523C61.955 94.844 38.199 87.668 26.230 74.832C10.649 62.699 6.477 39.926 23.402 21.477Z" fill="#2A2A28" mask="url(#four-shores-mask)"/>
-    <path d="M23.402 21.477C35.763 7.284 60.471 10.906 73.770 25.168C88.021 35.875 92.571 63.628 76.598 78.523C61.955 94.844 38.199 87.668 26.230 74.832C10.649 62.699 6.477 39.926 23.402 21.477Z" fill="#C41E3A" mask="url(#four-shores-mask)" clip-path="url(#upper-right-shore)"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-labelledby="title desc">
+  <title id="title">Gruvbox Light 蒸汽波落日图标</title>
+  <desc id="desc">白色背景，使用所提供色板的基础色，自上而下依次为橙 #d65d0e、黄 #d79921、绿 #98971a、蓝 #458588、紫 #b16286。</desc>
+  <rect id="background" width="1254" height="1254" fill="#ffffff"/>
+  <g id="sunset">
+    <path id="sun-dome" fill="#d65d0e" d="M 145.62 586.5 A 482.929 477.5 0 0 1 1108.217 586.5 Z"/>
+    <path id="stripe-1" fill="#d79921" d="M 145.008 606.5 H 1108.205 Q 1109.47 637 1106.766 667.5 H 147.156 Q 143.688 637 145.008 606.5 Z"/>
+    <path id="stripe-2" fill="#98971a" d="M 149.635 691.5 H 1103.916 Q 1099.338 723.5 1089.529 755.5 H 164.199 Q 154.345 723.5 149.635 691.5 Z"/>
+    <path id="stripe-3" fill="#458588" d="M 172.797 781.5 H 1080.385 Q 1069.288 812.5 1052.062 843.5 H 200.718 Q 183.942 812.5 172.797 781.5 Z"/>
+    <path id="stripe-4" fill="#b16286" d="M 212.146 862.5 H 1040.893 Q 1021.218 895.5 992.757 928.5 H 259.184 Q 231.805 895.5 212.146 862.5 Z"/>
   </g>
 </svg>

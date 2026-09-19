@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { RotateCcw, Trash2, X } from '@lucide/svelte'
+  import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon'
+  import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
+  import XIcon from 'phosphor-svelte/lib/XIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import type { InboxMessageView } from '../../api/types'
 
@@ -15,7 +17,7 @@
 </script>
 
 {#if messages.length}
-  <section class="mb-2 overflow-hidden rounded-lg border bg-background shadow-sm" aria-labelledby="queued-messages-title">
+  <section class="mb-2 overflow-hidden rounded-none border bg-background shadow-none" aria-labelledby="queued-messages-title">
     <div class="px-3 py-2">
       <h2 id="queued-messages-title" class="text-xs font-medium text-muted-foreground">
         {messages.length} queued message{messages.length === 1 ? '' : 's'}
@@ -28,16 +30,16 @@
           {#if message.state === 'pending'}
             <div class="flex shrink-0 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
               <Button variant="ghost" size="icon-xs" disabled={busyMessageId === message.message_id} aria-label={`Cancel inbox message ${message.input.summary}`} title="Cancel" onclick={() => onCancel(message)}>
-                <Trash2 class="size-3.5" />
+                <TrashIcon class="size-3.5" />
               </Button>
             </div>
           {:else if message.state === 'failed'}
             <div class="flex shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
               <Button variant="ghost" size="icon-xs" disabled={busyMessageId === message.message_id} aria-label={`Remove inbox message ${message.input.summary}`} title="Remove" onclick={() => onDismiss(message)}>
-                <X class="size-3.5" />
+                <XIcon class="size-3.5" />
               </Button>
               <Button variant="ghost" size="icon-xs" disabled={busyMessageId === message.message_id} aria-label={`Retry inbox message ${message.input.summary}`} title="Retry" onclick={() => onRetry(message)}>
-                <RotateCcw class="size-3.5" />
+                <ArrowCounterClockwiseIcon class="size-3.5" />
               </Button>
             </div>
           {/if}

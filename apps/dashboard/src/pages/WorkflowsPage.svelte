@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { CircleAlert, Workflow } from '@lucide/svelte'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import { navigate } from '$lib/navigation'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -25,12 +26,12 @@
 <section class="space-y-6">
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
     <div class="space-y-2">
-      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><Workflow class="size-7" /> Workflows</h2>
+      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TreeStructureIcon class="size-7" /> Workflows</h2>
     </div>
   </div>
 
   {#if $workflowsError}
-    <Alert.Root variant="destructive"><CircleAlert class="size-4" /><Alert.Title>Workflows error</Alert.Title><Alert.Description>{$workflowsError}</Alert.Description></Alert.Root>
+    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflows error</Alert.Title><Alert.Description>{$workflowsError}</Alert.Description></Alert.Root>
   {/if}
 
   <Card.Root class="bg-transparent ring-0">

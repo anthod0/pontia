@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { ChevronRight, Wrench } from '@lucide/svelte'
+  import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
+  import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import { cn } from '$lib/utils.js'
 
@@ -29,8 +30,8 @@
     aria-label={open ? `Hide ${title} parameters` : `Show ${title} parameters`}
   >
     <span class="relative z-10 flex size-6 shrink-0 items-center justify-center bg-background text-muted-foreground">
-      <Wrench class="size-4 group-hover/fallback-step:hidden" aria-hidden="true" />
-      <ChevronRight class={cn('hidden size-4 transition-transform group-hover/fallback-step:block', open && 'rotate-90')} aria-hidden="true" />
+      <WrenchIcon class="size-4 group-hover/fallback-step:hidden" aria-hidden="true" />
+      <CaretRightIcon class={cn('hidden size-4 transition-transform group-hover/fallback-step:block', open && 'rotate-90')} aria-hidden="true" />
     </span>
     <span class="min-w-0 flex-1 pt-0.5 text-sm font-medium leading-5 text-foreground/75">{title}</span>
   </Collapsible.Trigger>

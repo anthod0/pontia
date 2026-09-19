@@ -1,5 +1,16 @@
 <script lang="ts">
-  import { Archive, ChevronDown, EllipsisVertical, Folder, FolderOpen, LogOut, Pencil, Pin, PinOff, Settings, SquarePen, Workflow } from '@lucide/svelte'
+  import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon'
+  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
+  import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
+  import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
+  import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon'
+  import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
+  import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
+  import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon'
+  import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon'
+  import GearIcon from 'phosphor-svelte/lib/GearIcon'
+  import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
+  import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import { navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -17,7 +28,7 @@
   type Item = {
     label: string
     path: string
-    icon: typeof SquarePen
+    icon: typeof NotePencilIcon
   }
 
   type RecentWorkspaceGroup = {
@@ -26,8 +37,8 @@
   }
 
   const primaryItems: Item[] = [
-    { label: 'New Chat', path: '/', icon: SquarePen },
-    { label: 'Workflows', path: '/workflows', icon: Workflow },
+    { label: 'New Chat', path: '/', icon: NotePencilIcon },
+    { label: 'Workflows', path: '/workflows', icon: TreeStructureIcon },
   ]
 
   const settingsSections = [
@@ -230,7 +241,7 @@
   <Sidebar.MenuItem>
     <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
       {#if session.pinned_at}
-        <Pin class="size-3.5 shrink-0 fill-current" aria-label="Pinned session" />
+        <PushPinIcon class="size-3.5 shrink-0" aria-label="Pinned session" />
       {/if}
       <span class="line-clamp-1">{sessionChatTitle(session)}</span>
     </Sidebar.MenuButton>
@@ -239,7 +250,7 @@
         class={cn('pointer-events-none absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center transition-opacity group-has-[:focus-visible]/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100')}
         aria-label={`${session.state} session`}
       >
-        <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
+        <span class={`size-2 rounded-none ${sessionStateDotClass(session.state)}`}></span>
       </span>
     {/if}
     <DropdownMenu.Root bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)}>
@@ -252,28 +263,28 @@
       >
         {#snippet child({ props })}
           <DropdownMenu.Trigger {...props}>
-            <EllipsisVertical />
+            <DotsThreeVerticalIcon />
           </DropdownMenu.Trigger>
         {/snippet}
       </Sidebar.MenuAction>
       <DropdownMenu.Content side="right" align="start" class="w-44">
         <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
-          <Pencil class="size-4" /> Rename
+          <PencilSimpleIcon class="size-4" /> Rename
         </DropdownMenu.Item>
         <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
           {#if session.pinned_at}
-            <PinOff class="size-4" /> Unpin
+            <PushPinSlashIcon class="size-4" /> Unpin
           {:else}
-            <Pin class="size-4" /> Pin
+            <PushPinIcon class="size-4" /> Pin
           {/if}
         </DropdownMenu.Item>
         <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
-          <Archive class="size-4" /> Archive
+          <ArchiveIcon class="size-4" /> Archive
         </DropdownMenu.Item>
         {#if !isTerminalSessionState(session.state)}
           <DropdownMenu.Separator />
           <DropdownMenu.Item variant="destructive" disabled={sessionManagementBusyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
-            <LogOut class="size-4" /> Exit
+            <SignOutIcon class="size-4" /> Exit
           </DropdownMenu.Item>
         {/if}
       </DropdownMenu.Content>
@@ -282,27 +293,33 @@
 {/snippet}
 
 <Sidebar.Root collapsible="icon">
-  <Sidebar.Header>
+  <Sidebar.Header class="px-2 py-0">
     <button
       type="button"
-      class="flex items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-semibold hover:bg-sidebar-accent group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0"
+      class="flex h-14 items-center gap-3 px-2 text-left text-sm font-semibold text-heading hover:bg-sidebar-accent group-data-[collapsible=icon]:px-0"
       onclick={() => go('/')}
       aria-label="Open new chat"
     >
-      <span class="flex size-8 shrink-0 items-center justify-center rounded-lg">
-        <img src="/dashboard/logo.svg" alt="" class="size-6 shrink-0 object-contain" />
+      <span class="flex size-8 shrink-0 items-center justify-center rounded-none">
+        <img src="/dashboard/logo.svg" alt="" class="size-8 shrink-0 object-contain" />
       </span>
-      <span class="truncate group-data-[collapsible=icon]:hidden">PONTIA</span>
+      <span class="truncate group-data-[collapsible=icon]:hidden">Pontia</span>
     </button>
   </Sidebar.Header>
+  <Sidebar.Separator class="mx-4 data-[orientation=horizontal]:w-auto group-data-[collapsible=icon]:mx-2" />
   <Sidebar.Content class="overflow-hidden">
     <Sidebar.Group>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
           {#each primaryItems as item}
             <Sidebar.MenuItem>
-              <Sidebar.MenuButton isActive={isActive(item.path)} tooltipContent={item.label} onclick={() => go(item.path)}>
-                <item.icon />
+              <Sidebar.MenuButton
+                isActive={isActive(item.path)}
+                class={item.path === '/' ? 'mb-2 h-10 justify-center bg-primary text-[13px] font-semibold text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground active:bg-primary-active data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary-hover' : 'h-9 px-3 text-[13px]'}
+                tooltipContent={item.label}
+                onclick={() => go(item.path)}
+              >
+                <item.icon class={item.path === '/workflows' ? 'text-aqua' : ''} />
                 <span>{item.label}</span>
                 {#if item.path === '/'}
                   {@render shortcutHint('N')}
@@ -310,6 +327,27 @@
               </Sidebar.MenuButton>
             </Sidebar.MenuItem>
           {/each}
+          <Sidebar.MenuItem>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger
+                data-active={isSettingsActive() ? true : undefined}
+                class={cn(sidebarMenuButtonVariants(), 'h-9 w-full px-3 text-[13px]')}
+                aria-label="Settings"
+              >
+                <GearIcon />
+                <span>Settings</span>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content side="bottom" align="start" class="w-48">
+                <DropdownMenu.Label>Settings</DropdownMenu.Label>
+                <DropdownMenu.Separator />
+                {#each settingsSections as section}
+                  <DropdownMenu.Item onclick={() => openSettingsSection(section.path)}>
+                    {section.label}
+                  </DropdownMenu.Item>
+                {/each}
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+          </Sidebar.MenuItem>
         </Sidebar.Menu>
       </Sidebar.GroupContent>
     </Sidebar.Group>
@@ -329,31 +367,31 @@
               <li data-slot="sidebar-workspace-group" class="group/workspace relative list-none">
                 <button
                   type="button"
-                  class="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 pr-14 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+                  class="flex h-8 w-full min-w-0 items-center gap-2 rounded-none px-2 pr-14 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
                   title={workspace.canonical_path}
                   aria-expanded={workspaceExpanded}
                   onclick={() => toggleWorkspace(workspace.workspace_id)}
                 >
-                  <Folder class="size-4 shrink-0" />
+                  <FolderIcon class="size-4 shrink-0" />
                   <span class="truncate">{workspaceTitle(workspace)}</span>
                 </button>
                 <button
                   type="button"
-                  class="absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
+                  class="absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-none text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
                   aria-label={`Open ${workspaceTitle(workspace)} workspace page`}
                   title="Open workspace"
                   onclick={(event) => openWorkspacePage(event, workspace)}
                 >
-                  <FolderOpen class="size-4" />
+                  <FolderOpenIcon class="size-4" />
                 </button>
                 <button
                   type="button"
-                  class="absolute top-1.5 right-7 flex aspect-square w-5 items-center justify-center rounded-md text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
+                  class="absolute top-1.5 right-7 flex aspect-square w-5 items-center justify-center rounded-none text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
                   aria-label={`New chat in ${workspaceTitle(workspace)}`}
                   title="New chat"
                   onclick={(event) => openNewChatForWorkspace(event, workspace)}
                 >
-                  <SquarePen class="size-4" />
+                  <NotePencilIcon class="size-4" />
                 </button>
                 {#if workspaceExpanded}
                   <Sidebar.Menu class="mt-1 pl-2">
@@ -377,12 +415,12 @@
         <Sidebar.GroupLabel class="p-0">
         <button
           type="button"
-          class="flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-xs font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+          class="flex h-8 w-full items-center justify-between rounded-none px-2 text-left text-xs font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
           aria-expanded={recentSessionsOpen}
           onclick={() => (recentSessionsOpen = !recentSessionsOpen)}
         >
           <span>Recent Sessions</span>
-          <ChevronDown class={cn('size-4 transition-transform', recentSessionsOpen ? 'rotate-0' : '-rotate-90')} />
+          <CaretDownIcon class={cn('size-4 transition-transform', recentSessionsOpen ? 'rotate-0' : '-rotate-90')} />
         </button>
       </Sidebar.GroupLabel>
       {#if recentSessionsOpen}
@@ -406,31 +444,6 @@
       </Sidebar.Group>
     </div>
   </Sidebar.Content>
-  <Sidebar.Footer>
-    <Sidebar.Menu>
-      <Sidebar.MenuItem>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger
-            data-active={isSettingsActive() ? true : undefined}
-            class={cn(sidebarMenuButtonVariants(), 'w-full')}
-            aria-label="Settings"
-          >
-            <Settings />
-            <span>Settings</span>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content side="top" align="end" class="w-48">
-            <DropdownMenu.Label>Settings</DropdownMenu.Label>
-            <DropdownMenu.Separator />
-            {#each settingsSections as section}
-              <DropdownMenu.Item onclick={() => openSettingsSection(section.path)}>
-                {section.label}
-              </DropdownMenu.Item>
-            {/each}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      </Sidebar.MenuItem>
-    </Sidebar.Menu>
-  </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>
 

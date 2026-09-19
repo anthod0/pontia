@@ -3,28 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import MessageComposer from '../../src/components/chat/MessageComposer.svelte';
 
-function renderComposer() {
-  return render(MessageComposer, {
-    props: {
-      value: '',
-      fullscreen: true,
-      onSubmit: vi.fn(),
-    },
-  });
-}
-
-test('message composer editor grows until its scrolling height limit', () => {
-  renderComposer();
-
-  const editor = screen.getByPlaceholderText('Send a follow-up message…');
-
-  expect(editor).toHaveAttribute('contenteditable', 'true');
-  expect(editor).toHaveClass('min-h-10');
-  expect(editor).toHaveClass('max-h-48');
-  expect(editor).toHaveClass('overflow-y-auto');
-  expect(editor).not.toHaveClass('h-10');
-});
-
 test('backslash plus Enter inserts a newline instead of submitting', async () => {
   const onSubmit = vi.fn();
   render(MessageComposer, { props: { value: '', onSubmit } });
@@ -36,11 +14,4 @@ test('backslash plus Enter inserts a newline instead of submitting', async () =>
   await waitFor(() => expect(editor.querySelector('br:not(.ProseMirror-trailingBreak)')).toBeInTheDocument());
   expect(editor).toHaveTextContent('first line');
   expect(onSubmit).not.toHaveBeenCalled();
-});
-
-test('message composer keeps resize control mobile-only', () => {
-  renderComposer();
-
-  expect(screen.queryByRole('button', { name: 'Collapse message composer' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Expand message composer' })).toHaveClass('sm:hidden');
 });

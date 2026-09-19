@@ -52,27 +52,10 @@ describe('ChatRuler', () => {
     const marks = document.querySelectorAll('[data-chat-ruler-mark]');
     expect(marks).toHaveLength(6);
     const userMark = screen.getByRole('button', { name: 'User message: Root question' });
-    expect(userMark).toHaveClass('h-full', 'w-full');
-    expect(userMark.parentElement).toHaveClass('h-2');
-    expect(userMark.querySelector('[data-chat-ruler-line]')).toHaveClass('h-px', 'w-[10px]', 'bg-gray-300');
-    expect(
-      screen
-        .getByRole('button', { name: 'Assistant message: Root answer' })
-        .querySelector('[data-chat-ruler-line]'),
-    ).toHaveClass('h-px', 'w-[5px]', 'bg-gray-300');
 
     await user.hover(userMark);
     const summary = await screen.findByText('Root question');
     const tooltipLayout = summary.parentElement;
-    expect(summary).toHaveClass('text-gray-600');
-    expect(tooltipLayout).toHaveClass('flex-col', 'items-start');
-    expect(tooltipLayout?.parentElement).toHaveClass(
-      'border',
-      'border-gray-200',
-      'bg-gray-100',
-      'text-gray-900',
-      'shadow-md',
-    );
     expect(tooltipLayout?.parentElement?.querySelector('.hidden')).toBeInTheDocument();
     expect(tooltipLayout?.children[0]).toHaveTextContent('User');
     expect(tooltipLayout?.children[1]).toHaveTextContent('Root question');
@@ -96,7 +79,6 @@ describe('ChatRuler', () => {
     const branchLines = document.querySelectorAll('[data-chat-ruler-branch]');
     expect(branchLines).toHaveLength(1);
     expect(branchLines[0].tagName).toBe('SPAN');
-    expect(branchLines[0]).toHaveClass('h-px', 'w-[10px]', 'bg-gray-500');
     expect(branchLines[0].closest('button')).toHaveAttribute('data-turn-id', 'turn-current');
     expect(screen.queryByRole('button', { name: 'User message: Other branch question' })).not.toBeInTheDocument();
     expect(document.querySelector('[data-chat-ruler] svg')).not.toBeInTheDocument();

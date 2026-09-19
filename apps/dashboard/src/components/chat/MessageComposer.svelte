@@ -1,6 +1,8 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import { Maximize2, Minimize2, Square } from '@lucide/svelte'
+  import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
+  import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
+  import StopIcon from 'phosphor-svelte/lib/StopIcon'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import FileMentionEditor from '$lib/components/file-picker/FileMentionEditor.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -18,6 +20,7 @@
     inputId?: string
     fullscreen?: boolean
     submitLabel?: string
+    startSession?: boolean
     interruptMode?: boolean
     interruptBusy?: boolean
     autofocus?: boolean
@@ -30,12 +33,13 @@
     value = $bindable(''),
     disabled = false,
     submitDisabled = false,
-    placeholder = 'Send a follow-up message…',
+    placeholder = 'Continue the thread…',
     busy = false,
     workspaceId = null,
     inputId,
     fullscreen = false,
-    submitLabel,
+    submitLabel = 'Send',
+    startSession = false,
     interruptMode = false,
     interruptBusy = false,
     autofocus = false,
@@ -90,10 +94,10 @@
 <PromptInput.Root class="w-full" onSubmit={submit}>
   <PromptInput.Body>
     <div class="relative">
-      <FileMentionEditor id={inputId} bind:value {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-10 pr-10' : 'min-h-10'} />
+      <FileMentionEditor id={inputId} bind:value {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-[52px] px-4 py-3 pr-10 text-base sm:text-[13.5px]' : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
       {#if fullscreen}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={() => void openFullscreen()}>
-          <Maximize2 class="size-4" />
+          <ArrowsOutIcon class="size-4" />
         </Button>
       {/if}
     </div>
@@ -101,10 +105,10 @@
   <PromptInput.Toolbar class="justify-end pt-0">
     {#if interruptMode}
       <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
-        <Square class="size-4" />
+        <StopIcon class="size-4" />
       </Button>
     {:else}
-      <PromptInput.Submit disabled={disabled || submitDisabled} {busy} aria-label={submitLabel} />
+      <PromptInput.Submit disabled={disabled || submitDisabled} {busy} label={submitLabel} {startSession} />
     {/if}
   </PromptInput.Toolbar>
 </PromptInput.Root>
@@ -116,7 +120,7 @@
         <div class="flex items-center justify-between gap-2">
           <Dialog.Title>Expanded message composer</Dialog.Title>
           <Button type="button" variant="ghost" size="icon-sm" aria-label="Close expanded message composer" onclick={() => (fullscreenOpen = false)}>
-            <Minimize2 class="size-4" />
+            <ArrowsInIcon class="size-4" />
           </Button>
         </div>
         <Dialog.Description>Write a longer follow-up message.</Dialog.Description>
@@ -129,10 +133,10 @@
         <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
           {#if interruptMode}
             <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt(true)}>
-              <Square class="size-4" />
+              <StopIcon class="size-4" />
             </Button>
           {:else}
-            <PromptInput.Submit disabled={disabled || submitDisabled} {busy} aria-label={submitLabel} />
+            <PromptInput.Submit disabled={disabled || submitDisabled} {busy} label={submitLabel} {startSession} />
           {/if}
         </PromptInput.Toolbar>
       </PromptInput.Root>

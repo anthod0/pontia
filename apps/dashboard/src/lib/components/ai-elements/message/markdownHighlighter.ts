@@ -21,8 +21,7 @@ import tsx from 'shiki/langs/tsx.mjs';
 import typescript from 'shiki/langs/typescript.mjs';
 import xml from 'shiki/langs/xml.mjs';
 import yaml from 'shiki/langs/yaml.mjs';
-import githubDarkDimmed from 'shiki/themes/github-dark-dimmed.mjs';
-import githubLight from 'shiki/themes/github-light.mjs';
+import gruvboxLight from 'shiki/themes/gruvbox-light-soft.mjs';
 
 const highlighter = createHighlighterCoreSync({
   engine: createJavaScriptRegexEngine(),
@@ -49,7 +48,7 @@ const highlighter = createHighlighterCoreSync({
     xml,
     yaml,
   ] as unknown as LanguageRegistration[],
-  themes: [githubLight, githubDarkDimmed] as unknown as ThemeRegistrationAny[],
+  themes: [gruvboxLight] as unknown as ThemeRegistrationAny[],
 });
 
 const loadedLanguages = new Set(highlighter.getLoadedLanguages());
@@ -61,11 +60,7 @@ export function highlightMarkdownCode(code: string, language: string): string {
   try {
     return highlighter.codeToHtml(code, {
       lang: normalizedLanguage,
-      themes: {
-        light: 'github-light',
-        dark: 'github-dark-dimmed',
-      },
-      defaultColor: false,
+      theme: 'gruvbox-light-soft',
     });
   } catch {
     return fallbackCode(code);

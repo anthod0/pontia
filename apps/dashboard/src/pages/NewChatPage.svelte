@@ -3,7 +3,8 @@
   import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
-  import AgentOverview from '../components/home/AgentOverview.svelte'
+  import { Button } from '$lib/components/ui/button/index.js'
+  import * as Alert from '$lib/components/ui/alert/index.js'
   import WorkspaceOnboarding from '../components/workspaces/WorkspaceOnboarding.svelte'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { isTransientNetworkError } from '../api/client'
@@ -21,9 +22,7 @@
     createSession,
     loadSessionDetail,
     loadSessions,
-    sessions,
     sessionsError,
-    sessionsLoading,
   } from '../stores/sessions'
   import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
 
@@ -33,7 +32,6 @@
   let actionError: string | null = null
   let lastToastedError: string | null = null
   let queryWorkspaceSelectionId: string | null = null
-  let overviewWorkspaceId: string | null = null
   let autofocusComposer = false
   let initialWorkspaceLoadComplete = false
   let workspaceOnboardingActive = false
@@ -114,17 +112,12 @@
   }
 
   function syncWorkspaceSelectionsFromLocation(): void {
-    overviewWorkspaceId = availableWorkspaceId(readQueryWorkspaceId())
     ensureCreateWorkspaceSelection()
   }
 
-  function selectOverviewWorkspace(workspaceId: string | null): void {
-    overviewWorkspaceId = workspaceId
-    if (workspaceId) {
-      createWorkspaceId = workspaceId
-      rememberCreateWorkspaceSelection(workspaceId)
-    }
-    void navigate('/', { workspace: workspaceId })
+  async function retryWorkspaces(): Promise<void> {
+    await loadWorkspaces()
+    workspaceOnboardingActive = !$workspaces.length && !$workspacesError
   }
 
   function completeWorkspaceOnboarding(): void {
@@ -189,14 +182,20 @@
 {:else if workspaceOnboardingActive}
   <WorkspaceOnboarding canContinue={$workspaces.length > 0} onContinue={completeWorkspaceOnboarding} />
 {:else}
-  <section class="flex min-h-[calc(100svh-5.5rem)] flex-col gap-8 md:min-h-[calc(100svh-6.5rem)]">
-    <AgentOverview
-      sessions={$sessions}
-      workspaces={$workspaces}
-      loading={$sessionsLoading}
-      selectedWorkspaceId={overviewWorkspaceId}
-      onWorkspaceChange={selectOverviewWorkspace}
-    />
+  <section class="flex min-h-[calc(100svh-3.25rem)] flex-col gap-6">
+    <div class="mx-auto flex w-full max-w-[720px] flex-1 items-center justify-center py-12 text-center">
+      <div>
+        <h1 class="mb-2 text-[28px] font-semibold tracking-tight text-heading">Start a session</h1>
+        <p class="text-sm text-foreground">Choose a workspace and agent client, then describe the job.</p>
+      </div>
+    </div>
+    {#if !$workspaces.length && $workspacesError}
+      <Alert.Root variant="destructive" class="mx-auto max-w-[720px]">
+        <Alert.Title>Could not load workspaces</Alert.Title>
+        <Alert.Description>{$workspacesError}</Alert.Description>
+        <Button variant="outline" class="mt-2" disabled={$workspacesLoading} onclick={() => void retryWorkspaces()}>Retry</Button>
+      </Alert.Root>
+    {/if}
 
     <NewChatPanel
       bind:prompt={$chatDraft}

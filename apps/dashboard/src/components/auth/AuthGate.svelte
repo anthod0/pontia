@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { KeyRound } from '@lucide/svelte'
+  import KeyIcon from 'phosphor-svelte/lib/KeyIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
@@ -34,8 +34,8 @@
 <main class="flex min-h-svh items-center justify-center bg-muted/20 p-4">
   <Card.Root class="w-full max-w-md">
     <Card.Header class="space-y-3 text-center">
-      <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <KeyRound class="size-6" />
+      <div class="mx-auto flex size-12 items-center justify-center rounded-none bg-primary/10 text-primary">
+        <KeyIcon class="size-6" />
       </div>
       <div class="space-y-1">
         <h1 class="text-2xl font-semibold">Enter External API token</h1>

@@ -1,5 +1,5 @@
 import { mocks, session, turn, workspace } from './fixtures';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import type { CreateSessionResult } from '../../../src/api/types';
@@ -22,7 +22,7 @@ test('guides first-time users to activate a workspace instead of showing an unus
   expect(await screen.findByRole('heading', { name: 'Set up your first workspace' })).toBeInTheDocument();
   expect(screen.getByText(/workspace is the project directory/i)).toBeInTheDocument();
   expect(await screen.findByRole('button', { name: 'Activate pontia' })).toBeInTheDocument();
-  expect(screen.queryByPlaceholderText('Ask the agent to implement, inspect, or explain something…')).not.toBeInTheDocument();
+  expect(screen.queryByPlaceholderText('What should the agent do?')).not.toBeInTheDocument();
 });
 
 test('keeps first-time users in workspace setup until they continue explicitly', async () => {
@@ -50,12 +50,12 @@ test('keeps first-time users in workspace setup until they continue explicitly',
 
   await waitFor(() => expect(mocks.registerWorkspace).toHaveBeenCalledWith({ root_id: 'root-1', path: 'pontia', name: 'pontia' }));
   expect(screen.getByRole('heading', { name: 'Set up your first workspace' })).toBeInTheDocument();
-  expect(screen.queryByPlaceholderText('Ask the agent to implement, inspect, or explain something…')).not.toBeInTheDocument();
+  expect(screen.queryByPlaceholderText('What should the agent do?')).not.toBeInTheDocument();
   expect(continueButton).toBeEnabled();
 
   await user.click(continueButton);
 
-  expect(await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…')).toBeInTheDocument();
+  expect(await screen.findByPlaceholderText('What should the agent do?')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Set up your first workspace' })).not.toBeInTheDocument();
 });
 
@@ -73,12 +73,12 @@ test('explains how to configure Pontia when no workspace roots exist', async () 
 test('focuses the prompt only on the first entry to the new chat page', async () => {
   const firstPage = render(NewChatPage);
 
-  const firstPrompt = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  const firstPrompt = await screen.findByPlaceholderText('What should the agent do?');
   await waitFor(() => expect(firstPrompt).toHaveFocus());
   firstPage.unmount();
 
   render(NewChatPage);
-  const revisitedPrompt = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  const revisitedPrompt = await screen.findByPlaceholderText('What should the agent do?');
   expect(revisitedPrompt).not.toHaveFocus();
 });
 
@@ -92,7 +92,7 @@ test('prefers the new chat workspace query parameter over the remembered workspa
 
   render(NewChatPage);
 
-  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  await screen.findByPlaceholderText('What should the agent do?');
   expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent('sandbox');
   expect(window.localStorage.getItem('pontia.chat.lastWorkspaceId')).toBe('workspace-1');
 });
@@ -105,7 +105,7 @@ test('updates the selected workspace when the mounted page query changes', async
 
   render(NewChatPage);
 
-  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  await screen.findByPlaceholderText('What should the agent do?');
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent('pontia');
 
@@ -127,107 +127,52 @@ test('remembers the selected new chat workspace after starting a chat', async ()
 
   render(NewChatPage);
 
-  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
+  await screen.findByPlaceholderText('What should the agent do?');
   const workspaceSelector = screen.getByLabelText(/^Workspace$/i);
   await user.click(workspaceSelector);
   await user.keyboard('{ArrowDown}{Enter}{Escape}');
   expect(workspaceSelector).toHaveTextContent('sandbox');
   document.body.style.pointerEvents = '';
-  await user.type(screen.getByPlaceholderText('Ask the agent to implement, inspect, or explain something…'), 'Use sandbox');
-  await user.click(screen.getByRole('button', { name: /start chat/i }));
+  await user.type(screen.getByPlaceholderText('What should the agent do?'), 'Use sandbox');
+  await user.click(screen.getByRole('button', { name: /start session/i }));
 
   await vi.waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({ workspace_id: 'workspace-2' })));
   expect(window.localStorage.getItem('pontia.chat.lastWorkspaceId')).toBe('workspace-2');
 });
 
 
-test('shows active agents and opens their chats from the overview', async () => {
-  mocks.sessions.set([
-    session({ session_id: 'session-working', title: 'Implement overview', state: 'busy', updated_at: '2026-05-14T00:01:00Z' }),
-    session({ session_id: 'session-idle', title: 'Review changes', state: 'idle' }),
-    session({ session_id: 'session-exited', title: 'Old session', state: 'exited' }),
-  ]);
-
+test('offers the implemented client and leaves submission disabled until a task is entered', async () => {
   render(NewChatPage);
 
-  expect(await screen.findByText('Implement overview')).toBeInTheDocument();
-  expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument();
-  expect(screen.getByText('Review changes')).toBeInTheDocument();
-  expect(screen.queryByText('Old session')).not.toBeInTheDocument();
-
-  await fireEvent.click(screen.getByRole('button', { name: 'Open Implement overview, Working' }));
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-working');
+  expect(await screen.findByRole('heading', { name: 'Start a session' })).toBeInTheDocument();
+  const clients = screen.getByRole('group', { name: 'Agent client' });
+  expect(within(clients).getAllByRole('button')).toHaveLength(1);
+  expect(within(clients).getByRole('button', { name: 'pi' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Start session' })).toBeDisabled();
+  await userEvent.type(screen.getByRole('textbox'), 'Inspect this workspace');
+  expect(screen.getByRole('button', { name: 'Start session' })).toBeEnabled();
 });
 
-test('does not show an empty-state placeholder when there are no active agents', async () => {
-  mocks.sessions.set([
-    session({ session_id: 'session-exited', state: 'exited' }),
-  ]);
-
+test.each([true, false])('recovers from a workspace load error, with registered workspaces: %s', async (hasWorkspace) => {
+  mocks.workspaces.set([]);
+  mocks.workspacesError.set('Workspace request failed');
   render(NewChatPage);
 
-  await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('region', { name: 'Active agents' })).not.toBeInTheDocument();
-  expect(screen.queryByText('No active agents')).not.toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Workspace request failed');
+  expect(screen.getByRole('button', { name: 'Start session' })).toBeDisabled();
+  mocks.loadWorkspaces.mockImplementationOnce(async () => {
+    mocks.workspacesError.set(null);
+    mocks.workspaces.set(hasWorkspace ? [workspace()] : []);
+  });
+  await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  if (hasWorkspace) {
+    expect(screen.getByLabelText('Workspace')).toHaveTextContent('pontia');
+  } else {
+    expect(await screen.findByRole('heading', { name: 'Set up your first workspace' })).toBeInTheDocument();
+  }
 });
-
-test('filters the overview by workspace and syncs the new chat target', async () => {
-  const user = userEvent.setup();
-  mocks.workspaces.set([
-    workspace({ workspace_id: 'workspace-1', name: 'pontia' }),
-    workspace({ workspace_id: 'workspace-2', name: 'sandbox', canonical_path: '/repo/sandbox', display_path: '~/repo/sandbox' }),
-  ]);
-  mocks.sessions.set([
-    session({ session_id: 'session-pontia', title: 'Pontia agent', workspace_id: 'workspace-1' }),
-    session({ session_id: 'session-sandbox', title: 'Sandbox agent', workspace_id: 'workspace-2' }),
-  ]);
-
-  render(NewChatPage);
-
-  const overviewWorkspace = await screen.findByRole('button', { name: 'Overview workspace' });
-  expect(overviewWorkspace).toHaveTextContent('All workspaces');
-  await user.click(overviewWorkspace);
-  await user.keyboard('{ArrowDown}{ArrowDown}{Enter}{Escape}');
-
-  expect(mocks.navigate).toHaveBeenCalledWith('/', { workspace: 'workspace-2' });
-  expect(screen.queryByText('Pontia agent')).not.toBeInTheDocument();
-  expect(screen.getByText('Sandbox agent')).toBeInTheDocument();
-  expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent('sandbox');
-});
-
-test('renders a bottom-aligned prompt input with inline workspace and client selectors on the bare chat route', async () => {
-  render(NewChatPage);
-
-  const promptInput = await screen.findByPlaceholderText('Ask the agent to implement, inspect, or explain something…');
-  expect(promptInput).toHaveTextContent('');
-  expect(screen.queryByRole('heading', { name: /new chat/i })).not.toBeInTheDocument();
-  expect(screen.queryByText('Start a new agent session from a prompt, workspace, and client.')).not.toBeInTheDocument();
-  expect(screen.getByText('Start a new agent session from')).toBeInTheDocument();
-  expect(screen.getByText(', use')).toBeInTheDocument();
-  const panel = screen.getByTestId('new-chat-panel');
-  const pageSection = panel.closest('section');
-  expect(pageSection).toHaveClass('min-h-[calc(100svh-5.5rem)]');
-  expect(pageSection).toHaveClass('md:min-h-[calc(100svh-6.5rem)]');
-  expect(pageSection?.className).not.toContain('100vh');
-  expect(panel).toHaveClass('justify-end');
-  expect(panel).not.toHaveClass('justify-center');
-  expect(panel).toContainElement(promptInput);
-  expect(screen.queryByText(/Enter the first prompt/i)).not.toBeInTheDocument();
-  expect(screen.queryByText(/^Prompt$/i)).not.toBeInTheDocument();
-  const workspaceSelector = screen.getByLabelText(/^Workspace$/i);
-  const clientSelector = screen.getByLabelText(/client/i);
-  expect(workspaceSelector).toHaveTextContent('pontia');
-  expect(clientSelector).toHaveTextContent('pi');
-  expect(workspaceSelector).toHaveClass('rounded-md');
-  expect(workspaceSelector).not.toHaveClass('rounded-full');
-  expect(clientSelector).toHaveClass('rounded-md');
-  expect(clientSelector).not.toHaveClass('rounded-full');
-  expect(screen.queryByLabelText(/profile/i)).not.toBeInTheDocument();
-  expect(mocks.loadSessionDetail).not.toHaveBeenCalled();
-});
-
-
 
 test('creates a session with initial prompt, workspace, and client then opens its chat', async () => {
   const user = userEvent.setup();
@@ -235,8 +180,8 @@ test('creates a session with initial prompt, workspace, and client then opens it
   mocks.createSession.mockResolvedValue({ session: created, initial_turn: turn({ session_id: 'session-new' }) } satisfies CreateSessionResult);
   render(NewChatPage);
 
-  await user.type(screen.getByPlaceholderText('Ask the agent to implement, inspect, or explain something…'), 'Implement the dashboard chat flow');
-  await fireEvent.click(screen.getByRole('button', { name: /start chat/i }));
+  await user.type(screen.getByPlaceholderText('What should the agent do?'), 'Implement the dashboard chat flow');
+  await fireEvent.click(screen.getByRole('button', { name: /start session/i }));
 
   await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith({
     client_type: 'pi',
@@ -247,4 +192,3 @@ test('creates a session with initial prompt, workspace, and client then opens it
   }));
   expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new');
 });
-

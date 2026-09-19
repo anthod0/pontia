@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { ChevronRight, FilePenLine, FilePlus2, FileSearch } from '@lucide/svelte'
+  import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
+  import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
+  import FilePlusIcon from 'phosphor-svelte/lib/FilePlusIcon'
+  import FileMagnifyingGlassIcon from 'phosphor-svelte/lib/FileMagnifyingGlassIcon'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import { cn } from '$lib/utils.js'
 
@@ -12,7 +15,7 @@
   let { operation, files, connected = false }: Props = $props()
   let open = $state(false)
 
-  const Icon = $derived(operation === 'read' ? FileSearch : operation === 'write' ? FilePlus2 : FilePenLine)
+  const Icon = $derived(operation === 'read' ? FileMagnifyingGlassIcon : operation === 'write' ? FilePlusIcon : FileTextIcon)
   const label = $derived(`${operation === 'read' ? 'Read' : operation === 'write' ? 'Write' : 'Edit'} ${files.length} ${files.length === 1 ? 'file' : 'files'}`)
 </script>
 
@@ -23,7 +26,7 @@
   >
     <span class="relative z-10 flex size-6 shrink-0 items-center justify-center bg-background text-muted-foreground">
       <Icon class="size-4 group-hover/file-step:hidden" aria-hidden="true" />
-      <ChevronRight class={cn('hidden size-4 transition-transform group-hover/file-step:block', open && 'rotate-90')} aria-hidden="true" />
+      <CaretRightIcon class={cn('hidden size-4 transition-transform group-hover/file-step:block', open && 'rotate-90')} aria-hidden="true" />
     </span>
     <span class="min-w-0 flex-1 pt-0.5 text-sm font-medium leading-5 text-foreground/75">{label}</span>
   </Collapsible.Trigger>
