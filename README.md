@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="./assets/logo.svg" width="120" alt="Pontia Logo" />
-</p>
-
 <p align="center">Keep your coding agents working beyond a single terminal window.</p>
 
 > Pontia is experimental and under active development. Some workflows are incomplete, and breaking changes should be expected.
