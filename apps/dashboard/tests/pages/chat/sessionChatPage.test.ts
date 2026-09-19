@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import type { CreateSessionResult, SessionView, TurnView } from '../../../src/api/types';
 import { optimisticInitialMessages, rememberOptimisticMessage } from '../../../src/stores/optimisticChat';
+import { optimisticInboxSubmissions } from '../../../src/stores/optimisticInbox';
 
 const NewChatPage = (await import('../../../src/pages/NewChatPage.svelte')).default;
 const SessionChatPage = (await import('../../../src/pages/SessionChatPage.svelte')).default;
@@ -1719,7 +1720,7 @@ test('hides the floating scroll-down button at the bottom', async () => {
 });
 
 
-test('scrolls to the document bottom after sending from the prompt input', async () => {
+test('scrolls once when the submitted user message mounts, not again on acceptance or transcript updates', async () => {
   const user = userEvent.setup();
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   const selected = session({ session_id: 'session-2', state: 'idle' });
@@ -1729,40 +1730,166 @@ test('scrolls to the document bottom after sending from the prompt input', async
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  let accept!: (message: ReturnType<typeof inboxMessage>) => void;
+  mocks.submitInboxMessage.mockImplementationOnce(() => new Promise((resolve) => { accept = resolve; }));
 
   render(SessionChatPage);
-
-  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
+  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="false"]')).toBeInTheDocument());
+  const followUpInput = screen.getByPlaceholderText('Continue the thread…');
   await user.type(followUpInput, 'continue this session');
+  scrollTo.mockClear();
+  scrollTo.mockImplementation(() => {
+    expect(screen.getByText('continue this session').closest('[data-chat-role="user"]')).toBeInTheDocument();
+  });
   await user.click(screen.getByRole('button', { name: /send/i }));
 
-  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+  expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
+  accept(inboxMessage({ session_id: 'session-2', turn_id: 'turn-2', input: { summary: 'continue this session' } }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^send$/i })).not.toHaveAttribute('aria-busy', 'true'));
+  expect(scrollTo).toHaveBeenCalledTimes(1);
+
+  const submittedTurn = turn({ session_id: 'session-2', turn_id: 'turn-2', input: { summary: 'continue this session' } });
+  mocks.timelineState.set(timelineStateValue({
+    sessionId: 'session-2', items: timelineItemsFromTurns([submittedTurn]), latestTurnId: 'turn-2', status: 'ready',
+  }));
+  await waitFor(() => expect(document.querySelector('[data-chat-message-id="turn-2:user"]')).toBeInTheDocument());
+  mocks.timelineState.set(timelineStateValue({
+    sessionId: 'session-2', items: timelineItemsFromTurns([{ ...submittedTurn, output: { summary: 'Updated reply.' } }]), latestTurnId: 'turn-2', status: 'ready',
+  }));
+  await screen.findByText('Updated reply.');
+  await new Promise(requestAnimationFrame);
+  expect(scrollTo).toHaveBeenCalledTimes(1);
   scrollTo.mockRestore();
 });
 
 
-test('scrolls when a prompt input send is rendered in an existing projected timeline', async () => {
+test('scrolls once for each queued submission, not on unrelated assistant updates', async () => {
   const user = userEvent.setup();
   const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'idle' });
+  const selected = session({ session_id: 'session-2', state: 'busy' });
+  const existingTurn = turn({ session_id: 'session-2', input: { summary: 'continue this session' } });
   Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({ session: selected, turns: [existingTurn], inboxMessages: [], events: [] });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
   render(SessionChatPage);
-
-  await screen.findByText('hi there');
-  scrollTo.mockClear();
+  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="false"]')).toBeInTheDocument());
   const followUpInput = screen.getByPlaceholderText('Continue the thread…');
   await user.type(followUpInput, 'continue this session');
+  scrollTo.mockClear();
   await user.click(screen.getByRole('button', { name: /send/i }));
-  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
+  expect(screen.getAllByText('continue this session')).toHaveLength(1);
+  await user.type(followUpInput, 'another queued question');
+  await user.click(screen.getByRole('button', { name: /send/i }));
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(2));
+  mocks.timelineState.set(timelineStateValue({
+    sessionId: 'session-2',
+    items: timelineItemsFromTurns([{ ...existingTurn, output: { summary: 'Still working.' } }])
+      .map((item) => item.kind === 'user' ? { ...item, item_id: 'native-user-id' } : item),
+    latestTurnId: existingTurn.turn_id, status: 'ready',
+  }));
+  await screen.findByText('Still working.');
+  await new Promise(requestAnimationFrame);
+  expect(scrollTo).not.toHaveBeenCalled();
 
+  mocks.timelineState.set(timelineStateValue({
+    sessionId: 'session-2',
+    items: timelineItemsFromTurns([existingTurn, turn({ turn_id: 'turn-2', input: { summary: 'continue this session' }, created_at: '2026-05-14T00:01:00Z' })]),
+    latestTurnId: 'turn-2', status: 'ready',
+  }));
+  await waitFor(() => expect(screen.getAllByText('continue this session')).toHaveLength(2));
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+  expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
+  mocks.timelineState.set(timelineStateValue({
+    sessionId: 'session-2',
+    items: timelineItemsFromTurns([
+      existingTurn,
+      turn({ turn_id: 'turn-2', input: { summary: 'continue this session' }, created_at: '2026-05-14T00:01:00Z' }),
+      turn({ turn_id: 'turn-3', input: { summary: 'another queued question' }, created_at: '2026-05-14T00:02:00Z' }),
+    ]),
+    latestTurnId: 'turn-3', status: 'ready',
+  }));
+  await screen.findByText('another queued question');
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(2));
+  scrollTo.mockRestore();
+});
+
+test('waits for the native user message if the optimistic message disappears before the scroll frame', async () => {
+  const user = userEvent.setup();
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  render(SessionChatPage);
+  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="false"]')).toBeInTheDocument());
+  await user.type(screen.getByPlaceholderText('Continue the thread…'), 'A new prompt');
+  scrollTo.mockClear();
+
+  const frames: FrameRequestCallback[] = [];
+  const animationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    frames.push(callback);
+    return frames.length;
+  });
+  try {
+    await user.click(screen.getByRole('button', { name: /^send$/i }));
+    await screen.findByText('A new prompt');
+    await waitFor(() => expect(frames.length).toBeGreaterThan(0));
+    optimisticInboxSubmissions.set({});
+    await waitFor(() => expect(screen.queryByText('A new prompt')).not.toBeInTheDocument());
+    animationFrame.mockRestore();
+    for (const frame of frames) frame(performance.now());
+    await new Promise(requestAnimationFrame);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    mocks.timelineState.set(timelineStateValue({
+      sessionId: 'session-2',
+      items: timelineItemsFromTurns([turn({ turn_id: 'turn-new', input: { summary: 'A new prompt' } })]),
+      latestTurnId: 'turn-new', status: 'ready',
+    }));
+    await screen.findByText('A new prompt');
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+  } finally {
+    animationFrame.mockRestore();
+    scrollTo.mockRestore();
+  }
+});
+
+
+test('does not consume a submit scroll until the unavailable conversation mounts again', async () => {
+  const user = userEvent.setup();
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const selected = session({ session_id: 'session-2', state: 'idle' });
+  window.history.pushState({}, '', '/dashboard/chat/session-2');
+  mocks.pathParams = { sessionId: 'session-2' };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  render(SessionChatPage);
+  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="false"]')).toBeInTheDocument());
+  mocks.timelineState.set(timelineStateValue({ sessionId: 'session-2', error: 'Timeline unavailable' }));
+  await screen.findByText('Conversation history unavailable');
+  await user.type(screen.getByPlaceholderText('Continue the thread…'), 'Prompt during an outage');
+  scrollTo.mockClear();
+  await user.click(screen.getByRole('button', { name: /^send$/i }));
+  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
+  await new Promise(requestAnimationFrame);
+  expect(screen.queryByText('Prompt during an outage')).not.toBeInTheDocument();
+  expect(scrollTo).not.toHaveBeenCalled();
+
+  mocks.timelineState.set(timelineStateValue({ sessionId: 'session-2', status: 'empty' }));
+  await screen.findByText('Prompt during an outage');
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
   scrollTo.mockRestore();
 });
 
@@ -1981,11 +2108,9 @@ test('renders ordered live output over the active Turn transcript while preservi
   await waitFor(() => expect(screen.getByText('Hello')).toBeInTheDocument());
   expect(screen.getByText('hello')).toBeInTheDocument();
   expect(screen.getByText('Done')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /hide agent work steps/i })).toHaveTextContent('Working');
-  expect(screen.getAllByRole('button', { name: /hide agent work steps/i })).toHaveLength(1);
+  expect(screen.getByRole('button', { name: /show agent work steps/i })).toHaveAttribute('aria-expanded', 'false');
   expect(screen.getByText('Read 1 file')).toBeInTheDocument();
   expect(screen.getByText('Run command')).toBeInTheDocument();
-  expect(screen.queryByText(/Worked for/)).not.toBeInTheDocument();
   expect(screen.queryByText('transcript partial')).not.toBeInTheDocument();
 });
 

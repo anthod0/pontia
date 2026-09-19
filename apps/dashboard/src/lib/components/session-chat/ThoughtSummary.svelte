@@ -31,10 +31,6 @@
 
   const visibleSteps = $derived(groupFileSteps(steps.filter((step) => step.kind !== 'tool_result')))
 
-  $effect(() => {
-    open = active
-  })
-
   function groupFileSteps(source: SessionChatThoughtStep[]): DisplayStep[] {
     const grouped: DisplayStep[] = []
     for (let index = 0; index < source.length;) {

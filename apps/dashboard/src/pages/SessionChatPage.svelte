@@ -88,7 +88,13 @@
   let scrollDownButtonRendered = false
   let scrollDownButtonHideTimer: ReturnType<typeof setTimeout> | null = null
   let bottomIntersectionObserver: IntersectionObserver | null = null
-  let promptInputScrollBaselineKey: string | null = null
+  interface PromptScrollRequest {
+    sessionId: string
+    input: string
+    turnIds: Set<string>
+  }
+  let pendingPromptScrolls: PromptScrollRequest[] = []
+  let promptScrollScheduled = false
   let historyObserverEnabled = false
   let initialChatScrollPending = false
   let destroyed = false
@@ -150,10 +156,8 @@
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
   $: canSend = canSendSessionMessage(selectedSession, $chatDraft) && !submitting
-  $: currentMessagesRenderKey = chatMessagesRenderKey(messages)
-  $: if (promptInputScrollBaselineKey !== null && currentMessagesRenderKey !== promptInputScrollBaselineKey) {
-    promptInputScrollBaselineKey = null
-    void tick().then(scrollChatToBottom)
+  $: if (!timelineUnavailable && matchingPromptScrolls(messages, pendingPromptScrolls, selectedSessionId).length) {
+    void scrollSubmittedPromptAfterLayout(selectedSessionId)
   }
 
   function requestedSessionIdFromLocation(): string {
@@ -306,10 +310,6 @@
     }
   }
 
-  function chatMessagesRenderKey(chatMessages: typeof messages): string {
-    return chatMessages.map((message) => [message.id, message.status, message.content].join('\u001f')).join('\u001e')
-  }
-
   function projectedTurnForBranchMessage(message: SessionChatMessage) {
     if (!branchActionMessageIds.includes(message.id)) return null
     return $sessionDetail?.turns.find((turn) => turn.turn_id === message.turnId) ?? null
@@ -398,6 +398,42 @@
   function scrollChatToBottom(): void {
     scrollDocumentToBottom()
     setScrollDownButtonVisible(false)
+  }
+
+  function matchingPromptScrolls(
+    chatMessages: SessionChatMessage[],
+    requests: PromptScrollRequest[],
+    sessionId: string,
+  ): PromptScrollRequest[] {
+    const matchedTurnIds = new Set<string>()
+    return requests.filter((request) => {
+      if (request.sessionId !== sessionId) return false
+      const message = chatMessages.find((item) => item.role === 'user'
+        && !request.turnIds.has(item.turnId)
+        && !matchedTurnIds.has(item.turnId)
+        && item.content === request.input)
+      if (!message) return false
+      matchedTurnIds.add(message.turnId)
+      return true
+    })
+  }
+
+  async function scrollSubmittedPromptAfterLayout(sessionId: string): Promise<void> {
+    if (promptScrollScheduled) return
+    promptScrollScheduled = true
+    await tick()
+    await nextAnimationFrame()
+    promptScrollScheduled = false
+    if (destroyed || selectedSessionId !== sessionId) return
+    const mountedMessageIds = new Set([...document.querySelectorAll<HTMLElement>('[data-chat-message-id][data-chat-role="user"]')]
+      .map((element) => element.dataset.chatMessageId))
+    const rendered = matchingPromptScrolls(messages.filter((message) => mountedMessageIds.has(message.id)), pendingPromptScrolls, sessionId)
+    if (!rendered.length) return
+    scrollChatToBottom()
+    pendingPromptScrolls = pendingPromptScrolls.filter((request) => !rendered.includes(request))
+    for (const request of pendingPromptScrolls) {
+      for (const message of messages) request.turnIds.add(message.turnId)
+    }
   }
 
   async function scrollChatToBottomAfterLayout(): Promise<void> {
@@ -503,6 +539,7 @@
     closeLiveOutputStream = null
     liveOutputOverlays = {}
     selectedSessionId = nextSessionId
+    pendingPromptScrolls = []
     actionError = null
     branchActionError = null
     if (selectedSessionId) {
@@ -673,7 +710,12 @@
     submitting = true
     actionError = null
     const message = $chatDraft.trim()
-    promptInputScrollBaselineKey = chatMessagesRenderKey(messages)
+    const scrollRequest = {
+      sessionId: selectedSessionId,
+      input: message,
+      turnIds: new Set([...messages.map((item) => item.turnId), ...selectedTurns.map((turn) => turn.turn_id)]),
+    }
+    pendingPromptScrolls = [...pendingPromptScrolls, scrollRequest]
     const waitForResume = selectedSession?.state === 'exited'
     if (!waitForResume) clearChatDraft()
     try {
@@ -687,10 +729,8 @@
         delivery_policy: 'after_idle',
         metadata: { source: 'dashboard_chat' },
       })
-      await tick()
-      scrollChatToBottom()
     } catch (error) {
-      promptInputScrollBaselineKey = null
+      pendingPromptScrolls = pendingPromptScrolls.filter((request) => request !== scrollRequest)
       if (!get(chatDraft).trim()) chatDraft.set(message)
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -701,7 +741,7 @@
 
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
-<section class="flex flex-col gap-4" style={`padding-bottom: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
+<section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
   {#if selectedSession}
     <h1 class="truncate pt-1 text-base font-normal text-heading" title={sessionChatTitle(selectedSession)}>{sessionChatTitle(selectedSession)}</h1>
   {/if}
@@ -713,7 +753,7 @@
     </Alert.Root>
   {/if}
   <div class="mx-auto min-w-0 w-full max-w-[760px] flex-1">
-    <div class="flex min-w-0 flex-col rounded-none bg-transparent">
+    <div class="relative flex min-w-0 flex-col rounded-none bg-transparent">
       {#if $sessionDetailLoading && !selectedSession}
         <div class="space-y-4 p-6"><Skeleton class="h-10 w-1/3" /><Skeleton class="h-80 w-full" /></div>
       {:else if !selectedSession}
@@ -783,7 +823,7 @@
             <Alert.Description>{branchActionError}</Alert.Description>
           </Alert.Root>
         {/if}
-        <div aria-hidden="true" class="h-px w-px" data-chat-bottom-sentinel use:observeBottomSentinel></div>
+        <div aria-hidden="true" class="absolute bottom-0 h-px w-px" data-chat-bottom-sentinel use:observeBottomSentinel></div>
 
         {#if scrollDownButtonRendered}
           <div

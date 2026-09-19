@@ -68,6 +68,8 @@ test('groups adjacent file operations by type and reveals their file lists', asy
     },
   });
 
+  await user.click(screen.getByRole('button', { name: 'Show agent work steps' }));
+
   expect(screen.getByText('Read 2 files')).toBeInTheDocument();
   expect(screen.getByText('Write 2 files')).toBeInTheDocument();
   expect(screen.getByText('Edit 2 files')).toBeInTheDocument();
@@ -97,6 +99,8 @@ test('run command reveals its command from a nested disclosure', async () => {
     },
   });
 
+  await user.click(screen.getByRole('button', { name: 'Show agent work steps' }));
+
   const trigger = screen.getByRole('button', { name: 'Show Run command details' });
   expect(document.querySelector('.command-code')).not.toBeVisible();
 
@@ -107,19 +111,45 @@ test('run command reveals its command from a nested disclosure', async () => {
   expect(document.querySelector('.command-code')).toHaveTextContent('pnpm test');
 });
 
-test('active work is expanded inline by default', () => {
+test('active work stays collapsed until manually expanded', async () => {
+  const user = userEvent.setup();
   render(ThoughtSummary, {
     props: {
-      steps: [
-        step({ id: 'thought-1', content: 'Planning changes.' }),
-        step({ id: 'thought-2', kind: 'tool_call', title: 'Read file', content: 'ThoughtSummary.svelte', managedToolUse: { tool_name: 'read', input: { type: 'read', path: 'ThoughtSummary.svelte' } } }),
-      ],
+      steps: [step({ content: 'Planning changes.' })],
       active: true,
     },
   });
 
-  expect(screen.getByRole('button', { name: 'Hide agent work steps' })).toHaveTextContent('Working');
-  expect(screen.getByText('Planning changes.')).toBeInTheDocument();
-  expect(screen.getByText('Read 1 file')).toBeInTheDocument();
-  expect(screen.getByText('ThoughtSummary.svelte')).not.toBeVisible();
+  const trigger = screen.getByRole('button', { name: 'Show agent work steps' });
+  expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByText('Planning changes.')).not.toBeVisible();
+
+  await user.click(trigger);
+
+  expect(screen.getByText('Planning changes.')).toBeVisible();
+});
+
+test('streaming updates and activity changes preserve the user disclosure state', async () => {
+  const user = userEvent.setup();
+  const { rerender } = render(ThoughtSummary, {
+    props: { steps: [step()], active: false },
+  });
+
+  await rerender({ active: true });
+  expect(screen.getByRole('button', { name: 'Show agent work steps' })).toHaveAttribute('aria-expanded', 'false');
+
+  await user.click(screen.getByRole('button', { name: 'Show agent work steps' }));
+  await rerender({ steps: [step({ content: 'Updated thinking.' })] });
+  expect(screen.getByText('Updated thinking.')).toBeVisible();
+
+  await rerender({ active: false });
+  expect(screen.getByRole('button', { name: 'Hide agent work steps' })).toHaveAttribute('aria-expanded', 'true');
+
+  await rerender({ active: true });
+  expect(screen.getByRole('button', { name: 'Hide agent work steps' })).toHaveAttribute('aria-expanded', 'true');
+
+  await user.click(screen.getByRole('button', { name: 'Hide agent work steps' }));
+  await rerender({ steps: [step({ content: 'More thinking.' })] });
+  expect(screen.getByRole('button', { name: 'Show agent work steps' })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByText('More thinking.')).not.toBeVisible();
 });

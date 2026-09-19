@@ -53,6 +53,28 @@ const messages: SessionChatMessage[] = [
   },
 ];
 
+test('conversation groups each Turn’s user and assistant messages with its status', () => {
+  const firstTurn: SessionChatMessage[] = messages.map((message) => ({
+    ...message, turnId: 'turn-1', createdAt: '2026-06-11T00:00:00Z',
+  }));
+  const secondTurn: SessionChatMessage[] = [
+    { id: 'turn-2:user', turnId: 'turn-2', role: 'user', content: 'Next question.', status: 'sent', createdAt: '2026-06-11T00:01:00Z' },
+    { id: 'turn-2:assistant', turnId: 'turn-2', role: 'assistant', content: 'Streaming reply.', status: 'pending', createdAt: '2026-06-11T00:01:00Z' },
+  ];
+  render(SessionConversation, {
+    props: { messages: [...firstTurn, ...secondTurn], sessionState: 'busy', activeTurnId: 'turn-2' },
+  });
+  const turns = document.querySelectorAll('[data-chat-turn]');
+  expect(turns).toHaveLength(2);
+  expect(turns[0]).toHaveAttribute('data-chat-turn-id', 'turn-1');
+  expect(turns[0]).toContainElement(screen.getByText('Please inspect the repo.'));
+  expect(turns[0]).toContainElement(screen.getByText('I will inspect it now.'));
+  expect(turns[1]).toHaveAttribute('data-chat-turn-id', 'turn-2');
+  expect(turns[1]).toContainElement(screen.getByText('Next question.'));
+  expect(turns[1]).toContainElement(screen.getByText('Streaming reply.'));
+  expect(turns[1]).toContainElement(screen.getByLabelText('Agent status: Agent working'));
+});
+
 test('conversation renders messages without role headers', () => {
   render(SessionConversation, { props: { messages } });
 
@@ -310,7 +332,7 @@ test('conversation shows agent status for a busy pending assistant message with 
   expect(screen.queryByText('Working…')).not.toBeInTheDocument();
 });
 
-test('conversation keeps the active Turn work expanded when a queued user message follows it', () => {
+test('conversation keeps the active Turn work collapsed and labeled Working when a queued user message follows it', () => {
   render(SessionConversation, {
     props: {
       sessionState: 'busy',
@@ -325,7 +347,7 @@ test('conversation keeps the active Turn work expanded when a queued user messag
           status: 'pending',
           createdAt: '2026-06-11T00:00:00Z',
           thoughtSteps: [
-            { id: 'tool-live', kind: 'tool_call', title: 'read', status: 'started', content: 'README.md', occurredAt: null },
+            { id: 'thinking-live', kind: 'thinking', title: 'Thinking', status: 'started', content: 'Inspecting the active turn.', occurredAt: null },
           ],
         },
         {
@@ -340,8 +362,10 @@ test('conversation keeps the active Turn work expanded when a queued user messag
     },
   });
 
-  expect(screen.getByRole('button', { name: 'Hide agent work steps' })).toHaveAttribute('aria-expanded', 'true');
-  expect(screen.getByText('README.md')).toBeInTheDocument();
+  const trigger = screen.getByRole('button', { name: 'Show agent work steps' });
+  expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  expect(trigger).toHaveTextContent('Working');
+  expect(screen.getByText('Inspecting the active turn.')).not.toBeVisible();
 });
 
 test('conversation shows agent working only once after an interrupted pending thought summary', () => {

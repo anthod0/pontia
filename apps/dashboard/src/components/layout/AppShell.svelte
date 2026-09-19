@@ -29,7 +29,7 @@
 
   const settingsPath = $derived(isSettingsPath(currentPath))
   const chatPath = $derived(isChatPath(currentPath))
-  const mainClass = $derived(settingsPath ? 'min-w-0 flex-1 bg-surface' : chatPath ? 'min-w-0 flex-1 bg-surface px-4 pb-5 md:px-8' : 'min-w-0 flex-1 bg-surface p-4 md:p-6')
+  const mainClass = $derived(settingsPath ? 'min-w-0 flex-1 bg-surface' : chatPath ? 'min-w-0 flex-1 bg-surface px-4 md:px-8' : 'min-w-0 flex-1 bg-surface p-4 md:p-6')
 
   let uninstallVisualViewportCssVars: (() => void) | null = null
 

@@ -48,7 +48,7 @@
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const displayMessages = $derived(messages)
   const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
-  const displayGroups = $derived(conversationDisplayGroups(displayItems))
+  const displayTurns = $derived(conversationDisplayTurns(displayItems))
   const activeLoadingMessageId = $derived(activePendingAssistantMessageId(displayMessages, activeTurnId))
   const branchActionMessageIdSet = $derived(new Set(Object.keys(branchActionInputs)))
   let topHistoryLoadInFlight = false
@@ -152,6 +152,25 @@
     if (showBottomStatus) return [...items, { kind: 'agent_bottom_status', id: `agent-bottom-status:${state}` }]
     if (!showStatus || latestAssistantId) return items
     return [...items, { kind: 'agent_status', id: `agent-status:${state}` }]
+  }
+
+  interface ConversationDisplayTurn {
+    id: string
+    turnId: string | null
+    items: ConversationDisplayItem[]
+  }
+
+  function conversationDisplayTurns(items: ConversationDisplayItem[]): ConversationDisplayTurn[] {
+    const turns: ConversationDisplayTurn[] = []
+    for (const item of items) {
+      let turn = turns.at(-1)
+      if (!turn || (item.kind === 'message' && item.message.turnId !== turn.turnId)) {
+        turn = { id: item.id, turnId: item.kind === 'message' ? item.message.turnId : null, items: [] }
+        turns.push(turn)
+      }
+      turn.items.push(item)
+    }
+    return turns
   }
 
   function conversationDisplayGroups(items: ConversationDisplayItem[]): ConversationDisplayGroup[] {
@@ -393,7 +412,7 @@
       </Empty.Header>
     </Empty.Root>
   {:else}
-    <Conversation.Content bind:ref={scrollContainer} data-chat-conversation-content class="min-w-0 gap-6 overflow-visible px-0 py-4">
+    <Conversation.Content bind:ref={scrollContainer} data-chat-conversation-content class="min-w-0 gap-6 overflow-visible px-0 pb-0 pt-4">
       {#if historyObserverEnabled && hasMoreHistory}
         <div aria-hidden="true" class="h-px w-px" data-chat-history-top-sentinel use:observeTopHistorySentinel></div>
       {/if}
@@ -404,17 +423,32 @@
           {topHistoryPullDistance >= TOP_HISTORY_PULL_THRESHOLD_PX ? 'Release to load earlier messages' : 'Keep scrolling up to load earlier messages'}
         </div>
       {/if}
-      {#each displayGroups as displayGroup (displayGroup.id)}
-        {#if displayGroup.kind === 'user_message'}
-          {@render conversationItem(displayGroup.item)}
-        {:else}
-          <div class="space-y-3" data-chat-assistant-group>
-            {#each displayGroup.items as displayItem (displayItem.id)}
-              {@render conversationItem(displayItem)}
-            {/each}
-          </div>
-        {/if}
+      {#each displayTurns as turn, index (turn.id)}
+        <div
+          data-chat-turn
+          data-chat-turn-id={turn.turnId}
+          class="flex min-w-0 flex-col gap-6"
+          class:latest-turn={index === displayTurns.length - 1}
+        >
+          {#each conversationDisplayGroups(turn.items) as displayGroup (displayGroup.id)}
+            {#if displayGroup.kind === 'user_message'}
+              {@render conversationItem(displayGroup.item)}
+            {:else}
+              <div class="space-y-3" data-chat-assistant-group>
+                {#each displayGroup.items as displayItem (displayItem.id)}
+                  {@render conversationItem(displayItem)}
+                {/each}
+              </div>
+            {/if}
+          {/each}
+        </div>
       {/each}
     </Conversation.Content>
   {/if}
 </Conversation.Root>
+
+<style>
+  .latest-turn {
+    min-height: max(0px, calc(100dvh - var(--chat-top-offset, 4rem) - var(--chat-bottom-padding, 0px)));
+  }
+</style>
