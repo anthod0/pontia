@@ -4,25 +4,11 @@
 
 ## What Pontia is
 
-Pontia is for developers who want coding agents to keep working beyond one terminal window.
-
-It aims to provide:
+Pontia aims to provide:
 
 - **Persistent agent sessions** — keep working with your agent over time without giving up its familiar terminal experience.
 - **One session, control from anywhere** — start, continue, observe, or steer the same agent session from your terminal or web dashboard, with broader desktop and mobile access as a product goal.
 - **Visible long-running tasks** — let agents break large tasks into manageable steps so you can understand progress, intervene, and retry work when needed.
-
-In short: Pontia keeps agent work alive, visible, and under your control.
-
-### Long-running work you can follow
-
-Long tasks should not be opaque prompts that run for hours with no structure.
-
-Pontia's goal is to let agents turn a large task into a clear plan: what needs to happen, which steps depend on others, and what is ready to work on next. As work progresses, agents should be able to adjust the plan rather than blindly follow it.
-
-Developers should be able to inspect each step, understand the results, and intervene, retry, or revise part of the task without starting everything over.
-
-This is a product direction, not a capability of the current release.
 
 ## Current status
 

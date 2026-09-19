@@ -37,14 +37,6 @@ If a session does not appear in the dashboard, check that:
 - pi is running inside tmux.
 - If you just installed the plugin, you have restarted pi.
 
-## Event reporting contract
-
-- Turn input and output summaries are bounded to 200 Unicode code points. The full prompt still reaches pi unchanged; full messages remain in pi's native session store. Pontia also bounds input summaries before event persistence, including non-HTTP ingestion.
-- If `turn.started` is rejected, Pontia records a runtime-fenced `session.error` with reason `turn_start_reporting_failed`. This is a Pontia-owned integration error (`runtime_manager`), not a claim that the agent's task failed or its process exited. No synthetic `turn.failed` is created. If the start actually committed but its response was lost, the terminal Session error administratively abandons its active Turn with explicit projection provenance.
-- The Workflow coordinator reads this durable error and marks the current node and Workflow `failed` (even if the node has submitted and is awaiting exit), including when the error arrived before node/session binding or before a server restart. A Session in error cannot submit a Workflow node.
-- For a transport failure or missing canonical turn ID, the plugin sends a small `POST /internal/v1/sessions/{session_id}/turn-start-failure` notification containing only `runtime_instance_id` and a reason (`event_rejected`, `transport_failed`, or `missing_turn_id`). Repeated notifications persist only one reporting error per runtime; stale runtimes are rejected. Workflow failure rechecks the runtime and current node in the same transaction as the state transition.
-- A `turn.started` request has a five-second timeout. An ambiguous request is not blindly retried because it could create another Turn. Only the failure notification is retried, at most three attempts with five-second timeouts. If Pontia remains unreachable, the hook log reports `turn_start_failure_report_failed`; persisted state is unconfirmed, not claimed to be failed.
-
 ## License
 
 [Apache License 2.0](LICENSE)

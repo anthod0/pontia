@@ -1,6 +1,6 @@
-# pontia Dashboard
+# Pontia Dashboard
 
-SvelteKit SPA + adapter-static + Tailwind CSS + shadcn-svelte dashboard.
+View and control your coding-agent sessions from the web. For installation and setup, see the [getting started guide](../../README.md#get-started).
 
 ## Development
 
@@ -17,15 +17,7 @@ If `just` is not installed yet:
 cargo install just
 ```
 
-You can also run the combined development script directly:
-
-```bash
-./scripts/dev.sh
-```
-
-This starts `cargo run -p pontiad` for the backend and the SvelteKit development server for the dashboard. Open <http://127.0.0.1:5173/dashboard/> during development for HMR updates.
-
-The development server proxies `/external/*` to `http://127.0.0.1:8080`.
+Open <http://127.0.0.1:5173/dashboard/>. Changes reload automatically; press Ctrl-C to stop the development servers.
 
 If you prefer separate terminals, run:
 
@@ -38,14 +30,7 @@ just dev-dashboard
 
 ```bash
 pnpm --dir=apps/dashboard run build
-PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist PONTIA_EXTERNAL_API_TOKEN=dev-token cargo run -p pontiad
+PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist just dev-backend
 ```
 
 Open <http://127.0.0.1:8080/dashboard>.
-
-Equivalent TOML config:
-
-```toml
-[dashboard]
-source = "apps/dashboard/dist"
-```

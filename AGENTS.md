@@ -30,13 +30,7 @@ Domain documentation uses the single-context layout. See `docs/agents/domain.md`
 - When a new basic UI primitive is needed, first check the shadcn-svelte component catalog and add the component through the shadcn-svelte CLI instead of hand-rolling it.
 - Prefer extending or composing existing `ui/` components before writing one-off markup for common primitives.
 
-## Commands
-
-- Run `just --list` to discover project commands and `just check` for the standard verification suite.
-- Use pnpm for package-specific scripts not exposed through `just`.
-- Run backend Cargo checks through `just` so SQLx uses the committed `.sqlx/` metadata in offline mode.
-- Commit `.sqlx/`. After changing SQLx query macros or SQLite migrations, run `just sqlx-prepare` and include the refreshed metadata.
-
 ## Agent documentation
 
-- Current SQLite table, column, trigger, and index definitions: [`docs/database-schema.md`](docs/database-schema.md). When adding a migration, you must update this document in the same change.
+- Do not modify any README file unless the user explicitly requests it.
+- Database definitions: [`docs/database-schema.md`](docs/database-schema.md). When adding a migration, update this document in the same change.
