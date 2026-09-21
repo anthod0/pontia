@@ -70,6 +70,32 @@ test('Escape dismisses suggestions and a complete command still runs from the su
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
+test('a slash command draft remains focusable and editable after switching away and back', async () => {
+  const items = commands();
+  const onSubmit = vi.fn();
+  const first = render(MessageComposer, { value: '', commands: items, onSubmit });
+  await userEvent.type(screen.getByRole('textbox'), '/new');
+  await screen.findByRole('listbox', { name: 'Chat commands' });
+  await first.unmount();
+
+  const other = render(MessageComposer, { value: '', commands: items, onSubmit });
+  await userEvent.click(screen.getByRole('textbox'));
+  await other.unmount();
+
+  render(MessageComposer, { value: '/new', commands: items, onSubmit });
+  const editor = screen.getByRole('textbox');
+  await fireEvent.focus(editor);
+  await screen.findByRole('listbox', { name: 'Chat commands' });
+  await userEvent.click(editor);
+
+  await waitFor(() => expect(editor).toHaveFocus());
+  await userEvent.keyboard(' details');
+  expect(editor).toHaveTextContent('/new');
+  expect(editor).toHaveTextContent('details');
+  expect(items[0].run).not.toHaveBeenCalled();
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
 test('selecting text closes command suggestions without consuming Tab or executing a command', async () => {
   const items = commands();
   const onSubmit = vi.fn();

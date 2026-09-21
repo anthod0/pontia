@@ -95,6 +95,7 @@
   <Popover.Root {open} onOpenChange={(next) => { if (!next) dismiss() }}>
     <Popover.Content
       customAnchor={anchor}
+      trapFocus={false}
       side={commandSide}
       align="start"
       class="w-[min(28rem,calc(100vw-3rem))] gap-0 p-1"
