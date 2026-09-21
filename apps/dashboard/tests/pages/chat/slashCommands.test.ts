@@ -26,7 +26,7 @@ function renderChat(value: string, overrides: Partial<SessionView> = {}) {
 
 test.each(['idle', 'error', 'exited'])('/new opens the current workspace without starting or ending a session in state %s', async (state) => {
   renderChat('/new', { state, capabilities: { accept_task: false } });
-  await fireEvent.click(await screen.findByRole('button', { name: 'Run /new' }));
+  await fireEvent.click(await screen.findByRole('button', { name: 'New chat' }));
   expect(mocks.navigate).toHaveBeenCalledWith('/', { workspace: 'workspace-1' });
   expect(get(chatDraft)).toBe('');
   expect(mocks.createSession).not.toHaveBeenCalled();
@@ -38,7 +38,7 @@ test('/exit terminates a busy session once, keeps the page, and waits for report
   let finish!: () => void;
   mocks.terminateSession.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
   const selected = renderChat('/exit', { state: 'busy', capabilities: { accept_task: false } });
-  const button = await screen.findByRole('button', { name: 'Run /exit' });
+  const button = await screen.findByRole('button', { name: 'Exit' });
   await fireEvent.click(button);
   expect(button).toBeDisabled();
   await fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
@@ -54,7 +54,7 @@ test.each(['idle', 'busy', 'exited'])('/rename <name> updates the title directly
   let finish!: () => void;
   mocks.updateSessionTitle.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
   const selected = renderChat(' /rename  项目 planning  ', { state, capabilities: { accept_task: false } });
-  const button = await screen.findByRole('button', { name: 'Run /rename' });
+  const button = await screen.findByRole('button', { name: 'Rename' });
   await fireEvent.click(button);
   expect(button).toBeDisabled();
   await fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
@@ -69,10 +69,10 @@ test.each(['idle', 'busy', 'exited'])('/rename <name> updates the title directly
 test('failed /rename preserves the full command for retry', async () => {
   mocks.updateSessionTitle.mockRejectedValueOnce(new Error('Rename failed'));
   const selected = renderChat('/rename New title');
-  await fireEvent.click(await screen.findByRole('button', { name: 'Run /rename' }));
+  await fireEvent.click(await screen.findByRole('button', { name: 'Rename' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Rename failed');
   expect(get(chatDraft)).toBe('/rename New title');
-  await fireEvent.click(screen.getByRole('button', { name: 'Run /rename' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
   await waitFor(() => expect(get(chatDraft)).toBe(''));
   expect(mocks.updateSessionTitle).toHaveBeenLastCalledWith(selected.session_id, 'New title');
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
@@ -80,7 +80,7 @@ test('failed /rename preserves the full command for retry', async () => {
 
 test.each(['/rename', '/rename   '])('/rename requires a nonempty name: %j', async (value) => {
   renderChat(value);
-  expect(await screen.findByRole('button', { name: 'Run /rename' })).toBeDisabled();
+  expect(await screen.findByRole('button', { name: 'Rename' })).toBeDisabled();
   await fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
   expect(mocks.updateSessionTitle).not.toHaveBeenCalled();
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
@@ -89,11 +89,11 @@ test.each(['/rename', '/rename   '])('/rename requires a nonempty name: %j', asy
 test('failed /exit preserves the command for retry and shows the error', async () => {
   mocks.terminateSession.mockRejectedValueOnce(new Error('Exit request failed'));
   const selected = renderChat('/exit');
-  await fireEvent.click(await screen.findByRole('button', { name: 'Run /exit' }));
+  await fireEvent.click(await screen.findByRole('button', { name: 'Exit' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Exit request failed');
   expect(get(chatDraft)).toBe('/exit');
-  expect(screen.getByRole('button', { name: 'Run /exit' })).toBeEnabled();
-  await fireEvent.click(screen.getByRole('button', { name: 'Run /exit' }));
+  expect(screen.getByRole('button', { name: 'Exit' })).toBeEnabled();
+  await fireEvent.click(screen.getByRole('button', { name: 'Exit' }));
   await waitFor(() => expect(get(chatDraft)).toBe(''));
   expect(mocks.terminateSession).toHaveBeenLastCalledWith(selected.session_id);
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
@@ -101,21 +101,21 @@ test('failed /exit preserves the command for retry and shows the error', async (
 
 test.each(['exited', 'error'])('/exit is unavailable for an already terminal %s session', async (state) => {
   renderChat('/exit', { state });
-  expect(await screen.findByRole('button', { name: 'Run /exit' })).toBeDisabled();
+  expect(await screen.findByRole('button', { name: 'Exit' })).toBeDisabled();
   await fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
   expect(mocks.terminateSession).not.toHaveBeenCalled();
   expect(mocks.resumeSession).not.toHaveBeenCalled();
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 });
 
-test.each(['/exit', '/rename New title'])('new chat disables %s and /new clears the prompt while preserving workspace selection', async (value) => {
+test.each([['/exit', 'Exit'], ['/rename New title', 'Rename']])('new chat disables %s and /new clears the prompt while preserving workspace selection', async (value, label) => {
   chatDraft.set(value);
   render(NewChatPage);
-  expect(await screen.findByRole('button', { name: `Run ${value.split(' ')[0]}` })).toBeDisabled();
+  expect(await screen.findByRole('button', { name: label })).toBeDisabled();
   await fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
   expect(mocks.createSession).not.toHaveBeenCalled();
   chatDraft.set('/new');
-  await fireEvent.click(await screen.findByRole('button', { name: 'Run /new' }));
+  await fireEvent.click(await screen.findByRole('button', { name: 'New chat' }));
   expect(get(chatDraft)).toBe('');
   expect(mocks.navigate).toHaveBeenCalledWith('/', { workspace: 'workspace-1' });
   expect(mocks.createSession).not.toHaveBeenCalled();

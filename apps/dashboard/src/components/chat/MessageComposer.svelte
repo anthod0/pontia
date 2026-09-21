@@ -3,6 +3,9 @@
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
   import StopIcon from 'phosphor-svelte/lib/StopIcon'
+  import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
+  import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
+  import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import ChatCommandInput from './ChatCommandInput.svelte'
   import { findChatCommand, type ChatCommand } from '$lib/chatCommands'
@@ -52,9 +55,15 @@
   }: Props = $props()
 
   let fullscreenOpen = $state(false)
+  const commandActions: Record<ChatCommand['name'], { label: string; icon: typeof NotePencilIcon }> = {
+    '/new': { label: 'New chat', icon: NotePencilIcon },
+    '/rename': { label: 'Rename', icon: PencilSimpleIcon },
+    '/exit': { label: 'Exit', icon: SignOutIcon },
+  }
   const mentionIdentities = new Map<string, FilePickerFileView>()
   let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)
   const command = $derived(findChatCommand(value, commands))
+  const commandAction = $derived(command ? commandActions[command.name] : undefined)
   const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
   const cannotSubmit = $derived(disabled || busy || (command ? Boolean(command.disabledReason) || (command.name === '/rename' && !commandArgument) : submitDisabled))
 
@@ -129,7 +138,7 @@
         <StopIcon class="size-4" />
       </Button>
     {:else}
-      <PromptInput.Submit disabled={cannotSubmit} {busy} label={command ? `Run ${command.name}` : submitLabel} startSession={startSession && !command} />
+      <PromptInput.Submit disabled={cannotSubmit} {busy} label={commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} />
     {/if}
   </PromptInput.Toolbar>
 </PromptInput.Root>
@@ -157,7 +166,7 @@
               <StopIcon class="size-4" />
             </Button>
           {:else}
-            <PromptInput.Submit disabled={cannotSubmit} {busy} label={command ? `Run ${command.name}` : submitLabel} startSession={startSession && !command} />
+            <PromptInput.Submit disabled={cannotSubmit} {busy} label={commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} />
           {/if}
         </PromptInput.Toolbar>
       </PromptInput.Root>

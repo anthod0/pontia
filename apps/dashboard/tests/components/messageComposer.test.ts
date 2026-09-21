@@ -65,7 +65,7 @@ test('Escape dismisses suggestions and a complete command still runs from the su
   await fireEvent.keyUp(editor, { key: 'Escape' });
   expect(await fireEvent.keyDown(editor, { key: 'Tab' })).toBe(true);
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-  await fireEvent.click(screen.getByRole('button', { name: 'Run /new' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
   expect(items[0].run).toHaveBeenCalledOnce();
   expect(onSubmit).not.toHaveBeenCalled();
 });
@@ -143,7 +143,7 @@ test.each(['Enter', 'Tab', 'click'])('selecting /rename with %s completes the co
   if (selection === 'click') await fireEvent.click(option);
   else await fireEvent.keyDown(editor, { key: selection });
   await waitFor(() => expect(editor).toHaveTextContent('/rename'));
-  expect(screen.getByRole('button', { name: 'Run /rename' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Rename' })).toBeDisabled();
   expect(run).not.toHaveBeenCalled();
   await userEvent.type(editor, 'Project planning');
   await fireEvent.keyDown(editor, { key: 'Enter' });
@@ -162,7 +162,7 @@ test('disabled commands cannot run or become ordinary messages', async () => {
   await fireEvent.keyDown(editor, { key: 'Enter' });
   await fireEvent.keyDown(editor, { key: 'Escape' });
   await fireEvent.keyDown(editor, { key: 'Enter' });
-  expect(screen.getByRole('button', { name: 'Run /exit' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Exit' })).toBeDisabled();
   expect(items[1].run).not.toHaveBeenCalled();
   expect(onSubmit).not.toHaveBeenCalled();
 });
