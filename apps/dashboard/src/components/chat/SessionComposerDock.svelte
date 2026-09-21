@@ -28,6 +28,7 @@
     onInterrupt: () => void
     onFocus: () => void
     onNewChat: () => void
+    onRename: () => void
     onExit: () => void
   }
 
@@ -51,6 +52,7 @@
     onInterrupt,
     onFocus,
     onNewChat,
+    onRename,
     onExit,
   }: Props = $props()
 
@@ -58,6 +60,7 @@
   let interruptMode = $derived(session.state === 'busy' && session.capabilities?.interrupt === true && input.trim() === '')
   const commands: ChatCommand[] = $derived([
     { name: '/new', description: 'Start a new chat in this workspace', run: onNewChat },
+    { name: '/rename', description: 'Rename the current session', run: onRename },
     {
       name: '/exit',
       description: 'End the current session',

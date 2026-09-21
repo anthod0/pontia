@@ -1,5 +1,5 @@
 export interface ChatCommand {
-  name: '/new' | '/exit';
+  name: '/new' | '/rename' | '/exit';
   description: string;
   disabledReason?: string;
   run: () => void;
