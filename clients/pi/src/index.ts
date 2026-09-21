@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
