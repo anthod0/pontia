@@ -2,6 +2,9 @@
   import type { WorkspaceView } from '../../api/types'
   import MessageComposer from './MessageComposer.svelte'
   import SessionTargetSelector from './SessionTargetSelector.svelte'
+  import { navigate } from '$lib/navigation'
+  import { clearChatDraft } from '../../stores/chatDraft'
+  import type { ChatCommand } from '$lib/chatCommands'
 
   interface Props {
     prompt: string
@@ -36,6 +39,19 @@
     placement = 'center',
     onStartChat,
   }: Props = $props()
+
+  const commands: ChatCommand[] = [
+    {
+      name: '/new',
+      description: 'Start a new chat in this workspace',
+      run: () => {
+        prompt = ''
+        clearChatDraft()
+        void navigate('/', { workspace: workspaceId })
+      },
+    },
+    { name: '/exit', description: 'End the current session', disabledReason: 'No current session', run: () => {} },
+  ]
 </script>
 
 <div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class="flex min-h-0 shrink-0 flex-col">
@@ -44,6 +60,7 @@
     <MessageComposer
       bind:value={prompt}
       {workspaceId}
+      {commands}
       inputId="chat-prompt"
       {autofocus}
       placeholder="What should the agent do?"

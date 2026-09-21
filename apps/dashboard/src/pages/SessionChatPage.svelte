@@ -50,6 +50,7 @@
     loadSessionDetail,
     loadSessions,
     interruptSession,
+    terminateSession,
     resumeSession,
     sessionDetail,
     sessionDetailLoading,
@@ -69,6 +70,7 @@
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
+  import { isTerminalSession } from './sessions/sessionList'
 
   export let routeSessionId: string | null = null
 
@@ -528,8 +530,9 @@
 
   function openNewChat(): void {
     actionError = null
+    clearChatDraft()
     resetTimelineState()
-    navigate('/')
+    navigate('/', { workspace: selectedSession?.workspace_id })
   }
 
   async function selectSessionFromLocation(): Promise<void> {
@@ -615,6 +618,21 @@
       })
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
+    }
+  }
+
+  async function exitSelectedSession(): Promise<void> {
+    if (!selectedSession || isTerminalSession(selectedSession) || actionBusy) return
+    const sessionId = selectedSessionId
+    actionBusy = true
+    actionError = null
+    try {
+      await terminateSession(sessionId)
+      if (selectedSessionId === sessionId && $chatDraft.trim() === '/exit') clearChatDraft()
+    } catch (error) {
+      if (selectedSessionId === sessionId) actionError = error instanceof Error ? error.message : String(error)
+    } finally {
+      actionBusy = false
     }
   }
 
@@ -864,6 +882,8 @@
           onRetryInboxMessage={(message) => void retryFailedInboxMessage(message)}
           onDismissInboxMessage={(message) => void dismissFailedInboxMessage(message)}
           onSend={() => void sendMessage()}
+          onNewChat={openNewChat}
+          onExit={() => void exitSelectedSession()}
           onInterrupt={() => void interruptSelectedSession()}
           onFocus={() => void refreshCurrentSessionGitStatus()}
         />

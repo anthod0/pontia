@@ -28,6 +28,8 @@
     shortcutFocusTarget?: boolean
     autofocus?: boolean
     mentionIdentities?: Map<string, FilePickerFileView>
+    suggestionListId?: string
+    activeSuggestionId?: string
   }
 
   let {
@@ -42,6 +44,8 @@
     shortcutFocusTarget = false,
     autofocus = false,
     mentionIdentities = new Map(),
+    suggestionListId,
+    activeSuggestionId,
   }: Props = $props()
 
   const suggestionPluginKey = new PluginKey('fileMentionSuggestion')
@@ -221,6 +225,15 @@
     return () => {
       editor.destroy()
       editorState.editor = null
+    }
+  })
+
+  $effect(() => {
+    const editor = editorState.editor
+    if (!editor) return
+    for (const [name, value] of [['aria-controls', suggestionListId], ['aria-activedescendant', activeSuggestionId]] as const) {
+      if (value) editor.view.dom.setAttribute(name, value)
+      else editor.view.dom.removeAttribute(name)
     }
   })
 

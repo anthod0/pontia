@@ -4,7 +4,8 @@
   import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
   import StopIcon from 'phosphor-svelte/lib/StopIcon'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
-  import FileMentionEditor from '$lib/components/file-picker/FileMentionEditor.svelte'
+  import ChatCommandInput from './ChatCommandInput.svelte'
+  import { findChatCommand, type ChatCommand } from '$lib/chatCommands'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
@@ -24,6 +25,7 @@
     interruptMode?: boolean
     interruptBusy?: boolean
     autofocus?: boolean
+    commands?: ChatCommand[]
     onSubmit: () => void
     onInterrupt?: () => void
     onFocus?: () => void
@@ -43,6 +45,7 @@
     interruptMode = false,
     interruptBusy = false,
     autofocus = false,
+    commands = [],
     onSubmit,
     onInterrupt,
     onFocus,
@@ -51,6 +54,8 @@
   let fullscreenOpen = $state(false)
   const mentionIdentities = new Map<string, FilePickerFileView>()
   let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)
+  const command = $derived(findChatCommand(value, commands))
+  const cannotSubmit = $derived(disabled || busy || (command ? Boolean(command.disabledReason) : submitDisabled))
 
   async function openFullscreen(): Promise<void> {
     fullscreenOpen = true
@@ -59,14 +64,22 @@
   }
 
   function submit(): void {
-    if (disabled || submitDisabled || busy) return
-    onSubmit()
+    if (cannotSubmit) return
+    if (command) executeCommand(command)
+    else onSubmit()
+  }
+
+  function executeCommand(command: ChatCommand): void {
+    if (disabled || busy || command.disabledReason) return
+    value = command.name
+    fullscreenOpen = false
+    command.run()
   }
 
   function submitAndCloseFullscreen(): void {
-    if (disabled || submitDisabled || busy) return
+    if (cannotSubmit) return
     fullscreenOpen = false
-    onSubmit()
+    submit()
   }
 
   function interrupt(closeFullscreen = false): void {
@@ -76,6 +89,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
+    if (event.isComposing || event.keyCode === 229) return
     const isPlainEnter = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey
     if (!isPlainEnter) return
 
@@ -94,7 +108,7 @@
 <PromptInput.Root class="w-full" onSubmit={submit}>
   <PromptInput.Body>
     <div class="relative">
-      <FileMentionEditor id={inputId} bind:value {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-[52px] px-4 py-3 pr-10 text-base sm:text-[13.5px]' : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
+      <ChatCommandInput id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-[52px] px-4 py-3 pr-10 text-base sm:text-[13.5px]' : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
       {#if fullscreen}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={() => void openFullscreen()}>
           <ArrowsOutIcon class="size-4" />
@@ -108,7 +122,7 @@
         <StopIcon class="size-4" />
       </Button>
     {:else}
-      <PromptInput.Submit disabled={disabled || submitDisabled} {busy} label={submitLabel} {startSession} />
+      <PromptInput.Submit disabled={cannotSubmit} {busy} label={command ? `Run ${command.name}` : submitLabel} startSession={startSession && !command} />
     {/if}
   </PromptInput.Toolbar>
 </PromptInput.Root>
@@ -128,7 +142,7 @@
 
       <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
         <PromptInput.Body class="min-h-0 flex-1">
-          <FileMentionEditor bind:this={fullscreenEditor} bind:value {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-0 pr-2" />
+          <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] pr-2" />
         </PromptInput.Body>
         <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
           {#if interruptMode}
@@ -136,7 +150,7 @@
               <StopIcon class="size-4" />
             </Button>
           {:else}
-            <PromptInput.Submit disabled={disabled || submitDisabled} {busy} label={submitLabel} {startSession} />
+            <PromptInput.Submit disabled={cannotSubmit} {busy} label={command ? `Run ${command.name}` : submitLabel} startSession={startSession && !command} />
           {/if}
         </PromptInput.Toolbar>
       </PromptInput.Root>

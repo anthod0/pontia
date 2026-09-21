@@ -5,6 +5,8 @@
   import QueuedMessages from './QueuedMessages.svelte'
   import SessionMetadata from './SessionMetadata.svelte'
   import { type SessionMetadataItem } from './sessionMetadata'
+  import type { ChatCommand } from '$lib/chatCommands'
+  import { isTerminalSession } from '../../pages/sessions/sessionList'
 
   interface Props {
     session: SessionView
@@ -25,6 +27,8 @@
     onSend: () => void
     onInterrupt: () => void
     onFocus: () => void
+    onNewChat: () => void
+    onExit: () => void
   }
 
   let {
@@ -46,11 +50,21 @@
     onSend,
     onInterrupt,
     onFocus,
+    onNewChat,
+    onExit,
   }: Props = $props()
 
-  let canAcceptWebInput = $derived(session.capabilities?.accept_task === true)
-  let composerDisabled = $derived(!canAcceptWebInput || session.state === 'error' || submitting)
+  let composerDisabled = $derived(submitting || actionBusy)
   let interruptMode = $derived(session.state === 'busy' && session.capabilities?.interrupt === true && input.trim() === '')
+  const commands: ChatCommand[] = $derived([
+    { name: '/new', description: 'Start a new chat in this workspace', run: onNewChat },
+    {
+      name: '/exit',
+      description: 'End the current session',
+      disabledReason: isTerminalSession(session) ? 'Session has already ended' : undefined,
+      run: onExit,
+    },
+  ])
 </script>
 
 <div bind:clientHeight={height} data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-surface px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 md:left-[var(--sidebar-width)] md:px-8 transition-[left] duration-200 ease-linear group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]">
@@ -65,7 +79,7 @@
     <div class="mb-2 flex min-w-0 items-center gap-2">
       <SessionMetadata {gitStatus} {metadataItems} {metadataSummary} />
     </div>
-    <MessageComposer bind:value={input} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus} />
+    <MessageComposer bind:value={input} {commands} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus} />
     {#if canSendSessionMessage(session, 'x') === false}
       <p class="mt-2 text-xs text-muted-foreground">This session cannot accept new messages.</p>
     {/if}
