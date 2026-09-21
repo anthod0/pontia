@@ -8,10 +8,6 @@ export type ChatCommand = ChatCommandInfo & (
   | { name: '/rename'; run: (title: string) => void }
 );
 
-export function chatCommandQuery(value: string): string | null {
-  return /^[\t ]*\/[a-z]*[\t ]*$/.test(value) ? value.trim() : null;
-}
-
 export function findChatCommand(value: string, commands: ChatCommand[]): ChatCommand | undefined {
   if (/[\r\n]/.test(value)) return undefined;
   const match = value.match(/^[\t ]*(\/[a-z]+)(?:[\t ]+([^\r\n]*))?$/);

@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import { Editor } from '@tiptap/core'
+  import { Editor, Extension, type Extensions } from '@tiptap/core'
   import Document from '@tiptap/extension-document'
   import HardBreak from '@tiptap/extension-hard-break'
   import Paragraph from '@tiptap/extension-paragraph'
   import Placeholder from '@tiptap/extension-placeholder'
   import Text from '@tiptap/extension-text'
-  import { PluginKey } from '@tiptap/pm/state'
+  import { Plugin, PluginKey } from '@tiptap/pm/state'
   import { exitSuggestion, type SuggestionProps } from '@tiptap/suggestion'
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
@@ -30,6 +30,7 @@
     mentionIdentities?: Map<string, FilePickerFileView>
     suggestionListId?: string
     activeSuggestionId?: string
+    extensions?: Extensions
   }
 
   let {
@@ -46,6 +47,7 @@
     mentionIdentities = new Map(),
     suggestionListId,
     activeSuggestionId,
+    extensions = [],
   }: Props = $props()
 
   const suggestionPluginKey = new PluginKey('fileMentionSuggestion')
@@ -127,6 +129,7 @@
   }
 
   function handleEditorKeyDown(_view: unknown, event: KeyboardEvent): boolean {
+    if (event.isComposing || event.keyCode === 229) return false
     if (event.key === 'Backspace' && deleteAdjacentMention()) {
       event.preventDefault()
       return true
@@ -154,12 +157,7 @@
       }
     }
 
-    const previousValue = value
-    onkeydown?.(event)
-    if (event.defaultPrevented && value !== previousValue) {
-      queueMicrotask(() => editorState.editor?.commands.focus('end'))
-    }
-    return event.defaultPrevented
+    return false
   }
 
   onMount(() => {
@@ -173,6 +171,24 @@
         Text,
         HardBreak,
         Placeholder.configure({ placeholder }),
+        ...extensions,
+        Extension.create({
+          name: 'promptKeyboard',
+          // Suggestions run before submission; submission runs before Tiptap's Enter keymap.
+          priority: 150,
+          addProseMirrorPlugins: () => [new Plugin({
+            props: {
+              handleKeyDown: (_view, event) => {
+                const previousValue = value
+                onkeydown?.(event)
+                if (event.defaultPrevented && value !== previousValue) {
+                  queueMicrotask(() => editorState.editor?.commands.focus('end'))
+                }
+                return event.defaultPrevented
+              },
+            },
+          })],
+        }),
         createFileMentionExtension({
           pluginKey: suggestionPluginKey,
           identities: mentionIdentities,

@@ -5,6 +5,7 @@ import MessageComposer from '../../src/components/chat/MessageComposer.svelte';
 import type { ChatCommand } from '../../src/lib/chatCommands';
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   // jsdom has no layout; give the anchored popup a visible viewport and editor.
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 600, 80));
   vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([new DOMRect(0, 100, 600, 80)] as unknown as DOMRectList);
@@ -55,15 +56,53 @@ test('selects slash commands with arrow keys, completes with Tab, and executes w
 test('Escape dismisses suggestions and a complete command still runs from the submit button', async () => {
   const items = commands();
   const onSubmit = vi.fn();
-  render(MessageComposer, { value: '/new', commands: items, submitDisabled: true, onSubmit });
+  render(MessageComposer, { value: '', commands: items, submitDisabled: true, onSubmit });
   const editor = screen.getByRole('textbox');
-  await fireEvent.focus(editor);
+  await userEvent.type(editor, '/new');
   await screen.findByRole('listbox');
   await fireEvent.keyDown(editor, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+  await fireEvent.keyUp(editor, { key: 'Escape' });
+  expect(await fireEvent.keyDown(editor, { key: 'Tab' })).toBe(true);
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   await fireEvent.click(screen.getByRole('button', { name: 'Run /new' }));
   expect(items[0].run).toHaveBeenCalledOnce();
   expect(onSubmit).not.toHaveBeenCalled();
+});
+
+test('selecting text closes command suggestions without consuming Tab or executing a command', async () => {
+  const items = commands();
+  const onSubmit = vi.fn();
+  render(MessageComposer, { value: '', commands: items, onSubmit });
+  const editor = screen.getByRole('textbox');
+  await userEvent.type(editor, '/ne');
+  await screen.findByRole('listbox', { name: 'Chat commands' });
+
+  await fireEvent.keyDown(editor, { key: 'a', ctrlKey: true });
+
+  await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+  expect(await fireEvent.keyDown(editor, { key: 'Tab' })).toBe(true);
+  expect(editor).toHaveTextContent('/ne');
+  for (const item of items) expect(item.run).not.toHaveBeenCalled();
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+test('moving the cursor out of the command end closes suggestions and returning restores them', async () => {
+  render(MessageComposer, { value: '', commands: commands(), onSubmit: vi.fn() });
+  const editor = screen.getByRole('textbox');
+  await userEvent.type(editor, '/ne');
+  await screen.findByRole('listbox', { name: 'Chat commands' });
+
+  const text = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT).nextNode()!;
+  document.getSelection()!.collapse(text, 1);
+  await fireEvent(document, new Event('selectionchange'));
+
+  await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+  expect(await fireEvent.keyDown(editor, { key: 'Tab' })).toBe(true);
+  const end = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT).nextNode()!;
+  document.getSelection()!.collapse(end, end.textContent!.length);
+  await fireEvent(document, new Event('selectionchange'));
+  expect(await screen.findByRole('option', { name: /\/new/ })).toBeInTheDocument();
 });
 
 test.each(['Enter', 'Tab', 'click'])('selecting /rename with %s completes the command before accepting a name', async (selection) => {
@@ -136,5 +175,15 @@ test('executes a selected command in the fullscreen composer and closes the dial
   await fireEvent.click(option);
   expect(items[1].run).toHaveBeenCalledOnce();
   expect(onSubmit).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
+test('an unknown slash command does not consume Escape in the fullscreen composer', async () => {
+  render(MessageComposer, { value: '/unknown', commands: commands(), fullscreen: true, onSubmit: vi.fn() });
+  await fireEvent.click(screen.getByRole('button', { name: 'Expand message composer' }));
+  const dialog = await screen.findByRole('dialog');
+
+  await fireEvent.keyDown(dialog.querySelector('[role="textbox"]')!, { key: 'Escape' });
+
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 });
