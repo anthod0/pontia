@@ -66,6 +66,26 @@ test('Escape dismisses suggestions and a complete command still runs from the su
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
+test.each(['Enter', 'Tab', 'click'])('selecting /rename with %s completes the command before accepting a name', async (selection) => {
+  const run = vi.fn();
+  const onSubmit = vi.fn();
+  render(MessageComposer, {
+    value: '', commands: [{ name: '/rename', description: 'Rename the session', run }], onSubmit,
+  });
+  const editor = screen.getByRole('textbox');
+  await userEvent.type(editor, '/ren');
+  const option = await screen.findByRole('option', { name: /\/rename <name>/ });
+  if (selection === 'click') await fireEvent.click(option);
+  else await fireEvent.keyDown(editor, { key: selection });
+  await waitFor(() => expect(editor).toHaveTextContent('/rename'));
+  expect(screen.getByRole('button', { name: 'Run /rename' })).toBeDisabled();
+  expect(run).not.toHaveBeenCalled();
+  await userEvent.type(editor, 'Project planning');
+  await fireEvent.keyDown(editor, { key: 'Enter' });
+  expect(run).toHaveBeenCalledExactlyOnceWith('Project planning');
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
 test('disabled commands cannot run or become ordinary messages', async () => {
   const items = commands();
   items[1].disabledReason = 'No current session';

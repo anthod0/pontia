@@ -69,7 +69,6 @@
   import { subscribeDashboardEvents } from '../services/eventStream'
   import { openLiveOutputStream } from '../services/liveOutputStream'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
-  import RenameSessionDialog from '../components/chat/RenameSessionDialog.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
   import { isTerminalSession } from './sessions/sessionList'
@@ -84,10 +83,6 @@
   let actionBusy = false
   let inboxActionMessageId: string | null = null
   let actionError: string | null = null
-  let renameDialogOpen = false
-  let renamingSession: SessionView | null = null
-  let savingRename = false
-  let renameError: string | null = null
   let unsubscribeDashboardEvents: (() => void) | null = null
   let closeLiveOutputStream: (() => void) | null = null
   let liveOutputOverlays: LiveOutputOverlays = {}
@@ -627,27 +622,19 @@
     }
   }
 
-  function renameSelectedSession(): void {
-    if (!selectedSession || savingRename) return
-    renamingSession = selectedSession
-    renameError = null
-    renameDialogOpen = true
-  }
-
-  async function confirmRenameSession(title: string | null): Promise<void> {
-    if (!renamingSession || savingRename) return
-    const sessionId = renamingSession.session_id
-    savingRename = true
-    renameError = null
+  async function renameSelectedSession(title: string): Promise<void> {
+    if (!selectedSession || actionBusy || !title.trim()) return
+    const sessionId = selectedSessionId
+    const commandInput = $chatDraft
+    actionBusy = true
+    actionError = null
     try {
       await updateSessionTitle(sessionId, title)
-      renameDialogOpen = false
-      renamingSession = null
-      if (selectedSessionId === sessionId && $chatDraft.trim() === '/rename') clearChatDraft()
+      if (selectedSessionId === sessionId && $chatDraft === commandInput) clearChatDraft()
     } catch (error) {
-      renameError = error instanceof Error ? error.message : String(error)
+      if (selectedSessionId === sessionId) actionError = error instanceof Error ? error.message : String(error)
     } finally {
-      savingRename = false
+      actionBusy = false
     }
   }
 
@@ -913,7 +900,7 @@
           onDismissInboxMessage={(message) => void dismissFailedInboxMessage(message)}
           onSend={() => void sendMessage()}
           onNewChat={openNewChat}
-          onRename={renameSelectedSession}
+          onRename={(title) => void renameSelectedSession(title)}
           onExit={() => void exitSelectedSession()}
           onInterrupt={() => void interruptSelectedSession()}
           onFocus={() => void refreshCurrentSessionGitStatus()}
@@ -922,14 +909,6 @@
     </div>
   </div>
 </section>
-
-<RenameSessionDialog
-  bind:open={renameDialogOpen}
-  session={renamingSession}
-  busy={savingRename}
-  error={renameError}
-  onConfirm={(title) => void confirmRenameSession(title)}
-/>
 
 {#if selectedSession && !initialChatScrollPending && rulerTurns.length}
   <ChatRuler

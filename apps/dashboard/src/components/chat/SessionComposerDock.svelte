@@ -28,7 +28,7 @@
     onInterrupt: () => void
     onFocus: () => void
     onNewChat: () => void
-    onRename: () => void
+    onRename: (title: string) => void
     onExit: () => void
   }
 

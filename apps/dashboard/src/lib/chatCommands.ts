@@ -1,15 +1,20 @@
-export interface ChatCommand {
-  name: '/new' | '/rename' | '/exit';
+interface ChatCommandInfo {
   description: string;
   disabledReason?: string;
-  run: () => void;
 }
+
+export type ChatCommand = ChatCommandInfo & (
+  | { name: '/new' | '/exit'; run: () => void }
+  | { name: '/rename'; run: (title: string) => void }
+);
 
 export function chatCommandQuery(value: string): string | null {
   return /^[\t ]*\/[a-z]*[\t ]*$/.test(value) ? value.trim() : null;
 }
 
 export function findChatCommand(value: string, commands: ChatCommand[]): ChatCommand | undefined {
-  const query = chatCommandQuery(value);
-  return commands.find((command) => command.name === query);
+  if (/[\r\n]/.test(value)) return undefined;
+  const match = value.match(/^[\t ]*(\/[a-z]+)(?:[\t ]+([^\r\n]*))?$/);
+  return commands.find((command) => command.name === match?.[1]
+    && (command.name === '/rename' || !match?.[2]?.trim()));
 }

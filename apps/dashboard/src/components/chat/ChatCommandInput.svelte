@@ -44,6 +44,11 @@
 
   function execute(command: ChatCommand): void {
     if (disabled || command.disabledReason) return
+    if (command.name === '/rename') {
+      value = '/rename '
+      void tick().then(focusEnd)
+      return
+    }
     dismissedQuery = query
     onCommand(command)
   }
@@ -65,7 +70,7 @@
       if (command && (event.key === 'Enter' || event.key === 'Tab')) {
         event.preventDefault()
         if (event.key === 'Tab') {
-          value = command.name
+          value = command.name === '/rename' ? '/rename ' : command.name
           void tick().then(focusEnd)
         } else {
           execute(command)
@@ -114,7 +119,7 @@
             onpointerdown={(event) => event.preventDefault()}
             onclick={() => execute(command)}
           >
-            <span class="font-mono">{command.name}</span>
+            <span class="font-mono">{command.name}{command.name === '/rename' ? ' <name>' : ''}</span>
             <span class="whitespace-normal text-xs font-normal text-muted-foreground">{command.disabledReason ?? command.description}</span>
           </Button>
         {/each}

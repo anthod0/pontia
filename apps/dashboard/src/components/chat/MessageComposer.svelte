@@ -55,7 +55,8 @@
   const mentionIdentities = new Map<string, FilePickerFileView>()
   let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)
   const command = $derived(findChatCommand(value, commands))
-  const cannotSubmit = $derived(disabled || busy || (command ? Boolean(command.disabledReason) : submitDisabled))
+  const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
+  const cannotSubmit = $derived(disabled || busy || (command ? Boolean(command.disabledReason) || (command.name === '/rename' && !commandArgument) : submitDisabled))
 
   async function openFullscreen(): Promise<void> {
     fullscreenOpen = true
@@ -71,6 +72,12 @@
 
   function executeCommand(command: ChatCommand): void {
     if (disabled || busy || command.disabledReason) return
+    if (command.name === '/rename') {
+      if (!commandArgument) return
+      fullscreenOpen = false
+      command.run(commandArgument)
+      return
+    }
     value = command.name
     fullscreenOpen = false
     command.run()
