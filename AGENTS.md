@@ -21,6 +21,11 @@ Triage uses the five canonical status strings. See `docs/agents/triage-labels.md
 
 Domain documentation uses the single-context layout. See `docs/agents/domain.md`.
 
+### Workspaces
+
+When asked for a worktree or isolated workspace, run `scripts/create-workspace <name> [base-revision]`; the base defaults to the calling checkout's HEAD.
+Destination: `$HOME/worktrees/pontia/<name>`.
+
 ## Project snapshot
 
 `pontia` is a Rust console/control plane for coding agents with a web dashboard and client integrations.

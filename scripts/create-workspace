@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+# Scheme 2: linked Git worktree, reflinked local resources, shared private docs.
+set -euo pipefail
+
+usage() { echo "Usage: $0 <name> [base-revision]" >&2; }
+fail() { echo "create-workspace: $*" >&2; exit 1; }
+if [[ ${1:-} == --help ]]; then usage; exit 0; fi
+[[ $# -ge 1 && $# -le 2 ]] || { usage; exit 1; }
+name=$1
+[[ $name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || fail "name must be one directory component: letters, digits, dots, underscores or hyphens"
+for tool in git cp python3; do command -v "$tool" >/dev/null || fail "missing $tool"; done
+
+workspace_root=${PONTIA_WORKSPACE_ROOT:-"$HOME/worktrees"}
+[[ $workspace_root == /* ]] || fail "workspace root must be an absolute path"
+calling_checkout=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
+base=$(git -C "$calling_checkout" rev-parse --verify --end-of-options "${2:-HEAD}^{commit}")
+source_checkout=$(git -C "$calling_checkout" worktree list --porcelain -z | python3 -c '
+import os, sys
+record = sys.stdin.buffer.read().split(b"\0", 1)[0]
+assert record.startswith(b"worktree ")
+print(os.fsdecode(record[len(b"worktree "):]))
+')
+workspace_parent="$workspace_root/$(basename "$source_checkout")"
+destination="$workspace_parent/$name"
+branch="agent/$name"
+git check-ref-format --branch "$branch" >/dev/null
+[[ ! -e $destination && ! -L $destination ]] || fail "destination already exists: $destination"
+if git -C "$calling_checkout" show-ref --verify --quiet "refs/heads/$branch"; then
+  fail "branch already exists: $branch"
+fi
+mkdir -p -- "$workspace_parent"
+[[ $(stat -c %d "$source_checkout") == $(stat -c %d "$workspace_parent") ]] || fail "source and destination must be on the same filesystem"
+# Probe before creating a branch. Never silently fall back to ordinary copies.
+probe=$(mktemp "$workspace_parent/.cow-probe.XXXXXX")
+if ! cp --reflink=always -- "$source_checkout/AGENTS.md" "$probe"; then
+  rm -- "$probe"
+  fail "CoW copying is not supported at the selected destination"
+fi
+rm -- "$probe"
+
+copy_paths=(
+  .env .env.local
+  node_modules
+  apps/dashboard/node_modules apps/dashboard/.svelte-kit apps/dashboard/dist
+  apps/website/node_modules apps/website/.svelte-kit apps/website/build
+  clients/pi/node_modules
+  target
+)
+# Each shared path is authoritative in the primary checkout; missing paths are skipped.
+shared_paths=(
+  .scratch docs/agents docs/adr specs
+  AGENTS.local.md CONTEXT.md CONTEXT-MAP.md TODO.md MILESTONE.md
+)
+
+git -C "$calling_checkout" worktree add -b "$branch" "$destination" "$base" >&2
+trap 'echo "create-workspace: setup failed; inspect the partial workspace at $destination (branch $branch). Nothing was rolled back." >&2' ERR
+python3 - "$source_checkout" "$destination" "${copy_paths[@]}" -- "${shared_paths[@]}" <<'PY'
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import stat
+import subprocess
+import sys
+
+source, destination = (Path(p).resolve() for p in sys.argv[1:3])
+separator = sys.argv.index("--", 3)
+copies = [Path(p) for p in sys.argv[3:separator] if os.path.lexists(source / p)]
+shared = [Path(p) for p in sys.argv[separator + 1:] if os.path.lexists(source / p)]
+
+
+def warn(message):
+    print(f"create-workspace: {message}", file=sys.stderr)
+
+
+def beneath(path, roots):
+    return any(path == root or root in path.parents for root in roots)
+
+
+# Never merge ignored resources into tracked paths, or write through a directory link.
+for relative in copies:
+    for parent in relative.parents:
+        if (source / parent).is_symlink():
+            raise RuntimeError(f"resource source parent is a symbolic link: {parent}")
+for relative in copies + shared:
+    target = destination / relative
+    if os.path.lexists(target):
+        raise RuntimeError(f"resource collides with the selected revision: {relative}")
+    for parent in target.parents:
+        if parent == destination:
+            break
+        if parent.is_symlink():
+            raise RuntimeError(f"resource parent is a symbolic link: {parent}")
+for relative in shared:
+    ignored = subprocess.run(
+        ["git", "check-ignore", "--quiet", "--", str(relative)], cwd=destination,
+    )
+    if ignored.returncode != 0:
+        raise RuntimeError(
+            f"shared path is not ignored by the selected revision: {relative}; "
+            "ignore rules must cover symlinks, not just directories (no trailing '/')"
+        )
+
+# Enumerate without following links, omitting process-local files before copying.
+files, directories = [], []
+
+
+def collect(relative):
+    path = source / relative
+    mode = path.lstat().st_mode
+    if relative.name.endswith(".pid") or relative.name in {".cargo-lock", ".cargo-artifact-lock"}:
+        return
+    if stat.S_ISLNK(mode) or stat.S_ISREG(mode):
+        files.append(relative)
+    elif stat.S_ISDIR(mode):
+        directories.append(relative)
+        for child in path.iterdir():
+            collect(child.relative_to(source))
+    else:
+        warn(f"skipping process-local/special file: {relative}")
+
+
+for relative in copies:
+    collect(relative)
+for relative in directories:
+    (destination / relative).mkdir(parents=True, exist_ok=True)
+for offset in range(0, len(files), 128):
+    subprocess.run(
+        ["cp", "-a", "--reflink=always", "--parents", "-t", str(destination), "--",
+         *(str(p) for p in files[offset:offset + 128])],
+        cwd=source, check=True,
+    )
+for relative in shared:
+    target = destination / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(source / relative)
+
+
+def relocate_target(target):
+    """Resolve at the original location, including symlinks preceding '..'."""
+    target = target.resolve()
+    if not target.is_relative_to(source):
+        return target  # External pnpm cache, etc. stays external.
+    relative = target.relative_to(source)
+    if beneath(relative, shared):
+        return target
+    if beneath(relative, copies) or os.path.lexists(destination / relative):
+        return destination / relative
+    warn(f"reference to an uncopied resource needs review: {relative}")
+    return target
+
+
+def relocate_relative(value, old_parent, new_parent):
+    target = relocate_target(old_parent / value)
+    return str(target) if os.path.isabs(value) else os.path.relpath(target, new_parent)
+
+
+# Keep intentional shared references intact, including when embedded in NODE_PATH.
+source_pattern = re.compile(re.escape(str(source)) + r'(?=/|$|[\s:"\'])')
+
+
+def relocate_absolute(text):
+    def replace(match):
+        tail = text[match.end():]
+        for relative in shared:
+            prefix = "/" + str(relative)
+            if tail.startswith(prefix) and (len(tail) == len(prefix) or tail[len(prefix)] in "/\t\r\n :\"'"):
+                return str(source)
+        return str(destination)
+    return source_pattern.sub(replace, text)
+
+
+def relocate_json(value):
+    if isinstance(value, str):
+        return relocate_absolute(value)
+    if isinstance(value, list):
+        return [relocate_json(item) for item in value]
+    if isinstance(value, dict):
+        return {relocate_absolute(key): relocate_json(item) for key, item in value.items()}
+    return value
+
+
+# Repair only understood regular text formats. Never follow a copied symlink.
+for relative in files:
+    old, new = source / relative, destination / relative
+    if new.is_symlink():
+        original = os.readlink(old)
+        repaired = relocate_relative(original, old.parent, new.parent)
+        if repaired != original:
+            new.unlink()
+            new.symlink_to(repaired)
+            shutil.copystat(old, new, follow_symlinks=False)
+        continue
+    data = new.read_bytes()
+    if b"\0" in data:
+        continue
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        continue
+    repaired = text
+    metadata = relative.name in {".modules.yaml", ".package-map.json", ".pnpm-workspace-state-v1.json"}
+    if metadata and "node_modules" in relative.parts:
+        # The installed pnpm version writes JSON, including .modules.yaml.
+        # Do not guess at an uninspected YAML layout from a future installation.
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError:
+            warn(f"unsupported pnpm metadata; reinstall dependencies in the workspace: {relative}")
+            continue
+        original = value
+        value = relocate_json(original)
+        if relative.name == ".modules.yaml":
+            value["virtualStoreDir"] = relocate_relative(
+                original["virtualStoreDir"], old.parent, new.parent,
+            )
+        elif relative.name == ".package-map.json":
+            for key, package in original["packages"].items():
+                value["packages"][relocate_absolute(key)]["url"] = relocate_relative(
+                    package["url"], old.parent, new.parent,
+                )
+        if value != original:
+            repaired = json.dumps(value, indent=2) + "\n"
+    elif ".bin" in relative.parts and text.startswith("#!/bin/sh\n"):
+        lines = []
+        for line in text.splitlines(keepends=True):
+            if not line.lstrip().startswith("#"):
+                line = relocate_absolute(line)
+                # pnpm shims may reach the global store with relative basedir paths.
+                line = re.sub(
+                    r'\$(basedir(?:_win)?)/([^"\n]+)',
+                    lambda match: "$" + match[1] + "/" + relocate_relative(match[2], old.parent, new.parent),
+                    line,
+                )
+            lines.append(line)
+        repaired = "".join(lines)
+    elif relative.parts[0] == "target" and relative.suffix == ".d":
+        # rustc depfiles backslash-escape spaces in filenames.
+        escaped_source = str(source).replace(" ", r"\ ")
+        escaped_destination = str(destination).replace(" ", r"\ ")
+        dep_pattern = re.compile(re.escape(escaped_source) + r'(?=/|:|\s|$)')
+        def relocate_depfile(match):
+            tail = match.string[match.end():]
+            for path in shared:
+                prefix = "/" + str(path).replace(" ", r"\ ")
+                if tail.startswith(prefix) and (len(tail) == len(prefix) or tail[len(prefix)] in "/ \t\r\n:"):
+                    return escaped_source
+            return escaped_destination
+        repaired = "".join(
+            line if line.lstrip().startswith("#") else dep_pattern.sub(relocate_depfile, line)
+            for line in text.splitlines(keepends=True)
+        )
+    elif str(source) in text:
+        warn(f"unhandled source path in copied text; assess/regenerate before use: {relative}")
+    if repaired != text:
+        new.write_text(repaired)
+        shutil.copystat(old, new)
+
+# Restore directory metadata after copying/repairing children.
+for relative in reversed(directories):
+    shutil.copystat(source / relative, destination / relative)
+PY
+printf '%s\n' "$destination"

@@ -15,16 +15,16 @@ TODO.md
 MILESTONE.md
 archive/
 tmp/
-/specs/
+/specs
 /docs/agents
-/.scratch/
+/.scratch
 
 /.agents/
 /.cursor/
 /.codex/
 
 /.out-of-scope/
-/docs/adr/
+/docs/adr
 /CONTEXT.md
 /CONTEXT-MAP.md
 /AGENTS.local.md
