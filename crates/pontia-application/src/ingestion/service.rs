@@ -46,6 +46,10 @@ pub struct EventIngestService {
 }
 
 impl EventIngestService {
+    pub fn db(&self) -> SqlitePool {
+        self.pool.clone()
+    }
+
     pub fn with_reporting_dependencies(
         mut self,
         pi_control: crate::PiControlService,
@@ -114,17 +118,23 @@ impl EventIngestService {
             .map(|result| result.expect("unconditional event ingestion returns a result"))
     }
 
-    /// Ingests a fact supplied by an explicit agent-client adapter.
+    /// Injects an event for storage/projection tests and the in-process generic test client.
     ///
-    /// This path preserves adapter and replay behavior that predates runtime
-    /// fencing. Client reports must use [`Self::report_fact`], while
-    /// Pontia-owned callers must use [`Self::ingest_pontia_event`].
+    /// This is a test-support entry point by convention, not by compile-time enforcement.
+    /// It bypasses fact normalization, report validation and runtime fencing; it still
+    /// runs the shared persistence, projection and configured post-commit effects.
+    /// Do not use it for production adapters or add a replay path through it.
+    /// Client facts must use [`Self::report_fact`]; Pontia-owned facts must use
+    /// [`Self::ingest_pontia_event`] (or [`Self::ingest_runtime_observation_event`]
+    /// for runtime observations that require fencing).
     pub async fn ingest_reported_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into(), None, false, None)
             .await
             .map(|result| result.expect("unconditional event ingestion returns a result"))
     }
 
+    /// Injects ready only for the generic test client; real clients return no event here.
+    /// Production client readiness must be reported through [`Self::report_fact`].
     pub(crate) async fn ingest_in_process_ready_event(
         &self,
         client_type: &str,
@@ -145,13 +155,21 @@ impl EventIngestService {
     }
 
     /// Persists an already normalized event with transaction-time runtime fencing.
-    /// Client facts must enter through [`Self::report_fact`] for full validation and effects.
+    ///
+    /// This is the lower-level persistence step used by [`Self::report_fact`].
+    /// "Confirmed" means the caller has already normalized and validated the fact;
+    /// this method does not perform the full report validation itself.
+    /// Production adapters must call [`Self::report_fact`], even for in-process reports.
     pub async fn ingest_confirmed_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into(), None, true, None)
             .await
             .map(|result| result.expect("unconditional event ingestion returns a result"))
     }
 
+    /// Injects an event with explicit topology for storage/projection and query tests.
+    /// Like [`Self::ingest_reported_event`], this bypasses report validation and runtime
+    /// fencing and is not compile-time restricted to tests. Production client facts
+    /// must use [`Self::report_fact`], which derives topology through normal ingestion.
     pub async fn ingest_event_with_topology(
         &self,
         event: ReportedEvent,
@@ -370,7 +388,7 @@ impl EventIngestService {
                     | EventType::TurnInterrupted
             )
         {
-            let mut inbox = InboxCommandService::new(self.pool.clone());
+            let mut inbox = InboxCommandService::new(self.clone());
             if let Some(control) = &self.pi_control {
                 inbox = inbox.with_pi_control(control.clone());
             }

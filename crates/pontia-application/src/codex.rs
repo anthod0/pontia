@@ -1,5 +1,7 @@
 mod events;
 mod observer;
+#[cfg(test)]
+mod tests;
 
 use crate::{
     AgentBindingService, EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType,
@@ -19,11 +21,15 @@ pub use observer::CodexObserver;
 #[derive(Clone)]
 pub struct CodexService {
     pub(super) pool: SqlitePool,
+    pub(super) event_ingest: crate::EventIngestService,
 }
 
 impl CodexService {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(event_ingest: crate::EventIngestService) -> Self {
+        Self {
+            pool: event_ingest.db(),
+            event_ingest,
+        }
     }
 
     pub async fn provision(&self, session_id: &str, root: &Path, cwd: &Path) -> Result<()> {

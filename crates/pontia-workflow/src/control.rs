@@ -20,15 +20,18 @@ pub struct WorkflowControlOutcome {
 #[derive(Clone)]
 pub struct WorkflowControlService {
     pool: SqlitePool,
+    event_ingest: pontia_application::EventIngestService,
     pi_control: Option<pontia_application::PiControlService>,
     workflows: SqliteWorkflowRepository,
 }
 
 impl WorkflowControlService {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(event_ingest: pontia_application::EventIngestService) -> Self {
+        let pool = event_ingest.db();
         Self {
             workflows: SqliteWorkflowRepository::new(pool.clone()),
             pool,
+            event_ingest,
             pi_control: None,
         }
     }
@@ -53,7 +56,7 @@ impl WorkflowControlService {
                 .as_ref()
                 .is_some_and(|session| session.state == "busy")
             {
-                RuntimeControlService::new(self.pool.clone())
+                RuntimeControlService::new(self.event_ingest.clone())
                     .interrupt_current_turn(&session_id)
                     .await?;
                 interrupt_requested = true;
@@ -79,7 +82,7 @@ impl WorkflowControlService {
                 .as_ref()
                 .is_some_and(|session| session.state == "interrupted")
             {
-                let mut inbox = InboxCommandService::new(self.pool.clone());
+                let mut inbox = InboxCommandService::new(self.event_ingest.clone());
                 if let Some(control) = &self.pi_control {
                     inbox = inbox.with_pi_control(control.clone());
                 }

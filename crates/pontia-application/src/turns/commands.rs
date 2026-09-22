@@ -20,6 +20,7 @@ use crate::{
 #[derive(Clone)]
 pub struct TurnCommandService {
     pool: SqlitePool,
+    event_ingest: crate::EventIngestService,
     pi_control: Option<crate::PiControlService>,
     runtime: GenericRuntimeManager,
 }
@@ -30,9 +31,10 @@ impl TurnCommandService {
         self
     }
 
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(event_ingest: crate::EventIngestService) -> Self {
         Self {
-            pool,
+            pool: event_ingest.db(),
+            event_ingest,
             pi_control: None,
             runtime: GenericRuntimeManager,
         }
@@ -60,7 +62,7 @@ impl TurnCommandService {
                     "Resume the Codex session before sending input".into(),
                 ));
             }
-            crate::codex::CodexService::new(self.pool.clone())
+            crate::codex::CodexService::new(self.event_ingest.clone())
                 .submit(session_id, &input, metadata["inbox_message_id"].as_str())
                 .await?;
             return Ok(None);

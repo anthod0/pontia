@@ -20,7 +20,6 @@ use pontia_storage_sqlite::{
     },
 };
 use serde_json::json;
-use sqlx::SqlitePool;
 use tokio::sync::watch;
 use uuid::Uuid;
 
@@ -82,15 +81,15 @@ where
     S: SessionCreator + Send + Sync + 'static,
 {
     pub fn new(
-        pool: SqlitePool,
+        event_ingest: pontia_application::EventIngestService,
         sessions: S,
         agent_events: AgentEventBroker,
         pontia_home: PathBuf,
     ) -> Self {
-        let exits = PiGracefulExitService::new(pool.clone());
-        let interruptions = RuntimeControlService::new(pool.clone());
+        let exits = PiGracefulExitService::new(event_ingest.db());
+        let interruptions = RuntimeControlService::new(event_ingest.clone());
         Self::with_services_and_interruptions(
-            pool,
+            event_ingest,
             sessions,
             exits,
             interruptions,
@@ -107,14 +106,14 @@ where
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services(
-        pool: SqlitePool,
+        event_ingest: pontia_application::EventIngestService,
         sessions: S,
         exits: X,
         agent_events: B,
         pontia_home: PathBuf,
     ) -> Self {
         Self::with_services_and_interruptions(
-            pool,
+            event_ingest,
             sessions,
             exits.clone(),
             exits,
@@ -132,7 +131,7 @@ where
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services_and_interruptions(
-        pool: SqlitePool,
+        event_ingest: pontia_application::EventIngestService,
         sessions: S,
         exits: X,
         interruptions: I,
@@ -140,9 +139,9 @@ where
         pontia_home: PathBuf,
     ) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(pool.clone()),
-            persisted_events: SqliteEventRepository::new(pool.clone()),
-            inbox: InboxCommandService::new(pool),
+            repository: SqliteWorkflowRepository::new(event_ingest.db()),
+            persisted_events: SqliteEventRepository::new(event_ingest.db()),
+            inbox: InboxCommandService::new(event_ingest),
             sessions,
             exits,
             interruptions,

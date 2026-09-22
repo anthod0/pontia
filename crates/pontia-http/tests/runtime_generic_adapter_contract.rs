@@ -350,7 +350,7 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
         .await
         .expect("bind interrupted session");
 
-    let outcome = WorkflowControlService::new(state.db())
+    let outcome = WorkflowControlService::new(state.event_ingest_service())
         .resume("wf_generic_resume")
         .await
         .expect("resume workflow");

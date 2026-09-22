@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
     pontia_runtime::set_runtime_bind_addr(bound_addr);
     tokio::spawn(
         application::codex::CodexObserver::new(
-            app_state.db(),
+            app_state.event_ingest_service(),
             app_state.pontia_home().to_path_buf(),
         )
         .run(app_state.shutdown().subscribe()),
@@ -44,9 +44,9 @@ async fn main() -> Result<()> {
         .with_live_output(app_state.live_output());
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
     let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
-        app_state.db(),
+        app_state.event_ingest_service(),
         application::SessionCommandService::new(
-            app_state.db(),
+            app_state.event_ingest_service(),
             app_state.pontia_home().to_path_buf(),
         )
         .with_pi_control(app_state.pi_control()),

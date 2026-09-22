@@ -110,7 +110,7 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
         .expect("request Patch");
     let interruptions = RecordingInterrupter::default();
     let coordinator = WorkflowCoordinator::with_services_and_interruptions(
-        pool.clone(),
+        pontia_application::EventIngestService::new(pool.clone()),
         SequencedSessionCreator::new([Some("sess_replanner")]),
         RecordingExitRequester::default(),
         interruptions.clone(),

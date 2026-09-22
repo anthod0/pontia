@@ -87,7 +87,8 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
             .await
             .unwrap();
     });
-    let service = TurnCommandService::new(pool.clone()).with_pi_control(control);
+    let service = TurnCommandService::new(crate::EventIngestService::new(pool.clone()))
+        .with_pi_control(control);
     let dispatch = tokio::spawn(async move {
         service
             .create_and_dispatch_turn(
@@ -128,7 +129,7 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
 async fn missing_pi_endpoint_rejects_delivery_without_creating_a_turn_or_pending_context() {
     let (pool, _root, control) = setup().await;
     ready(&pool).await;
-    let error = TurnCommandService::new(pool.clone())
+    let error = TurnCommandService::new(crate::EventIngestService::new(pool.clone()))
         .with_pi_control(control)
         .create_and_dispatch_turn("sess_pi", "not delivered".into(), json!({}))
         .await

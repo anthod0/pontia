@@ -5,7 +5,6 @@ use crate::{
 use pontia_core::{Error, Result, ids::new_session_id};
 use pontia_runtime::codex::{CodexRuntime, TuiTarget};
 use serde_json::{Value, json};
-use sqlx::SqlitePool;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -20,9 +19,9 @@ pub struct CodexObserver {
 }
 
 impl CodexObserver {
-    pub fn new(pool: SqlitePool, root: PathBuf) -> Self {
+    pub fn new(event_ingest: EventIngestService, root: PathBuf) -> Self {
         Self {
-            service: CodexService::new(pool),
+            service: CodexService::new(event_ingest),
             root,
         }
     }
@@ -113,7 +112,7 @@ impl CodexObserver {
                             subscribed.insert(thread.clone());
                         }
                         self.service.connection_state(&session,&runtime.instance_id,"available").await?;
-                        crate::InboxCommandService::new(self.service.pool.clone()).drain_inbox(&session).await?;
+                        crate::InboxCommandService::new(self.service.event_ingest.clone()).drain_inbox(&session).await?;
                             Ok(())
                         }.await;
                         if let Err(error) = result {
@@ -138,7 +137,7 @@ impl CodexObserver {
                                 self.service.reconcile_turns(&session,&runtime,&turns).await?;
                             }
                         }
-                        Some("turn/completed") => self.service.turn_fact(&session,&runtime,&event["params"]["turn"],"notification").await?,
+                        Some("turn/completed") => self.service.turn_fact(&session,&runtime.instance_id,&event["params"]["turn"],"notification").await?,
                         Some("thread/archived") => { self.service.archived(&session,&runtime).await?; subscribed.remove(thread); }
                         Some("thread/unarchived") => {
                             subscribed.remove(thread);

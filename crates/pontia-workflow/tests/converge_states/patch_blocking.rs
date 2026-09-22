@@ -120,7 +120,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
     let creator = PersistingSessionCreator::new(pool.clone());
     let exits = RecordingExitRequester::default();
     let coordinator = WorkflowCoordinator::with_services(
-        pool.clone(),
+        pontia_application::EventIngestService::new(pool.clone()),
         creator.clone(),
         exits.clone(),
         TestAgentEvents::new(pool.clone()),
@@ -323,7 +323,7 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
     .await;
     let exits = RecordingExitRequester::default();
     let coordinator = WorkflowCoordinator::with_services(
-        pool.clone(),
+        pontia_application::EventIngestService::new(pool.clone()),
         PersistingSessionCreator::new(pool.clone()),
         exits.clone(),
         TestAgentEvents::new(pool.clone()),
@@ -528,7 +528,7 @@ output = "replacement.md"
     )
     .await;
     let second_coordinator = WorkflowCoordinator::with_services(
-        pool.clone(),
+        pontia_application::EventIngestService::new(pool.clone()),
         PersistingSessionCreator::with_identity(
             pool.clone(),
             "sess_replanner_second",
@@ -641,7 +641,7 @@ async fn requester_terminal_fact_implicitly_blocks_and_preserves_the_accepted_ou
     .await;
 
     let coordinator = WorkflowCoordinator::with_services(
-        pool.clone(),
+        pontia_application::EventIngestService::new(pool.clone()),
         PersistingSessionCreator::new(pool.clone()),
         RecordingExitRequester::default(),
         TestAgentEvents::new(pool.clone()),
@@ -723,7 +723,7 @@ async fn unresolved_replanner_terminal_blocks_once_restores_definition_and_late_
     .await;
     let exits = RecordingExitRequester::default();
     let coordinator = WorkflowCoordinator::with_services(
-        pool.clone(),
+        pontia_application::EventIngestService::new(pool.clone()),
         PersistingSessionCreator::new(pool.clone()),
         exits.clone(),
         TestAgentEvents::new(pool.clone()),
@@ -809,7 +809,7 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     )
     .await;
     WorkflowCoordinator::with_services(
-        pool.clone(),
+        pontia_application::EventIngestService::new(pool.clone()),
         PersistingSessionCreator::new(pool.clone()),
         RecordingExitRequester::default(),
         TestAgentEvents::new(pool.clone()),
@@ -908,14 +908,14 @@ async fn crash_gap_recovers_the_session_with_the_persisted_creation_token() {
 
     let creator = PersistingSessionCreator::new(pool.clone());
     let coordinator_one = WorkflowCoordinator::with_services(
-        pool.clone(),
+        pontia_application::EventIngestService::new(pool.clone()),
         creator.clone(),
         RecordingExitRequester::default(),
         TestAgentEvents::new(pool.clone()),
         pontia_home.clone(),
     );
     let coordinator_two = WorkflowCoordinator::with_services(
-        pool.clone(),
+        pontia_application::EventIngestService::new(pool.clone()),
         creator.clone(),
         RecordingExitRequester::default(),
         TestAgentEvents::new(pool.clone()),

@@ -85,7 +85,7 @@ impl RuntimeControlService {
             )));
         }
         if session.client_type == "codex" {
-            crate::codex::CodexService::new(self.pool.clone())
+            crate::codex::CodexService::new(self.event_ingest.clone())
                 .interrupt(session_id)
                 .await?;
             return Ok(ControlCommandOutcome {
@@ -146,7 +146,7 @@ impl RuntimeControlService {
                 })?;
             match terminate_behavior {
                 TerminateBehavior::CodexArchive => {
-                    crate::codex::CodexService::new(self.pool.clone())
+                    crate::codex::CodexService::new(self.event_ingest.clone())
                         .archive(session_id)
                         .await?
                 }
@@ -198,7 +198,7 @@ impl RuntimeControlService {
             )));
         }
         if session.client_type == "codex" {
-            crate::codex::CodexService::new(self.pool.clone())
+            crate::codex::CodexService::new(self.event_ingest.clone())
                 .resume(session_id)
                 .await?;
             return Ok(ControlCommandOutcome {

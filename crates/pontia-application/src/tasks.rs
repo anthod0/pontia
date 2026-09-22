@@ -10,14 +10,18 @@ pub struct CreateTaskOutcome {
 #[derive(Clone)]
 pub struct TaskCommandService {
     pool: SqlitePool,
+    event_ingest: crate::EventIngestService,
 }
 
 mod commands;
 mod persistence;
 
 impl TaskCommandService {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(event_ingest: crate::EventIngestService) -> Self {
+        Self {
+            pool: event_ingest.db(),
+            event_ingest,
+        }
     }
 }
 

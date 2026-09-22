@@ -39,6 +39,7 @@ pub struct InboxCommandOutcome {
 #[derive(Clone)]
 pub struct InboxCommandService {
     pool: SqlitePool,
+    event_ingest: crate::EventIngestService,
     pi_control: Option<crate::PiControlService>,
 }
 
@@ -48,9 +49,10 @@ impl InboxCommandService {
         self
     }
 
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(event_ingest: crate::EventIngestService) -> Self {
         Self {
-            pool,
+            pool: event_ingest.db(),
+            event_ingest,
             pi_control: None,
         }
     }
@@ -186,7 +188,7 @@ impl InboxCommandService {
                     "session ".to_string() + session_id + " runtime does not support interrupt",
                 )
                 .await?;
-            } else if let Err(error) = RuntimeControlService::new(self.pool.clone())
+            } else if let Err(error) = RuntimeControlService::new(self.event_ingest.clone())
                 .interrupt_current_turn(session_id)
                 .await
             {
@@ -354,7 +356,7 @@ impl InboxCommandService {
             return Ok(());
         }
 
-        let mut turns = TurnCommandService::new(self.pool.clone());
+        let mut turns = TurnCommandService::new(self.event_ingest.clone());
         if let Some(control) = &self.pi_control {
             turns = turns.with_pi_control(control.clone());
         }

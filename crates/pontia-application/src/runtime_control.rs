@@ -16,13 +16,15 @@ pub struct ControlCommandOutcome {
 #[derive(Clone)]
 pub struct RuntimeControlService {
     pool: SqlitePool,
+    event_ingest: crate::EventIngestService,
     runtime: GenericRuntimeManager,
 }
 
 impl RuntimeControlService {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(event_ingest: crate::EventIngestService) -> Self {
         Self {
-            pool,
+            pool: event_ingest.db(),
+            event_ingest,
             runtime: GenericRuntimeManager,
         }
     }

@@ -20,7 +20,6 @@ time = { workspace = true, features = ["formatting", "parsing", "serde"] }
 tokio = { version = "1", features = ["rt", "sync", "time"] }
 tracing = "0.1"
 uuid = { workspace = true, features = ["v7", "serde"] }
-reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
 
 [dev-dependencies]
 pontia-agent-clients = { workspace = true, default-features = true, features = ["generic-test-client"] }

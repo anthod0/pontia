@@ -130,7 +130,7 @@ impl SessionCommandService {
                 .clone()
                 .map(std::path::PathBuf::from)
                 .unwrap_or(std::env::current_dir()?);
-            crate::codex::CodexService::new(self.pool.clone())
+            crate::codex::CodexService::new(self.event_ingest.clone())
                 .provision(&session_id, &self.pontia_home, &cwd)
                 .await?;
             self.update_session_workspace(&session_id, workspace_record.as_ref())
@@ -138,7 +138,7 @@ impl SessionCommandService {
             sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex_environment',json(?)) WHERE session_id=?")
                 .bind(serde_json::to_string(&request.runtime_environment)?).bind(&session_id).execute(&self.pool).await?;
             if let Some(task) = request.initial_task {
-                crate::InboxCommandService::new(self.pool.clone())
+                crate::InboxCommandService::new(self.event_ingest.clone())
                     .submit_message(
                         &session_id,
                         crate::SubmitInboxMessageRequest {

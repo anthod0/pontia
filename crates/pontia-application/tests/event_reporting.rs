@@ -30,7 +30,7 @@ impl Fixture {
         .unwrap();
         run_migrations(&pool).await.unwrap();
         let state = AppState::builder(pool, root.path().into()).build();
-        let fixture = Self { state, root: root };
+        let fixture = Self { state, root };
         fixture.session("session", client).await;
         fixture.bind("session", "runtime").await;
         fixture

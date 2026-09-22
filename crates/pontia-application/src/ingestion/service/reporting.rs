@@ -14,7 +14,13 @@ const MAX_EVENT_PAYLOAD_BYTES: usize = 64 * 1024;
 
 impl EventIngestService {
     /// Processes a client fact, including validation and post-commit effects.
-    /// Use AppState::event_ingest_service to share the application's notification dependencies.
+    ///
+    /// This is the production entry point for all client adapters, whether called
+    /// in-process or through a transport handler. It owns normalization, report
+    /// validation and routing to durable ingestion or volatile notifications.
+    /// Use [`crate::AppState::event_ingest_service`] to share the application's
+    /// notification dependencies; the lower-level `ingest_*` methods do not replace
+    /// this reporting contract.
     pub async fn report_fact(
         &self,
         fact: ReportedFact,

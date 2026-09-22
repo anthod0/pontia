@@ -40,7 +40,7 @@ pub async fn interrupt_task(
     Path(task_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = TaskCommandService::new(state.db());
+    let service = TaskCommandService::new(state.event_ingest_service());
     let operation = format!("interrupt_task:{task_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.interrupt_task(&task_id).await?.data)
@@ -55,7 +55,7 @@ pub async fn cancel_task(
     Path(task_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = TaskCommandService::new(state.db());
+    let service = TaskCommandService::new(state.event_ingest_service());
     let operation = format!("cancel_task:{task_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.cancel_task(&task_id).await?.data)

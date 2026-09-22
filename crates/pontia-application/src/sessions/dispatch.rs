@@ -170,8 +170,11 @@ mod tests {
                     .unwrap();
             }
         });
-        let service =
-            SessionCommandService::new(pool.clone(), root.path().into()).with_pi_control(control);
+        let service = SessionCommandService::new(
+            crate::EventIngestService::new(pool.clone()),
+            root.path().into(),
+        )
+        .with_pi_control(control);
         let dispatch = tokio::spawn(async move {
             service
                 .wait_and_dispatch_initial_tui_turn(

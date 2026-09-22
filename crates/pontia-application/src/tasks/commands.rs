@@ -23,7 +23,7 @@ impl TaskCommandService {
             Error::StateConflict(format!("task {task_id} has no turn to interrupt"))
         })?;
 
-        RuntimeControlService::new(self.pool.clone())
+        RuntimeControlService::new(self.event_ingest.clone())
             .interrupt_turn(&session_id, &turn_id)
             .await?;
         let task = ExternalQueryService::new(self.pool.clone())

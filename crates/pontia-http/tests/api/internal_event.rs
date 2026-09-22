@@ -153,7 +153,7 @@ async fn reconcile_reporting_workflow(state: &AppState) {
     }
     let root = tempfile::tempdir().unwrap();
     pontia_workflow::WorkflowCoordinator::new(
-        state.db(),
+        state.event_ingest_service(),
         NoSessions,
         state.agent_events(),
         root.path().to_path_buf(),

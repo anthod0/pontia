@@ -22,10 +22,13 @@ async fn app() -> (tempfile::TempDir, AppState, String) {
     run_migrations(&pool).await.unwrap();
     let request: CreateSessionRequest =
         serde_json::from_value(json!({"client_type":"codex","workspace":root.path()})).unwrap();
-    let created = SessionCommandService::new(pool.clone(), root.path().into())
-        .create_session(request)
-        .await
-        .unwrap();
+    let created = SessionCommandService::new(
+        pontia_application::EventIngestService::new(pool.clone()),
+        root.path().into(),
+    )
+    .create_session(request)
+    .await
+    .unwrap();
     let session = created.session_id().unwrap().to_string();
     sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='instance',binding_state='confirmed' WHERE session_id=?").bind(&session).execute(&pool).await.unwrap();
     AgentBindingService::new(pool.clone())

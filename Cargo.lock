@@ -1683,7 +1683,7 @@ dependencies = [
  "dialoguer",
  "getrandom 0.3.4",
  "pontia-config",
- "reqwest 0.12.28",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",
@@ -1715,7 +1715,6 @@ dependencies = [
  "pontia-core",
  "pontia-runtime",
  "pontia-storage-sqlite",
- "reqwest 0.13.5",
  "serde",
  "serde_json",
  "sqlx",
@@ -1787,7 +1786,7 @@ dependencies = [
  "pontia-runtime",
  "pontia-storage-sqlite",
  "pontia-workflow",
- "reqwest 0.12.28",
+ "reqwest",
  "serde",
  "serde_json",
  "sqlx",
@@ -2186,37 +2185,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "webpki-roots 1.0.7",
-]
-
-[[package]]
-name = "reqwest"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
-dependencies = [
- "base64 0.23.1",
- "bytes",
- "futures-core",
- "http",
- "http-body",
- "http-body-util",
- "hyper",
- "hyper-util",
- "js-sys",
- "log",
- "percent-encoding",
- "pin-project-lite",
- "serde",
- "serde_json",
- "sync_wrapper",
- "tokio",
- "tower",
- "tower-http",
- "tower-service",
- "url",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]
