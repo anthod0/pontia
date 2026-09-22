@@ -60,6 +60,36 @@ fn read(source: ResolvedAgentBinding, native: &str) -> Vec<TurnTimelineItem> {
 }
 
 #[test]
+fn normalizes_message_kinds_for_chat_history() {
+    let (_root, source) = fixture(&[
+        context("one"),
+        item(json!({"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]})),
+        item(
+            json!({"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello!"}]}),
+        ),
+    ]);
+    let items = read(source, "one");
+    let messages: Vec<_> = items
+        .iter()
+        .map(|entry| {
+            (
+                entry.item.kind.as_str(),
+                entry.item.role.as_str(),
+                entry.item.raw_kind.as_deref(),
+                entry.item.content_preview.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        messages,
+        vec![
+            ("user", "user", Some("message"), "hi"),
+            ("assistant", "assistant", Some("message"), "Hello!"),
+        ]
+    );
+}
+
+#[test]
 fn native_call_identity_associates_actual_answers_without_crossing_turns() {
     let (_root, source) = fixture(&[
         context("one"),

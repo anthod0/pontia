@@ -244,7 +244,7 @@ impl TurnTimelineReader for CodexRollout {
                 }
                 let mut title = None;
                 let (kind, role, content) = match raw_kind {
-                    "message" => ("message", role, render_content(&payload["content"])),
+                    "message" => (role, role, render_content(&payload["content"])),
                     "reasoning" => ("thinking", "assistant", render_content(&payload["summary"])),
                     "function_call" | "custom_tool_call" => {
                         let name = payload["name"].as_str().unwrap_or("Tool");

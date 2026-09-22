@@ -4,7 +4,7 @@ const DATABASE_NAME = 'pontia-dashboard';
 const DATABASE_VERSION = 1;
 const STORE_NAME = 'session-timelines';
 const CACHED_TIMELINE_LIMIT = 30;
-const SNAPSHOT_VERSION = 1;
+const SNAPSHOT_VERSION = 2;
 
 export interface CachedTimelineSnapshot {
   version: typeof SNAPSHOT_VERSION;
