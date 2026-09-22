@@ -78,31 +78,20 @@ impl PiControlConnection {
     }
 
     pub async fn ping(&self) -> Result<()> {
-        let result = self.request("ping", json!({})).await?;
-        if result != json!({ "pong": true }) {
-            return Err(Error::Domain("invalid Pi control ping response".into()));
-        }
-        Ok(())
+        self.request("ping", json!({}), json!({ "pong": true }))
+            .await
     }
 
     pub async fn submit(&self, input: &str, inbox_message_id: Option<&str>) -> Result<()> {
-        let result = self
-            .request(
-                "submit",
-                json!({
-                    "input": input, "inbox_message_id": inbox_message_id,
-                }),
-            )
-            .await?;
-        if result != json!({ "accepted": true }) {
-            return Err(Error::Domain(
-                "invalid Pi control submit response; delivery may be uncertain".into(),
-            ));
-        }
-        Ok(())
+        self.request(
+            "submit",
+            json!({ "input": input, "inbox_message_id": inbox_message_id }),
+            json!({ "accepted": true }),
+        )
+        .await
     }
 
-    async fn request(&self, method: &str, payload: Value) -> Result<Value> {
+    async fn request(&self, method: &str, payload: Value, expected: Value) -> Result<()> {
         let mut invalidated = self.invalidated.subscribe();
         if *invalidated.borrow() {
             return Err(Error::StateConflict(
@@ -112,13 +101,13 @@ impl PiControlConnection {
         tokio::select! {
             biased;
             _ = invalidated.changed() => Err(Error::StateConflict("Pi control binding has changed".into())),
-            result = tokio::time::timeout(REQUEST_TIMEOUT, self.request_inner(method, payload)) => {
+            result = tokio::time::timeout(REQUEST_TIMEOUT, self.request_inner(method, payload, expected)) => {
                 result.map_err(|_| Error::Domain("Pi control request timed out; request was not replayed".into()))?
             }
         }
     }
 
-    async fn request_inner(&self, method: &str, payload: Value) -> Result<Value> {
+    async fn request_inner(&self, method: &str, payload: Value, expected: Value) -> Result<()> {
         let mut slot = self.stream.lock().await;
         // Keep the stream outside the slot during I/O so cancellation also disconnects it.
         let mut stream = match slot.take() {
@@ -150,8 +139,13 @@ impl PiControlConnection {
             }
         };
         let result = self.exchange(&mut stream, method, payload).await?;
+        if result != expected {
+            return Err(Error::Domain(format!(
+                "invalid Pi control {method} response; delivery may be uncertain"
+            )));
+        }
         *slot = Some(stream);
-        Ok(result)
+        Ok(())
     }
 
     async fn exchange(

@@ -95,6 +95,7 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
         "timeout",
         "disconnect",
         "wrong_id",
+        "invalid_result",
         "oversized",
         "wrong_identity",
     ] {
@@ -146,6 +147,14 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
                 "wrong_id" => {
                     stream.get_mut().write_all(b"{\"version\":1,\"request_id\":\"other\",\"result\":{\"pong\":true}}\n").await.unwrap();
                 }
+                "invalid_result" => {
+                    let reply = json!({"version":1,"request_id":ping["request_id"],"result":{"accepted":false}});
+                    stream
+                        .get_mut()
+                        .write_all(format!("{reply}\n").as_bytes())
+                        .await
+                        .unwrap();
+                }
                 "oversized" => {
                     let _ = stream.get_mut().write_all(&vec![b'a'; 65537]).await;
                 }
@@ -175,6 +184,7 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
             "disconnect" => "closed",
             "wrong_id" => "request_id mismatch",
             "oversized" => "64 KiB",
+            "invalid_result" => "invalid Pi control submit response",
             "wrong_identity" => "identity mismatch",
             _ => unreachable!(),
         };

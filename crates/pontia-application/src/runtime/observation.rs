@@ -30,6 +30,7 @@ pub struct RuntimeObservationService {
     runtime: GenericRuntimeManager,
     agent_events: Option<AgentEventBroker>,
     live_output: Option<LiveOutputService>,
+    pi_control: Option<crate::PiControlService>,
 }
 
 impl RuntimeObservationService {
@@ -39,6 +40,7 @@ impl RuntimeObservationService {
             runtime: GenericRuntimeManager,
             agent_events: None,
             live_output: None,
+            pi_control: None,
         }
     }
 
@@ -49,6 +51,11 @@ impl RuntimeObservationService {
 
     pub fn with_live_output(mut self, live_output: LiveOutputService) -> Self {
         self.live_output = Some(live_output);
+        self
+    }
+
+    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
+        self.pi_control = Some(pi_control);
         self
     }
 
@@ -289,6 +296,9 @@ impl RuntimeObservationService {
         }
         if let Some(live_output) = &self.live_output {
             ingest = ingest.with_live_output(live_output.clone());
+        }
+        if let Some(control) = &self.pi_control {
+            ingest = ingest.with_pi_control(control.clone());
         }
         ingest
     }

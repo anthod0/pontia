@@ -2,13 +2,6 @@ use pontia_core::{Error, Result};
 
 use super::SqliteRuntimeBindingRepository;
 
-#[derive(sqlx::FromRow)]
-pub struct PiControlBindingRow {
-    pub session_id: String,
-    pub runtime_instance_id: String,
-    pub endpoint: String,
-}
-
 impl SqliteRuntimeBindingRepository {
     pub async fn publish_pi_control_endpoint(
         &self,
@@ -31,15 +24,14 @@ impl SqliteRuntimeBindingRepository {
         Ok(())
     }
 
-    pub async fn pi_control_bindings(&self) -> Result<Vec<PiControlBindingRow>> {
-        Ok(sqlx::query_as(
-            r#"SELECT r.session_id, r.runtime_instance_id,
-                      json_extract(r.adapter_details, '$.pi_control') AS endpoint
+    pub async fn pi_control_endpoint(&self, session_id: &str) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar(
+            r#"SELECT json_extract(r.adapter_details, '$.pi_control') AS endpoint
                FROM runtime_bindings r JOIN sessions s ON s.session_id = r.session_id
-               WHERE s.client_type = 'pi' AND s.state IN ('starting', 'idle', 'busy', 'interrupted')
+               WHERE r.session_id = ? AND s.client_type = 'pi' AND s.state IN ('starting', 'idle', 'busy', 'interrupted')
                  AND r.binding_state = 'confirmed' AND r.runtime_instance_id IS NOT NULL
                  AND json_type(r.adapter_details, '$.pi_control') = 'object'
                  AND json_extract(r.adapter_details, '$.pi_control.runtime_instance_id') = r.runtime_instance_id"#,
-        ).fetch_all(&self.pool).await?)
+        ).bind(session_id).fetch_optional(&self.pool).await?)
     }
 }

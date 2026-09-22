@@ -306,6 +306,16 @@ impl EventIngestService {
 
         tx.commit().await?;
 
+        if event.client_type == "pi"
+            && matches!(
+                event.event_type,
+                EventType::SessionExited | EventType::SessionError
+            )
+            && let Some(control) = &self.pi_control
+        {
+            control.refresh_session(&event.session_id).await;
+        }
+
         if let Some(agent_events) = &self.agent_events {
             agent_events.publish(event.clone());
         }

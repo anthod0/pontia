@@ -2,7 +2,6 @@ use pontia_core::{Error, Result};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 mod pi_control;
-pub use pi_control::PiControlBindingRow;
 
 #[derive(Debug, Clone)]
 pub struct RuntimeBindingUpsertRecord {

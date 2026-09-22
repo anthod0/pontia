@@ -38,9 +38,8 @@ async fn main() -> Result<()> {
         .run(app_state.shutdown().subscribe()),
     );
     let pi_control = app_state.pi_control();
-    let pi_shutdown = app_state.shutdown().subscribe();
-    let pi_control_task = tokio::spawn(async move { pi_control.run(pi_shutdown).await });
     let runtime_observer = application::RuntimeObservationService::new(app_state.db())
+        .with_pi_control(pi_control.clone())
         .with_agent_events(app_state.agent_events())
         .with_live_output(app_state.live_output());
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
@@ -78,7 +77,7 @@ async fn main() -> Result<()> {
     .await;
 
     cleanup_shutdown.notify();
-    let _ = pi_control_task.await;
+    pi_control.close().await;
     if let Some(task) = remote_task {
         let _ = task.await;
     }

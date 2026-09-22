@@ -49,8 +49,11 @@ async fn confirming_a_new_instance_drops_the_previous_control_endpoint() {
         .await
         .unwrap();
         tx.commit().await.unwrap();
-        let rows = repository.pi_control_bindings().await.unwrap();
-        assert_eq!(rows.len(), usize::from(runtime == "rtinst_old"));
+        let endpoint = repository
+            .pi_control_endpoint("sess_runtime")
+            .await
+            .unwrap();
+        assert_eq!(endpoint.is_some(), runtime == "rtinst_old");
     }
     let details: String = sqlx::query_scalar(
         "SELECT adapter_details FROM runtime_bindings WHERE session_id = 'sess_runtime'",

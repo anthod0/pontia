@@ -124,6 +124,94 @@ async fn eventually_ping(connection: &PiControlConnection) {
 }
 
 #[tokio::test]
+async fn submissions_connect_on_demand_reuse_and_reconnect_only_for_the_next_request() {
+    use pontia_application::PublishPiControlEndpoint;
+    use serde_json::Value;
+    use tokio::{io::AsyncWriteExt, net::UnixListener};
+
+    let (state, root) = state().await;
+    let path = root.path().join("control.sock");
+    let listener = UnixListener::bind(&path).unwrap();
+    sqlx::query(
+        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_pi', 'pi', 'idle')",
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, binding_state) VALUES ('sess_pi', 'tmux', 'rtinst_pi', 'confirmed')")
+        .execute(&state.db()).await.unwrap();
+    let service = state.pi_control();
+    service
+        .publish_endpoint(PublishPiControlEndpoint {
+            session_id: "sess_pi".into(),
+            runtime_instance_id: "rtinst_pi".into(),
+            socket_path: path.display().to_string(),
+            version: 1,
+        })
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), listener.accept())
+            .await
+            .is_err(),
+        "publishing an endpoint must not open a connection"
+    );
+
+    let server = tokio::spawn(async move {
+        for inputs in [vec!["first", "uncertain"], vec!["next"]] {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut stream = BufReader::new(socket);
+            let mut line = String::new();
+            stream.read_line(&mut line).await.unwrap();
+            let hello: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(hello["method"], "hello");
+            let reply = json!({"version":1,"request_id":hello["request_id"],"result":{"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}});
+            stream
+                .get_mut()
+                .write_all(format!("{reply}\n").as_bytes())
+                .await
+                .unwrap();
+            for input in inputs {
+                line.clear();
+                stream.read_line(&mut line).await.unwrap();
+                let request: Value = serde_json::from_str(&line).unwrap();
+                assert_eq!(request["method"], "submit");
+                assert_eq!(request["input"], input);
+                if input == "uncertain" {
+                    break;
+                }
+                let reply = json!({"version":1,"request_id":request["request_id"],"result":{"accepted":true}});
+                stream
+                    .get_mut()
+                    .write_all(format!("{reply}\n").as_bytes())
+                    .await
+                    .unwrap();
+            }
+        }
+    });
+    tokio::time::timeout(Duration::from_secs(3), async {
+        service
+            .submit("sess_pi", "rtinst_pi", "first", None)
+            .await
+            .unwrap();
+        assert!(
+            service
+                .submit("sess_pi", "rtinst_pi", "uncertain", None)
+                .await
+                .is_err()
+        );
+        service
+            .submit("sess_pi", "rtinst_pi", "next", None)
+            .await
+            .unwrap();
+        server.await.unwrap();
+    })
+    .await
+    .unwrap();
+    service.close().await;
+}
+
+#[tokio::test]
 async fn routes_registered_endpoints_fences_replacements_and_recovers_from_daemon_restart() {
     let (state, _root) = state().await;
     let service = state.pi_control();
@@ -235,27 +323,27 @@ async fn routes_registered_endpoints_fences_replacements_and_recovers_from_daemo
 }
 
 #[tokio::test]
-async fn daemon_loop_connects_existing_bindings_and_releases_exited_sessions_and_shutdown() {
+async fn exit_events_release_bindings_and_shutdown_closes_connections() {
     let (state, _root) = state().await;
     let mut pi = PiProcess::start("sess_pi", "rtinst_pi").await;
     bind(&state, &pi).await;
     assert_eq!(publish(&state, &pi).await, StatusCode::OK);
-    let (shutdown, receiver) = tokio::sync::watch::channel(false);
     let service = state.pi_control();
-    let task = tokio::spawn(async move { service.run(receiver).await });
-    eventually_busy(&pi).await;
+    service.ping("sess_pi", "rtinst_pi").await.unwrap();
     let observer = pi.controller();
-    sqlx::query("UPDATE sessions SET state = 'exited' WHERE session_id = 'sess_pi'")
-        .execute(&state.db())
+    pontia_application::EventIngestService::new(state.db())
+        .with_pi_control(service.clone())
+        .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
+            "evt_exit".into(),
+            "sess_pi".into(),
+            None,
+            pontia_core::domain::EventSource::AgentClient,
+            "pi".into(),
+            pontia_core::domain::EventType::SessionExited,
+            json!({"runtime_instance_id":"rtinst_pi"}),
+        ))
         .await
         .unwrap();
-    assert!(
-        state
-            .pi_control()
-            .ping("sess_pi", "rtinst_pi")
-            .await
-            .is_err()
-    );
     eventually_ping(&observer).await;
     observer.invalidate();
     assert_eq!(publish(&state, &pi).await, StatusCode::CONFLICT);
@@ -264,9 +352,18 @@ async fn daemon_loop_connects_existing_bindings_and_releases_exited_sessions_and
         .await
         .unwrap();
     assert_eq!(publish(&state, &pi).await, StatusCode::OK);
-    eventually_busy(&pi).await;
-    shutdown.send(true).unwrap();
-    task.await.unwrap();
+    // Wait for the peer to release the previous diagnostic connection.
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if service.ping("sess_pi", "rtinst_pi").await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    service.close().await;
     assert!(
         state
             .pi_control()
@@ -280,20 +377,39 @@ async fn daemon_loop_connects_existing_bindings_and_releases_exited_sessions_and
     pi.stop().await;
 }
 
-async fn eventually_busy(pi: &PiProcess) {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let controller = pi.controller();
-            let result = controller.ping().await;
-            controller.invalidate();
-            if result.is_err_and(|error| error.to_string().contains("connection_busy")) {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+#[tokio::test]
+async fn session_errors_and_process_exit_observations_release_idle_connections() {
+    for process_exit in [false, true] {
+        let (state, _root) = state().await;
+        let mut pi = PiProcess::start("sess_pi", "rtinst_pi").await;
+        bind(&state, &pi).await;
+        assert_eq!(publish(&state, &pi).await, StatusCode::OK);
+        let service = state.pi_control();
+        service.ping("sess_pi", "rtinst_pi").await.unwrap();
+        if process_exit {
+            sqlx::query("UPDATE runtime_bindings SET tmux_socket_path='/unused/tmux', tmux_pane_id='%1' WHERE session_id='sess_pi'")
+                .execute(&state.db()).await.unwrap();
+            pontia_application::RuntimeObservationService::new(state.db())
+                .with_pi_control(service.clone())
+                .observe_session("sess_pi")
+                .await
+                .unwrap();
+        } else {
+            pontia_application::EventIngestService::new(state.db())
+                .with_pi_control(service.clone())
+                .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
+                    "evt_error".into(), "sess_pi".into(), None,
+                    pontia_core::domain::EventSource::AgentClient, "pi".into(),
+                    pontia_core::domain::EventType::SessionError,
+                    json!({"runtime_instance_id":"rtinst_pi", "failure":{"message":"client error"}}),
+                )).await.unwrap();
         }
-    })
-    .await
-    .unwrap();
+        let observer = pi.controller();
+        eventually_ping(&observer).await;
+        observer.invalidate();
+        service.close().await;
+        pi.stop().await;
+    }
 }
 
 #[tokio::test]
@@ -307,11 +423,6 @@ async fn external_inbox_uses_the_registered_connection_without_paste_or_turn_fac
     sqlx::query("UPDATE runtime_bindings SET tmux_socket_path='/unused/tmux',tmux_pane_id='%1',capabilities=? WHERE session_id='sess_input'")
         .bind(serde_json::to_string(&pontia_agent_clients::pi::CAPABILITIES).unwrap()).execute(&state.db()).await.unwrap();
     assert_eq!(publish(&state, &pi).await, StatusCode::OK);
-    state
-        .pi_control()
-        .ping("sess_input", "rtinst_input")
-        .await
-        .unwrap();
     EventIngestService::new(state.db())
         .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
             "evt_input_ready".into(),

@@ -150,14 +150,13 @@ mod tests {
         let server = tokio::spawn(async move {
             let (socket, _) = listener.accept().await.unwrap();
             let mut stream = BufReader::new(socket);
-            for method in ["hello", "ping", "submit"] {
+            for method in ["hello", "submit"] {
                 let mut line = String::new();
                 stream.read_line(&mut line).await.unwrap();
                 let request: Value = serde_json::from_str(&line).unwrap();
                 assert_eq!(request["method"], method);
                 let result = match method {
                     "hello" => json!({"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}),
-                    "ping" => json!({"pong":true}),
                     _ => {
                         assert_eq!(request["input"], "initial input");
                         json!({"accepted":true})
@@ -171,7 +170,6 @@ mod tests {
                     .unwrap();
             }
         });
-        control.ping("sess_pi", "rtinst_pi").await.unwrap();
         let service =
             SessionCommandService::new(pool.clone(), root.path().into()).with_pi_control(control);
         let dispatch = tokio::spawn(async move {
