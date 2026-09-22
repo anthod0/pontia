@@ -10,7 +10,7 @@ use pontia_storage_sqlite::repositories::{
     sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
 };
 
-/// A client-observed fact at the Internal Event API boundary.
+/// A client-observed fact at the application ingestion boundary.
 ///
 /// Pontia identity, source, client type, canonical time and canonical payload are
 /// deliberately absent: those belong to normalization, not to the client.

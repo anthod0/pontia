@@ -120,6 +120,15 @@ impl AppState {
         LiveOutputService::new(self.db(), self.inner.events.live_output.clone())
     }
 
+    pub fn event_ingest_service(&self) -> crate::EventIngestService {
+        crate::EventIngestService::new(self.db()).with_reporting_dependencies(
+            self.pi_control(),
+            self.agent_events(),
+            self.live_output(),
+            self.volatile_events(),
+        )
+    }
+
     pub fn git_refresh(&self) -> GitRefreshCoordinator {
         self.inner.integrations.git_refresh.clone()
     }

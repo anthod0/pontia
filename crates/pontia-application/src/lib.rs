@@ -38,8 +38,8 @@ pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use idempotency::{IdempotencyCoordinator, IdempotencyOutcome};
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
 pub use ingestion::{
-    EventIngestResult, EventIngestService, EventReportNormalizer, InternalEventValidationService,
-    PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
+    EventIngestResult, EventIngestService, EventReportError, EventReportNormalizer,
+    InternalEventValidationService, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
 };
 pub use live_output::{
     LiveOutputBatch, LiveOutputClose, LiveOutputCloseReason, LiveOutputIdentity, LiveOutputItem,

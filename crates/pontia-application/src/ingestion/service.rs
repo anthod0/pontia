@@ -1,6 +1,7 @@
 mod effects;
 mod enrichment;
 mod persistence;
+mod reporting;
 mod reporting_failure;
 mod validation;
 
@@ -41,9 +42,24 @@ pub struct EventIngestService {
     pi_control: Option<crate::PiControlService>,
     agent_events: Option<AgentEventBroker>,
     live_output: Option<LiveOutputService>,
+    volatile_events: Option<crate::app::VolatileEventBroker>,
 }
 
 impl EventIngestService {
+    pub fn with_reporting_dependencies(
+        mut self,
+        pi_control: crate::PiControlService,
+        agent_events: AgentEventBroker,
+        live_output: LiveOutputService,
+        volatile_events: crate::app::VolatileEventBroker,
+    ) -> Self {
+        self.pi_control = Some(pi_control);
+        self.agent_events = Some(agent_events);
+        self.live_output = Some(live_output);
+        self.volatile_events = Some(volatile_events);
+        self
+    }
+
     pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
         self.pi_control = Some(pi_control);
         self
@@ -55,6 +71,7 @@ impl EventIngestService {
             pi_control: None,
             agent_events: None,
             live_output: None,
+            volatile_events: None,
         }
     }
 
@@ -100,7 +117,7 @@ impl EventIngestService {
     /// Ingests a fact supplied by an explicit agent-client adapter.
     ///
     /// This path preserves adapter and replay behavior that predates runtime
-    /// fencing. HTTP reports must use [`Self::ingest_confirmed_event`], while
+    /// fencing. Client reports must use [`Self::report_fact`], while
     /// Pontia-owned callers must use [`Self::ingest_pontia_event`].
     pub async fn ingest_reported_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into(), None, false, None)
@@ -127,6 +144,8 @@ impl EventIngestService {
         Ok(())
     }
 
+    /// Persists an already normalized event with transaction-time runtime fencing.
+    /// Client facts must enter through [`Self::report_fact`] for full validation and effects.
     pub async fn ingest_confirmed_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into(), None, true, None)
             .await
@@ -368,7 +387,7 @@ impl EventIngestService {
         }))
     }
 
-    pub async fn ensure_confirmed_event_matches_session_boundary(
+    async fn ensure_confirmed_event_matches_session_boundary(
         &self,
         event: &DomainEvent,
     ) -> Result<()> {
@@ -396,7 +415,7 @@ impl EventIngestService {
         rows.into_iter().map(event_from_row).collect()
     }
 
-    pub async fn volatile_state_version(&self, session_id: &str) -> Result<i64> {
+    async fn volatile_state_version(&self, session_id: &str) -> Result<i64> {
         SqliteEventRepository::new(self.pool.clone())
             .session_event_count(session_id)
             .await

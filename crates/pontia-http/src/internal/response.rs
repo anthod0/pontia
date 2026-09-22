@@ -14,10 +14,6 @@ pub struct ApiError {
 }
 
 impl ApiError {
-    pub(super) fn is_permanent_rejection(&self) -> bool {
-        self.status.is_client_error() && self.status != StatusCode::TOO_MANY_REQUESTS
-    }
-
     pub(crate) fn invalid_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
@@ -77,6 +73,17 @@ impl ApiError {
                 code: "internal_error",
                 message: error.to_string(),
             },
+        }
+    }
+}
+
+impl From<pontia_application::EventReportError> for ApiError {
+    fn from(error: pontia_application::EventReportError) -> Self {
+        match error {
+            pontia_application::EventReportError::InvalidFact(message) => {
+                Self::invalid_request(message)
+            }
+            pontia_application::EventReportError::Ingestion(error) => Self::from(error),
         }
     }
 }

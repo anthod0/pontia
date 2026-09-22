@@ -4,20 +4,12 @@ use axum::{
     Json,
     extract::{State, rejection::JsonRejection},
 };
-use pontia_application::{
-    AppState, EventIngestService, EventReportNormalizer, InternalEventValidationService,
-    ReportedFact,
-};
-use pontia_core::{
-    domain::{DomainEvent, EventType, MAX_TURN_INPUT_SUMMARY_CHARS, MAX_TURN_OUTPUT_SUMMARY_CHARS},
-    error::Error,
-};
+use pontia_application::{AppState, ReportedFact};
+use pontia_core::domain::EventType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::response::ApiError;
-
-const MAX_EVENT_PAYLOAD_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -46,95 +38,10 @@ pub async fn post_event(
     request: Result<Json<InternalEventRequest>, JsonRejection>,
 ) -> Result<Json<InternalEventResponse>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let failure_context = (request.fact_type == "turn.started")
-        .then(|| {
-            request
-                .data
-                .get("runtime_instance_id")
-                .and_then(Value::as_str)
-        })
-        .flatten()
-        .map(|runtime| (request.session_id.clone(), runtime.to_string()));
-    let result = ingest_event(&state, request).await;
-    if let Err(error) = &result
-        && error.is_permanent_rejection()
-        && let Some((session_id, runtime_instance_id)) = failure_context
-        && let Err(failure) = EventIngestService::new(state.db())
-            .with_pi_control(state.pi_control())
-            .with_agent_events(state.agent_events())
-            .report_turn_start_failure(&session_id, &runtime_instance_id, "event_rejected")
-            .await
-    {
-        tracing::warn!(%session_id, %failure, "could not record turn start reporting failure");
-    }
-    result
-}
-
-async fn ingest_event(
-    state: &AppState,
-    request: InternalEventRequest,
-) -> Result<Json<InternalEventResponse>, ApiError> {
-    let fact = request.into_reported_fact()?;
-    let mut reported_event = EventReportNormalizer::new(state.db())
-        .normalize(fact)
-        .await
-        .map_err(|error| ApiError::invalid_request(error.to_string()))?;
-    if reported_event.event_type == EventType::TurnStarted {
-        truncate_summary(
-            &mut reported_event.payload,
-            "/input/summary",
-            MAX_TURN_INPUT_SUMMARY_CHARS,
-        );
-    }
-    if reported_event.event_type == EventType::TurnOutput {
-        truncate_summary(
-            &mut reported_event.payload,
-            "/output/summary",
-            MAX_TURN_OUTPUT_SUMMARY_CHARS,
-        );
-    }
-    if reported_event.event_type == EventType::SessionContextUsageUpdated {
-        validate_context_usage_payload(&reported_event.payload)?;
-    }
-    let payload_size = serde_json::to_vec(&reported_event.payload)
-        .map_err(Error::from)?
-        .len();
-    if payload_size > MAX_EVENT_PAYLOAD_BYTES {
-        return Err(ApiError::invalid_request(format!(
-            "payload exceeds maximum size of {MAX_EVENT_PAYLOAD_BYTES} bytes"
-        )));
-    }
-    let event = DomainEvent::from(reported_event.clone());
-    InternalEventValidationService::new()
-        .validate(&event)
-        .map_err(domain_error_as_invalid_request)?;
-    let service = EventIngestService::new(state.db())
-        .with_pi_control(state.pi_control())
-        .with_agent_events(state.agent_events())
-        .with_live_output(state.live_output());
-    service
-        .ensure_confirmed_event_matches_session_boundary(&event)
-        .await
-        .map_err(domain_error_as_invalid_request)?;
-
-    if event.event_type == EventType::SessionMessageUpdated {
-        let state_version = service.volatile_state_version(&event.session_id).await?;
-        state
-            .volatile_events()
-            .publish_debounced_session_message_updated(event.clone());
-        return Ok(Json(InternalEventResponse {
-            accepted: true,
-            duplicate: false,
-            event_id: event.event_id,
-            session_id: event.session_id,
-            turn_id: event.turn_id,
-            state_version,
-            warnings: Vec::new(),
-        }));
-    }
-
-    let result = service.ingest_confirmed_event(reported_event).await?;
-
+    let result = state
+        .event_ingest_service()
+        .report_fact(request.into_reported_fact()?)
+        .await?;
     Ok(Json(InternalEventResponse {
         accepted: result.accepted,
         duplicate: result.duplicate,
@@ -150,9 +57,6 @@ impl InternalEventRequest {
     fn into_reported_fact(self) -> Result<ReportedFact, ApiError> {
         let fact_type = EventType::from_str(&self.fact_type)
             .map_err(|err| ApiError::invalid_request(err.to_string()))?;
-        if !self.data.is_object() {
-            return Err(ApiError::invalid_request("data must be a JSON object"));
-        }
         Ok(ReportedFact {
             session_id: self.session_id,
             turn_id: self.turn_id,
@@ -160,85 +64,4 @@ impl InternalEventRequest {
             data: self.data,
         })
     }
-}
-
-fn domain_error_as_invalid_request(error: Error) -> ApiError {
-    match error {
-        Error::Domain(message) => ApiError::invalid_request(message),
-        other => ApiError::from(other),
-    }
-}
-
-fn truncate_summary(payload: &mut Value, pointer: &str, max_chars: usize) {
-    if let Some(Value::String(summary)) = payload.pointer_mut(pointer) {
-        *summary = summary.chars().take(max_chars).collect();
-    }
-}
-
-fn validate_context_usage_payload(payload: &Value) -> Result<(), ApiError> {
-    let usage = payload
-        .get("context_usage")
-        .and_then(Value::as_object)
-        .ok_or_else(|| ApiError::invalid_request("payload.context_usage must be a JSON object"))?;
-
-    for field in [
-        "used_tokens",
-        "max_tokens",
-        "remaining_tokens",
-        "input_tokens",
-        "output_tokens",
-        "cache_tokens",
-    ] {
-        if let Some(value) = usage.get(field)
-            && !value.is_null()
-            && value.as_u64().is_none()
-        {
-            return Err(ApiError::invalid_request(format!(
-                "payload.context_usage.{field} must be a non-negative integer"
-            )));
-        }
-    }
-
-    if let Some(value) = usage.get("usage_ratio")
-        && !value.is_null()
-    {
-        let ratio = value.as_f64().ok_or_else(|| {
-            ApiError::invalid_request("payload.context_usage.usage_ratio must be between 0 and 1")
-        })?;
-        if !(0.0..=1.0).contains(&ratio) {
-            return Err(ApiError::invalid_request(
-                "payload.context_usage.usage_ratio must be between 0 and 1",
-            ));
-        }
-    }
-
-    if usage.contains_key("model") {
-        return Err(ApiError::invalid_request(
-            "payload.context_usage.model is not supported; use payload.model",
-        ));
-    }
-
-    if let Some(value) = usage.get("confidence")
-        && !value.is_null()
-    {
-        match value.as_str() {
-            Some("exact" | "estimated" | "unknown") => {}
-            _ => {
-                return Err(ApiError::invalid_request(
-                    "payload.context_usage.confidence must be exact, estimated, or unknown",
-                ));
-            }
-        }
-    }
-
-    if let Some(value) = payload.get("model")
-        && !value.is_null()
-        && value.as_str().is_none()
-    {
-        return Err(ApiError::invalid_request(
-            "payload.model must be a string or null",
-        ));
-    }
-
-    Ok(())
 }

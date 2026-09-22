@@ -8,5 +8,5 @@ pub mod validation;
 pub use owned::{PontiaEvent, PontiaEventSource, PontiaEventType};
 pub use report::{EventReportNormalizer, ReportedFact};
 pub use service::EventIngestService;
-pub use types::EventIngestResult;
+pub use types::{EventIngestResult, EventReportError};
 pub use validation::InternalEventValidationService;
