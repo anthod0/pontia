@@ -6,9 +6,9 @@ license.workspace = true
 
 [dependencies]
 futures-util = "0.3.34"
-pontia-agent-clients = { path = "../agent-clients", default-features = false }
-pontia-config = { path = "../config", default-features = false }
-pontia-core = { path = "../core", default-features = false }
+pontia-agent-clients.workspace = true
+pontia-config.workspace = true
+pontia-core.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 time = { workspace = true, features = ["formatting"] }
@@ -16,7 +16,7 @@ tokio = { version = "1.53.1", features = ["rt", "sync", "time", "net", "process"
 tokio-tungstenite = "0.30.0"
 
 [dev-dependencies]
-pontia-agent-clients = { path = "../agent-clients", features = ["generic-test-client"] }
+pontia-agent-clients = { workspace = true, default-features = true, features = ["generic-test-client"] }
 tempfile = "3"
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
 

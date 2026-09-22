@@ -10,7 +10,7 @@ axum = { version = "0.8", features = ["ws"] }
 axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 clap = { version = "4", features = ["derive"] }
 ed25519-dalek = "2.2"
-pontia-tunnel = { path = "../tunnel" }
+pontia-tunnel.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde_json.workspace = true
 sqlx.workspace = true

@@ -5,11 +5,11 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-pontia-agent-clients = { path = "../agent-clients", default-features = false }
-pontia-config = { path = "../config", default-features = false }
-pontia-core = { path = "../core", default-features = false }
-pontia-runtime = { path = "../runtime", default-features = false }
-pontia-storage-sqlite = { path = "../storage-sqlite" }
+pontia-agent-clients.workspace = true
+pontia-config.workspace = true
+pontia-core.workspace = true
+pontia-runtime.workspace = true
+pontia-storage-sqlite.workspace = true
 ignore = "0.4"
 nucleo-matcher = "0.3"
 serde = { workspace = true, features = ["derive"] }
@@ -23,7 +23,7 @@ uuid = { workspace = true, features = ["v7", "serde"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
 
 [dev-dependencies]
-pontia-agent-clients = { path = "../agent-clients", features = ["generic-test-client"] }
+pontia-agent-clients = { workspace = true, default-features = true, features = ["generic-test-client"] }
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 

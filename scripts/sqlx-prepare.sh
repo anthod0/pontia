@@ -13,7 +13,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for migration_file in control/storage-sqlite/migrations/*.sql; do
+for migration_file in crates/pontia-storage-sqlite/migrations/*.sql; do
   sqlite3 "$SQLX_PREPARE_DB" < "$migration_file"
 done
 

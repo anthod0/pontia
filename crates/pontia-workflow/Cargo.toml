@@ -5,9 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-pontia-application = { path = "../application", default-features = false }
-pontia-core = { path = "../core", default-features = false }
-pontia-storage-sqlite = { path = "../storage-sqlite" }
+pontia-application.workspace = true
+pontia-core.workspace = true
+pontia-storage-sqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

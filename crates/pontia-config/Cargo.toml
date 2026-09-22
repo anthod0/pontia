@@ -1,17 +1,14 @@
 [package]
-name = "pontia-agent-clients"
+name = "pontia-config"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-pontia-core = { path = "../core", default-features = false }
+pontia-agent-clients = { workspace = true, default-features = true }
+pontia-core.workspace = true
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
+toml = "0.9"
 
 [dev-dependencies]
 tempfile = "3"
-
-[features]
-default = []
-generic-test-client = []
