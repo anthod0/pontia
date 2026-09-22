@@ -17,6 +17,14 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
     let app_state = application::initialize(&config).await?;
+    pontia_runtime::set_runtime_bind_addr(bound_addr);
+    tokio::spawn(
+        application::codex::CodexObserver::new(
+            app_state.db(),
+            app_state.pontia_home().to_path_buf(),
+        )
+        .run(app_state.shutdown().subscribe()),
+    );
     let runtime_observer = application::RuntimeObservationService::new(app_state.db())
         .with_agent_events(app_state.agent_events())
         .with_live_output(app_state.live_output());
@@ -39,6 +47,7 @@ async fn main() -> Result<()> {
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
     let shutdown = state.app().shutdown();
+    let codex_root = state.app().pontia_home().to_path_buf();
     http::serve_with_shutdown_timeout(
         listener,
         http::router(state),
@@ -49,6 +58,8 @@ async fn main() -> Result<()> {
         Duration::from_secs(5),
     )
     .await?;
+
+    pontia_runtime::codex::CodexRuntime::shutdown(&codex_root).await;
 
     Ok(())
 }

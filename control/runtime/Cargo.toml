@@ -5,13 +5,20 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+futures-util = "0.3.34"
 pontia-agent-clients = { path = "../agent-clients", default-features = false }
 pontia-config = { path = "../config", default-features = false }
 pontia-core = { path = "../core", default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 time = { workspace = true, features = ["formatting"] }
+tokio = { version = "1.53.1", features = ["rt", "sync", "time", "net", "process", "io-util", "macros"] }
+tokio-tungstenite = "0.30.0"
 
 [dev-dependencies]
 pontia-agent-clients = { path = "../agent-clients", features = ["generic-test-client"] }
 tempfile = "3"
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2.189"

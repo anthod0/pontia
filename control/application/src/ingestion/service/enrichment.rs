@@ -107,12 +107,16 @@ pub(super) async fn enrich_timeline_boundary(pool: &sqlx::SqlitePool, event: &mu
         }
     };
 
-    let native_entry_anchor = match kind {
-        TimelineBoundaryCaptureKind::Head => {
-            event.payload.pointer("/timeline_anchor/previous_leaf_id")
-        }
-        TimelineBoundaryCaptureKind::Tail => {
-            event.payload.pointer("/timeline_anchor/terminal_leaf_id")
+    let native_entry_anchor = if event.client_type == "codex" {
+        event.payload.get("native_turn_id")
+    } else {
+        match kind {
+            TimelineBoundaryCaptureKind::Head => {
+                event.payload.pointer("/timeline_anchor/previous_leaf_id")
+            }
+            TimelineBoundaryCaptureKind::Tail => {
+                event.payload.pointer("/timeline_anchor/terminal_leaf_id")
+            }
         }
     }
     .and_then(Value::as_str)

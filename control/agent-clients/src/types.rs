@@ -54,6 +54,7 @@ impl AgentClientCapabilities {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispatchBehavior {
+    CodexProtocol,
     InProcessRecorded,
     TmuxPaste,
     None,
@@ -70,6 +71,7 @@ pub enum ClientSessionIdentityBehavior {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeBehavior {
+    CodexAppServer,
     InProcess,
     Tmux(TmuxRuntimeBehavior),
 }
@@ -95,12 +97,14 @@ pub struct HookLogBehavior {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InterruptBehavior {
+    CodexProtocol,
     Unsupported,
     TmuxInterrupt,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerminateBehavior {
+    CodexArchive,
     RuntimeManager,
     TmuxSendKeys(&'static [&'static str]),
 }
@@ -119,12 +123,14 @@ pub enum CurrentTurnIdBehavior {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TurnLifecycleBehavior {
+    ClientManaged,
     BackendManaged,
     ClientManagedForInteractiveTmux,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeBindingBehavior {
+    CodexAppServer,
     Unsupported,
     Tmux { runtime_kind: &'static str },
 }
@@ -140,6 +146,7 @@ pub enum StartupHook {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TranscriptBehavior {
+    CodexRollout,
     Unsupported,
     PiJsonl,
 }
@@ -207,6 +214,7 @@ impl AgentClientSpec {
 
     pub fn runtime_binding_kind(&self) -> Option<&'static str> {
         match self.adapter.runtime_binding {
+            RuntimeBindingBehavior::CodexAppServer => Some("codex_app_server"),
             RuntimeBindingBehavior::Unsupported => None,
             RuntimeBindingBehavior::Tmux { runtime_kind } => Some(runtime_kind),
         }
@@ -217,7 +225,7 @@ impl AgentClientAdapter {
     pub fn tmux_runtime(&self) -> Option<TmuxRuntimeBehavior> {
         match self.runtime {
             RuntimeBehavior::Tmux(runtime) => Some(runtime),
-            RuntimeBehavior::InProcess => None,
+            RuntimeBehavior::InProcess | RuntimeBehavior::CodexAppServer => None,
         }
     }
 }

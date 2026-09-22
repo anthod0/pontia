@@ -141,12 +141,12 @@ test('remembers the selected new chat workspace after starting a chat', async ()
 });
 
 
-test('offers the implemented client and leaves submission disabled until a task is entered', async () => {
+test('offers Pi and Codex and requires a task before submission', async () => {
   render(NewChatPage);
 
   expect(await screen.findByRole('heading', { name: 'Start a session' })).toBeInTheDocument();
   const clients = screen.getByRole('group', { name: 'Agent client' });
-  expect(within(clients).getAllByRole('button')).toHaveLength(1);
+  expect(within(clients).getByRole('button', { name: 'codex' })).toHaveAttribute('aria-pressed', 'false');
   expect(within(clients).getByRole('button', { name: 'pi' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: 'Start session' })).toBeDisabled();
   await userEvent.type(screen.getByRole('textbox'), 'Inspect this workspace');

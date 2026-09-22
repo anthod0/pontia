@@ -239,6 +239,25 @@ impl EventIngestService {
                 state_version,
             }));
         }
+        if sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM events WHERE event_id=?")
+            .bind(&event.event_id)
+            .fetch_one(&mut *tx)
+            .await?
+            > 0
+        {
+            let state_version =
+                SqliteEventRepository::session_event_count_in_tx(&mut tx, &event.session_id)
+                    .await?;
+            tx.commit().await?;
+            return Ok(Some(EventIngestResult {
+                accepted: true,
+                duplicate: true,
+                event_id: event.event_id,
+                session_id: event.session_id,
+                turn_id: event.turn_id,
+                state_version,
+            }));
+        }
         validate_turn_identity_in_tx(&mut tx, &event, enforce_runtime_fence).await?;
         let sessions =
             SqliteSessionRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
@@ -304,15 +323,17 @@ impl EventIngestService {
         clear_exited_session_tmux_markers(&self.pool, &event, true).await;
         link_started_turn_to_inbox_message(&self.pool, &event).await?;
 
-        if matches!(
-            event.event_type,
-            EventType::SessionReady
-                | EventType::TurnCompleted
-                | EventType::TurnFailed
-                | EventType::TurnDispatchFailed
-                | EventType::TurnAbandoned
-                | EventType::TurnInterrupted
-        ) {
+        if event.client_type != "codex"
+            && matches!(
+                event.event_type,
+                EventType::SessionReady
+                    | EventType::TurnCompleted
+                    | EventType::TurnFailed
+                    | EventType::TurnDispatchFailed
+                    | EventType::TurnAbandoned
+                    | EventType::TurnInterrupted
+            )
+        {
             Box::pin(InboxCommandService::new(self.pool.clone()).drain_inbox(&event.session_id))
                 .await?;
         }

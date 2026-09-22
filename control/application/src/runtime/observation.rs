@@ -183,7 +183,7 @@ impl RuntimeObservationService {
                     })
                     .await;
             }
-            RuntimeBehavior::InProcess => {
+            RuntimeBehavior::InProcess | RuntimeBehavior::CodexAppServer => {
                 let Some(runtime_target) = SqliteRuntimeBindingRepository::new(self.pool.clone())
                     .runtime_handle(session_id)
                     .await?

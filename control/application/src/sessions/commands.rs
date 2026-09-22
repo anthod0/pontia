@@ -125,6 +125,39 @@ impl SessionCommandService {
                 }),
             ))
             .await?;
+        if request.client_type == "codex" {
+            let cwd = runtime_workspace
+                .clone()
+                .map(std::path::PathBuf::from)
+                .unwrap_or(std::env::current_dir()?);
+            crate::codex::CodexService::new(self.pool.clone())
+                .provision(&session_id, &self.pontia_home, &cwd)
+                .await?;
+            self.update_session_workspace(&session_id, workspace_record.as_ref())
+                .await?;
+            sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex_environment',json(?)) WHERE session_id=?")
+                .bind(serde_json::to_string(&request.runtime_environment)?).bind(&session_id).execute(&self.pool).await?;
+            if let Some(task) = request.initial_task {
+                crate::InboxCommandService::new(self.pool.clone())
+                    .submit_message(
+                        &session_id,
+                        crate::SubmitInboxMessageRequest {
+                            input: task.input,
+                            metadata: task.metadata,
+                            delivery_policy: "after_idle".into(),
+                            branch_target_turn_id: None,
+                        },
+                    )
+                    .await?;
+            }
+            let session = ExternalQueryService::new(self.pool.clone())
+                .get_session(&session_id)
+                .await?;
+            return Ok(CreateSessionOutcome {
+                data: json!({"session":session}),
+                duplicate: false,
+            });
+        }
         ingest
             .ingest_pontia_event(PontiaEvent::new(
                 session_id.clone(),
@@ -275,6 +308,9 @@ impl SessionCommandService {
                                 .await
                         }
                         DispatchMode::None => Ok(()),
+                        DispatchMode::CodexProtocol => {
+                            unreachable!("Codex dispatch uses its async controller")
+                        }
                     };
                     if let Err(error) = result {
                         tracing::warn!(

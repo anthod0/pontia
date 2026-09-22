@@ -1,3 +1,4 @@
+pub mod codex;
 #[cfg(any(test, feature = "generic-test-client"))]
 mod generic_test;
 pub mod pi;
@@ -25,6 +26,7 @@ pub const AGENT_CLIENTS: &[AgentClientSpec] = &[
     #[cfg(any(test, feature = "generic-test-client"))]
     generic_test::SPEC,
     pi::SPEC,
+    codex::SPEC,
 ];
 
 pub fn default_real_client_spec() -> &'static AgentClientSpec {
@@ -72,6 +74,10 @@ pub fn timeline_boundary_backend_for(client_type: &str) -> Option<TimelineBounda
     let spec = get_client_spec(client_type)?;
     match spec.adapter.transcript {
         TranscriptBehavior::Unsupported => None,
+        TranscriptBehavior::CodexRollout => Some(TimelineBoundaryBackend {
+            resolver: Box::new(codex::rollout::CodexRollout),
+            capturer: Box::new(codex::rollout::CodexRollout),
+        }),
         TranscriptBehavior::PiJsonl => Some(TimelineBoundaryBackend {
             resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
             capturer: Box::new(pi::raw_transcripts::PiTimelineAdapter::new()),
@@ -86,6 +92,10 @@ pub fn turn_timeline_backend_for(client_type: &str) -> Option<TurnTimelineBacken
     }
     match spec.adapter.transcript {
         TranscriptBehavior::Unsupported => None,
+        TranscriptBehavior::CodexRollout => Some(TurnTimelineBackend {
+            resolver: Box::new(codex::rollout::CodexRollout),
+            reader: Box::new(codex::rollout::CodexRollout),
+        }),
         TranscriptBehavior::PiJsonl => Some(TurnTimelineBackend {
             resolver: Box::new(pi::raw_transcripts::PiAgentBindingResolver::new()),
             reader: Box::new(pi::raw_transcripts::PiTimelineAdapter::new()),

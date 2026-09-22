@@ -141,6 +141,7 @@ pub(crate) fn runtime_binding_record(
         "pi_hook_log": metadata.get("pi_hook_log"),
     });
     let adapter_details = json!({
+        "codex": metadata.get("codex"),
         "tmux": metadata.get("tmux"),
         "in_process": metadata.get("in_process"),
     });

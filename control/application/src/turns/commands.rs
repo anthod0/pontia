@@ -47,6 +47,17 @@ impl TurnCommandService {
             Error::Domain(format!("unsupported client_type: {}", session.client_type))
         })?;
         let dispatch_mode = client_spec.adapter.dispatch;
+        if dispatch_mode == DispatchMode::CodexProtocol {
+            if matches!(session.state.as_str(), "exited" | "error") {
+                return Err(Error::StateConflict(
+                    "Resume the Codex session before sending input".into(),
+                ));
+            }
+            crate::codex::CodexService::new(self.pool.clone())
+                .submit(session_id, &input, metadata["inbox_message_id"].as_str())
+                .await?;
+            return Ok(None);
+        }
         let can_accept_turn = matches!(session.state.as_str(), "idle" | "interrupted")
             || (session.state == "starting" && dispatch_mode == DispatchMode::TmuxPaste);
         if !can_accept_turn {

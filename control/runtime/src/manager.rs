@@ -55,6 +55,11 @@ impl GenericRuntimeManager {
         } else {
             client_spec.capabilities.clone()
         };
+        if client_spec.adapter.runtime == RuntimeBehavior::CodexAppServer {
+            return Err(Error::Domain(
+                "Codex requires the asynchronous app-server controller".into(),
+            ));
+        }
         if client_spec.adapter.runtime == RuntimeBehavior::InProcess {
             return in_process::start_session(pontia_home, request, capabilities, restart_count);
         }
@@ -194,6 +199,9 @@ impl GenericRuntimeManager {
     ) -> Result<()> {
         match behavior {
             InterruptBehavior::Unsupported => Ok(()),
+            InterruptBehavior::CodexProtocol => Err(Error::Domain(
+                "Codex interrupt requires its protocol controller".into(),
+            )),
             InterruptBehavior::TmuxInterrupt => tmux::interrupt_session(socket_path, pane_id),
         }
     }

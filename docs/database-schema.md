@@ -296,6 +296,41 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 |---|---|---|---|
 | `idx_runtime_bindings_tmux_unconfirmed` | No | `tmux_socket_path`, `tmux_pane_id`, `binding_state` |  |
 
+Codex runtime bindings use `runtime_kind = 'codex_app_server'`. Their
+`runtime_instance_id` identifies the shared managed server, and `runtime_handle`
+locates its Pontia state root. `adapter_details.codex` contains the native
+`thread_id`, Unix WebSocket `endpoint`, and control `connection` availability
+(`awaiting_input`, `reconciling`, `available`, `unavailable`, or `archived`).
+TUI process ownership is stored separately from execution runtime identity.
+
+## `native_turn_bindings`
+
+| Column | Type | Constraints |
+|---|---|---|
+| `session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` ON DELETE CASCADE |
+| `client_turn_id` | TEXT | NOT NULL |
+| `turn_id` | TEXT | NOT NULL, UNIQUE; Pontia-generated Turn identity |
+
+Primary key: (`session_id`, `client_turn_id`). Identity is allocated before the
+first normalized native fact is ingested, so `turn_id` has no foreign key to the
+Turn projection. Retries and recovery reuse this identity.
+
+## `codex_tui_bindings`
+
+| Column | Type | Constraints |
+|---|---|---|
+| `owner_session_id` | TEXT | NOT NULL, primary key, foreign key → `sessions.session_id` ON DELETE CASCADE |
+| `target_session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` ON DELETE CASCADE |
+| `runtime_instance_id` | TEXT | NOT NULL |
+| `connected` | BOOLEAN | NOT NULL, default FALSE |
+| `connection_id` | TEXT | Fences disconnects from superseded TUI connections |
+| `tmux_socket_path` | TEXT | |
+| `tmux_pane_id` | TEXT | |
+
+The owner identifies a reattachable TUI gateway. The target follows successful
+user-thread start, resume and fork responses on that TUI connection. Changing
+the target does not change either Session's persistent Agent binding.
+
 ## `pending_turn_contexts`
 
 | Column | Type | Constraints / default |

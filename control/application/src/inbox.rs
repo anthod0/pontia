@@ -80,7 +80,7 @@ impl InboxCommandService {
         }
         if !matches!(
             request.delivery_policy.as_str(),
-            "after_idle" | "interrupt_now"
+            "after_idle" | "interrupt_now" | "steer"
         ) {
             return Err(Error::Domain(format!(
                 "unknown delivery_policy: {}",
@@ -113,6 +113,11 @@ impl InboxCommandService {
                         .expect("branch target was checked above"),
                 )
                 .await?;
+        }
+        if request.delivery_policy == "steer" && session.client_type != "codex" {
+            return Err(Error::CapabilityUnavailable(
+                "This client does not support steer".into(),
+            ));
         }
 
         let metadata = serde_json::to_string(&request.metadata)?;
@@ -300,11 +305,13 @@ impl InboxCommandService {
             Some(session) => session,
             None => return Ok(()),
         };
-        if !matches!(session.state.as_str(), "idle" | "interrupted")
-            || SqliteTurnRepository::new(self.pool.clone())
-                .active_turn(session_id)
-                .await?
-                .is_some()
+        let codex = session.client_type == "codex";
+        if !codex
+            && (!matches!(session.state.as_str(), "idle" | "interrupted")
+                || SqliteTurnRepository::new(self.pool.clone())
+                    .active_turn(session_id)
+                    .await?
+                    .is_some())
         {
             return Ok(());
         }
@@ -313,6 +320,12 @@ impl InboxCommandService {
         let Some(row) = inbox_repository.next_pending_message(session_id).await? else {
             return Ok(());
         };
+        if codex
+            && (matches!(session.state.as_str(), "exited" | "error")
+                || (session.state == "busy" && row.delivery_policy != "steer"))
+        {
+            return Ok(());
+        }
         let message_id = row.message_id;
         let input = row.input_summary;
         let branch_target_turn_id = row.branch_target_turn_id;

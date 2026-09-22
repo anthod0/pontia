@@ -19,7 +19,7 @@
 
   let { routeWorkspaceId = null }: { routeWorkspaceId?: string | null } = $props()
 
-  const CLIENT_TYPE_OPTIONS = ['pi']
+  const CLIENT_TYPE_OPTIONS = ['pi', 'codex']
 
   let prompt = $state('')
   let clientType = $state('pi')

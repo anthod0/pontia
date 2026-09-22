@@ -94,6 +94,7 @@ impl ProjectionState {
                 && event.event_type == EventType::SessionResuming)
             && event.event_type != EventType::SessionTitleUpdated
             && event.event_type != EventType::SessionContextUsageUpdated
+            && !(event.client_type == "codex" && event.event_type.is_turn_event())
         {
             if event.topology.is_some() {
                 self.apply_topology_to_existing_turn(event)?;
@@ -109,10 +110,12 @@ impl ProjectionState {
             EventType::SessionStarted => self.apply_session(event, SessionState::Starting),
             EventType::SessionReady => self.apply_session(event, SessionState::Idle),
             EventType::SessionExited => {
-                self.abandon_active_turn_for_terminal_session(
-                    event,
-                    "session_exited_without_terminal_fact",
-                )?;
+                if event.client_type != "codex" {
+                    self.abandon_active_turn_for_terminal_session(
+                        event,
+                        "session_exited_without_terminal_fact",
+                    )?;
+                }
                 self.apply_session(event, SessionState::Exited)
             }
             EventType::SessionError => {

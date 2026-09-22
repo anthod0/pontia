@@ -32,7 +32,7 @@ impl EventReportNormalizer {
         Self { pool }
     }
 
-    pub async fn normalize(&self, fact: ReportedFact) -> Result<ReportedEvent> {
+    pub async fn normalize(&self, mut fact: ReportedFact) -> Result<ReportedEvent> {
         if !fact.fact_type.is_client_reportable() {
             return Err(Error::Domain(format!(
                 "{} is owned by the Pontia control plane and cannot be reported by an agent client",
@@ -65,6 +65,14 @@ impl EventReportNormalizer {
             }
         }
 
+        let native_turn_id = if session.client_type == "codex" && fact.fact_type.is_turn_event() {
+            Some(crate::codex::native_turn_identity(&self.pool, &fact).await?)
+        } else {
+            None
+        };
+        if native_turn_id.is_some() {
+            fact.turn_id = native_turn_id;
+        }
         let turn_id = match (fact.fact_type, fact.turn_id) {
             (EventType::TurnStarted, None) => Some(new_turn_id().to_string()),
             (event_type, None) if event_type.requires_turn_id() => {
@@ -81,8 +89,17 @@ impl EventReportNormalizer {
         };
         let payload = normalize_payload(&session.client_type, fact.fact_type, fact.data)?;
 
+        let event_id = if session.client_type == "codex" && fact.fact_type.is_turn_event() {
+            format!(
+                "evt_codex_{}_{}",
+                turn_id.as_deref().unwrap(),
+                fact.fact_type
+            )
+        } else {
+            new_event_id().to_string()
+        };
         Ok(ReportedEvent::new(
-            new_event_id().to_string(),
+            event_id,
             fact.session_id,
             turn_id,
             source,

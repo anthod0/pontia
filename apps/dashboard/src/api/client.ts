@@ -408,3 +408,7 @@ export async function resumeSession(sessionId: string): Promise<unknown> {
 export async function terminateSession(sessionId: string): Promise<unknown> {
   return request(`/sessions/${sessionId}`, { method: 'DELETE', mutating: true });
 }
+
+export async function openCodexTui(sessionId: string): Promise<{ session: SessionView }> {
+  return request(`/sessions/${encodeURIComponent(sessionId)}/tui`, { method: 'POST', body: {}, mutating: true });
+}

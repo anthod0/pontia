@@ -36,7 +36,7 @@
   let initialWorkspaceLoadComplete = false
   let workspaceOnboardingActive = false
 
-  const CLIENT_TYPE_OPTIONS = ['pi']
+  const CLIENT_TYPE_OPTIONS = ['pi', 'codex']
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
 
   onMount(() => {

@@ -4,7 +4,7 @@ export type SessionState = 'created' | 'starting' | 'idle' | 'busy' | 'interrupt
 export type TaskState = 'created' | 'routing' | 'needs_confirmation' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 export type TurnState = 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'abandoned';
 export type TurnTopologyStatus = 'unknown' | 'root' | 'linked';
-export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now';
+export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now' | 'steer';
 export type InboxMessageState = 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed' | 'dismissed';
 export type WorkflowState = 'pending' | 'running' | 'paused' | 'replanning' | 'blocked' | 'idle' | 'completed' | 'failed';
 export type WorkflowAgentStatus = 'pending' | 'starting' | 'running' | 'paused' | 'idle' | 'exiting' | 'submitted' | 'failed' | 'unknown';
@@ -193,7 +193,21 @@ export interface SessionLineageView {
   created_at: string;
 }
 
+export interface CodexTuiView {
+  owner_session_id: string;
+  target_session_id: string;
+  connected: boolean;
+  socket_path: string | null;
+  pane_id: string | null;
+}
+
 export interface SessionView {
+  codex?: {
+    connection: 'awaiting_input' | 'available' | 'reconciling' | 'unavailable' | 'archived';
+    thread_id?: string;
+    tui?: CodexTuiView;
+    owned_tui?: CodexTuiView;
+  };
   session_id: string;
   client_type: string;
   title: string | null;

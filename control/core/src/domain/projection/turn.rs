@@ -160,6 +160,9 @@ impl ProjectionState {
             session.title = Some(title);
         }
 
+        if session.state == SessionState::Exited && event.client_type == "codex" {
+            return Ok(());
+        }
         match new_state {
             TurnState::Queued => {}
             TurnState::Running => {

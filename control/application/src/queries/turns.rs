@@ -44,7 +44,11 @@ impl ExternalQueryService {
             match event_type.as_str() {
                 "turn.created" | "turn.queued" | "turn.started" => {
                     if event_type == "turn.started" && turn.started_at.is_none() {
-                        turn.started_at = Some(occurred_at.clone());
+                        turn.started_at = if payload.get("native_turn_id").is_some() {
+                            native_timestamp(payload.pointer("/metadata/native_started_at"))
+                        } else {
+                            Some(occurred_at.clone())
+                        };
                     }
                     if turn.input.summary.is_none() {
                         turn.input.summary = nested_string(&payload, &["input", "summary"])
@@ -56,7 +60,11 @@ impl ExternalQueryService {
                         continue;
                     }
                     if event_type == "turn.completed" {
-                        turn.completed_at = Some(occurred_at.clone());
+                        turn.completed_at = if payload.get("native_turn_id").is_some() {
+                            native_timestamp(payload.get("native_completed_at"))
+                        } else {
+                            Some(occurred_at.clone())
+                        };
                     }
                     if turn.output.summary.is_none() {
                         turn.output.summary = nested_string(&payload, &["output", "summary"])
@@ -71,7 +79,11 @@ impl ExternalQueryService {
                     if turn.state != expected_state {
                         continue;
                     }
-                    turn.completed_at = Some(occurred_at);
+                    turn.completed_at = if payload.get("native_turn_id").is_some() {
+                        native_timestamp(payload.get("native_completed_at"))
+                    } else {
+                        Some(occurred_at)
+                    };
                     if turn.failure.is_none() {
                         turn.failure = nested_string(&payload, &["failure", "message"])
                             .or_else(|| nested_string(&payload, &["message"]));
@@ -92,4 +104,11 @@ fn nested_string(value: &Value, path: &[&str]) -> Option<String> {
         current = current.get(*key)?;
     }
     current.as_str().map(ToString::to_string)
+}
+
+fn native_timestamp(value: Option<&Value>) -> Option<String> {
+    time::OffsetDateTime::from_unix_timestamp(value?.as_i64()?)
+        .ok()?
+        .format(&time::format_description::well_known::Rfc3339)
+        .ok()
 }

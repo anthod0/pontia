@@ -18,6 +18,7 @@ pub struct InboxMessageRow {
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PendingInboxMessageRow {
+    pub delivery_policy: String,
     pub message_id: String,
     pub input_summary: String,
     pub metadata: String,

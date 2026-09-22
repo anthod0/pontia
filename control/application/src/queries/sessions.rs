@@ -70,6 +70,26 @@ impl ExternalQueryService {
         }
 
         session.lineage = self.session_lineage(&session.session_id).await?;
+        if session.client_type == "codex" {
+            let details: Option<String> = sqlx::query_scalar("SELECT json_extract(adapter_details,'$.codex') FROM runtime_bindings WHERE session_id=?")
+                .bind(&session.session_id).fetch_optional(&self.pool).await?.flatten();
+            let mut details: serde_json::Value = details
+                .map(|value| serde_json::from_str(&value))
+                .transpose()?
+                .unwrap_or_else(|| serde_json::json!({"connection":"awaiting_input"}));
+            let tuis: Vec<crate::views::sessions::CodexTuiView> = sqlx::query_as("SELECT owner_session_id,target_session_id,connected,tmux_socket_path AS socket_path,tmux_pane_id AS pane_id FROM codex_tui_bindings WHERE owner_session_id=? OR target_session_id=? ORDER BY connected DESC, (target_session_id=?) DESC")
+                .bind(&session.session_id).bind(&session.session_id).bind(&session.session_id).fetch_all(&self.pool).await?;
+            if let Some(tui) = tuis
+                .iter()
+                .find(|tui| tui.owner_session_id == session.session_id)
+            {
+                details["owned_tui"] = serde_json::to_value(tui)?;
+            }
+            if let Some(tui) = tuis.first() {
+                details["tui"] = serde_json::to_value(tui)?;
+            }
+            session.codex = Some(details);
+        }
 
         Ok(())
     }

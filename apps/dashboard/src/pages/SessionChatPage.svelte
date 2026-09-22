@@ -4,6 +4,7 @@
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
+  import { getSession, openCodexTui } from '../api/client'
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -107,7 +108,40 @@
   const SCROLL_DOWN_BUTTON_ANIMATION_MS = 200
   const INITIAL_SCROLL_SETTLE_PASSES = 2
 
+  let codexPoll: ReturnType<typeof setInterval> | null = null
+  let codexRefreshing = false
+  async function refreshCodex(): Promise<void> {
+    if (codexRefreshing || selectedSession?.client_type !== 'codex') return
+    codexRefreshing = true
+    const id = selectedSessionId
+    try {
+      const detail = await loadSessionDetail(id, { showLoading: false })
+      if (destroyed || selectedSessionId !== id) return
+      const owner = new URLSearchParams(window.location.search).get('tui')
+      const tui = owner
+        ? (owner === id ? detail?.session.codex?.owned_tui : (await getSession(owner)).codex?.owned_tui)
+        : detail?.session.codex?.tui
+      if (destroyed || selectedSessionId !== id) return
+      if (tui?.connected && tui.target_session_id !== id) {
+        await navigate(`/chat/${tui.target_session_id}`, { tui: tui.owner_session_id })
+      }
+      if (detail?.session.capabilities.timeline && !hasTimelineSnapshot(get(timelineState), id)) {
+        await loadSessionTimeline(id)
+      }
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : String(error)
+    } finally { codexRefreshing = false }
+  }
+  async function openSelectedTui(): Promise<void> {
+    if (!selectedSessionId || actionBusy) return
+    actionBusy = true
+    try { await openCodexTui(selectedSessionId); await refreshCodex() }
+    catch (error) { actionError = error instanceof Error ? error.message : String(error) }
+    finally { actionBusy = false }
+  }
+
   onMount(async () => {
+    codexPoll = setInterval(() => void refreshCodex(), 2000)
     selectedSessionId = requestedSessionIdFromLocation()
     autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
     initialChatScrollPending = Boolean(selectedSessionId)
@@ -119,6 +153,7 @@
 
   onDestroy(() => {
     destroyed = true
+    if (codexPoll) clearInterval(codexPoll)
     unsubscribeDashboardEvents?.()
     closeLiveOutputStream?.()
     bottomIntersectionObserver?.disconnect()
@@ -287,7 +322,7 @@
     try {
       await submitInboxMessage(selectedSessionId, {
         input: message.input.summary,
-        delivery_policy: message.delivery_policy === 'interrupt_now' ? 'interrupt_now' : 'after_idle',
+        delivery_policy: message.delivery_policy === 'steer' ? 'steer' : message.delivery_policy === 'interrupt_now' ? 'interrupt_now' : 'after_idle',
         metadata: message.metadata,
         ...(message.branch_target_turn_id
           ? { branch_target_turn_id: message.branch_target_turn_id }
@@ -573,6 +608,11 @@
     try {
       await loadSessionDetail(sessionId)
       const loadedSession = currentSelectedSession()
+      if (loadedSession?.client_type === 'codex' && !sessionSupportsTimeline(loadedSession)) {
+        initialChatScrollPending = false
+        resetTimelineState(sessionId)
+        return
+      }
       if (loadedSession && !sessionSupportsTimeline(loadedSession)) {
         redirectToSessionDetail(sessionId)
         return
@@ -761,7 +801,7 @@
       }
       await submitInboxMessage(selectedSessionId, {
         input: message,
-        delivery_policy: 'after_idle',
+        delivery_policy: selectedSession?.client_type === 'codex' ? 'steer' : 'after_idle',
         metadata: { source: 'dashboard_chat' },
       })
     } catch (error) {
@@ -779,6 +819,17 @@
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
   {#if selectedSession}
     <h1 class="truncate pt-1 text-base font-normal text-heading" title={sessionChatTitle(selectedSession)}>{sessionChatTitle(selectedSession)}</h1>
+  {/if}
+  {#if selectedSession?.codex}
+    <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+      <span>Control: {selectedSession.codex.connection.replaceAll('_', ' ')}</span>
+      <span>TUI: {selectedSession.codex.tui?.connected ? 'connected' : 'disconnected'}</span>
+      <Button variant="outline" size="sm" disabled={!selectedSession.codex.thread_id || actionBusy || selectedSession.state === 'exited'} onclick={() => void openSelectedTui()}>Open TUI</Button>
+      {#if selectedSession.codex.tui?.pane_id}
+        <code>tmux attach -t pontia_codex_{(selectedSession.codex.tui.owner_session_id ?? selectedSession.session_id).replaceAll('-', '_')}</code>
+      {/if}
+      {#if !selectedSession.capabilities.timeline}<span>Native history is currently unavailable.</span>{/if}
+    </div>
   {/if}
   {#if actionError}
     <Alert.Root variant="destructive" role="alert" class="mx-auto w-full max-w-[760px]">

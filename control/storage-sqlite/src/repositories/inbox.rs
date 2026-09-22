@@ -136,10 +136,10 @@ impl SqliteInboxRepository {
         session_id: &str,
     ) -> Result<Option<PendingInboxMessageRow>> {
         Ok(sqlx::query_as::<_, PendingInboxMessageRow>(
-            r#"SELECT message_id, input_summary, metadata, branch_target_turn_id
+            r#"SELECT message_id, input_summary, metadata, branch_target_turn_id, delivery_policy
                FROM inbox_messages
                WHERE session_id = ? AND state = 'pending'
-               ORDER BY CASE WHEN delivery_policy = 'interrupt_now' THEN 0 ELSE 1 END,
+               ORDER BY CASE delivery_policy WHEN 'interrupt_now' THEN 0 WHEN 'steer' THEN 1 ELSE 2 END,
                         CASE WHEN delivery_policy = 'interrupt_now' THEN created_at END DESC,
                         CASE WHEN delivery_policy = 'interrupt_now' THEN message_id END DESC,
                         created_at ASC,
@@ -166,7 +166,7 @@ impl SqliteInboxRepository {
     pub async fn mark_dispatched(&self, message_id: &str, turn_id: Option<&str>) -> Result<()> {
         sqlx::query(
             r#"UPDATE inbox_messages
-               SET state = 'dispatched', turn_id = ?, dispatched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+               SET state = 'dispatched', turn_id = COALESCE(?, turn_id), dispatched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE message_id = ?"#,
         )

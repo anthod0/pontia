@@ -5,6 +5,7 @@ mod agent_events;
 mod agent_profiles;
 pub mod app;
 mod branch_replay;
+pub mod codex;
 mod git_status;
 mod idempotency;
 mod inbox;

@@ -8,6 +8,11 @@ use crate::{
 
 impl ProjectionState {
     pub(super) fn apply_session(&mut self, event: &DomainEvent, state: SessionState) -> Result<()> {
+        let ready_with_active_turn = event.event_type == EventType::SessionReady
+            && self
+                .turns
+                .values()
+                .any(|turn| turn.session_id == event.session_id && turn.state.is_active());
         let session = self
             .sessions
             .entry(event.session_id.clone())
@@ -26,7 +31,13 @@ impl ProjectionState {
                 metadata: Value::Object(Default::default()),
             });
 
-        session.state = state;
+        if ready_with_active_turn {
+            session.state = SessionState::Busy;
+        } else if !(event.event_type == EventType::SessionReady
+            && session.state == SessionState::Busy)
+        {
+            session.state = state;
+        }
         if event.event_type == EventType::SessionCreated {
             session.title = event
                 .payload

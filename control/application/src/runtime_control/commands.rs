@@ -84,6 +84,15 @@ impl RuntimeControlService {
                 "session {session_id} runtime does not support interrupt"
             )));
         }
+        if session.client_type == "codex" {
+            crate::codex::CodexService::new(self.pool.clone())
+                .interrupt(session_id)
+                .await?;
+            return Ok(ControlCommandOutcome {
+                data: json!({"turn":turn}),
+                duplicate: false,
+            });
+        }
         let tmux_binding = self.tmux_pane_binding(session_id).await?.ok_or_else(|| {
             Error::CapabilityUnavailable(format!(
                 "session {session_id} runtime does not support interrupt: missing tmux pane binding"
@@ -136,6 +145,11 @@ impl RuntimeControlService {
                     Error::Domain(format!("unsupported client_type: {}", session.client_type))
                 })?;
             match terminate_behavior {
+                TerminateBehavior::CodexArchive => {
+                    crate::codex::CodexService::new(self.pool.clone())
+                        .archive(session_id)
+                        .await?
+                }
                 TerminateBehavior::TmuxSendKeys(keys) => {
                     let tmux_binding = self.tmux_pane_binding(session_id).await?.ok_or_else(|| {
                         Error::CapabilityUnavailable(format!(
@@ -182,6 +196,15 @@ impl RuntimeControlService {
                 "session {session_id} in state {} cannot be resumed",
                 session.state
             )));
+        }
+        if session.client_type == "codex" {
+            crate::codex::CodexService::new(self.pool.clone())
+                .resume(session_id)
+                .await?;
+            return Ok(ControlCommandOutcome {
+                data: json!({"session":query.get_session(session_id).await?}),
+                duplicate: false,
+            });
         }
 
         let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
@@ -277,6 +300,9 @@ impl RuntimeControlService {
                 "terminal session {session_id} cannot be restarted"
             )));
         }
+        if session.client_type == "codex" {
+            return Err(Error::CapabilityUnavailable("A Codex Session shares its app-server; reconnect its TUI or resume its thread instead".into()));
+        }
 
         let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
         let terminate_behavior = get_client_spec(&session.client_type)
@@ -299,6 +325,9 @@ impl RuntimeControlService {
             )));
         }
         match terminate_behavior {
+            TerminateBehavior::CodexArchive => {
+                unreachable!("Codex runtime replacement is not a Session operation")
+            }
             TerminateBehavior::TmuxSendKeys(_) => {
                 let tmux_binding = self.tmux_pane_binding(session_id).await?.ok_or_else(|| {
                     Error::CapabilityUnavailable(format!(

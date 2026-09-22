@@ -37,6 +37,20 @@ pub async fn create_session(
     Ok((status, ok(outcome.data)).into_response())
 }
 
+pub async fn open_codex_tui(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    pontia_application::codex::CodexService::new(state.db())
+        .open_tui(&session_id)
+        .await?;
+    Ok(ok(
+        json!({"session":ExternalQueryService::new(state.db()).get_session(&session_id).await?}),
+    ))
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ListSessionsQuery {
     #[serde(default)]
