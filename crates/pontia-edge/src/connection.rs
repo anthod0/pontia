@@ -76,16 +76,17 @@ async fn authenticate(edge: &Edge, socket: &mut WebSocket) -> Result<Uuid> {
     .await?;
     let Message::Authenticate {
         device_id,
+        access_key,
         signature,
     } = receive(socket).await?
     else {
         bail!("expected device authentication");
     };
     let public_key = edge
-        .bindings
-        .public_key(device_id)
+        .devices
+        .authorized_public_key(&access_key, device_id)
         .await?
-        .ok_or_else(|| anyhow::anyhow!("device is not bound"))?;
+        .ok_or_else(|| anyhow::anyhow!("device access denied"))?;
     protocol::verify(&public_key, device_id, &nonce, &signature)?;
     Ok(device_id)
 }

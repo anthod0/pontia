@@ -3,7 +3,7 @@ use std::{net::SocketAddr, path::PathBuf, time::Duration};
 use anyhow::Result;
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
-use pontia_edge::{ConnectionLimits, DeviceBindings, Edge};
+use pontia_edge::{ConnectionLimits, DeviceRegistry, Edge};
 
 #[derive(Parser)]
 #[command(about = "Pontia device connection service")]
@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let tls = RustlsConfig::from_pem_file(args.tls_cert, args.tls_key).await?;
     let edge = Edge::new(
-        DeviceBindings::open(&args.database).await?,
+        DeviceRegistry::open(&args.database).await?,
         ConnectionLimits::default(),
     );
     let handle = axum_server::Handle::new();

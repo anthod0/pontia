@@ -23,11 +23,22 @@ pub struct AppConfig {
     pub remote: Option<RemoteConfig>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RemoteConfig {
     pub edge_url: String,
+    pub access_key: String,
     pub ca_certificate: Option<PathBuf>,
+}
+
+impl std::fmt::Debug for RemoteConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RemoteConfig")
+            .field("edge_url", &self.edge_url)
+            .field("access_key", &"[redacted]")
+            .field("ca_certificate", &self.ca_certificate)
+            .finish()
+    }
 }
 
 const DEFAULT_DASHBOARD_SOURCE: &str = concat!(

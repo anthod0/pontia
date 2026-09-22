@@ -35,12 +35,13 @@ impl DeviceIdentity {
         self.key.verifying_key().to_bytes()
     }
 
-    pub fn authenticate(&self, nonce: &[u8; 32]) -> protocol::Message {
+    pub fn authenticate(&self, nonce: &[u8; 32], access_key: &str) -> protocol::Message {
         let signature = self
             .key
             .sign(&protocol::signing_payload(self.device_id, nonce));
         protocol::Message::Authenticate {
             device_id: self.device_id,
+            access_key: access_key.to_owned(),
             signature: STANDARD.encode(signature.to_bytes()),
         }
     }
