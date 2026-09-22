@@ -1,8 +1,12 @@
+pub mod records;
+
+pub const ACCESS_KEY: &str = "fixture-device-access-key";
+
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use axum_server::{Handle, tls_rustls::RustlsConfig};
 use futures_util::{SinkExt, StreamExt};
-use pontia_edge::{ConnectionLimits, DeviceBindings, Edge};
+use pontia_edge::{ConnectionLimits, DeviceRegistry, Edge};
 use pontia_tunnel::{DeviceIdentity, protocol::Message};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, pki_types::PrivatePkcs8KeyDer};
 use tokio::{net::TcpStream, task::JoinHandle, time::timeout};
@@ -10,14 +14,13 @@ use tokio_tungstenite::{
     Connector, MaybeTlsStream, WebSocketStream, connect_async_tls_with_config,
     tungstenite::Message as WsMessage,
 };
-use uuid::Uuid;
 
 pub type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub struct TestEdge {
     pub root: tempfile::TempDir,
     pub edge: Edge,
-    pub bindings: DeviceBindings,
+    pub records: sqlx::SqlitePool,
     pub url: String,
     pub connector: Connector,
     pub ca_path: PathBuf,
@@ -28,11 +31,16 @@ pub struct TestEdge {
 impl TestEdge {
     pub async fn start() -> Self {
         let root = tempfile::tempdir().unwrap();
-        let bindings = DeviceBindings::open(&root.path().join("edge.db"))
+        let devices = DeviceRegistry::open(&root.path().join("edge.db"))
             .await
             .unwrap();
+        let records = sqlx::SqlitePool::connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new().filename(root.path().join("edge.db")),
+        )
+        .await
+        .unwrap();
         let edge = Edge::new(
-            bindings.clone(),
+            devices,
             ConnectionLimits {
                 max_pending: 2,
                 auth_timeout: Duration::from_millis(500),
@@ -78,7 +86,7 @@ impl TestEdge {
         Self {
             root,
             edge,
-            bindings,
+            records,
             url,
             connector,
             ca_path,
@@ -98,15 +106,15 @@ impl TestEdge {
         .0
     }
 
-    pub async fn bind(&self, identity: &DeviceIdentity) {
-        self.bindings
-            .bind(
-                &Uuid::new_v4().to_string(),
-                identity.device_id(),
-                identity.public_key(),
-            )
-            .await
-            .unwrap();
+    pub async fn seed_association(&self, identity: &DeviceIdentity) {
+        records::device(&self.records, identity).await;
+        records::access_key(
+            &self.records,
+            "fixture-key",
+            ACCESS_KEY,
+            Some(identity.device_id()),
+        )
+        .await;
     }
 
     pub async fn authenticate(&self, identity: &DeviceIdentity) -> Socket {
@@ -114,7 +122,7 @@ impl TestEdge {
         let Message::Challenge { nonce, .. } = receive(&mut socket).await else {
             panic!()
         };
-        send(&mut socket, identity.authenticate(&nonce)).await;
+        send(&mut socket, identity.authenticate(&nonce, ACCESS_KEY)).await;
         assert!(
             matches!(receive(&mut socket).await, Message::Authenticated { device_id } if device_id == identity.device_id())
         );

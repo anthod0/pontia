@@ -1,5 +1,5 @@
-mod bindings;
 mod connection;
+mod devices;
 mod online;
 
 use std::{sync::Arc, time::Duration};
@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 use axum::{Router, routing::get};
 use tokio::sync::{Semaphore, watch};
 
-pub use bindings::DeviceBindings;
+pub use devices::DeviceRegistry;
 pub use online::OnlineDevices;
 
 #[derive(Clone)]
@@ -31,7 +31,7 @@ impl Default for ConnectionLimits {
 
 #[derive(Clone)]
 pub struct Edge {
-    bindings: DeviceBindings,
+    devices: DeviceRegistry,
     online: OnlineDevices,
     pending: Arc<Semaphore>,
     limits: ConnectionLimits,
@@ -39,9 +39,9 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub fn new(bindings: DeviceBindings, limits: ConnectionLimits) -> Self {
+    pub fn new(devices: DeviceRegistry, limits: ConnectionLimits) -> Self {
         Self {
-            bindings,
+            devices,
             online: OnlineDevices::default(),
             pending: Arc::new(Semaphore::new(limits.max_pending)),
             limits,

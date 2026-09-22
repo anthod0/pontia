@@ -388,14 +388,27 @@ fn remote_connection_is_explicitly_configured() {
     let root = tempfile::tempdir().unwrap();
     fs::write(
         root.path().join("config.toml"),
-        "[remote]\nedge_url = 'wss://edge.example/tunnel'\nca_certificate = '/opt/pontia/ca.pem'\n",
+        "[remote]\nedge_url = 'wss://edge.example/tunnel'\naccess_key = 'fixture-remote-key'\nca_certificate = '/opt/pontia/ca.pem'\n",
     )
     .unwrap();
     let config = AppConfig::from_vars(&vars_for_home(root.path())).unwrap();
+    assert!(!format!("{config:?}").contains("fixture-remote-key"));
     let remote = config.remote.unwrap();
+    assert_eq!(remote.access_key, "fixture-remote-key");
     assert_eq!(remote.edge_url, "wss://edge.example/tunnel");
     assert_eq!(
         remote.ca_certificate.unwrap(),
         std::path::Path::new("/opt/pontia/ca.pem")
     );
+}
+
+#[test]
+fn remote_connection_requires_an_access_key() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("config.toml"),
+        "[remote]\nedge_url = 'wss://edge.example/tunnel'\n",
+    )
+    .unwrap();
+    assert!(AppConfig::from_vars(&vars_for_home(root.path())).is_err());
 }
