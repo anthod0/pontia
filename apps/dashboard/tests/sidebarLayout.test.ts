@@ -676,7 +676,7 @@ test('sidebar New Chat notifies mounted route components about the route change'
   window.removeEventListener('popstate', popstateListener);
 });
 
-test('sidebar highlights the matching recent session on chat and session console routes', () => {
+test('sidebar highlights the matching recent session on chat routes', () => {
   mocks.sessions.set([
     {
       session_id: 'session-active',
@@ -715,13 +715,6 @@ test('sidebar highlights the matching recent session on chat and session console
   ]);
 
   window.history.pushState({}, '', '/dashboard/chat/session-active');
-  const { unmount } = render(AppSidebarHost);
-
-  expect(screen.getByText('main · coder').closest('button')).toHaveAttribute('data-active', 'true');
-  expect(screen.getByText('other').closest('button')).not.toHaveAttribute('data-active');
-
-  unmount();
-  window.history.pushState({}, '', '/dashboard/sessions/session-active');
   render(AppSidebarHost);
 
   expect(screen.getByText('main · coder').closest('button')).toHaveAttribute('data-active', 'true');

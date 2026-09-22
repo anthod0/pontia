@@ -1,3 +1,9 @@
+import type { SessionView } from '../api/types';
+
+export function isTerminalSession(session: Pick<SessionView, 'state'>): boolean {
+  return session.state === 'exited' || session.state === 'error';
+}
+
 export function sessionStateDotClass(state: string): string {
   switch (state) {
     case 'busy':

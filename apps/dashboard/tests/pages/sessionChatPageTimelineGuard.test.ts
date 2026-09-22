@@ -1,8 +1,8 @@
-import { render, waitFor } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, expect, test, vi } from 'vitest';
 import SessionChatPage from '../../src/pages/SessionChatPage.svelte';
 import type { SessionConsoleDetail } from '../../src/stores/sessions';
-import type { SessionView } from '../../src/api/types';
+import type { DashboardStreamEvent, SessionView } from '../../src/api/types';
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -77,7 +77,7 @@ const mocks = vi.hoisted(() => {
     loadSessionTimeline: vi.fn(async () => null),
     resetTimelineState: vi.fn(),
     refreshSessionTimeline: vi.fn(async () => undefined),
-    subscribeDashboardEvents: vi.fn(() => () => undefined),
+    subscribeDashboardEvents: vi.fn((_listener: (event: DashboardStreamEvent) => void) => () => undefined),
   };
 });
 
@@ -158,10 +158,39 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test('chat session route redirects clients without timeline support to session detail without loading timeline', async () => {
+test('chat keeps clients without timeline support on the page with history unavailable', async () => {
   render(SessionChatPage);
 
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-1'));
-  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/sessions/session-1'));
+  expect(await screen.findByText('Conversation history unavailable')).toBeInTheDocument();
+  expect(mocks.navigate).not.toHaveBeenCalled();
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
 });
+
+test.each(['session.ready', 'turn.started', 'turn.completed', 'session.message_updated'])(
+  '%s refreshes session details without requesting unsupported history',
+  async (type) => {
+    render(SessionChatPage);
+    await waitFor(() => expect(mocks.subscribeDashboardEvents).toHaveBeenCalled());
+    mocks.loadSessionDetail.mockClear();
+
+    const listener = mocks.subscribeDashboardEvents.mock.calls[0][0];
+    listener({
+      kind: 'session_event',
+      id: 'event-1',
+      occurred_at: '2026-05-14T00:00:00Z',
+      event: {
+        event_id: 'event-1',
+        session_id: 'session-1',
+        turn_id: 'turn-1',
+        source: 'runtime',
+        type,
+        time: '2026-05-14T00:00:00Z',
+        payload: {},
+      },
+    });
+
+    await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-1', { showLoading: false }));
+    expect(mocks.refreshSessionTimeline).not.toHaveBeenCalled();
+  },
+);

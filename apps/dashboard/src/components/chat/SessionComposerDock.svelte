@@ -6,7 +6,7 @@
   import SessionMetadata from './SessionMetadata.svelte'
   import { type SessionMetadataItem } from './sessionMetadata'
   import type { ChatCommand } from '$lib/chatCommands'
-  import { isTerminalSession } from '../../pages/sessions/sessionList'
+  import { isTerminalSession } from '$lib/sessionState'
 
   interface Props {
     session: SessionView

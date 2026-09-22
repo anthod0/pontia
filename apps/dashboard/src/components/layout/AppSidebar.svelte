@@ -76,7 +76,7 @@
   }
 
   function activeSessionIdFromPath(): string | null {
-    const match = currentPath.match(/^\/(?:chat|sessions)\/([^/?#]+)/)
+    const match = currentPath.match(/^\/chat\/([^/?#]+)/)
     return match ? decodeURIComponent(match[1]) : null
   }
 

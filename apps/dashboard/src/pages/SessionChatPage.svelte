@@ -72,7 +72,7 @@
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
-  import { isTerminalSession } from './sessions/sessionList'
+  import { isTerminalSession } from '$lib/sessionState'
 
   export let routeSessionId: string | null = null
 
@@ -534,6 +534,10 @@
         const inboxMessageId = (metadata as Record<string, unknown>).inbox_message_id
         if (typeof inboxMessageId === 'string') consumeInboxSubmission(inboxMessageId, streamEvent.event.session_id)
       }
+      if (!sessionSupportsTimeline(currentSelectedSession())) {
+        void loadSessionDetail(selectedSessionId, { showLoading: false })
+        return
+      }
       if (isTerminalTurnEvent(streamEvent.event.type) && streamEvent.event.turn_id) {
         void convergeTerminalTurn(streamEvent.event.turn_id)
         return
@@ -595,26 +599,15 @@
     return session?.capabilities.timeline === true
   }
 
-  function redirectToSessionDetail(sessionId: string): void {
-    historyObserverEnabled = false
-    initialChatScrollPending = false
-    resetTimelineState(sessionId)
-    navigate(`/sessions/${sessionId}`)
-  }
-
   async function loadSelectedSession(sessionId: string): Promise<void> {
     historyObserverEnabled = false
     initialChatScrollPending = true
     try {
       await loadSessionDetail(sessionId)
       const loadedSession = currentSelectedSession()
-      if (loadedSession?.client_type === 'codex' && !sessionSupportsTimeline(loadedSession)) {
+      if (loadedSession && !sessionSupportsTimeline(loadedSession)) {
         initialChatScrollPending = false
         resetTimelineState(sessionId)
-        return
-      }
-      if (loadedSession && !sessionSupportsTimeline(loadedSession)) {
-        redirectToSessionDetail(sessionId)
         return
       }
       startSelectedLiveOutput(loadedSession)
@@ -699,7 +692,9 @@
     actionError = null
     try {
       await interruptSession(selectedSessionId)
-      await refreshSessionTimeline(selectedSessionId, selectedSession?.current_turn_id ?? latestProjectedTurnId())
+      if (sessionSupportsTimeline(currentSelectedSession())) {
+        await refreshSessionTimeline(selectedSessionId, selectedSession?.current_turn_id ?? latestProjectedTurnId())
+      }
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -876,11 +871,11 @@
             </div>
           {/if}
           <div class={initialChatScrollPending ? 'opacity-0' : ''}>
-            {#if timelineUnavailable}
+            {#if !sessionSupportsTimeline(selectedSession) || timelineUnavailable}
               <Empty.Root data-timeline-status={$timelineState.status} class="min-h-80">
                 <Empty.Header>
                   <Empty.Title>Conversation history unavailable</Empty.Title>
-                  <Empty.Description>{$timelineState.error}</Empty.Description>
+                  <Empty.Description>{!sessionSupportsTimeline(selectedSession) ? 'Conversation history is unavailable for this session.' : $timelineState.error}</Empty.Description>
                 </Empty.Header>
               </Empty.Root>
             {:else}
