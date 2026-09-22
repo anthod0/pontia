@@ -151,6 +151,11 @@ where
         }
     }
 
+    pub fn with_pi_control(mut self, control: pontia_application::PiControlService) -> Self {
+        self.inbox = self.inbox.with_pi_control(control);
+        self
+    }
+
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
         if *shutdown.borrow() {
             return;

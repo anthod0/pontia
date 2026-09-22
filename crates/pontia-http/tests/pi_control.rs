@@ -295,3 +295,88 @@ async fn eventually_busy(pi: &PiProcess) {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn external_inbox_uses_the_registered_connection_without_paste_or_turn_facts() {
+    use http_body_util::BodyExt;
+    use pontia_application::EventIngestService;
+    let (state, _root) = state().await;
+    let state = state.with_external_api_token(Some("token".into()));
+    let mut pi = PiProcess::start("sess_input", "rtinst_input").await;
+    bind(&state, &pi).await;
+    sqlx::query("UPDATE runtime_bindings SET tmux_socket_path='/unused/tmux',tmux_pane_id='%1',capabilities=? WHERE session_id='sess_input'")
+        .bind(serde_json::to_string(&pontia_agent_clients::pi::CAPABILITIES).unwrap()).execute(&state.db()).await.unwrap();
+    assert_eq!(publish(&state, &pi).await, StatusCode::OK);
+    state
+        .pi_control()
+        .ping("sess_input", "rtinst_input")
+        .await
+        .unwrap();
+    EventIngestService::new(state.db())
+        .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
+            "evt_input_ready".into(),
+            "sess_input".into(),
+            None,
+            pontia_core::domain::EventSource::AgentClient,
+            "pi".into(),
+            pontia_core::domain::EventType::SessionReady,
+            json!({"runtime_instance_id":"rtinst_input"}),
+        ))
+        .await
+        .unwrap();
+    let response = pontia_http::router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/external/v1/sessions/sess_input/inbox/messages")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer token")
+                .body(Body::from(json!({"input":"first\n你好"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body: serde_json::Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let message_id = body["data"]["inbox_message"]["message_id"]
+        .as_str()
+        .unwrap();
+    assert_eq!(body["data"]["inbox_message"]["state"], "dispatched");
+    let delivered: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(pi._root.path().join("messages.jsonl")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        delivered,
+        json!({"input":"first\n你好", "inboxMessageId":message_id})
+    );
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    let contexts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pending_turn_contexts")
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    assert_eq!(contexts, 0);
+    // A client fact, not the delivery response, creates the turn and links the Inbox.
+    EventIngestService::new(state.db()).ingest_reported_event(pontia_core::domain::ReportedEvent::new(
+        "evt_input_started".into(), "sess_input".into(), Some("turn_input".into()),
+        pontia_core::domain::EventSource::AgentClient, "pi".into(), pontia_core::domain::EventType::TurnStarted,
+        json!({"runtime_instance_id":"rtinst_input", "input":{"summary":"first\n你好"}, "metadata":{"inbox_message_id":message_id}}),
+    )).await.unwrap();
+    let turn_id: Option<String> =
+        sqlx::query_scalar("SELECT turn_id FROM inbox_messages WHERE message_id=?")
+            .bind(message_id)
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    assert_eq!(turn_id.as_deref(), Some("turn_input"));
+    // Disconnects do not synthesize execution failure or replay input through tmux.
+    state.pi_control().close().await;
+    pi.stop().await;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_type IN ('turn.failed','turn.completed','session.exited')").fetch_one(&state.db()).await.unwrap();
+    assert_eq!(count, 0);
+}

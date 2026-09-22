@@ -113,6 +113,30 @@ impl PiControlService {
     }
 
     pub async fn ping(&self, session_id: &str, runtime_instance_id: &str) -> Result<()> {
+        self.request(session_id, runtime_instance_id, None).await
+    }
+
+    pub async fn submit(
+        &self,
+        session_id: &str,
+        runtime_instance_id: &str,
+        input: &str,
+        inbox_message_id: Option<&str>,
+    ) -> Result<()> {
+        self.request(
+            session_id,
+            runtime_instance_id,
+            Some((input, inbox_message_id)),
+        )
+        .await
+    }
+
+    async fn request(
+        &self,
+        session_id: &str,
+        runtime_instance_id: &str,
+        submission: Option<(&str, Option<&str>)>,
+    ) -> Result<()> {
         self.reconcile().await?;
         let connection = {
             let connections = self.connections.lock().await;
@@ -128,7 +152,10 @@ impl PiControlService {
             }
             managed.connection.clone()
         };
-        let result = connection.ping().await;
+        let result = match submission {
+            Some((input, inbox_message_id)) => connection.submit(input, inbox_message_id).await,
+            None => connection.ping().await,
+        };
         self.reconcile().await?;
         let connections = self.connections.lock().await;
         if !connections

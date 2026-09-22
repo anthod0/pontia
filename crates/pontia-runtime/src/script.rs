@@ -115,7 +115,9 @@ pub(super) fn write_launch_script(
                 ),
                 "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
             ),
-            DispatchBehavior::TmuxPaste | DispatchBehavior::CodexProtocol => {
+            DispatchBehavior::TmuxPaste
+            | DispatchBehavior::PiControl
+            | DispatchBehavior::CodexProtocol => {
                 return Err(Error::Domain(format!(
                     "{} cannot use tmux paste dispatch without tmux runtime",
                     request.client_type

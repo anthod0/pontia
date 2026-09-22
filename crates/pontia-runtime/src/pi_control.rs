@@ -78,6 +78,31 @@ impl PiControlConnection {
     }
 
     pub async fn ping(&self) -> Result<()> {
+        let result = self.request("ping", json!({})).await?;
+        if result != json!({ "pong": true }) {
+            return Err(Error::Domain("invalid Pi control ping response".into()));
+        }
+        Ok(())
+    }
+
+    pub async fn submit(&self, input: &str, inbox_message_id: Option<&str>) -> Result<()> {
+        let result = self
+            .request(
+                "submit",
+                json!({
+                    "input": input, "inbox_message_id": inbox_message_id,
+                }),
+            )
+            .await?;
+        if result != json!({ "accepted": true }) {
+            return Err(Error::Domain(
+                "invalid Pi control submit response; delivery may be uncertain".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn request(&self, method: &str, payload: Value) -> Result<Value> {
         let mut invalidated = self.invalidated.subscribe();
         if *invalidated.borrow() {
             return Err(Error::StateConflict(
@@ -87,13 +112,13 @@ impl PiControlConnection {
         tokio::select! {
             biased;
             _ = invalidated.changed() => Err(Error::StateConflict("Pi control binding has changed".into())),
-            result = tokio::time::timeout(REQUEST_TIMEOUT, self.ping_inner()) => {
+            result = tokio::time::timeout(REQUEST_TIMEOUT, self.request_inner(method, payload)) => {
                 result.map_err(|_| Error::Domain("Pi control request timed out; request was not replayed".into()))?
             }
         }
     }
 
-    async fn ping_inner(&self) -> Result<()> {
+    async fn request_inner(&self, method: &str, payload: Value) -> Result<Value> {
         let mut slot = self.stream.lock().await;
         // Keep the stream outside the slot during I/O so cancellation also disconnects it.
         let mut stream = match slot.take() {
@@ -124,12 +149,9 @@ impl PiControlConnection {
                 stream
             }
         };
-        let result = self.exchange(&mut stream, "ping", json!({})).await?;
-        if result != json!({ "pong": true }) {
-            return Err(Error::Domain("invalid Pi control ping response".into()));
-        }
+        let result = self.exchange(&mut stream, method, payload).await?;
         *slot = Some(stream);
-        Ok(())
+        Ok(result)
     }
 
     async fn exchange(

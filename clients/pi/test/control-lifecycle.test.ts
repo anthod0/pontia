@@ -36,7 +36,13 @@ test("extension publishes only listening endpoints, replaces them on session swi
     env: { PONTIA_HOME: root, XDG_RUNTIME_DIR: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
     fetch: fetchImpl as typeof fetch,
     isManagedPane: async () => true,
-    makeReporter: () => ({ report: async (_context, event) => { events.push(event); return true; } }),
+    makeReporter: () => ({ report: async (_context, event) => {
+      if (event.type === "session.ready") {
+        expect(published.at(-1)?.session_id).toBe(event.session_id);
+      }
+      events.push(event);
+      return true;
+    } }),
     logDiagnostic,
   });
   const context = (id: string) => ({ mode: "tui", sessionManager: {

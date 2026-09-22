@@ -39,11 +39,20 @@ pub struct InboxCommandOutcome {
 #[derive(Clone)]
 pub struct InboxCommandService {
     pool: SqlitePool,
+    pi_control: Option<crate::PiControlService>,
 }
 
 impl InboxCommandService {
+    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
+        self.pi_control = Some(pi_control);
+        self
+    }
+
     pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            pi_control: None,
+        }
     }
 
     pub async fn submit_message(
@@ -345,13 +354,17 @@ impl InboxCommandService {
             return Ok(());
         }
 
+        let mut turns = TurnCommandService::new(self.pool.clone());
+        if let Some(control) = &self.pi_control {
+            turns = turns.with_pi_control(control.clone());
+        }
         let delivery = if branch_target_turn_id.is_some() {
-            TurnCommandService::new(self.pool.clone())
+            turns
                 .dispatch_tui_command(session_id, format!("/pontia-edit {message_id}"))
                 .await
                 .map(|()| None)
         } else {
-            TurnCommandService::new(self.pool.clone())
+            turns
                 .create_and_dispatch_turn(session_id, input, metadata)
                 .await
         };

@@ -11,6 +11,11 @@ export interface ControlIdentity {
   runtimeInstanceId: string;
 }
 
+export interface ControlInput {
+  input: string;
+  inboxMessageId?: string;
+}
+
 export interface ControlSocket {
   socketPath: string;
   close(): Promise<void>;
@@ -30,6 +35,7 @@ export async function startControlSocket(
   identity: ControlIdentity,
   env: Record<string, string | undefined> = process.env,
   onError: (error: Error) => void = () => {},
+  onSubmit?: (input: ControlInput) => void,
 ): Promise<ControlSocket> {
   const base = controlSocketDirectory(env);
   validateControlSocketPath(join(base, "pontia-pi-XXXXXX", "control.sock"));
@@ -108,6 +114,19 @@ export async function startControlSocket(
         }
       } else if (request.method === "ping") {
         respond({ request_id: requestId, result: { pong: true } });
+      } else if (request.method === "submit") {
+        if (typeof request.input !== "string" || !request.input.trim()
+          || (request.inbox_message_id != null && (typeof request.inbox_message_id !== "string" || !request.inbox_message_id))) {
+          respond({ request_id: requestId, error: { code: "invalid_input", message: "submit requires non-empty input and an optional inbox_message_id" } });
+          return;
+        }
+        try {
+          if (!onSubmit) throw new Error("Pi input delivery is unavailable");
+          onSubmit({ input: request.input, inboxMessageId: request.inbox_message_id as string | undefined });
+          respond({ request_id: requestId, result: { accepted: true } });
+        } catch (error) {
+          respond({ request_id: requestId, error: { code: "submit_rejected", message: error instanceof Error ? error.message : String(error) } });
+        }
       } else {
         respond({ request_id: requestId, error: { code: "unknown_method", message: "Unknown Pi control method" } });
       }

@@ -21,7 +21,7 @@ pub async fn submit_inbox_message(
     Json(request): Json<SubmitInboxMessageRequest>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = InboxCommandService::new(state.db());
+    let service = InboxCommandService::new(state.db()).with_pi_control(state.pi_control());
     let operation = format!("submit_inbox_message:{session_id}");
     let action_session_id = session_id.clone();
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -41,7 +41,7 @@ pub async fn submit_inbox_message(
             .as_str()
             .map(str::to_owned);
         if let Some(message_id) = message_id {
-            let service = InboxCommandService::new(state.db());
+            let service = InboxCommandService::new(state.db()).with_pi_control(state.pi_control());
             match service.get_message(&session_id, &message_id).await? {
                 Some(message) => json!({ "inbox_message": message }),
                 None => outcome.data,
@@ -61,7 +61,7 @@ pub async fn list_inbox_messages(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = InboxCommandService::new(state.db());
+    let service = InboxCommandService::new(state.db()).with_pi_control(state.pi_control());
     let messages = service.list_messages(&session_id).await?;
     Ok(ok(json!({ "inbox_messages": messages })))
 }
@@ -72,7 +72,7 @@ pub async fn get_inbox_message(
     Path((session_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = InboxCommandService::new(state.db());
+    let service = InboxCommandService::new(state.db()).with_pi_control(state.pi_control());
     let message = service
         .get_message(&session_id, &message_id)
         .await?
@@ -88,7 +88,7 @@ pub async fn cancel_inbox_message(
     Path((session_id, message_id)): Path<(String, String)>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = InboxCommandService::new(state.db());
+    let service = InboxCommandService::new(state.db()).with_pi_control(state.pi_control());
     let outcome = service.cancel_message(&session_id, &message_id).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
@@ -99,7 +99,7 @@ pub async fn dismiss_inbox_message(
     Path((session_id, message_id)): Path<(String, String)>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = InboxCommandService::new(state.db());
+    let service = InboxCommandService::new(state.db()).with_pi_control(state.pi_control());
     let outcome = service.dismiss_message(&session_id, &message_id).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }

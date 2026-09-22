@@ -47,6 +47,18 @@ async fn rust_controls_actual_pi_extension_and_recovers_after_controller_restart
     let (first, concurrent) = tokio::join!(connection.ping(), connection.ping());
     first.unwrap();
     concurrent.unwrap();
+    connection
+        .submit("hello\n你好", Some("msg_one"))
+        .await
+        .unwrap();
+    let message: Value =
+        serde_json::from_str(&std::fs::read_to_string(root.path().join("messages.jsonl")).unwrap())
+            .unwrap();
+    assert_eq!(
+        message,
+        json!({"input":"hello\n你好", "inboxMessageId":"msg_one"})
+    );
+    std::fs::remove_file(root.path().join("messages.jsonl")).unwrap();
     let second = PiControlConnection::new("sess_pi".into(), endpoint.clone()).unwrap();
     assert!(
         second
@@ -127,7 +139,8 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
             line.clear();
             stream.read_line(&mut line).await.unwrap();
             let ping: Value = serde_json::from_str(&line).unwrap();
-            assert_eq!(ping["method"], "ping");
+            assert_eq!(ping["method"], "submit");
+            assert_eq!(ping["input"], "exactly once");
             match failure {
                 "disconnect" => return,
                 "wrong_id" => {
@@ -152,7 +165,11 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
                 "failed requests must not reconnect themselves"
             );
         });
-        let error = connection.ping().await.unwrap_err().to_string();
+        let error = connection
+            .submit("exactly once", None)
+            .await
+            .unwrap_err()
+            .to_string();
         let expected = match failure {
             "timeout" => "timed out",
             "disconnect" => "closed",

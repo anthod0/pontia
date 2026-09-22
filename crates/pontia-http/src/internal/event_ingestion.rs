@@ -60,6 +60,7 @@ pub async fn post_event(
         && error.is_permanent_rejection()
         && let Some((session_id, runtime_instance_id)) = failure_context
         && let Err(failure) = EventIngestService::new(state.db())
+            .with_pi_control(state.pi_control())
             .with_agent_events(state.agent_events())
             .report_turn_start_failure(&session_id, &runtime_instance_id, "event_rejected")
             .await
@@ -108,6 +109,7 @@ async fn ingest_event(
         .validate(&event)
         .map_err(domain_error_as_invalid_request)?;
     let service = EventIngestService::new(state.db())
+        .with_pi_control(state.pi_control())
         .with_agent_events(state.agent_events())
         .with_live_output(state.live_output());
     service

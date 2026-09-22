@@ -1,1 +1,1 @@
-mod tmux_dispatch;
+mod pi_dispatch;

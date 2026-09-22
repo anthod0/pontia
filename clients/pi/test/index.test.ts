@@ -138,6 +138,76 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
 }
 
 describe("pontia pi extension lifecycle", () => {
+  test("socket input retains its Inbox identity across async hooks and never labels manual input", async () => {
+    let submit: ((input: { input: string; inboxMessageId?: string }) => void) | undefined;
+    let idle = true;
+    const workspace = await realpath(await tempDir());
+    const loadContext = vi.fn(async () => ({ ok: false as const, silent: true, reason: "no pending input", logFile: "hook.log" }));
+    const { handlers, reported, sendUserMessage } = install({
+      env: { PONTIA_SESSION_ID: "sess_direct", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_direct" },
+      fetch: vi.fn(async () => Response.json({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } })) as any,
+      loadContext,
+      startControlSocket: async (_identity, _env, _onError, onSubmit) => {
+        submit = onSubmit;
+        return { socketPath: "/unused/control.sock", close: async () => {} };
+      },
+    });
+    const ctx = { isIdle: () => idle, sessionManager: {
+      getSessionId: () => "pi_direct", getCwd: () => workspace,
+    } };
+    await handlers.session_start({ reason: "startup" }, ctx);
+    let started: Promise<void> | undefined;
+    let retry: Promise<void> | undefined;
+    let releaseRetry!: () => void;
+    const retryGate = new Promise<void>((resolve) => { releaseRetry = resolve; });
+    sendUserMessage.mockImplementation((input: string) => {
+      started = (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await handlers.before_agent_start({ prompt: input }, ctx);
+        await handlers.agent_start({}, ctx);
+      })();
+      if (input === "from dashboard") {
+        retry = (async () => {
+          await retryGate;
+          await handlers.before_agent_start({ prompt: "retry continuation" }, ctx);
+          await handlers.agent_start({}, ctx);
+        })();
+      }
+    });
+    submit!({ input: "from dashboard", inboxMessageId: "msg_direct" });
+    expect(reported.filter((event) => event.type === "turn.started")).toHaveLength(0);
+    await started;
+    const first = reported.find((event) => event.type === "turn.started")!;
+    expect(first.data).toMatchObject({ input_summary: "from dashboard", inbox_message_id: "msg_direct" });
+    await handlers.agent_end({ messages: [] }, ctx);
+    releaseRetry();
+    await retry;
+    const continuation = reported.filter((event) => event.type === "turn.started")[1];
+    expect(continuation.data).toMatchObject({ input_summary: "retry continuation" });
+    expect(continuation.data).not.toHaveProperty("inbox_message_id");
+
+    idle = false;
+    expect(() => submit!({ input: "too early" })).toThrow("Pi is busy");
+    await handlers.agent_end({ messages: [] }, ctx);
+    submit!({ input: "next from inbox", inboxMessageId: "msg_next" });
+    expect(sendUserMessage).toHaveBeenCalledTimes(1);
+    idle = true;
+    await handlers.agent_settled({}, ctx);
+    await started;
+    expect(sendUserMessage).toHaveBeenCalledTimes(2);
+    const second = reported.filter((event) => event.type === "turn.started")[2];
+    expect(second.data).toMatchObject({ inbox_message_id: "msg_next" });
+    await handlers.agent_end({ messages: [] }, ctx);
+
+    await handlers.before_agent_start({ prompt: "typed manually" }, ctx);
+    await handlers.agent_start({}, ctx);
+    const manual = reported.filter((event) => event.type === "turn.started")[3];
+    expect(manual.data).toMatchObject({ input_summary: "typed manually" });
+    expect(manual.data).not.toHaveProperty("inbox_message_id");
+    await handlers.session_shutdown({ reason: "quit" }, ctx);
+    expect(() => submit!({ input: "stale" })).toThrow("no longer current");
+  });
+
   test("pontia-edit resolves, navigates once without summarization, clears restored text, then submits replacement", async () => {
     const calls: string[] = [];
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {

@@ -42,7 +42,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
             }),
             runtime_config_key: Some("pi"),
         }),
-        dispatch: DispatchBehavior::TmuxPaste,
+        dispatch: DispatchBehavior::PiControl,
         client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
         interrupt: InterruptBehavior::TmuxInterrupt,
         terminate: TerminateBehavior::TmuxSendKeys(&["C-c", "C-c"]),

@@ -54,6 +54,7 @@ impl AgentClientCapabilities {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispatchBehavior {
+    PiControl,
     CodexProtocol,
     InProcessRecorded,
     TmuxPaste,
@@ -199,12 +200,12 @@ impl AgentClientSpec {
     }
 
     pub fn owns_interactive_tmux_turn(&self) -> bool {
-        self.adapter.dispatch == DispatchBehavior::TmuxPaste
+        self.tmux_runtime().is_some()
             && self.adapter.turn_lifecycle == TurnLifecycleBehavior::ClientManagedForInteractiveTmux
     }
 
     pub fn owns_initial_tmux_turn(&self) -> bool {
-        self.adapter.dispatch == DispatchBehavior::TmuxPaste
+        self.tmux_runtime().is_some()
             && self.adapter.turn_lifecycle == TurnLifecycleBehavior::ClientManagedForInteractiveTmux
     }
 

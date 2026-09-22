@@ -34,6 +34,7 @@ pub async fn report_turn_start_failure(
         TurnStartFailureReason::MissingTurnId => "missing_turn_id",
     };
     EventIngestService::new(state.db())
+        .with_pi_control(state.pi_control())
         .with_agent_events(state.agent_events())
         .report_turn_start_failure(&session_id, &request.runtime_instance_id, reason)
         .await?;

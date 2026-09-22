@@ -93,6 +93,29 @@ describe("Pi control socket", () => {
     expect(await oversized.read()).toMatchObject({ error: { code: "message_too_large" } });
   });
 
+  test("validates submissions and keeps the channel usable after rejection", async () => {
+    const root = await tempDir("pc-");
+    const submit = vi.fn();
+    const server = await startControlSocket(identity, { XDG_RUNTIME_DIR: root }, undefined, submit);
+    onTestFinished(() => server.close());
+    const client = await connect(server.socketPath);
+    client.send(hello);
+    await client.read();
+    for (const input of ["", "  ", 42]) {
+      client.send({ ...ping, method: "submit", input });
+      expect(await client.read()).toMatchObject({ error: { code: "invalid_input" } });
+    }
+    expect(submit).not.toHaveBeenCalled();
+    submit.mockImplementationOnce(() => { throw new Error("Pi is busy"); });
+    client.send({ ...ping, method: "submit", input: "rejected" });
+    expect(await client.read()).toMatchObject({ error: { code: "submit_rejected", message: "Pi is busy" } });
+    client.send({ ...ping, method: "submit", input: "line one\n你好", inbox_message_id: "msg_one" });
+    expect(await client.read()).toMatchObject({ result: { accepted: true } });
+    expect(submit).toHaveBeenLastCalledWith({ input: "line one\n你好", inboxMessageId: "msg_one" });
+    client.send(ping);
+    expect(await client.read()).toMatchObject({ result: { pong: true } });
+  });
+
   test("unknown methods fail explicitly without breaking the channel", async () => {
     const { server } = await endpoint();
     const client = await connect(server.socketPath);

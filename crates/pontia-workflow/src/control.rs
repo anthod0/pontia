@@ -17,9 +17,10 @@ pub struct WorkflowControlOutcome {
     pub continue_sent: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WorkflowControlService {
     pool: SqlitePool,
+    pi_control: Option<pontia_application::PiControlService>,
     workflows: SqliteWorkflowRepository,
 }
 
@@ -28,7 +29,13 @@ impl WorkflowControlService {
         Self {
             workflows: SqliteWorkflowRepository::new(pool.clone()),
             pool,
+            pi_control: None,
         }
+    }
+
+    pub fn with_pi_control(mut self, control: pontia_application::PiControlService) -> Self {
+        self.pi_control = Some(control);
+        self
     }
 
     pub async fn pause(&self, workflow_id: &str) -> Result<WorkflowControlOutcome> {
@@ -72,7 +79,11 @@ impl WorkflowControlService {
                 .as_ref()
                 .is_some_and(|session| session.state == "interrupted")
             {
-                let outcome = InboxCommandService::new(self.pool.clone())
+                let mut inbox = InboxCommandService::new(self.pool.clone());
+                if let Some(control) = &self.pi_control {
+                    inbox = inbox.with_pi_control(control.clone());
+                }
+                let outcome = inbox
                     .submit_message(
                         &session_id,
                         SubmitInboxMessageRequest {

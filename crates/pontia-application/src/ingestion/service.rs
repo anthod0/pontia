@@ -38,14 +38,21 @@ use crate::{AgentEventBroker, InboxCommandService, LiveOutputService, UpsertAgen
 #[derive(Clone)]
 pub struct EventIngestService {
     pool: SqlitePool,
+    pi_control: Option<crate::PiControlService>,
     agent_events: Option<AgentEventBroker>,
     live_output: Option<LiveOutputService>,
 }
 
 impl EventIngestService {
+    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
+        self.pi_control = Some(pi_control);
+        self
+    }
+
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool,
+            pi_control: None,
             agent_events: None,
             live_output: None,
         }
@@ -334,8 +341,11 @@ impl EventIngestService {
                     | EventType::TurnInterrupted
             )
         {
-            Box::pin(InboxCommandService::new(self.pool.clone()).drain_inbox(&event.session_id))
-                .await?;
+            let mut inbox = InboxCommandService::new(self.pool.clone());
+            if let Some(control) = &self.pi_control {
+                inbox = inbox.with_pi_control(control.clone());
+            }
+            Box::pin(inbox.drain_inbox(&event.session_id)).await?;
         }
 
         Ok(Some(EventIngestResult {

@@ -36,6 +36,19 @@ impl SessionCommandService {
         input: &str,
         runtime: &RuntimeStartResult,
     ) -> Result<()> {
+        if client_type == "pi" {
+            let runtime_instance_id = RuntimeReadinessService::new(self.pool.clone())
+                .wait_until_bound_and_ready(session_id, client_type)
+                .await?;
+            return self
+                .pi_control
+                .as_ref()
+                .ok_or_else(|| {
+                    Error::CapabilityUnavailable("Pi control service is unavailable".into())
+                })?
+                .submit(session_id, &runtime_instance_id, input, None)
+                .await;
+        }
         let agent_input = AgentInput {
             session_id: session_id.to_string(),
             dispatch_id: new_dispatch_id().to_string(),
@@ -96,5 +109,111 @@ impl SessionCommandService {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{PiControlService, PublishPiControlEndpoint};
+    use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+    use serde_json::Value;
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        net::UnixListener,
+    };
+
+    #[tokio::test]
+    async fn initial_pi_input_uses_the_shared_socket_after_ready() {
+        let root = tempfile::Builder::new().prefix("pi-").tempdir().unwrap();
+        let pool = connect_sqlite(&format!(
+            "sqlite://{}",
+            root.path().join("test.db").display()
+        ))
+        .await
+        .unwrap();
+        run_migrations(&pool).await.unwrap();
+        sqlx::query("INSERT INTO sessions (session_id,client_type,state) VALUES ('sess_pi','pi','starting')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO runtime_bindings (session_id,runtime_kind,runtime_instance_id,binding_state) VALUES ('sess_pi','pi_tui','rtinst_pi','confirmed')").execute(&pool).await.unwrap();
+        let path = root.path().join("s");
+        let listener = UnixListener::bind(&path).unwrap();
+        let control = PiControlService::new(pool.clone(), root.path().into());
+        control
+            .publish_endpoint(PublishPiControlEndpoint {
+                session_id: "sess_pi".into(),
+                runtime_instance_id: "rtinst_pi".into(),
+                socket_path: path.display().to_string(),
+                version: 1,
+            })
+            .await
+            .unwrap();
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut stream = BufReader::new(socket);
+            for method in ["hello", "ping", "submit"] {
+                let mut line = String::new();
+                stream.read_line(&mut line).await.unwrap();
+                let request: Value = serde_json::from_str(&line).unwrap();
+                assert_eq!(request["method"], method);
+                let result = match method {
+                    "hello" => json!({"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}),
+                    "ping" => json!({"pong":true}),
+                    _ => {
+                        assert_eq!(request["input"], "initial input");
+                        json!({"accepted":true})
+                    }
+                };
+                let reply = json!({"version":1,"request_id":request["request_id"],"result":result});
+                stream
+                    .get_mut()
+                    .write_all(format!("{reply}\n").as_bytes())
+                    .await
+                    .unwrap();
+            }
+        });
+        control.ping("sess_pi", "rtinst_pi").await.unwrap();
+        let service =
+            SessionCommandService::new(pool.clone(), root.path().into()).with_pi_control(control);
+        let dispatch = tokio::spawn(async move {
+            service
+                .wait_and_dispatch_initial_tui_turn(
+                    "sess_pi",
+                    "dispatch_one",
+                    "pi",
+                    "initial input",
+                    &RuntimeStartResult {
+                        runtime_kind: "pi_tui".into(),
+                        runtime_handle: "unused".into(),
+                        capabilities: pontia_agent_clients::pi::CAPABILITIES,
+                        metadata: json!({}),
+                    },
+                )
+                .await
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(!dispatch.is_finished());
+        EventIngestService::new(pool.clone())
+            .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
+                "evt_ready".into(),
+                "sess_pi".into(),
+                None,
+                pontia_core::domain::EventSource::AgentClient,
+                "pi".into(),
+                pontia_core::domain::EventType::SessionReady,
+                json!({"runtime_instance_id":"rtinst_pi"}),
+            ))
+            .await
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), dispatch)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        server.await.unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
     }
 }

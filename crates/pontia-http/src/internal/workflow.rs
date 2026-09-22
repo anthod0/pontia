@@ -89,7 +89,8 @@ pub async fn run_workflow(
     let workflow_id = request.workflow_id.clone();
     let scheduler = WorkflowScheduler::new(
         state.db(),
-        SessionCommandService::new(state.db(), state.pontia_home().to_path_buf()),
+        SessionCommandService::new(state.db(), state.pontia_home().to_path_buf())
+            .with_pi_control(state.pi_control()),
         state.pontia_home().to_path_buf(),
     );
     let outcome = scheduler
@@ -225,7 +226,8 @@ pub async fn submit_workflow_output(
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let scheduler = WorkflowScheduler::new(
         state.db(),
-        SessionCommandService::new(state.db(), state.pontia_home().to_path_buf()),
+        SessionCommandService::new(state.db(), state.pontia_home().to_path_buf())
+            .with_pi_control(state.pi_control()),
         state.pontia_home().to_path_buf(),
     );
     scheduler

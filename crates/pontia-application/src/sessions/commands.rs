@@ -268,60 +268,42 @@ impl SessionCommandService {
             let dispatch_session_id = session_id.clone();
             let dispatch_client_type = request.client_type.clone();
             let dispatch_runtime = runtime.clone();
-            std::thread::spawn(move || {
-                let runtime = match tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    Ok(runtime) => runtime,
-                    Err(error) => {
-                        tracing::warn!(
-                            session_id = %dispatch_session_id,
-                            turn_id = %turn_id,
-                            client_type = %dispatch_client_type,
-                            error = %error,
-                            "initial turn dispatch runtime creation failed"
-                        );
-                        return;
+            tokio::spawn(async move {
+                let result = match dispatch_mode {
+                    DispatchMode::InProcessRecorded => {
+                        service
+                            .dispatch_initial_generic_turn(
+                                &dispatch_session_id,
+                                &dispatch_client_type,
+                                &input,
+                            )
+                            .await
+                    }
+                    DispatchMode::TmuxPaste | DispatchMode::PiControl => {
+                        service
+                            .wait_and_dispatch_initial_tui_turn(
+                                &dispatch_session_id,
+                                &turn_id,
+                                &dispatch_client_type,
+                                &input,
+                                &dispatch_runtime,
+                            )
+                            .await
+                    }
+                    DispatchMode::None => Ok(()),
+                    DispatchMode::CodexProtocol => {
+                        unreachable!("Codex dispatch uses its async controller")
                     }
                 };
-                runtime.block_on(async move {
-                    let result = match dispatch_mode {
-                        DispatchMode::InProcessRecorded => {
-                            service
-                                .dispatch_initial_generic_turn(
-                                    &dispatch_session_id,
-                                    &dispatch_client_type,
-                                    &input,
-                                )
-                                .await
-                        }
-                        DispatchMode::TmuxPaste => {
-                            service
-                                .wait_and_dispatch_initial_tui_turn(
-                                    &dispatch_session_id,
-                                    &turn_id,
-                                    &dispatch_client_type,
-                                    &input,
-                                    &dispatch_runtime,
-                                )
-                                .await
-                        }
-                        DispatchMode::None => Ok(()),
-                        DispatchMode::CodexProtocol => {
-                            unreachable!("Codex dispatch uses its async controller")
-                        }
-                    };
-                    if let Err(error) = result {
-                        tracing::warn!(
-                            session_id = %dispatch_session_id,
-                            turn_id = %turn_id,
-                            client_type = %dispatch_client_type,
-                            error = %error,
-                            "initial turn dispatch failed"
-                        );
-                    }
-                });
+                if let Err(error) = result {
+                    tracing::warn!(
+                        session_id = %dispatch_session_id,
+                        turn_id = %turn_id,
+                        client_type = %dispatch_client_type,
+                        error = %error,
+                        "initial turn dispatch failed"
+                    );
+                }
             });
         }
 

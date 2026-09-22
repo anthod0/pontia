@@ -49,10 +49,12 @@ async fn main() -> Result<()> {
         application::SessionCommandService::new(
             app_state.db(),
             app_state.pontia_home().to_path_buf(),
-        ),
+        )
+        .with_pi_control(app_state.pi_control()),
         app_state.agent_events(),
         app_state.pontia_home().to_path_buf(),
     );
+    let workflow_coordinator = workflow_coordinator.with_pi_control(app_state.pi_control());
     tokio::spawn(workflow_coordinator.run(app_state.shutdown().subscribe()));
     let dashboard =
         http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;

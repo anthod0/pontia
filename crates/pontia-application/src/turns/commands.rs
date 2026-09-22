@@ -20,13 +20,20 @@ use crate::{
 #[derive(Clone)]
 pub struct TurnCommandService {
     pool: SqlitePool,
+    pi_control: Option<crate::PiControlService>,
     runtime: GenericRuntimeManager,
 }
 
 impl TurnCommandService {
+    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
+        self.pi_control = Some(pi_control);
+        self
+    }
+
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool,
+            pi_control: None,
             runtime: GenericRuntimeManager,
         }
     }
@@ -59,7 +66,7 @@ impl TurnCommandService {
             return Ok(None);
         }
         let can_accept_turn = matches!(session.state.as_str(), "idle" | "interrupted")
-            || (session.state == "starting" && dispatch_mode == DispatchMode::TmuxPaste);
+            || (session.state == "starting" && client_spec.owns_initial_tmux_turn());
         if !can_accept_turn {
             return Err(Error::StateConflict(format!(
                 "session {session_id} in state {} cannot accept a new turn",
@@ -95,9 +102,7 @@ impl TurnCommandService {
                 self.runtime_instance_id(session_id).await?.ok_or_else(|| {
                     Error::Domain(format!("{} runtime binding not found", session.client_type))
                 })?;
-            let tmux_binding = tmux_binding
-                .as_ref()
-                .expect("tmux binding was validated before client dispatch");
+
             let agent_input = AgentInput {
                 session_id: session_id.to_string(),
                 dispatch_id: new_dispatch_id().to_string(),
@@ -105,6 +110,24 @@ impl TurnCommandService {
             };
             self.wait_for_tui_readiness(&session.client_type, session_id, &runtime_instance_id)
                 .await?;
+            if dispatch_mode == DispatchMode::PiControl {
+                self.pi_control
+                    .as_ref()
+                    .ok_or_else(|| {
+                        Error::CapabilityUnavailable("Pi control service is unavailable".into())
+                    })?
+                    .submit(
+                        session_id,
+                        &runtime_instance_id,
+                        &agent_input.input,
+                        metadata["inbox_message_id"].as_str(),
+                    )
+                    .await?;
+                return Ok(None);
+            }
+            let tmux_binding = tmux_binding
+                .as_ref()
+                .expect("tmux binding was validated before client dispatch");
             match client_spec.adapter.turn_context {
                 TurnContextBehavior::InternalApiClaim => {
                     store_client_current_turn_context(
@@ -250,7 +273,7 @@ impl TurnCommandService {
         let client_spec = get_client_spec(&session.client_type).ok_or_else(|| {
             Error::Domain(format!("unsupported client_type: {}", session.client_type))
         })?;
-        if client_spec.adapter.dispatch != DispatchMode::TmuxPaste {
+        if client_spec.tmux_runtime().is_none() {
             return Err(Error::CapabilityUnavailable(format!(
                 "session {session_id} does not support TUI command delivery"
             )));

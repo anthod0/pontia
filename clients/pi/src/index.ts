@@ -1,5 +1,6 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { startControlSocket, type ControlSocket } from "./control-socket.js";
+import { AsyncLocalStorage } from "node:async_hooks";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { startControlSocket, type ControlSocket, type ControlInput } from "./control-socket.js";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
@@ -135,6 +136,19 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let pendingPrompt: string | undefined;
   let controlSocket: ControlSocket | undefined;
   let controlGeneration = 0;
+  let piContext: ExtensionContext | undefined;
+  const directInput = new AsyncLocalStorage<{
+    submission: ControlInput;
+    sessionContext: SessionContext;
+    consumed: boolean;
+  }>();
+  let queuedControlInput: ControlInput | undefined;
+
+  function sendControlInput(submission: ControlInput): void {
+    if (!boundSessionContext) throw new Error("Pi session is not bound");
+    directInput.run({ submission, sessionContext: boundSessionContext, consumed: false },
+      () => pi.sendUserMessage(submission.input));
+  }
 
   async function controlError(error: unknown): Promise<void> {
     await logDiagnostic(currentHookLogFile(), {
@@ -147,6 +161,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   async function closeControlSocket(): Promise<void> {
     controlGeneration += 1;
+    queuedControlInput = undefined;
     const socket = controlSocket;
     controlSocket = undefined;
     if (socket) await socket.close().catch(controlError);
@@ -159,6 +174,21 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     try {
       socket = await (dependencies.startControlSocket ?? startControlSocket)(context, currentEnv(), (error) => {
         void controlError(error).catch(() => {});
+      }, (submission) => {
+        if (generation !== controlGeneration || reportingDisabled || boundSessionContext !== context) {
+          throw new Error("Pi control session is no longer current");
+        }
+        if (queuedControlInput) throw new Error("Pi already has pending input");
+        if (!piContext?.isIdle()) {
+          // Pontia drains the Inbox while handling our terminal event, before
+          // Pi finishes agent_end. Wait for Pi's settled hook to start this input.
+          if (!activeTurn?.ended) throw new Error("Pi is busy; input was not submitted");
+          queuedControlInput = submission;
+          return;
+        }
+        // Pi owns the asynchronous prompt execution. Its hooks retain this request's
+        // context without leaving pending metadata for unrelated terminal input.
+        sendControlInput(submission);
       });
       if (generation !== controlGeneration) {
         await socket.close();
@@ -438,8 +468,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       if (!context || !await confirmManagedPane(true)) return;
 
       boundSessionContext = context;
-      readyReported = reportAccepted(await makeReporter(logFile).report(context, buildSessionReadyEvent(context)));
+      piContext = ctx;
       await openControlSocket(context);
+      readyReported = reportAccepted(await makeReporter(logFile).report(context, buildSessionReadyEvent(context)));
     } catch (error) {
       const logFile = currentHookLogFile();
       await logDiagnostic(logFile, {
@@ -452,6 +483,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("session_shutdown", async (event) => {
+    piContext = undefined;
     await closeControlSocket();
     readyReported = false;
     if (reportingDisabled || !await confirmManagedPane()) return;
@@ -478,7 +510,13 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const previousLeafId = leafIdFromHookContext(ctx);
     if (reportingDisabled) return;
     try {
-      const loaded = await contextLoader(currentEnv(), boundSessionContext);
+      const dispatch = directInput.getStore();
+      const submission = dispatch && !dispatch.consumed && dispatch.sessionContext === boundSessionContext
+        ? dispatch.submission : undefined;
+      if (dispatch) dispatch.consumed = true;
+      const loaded: LoadTurnContextResult = submission && boundSessionContext
+        ? { ok: true, context: { ...boundSessionContext, ...submission }, logFile: currentHookLogFile() }
+        : await contextLoader(currentEnv(), boundSessionContext);
       let turnContext: TurnContext | undefined;
       let logFile: string;
       if (loaded.ok) {
@@ -517,8 +555,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           }
           boundSessionContext = await bindSession(pontiaHome, currentEnv(), fetchImpl, sessionDetails);
           if (boundSessionContext && !readyReported) {
-            readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
+            piContext = ctx;
             await openControlSocket(boundSessionContext);
+            readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
           }
         }
         if (boundSessionContext) {
@@ -613,6 +652,13 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const fullText = assistantTextFromMessage((event as unknown as Record<string, unknown> | undefined)?.message);
     if (fullText) activeTurn.output = fullText;
     await scheduleMessageRefresh("append");
+  });
+
+  pi.on("agent_settled", (_event, ctx) => {
+    if (!queuedControlInput || !ctx.isIdle()) return;
+    const submission = queuedControlInput;
+    queuedControlInput = undefined;
+    sendControlInput(submission);
   });
 
   pi.on("agent_end", async (event, ctx) => {

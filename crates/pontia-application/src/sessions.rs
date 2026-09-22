@@ -58,14 +58,21 @@ impl CreateSessionOutcome {
 #[derive(Clone)]
 pub struct SessionCommandService {
     pool: SqlitePool,
+    pi_control: Option<crate::PiControlService>,
     pontia_home: PathBuf,
     runtime: GenericRuntimeManager,
 }
 
 impl SessionCommandService {
+    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
+        self.pi_control = Some(pi_control);
+        self
+    }
+
     pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
         Self {
             pool,
+            pi_control: None,
             pontia_home,
             runtime: GenericRuntimeManager,
         }
