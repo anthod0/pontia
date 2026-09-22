@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { startControlSocket, type ControlSocket } from "./control-socket.js";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
@@ -9,7 +10,7 @@ import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRunti
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
-import { bindSession, loadExistingSessionContext, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
+import { bindSession, loadExistingSessionContext, piSessionDetailsFromHookContext, publishControlEndpoint, type PiSessionDetails } from "./runtime-binding.js";
 import type { SessionContext } from "./session.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
@@ -36,6 +37,7 @@ export interface PontiaPiExtensionDependencies {
   loadManagedRuntime?: (env: EnvLike) => Promise<ManagedRuntimeIdentity | undefined>;
   isManagedPane?: (env: EnvLike) => Promise<boolean>;
   makeLiveOutputPublisher?: (context: TurnContext & { turnId: string }) => LiveOutputPublisherLike;
+  startControlSocket?: typeof startControlSocket;
 }
 
 interface ActiveTurnState {
@@ -131,6 +133,45 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let managedPaneConfirmed = false;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
+  let controlSocket: ControlSocket | undefined;
+  let controlGeneration = 0;
+
+  async function controlError(error: unknown): Promise<void> {
+    await logDiagnostic(currentHookLogFile(), {
+      level: "warn",
+      code: "pi_control_unavailable",
+      message: "Pi control channel failed",
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  async function closeControlSocket(): Promise<void> {
+    controlGeneration += 1;
+    const socket = controlSocket;
+    controlSocket = undefined;
+    if (socket) await socket.close().catch(controlError);
+  }
+
+  async function openControlSocket(context: SessionContext): Promise<void> {
+    await closeControlSocket();
+    const generation = controlGeneration;
+    let socket: ControlSocket | undefined;
+    try {
+      socket = await (dependencies.startControlSocket ?? startControlSocket)(context, currentEnv(), (error) => {
+        void controlError(error).catch(() => {});
+      });
+      if (generation !== controlGeneration) {
+        await socket.close();
+        return;
+      }
+      controlSocket = socket;
+      await publishControlEndpoint(context, socket.socketPath, fetchImpl);
+    } catch (error) {
+      if (controlSocket === socket) controlSocket = undefined;
+      await socket?.close().catch(controlError);
+      await controlError(error);
+    }
+  }
 
   async function confirmManagedPane(refresh = false): Promise<boolean> {
     if (managedPaneConfirmed && !refresh) return true;
@@ -318,8 +359,12 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   pi.on("session_start", async (event, ctx) => {
     if (reportingDisabled) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
-    if (readyReported && reason !== "fork" && reason !== "resume") return;
+    if (readyReported && reason !== "fork" && reason !== "resume" && reason !== "new") return;
     if (reason !== "startup" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
+    await closeControlSocket();
+    const parentSessionId = boundSessionContext?.sessionId;
+    boundSessionContext = undefined;
+    readyReported = false;
     if (!isPersistentTuiContext(ctx)) {
       reportingDisabled = true;
       return;
@@ -348,7 +393,6 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       }
 
       if (reason === "fork") {
-        const parentSessionId = boundSessionContext?.sessionId;
         if (!parentSessionId) {
           await logDiagnostic(logFile, {
             level: "error",
@@ -387,7 +431,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         }
 
         context = await bindSession(pontiaHome, env, fetchImpl, sessionDetails, {
-          runtimeInstanceId: existingSession?.runtimeInstanceId,
+          runtimeInstanceId: existingSession?.sessionState === "starting" ? existingSession.runtimeInstanceId : undefined,
         });
         if (reason === "resume" || reason === "new") readyReported = false;
       }
@@ -395,6 +439,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
       boundSessionContext = context;
       readyReported = reportAccepted(await makeReporter(logFile).report(context, buildSessionReadyEvent(context)));
+      await openControlSocket(context);
     } catch (error) {
       const logFile = currentHookLogFile();
       await logDiagnostic(logFile, {
@@ -407,6 +452,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   });
 
   pi.on("session_shutdown", async (event) => {
+    await closeControlSocket();
+    readyReported = false;
     if (reportingDisabled || !await confirmManagedPane()) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
     if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
@@ -471,6 +518,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           boundSessionContext = await bindSession(pontiaHome, currentEnv(), fetchImpl, sessionDetails);
           if (boundSessionContext && !readyReported) {
             readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
+            await openControlSocket(boundSessionContext);
           }
         }
         if (boundSessionContext) {

@@ -105,6 +105,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             post(internal::upsert_runtime_binding),
         )
         .route(
+            "/internal/v1/runtime-bindings/pi-control",
+            post(internal::publish_pi_control_endpoint),
+        )
+        .route(
             "/internal/v1/sessions/{session_id}/current-turn/claim",
             post(internal::claim_current_turn),
         )

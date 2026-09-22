@@ -1,9 +1,29 @@
 import type { EnvLike } from "./context.js";
+import { CONTROL_VERSION } from "./control-socket.js";
 import { resolvePontiaConnection } from "./discovery.js";
 import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
 import type { SessionContext } from "./session.js";
 
 export type PiSessionDetails = Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">;
+
+export async function publishControlEndpoint(
+  context: SessionContext,
+  socketPath: string,
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  const response = await fetchImpl(context.internalEventUrl.replace(/\/events\/?$/, "/runtime-bindings/pi-control"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(5_000),
+    body: JSON.stringify({
+      session_id: context.sessionId,
+      runtime_instance_id: context.runtimeInstanceId,
+      socket_path: socketPath,
+      version: CONTROL_VERSION,
+    }),
+  });
+  if (!response.ok) throw new Error(`Pi control endpoint registration failed: ${response.status} ${response.statusText}`);
+}
 
 function callSessionManagerString(sessionManager: unknown, method: string): string | undefined {
   if (!sessionManager || typeof sessionManager !== "object") return undefined;

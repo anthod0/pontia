@@ -95,6 +95,7 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
   const fetchWithManagedBinding = suppliedFetch
     ? (async (url: string | URL | Request, init?: RequestInit) => {
         const requestUrl = String(url);
+        if (requestUrl.endsWith("/runtime-bindings/pi-control")) return new Response("{}", { status: 200 });
         if (managedRuntime && requestUrl.includes("/internal/v1/agent-bindings/session-context?")) {
           return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
         }
@@ -114,6 +115,7 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
       }) as typeof fetch
     : suppliedFetch;
   createPontiaPiExtension(pi as any, {
+    startControlSocket: vi.fn(async () => ({ socketPath: "/unused/control.sock", close: async () => {} })),
     loadContext: vi.fn(async () => ({ ok: true as const, context, logFile: "hook.log" })),
     makeReporter: vi.fn(() => ({ report: vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
       reported.push(event);

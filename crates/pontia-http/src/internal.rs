@@ -22,7 +22,7 @@ pub use event_ingestion::{InternalEventRequest, InternalEventResponse, post_even
 pub use live_output::{InternalLiveOutputRequest, InternalLiveOutputResponse, post_live_output};
 pub use reporting_failure::report_turn_start_failure;
 pub use response::ApiError;
-pub use runtime_binding::upsert_runtime_binding;
+pub use runtime_binding::{publish_pi_control_endpoint, upsert_runtime_binding};
 pub use workflow::{
     WorkflowPatchApplyRequest, WorkflowPatchBlockRequest, WorkflowPatchRequest, WorkflowRunRequest,
     WorkflowSubmissionRequest, apply_workflow_patch, block_workflow_patch, request_workflow_patch,

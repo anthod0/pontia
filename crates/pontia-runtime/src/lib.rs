@@ -8,6 +8,7 @@ mod config;
 mod in_process;
 mod manager;
 mod paths;
+pub mod pi_control;
 mod script;
 mod session_identifier;
 mod tmux;

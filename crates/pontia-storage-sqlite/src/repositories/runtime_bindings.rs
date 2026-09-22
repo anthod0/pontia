@@ -1,6 +1,9 @@
 use pontia_core::{Error, Result};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
+mod pi_control;
+pub use pi_control::PiControlBindingRow;
+
 #[derive(Debug, Clone)]
 pub struct RuntimeBindingUpsertRecord {
     pub session_id: String,
@@ -221,7 +224,11 @@ impl SqliteRuntimeBindingRepository {
                    process_fingerprint = excluded.process_fingerprint,
                    capabilities = excluded.capabilities,
                    diagnostics = json_patch(runtime_bindings.diagnostics, excluded.diagnostics),
-                   adapter_details = json_patch(runtime_bindings.adapter_details, excluded.adapter_details),
+                   adapter_details = CASE
+                       WHEN runtime_bindings.runtime_instance_id = excluded.runtime_instance_id
+                       THEN json_patch(runtime_bindings.adapter_details, excluded.adapter_details)
+                       ELSE excluded.adapter_details
+                   END,
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"#,
         )
         .bind(binding.session_id)

@@ -49,6 +49,7 @@ struct LifecycleState {
 struct IntegrationState {
     git_refresh: GitRefreshCoordinator,
     idempotency: IdempotencyCoordinator,
+    pi_control: crate::PiControlService,
 }
 
 impl AppState {
@@ -77,6 +78,7 @@ impl AppState {
                 integrations: IntegrationState {
                     git_refresh: builder.git_refresh,
                     idempotency: builder.idempotency,
+                    pi_control: builder.pi_control,
                 },
             }),
         }
@@ -122,6 +124,10 @@ impl AppState {
         self.inner.integrations.git_refresh.clone()
     }
 
+    pub fn pi_control(&self) -> crate::PiControlService {
+        self.inner.integrations.pi_control.clone()
+    }
+
     pub fn idempotency(&self) -> IdempotencyCoordinator {
         self.inner.integrations.idempotency.clone()
     }
@@ -143,5 +149,6 @@ impl AppState {
             .live_output(self.inner.events.live_output.clone())
             .git_refresh(self.git_refresh())
             .idempotency(self.idempotency())
+            .pi_control(self.pi_control())
     }
 }

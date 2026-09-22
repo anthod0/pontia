@@ -20,11 +20,13 @@ pub struct AppStateBuilder {
     pub(super) live_output: LiveOutputStore,
     pub(super) git_refresh: GitRefreshCoordinator,
     pub(super) idempotency: IdempotencyCoordinator,
+    pub(super) pi_control: crate::PiControlService,
 }
 
 impl AppStateBuilder {
     pub(super) fn new(db: SqlitePool, pontia_home: PathBuf) -> Self {
         Self {
+            pi_control: crate::PiControlService::new(db.clone(), pontia_home.clone()),
             db,
             pontia_home,
             external_api_token: None,
@@ -81,6 +83,11 @@ impl AppStateBuilder {
 
     pub fn idempotency(mut self, idempotency: IdempotencyCoordinator) -> Self {
         self.idempotency = idempotency;
+        self
+    }
+
+    pub(super) fn pi_control(mut self, pi_control: crate::PiControlService) -> Self {
+        self.pi_control = pi_control;
         self
     }
 

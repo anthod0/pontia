@@ -12,6 +12,7 @@ mod inbox;
 pub mod ingestion;
 pub mod live_output;
 mod pi_control;
+mod pi_control_socket;
 pub mod queries;
 mod raw_transcripts;
 pub mod runtime;
@@ -46,6 +47,7 @@ pub use live_output::{
     LiveOutputSnapshotReplacement, LiveOutputStreamEvent, LiveOutputSubscription, LiveOutputUpdate,
 };
 pub use pi_control::PiGracefulExitService;
+pub use pi_control_socket::{PiControlService, PublishPiControlEndpoint};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
     TurnTimelineDirection, TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage,
