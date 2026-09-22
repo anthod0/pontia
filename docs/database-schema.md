@@ -1,5 +1,20 @@
 # Current SQLite database tables
 
+## Edge database: `device_bindings`
+
+The edge service uses its own SQLite file, separate from the local control-plane database.
+Each row records an account's bound device; unique constraints enforce the first-release
+one-account/one-device relationship. Device connection status is ephemeral.
+
+| Column | Type | Constraints / default |
+|---|---|---|
+| `device_id` | TEXT | primary key, NOT NULL; UUID |
+| `account_id` | TEXT | NOT NULL, UNIQUE, non-blank |
+| `public_key` | BLOB | NOT NULL, UNIQUE; 32-byte Ed25519 public key |
+| `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
+
+The following tables belong to the local control-plane database.
+
 ## `events`
 
 | Column | Type | Constraints / default |

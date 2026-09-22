@@ -1,5 +1,7 @@
 [workspace]
 members = [
+    "edge",
+    "tunnel",
     "control/pontiad",
     "control/core",
     "control/storage-sqlite",

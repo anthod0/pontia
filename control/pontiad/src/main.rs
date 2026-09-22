@@ -14,9 +14,21 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 async fn main() -> Result<()> {
     let config = AppConfig::from_env()?;
     init_tracing();
+    let remote = config.remote.as_ref().map(|remote| {
+        let identity = pontia_tunnel::DeviceIdentity::load_or_create(
+            &config.pontia_home.join("state/device-identity.json"),
+        )?;
+        info!(device_id = %identity.device_id(), public_key = ?identity.public_key(), "remote device identity");
+        pontia_tunnel::RemoteClient::new(&remote.edge_url, identity, remote.ca_certificate.as_deref())
+    }).transpose().map_err(|error| pontia_core::error::Error::InvalidConfig {
+        key: "remote",
+        message: error.to_string(),
+    })?;
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
     let app_state = application::initialize(&config).await?;
+    let remote_task =
+        remote.map(|remote| tokio::spawn(remote.run(app_state.shutdown().subscribe())));
     pontia_runtime::set_runtime_bind_addr(bound_addr);
     tokio::spawn(
         application::codex::CodexObserver::new(
@@ -47,8 +59,9 @@ async fn main() -> Result<()> {
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
     let shutdown = state.app().shutdown();
+    let cleanup_shutdown = shutdown.clone();
     let codex_root = state.app().pontia_home().to_path_buf();
-    http::serve_with_shutdown_timeout(
+    let server_result = http::serve_with_shutdown_timeout(
         listener,
         http::router(state),
         async move {
@@ -57,9 +70,16 @@ async fn main() -> Result<()> {
         },
         Duration::from_secs(5),
     )
-    .await?;
+    .await;
+
+    cleanup_shutdown.notify();
+    if let Some(task) = remote_task {
+        let _ = task.await;
+    }
 
     pontia_runtime::codex::CodexRuntime::shutdown(&codex_root).await;
+
+    server_result?;
 
     Ok(())
 }

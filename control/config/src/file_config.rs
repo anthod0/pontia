@@ -3,7 +3,9 @@ use std::path::Path;
 use pontia_core::error::{Error, Result};
 use serde::Deserialize;
 
-use super::{DashboardConfig, FilePickerConfig, RuntimeConfig, WorkspaceBrowserConfig};
+use super::{
+    DashboardConfig, FilePickerConfig, RemoteConfig, RuntimeConfig, WorkspaceBrowserConfig,
+};
 
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct FileConfig {
@@ -15,6 +17,7 @@ pub(super) struct FileConfig {
     pub(super) workspace_browser: Option<WorkspaceBrowserConfig>,
     pub(super) file_picker: Option<FilePickerConfig>,
     pub(super) dashboard: Option<DashboardConfig>,
+    pub(super) remote: Option<RemoteConfig>,
 }
 
 pub(super) fn read(path: &Path) -> Result<FileConfig> {

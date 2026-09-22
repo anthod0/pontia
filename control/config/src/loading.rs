@@ -96,6 +96,7 @@ impl AppConfig {
             file_picker,
             runtime,
             dashboard,
+            remote: file.and_then(|config| config.remote.clone()),
         })
     }
 }

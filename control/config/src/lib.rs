@@ -20,6 +20,14 @@ pub struct AppConfig {
     pub file_picker: FilePickerConfig,
     pub runtime: RuntimeConfig,
     pub dashboard: DashboardConfig,
+    pub remote: Option<RemoteConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoteConfig {
+    pub edge_url: String,
+    pub ca_certificate: Option<PathBuf>,
 }
 
 const DEFAULT_DASHBOARD_SOURCE: &str = concat!(

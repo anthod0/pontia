@@ -15,6 +15,7 @@ pontia-http = { path = "../http" }
 pontia-runtime = { path = "../runtime", default-features = false }
 pontia-storage-sqlite = { path = "../storage-sqlite" }
 pontia-workflow = { path = "../workflow" }
+pontia-tunnel = { path = "../../tunnel" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sqlx.workspace = true
@@ -28,6 +29,10 @@ uuid = { workspace = true, features = ["v7", "serde"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 http-body-util = "0.1"
+pontia-edge = { path = "../../edge" }
+rcgen = "0.14"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
