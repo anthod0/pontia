@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { buildSessionContextUsageUpdatedEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiContext, contextUsageFromPiEvent, contextUsageFromPiHook } from "../src/events.js";
+import { RpcError } from "../src/control-socket.js";
 import { EventReporter } from "../src/reporter.js";
 import { tempDir } from "./temp-dir.js";
 
@@ -208,19 +209,12 @@ describe("event builders", () => {
 });
 
 describe("EventReporter", () => {
-  test("posts event JSON to the Internal Event API", async () => {
-    const fetch = vi.fn(async () => new Response(JSON.stringify({ accepted: true, event_id: "evt_server", turn_id: "turn_server" }), { status: 202 }));
-    const reporter = new EventReporter({ fetch, logFile: await tempLogFile() });
+  test("reports facts over RPC and returns the canonical turn identity", async () => {
+    const request = vi.fn(async () => ({ accepted: true, event_id: "evt_server", turn_id: "turn_server" }));
+    const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
     const event = buildTurnCompletedEvent(context);
-
-    const result = await reporter.report(context, event);
-
-    expect(result).toEqual({ accepted: true, eventId: "evt_server", turnId: "turn_server" });
-    expect(fetch).toHaveBeenCalledWith(context.internalEventUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(event),
-    });
+    expect(await reporter.report(context, event)).toEqual({ accepted: true, eventId: "evt_server", turnId: "turn_server" });
+    expect(request).toHaveBeenCalledWith("event.report", { runtime_instance_id: "rtinst_1", event });
   });
 
   test.each([
@@ -228,36 +222,30 @@ describe("EventReporter", () => {
     ["network", "transport_failed"],
     ["missing identity", "missing_turn_id"],
   ])("reports %s of turn.started as an orchestration failure", async (failure, reason) => {
-    const requests: { url: string; body: any }[] = [];
-    const fetch = vi.fn(async (url: any, init: any) => {
-      requests.push({ url: String(url), body: JSON.parse(init.body) });
-      if (String(url).endsWith("/turn-start-failure")) return new Response('{"accepted":true}');
+    const request = vi.fn(async (method: string) => {
+      if (method === "turn.startFailure") return { accepted: true };
       if (failure === "network") throw new Error("connection lost");
-      return failure === "rejection"
-        ? new Response("input contains private task text", { status: 400 })
-        : new Response('{"accepted":true}');
+      if (failure === "rejection") throw new RpcError(-32602, "invalid fact");
+      return { accepted: true };
     });
-    const reporter = new EventReporter({ fetch, logFile: await tempLogFile() });
+    const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
     expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
-    expect(requests[1]).toEqual({
-      url: "http://127.0.0.1:8080/internal/v1/sessions/sess_1/turn-start-failure",
-      body: { runtime_instance_id: "rtinst_1", reason },
+    expect(request).toHaveBeenLastCalledWith("turn.startFailure", {
+      session_id: "sess_1", runtime_instance_id: "rtinst_1", reason,
     });
-    expect(requests).toHaveLength(2);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   test("retries the idempotent failure notification, not an ambiguous turn.started", async () => {
     let starts = 0;
     let failures = 0;
-    const fetch = vi.fn(async (url: any) => {
-      if (String(url).endsWith("/events")) {
-        starts++;
-        throw new Error("response lost");
-      }
+    const request = vi.fn(async (method: string) => {
+      if (method === "event.report") { starts++; throw new Error("response lost"); }
       failures++;
-      return failures < 3 ? new Response("unavailable", { status: 503 }) : new Response('{"accepted":true}');
+      if (failures < 3) throw new RpcError(-32603, "unavailable");
+      return { accepted: true };
     });
-    const reporter = new EventReporter({ fetch, logFile: await tempLogFile() });
+    const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
     expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
     expect(starts).toBe(1);
     expect(failures).toBe(3);
@@ -265,45 +253,28 @@ describe("EventReporter", () => {
 
   test("bounds failure-notification retries and reports unconfirmed state when offline", async () => {
     const logFile = await tempLogFile();
-    const fetch = vi.fn(async () => { throw new Error("offline"); });
-    const reporter = new EventReporter({ fetch, logFile });
+    const request = vi.fn(async () => { throw new Error("offline"); });
+    const reporter = new EventReporter({ connection: { request }, logFile });
     expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
-    expect(fetch).toHaveBeenCalledTimes(4); // One start, three failure notifications.
+    expect(request).toHaveBeenCalledTimes(4);
     expect(await readFile(logFile, "utf8")).toContain("turn_start_failure_report_failed");
   });
 
   test("does not retry a failure notification rejected by the runtime fence", async () => {
-    const fetch = vi.fn(async () => new Response("stale", { status: 409 }));
-    const reporter = new EventReporter({ fetch, logFile: await tempLogFile() });
+    const request = vi.fn(async () => { throw new RpcError(-32009, "stale"); });
+    const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
     expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
-  test("logs non-2xx POST failures and returns false", async () => {
+  test.each([new RpcError(-32603, "server error"), new Error("connection lost")])("logs report failures without inventing acceptance", async (error) => {
     const logFile = await tempLogFile();
-    const fetch = vi.fn(async () => new Response("nope", { status: 500, statusText: "Server Error" }));
-    const reporter = new EventReporter({ fetch, logFile });
-
-    const result = await reporter.report(context, buildTurnCompletedEvent(context));
-
-    expect(result).toEqual({ accepted: false });
+    const request = vi.fn(async () => { throw error; });
+    const reporter = new EventReporter({ connection: { request }, logFile });
+    expect(await reporter.report(context, buildTurnCompletedEvent(context))).toEqual({ accepted: false });
+    expect(request).toHaveBeenCalledTimes(1);
     const log = await readFile(logFile, "utf8");
-    expect(log).toContain("internal_event_post_failed");
-    expect(log).toContain("500");
-  });
-
-  test("logs thrown POST errors and returns false", async () => {
-    const logFile = await tempLogFile();
-    const fetch = vi.fn(async () => {
-      throw new Error("network down");
-    });
-    const reporter = new EventReporter({ fetch, logFile });
-
-    const result = await reporter.report(context, buildTurnCompletedEvent(context));
-
-    expect(result).toEqual({ accepted: false });
-    const log = await readFile(logFile, "utf8");
-    expect(log).toContain("internal_event_post_exception");
-    expect(log).toContain("network down");
+    expect(log).toContain("pi_event_report_failed");
+    expect(log).toContain(error.message);
   });
 });

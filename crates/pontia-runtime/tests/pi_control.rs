@@ -1,5 +1,5 @@
 use pontia_core::Error;
-use pontia_runtime::pi_control::{MAX_FRAME_BYTES, PiRpcPeer};
+use pontia_runtime::pi_control::{MAX_CONTROL_FRAME_BYTES, MAX_FRAME_BYTES, PiRpcPeer};
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -137,7 +137,15 @@ async fn oversized_frames_are_rejected_and_cancellation_releases_pending_calls()
     let (left, mut right) = UnixStream::pair().unwrap();
     let (peer, _incoming) = PiRpcPeer::new(left);
     assert!(matches!(
-        peer.call("submit", json!({"input":"x".repeat(MAX_FRAME_BYTES)}))
+        peer.call(
+            "submit",
+            json!({"input":"x".repeat(MAX_CONTROL_FRAME_BYTES)})
+        )
+        .await,
+        Err(Error::Domain(_))
+    ));
+    assert!(matches!(
+        peer.call("event.report", json!({"data":"x".repeat(MAX_FRAME_BYTES)}))
             .await,
         Err(Error::Domain(_))
     ));

@@ -41,3 +41,25 @@ async fn healthz_returns_ok_json() {
 
     assert_eq!(json, serde_json::json!({ "status": "ok" }));
 }
+
+#[tokio::test]
+async fn migrated_pi_reporting_endpoints_are_removed() {
+    let state = test_state().await;
+    for path in [
+        "/internal/v1/events",
+        "/internal/v1/sessions/session/turn-start-failure",
+    ] {
+        let response = http::router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+}

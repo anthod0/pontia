@@ -351,15 +351,13 @@ async fn upsert_rejects_a_different_runtime_owner_while_a_turn_is_active() {
     assert_eq!(first_status, StatusCode::OK, "{first:?}");
     let session_id = first["session"]["session_id"].as_str().unwrap();
     let runtime_instance_id = first["runtime"]["runtime_instance_id"].as_str().unwrap();
-    let (started_status, started) = request_json(
+    let (started_status, started) = crate::common::reporting::report_fact(
         state.clone(),
-        "POST",
-        "/internal/v1/events",
-        Some(json!({
+        json!({
             "session_id": session_id,
             "type": "turn.started",
             "data": { "runtime_instance_id": runtime_instance_id }
-        })),
+        }),
     )
     .await;
     assert_eq!(started_status, StatusCode::OK, "{started:?}");

@@ -96,27 +96,9 @@ async fn seed_session_events(state: &AppState) {
 }
 
 async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, String) {
-    let response = http::router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/internal/v1/events")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body.to_string()))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    let status = response.status();
-    let bytes = response
-        .into_body()
-        .collect()
-        .await
-        .expect("body")
-        .to_bytes();
-    (status, String::from_utf8(bytes.to_vec()).expect("utf8"))
+    let (status, body) = crate::common::reporting::report_fact(state, body).await;
+    (status, body.to_string())
 }
-
 async fn stream_get(
     state: AppState,
     uri: &str,
@@ -452,7 +434,7 @@ async fn dashboard_event_stream_pushes_volatile_session_message_updated_after_cu
             "session_id": "sess_stream_1",
             "turn_id": null,
             "type": "session.message_updated",
-            "payload": {"binding_id":"bind_1","reason":"update"}
+            "data": {"binding_id":"bind_1","reason":"update"}
         }),
     )
     .await;
@@ -527,7 +509,7 @@ async fn session_event_stream_pushes_volatile_session_message_updated_after_curs
             "session_id": "sess_stream_1",
             "turn_id": null,
             "type": "session.message_updated",
-            "payload": {"binding_id":"bind_session","reason":"update"}
+            "data": {"binding_id":"bind_session","reason":"update"}
         }),
     )
     .await;

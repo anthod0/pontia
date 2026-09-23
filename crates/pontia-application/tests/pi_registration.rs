@@ -162,3 +162,264 @@ async fn listener_preserves_occupied_paths_and_recovers_a_stale_socket() {
     drop(listener);
     assert!(!path.exists());
 }
+
+async fn register(pi: &PiRpcPeer, root: &std::path::Path) -> (String, String) {
+    let result = pi
+        .call(
+            "runtime.register",
+            json!({"version":PROTOCOL_VERSION,"binding":{
+                "client_type":"pi", "client_session_key":"native", "client_cwd":root,
+                "tmux":{"socket_path":"/unused/pi-test-tmux","pane_id":"%1"}
+            }}),
+        )
+        .await
+        .unwrap();
+    (
+        result["session"]["session_id"].as_str().unwrap().into(),
+        result["runtime"]["runtime_instance_id"]
+            .as_str()
+            .unwrap()
+            .into(),
+    )
+}
+
+fn fact(session: &str, runtime: &str, kind: &str, data: serde_json::Value) -> serde_json::Value {
+    json!({"runtime_instance_id":runtime,"event":{"session_id":session,"type":kind,"data":data}})
+}
+
+#[tokio::test]
+async fn reports_use_shared_fact_processing_and_acknowledge_exit_before_closing() {
+    let (state, root) = state().await;
+    let (pi, mut requests) = client(&state);
+    let (session, runtime) = register(&pi, root.path()).await;
+    let ready = pi
+        .call(
+            "event.report",
+            fact(
+                &session,
+                &runtime,
+                "session.ready",
+                json!({
+                    "runtime_instance_id":runtime, "client_session_key":"native"
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ready["accepted"], true);
+    // A control request can be outstanding while the client reports a fact.
+    let ping = {
+        let control = state.pi_control();
+        let session = session.clone();
+        let runtime = runtime.clone();
+        tokio::spawn(async move { control.ping(&session, &runtime).await })
+    };
+    let request = requests.recv().await.unwrap();
+    let started = pi
+        .call(
+            "event.report",
+            fact(
+                &session,
+                &runtime,
+                "turn.started",
+                json!({
+                    "runtime_instance_id":runtime, "input_summary":"界".repeat(40_000)
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    pi.reply(request.id, json!({"pong":true})).await.unwrap();
+    ping.await.unwrap().unwrap();
+    let turn = started["turn_id"].as_str().unwrap();
+    let summary: String = sqlx::query_scalar("SELECT json_extract(payload, '$.input.summary') FROM events WHERE event_type='turn.started' AND session_id=?")
+        .bind(&session).fetch_one(&state.db()).await.unwrap();
+    assert_eq!(summary, "界".repeat(200));
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    let refreshed = pi
+        .call(
+            "event.report",
+            fact(
+                &session,
+                &runtime,
+                "session.message_updated",
+                json!({"reason":"append"}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(refreshed["accepted"], true);
+    let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    assert_eq!(after, count, "message refresh remains volatile");
+    let mut completed = fact(
+        &session,
+        &runtime,
+        "turn.completed",
+        json!({"terminal_leaf_id":null}),
+    );
+    completed["event"]["turn_id"] = json!(turn);
+    assert_eq!(
+        pi.call("event.report", completed).await.unwrap()["accepted"],
+        true
+    );
+    let exited = pi
+        .call(
+            "event.report",
+            fact(
+                &session,
+                &runtime,
+                "session.exited",
+                json!({"runtime_instance_id":runtime,"reason":"quit"}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(exited["accepted"], true);
+    tokio::time::timeout(Duration::from_secs(1), pi.closed())
+        .await
+        .unwrap();
+    let state_value: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
+        .bind(&session)
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    assert_eq!(state_value, "exited");
+}
+
+#[tokio::test]
+async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_invalid_envelopes() {
+    let (state, root) = state().await;
+    let (pi, _requests) = client(&state);
+    assert!(
+        pi.call(
+            "event.report",
+            fact("unknown", "r", "session.message_updated", json!({}))
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        pi.call(
+            "turn.startFailure",
+            json!({"session_id":"unknown","runtime_instance_id":"r","reason":"transport_failed"})
+        )
+        .await
+        .is_err()
+    );
+    let (session, runtime) = register(&pi, root.path()).await;
+    let valid = fact(
+        &session,
+        &runtime,
+        "session.message_updated",
+        json!({"reason":"append"}),
+    );
+    for field in [
+        "timeline_boundary",
+        "event_id",
+        "source",
+        "client_type",
+        "time",
+    ] {
+        let mut request = valid.clone();
+        request["event"][field] = json!("client supplied");
+        assert!(pi.call("event.report", request).await.is_err());
+    }
+    let mut removed = valid.clone();
+    removed["event"]["type"] = json!("turn.timeline_item");
+    assert!(pi.call("event.report", removed).await.is_err());
+    let mut foreign = valid.clone();
+    foreign["event"]["session_id"] = json!("other");
+    assert!(pi.call("event.report", foreign).await.is_err());
+    let mut stale = valid.clone();
+    stale["runtime_instance_id"] = json!("old");
+    assert!(pi.call("event.report", stale).await.is_err());
+    sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='replacement' WHERE session_id=?")
+        .bind(&session)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    assert!(pi.call("event.report", valid).await.is_err());
+    assert!(
+        pi.call(
+            "turn.startFailure",
+            json!({"session_id":session,"runtime_instance_id":runtime,"client_session_key":"native","reason":"transport_failed"})
+        )
+        .await
+        .is_err()
+    );
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_type='session.error'")
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+    pi.close();
+}
+
+#[tokio::test]
+async fn failure_reports_are_idempotent_after_a_lost_started_acknowledgement() {
+    let (state, root) = state().await;
+    let (pi, _requests) = client(&state);
+    let (session, runtime) = register(&pi, root.path()).await;
+    let started = pi
+        .call(
+            "event.report",
+            fact(
+                &session,
+                &runtime,
+                "turn.started",
+                json!({"runtime_instance_id":runtime}),
+            ),
+        )
+        .await
+        .unwrap();
+    // Only the failure notification is retried, over an independent connection.
+    pi.close();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while state.pi_control().available(&session).await.unwrap() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let (pi, _requests) = client(&state);
+    let failure = json!({"session_id":session,"runtime_instance_id":runtime,"client_session_key":"native","reason":"transport_failed"});
+    assert_eq!(
+        pi.call("turn.startFailure", failure.clone()).await.unwrap()["accepted"],
+        true
+    );
+    pi.close();
+    let (retry, _requests) = client(&state);
+    assert!(!state.pi_control().available(&session).await.unwrap());
+    assert_eq!(
+        retry.call("turn.startFailure", failure).await.unwrap()["accepted"],
+        true
+    );
+    retry.close();
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_type='session.error'")
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    assert_eq!(count, 1);
+    let turn_state: String = sqlx::query_scalar("SELECT state FROM turns WHERE turn_id=?")
+        .bind(started["turn_id"].as_str().unwrap())
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    assert_eq!(turn_state, "abandoned");
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM events WHERE event_type IN ('turn.started','turn.failed')",
+    )
+    .fetch_one(&state.db())
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+    pi.close();
+}

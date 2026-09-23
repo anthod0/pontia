@@ -1,4 +1,6 @@
-//! Pi registration transport. Binding and lifecycle decisions remain in application services.
+//! Pi registration and reporting transport. Binding and lifecycle decisions remain in application services.
+mod reporting;
+
 use crate::{
     AgentBindingService, AppState, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
 };
@@ -9,7 +11,10 @@ use serde_json::{Value, json};
 use std::{
     os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 use tokio::{
@@ -122,25 +127,34 @@ impl Drop for ClosePeer {
 pub async fn serve_connection(state: AppState, stream: UnixStream) {
     let (peer, mut requests) = PiRpcPeer::new(stream);
     let _close = ClosePeer(peer.clone());
-    let mut registered = false;
+    let channel = Arc::new(PiChannel {
+        peer: peer.clone(),
+        handling: AtomicBool::new(false),
+        invalidated: AtomicBool::new(false),
+    });
+    let mut registered = None;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     loop {
         let request = tokio::select! {
             biased;
             _ = peer.closed() => break,
-            _ = tokio::time::sleep_until(deadline), if !registered => break,
+            _ = tokio::time::sleep_until(deadline), if registered.is_none() => break,
             request = requests.recv() => request,
         };
         let Some(request) = request else { break };
         if request.id.is_none() {
             continue;
-        } // Registration requires an acknowledged response.
+        } // All Pi reports and registration require an acknowledged response.
         if !matches!(
             request.method.as_str(),
-            "session.context" | "runtime.register" | "runtime.attach"
+            "session.context"
+                | "runtime.register"
+                | "runtime.attach"
+                | "event.report"
+                | "turn.startFailure"
         ) {
             if peer
-                .reply_error(request.id, -32601, "Unknown Pi registration method")
+                .reply_error(request.id, -32601, "Unknown Pi RPC method")
                 .await
                 .is_err()
             {
@@ -148,7 +162,9 @@ pub async fn serve_connection(state: AppState, stream: UnixStream) {
             }
             continue;
         }
-        let result = dispatch(&state, &peer, &request, &mut registered).await;
+        channel.handling.store(true, Ordering::SeqCst);
+        let reply_guard = ReplyGuard(&channel);
+        let result = dispatch(&state, &channel, &request, &mut registered).await;
         let response = match result {
             Ok(value) => peer.reply(request.id, value).await,
             Err(error) => {
@@ -169,6 +185,7 @@ pub async fn serve_connection(state: AppState, stream: UnixStream) {
                 peer.reply_error(request.id, code, &message).await
             }
         };
+        drop(reply_guard);
         if response.is_err() {
             break;
         }
@@ -197,10 +214,19 @@ struct ContextQuery {
 
 async fn dispatch(
     state: &AppState,
-    peer: &Arc<PiRpcPeer>,
+    channel: &Arc<PiChannel>,
     request: &RpcRequest,
-    registered: &mut bool,
+    registered: &mut Option<Attach>,
 ) -> Result<Value> {
+    if request.method == "turn.startFailure" {
+        return reporting::start_failure(state, request.params.clone()).await;
+    }
+    if request.method == "event.report" {
+        let identity = registered
+            .as_ref()
+            .ok_or_else(|| Error::StateConflict("Pi reporting requires registration".into()))?;
+        return reporting::report_event(state, identity, request.params.clone()).await;
+    }
     if request.method == "session.context" {
         let query: ContextQuery = serde_json::from_value(request.params.clone())?;
         if query.client_session_key.trim().is_empty() {
@@ -211,7 +237,7 @@ async fn dispatch(
             .await?;
         return Ok(json!({"session_context":context}));
     }
-    if *registered {
+    if registered.is_some() {
         return Err(Error::StateConflict(
             "Connection is already registered".into(),
         ));
@@ -253,7 +279,7 @@ async fn dispatch(
             let result = json!({"session_id":identity.session_id,"runtime_instance_id":identity.runtime_instance_id});
             (identity, result)
         }
-        _ => return Err(Error::Domain("Unknown Pi registration method".into())),
+        _ => return Err(Error::Domain("Unknown Pi RPC method".into())),
     };
     state
         .pi_control()
@@ -261,13 +287,53 @@ async fn dispatch(
             &identity.session_id,
             &identity.runtime_instance_id,
             &identity.client_session_key,
-            peer.clone(),
+            channel.clone(),
         )
         .await?;
-    *registered = true;
+
     crate::InboxCommandService::new(state.event_ingest_service())
         .notify_available(&identity.session_id);
+    *registered = Some(identity);
     Ok(result)
+}
+
+struct PiChannel {
+    peer: Arc<PiRpcPeer>,
+    handling: AtomicBool,
+    invalidated: AtomicBool,
+}
+
+// A terminal fact can invalidate control while its reporting acknowledgement is pending.
+struct ReplyGuard<'a>(&'a PiChannel);
+impl Drop for ReplyGuard<'_> {
+    fn drop(&mut self) {
+        self.0.handling.store(false, Ordering::SeqCst);
+        if self.0.invalidated.load(Ordering::SeqCst) {
+            self.0.peer.close();
+        }
+    }
+}
+
+impl crate::PiControlChannel for PiChannel {
+    fn available(&self) -> bool {
+        !self.invalidated.load(Ordering::SeqCst) && !self.peer.is_closed()
+    }
+    fn invalidate(&self) {
+        self.invalidated.store(true, Ordering::SeqCst);
+        if !self.handling.load(Ordering::SeqCst) {
+            self.peer.close();
+        }
+    }
+    fn ping(&self) -> crate::PiControlOperation<'_> {
+        self.peer.ping()
+    }
+    fn submit<'a>(
+        &'a self,
+        input: &'a str,
+        inbox_message_id: Option<&'a str>,
+    ) -> crate::PiControlOperation<'a> {
+        self.peer.submit(input, inbox_message_id)
+    }
 }
 
 impl crate::PiControlChannel for PiRpcPeer {

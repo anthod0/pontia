@@ -16,7 +16,7 @@ import type { SessionContext } from "./session.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
 interface ReporterLike {
-  report(context: { internalEventUrl: string }, event: InternalEvent): Promise<EventReportResult | boolean>;
+  report(context: { runtimeInstanceId: string }, event: InternalEvent): Promise<EventReportResult | boolean>;
 }
 
 function reportAccepted(result: EventReportResult | boolean): boolean {
@@ -118,7 +118,13 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   const currentHookLogFile = () => defaultHookLogFile(currentPontiaHome());
 
   const contextLoader = dependencies.loadContext ?? ((contextEnv, sessionContext) => loadTurnContext(contextEnv, { sessionContext }));
-  const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({ logFile }));
+  const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({
+    logFile,
+    connection: { request(method, params) {
+      if (!controlSocket) return Promise.reject(new Error("Pi connection is unavailable"));
+      return controlSocket.request(method, params);
+    } },
+  }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   const fetchImpl = dependencies.fetch ?? fetch;
   const loadManagedRuntime = dependencies.loadManagedRuntime ?? loadPontiaManagedRuntimeIdentity;
@@ -488,13 +494,11 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   pi.on("session_shutdown", async (event) => {
     piContext = undefined;
-    await closeControlSocket();
     readyReported = false;
-    if (reportingDisabled || !await confirmManagedPane()) return;
-    const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
-    if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
-
     try {
+      if (reportingDisabled || !await confirmManagedPane()) return;
+      const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
+      if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
       const logFile = currentHookLogFile();
       if (!boundSessionContext) return;
       await makeReporter(logFile).report(boundSessionContext, buildSessionExitedEvent(boundSessionContext, reason));
@@ -506,6 +510,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         message: "failed to report pontia exited signal",
         details: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      await closeControlSocket();
     }
   });
 

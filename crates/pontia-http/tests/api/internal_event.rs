@@ -1,20 +1,14 @@
+use crate::common::reporting::{report_fact_result as report_fact, report_start_failure};
 use crate::common::test_app::TestApp;
-use axum::{
-    body::Body,
-    http::{Request, StatusCode, header},
-};
-use http_body_util::BodyExt;
 use pontia_application::{AppState, EventIngestService};
 use pontia_core::{
     domain::{EventSource, EventType, ReportedEvent},
     ids::{new_event_id, new_turn_id},
 };
-use pontia_http as http;
 use pontia_storage_sqlite::repositories::runtime_bindings::{
     RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository,
 };
-use serde_json::{Value, json};
-use tower::ServiceExt;
+use serde_json::json;
 
 async fn test_state() -> AppState {
     TestApp::builder()
@@ -62,32 +56,6 @@ async fn bind_runtime(state: &AppState, session_id: &str, runtime_instance_id: &
         })
         .await
         .expect("bind runtime");
-}
-
-async fn post_event(state: AppState, body: Value) -> (StatusCode, Value) {
-    post_json(state, "/internal/v1/events", body).await
-}
-
-async fn post_json(state: AppState, path: &str, body: Value) -> (StatusCode, Value) {
-    let response = http::router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(path)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body.to_string()))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    let status = response.status();
-    let bytes = response
-        .into_body()
-        .collect()
-        .await
-        .expect("body")
-        .to_bytes();
-    (status, serde_json::from_slice(&bytes).expect("json body"))
 }
 
 async fn unbound_reporting_workflow_state() -> AppState {
@@ -169,17 +137,21 @@ async fn turn_start_reporting_failure_fails_workflow_without_fabricating_turn_fa
     use pontia_workflow::WorkflowQueryService;
     let state = reporting_workflow_state().await;
     let repository = SqliteWorkflowRepository::new(state.db());
-    let path = "/internal/v1/sessions/sess_reporting/turn-start-failure";
+    let session_id = "sess_reporting";
 
-    let (status, _) = post_json(
+    let failure = report_start_failure(
         state.clone(),
-        path,
+        session_id,
         json!({
             "runtime_instance_id": "rtinst_stale", "reason": "event_rejected"
         }),
     )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT);
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(failure, pontia_core::Error::StateConflict(_)),
+        "{failure:?}"
+    );
     assert_eq!(
         repository
             .get_workflow("wf_reporting")
@@ -190,7 +162,7 @@ async fn turn_start_reporting_failure_fails_workflow_without_fabricating_turn_fa
         "running"
     );
 
-    let (status, body) = post_event(
+    let body = report_fact(
         state.clone(),
         json!({
             "session_id": "sess_reporting",
@@ -201,8 +173,12 @@ async fn turn_start_reporting_failure_fails_workflow_without_fabricating_turn_fa
             }
         }),
     )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+        "{body:?}"
+    );
     assert!(
         repository
             .record_node_submission("node_reporting", "rtinst_reporting", "evt_invalid_submit")
@@ -221,15 +197,15 @@ async fn turn_start_reporting_failure_fails_workflow_without_fabricating_turn_fa
     );
 
     for _ in 0..2 {
-        let (status, body) = post_json(
+        report_start_failure(
             state.clone(),
-            path,
+            session_id,
             json!({
                 "runtime_instance_id": "rtinst_reporting", "reason": "event_rejected"
             }),
         )
-        .await;
-        assert_eq!(status, StatusCode::OK, "{body:?}");
+        .await
+        .unwrap();
     }
     let workflow = WorkflowQueryService::new(state.db())
         .get_workflow("wf_reporting")
@@ -268,13 +244,14 @@ async fn turn_start_failure_notification_fails_workflow_when_original_event_neve
     use pontia_workflow::WorkflowQueryService;
     for reason in ["transport_failed", "missing_turn_id"] {
         let state = reporting_workflow_state().await;
-        let (status, body) = post_json(
+        report_start_failure(
             state.clone(),
-            "/internal/v1/sessions/sess_reporting/turn-start-failure",
+            "sess_reporting",
             json!({ "runtime_instance_id": "rtinst_reporting", "reason": reason }),
         )
-        .await;
-        assert_eq!(status, StatusCode::OK, "{body:?}");
+        .await
+        .unwrap();
+
         reconcile_reporting_workflow(&state).await;
         let workflow = WorkflowQueryService::new(state.db())
             .get_workflow("wf_reporting")
@@ -290,13 +267,14 @@ async fn turn_start_failure_notification_fails_workflow_when_original_event_neve
 async fn reporting_failure_before_node_binding_is_recovered_from_persisted_events() {
     use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
     let state = unbound_reporting_workflow_state().await;
-    let (status, body) = post_json(
+    report_start_failure(
         state.clone(),
-        "/internal/v1/sessions/sess_reporting/turn-start-failure",
+        "sess_reporting",
         json!({ "runtime_instance_id": "rtinst_reporting", "reason": "transport_failed" }),
     )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body:?}");
+    .await
+    .unwrap();
+
     let repository = SqliteWorkflowRepository::new(state.db());
     repository
         .bind_node_session("node_reporting", "sess_reporting")
@@ -318,24 +296,26 @@ async fn reporting_failure_before_node_binding_is_recovered_from_persisted_event
 #[tokio::test]
 async fn lost_started_response_administratively_abandons_the_committed_turn() {
     let state = reporting_workflow_state().await;
-    let (status, started) = post_event(
+    let started = report_fact(
         state.clone(),
         json!({
             "session_id": "sess_reporting", "type": "turn.started",
             "data": { "runtime_instance_id": "rtinst_reporting", "input_summary": "task" }
         }),
     )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let (status, _) = post_json(
+    .await
+    .unwrap();
+
+    report_start_failure(
         state.clone(),
-        "/internal/v1/sessions/sess_reporting/turn-start-failure",
+        "sess_reporting",
         json!({"runtime_instance_id": "rtinst_reporting", "reason": "transport_failed"}),
     )
-    .await;
-    assert_eq!(status, StatusCode::OK);
+    .await
+    .unwrap();
+
     let turn = EventIngestService::new(state.db())
-        .get_turn(started["turn_id"].as_str().unwrap())
+        .get_turn(started.turn_id.as_deref().unwrap())
         .await
         .unwrap()
         .unwrap();
@@ -355,13 +335,14 @@ async fn reporting_failure_also_fails_a_submitted_node_waiting_for_exit() {
         .record_node_submission("node_reporting", "rtinst_reporting", "evt_submitted")
         .await
         .unwrap();
-    let (status, _) = post_json(
+    report_start_failure(
         state.clone(),
-        "/internal/v1/sessions/sess_reporting/turn-start-failure",
+        "sess_reporting",
         json!({"runtime_instance_id": "rtinst_reporting", "reason": "transport_failed"}),
     )
-    .await;
-    assert_eq!(status, StatusCode::OK);
+    .await
+    .unwrap();
+
     reconcile_reporting_workflow(&state).await;
     let workflow = pontia_workflow::WorkflowQueryService::new(state.db())
         .get_workflow("wf_reporting")
@@ -385,13 +366,13 @@ async fn reporting_failure_also_fails_a_submitted_node_waiting_for_exit() {
 async fn reporting_failure_notifications_persist_only_one_error_per_runtime() {
     let state = reporting_workflow_state().await;
     for _ in 0..3 {
-        let (status, _) = post_json(
+        report_start_failure(
             state.clone(),
-            "/internal/v1/sessions/sess_reporting/turn-start-failure",
+            "sess_reporting",
             json!({"runtime_instance_id": "rtinst_reporting", "reason": "transport_failed"}),
         )
-        .await;
-        assert_eq!(status, StatusCode::OK);
+        .await
+        .unwrap();
     }
     let events = EventIngestService::new(state.db())
         .list_events("sess_reporting")
@@ -409,13 +390,14 @@ async fn reporting_failure_notifications_persist_only_one_error_per_runtime() {
 #[tokio::test]
 async fn reporting_failure_from_an_old_runtime_cannot_fail_its_replacement() {
     let state = reporting_workflow_state().await;
-    let (status, _) = post_json(
+    report_start_failure(
         state.clone(),
-        "/internal/v1/sessions/sess_reporting/turn-start-failure",
+        "sess_reporting",
         json!({"runtime_instance_id": "rtinst_reporting", "reason": "transport_failed"}),
     )
-    .await;
-    assert_eq!(status, StatusCode::OK);
+    .await
+    .unwrap();
+
     bind_runtime(&state, "sess_reporting", "rtinst_replacement").await;
     reconcile_reporting_workflow(&state).await;
     let workflow = pontia_workflow::WorkflowQueryService::new(state.db())
@@ -427,12 +409,12 @@ async fn reporting_failure_from_an_old_runtime_cannot_fail_its_replacement() {
 }
 
 #[tokio::test]
-async fn internal_event_api_rejects_pontia_owned_event_types() {
+async fn reporting_service_rejects_pontia_owned_event_types() {
     let state = test_state().await;
     create_session(&state, "sess_owned_event", "generic").await;
 
     for fact_type in ["session.created", "turn.dispatch_failed", "turn.abandoned"] {
-        let (status, body) = post_event(
+        let body = report_fact(
             state.clone(),
             json!({
                 "session_id": "sess_owned_event",
@@ -441,12 +423,14 @@ async fn internal_event_api_rejects_pontia_owned_event_types() {
                 "data": {}
             }),
         )
-        .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+        .await
+        .unwrap_err();
         assert!(
-            body["error"]["message"]
-                .as_str()
-                .unwrap()
+            matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+            "{body:?}"
+        );
+        assert!(
+            body.to_string()
                 .contains("owned by the Pontia control plane"),
             "{body:?}"
         );
@@ -454,67 +438,17 @@ async fn internal_event_api_rejects_pontia_owned_event_types() {
 }
 
 #[tokio::test]
-async fn internal_event_api_rejects_timeline_boundary_as_an_unknown_field() {
-    let state = test_state().await;
-
-    let (status, body) = post_event(
-        state,
-        json!({
-            "session_id": "sess_unknown_field",
-            "type": "session.ready",
-            "data": {},
-            "timeline_boundary": null
-        }),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
-    assert_eq!(body["error"]["code"], "invalid_request");
-    assert!(
-        body["error"]["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("unknown field `timeline_boundary`")),
-        "{body:?}"
-    );
-}
-
-#[tokio::test]
-async fn internal_event_api_rejects_removed_timeline_item_events() {
-    let state = test_state().await;
-
-    let (status, body) = post_event(
-        state,
-        json!({
-            "session_id": "sess_removed_timeline_event",
-            "turn_id": "turn_removed_timeline_event",
-            "type": "turn.timeline_item",
-            "data": {}
-        }),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
-    assert_eq!(body["error"]["code"], "invalid_request");
-    assert!(
-        body["error"]["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("unknown event type: turn.timeline_item")),
-        "{body:?}"
-    );
-}
-
-#[tokio::test]
-async fn internal_event_api_normalizes_started_fact_into_a_domain_event() {
+async fn reporting_service_normalizes_started_fact_into_a_domain_event() {
     let state = test_state().await;
     create_session(&state, "sess_normalized", "pi").await;
     bind_runtime(&state, "sess_normalized", "rtinst_normalized").await;
 
-    let (status, body) = post_event(
+    let body = report_fact(
         state.clone(),
         json!({
             "session_id": "sess_normalized",
             "type": "turn.started",
-            "payload": {
+            "data": {
                 "runtime_instance_id": "rtinst_normalized",
                 "input_summary": "hello",
                 "previous_leaf_id": null,
@@ -522,16 +456,15 @@ async fn internal_event_api_normalizes_started_fact_into_a_domain_event() {
             }
         }),
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(body["accepted"], true);
-    assert_eq!(body["duplicate"], false);
-    assert_eq!(body["session_id"], "sess_normalized");
-    assert_eq!(body["state_version"], 2);
-    assert_eq!(body["warnings"], json!([]));
-    let event_id = body["event_id"].as_str().expect("event id");
-    let turn_id = body["turn_id"].as_str().expect("turn id");
+    assert!(body.accepted);
+    assert!(!body.duplicate);
+    assert_eq!(body.session_id, "sess_normalized");
+    assert_eq!(body.state_version, 2);
+    let event_id = body.event_id.as_str();
+    let turn_id = body.turn_id.as_deref().expect("turn id");
     assert!(event_id.starts_with("evt_"));
     assert!(turn_id.starts_with("turn_"));
     assert_eq!(
@@ -556,12 +489,12 @@ async fn internal_event_api_normalizes_started_fact_into_a_domain_event() {
 }
 
 #[tokio::test]
-async fn internal_event_api_rejection_does_not_broadcast() {
+async fn reporting_service_rejection_does_not_broadcast() {
     let state = test_state().await;
     create_session(&state, "sess_rejected_broadcast", "generic").await;
     let mut subscriber = state.agent_events().subscribe();
 
-    let (status, body) = post_event(
+    let body = report_fact(
         state.clone(),
         json!({
             "session_id": "sess_rejected_broadcast",
@@ -569,9 +502,13 @@ async fn internal_event_api_rejection_does_not_broadcast() {
             "data": {}
         }),
     )
-    .await;
+    .await
+    .unwrap_err();
 
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert!(
+        matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+        "{body:?}"
+    );
     assert!(matches!(
         subscriber.try_recv(),
         Err(tokio::sync::broadcast::error::TryRecvError::Empty)
@@ -579,7 +516,7 @@ async fn internal_event_api_rejection_does_not_broadcast() {
 }
 
 #[tokio::test]
-async fn internal_event_api_rejects_supplied_unknown_turn_id_for_started_fact() {
+async fn reporting_service_rejects_supplied_unknown_turn_id_for_started_fact() {
     let state = test_state().await;
     create_session(&state, "sess_unknown_started_turn", "pi").await;
     bind_runtime(
@@ -589,7 +526,7 @@ async fn internal_event_api_rejects_supplied_unknown_turn_id_for_started_fact() 
     )
     .await;
 
-    let (status, body) = post_event(
+    let body = report_fact(
         state,
         json!({
             "session_id": "sess_unknown_started_turn",
@@ -598,14 +535,17 @@ async fn internal_event_api_rejects_supplied_unknown_turn_id_for_started_fact() 
             "data": { "runtime_instance_id": "rtinst_unknown_started_turn" }
         }),
     )
-    .await;
+    .await
+    .unwrap_err();
 
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
-    assert_eq!(body["error"]["code"], "invalid_request");
+    assert!(
+        matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+        "{body:?}"
+    );
 }
 
 #[tokio::test]
-async fn internal_event_api_allows_started_fact_to_reference_an_existing_turn() {
+async fn reporting_service_allows_started_fact_to_reference_an_existing_turn() {
     let state = test_state().await;
     create_session(&state, "sess_existing_started_turn", "pi").await;
     bind_runtime(
@@ -629,7 +569,7 @@ async fn internal_event_api_allows_started_fact_to_reference_an_existing_turn() 
         .await
         .expect("create Pontia-owned turn");
 
-    let (referenced_status, referenced) = post_event(
+    let referenced = report_fact(
         state,
         json!({
             "session_id": "sess_existing_started_turn",
@@ -638,19 +578,19 @@ async fn internal_event_api_allows_started_fact_to_reference_an_existing_turn() 
             "data": { "runtime_instance_id": "rtinst_existing_started_turn" }
         }),
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert_eq!(referenced_status, StatusCode::OK, "{referenced:?}");
-    assert_eq!(referenced["turn_id"], turn_id);
+    assert_eq!(referenced.turn_id.as_deref(), Some(turn_id.as_str()));
 }
 
 #[tokio::test]
-async fn internal_event_api_rejects_other_creation_facts_with_unknown_supplied_turn_ids() {
+async fn reporting_service_rejects_other_creation_facts_with_unknown_supplied_turn_ids() {
     let state = test_state().await;
     create_session(&state, "sess_unknown_created_turn", "generic").await;
 
     for fact_type in ["turn.created", "turn.queued"] {
-        let (status, body) = post_event(
+        let body = report_fact(
             state.clone(),
             json!({
                 "session_id": "sess_unknown_created_turn",
@@ -659,18 +599,21 @@ async fn internal_event_api_rejects_other_creation_facts_with_unknown_supplied_t
                 "data": {}
             }),
         )
-        .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
-        assert_eq!(body["error"]["code"], "invalid_request");
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+            "{body:?}"
+        );
     }
 }
 
 #[tokio::test]
-async fn internal_event_api_uses_returned_turn_id_for_followup_facts() {
+async fn reporting_service_uses_returned_turn_id_for_followup_facts() {
     let state = test_state().await;
     create_session(&state, "sess_followup", "pi").await;
     bind_runtime(&state, "sess_followup", "rtinst_followup").await;
-    let (_, started) = post_event(
+    let started = report_fact(
         state.clone(),
         json!({
             "session_id": "sess_followup",
@@ -678,8 +621,9 @@ async fn internal_event_api_uses_returned_turn_id_for_followup_facts() {
             "data": { "runtime_instance_id": "rtinst_followup" }
         }),
     )
-    .await;
-    let turn_id = started["turn_id"].as_str().expect("turn id");
+    .await
+    .unwrap();
+    let turn_id = started.turn_id.as_deref().expect("turn id");
 
     for (fact_type, data) in [
         ("turn.output", json!({"output_summary":"answer"})),
@@ -688,7 +632,7 @@ async fn internal_event_api_uses_returned_turn_id_for_followup_facts() {
             json!({"runtime_instance_id":"rtinst_followup","terminal_leaf_id":null}),
         ),
     ] {
-        let (status, body) = post_event(
+        let body = report_fact(
             state.clone(),
             json!({
                 "session_id": "sess_followup",
@@ -697,9 +641,10 @@ async fn internal_event_api_uses_returned_turn_id_for_followup_facts() {
                 "data": data
             }),
         )
-        .await;
-        assert_eq!(status, StatusCode::OK, "{body:?}");
-        assert_eq!(body["turn_id"], turn_id);
+        .await
+        .unwrap();
+
+        assert_eq!(body.turn_id.as_deref(), Some(turn_id));
     }
 
     let turn = EventIngestService::new(state.db())
@@ -712,12 +657,12 @@ async fn internal_event_api_uses_returned_turn_id_for_followup_facts() {
 }
 
 #[tokio::test]
-async fn internal_event_api_accepts_agent_client_reported_turn_interrupted() {
+async fn reporting_service_accepts_agent_client_reported_turn_interrupted() {
     let state = test_state().await;
     create_session(&state, "sess_interrupted", "pi").await;
     bind_runtime(&state, "sess_interrupted", "rtinst_interrupted").await;
 
-    let (started_status, started) = post_event(
+    let started = report_fact(
         state.clone(),
         json!({
             "session_id": "sess_interrupted",
@@ -725,11 +670,12 @@ async fn internal_event_api_accepts_agent_client_reported_turn_interrupted() {
             "data": { "runtime_instance_id": "rtinst_interrupted" }
         }),
     )
-    .await;
-    assert_eq!(started_status, StatusCode::OK, "{started:?}");
-    let turn_id = started["turn_id"].as_str().expect("turn id");
+    .await
+    .unwrap();
 
-    let (status, body) = post_event(
+    let turn_id = started.turn_id.as_deref().expect("turn id");
+
+    report_fact(
         state.clone(),
         json!({
             "session_id": "sess_interrupted",
@@ -738,8 +684,8 @@ async fn internal_event_api_accepts_agent_client_reported_turn_interrupted() {
             "data": { "runtime_instance_id": "rtinst_interrupted" }
         }),
     )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body:?}");
+    .await
+    .unwrap();
 
     let turn = EventIngestService::new(state.db())
         .get_turn(turn_id)
@@ -750,12 +696,12 @@ async fn internal_event_api_accepts_agent_client_reported_turn_interrupted() {
 }
 
 #[tokio::test]
-async fn internal_event_api_derives_client_type_and_source_from_session_and_fact() {
+async fn reporting_service_derives_client_type_and_source_from_session_and_fact() {
     let state = test_state().await;
     create_session(&state, "sess_ready", "pi").await;
     bind_runtime(&state, "sess_ready", "rtinst_ready").await;
 
-    let (status, body) = post_event(
+    report_fact(
         state.clone(),
         json!({
             "session_id": "sess_ready",
@@ -766,8 +712,8 @@ async fn internal_event_api_derives_client_type_and_source_from_session_and_fact
             }
         }),
     )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body:?}");
+    .await
+    .unwrap();
 
     let events = EventIngestService::new(state.db())
         .list_events("sess_ready")
@@ -779,33 +725,44 @@ async fn internal_event_api_derives_client_type_and_source_from_session_and_fact
 }
 
 #[tokio::test]
-async fn internal_event_api_rejects_unknown_sessions_and_missing_followup_turn_ids() {
+async fn reporting_service_rejects_unknown_sessions_and_missing_followup_turn_ids() {
     let state = test_state().await;
-    let (status, _) = post_event(
+    let failure = report_fact(
         state.clone(),
         json!({"session_id":"sess_unknown","type":"session.ready","data":{}}),
     )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(
+            failure,
+            pontia_application::EventReportError::InvalidFact(_)
+        ),
+        "{failure:?}"
+    );
 
     create_session(&state, "sess_missing_turn", "generic").await;
-    let (status, body) = post_event(
+    let body = report_fact(
         state,
         json!({"session_id":"sess_missing_turn","type":"turn.output","data":{}}),
     )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+        "{body:?}"
+    );
 }
 
 #[tokio::test]
-async fn internal_event_api_rejects_followups_for_unknown_or_other_session_turns() {
+async fn reporting_service_rejects_followups_for_unknown_or_other_session_turns() {
     let state = test_state().await;
     create_session(&state, "sess_turn_owner", "pi").await;
     create_session(&state, "sess_turn_intruder", "pi").await;
     bind_runtime(&state, "sess_turn_owner", "rtinst_owner").await;
     bind_runtime(&state, "sess_turn_intruder", "rtinst_intruder").await;
 
-    let (unknown_status, unknown_body) = post_event(
+    let unknown_body = report_fact(
         state.clone(),
         json!({
             "session_id": "sess_turn_owner",
@@ -814,10 +771,19 @@ async fn internal_event_api_rejects_followups_for_unknown_or_other_session_turns
             "data": {}
         }),
     )
-    .await;
-    assert_eq!(unknown_status, StatusCode::CONFLICT, "{unknown_body:?}");
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(
+            unknown_body,
+            pontia_application::EventReportError::Ingestion(
+                pontia_core::Error::Domain(_) | pontia_core::Error::StateConflict(_)
+            )
+        ),
+        "{unknown_body:?}"
+    );
 
-    let (started_status, started) = post_event(
+    let started = report_fact(
         state.clone(),
         json!({
             "session_id": "sess_turn_owner",
@@ -825,10 +791,11 @@ async fn internal_event_api_rejects_followups_for_unknown_or_other_session_turns
             "data": { "runtime_instance_id": "rtinst_owner" }
         }),
     )
-    .await;
-    assert_eq!(started_status, StatusCode::OK, "{started:?}");
-    let turn_id = started["turn_id"].as_str().unwrap();
-    let (cross_session_status, cross_session_body) = post_event(
+    .await
+    .unwrap();
+
+    let turn_id = started.turn_id.as_deref().unwrap();
+    let cross_session_body = report_fact(
         state,
         json!({
             "session_id": "sess_turn_intruder",
@@ -837,40 +804,25 @@ async fn internal_event_api_rejects_followups_for_unknown_or_other_session_turns
             "data": { "output_summary": "not mine" }
         }),
     )
-    .await;
-    assert_eq!(
-        cross_session_status,
-        StatusCode::CONFLICT,
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(
+            cross_session_body,
+            pontia_application::EventReportError::Ingestion(
+                pontia_core::Error::Domain(_) | pontia_core::Error::StateConflict(_)
+            )
+        ),
         "{cross_session_body:?}"
     );
 }
 
 #[tokio::test]
-async fn internal_event_api_rejects_client_owned_domain_fields() {
-    let state = test_state().await;
-    create_session(&state, "sess_owned_fields", "generic").await;
-    let (status, body) = post_event(
-        state,
-        json!({
-            "event_id": "evt_client",
-            "session_id": "sess_owned_fields",
-            "source": "agent_client",
-            "client_type": "generic",
-            "type": "session.message_updated",
-            "time": "2026-01-01T00:00:00Z",
-            "data": {}
-        }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
-}
-
-#[tokio::test]
-async fn internal_event_api_validates_context_usage_and_truncates_output() {
+async fn reporting_service_validates_context_usage_and_truncates_output() {
     let state = test_state().await;
     create_session(&state, "sess_validation", "generic").await;
 
-    let (status, _) = post_event(
+    let failure = report_fact(
         state.clone(),
         json!({
             "session_id":"sess_validation",
@@ -878,16 +830,24 @@ async fn internal_event_api_validates_context_usage_and_truncates_output() {
             "data":{"context_usage":{"usage_ratio":2}}
         }),
     )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(
+            failure,
+            pontia_application::EventReportError::InvalidFact(_)
+        ),
+        "{failure:?}"
+    );
 
-    let (_, started) = post_event(
+    let started = report_fact(
         state.clone(),
         json!({"session_id":"sess_validation","type":"turn.started","data":{}}),
     )
-    .await;
-    let turn_id = started["turn_id"].as_str().expect("turn id");
-    let (status, body) = post_event(
+    .await
+    .unwrap();
+    let turn_id = started.turn_id.as_deref().expect("turn id");
+    report_fact(
         state.clone(),
         json!({
             "session_id":"sess_validation",
@@ -896,8 +856,9 @@ async fn internal_event_api_validates_context_usage_and_truncates_output() {
             "data":{"output":{"summary":"x".repeat(500)}}
         }),
     )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body:?}");
+    .await
+    .unwrap();
+
     let turn = EventIngestService::new(state.db())
         .get_turn(turn_id)
         .await

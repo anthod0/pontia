@@ -202,30 +202,15 @@ async fn report_fact(
     fact_type: &str,
     data: Value,
 ) -> Value {
-    let response = http::router(app.state.clone())
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/internal/v1/events")
-                .header(header::AUTHORIZATION, "Bearer test-token")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    json!({
-                        "session_id": session_id,
-                        "turn_id": turn_id,
-                        "type": fact_type,
-                        "data": data
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status();
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
-    serde_json::from_slice(&body).unwrap()
+    let (status, body) = crate::common::reporting::report_fact(
+        app.state.clone(),
+        json!({
+            "session_id": session_id, "turn_id": turn_id, "type": fact_type, "data": data,
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body
 }
 
 type Coordinator =

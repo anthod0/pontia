@@ -16,7 +16,9 @@ use tokio::{
 };
 
 pub const PROTOCOL_VERSION: u32 = 3;
-pub const MAX_FRAME_BYTES: usize = 64 * 1024;
+pub const MAX_CONTROL_FRAME_BYTES: usize = 64 * 1024;
+// The former HTTP event body limit plus space for the RPC envelope.
+pub const MAX_FRAME_BYTES: usize = 2 * 1024 * 1024 + 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct RpcRequest {
@@ -235,8 +237,10 @@ impl Drop for PendingCall<'_> {
 
 fn encode(value: &Value) -> Result<Vec<u8>> {
     let mut encoded = serde_json::to_vec(value)?;
-    if encoded.len() > MAX_FRAME_BYTES {
-        return Err(Error::Domain("Pi RPC frame exceeds 64 KiB".into()));
+    if encoded.len() > MAX_FRAME_BYTES
+        || (value["method"] == "submit" && encoded.len() > MAX_CONTROL_FRAME_BYTES)
+    {
+        return Err(Error::Domain("Pi RPC frame exceeds size limit".into()));
     }
     encoded.push(b'\n');
     Ok(encoded)
@@ -252,7 +256,7 @@ async fn read_frame<R: tokio::io::AsyncBufRead + Unpin>(stream: &mut R) -> Resul
         let newline = available.iter().position(|byte| *byte == b'\n');
         let size = newline.unwrap_or(available.len());
         if frame.len() + size > MAX_FRAME_BYTES {
-            return Err(Error::Domain("Pi RPC frame exceeds 64 KiB".into()));
+            return Err(Error::Domain("Pi RPC frame exceeds size limit".into()));
         }
         frame.extend_from_slice(&available[..size]);
         stream.consume(size + usize::from(newline.is_some()));

@@ -2,3 +2,5 @@
 
 pub(crate) mod generic_client;
 pub(crate) mod test_app;
+
+pub(crate) mod reporting;

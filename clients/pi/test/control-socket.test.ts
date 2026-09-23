@@ -2,7 +2,9 @@ import { mkdir } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
 import { onTestFinished, expect, test, vi } from "vitest";
-import { connectPi, piSocketPath, MAX_CONTROL_FRAME_BYTES } from "../src/control-socket.js";
+import { connectPi, piSocketPath, MAX_RPC_FRAME_BYTES } from "../src/control-socket.js";
+import { EventReporter } from "../src/reporter.js";
+import { buildTurnStartedEvent } from "../src/events.js";
 import { tempDir } from "./temp-dir.js";
 
 async function server(handler: (socket: Socket, message: any) => void) {
@@ -77,7 +79,7 @@ test.each(["wrong-id", "both", "invalid-json", "oversized"])("rejects %s frames 
   const root = await server((socket, message) => {
     const frame = kind === "wrong-id" ? JSON.stringify({ jsonrpc: "2.0", id: "wrong", result: {} })
       : kind === "both" ? JSON.stringify({ jsonrpc: "2.0", id: message.id, result: {}, error: { code: 1, message: "bad" } })
-      : kind === "oversized" ? "x".repeat(MAX_CONTROL_FRAME_BYTES + 1) : "not-json";
+      : kind === "oversized" ? "x".repeat(MAX_RPC_FRAME_BYTES + 1) : "not-json";
     socket.write(`${frame}\n`);
   });
   const client = await connectPi(root, () => {}, () => {});
@@ -94,4 +96,72 @@ test("correlates replies that arrive in reverse order", async () => {
   const client = await connectPi(root, () => {}, () => {});
   onTestFinished(() => client.close());
   await expect(Promise.all([client.request("one", {}), client.request("two", {})])).resolves.toEqual(["one", "two"]);
+});
+
+
+test("lost acknowledgements retry only the failure notification over a fresh connection", async () => {
+  const methods: string[] = [];
+  const root = await server((socket, message) => {
+    if (!message.method) {
+      expect(message.id).toBe("daemon:submit");
+      expect(message.result).toEqual({ accepted: true });
+      socket.destroy();
+      return;
+    }
+    methods.push(message.method);
+    if (message.method === "event.report") {
+      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "daemon:submit", method: "submit", params: { input: "next" } })}\n`);
+    } else if (message.method === "runtime.attach") {
+      setTimeout(() => reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" }), 400);
+    } else {
+      expect(message.params.client_session_key).toBe("native");
+      if (methods.filter((method) => method === "turn.startFailure").length === 1) socket.destroy();
+      else reply(socket, message.id, { accepted: true });
+    }
+  });
+  const submit = vi.fn();
+  const client = await connectPi(root, () => {}, submit);
+  onTestFinished(() => client.close());
+  client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
+  const reporter = new EventReporter({ connection: client, logFile: join(root, "hook.log") });
+  const context = { sessionId: "s", runtimeInstanceId: "r", clientType: "pi" as const, internalEventUrl: "unused" };
+  expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
+  expect(methods.filter((method) => method !== "runtime.attach")).toEqual(["event.report", "turn.startFailure", "turn.startFailure"]);
+  expect(submit).toHaveBeenCalledWith({ input: "next", inboxMessageId: undefined });
+});
+
+test("reports large facts without treating normal socket buffering as failure", async () => {
+  const data = "界".repeat(40_000);
+  const root = await server((socket, message) => {
+    expect(message.params.event.data.input_summary).toBe(data);
+    reply(socket, message.id, { accepted: true, turn_id: "turn_1" });
+  });
+  const client = await connectPi(root, () => {}, () => {});
+  onTestFinished(() => client.close());
+  await expect(client.request("event.report", { event: { data: { input_summary: data } } })).resolves.toMatchObject({ accepted: true });
+});
+
+test("new event reports wait for reconnect attachment before they are sent", async () => {
+  let attached = false;
+  const methods: string[] = [];
+  const root = await server((socket, message) => {
+    methods.push(message.method);
+    if (message.method === "break") { socket.destroy(); return; }
+    if (message.method === "runtime.attach") {
+      setTimeout(() => {
+        attached = true;
+        reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" });
+      }, 100);
+      return;
+    }
+    expect(attached).toBe(true);
+    reply(socket, message.id, { accepted: true });
+  });
+  const client = await connectPi(root, () => {}, () => {});
+  onTestFinished(() => client.close());
+  client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
+  await expect(client.request("break", {})).rejects.toThrow();
+  await vi.waitFor(() => expect(methods).toContain("runtime.attach"));
+  await expect(client.request("event.report", {})).resolves.toEqual({ accepted: true });
+  expect(methods).toEqual(["break", "runtime.attach", "event.report"]);
 });

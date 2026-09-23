@@ -118,7 +118,7 @@ async fn post_internal_json(state: AppState, uri: &str, body: Value) -> (StatusC
 }
 
 async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
-    post_internal_json(state, "/internal/v1/events", body).await
+    crate::common::reporting::report_fact(state, body).await
 }
 
 async fn seed_session_for_client(state: &AppState, session_id: &str, client_type: &str) {

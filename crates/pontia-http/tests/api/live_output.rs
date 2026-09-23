@@ -420,9 +420,8 @@ async fn live_output_ingress_fences_runtime_and_terminal_facts_clear_state() {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let (status, _) = post(
+    let (status, _) = crate::common::reporting::report_fact(
         state.clone(),
-        "/internal/v1/events",
         json!({
             "session_id": "sess_live",
             "turn_id": "turn_live",

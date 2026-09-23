@@ -1,15 +1,11 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
-use http_body_util::BodyExt;
+mod common;
+use axum::http::StatusCode;
 use pontia_application::{
     AgentBindingService, AppState, CreateSessionRequest, SessionCommandService,
     UpsertAgentBindingRequest,
 };
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
-use tower::ServiceExt;
 
 async fn app() -> (tempfile::TempDir, AppState, String) {
     let root = tempfile::tempdir().unwrap();
@@ -47,23 +43,11 @@ async fn app() -> (tempfile::TempDir, AppState, String) {
 }
 
 async fn report(state: &AppState, session: &str, kind: &str, data: Value) -> (StatusCode, Value) {
-    let response = pontia_http::router(state.clone())
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/internal/v1/events")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({"session_id":session,"type":kind,"data":data}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status();
-    let data =
-        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    (status, data)
+    crate::common::reporting::report_fact(
+        state.clone(),
+        json!({"session_id":session,"type":kind,"data":data}),
+    )
+    .await
 }
 
 #[tokio::test]

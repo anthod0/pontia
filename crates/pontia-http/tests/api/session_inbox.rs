@@ -46,20 +46,8 @@ async fn post_json(
 }
 
 async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
-    let response = http::router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/internal/v1/events")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body.to_string()))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    response_json(response).await
+    crate::common::reporting::report_fact(state, body).await
 }
-
 async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
     let response = http::router(state)
         .oneshot(

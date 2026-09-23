@@ -250,10 +250,8 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
         (2, "turn.output", json!({"output":{"summary":"working"}})),
         (3, "turn.completed", json!({"output":{"summary":"done"}})),
     ] {
-        let (status, _body) = post_json(
+        let (status, _body) = crate::common::reporting::report_fact(
             state.clone(),
-            "/internal/v1/events",
-            None,
             json!({
                 "session_id": session_id,
                 "turn_id": turn_id,
@@ -306,10 +304,8 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "initial workflow work").await;
     let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
     for event_type in ["turn.started", "turn.interrupted"] {
-        let (status, body) = post_json(
+        let (status, body) = crate::common::reporting::report_fact(
             state.clone(),
-            "/internal/v1/events",
-            None,
             json!({
                 "session_id": session_id,
                 "turn_id": turn_id,
@@ -377,10 +373,8 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "cannot interrupt").await;
     let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
 
-    let (started_status, _) = post_json(
+    let (started_status, _) = crate::common::reporting::report_fact(
         state.clone(),
-        "/internal/v1/events",
-        None,
         json!({
             "session_id":session_id,
             "turn_id":turn_id,

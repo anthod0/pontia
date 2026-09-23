@@ -59,29 +59,8 @@ async fn request(
 }
 
 async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {
-    let response = http::router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/internal/v1/events")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body.to_string()))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
-    let status = response.status();
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .expect("body")
-        .to_bytes();
-    let json = serde_json::from_slice(&body).expect("json body");
-    (status, json)
+    crate::common::reporting::report_fact(state, body).await
 }
-
 async fn create_session(state: AppState) -> String {
     let (status, body) = request(
         state,

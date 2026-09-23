@@ -19,6 +19,11 @@ test("session switches register a fresh connection and failed registration never
     connectPi: async () => {
       const close = vi.fn(async () => {}); closes.push(close);
       return { close, registered(identity) { registered.push(identity.sessionId); }, async request(method, params) {
+        if (method === "event.report") {
+          expect(close).not.toHaveBeenCalled();
+          events.push((params as any).event);
+          return { accepted: true };
+        }
         if (method === "session.context") return { session_context: null };
         const id = (params as any).binding.client_session_key;
         if (id === "failed") throw new Error("Registration rejected");
@@ -26,7 +31,6 @@ test("session switches register a fresh connection and failed registration never
       } };
     },
     isManagedPane: async () => true,
-    makeReporter: () => ({ report: async (_context, event) => { events.push(event); return true; } }),
     logDiagnostic: vi.fn(async () => {}),
   });
   const context = (id: string) => ({ mode: "tui", sessionManager: { getSessionId: () => id, getSessionFile: () => join(root, `${id}.jsonl`), getCwd: () => workspace } });

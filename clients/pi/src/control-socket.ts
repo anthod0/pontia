@@ -3,6 +3,8 @@ import { isAbsolute, join } from "node:path";
 
 export const CONTROL_VERSION = 3;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
+// Match the former HTTP event body limit, including the RPC envelope.
+export const MAX_RPC_FRAME_BYTES = 2 * 1024 * 1024 + 1024;
 const REQUEST_TIMEOUT_MS = 5_000;
 
 export interface ControlIdentity {
@@ -62,12 +64,16 @@ class RpcSocket {
 
   private encode(value: object): string {
     const encoded = JSON.stringify(value);
-    if (Buffer.byteLength(encoded) > MAX_CONTROL_FRAME_BYTES) throw new Error("Pi RPC frame exceeds 64 KiB");
+    if (Buffer.byteLength(encoded) > MAX_RPC_FRAME_BYTES) throw new Error("Pi RPC frame exceeds size limit");
     return `${encoded}\n`;
   }
 
   private write(encoded: string): void {
-    if (!this.socket.write(encoded)) this.fail(new Error("Pi RPC backpressure limit reached"));
+    if (this.socket.writableLength + Buffer.byteLength(encoded) > 2 * MAX_RPC_FRAME_BYTES) {
+      this.fail(new Error("Pi RPC backpressure limit reached"));
+      return;
+    }
+    this.socket.write(encoded);
   }
 
   private fail(error: Error): void {
@@ -85,7 +91,7 @@ class RpcSocket {
         const newline = chunk.indexOf(10, offset);
         const end = newline === -1 ? chunk.length : newline;
         const part = chunk.subarray(offset, end);
-        if (this.buffered.length + part.length > MAX_CONTROL_FRAME_BYTES) throw new Error("Pi RPC frame exceeds 64 KiB");
+        if (this.buffered.length + part.length > MAX_RPC_FRAME_BYTES) throw new Error("Pi RPC frame exceeds size limit");
         this.buffered = Buffer.concat([this.buffered, part]);
         if (newline === -1) return;
         const frame = this.buffered;
@@ -113,6 +119,7 @@ class RpcSocket {
       if (!params || typeof params !== "object" || Array.isArray(params)) { error(-32602, "Expected named parameters"); return; }
       if (message.method === "ping") { respond({ result: { pong: true } }); return; }
       if (message.method !== "submit") { error(-32601, "Unknown Pi control method"); return; }
+      if (Buffer.byteLength(JSON.stringify(message)) > MAX_CONTROL_FRAME_BYTES) { error(-32602, "Pi submit frame exceeds 64 KiB"); return; }
       if (typeof params.input !== "string" || !params.input.trim()
         || (params.inbox_message_id != null && (typeof params.inbox_message_id !== "string" || !params.inbox_message_id))) {
         error(-32602, "submit requires non-empty input and optional inbox_message_id"); return;
@@ -146,29 +153,50 @@ export async function connectPi(
   let stopped = false;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let current: RpcSocket | undefined;
-  let connecting: Socket | undefined;
+  const connecting = new Set<Socket>();
+  const peers = new Set<RpcSocket>();
+  let reconnectRejected = false;
+  let attached = false;
+  const waiting = new Set<() => void>();
 
-  async function open(): Promise<RpcSocket> {
-    const socket = createConnection(path);
-    connecting = socket;
-    socket.unref();
+  async function ready(): Promise<void> {
+    if (!identity || attached || stopped || reconnectRejected) return;
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => socket.destroy(new Error("Pi socket connection timed out")), REQUEST_TIMEOUT_MS);
-      socket.once("error", reject);
-      socket.once("connect", () => { clearTimeout(timer); socket.off("error", reject); resolve(); });
-      socket.once("close", () => { clearTimeout(timer); reject(new Error("Pi socket closed during connect")); });
+      const wake = () => { clearTimeout(timer); waiting.delete(wake); resolve(); };
+      const timer = setTimeout(() => {
+        waiting.delete(wake);
+        reject(new Error("Pi reconnect timed out"));
+      }, REQUEST_TIMEOUT_MS);
+      waiting.add(wake);
     });
-    connecting = undefined;
+  }
+
+  function wakeRequests(): void { for (const wake of waiting) wake(); }
+
+  async function open(reportingOnly = false): Promise<RpcSocket> {
+    const socket = createConnection(path);
+    connecting.add(socket);
+    socket.unref();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => socket.destroy(new Error("Pi socket connection timed out")), REQUEST_TIMEOUT_MS);
+        socket.once("error", reject);
+        socket.once("connect", () => { clearTimeout(timer); socket.off("error", reject); resolve(); });
+        socket.once("close", () => { clearTimeout(timer); reject(new Error("Pi socket closed during connect")); });
+      });
+    } finally { connecting.delete(socket); }
     if (stopped) { socket.destroy(); throw new Error("Pi connection is closed"); }
-    const peer = new RpcSocket(socket, onSubmit);
+    const peer = new RpcSocket(socket, reportingOnly ? () => { throw new Error("Pi reporting connection cannot accept input"); } : onSubmit);
+    peers.add(peer);
     socket.once("close", () => {
-      if (current === peer) { current = undefined; reconnect(); }
+      peers.delete(peer);
+      if (current === peer) { current = undefined; attached = false; reconnect(); }
     });
     return peer;
   }
 
   function reconnect(): void {
-    if (stopped || !identity || retry) return;
+    if (stopped || reconnectRejected || !identity || retry) return;
     retry = setTimeout(async () => {
       retry = undefined;
       try {
@@ -181,10 +209,12 @@ export async function connectPi(
         if (result?.session_id !== identity!.sessionId || result?.runtime_instance_id !== identity!.runtimeInstanceId) {
           throw new RpcError(-32009, "Pi reconnect identity mismatch");
         }
+        attached = true;
+        wakeRequests();
       } catch (error) {
         onError(error instanceof Error ? error : new Error(String(error)));
         // A rejected identity cannot be repaired by repeating registration.
-        if (error instanceof RpcError && error.code !== -32603) stopped = true;
+        if (error instanceof RpcError && error.code !== -32603) { reconnectRejected = true; wakeRequests(); }
         current?.close();
         current = undefined;
         reconnect();
@@ -195,16 +225,25 @@ export async function connectPi(
 
   current = await open();
   return {
-    request(method, params) {
+    async request(method, params) {
+      if (method === "turn.startFailure") {
+        if (!identity?.clientSessionKey || stopped) throw new Error("Pi reporting identity is unavailable");
+        const peer = await open(true);
+        try {
+          return await peer.request(method, { ...params, client_session_key: identity.clientSessionKey });
+        } finally { peer.close(); }
+      }
+      await ready();
       if (!current || stopped) return Promise.reject(new Error("Pi connection is unavailable"));
       return current.request(method, params);
     },
-    registered(value) { identity = value; if (!current) reconnect(); },
+    registered(value) { identity = value; attached = !!current; if (!current) reconnect(); },
     async close() {
       stopped = true;
+      wakeRequests();
       if (retry) clearTimeout(retry);
-      connecting?.destroy();
-      current?.close();
+      for (const socket of connecting) socket.destroy();
+      for (const peer of peers) peer.close();
       current = undefined;
     },
   };

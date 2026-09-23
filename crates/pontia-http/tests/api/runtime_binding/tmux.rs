@@ -1,6 +1,4 @@
-use super::{
-    StatusCode, delete_session, json, post_upsert, request_json, test_state, upsert_body_with_tmux,
-};
+use super::{StatusCode, delete_session, json, post_upsert, test_state, upsert_body_with_tmux};
 use std::process::{Command, Stdio};
 #[tokio::test]
 async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
@@ -76,15 +74,13 @@ async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() 
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
     let runtime_instance_id = upsert["runtime"]["runtime_instance_id"].as_str().unwrap();
 
-    let (exit_status, exit) = request_json(
+    let (exit_status, exit) = crate::common::reporting::report_fact(
         state,
-        "POST",
-        "/internal/v1/events",
-        Some(json!({
+        json!({
             "session_id": session_id,
             "type": "session.exited",
             "data": { "runtime_instance_id": runtime_instance_id, "reason": "quit" }
-        })),
+        }),
     )
     .await;
 
