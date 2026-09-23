@@ -706,23 +706,11 @@ test('top bar exposes the sidebar trigger', () => {
   expect(sidebarTrigger).toHaveAttribute('data-sidebar', 'trigger');
 });
 
-test('sidebar footer exposes settings as a section menu without agent profiles', async () => {
+test('sidebar settings button navigates directly to common settings without document reload', async () => {
   render(AppSidebarHost);
 
   await fireEvent.click(screen.getByRole('button', { name: /settings/i }));
-
-  expect(await screen.findByRole('menuitem', { name: /^common$/i })).toBeInTheDocument();
-  expect(screen.getByRole('menuitem', { name: /^workspaces$/i })).toBeInTheDocument();
-  expect(screen.queryByRole('menuitem', { name: /^agent profiles$/i })).not.toBeInTheDocument();
-});
-
-test('sidebar settings menu navigates to settings sections without document reload', async () => {
-  render(AppSidebarHost);
-
-  await fireEvent.click(screen.getByRole('button', { name: /settings/i }));
-  await fireEvent.click(await screen.findByRole('menuitem', { name: /^workspaces$/i }));
-
-  expect(mocks.navigate).toHaveBeenCalledWith('/settings/workspaces');
+  expect(mocks.navigate).toHaveBeenCalledWith('/settings/common');
 });
 
 test('settings common page contains controls without owning the section switcher', () => {

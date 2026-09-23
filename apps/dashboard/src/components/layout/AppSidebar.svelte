@@ -15,7 +15,6 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Kbd from '$lib/components/ui/kbd/index.js'
-  import { sidebarMenuButtonVariants } from '$lib/components/ui/sidebar/sidebar-menu-button.svelte'
   import { cn } from '$lib/utils.js'
   import { archiveSession, pinSession, sessions, sessionsLoading, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
   import { workspaces, workspacesInitialized, workspacesLoading } from '../../stores/workspaces'
@@ -39,11 +38,6 @@
   const primaryItems: Item[] = [
     { label: 'New Chat', path: '/', icon: NotePencilIcon },
     { label: 'Workflows', path: '/workflows', icon: TreeStructureIcon },
-  ]
-
-  const settingsSections = [
-    { label: 'Common', path: '/settings/common' },
-    { label: 'Workspaces', path: '/settings/workspaces' },
   ]
 
   let currentPath = $state(normalizePath(window.location.pathname))
@@ -124,12 +118,6 @@
   function go(path: string) {
     navigate(path)
     currentPath = normalizePath(path)
-    notifyRouteChanged()
-  }
-
-  function openSettingsSection(path: string) {
-    navigate(path)
-    currentPath = path
     notifyRouteChanged()
   }
 
@@ -328,25 +316,15 @@
             </Sidebar.MenuItem>
           {/each}
           <Sidebar.MenuItem>
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger
-                data-active={isSettingsActive() ? true : undefined}
-                class={cn(sidebarMenuButtonVariants(), 'h-9 w-full px-3 text-[13px]')}
-                aria-label="Settings"
-              >
-                <GearIcon />
-                <span>Settings</span>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content side="bottom" align="start" class="w-48">
-                <DropdownMenu.Label>Settings</DropdownMenu.Label>
-                <DropdownMenu.Separator />
-                {#each settingsSections as section}
-                  <DropdownMenu.Item onclick={() => openSettingsSection(section.path)}>
-                    {section.label}
-                  </DropdownMenu.Item>
-                {/each}
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
+            <Sidebar.MenuButton
+              isActive={isSettingsActive()}
+              class="h-9 px-3 text-[13px]"
+              tooltipContent="Settings"
+              onclick={() => go('/settings/common')}
+            >
+              <GearIcon />
+              <span>Settings</span>
+            </Sidebar.MenuButton>
           </Sidebar.MenuItem>
         </Sidebar.Menu>
       </Sidebar.GroupContent>
