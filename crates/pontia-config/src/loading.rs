@@ -1,6 +1,5 @@
 use std::{collections::HashMap, env, net::SocketAddr};
 
-use pontia_agent_clients as agent_clients;
 use pontia_core::error::{Error, Result};
 
 use super::{
@@ -56,7 +55,7 @@ impl AppConfig {
 
         let default_client_type = get(vars, "PONTIA_DEFAULT_CLIENT_TYPE")
             .or_else(|| file.and_then(|config| config.default_client_type.as_deref()))
-            .unwrap_or(agent_clients::default_real_client_type())
+            .unwrap_or("pi")
             .to_string();
         validate_real_default_client_type("PONTIA_DEFAULT_CLIENT_TYPE", &default_client_type)?;
 

@@ -1,6 +1,6 @@
 use std::{fs, sync::Arc};
 
-use pontia_runtime::pi_control::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
+use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
 use tokio::net::UnixStream;
 
 use axum::{
@@ -89,7 +89,7 @@ async fn seed_running_workflow(
         .await
         .expect("bind native Pi session");
     let (server, client) = UnixStream::pair().unwrap();
-    tokio::spawn(pontia_application::pi_ipc::serve_connection(
+    tokio::spawn(pontia_client_pi::ipc::serve_connection(
         app.state.clone(),
         server,
     ));

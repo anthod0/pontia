@@ -30,7 +30,7 @@ impl CodexService {
         }
     }
 
-    pub(crate) async fn reset_connections(&self) -> Result<()> {
+    pub async fn reset_connections(&self) -> Result<()> {
         sqlx::query("UPDATE codex_tui_bindings SET connected=FALSE")
             .execute(&self.pool)
             .await?;

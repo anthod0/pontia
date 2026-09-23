@@ -48,6 +48,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
     let started_turn = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .get_turn("turn_delayed_first")
         .await
         .unwrap()
@@ -330,6 +331,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
     assert!(body["data"]["turn"].get("tail_cursor").is_none());
 
     let events = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .list_events(session_id)
         .await
         .unwrap();
@@ -453,6 +455,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
         binding.id
     );
     let turn = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .get_turn(turn_id)
         .await
         .unwrap()
@@ -461,6 +464,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
     assert_eq!(turn.tail_cursor.as_deref(), Some(expected_tail.as_str()));
 
     let events = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .list_events(session_id)
         .await
         .unwrap();
@@ -482,6 +486,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
     let session_id = "sess_pi_boundary_missing";
     seed_session(&state, session_id).await;
     EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             "evt_existing_created".to_string(),
             session_id.to_string(),
@@ -494,6 +499,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
         .await
         .unwrap();
     EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             "evt_existing_completed".to_string(),
             session_id.to_string(),
@@ -543,6 +549,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
         .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
     let turn = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .get_turn("turn_pi_boundary_missing")
         .await
         .unwrap()

@@ -16,6 +16,7 @@ use crate::{
 impl SessionCommandService {
     pub(crate) async fn observe_resumed_session(&self, session_id: &str) -> Result<bool> {
         let session = ExternalQueryService::new(self.pool.clone())
+            .with_clients(self.event_ingest.clients())
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
@@ -40,6 +41,7 @@ impl SessionCommandService {
         runtime_instance_id: &str,
     ) -> Result<()> {
         let session = ExternalQueryService::new(self.pool.clone())
+            .with_clients(self.event_ingest.clients())
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
@@ -52,7 +54,7 @@ impl SessionCommandService {
         crate::clients::ClientAdapter::new(
             &session.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?
         .ensure_exit_available(&target)
         .await
@@ -67,7 +69,8 @@ impl SessionCommandService {
         session_id: &str,
         expected_runtime: Option<&str>,
     ) -> Result<ControlCommandOutcome> {
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -82,7 +85,7 @@ impl SessionCommandService {
             crate::clients::ClientAdapter::new(
                 &session.client_type,
                 self.event_ingest.clone(),
-                self.pi_control.clone(),
+                self.client_control.clone(),
             )?
             .exit(&target)
             .await
@@ -99,7 +102,8 @@ impl SessionCommandService {
         session_id: &str,
         pontia_home: &Path,
     ) -> Result<ControlCommandOutcome> {
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -113,7 +117,7 @@ impl SessionCommandService {
         let adapter = crate::clients::ClientAdapter::new(
             &session.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?;
         let target =
             crate::runtime::control_target::ControlTarget::resolve(&self.pool, session_id, None)
@@ -197,7 +201,8 @@ impl SessionCommandService {
         session_id: &str,
         pontia_home: &Path,
     ) -> Result<ControlCommandOutcome> {
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -210,7 +215,7 @@ impl SessionCommandService {
         let adapter = crate::clients::ClientAdapter::new(
             &session.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?;
         if !adapter.supports_restart() {
             return Err(Error::CapabilityUnavailable(

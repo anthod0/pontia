@@ -58,7 +58,7 @@ pub async fn stream_dashboard_events(
 ) -> std::result::Result<Sse<impl Stream<Item = std::result::Result<Event, Infallible>>>, ApiError>
 {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     let cursor = match query.after.as_deref() {
         Some(after) => parse_dashboard_stream_cursor(after)?,
         None => current_dashboard_stream_cursor(&service).await?,
@@ -183,7 +183,7 @@ fn dashboard_sse_stream(
 
     tokio::spawn(async move {
         let mut shutdown = state.shutdown().subscribe();
-        let service = ExternalQueryService::new(state.db());
+        let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
         let mut volatile_events = state.volatile_events().subscribe();
         let mut cursor = after_cursor;
 

@@ -47,6 +47,7 @@ async fn reporting_service_normalizes_started_fact_into_a_domain_event() {
     );
 
     let events = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .list_events("sess_normalized")
         .await
         .expect("events");
@@ -72,6 +73,7 @@ async fn reporting_service_allows_started_fact_to_reference_an_existing_turn() {
 
     let turn_id = new_turn_id().to_string();
     EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             new_event_id().to_string(),
             "sess_existing_started_turn".to_string(),
@@ -139,6 +141,7 @@ async fn reporting_service_uses_returned_turn_id_for_followup_facts() {
     }
 
     let turn = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .get_turn(turn_id)
         .await
         .expect("turn query")
@@ -179,6 +182,7 @@ async fn reporting_service_accepts_agent_client_reported_turn_interrupted() {
     .unwrap();
 
     let turn = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .get_turn(turn_id)
         .await
         .expect("turn query")
@@ -207,6 +211,7 @@ async fn reporting_service_derives_client_type_and_source_from_session_and_fact(
     .unwrap();
 
     let events = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .list_events("sess_ready")
         .await
         .expect("events");

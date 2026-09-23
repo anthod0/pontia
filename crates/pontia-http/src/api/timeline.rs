@@ -43,6 +43,7 @@ pub async fn get_turn_timeline(
         ));
     }
     let page = TurnTimelineService::new(state.db())
+        .with_clients(state.clients())
         .page(session_id, direction, query.get("turn_id").cloned(), limit)
         .await
         .map_err(turn_timeline_service_error)?;
@@ -73,6 +74,7 @@ pub async fn get_turn_tree_history(
         ));
     }
     let page = TurnTimelineService::new(state.db())
+        .with_clients(state.clients())
         .tree_history(session_id, query.get("from_turn_id").cloned(), limit)
         .await
         .map_err(turn_timeline_service_error)?;
@@ -87,6 +89,7 @@ pub async fn get_turn_tree_updates(
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let page = TurnTimelineService::new(state.db())
+        .with_clients(state.clients())
         .tree_updates(session_id, query.get("from_turn_id").cloned())
         .await
         .map_err(turn_timeline_service_error)?;

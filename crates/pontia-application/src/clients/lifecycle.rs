@@ -24,6 +24,22 @@ impl ClientAdapter {
                 .bind(serde_json::to_string(&request.environment)?).bind(&request.session_id).execute(&self.events.db()).await?;
             return Ok(None);
         }
+        if let Some(launcher) = self
+            .events
+            .clients()
+            .get(self.spec.client_type)
+            .and_then(|entry| entry.launcher.as_ref())
+        {
+            return launcher
+                .launch(super::ClientLaunchRequest {
+                    root,
+                    runtime: request,
+                    restart_count: 0,
+                    reuse_pane: None,
+                    native_session_key: None,
+                })
+                .map(Some);
+        }
         GenericRuntimeManager.start_session(root, request).map(Some)
     }
 
@@ -32,8 +48,8 @@ impl ClientAdapter {
             target.validate(&self.events.db()).await?;
             match self.spec.adapter.terminate {
                 TerminateBehavior::CodexArchive => crate::codex::CodexService::new(self.events.clone()).archive(target).await,
-                TerminateBehavior::PiControl => self.pi.as_ref()
-                    .ok_or_else(|| Error::CapabilityUnavailable("Pi control service is unavailable".into()))?
+                TerminateBehavior::Connected => self.control.as_ref()
+                    .ok_or_else(|| Error::CapabilityUnavailable("Client control service is unavailable".into()))?
                     .shutdown(&target.session_id, target.instance()?).await,
                 TerminateBehavior::RuntimeManager => {
                     if let Some(handle) = pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository::new(self.events.db()).runtime_handle(&target.session_id).await? {
@@ -50,7 +66,7 @@ impl ClientAdapter {
         &self,
         target: &ControlTarget,
         root: &Path,
-        mut request: RuntimeStartRequest,
+        request: RuntimeStartRequest,
         count: i64,
     ) -> Result<Option<RuntimeStartResult>> {
         target.validate(&self.events.db()).await?;
@@ -60,22 +76,31 @@ impl ClientAdapter {
                 .await?;
             return Ok(None);
         }
-        if let (Some(command), Some(argument)) = (
-            request.start_command.as_ref(),
-            self.spec
-                .tmux_runtime()
-                .and_then(|runtime| runtime.resume_session_identity_arg),
-        ) && let Some(binding) = crate::AgentBindingService::new(self.events.db())
+        let binding = crate::AgentBindingService::new(self.events.db())
             .binding_for_session(&target.session_id)
-            .await?
-        {
-            request.start_command = Some(format!(
-                "{command} {argument} '{}'",
-                binding.client_session_key.replace('\'', "'\\''")
-            ));
-        }
+            .await?;
         let pane = target.tmux_pane(&self.events.db()).await.ok();
         target.validate(&self.events.db()).await?;
+        if let Some(launcher) = self
+            .events
+            .clients()
+            .get(self.spec.client_type)
+            .and_then(|entry| entry.launcher.as_ref())
+        {
+            return launcher
+                .launch(super::ClientLaunchRequest {
+                    root,
+                    runtime: request,
+                    restart_count: count,
+                    reuse_pane: pane
+                        .as_ref()
+                        .map(|(socket, pane)| (socket.as_str(), pane.as_str())),
+                    native_session_key: binding
+                        .as_ref()
+                        .map(|binding| binding.client_session_key.as_str()),
+                })
+                .map(Some);
+        }
         GenericRuntimeManager
             .start_session_with_restart_count_and_reuse_target(
                 root,
@@ -83,6 +108,7 @@ impl ClientAdapter {
                 count,
                 pane.as_ref()
                     .map(|(socket, pane)| (socket.as_str(), pane.as_str())),
+                self.spec,
             )
             .map(Some)
     }
@@ -101,7 +127,7 @@ impl ClientAdapter {
         }
         target.validate(&self.events.db()).await?;
         match self.spec.adapter.terminate {
-            TerminateBehavior::PiControl => {
+            TerminateBehavior::Connected => {
                 let (socket, pane) = target.tmux_pane(&self.events.db()).await?;
                 GenericRuntimeManager.kill_tmux_pane(&socket, &pane)?;
             }
@@ -110,13 +136,27 @@ impl ClientAdapter {
             }
             TerminateBehavior::CodexArchive => unreachable!(),
         }
+        if let Some(launcher) = self
+            .events
+            .clients()
+            .get(self.spec.client_type)
+            .and_then(|entry| entry.launcher.as_ref())
+        {
+            return launcher.launch(super::ClientLaunchRequest {
+                root,
+                runtime: request,
+                restart_count: count,
+                reuse_pane: None,
+                native_session_key: None,
+            });
+        }
         GenericRuntimeManager.start_session_with_restart_count(root, request, count)
     }
 
     pub async fn ensure_exit_available(&self, target: &ControlTarget) -> Result<()> {
         target.validate(&self.events.db()).await?;
         match self.spec.adapter.terminate {
-            TerminateBehavior::PiControl | TerminateBehavior::CodexArchive => {
+            TerminateBehavior::Connected | TerminateBehavior::CodexArchive => {
                 if !self.input_available(&target.session_id).await? {
                     return Err(Error::CapabilityUnavailable(
                         "client control channel is unavailable".into(),

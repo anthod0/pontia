@@ -7,7 +7,8 @@ use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 use serde_json::json;
 impl TurnCommandService {
     pub async fn interrupt_current_turn(&self, session_id: &str) -> Result<ControlCommandOutcome> {
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         if query.get_session(session_id).await?.is_none() {
             return Err(Error::NotFound(format!("session {session_id} not found")));
         }
@@ -50,7 +51,8 @@ impl TurnCommandService {
             &self.pool, session_id, expected,
         )
         .await?;
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -92,11 +94,12 @@ impl TurnCommandService {
     ) -> Result<ControlCommandOutcome> {
         let session_id = &session.session_id;
         let turn_id = &turn.turn_id;
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         crate::clients::ClientAdapter::new(
             &session.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?
         .interrupt(&target, turn_id)
         .await

@@ -13,13 +13,14 @@ use pontia_core::{
     error::Error,
 };
 
-pub(super) fn enrich_pi_topology(
+pub(super) fn enrich_topology(
+    clients: &crate::clients::ClientRegistry,
     event: &mut DomainEvent,
     binding_id: Option<String>,
     evidence: Option<Value>,
     turns: &[TurnProjection],
 ) {
-    if !should_resolve_pi_topology(event) {
+    if !should_resolve_topology(clients, event) {
         return;
     }
     let Some(turn_id) = event.turn_id.clone() else {
@@ -30,7 +31,10 @@ pub(super) fn enrich_pi_topology(
         warn_topology_resolution(event, TopologyDiagnostic::BindingUnavailable);
         return;
     };
-    let Some(backend) = pontia_agent_clients::topology_backend_for(&event.client_type) else {
+    let Some(backend) = clients
+        .data(&event.client_type)
+        .and_then(|data| data.topology())
+    else {
         event.topology = Some(TurnTopology::Unknown);
         warn_topology_resolution(event, TopologyDiagnostic::AdapterUnavailable);
         return;
@@ -74,15 +78,19 @@ pub(super) fn enrich_pi_topology(
     }
 }
 
-pub(super) async fn enrich_timeline_boundary(pool: &sqlx::SqlitePool, event: &mut DomainEvent) {
+pub(super) async fn enrich_timeline_boundary(
+    pool: &sqlx::SqlitePool,
+    clients: &crate::clients::ClientRegistry,
+    event: &mut DomainEvent,
+    native_entry_anchor: Option<String>,
+) {
     let Some(kind) = timeline_boundary_kind(event.event_type) else {
         return;
     };
     if event.source != EventSource::AgentAdapter {
         return;
     }
-    let Some(backend) = pontia_agent_clients::timeline_boundary_backend_for(&event.client_type)
-    else {
+    let Some(backend) = clients.boundaries(&event.client_type) else {
         return;
     };
 
@@ -107,22 +115,6 @@ pub(super) async fn enrich_timeline_boundary(pool: &sqlx::SqlitePool, event: &mu
         }
     };
 
-    let native_entry_anchor = if event.client_type == "codex" {
-        event.payload.get("native_turn_id")
-    } else {
-        match kind {
-            TimelineBoundaryCaptureKind::Head => {
-                event.payload.pointer("/timeline_anchor/previous_leaf_id")
-            }
-            TimelineBoundaryCaptureKind::Tail => {
-                event.payload.pointer("/timeline_anchor/terminal_leaf_id")
-            }
-        }
-    }
-    .and_then(Value::as_str)
-    .map(str::trim)
-    .filter(|value| !value.is_empty())
-    .map(ToString::to_string);
     let is_first_session_turn = if kind == TimelineBoundaryCaptureKind::Head {
         match sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM turns WHERE session_id = ? AND turn_id <> ?",
@@ -192,20 +184,15 @@ pub(super) async fn enrich_timeline_boundary(pool: &sqlx::SqlitePool, event: &mu
     }
 }
 
-pub(super) fn should_resolve_pi_topology(event: &DomainEvent) -> bool {
+pub(super) fn should_resolve_topology(
+    clients: &crate::clients::ClientRegistry,
+    event: &DomainEvent,
+) -> bool {
     event.event_type == EventType::TurnStarted
-        && event.client_type == "pi"
         && event.source == EventSource::AgentAdapter
-}
-
-pub(super) fn consume_transient_pi_native_evidence(event: &mut DomainEvent) -> Option<Value> {
-    if event.client_type != "pi" || event.source != EventSource::AgentAdapter {
-        return None;
-    }
-    let payload = event.payload.as_object_mut()?;
-    let topology_evidence = payload.remove("topology_context");
-    payload.remove("timeline_anchor");
-    topology_evidence
+        && clients
+            .data(&event.client_type)
+            .is_some_and(|data| data.topology().is_some())
 }
 
 fn warn_topology_resolution(event: &DomainEvent, diagnostic: TopologyDiagnostic) {

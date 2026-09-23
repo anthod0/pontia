@@ -35,7 +35,7 @@ pub async fn list_workspaces(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     let workspaces = service.list_workspaces().await?;
     Ok(ok(json!({ "workspaces": workspaces })))
 }
@@ -46,7 +46,7 @@ pub async fn get_workspace(
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     let workspace = service
         .get_workspace(&workspace_id)
         .await?

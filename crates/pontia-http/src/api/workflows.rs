@@ -149,7 +149,7 @@ async fn control_workflow(
     let action_workflow_id = workflow_id.clone();
     let outcome = idempotent(&state, &headers, operation, || async move {
         let control = WorkflowControlService::new(action_state.event_ingest_service())
-            .with_pi_control(action_state.pi_control());
+            .with_client_control(action_state.client_control());
         let control_outcome = if pause {
             control.pause(&action_workflow_id).await
         } else {

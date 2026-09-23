@@ -414,6 +414,7 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
     EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .ingest_pontia_event(PontiaEvent::new(
             session_id.clone(),
             None,

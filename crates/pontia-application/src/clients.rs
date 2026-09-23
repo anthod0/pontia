@@ -2,10 +2,12 @@ mod input;
 mod lifecycle;
 mod models;
 pub(crate) use lifecycle::discard_unbound_runtime;
-mod pi;
+mod channel;
+mod registry;
+pub use registry::*;
 
-use crate::{EventIngestService, PiControlService};
-use pontia_agent_clients::{AgentClientSpec, DispatchMode, get_client_spec};
+use crate::{ClientControlService, EventIngestService};
+use pontia_agent_clients::{AgentClientSpec, DispatchMode};
 use pontia_core::{Error, Result};
 
 /// Client selection and native execution live here. Business policy stays with
@@ -13,20 +15,22 @@ use pontia_core::{Error, Result};
 pub(crate) struct ClientAdapter {
     pub spec: &'static AgentClientSpec,
     pub events: EventIngestService,
-    pub pi: Option<PiControlService>,
+    pub control: Option<ClientControlService>,
 }
 
 impl ClientAdapter {
     pub fn new(
         client: &str,
         events: EventIngestService,
-        pi: Option<PiControlService>,
+        control: Option<ClientControlService>,
     ) -> Result<Self> {
         Ok(Self {
-            spec: get_client_spec(client)
+            spec: events
+                .clients()
+                .spec(client)
                 .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client}")))?,
             events,
-            pi,
+            control,
         })
     }
 
@@ -52,8 +56,8 @@ impl ClientAdapter {
                 Some("available" | "awaiting_input")
             ));
         }
-        if self.spec.adapter.dispatch == DispatchMode::PiControl {
-            return match &self.pi {
+        if self.spec.adapter.dispatch == DispatchMode::Connected {
+            return match &self.control {
                 Some(pi) => pi.available(session).await,
                 None => Ok(false),
             };
@@ -61,3 +65,6 @@ impl ClientAdapter {
         Ok(true)
     }
 }
+
+#[cfg(test)]
+pub(crate) mod testing;

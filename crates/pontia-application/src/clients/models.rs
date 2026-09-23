@@ -14,8 +14,8 @@ impl ClientAdapter {
                     .list_models(target)
                     .await
             }
-            DispatchMode::PiControl => {
-                self.pi_models()?
+            DispatchMode::Connected => {
+                self.channel_models()?
                     .list_models(&target.session_id, target.instance()?)
                     .await
             }
@@ -34,8 +34,8 @@ impl ClientAdapter {
                             .set_model(target, model)
                             .await
                     }
-                    DispatchMode::PiControl => {
-                        self.pi_models()?
+                    DispatchMode::Connected => {
+                        self.channel_models()?
                             .set_model(&target.session_id, target.instance()?, model)
                             .await
                     }
@@ -48,9 +48,9 @@ impl ClientAdapter {
         )
     }
 
-    fn pi_models(&self) -> Result<&crate::PiControlService> {
-        self.pi
-            .as_ref()
-            .ok_or_else(|| Error::CapabilityUnavailable("Pi control service is unavailable".into()))
+    fn channel_models(&self) -> Result<&crate::ClientControlService> {
+        self.control.as_ref().ok_or_else(|| {
+            Error::CapabilityUnavailable("Client control service is unavailable".into())
+        })
     }
 }

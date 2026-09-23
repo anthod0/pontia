@@ -43,19 +43,19 @@ pub struct InboxCommandOutcome {
 pub struct InboxCommandService {
     pool: SqlitePool,
     event_ingest: crate::EventIngestService,
-    pi_control: Option<crate::PiControlService>,
+    client_control: Option<crate::ClientControlService>,
 }
 
 impl InboxCommandService {
-    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
-        self.pi_control = Some(pi_control);
+    pub fn with_client_control(mut self, client_control: crate::ClientControlService) -> Self {
+        self.client_control = Some(client_control);
         self
     }
 
     pub fn new(event_ingest: crate::EventIngestService) -> Self {
         Self {
             pool: event_ingest.db(),
-            pi_control: event_ingest.pi_control(),
+            client_control: event_ingest.client_control(),
             event_ingest,
         }
     }
@@ -102,7 +102,8 @@ impl InboxCommandService {
             )));
         }
 
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -119,6 +120,7 @@ impl InboxCommandService {
                 )));
             }
             BranchReplayService::new(self.pool.clone())
+                .with_clients(self.event_ingest.clients())
                 .validate_submission(
                     session_id,
                     request
@@ -132,7 +134,7 @@ impl InboxCommandService {
             && !crate::clients::ClientAdapter::new(
                 &session.client_type,
                 self.event_ingest.clone(),
-                self.pi_control.clone(),
+                self.client_control.clone(),
             )?
             .supports_steer()
         {
@@ -220,6 +222,7 @@ impl InboxCommandService {
 
     pub async fn list_messages(&self, session_id: &str) -> Result<Vec<InboxMessageView>> {
         ExternalQueryService::new(self.pool.clone())
+            .with_clients(self.event_ingest.clients())
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
@@ -245,7 +248,8 @@ impl InboxCommandService {
         session_id: &str,
         message_id: &str,
     ) -> Result<InboxCommandOutcome> {
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -285,7 +289,8 @@ impl InboxCommandService {
         session_id: &str,
         message_id: &str,
     ) -> Result<InboxCommandOutcome> {
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -330,14 +335,15 @@ impl InboxCommandService {
         {
             return Ok(());
         }
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let Some(session) = query.get_session(session_id).await? else {
             return Ok(());
         };
         let adapter = crate::clients::ClientAdapter::new(
             &session.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?;
         let active = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
@@ -387,11 +393,12 @@ impl InboxCommandService {
         }
 
         let mut turns = TurnCommandService::new(self.event_ingest.clone());
-        if let Some(control) = &self.pi_control {
-            turns = turns.with_pi_control(control.clone());
+        if let Some(control) = &self.client_control {
+            turns = turns.with_client_control(control.clone());
         }
         let delivery = if branch_target_turn_id.is_some() {
             BranchReplayService::new(self.pool.clone())
+                .with_clients(self.event_ingest.clients())
                 .dispatch(self.event_ingest.clone(), session_id, &message_id)
                 .await
                 .map(|result| (None, result))

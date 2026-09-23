@@ -401,6 +401,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     assert_eq!(warning["fields"]["diagnostic"], "evidence_invalid");
     assert!(!log_text.contains("native-secret-entry"));
     let turn_five = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .get_turn("turn_pi_linear_5")
         .await
         .unwrap()
@@ -456,6 +457,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     }
 
     let events = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .list_events(session_id)
         .await
         .unwrap();

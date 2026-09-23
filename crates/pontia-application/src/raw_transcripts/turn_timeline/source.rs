@@ -1,11 +1,8 @@
 use std::collections::HashMap;
 
-use pontia_agent_clients::{
-    self as agent_clients, TimelineSourceBehavior,
-    raw_transcripts::{
-        AgentBindingResolveRequest, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
-        TurnTimelineReadRequest,
-    },
+use pontia_agent_clients::raw_transcripts::{
+    AgentBindingResolveRequest, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
+    TurnTimelineReadRequest,
 };
 use pontia_core::{domain::TurnState, error::Error};
 use pontia_storage_sqlite::{models::turns::TurnRow, repositories::turns::SqliteTurnRepository};
@@ -52,17 +49,16 @@ impl TurnTimelineService {
         }
 
         let session = ExternalQueryService::new(self.pool.clone())
+            .with_clients(self.clients.clone())
             .get_session(session_id)
             .await?
             .ok_or(TurnTimelineServiceError::SessionNotFound)?;
-        let timeline_source = agent_clients::get_client_spec(&session.client_type)
-            .map(|spec| spec.adapter.timeline_source)
-            .unwrap_or(TimelineSourceBehavior::Unsupported);
-        match timeline_source {
-            TimelineSourceBehavior::Unsupported => {
-                return Err(TurnTimelineServiceError::CapabilityUnavailable);
-            }
-            TimelineSourceBehavior::Transcript => {}
+        if !self
+            .clients
+            .spec(&session.client_type)
+            .is_some_and(|spec| spec.capabilities.timeline)
+        {
+            return Err(TurnTimelineServiceError::CapabilityUnavailable);
         }
 
         let active_turn_id = SqliteTurnRepository::new(self.pool.clone())
@@ -110,7 +106,9 @@ impl TurnTimelineService {
             && all_turns.len() == 1
             && ranges.len() == 1
             && ranges[0].tail_cursor.is_none();
-        let backend = agent_clients::turn_timeline_backend_for(&binding.client_type)
+        let backend = self
+            .clients
+            .timeline(&binding.client_type)
             .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
         let source = match backend.resolver.resolve(&AgentBindingResolveRequest {
             id: binding.id.clone(),

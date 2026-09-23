@@ -25,7 +25,7 @@ impl RuntimeBindingUpsertService {
             return Ok(());
         }
 
-        let ingest = EventIngestService::new(self.pool.clone());
+        let ingest = EventIngestService::new(self.pool.clone()).with_clients(self.clients.clone());
         ingest
             .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
@@ -55,7 +55,7 @@ impl RuntimeBindingUpsertService {
         workspace: &WorkspaceRecord,
     ) -> Result<String> {
         let session_id = new_session_id().to_string();
-        let ingest = EventIngestService::new(self.pool.clone());
+        let ingest = EventIngestService::new(self.pool.clone()).with_clients(self.clients.clone());
         ingest
             .ingest_pontia_event_with_agent_binding(
                 PontiaEvent::new(

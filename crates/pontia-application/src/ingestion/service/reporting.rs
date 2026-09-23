@@ -27,7 +27,7 @@ impl EventIngestService {
     ) -> Result<EventIngestResult, EventReportError> {
         // Low-level projection callers can construct a database-only service;
         // client reports require the complete set of shared effects.
-        if self.pi_control.is_none()
+        if self.client_control.is_none()
             || self.agent_events.is_none()
             || self.live_output.is_none()
             || self.volatile_events.is_none()
@@ -64,6 +64,7 @@ impl EventIngestService {
             return Err(invalid_fact("data must be a JSON object"));
         }
         let mut reported_event = EventReportNormalizer::new(self.pool.clone())
+            .with_clients(self.clients.clone())
             .normalize(fact)
             .await
             .map_err(|error| invalid_fact(error.to_string()))?;
@@ -94,6 +95,7 @@ impl EventIngestService {
         }
         let event = DomainEvent::from(reported_event.clone());
         InternalEventValidationService::new()
+            .with_clients(self.clients.clone())
             .validate(&event)
             .map_err(EventReportError::validation)?;
         self.ensure_confirmed_event_matches_session_boundary(&event)

@@ -30,7 +30,8 @@ async fn state_with_running_turn() -> AppState {
 }
 
 async fn seed_running_turn(state: &AppState, session_id: &str, turn_id: &str, runtime_id: &str) {
-    let ingestion = EventIngestService::new(state.db());
+    let ingestion =
+        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
     ingestion
         .ingest_reported_event(ReportedEvent::new(
             new_event_id().to_string(),

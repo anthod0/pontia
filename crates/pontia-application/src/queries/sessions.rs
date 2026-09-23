@@ -1,4 +1,3 @@
-use pontia_agent_clients as agent_clients;
 use pontia_core::error::Result;
 use pontia_storage_sqlite::repositories::sessions::{SessionListOptions, SqliteSessionRepository};
 use sqlx::Row;
@@ -50,7 +49,9 @@ impl ExternalQueryService {
 
         if let Some(row) = row {
             let capabilities: SessionCapabilities = serde_json::from_str(&row.capabilities)?;
-            session.capabilities = if agent_clients::get_client_spec(&session.client_type)
+            session.capabilities = if self
+                .clients
+                .spec(&session.client_type)
                 .and_then(|spec| spec.tmux_runtime())
                 .is_some()
             {

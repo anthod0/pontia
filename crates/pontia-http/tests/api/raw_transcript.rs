@@ -11,10 +11,10 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_agent_clients::pi::raw_transcripts::{PiJsonlV2Cursor, TimelineBoundaryRelation};
 use pontia_application::{
     AgentBindingService, AppState, EventIngestService, UpsertAgentBindingRequest,
 };
+use pontia_client_pi::raw_transcripts::{PiJsonlV2Cursor, TimelineBoundaryRelation};
 use pontia_core::domain::{
     EventSource, EventType, ProjectionState, ReportedEvent, TimelineBoundary,
 };
@@ -98,7 +98,8 @@ async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value
 }
 
 async fn seed_session_for_client(state: &AppState, session_id: &str, client_type: &str) {
-    let service = EventIngestService::new(state.db());
+    let service =
+        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
     service
         .ingest_reported_event(ReportedEvent::new(
             format!("evt_{session_id}_created"),
@@ -118,7 +119,8 @@ async fn seed_session(state: &AppState, session_id: &str) {
 }
 
 async fn precreate_turn_if_missing(state: &AppState, session_id: &str, turn_id: &str) {
-    let service = EventIngestService::new(state.db());
+    let service =
+        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
     if service.get_turn(turn_id).await.unwrap().is_some() {
         return;
     }

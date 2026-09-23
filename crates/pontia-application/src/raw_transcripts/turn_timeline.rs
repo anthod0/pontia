@@ -69,11 +69,20 @@ impl From<Error> for TurnTimelineServiceError {
 
 #[derive(Clone)]
 pub struct TurnTimelineService {
+    clients: crate::clients::ClientRegistry,
     pub(super) pool: SqlitePool,
 }
 
 impl TurnTimelineService {
+    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
+        self.clients = clients;
+        self
+    }
+
     pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            clients: Default::default(),
+        }
     }
 }

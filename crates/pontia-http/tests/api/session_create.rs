@@ -566,6 +566,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
     let first_session_id = first.1["data"]["session"]["session_id"].as_str().unwrap();
 
     EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             "evt_session_exited_for_handle_reuse".to_string(),
             first_session_id.to_string(),

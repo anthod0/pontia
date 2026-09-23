@@ -4,8 +4,8 @@ use super::{
     seed_session, tempdir, test_state,
 };
 
-use pontia_application::pi_ipc::serve_connection;
-use pontia_runtime::pi_control::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
+use pontia_client_pi::ipc::serve_connection;
+use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
 use std::sync::Arc;
 use tokio::{net::UnixStream, sync::mpsc};
 
@@ -184,7 +184,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         .unwrap();
         offset = tail;
     }
-    let capabilities = pontia_agent_clients::AgentClientCapabilities::pi_m0_default();
+    let capabilities = pontia_client_pi::CAPABILITIES;
     sqlx::query(
         r#"INSERT INTO runtime_bindings
            (session_id, runtime_kind, runtime_instance_id, binding_state, tmux_socket_path, tmux_pane_id, capabilities)
@@ -329,7 +329,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     .await;
     assert_eq!(missing_boundary_status, StatusCode::CONFLICT);
 
-    let unsupported_capabilities = pontia_agent_clients::AgentClientCapabilities::pi_m0_default();
+    let unsupported_capabilities = pontia_client_pi::CAPABILITIES;
     let mut unsupported_capabilities = unsupported_capabilities;
     unsupported_capabilities.branch_control = false;
     sqlx::query("UPDATE runtime_bindings SET capabilities = ? WHERE session_id = ?")
@@ -443,7 +443,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     );
     pi.close();
     tokio::time::timeout(std::time::Duration::from_secs(1), async {
-        while state.pi_control().available(session_id).await.unwrap() {
+        while state.client_control().available(session_id).await.unwrap() {
             tokio::task::yield_now().await;
         }
     })
@@ -486,7 +486,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         failed_delivery_body["data"]["inbox_message"]["failure_message"]
             .as_str()
             .unwrap()
-            .contains("no current Pi connection")
+            .contains("no current Client connection")
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM turns WHERE session_id = ?")
@@ -573,7 +573,7 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
     .await
     .unwrap();
 
-    let capabilities = pontia_agent_clients::AgentClientCapabilities::pi_m0_default();
+    let capabilities = pontia_client_pi::CAPABILITIES;
     sqlx::query(
         r#"INSERT INTO runtime_bindings
            (session_id, runtime_kind, runtime_instance_id, binding_state, tmux_socket_path, tmux_pane_id, capabilities)

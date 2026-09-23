@@ -90,6 +90,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
     assert_eq!(body["error"]["code"], "session_not_found");
 
     EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             "evt_unsealed_turn".to_string(),
             session_id.to_string(),
@@ -112,6 +113,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
     let other_session_id = "sess_turn_timeline_other";
     seed_session(&state, other_session_id).await;
     EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             "evt_other_session_turn".to_string(),
             other_session_id.to_string(),

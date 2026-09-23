@@ -36,7 +36,7 @@ pub async fn list_turns(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     ensure_session_exists(&service, &session_id).await?;
     let turns = service.list_turns(&session_id).await?;
     Ok(ok(json!({ "turns": turns })))
@@ -48,7 +48,7 @@ pub async fn get_turn(
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     ensure_session_exists(&service, &session_id).await?;
     let turn = service
         .get_turn(&session_id, &turn_id)
@@ -63,7 +63,7 @@ pub async fn list_session_events(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     ensure_session_exists(&service, &session_id).await?;
     let events = service.list_session_events(&session_id).await?;
     Ok(ok(json!({ "events": events })))
@@ -75,7 +75,7 @@ pub async fn list_turn_events(
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     ensure_session_exists(&service, &session_id).await?;
     service
         .get_turn(&session_id, &turn_id)

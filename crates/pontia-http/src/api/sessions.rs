@@ -28,7 +28,7 @@ pub async fn create_session(
         state.event_ingest_service(),
         state.pontia_home().to_path_buf(),
     )
-    .with_pi_control(state.pi_control());
+    .with_client_control(state.client_control());
     let outcome = idempotent(&state, &headers, "create_session", || async move {
         Ok(service.create_session(request).await?.data)
     })
@@ -51,7 +51,7 @@ pub async fn open_codex_tui(
         .open_tui(&session_id)
         .await?;
     Ok(ok(
-        json!({"session":ExternalQueryService::new(state.db()).get_session(&session_id).await?}),
+        json!({"session":ExternalQueryService::new(state.db()).with_clients(state.clients()).get_session(&session_id).await?}),
     ))
 }
 
@@ -70,7 +70,7 @@ pub async fn list_sessions(
     Query(query): Query<ListSessionsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     let sessions = service
         .list_sessions(query.include_archived, query.limit, query.include_pinned)
         .await?;
@@ -88,7 +88,7 @@ pub async fn update_session(
         state.event_ingest_service(),
         state.pontia_home().to_path_buf(),
     )
-    .with_pi_control(state.pi_control());
+    .with_client_control(state.client_control());
     let data = service.update_session(&session_id, request).await?;
     Ok(ok(data))
 }
@@ -103,7 +103,7 @@ pub async fn pin_session(
         state.event_ingest_service(),
         state.pontia_home().to_path_buf(),
     )
-    .with_pi_control(state.pi_control());
+    .with_client_control(state.client_control());
     let data = service.pin_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -118,7 +118,7 @@ pub async fn unpin_session(
         state.event_ingest_service(),
         state.pontia_home().to_path_buf(),
     )
-    .with_pi_control(state.pi_control());
+    .with_client_control(state.client_control());
     let data = service.unpin_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -133,7 +133,7 @@ pub async fn archive_session(
         state.event_ingest_service(),
         state.pontia_home().to_path_buf(),
     )
-    .with_pi_control(state.pi_control());
+    .with_client_control(state.client_control());
     let data = service.archive_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -148,7 +148,7 @@ pub async fn unarchive_session(
         state.event_ingest_service(),
         state.pontia_home().to_path_buf(),
     )
-    .with_pi_control(state.pi_control());
+    .with_client_control(state.client_control());
     let data = service.unarchive_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -159,7 +159,7 @@ pub async fn get_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     let session = service
         .get_session(&session_id)
         .await?

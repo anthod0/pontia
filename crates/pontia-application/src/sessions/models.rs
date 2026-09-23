@@ -36,11 +36,12 @@ impl SessionCommandService {
         let models = ClientAdapter::new(
             &session.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?
         .list_models(&target)
         .await?;
         let current_model = ExternalQueryService::new(self.pool.clone())
+            .with_clients(self.event_ingest.clients())
             .get_session(session_id)
             .await?
             .and_then(|session| session.model);
@@ -68,7 +69,7 @@ impl SessionCommandService {
         ClientAdapter::new(
             &session.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?
         .set_model(&target, &request.model)
         .await
@@ -77,6 +78,7 @@ impl SessionCommandService {
 
     async fn model_session(&self, session_id: &str, modifying: bool) -> Result<SessionView> {
         let session = ExternalQueryService::new(self.pool.clone())
+            .with_clients(self.event_ingest.clients())
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;

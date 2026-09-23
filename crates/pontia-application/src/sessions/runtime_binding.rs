@@ -60,13 +60,21 @@ pub(crate) fn runtime_binding_record(
     runtime: &RuntimeStartResult,
 ) -> Result<RuntimeBindingUpsertRecord> {
     let metadata = &runtime.metadata;
-    let diagnostics = json!({
+    let mut diagnostics = json!({
         "launch_id": metadata.get("launch_id"),
         "log_dir": metadata.get("log_dir"),
         "runtime_log": metadata.get("runtime_log"),
         "log_path": metadata.get("log_path"),
-        "pi_hook_log": metadata.get("pi_hook_log"),
     });
+    if let Some(client) = metadata
+        .get("client_diagnostics")
+        .and_then(serde_json::Value::as_object)
+    {
+        diagnostics
+            .as_object_mut()
+            .expect("diagnostics object")
+            .extend(client.clone());
+    }
     let adapter_details = json!({
         "codex": metadata.get("codex"),
         "tmux": metadata.get("tmux"),

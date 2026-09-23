@@ -147,6 +147,7 @@ impl RuntimeBindingUpsertService {
             .await?;
 
         let session = ExternalQueryService::new(self.pool.clone())
+            .with_clients(self.clients.clone())
             .get_session(session_id)
             .await?
             .ok_or_else(|| {

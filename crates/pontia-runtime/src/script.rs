@@ -5,45 +5,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia_agent_clients::{
-    self as agent_clients, DispatchBehavior, RuntimeBehavior, TmuxRuntimeBehavior,
-};
+use pontia_agent_clients::{self as agent_clients, DispatchBehavior, RuntimeBehavior};
 use pontia_core::error::{Error, Result};
 
-use super::{RuntimeStartRequest, config::configured_tui_command};
+use super::RuntimeStartRequest;
 
 pub(super) struct RuntimePaths<'a> {
     pub(super) log_path: &'a Path,
-}
-
-pub(crate) fn tmux_start_command(
-    request: &RuntimeStartRequest,
-    tmux_runtime: TmuxRuntimeBehavior,
-    quote_session_id: bool,
-) -> String {
-    let Some(command) = request.start_command.clone() else {
-        let mut command = tmux_runtime
-            .command_env
-            .and_then(|env| std::env::var(env).ok())
-            .or_else(|| configured_tui_command(&request.client_type))
-            .unwrap_or_else(|| tmux_runtime.default_command.to_string());
-        for arg in tmux_runtime.startup_args {
-            command.push(' ');
-            command.push_str(arg);
-        }
-        if let Some(session_identity_arg) = tmux_runtime.startup_session_identity_arg {
-            command.push(' ');
-            command.push_str(session_identity_arg);
-            command.push(' ');
-            if quote_session_id {
-                command.push_str(&shell_quote(&request.session_id));
-            } else {
-                command.push_str(&request.session_id);
-            }
-        }
-        return command;
-    };
-    command
 }
 
 pub(super) fn write_ephemeral_launch_script(
@@ -52,6 +20,7 @@ pub(super) fn write_ephemeral_launch_script(
     request: &RuntimeStartRequest,
     launch_id: &str,
     runtime_instance_id: &str,
+    client_spec: &agent_clients::AgentClientSpec,
 ) -> Result<PathBuf> {
     let launch_dir = pontia_home.join("state/launch");
     std::fs::create_dir_all(&launch_dir)?;
@@ -63,6 +32,7 @@ pub(super) fn write_ephemeral_launch_script(
         request,
         launch_id,
         runtime_instance_id,
+        client_spec,
     )?;
     let mut permissions = std::fs::metadata(&path)?.permissions();
     permissions.set_mode(0o700);
@@ -77,17 +47,18 @@ pub(super) fn write_launch_script(
     request: &RuntimeStartRequest,
     launch_id: &str,
     runtime_instance_id: &str,
+    client_spec: &agent_clients::AgentClientSpec,
 ) -> Result<()> {
     let runtime_environment = render_runtime_environment(request)?;
-    let client_spec = agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
-        Error::Domain(format!("unsupported client_type: {}", request.client_type))
-    })?;
     let (log_setup, runtime_body) = match client_spec.adapter.runtime {
         RuntimeBehavior::CodexAppServer => {
             return Err(Error::Domain("Codex uses a managed app-server".into()));
         }
-        RuntimeBehavior::Tmux(tmux_runtime) => {
-            let command = tmux_start_command(request, tmux_runtime, true);
+        RuntimeBehavior::Tmux(_) => {
+            let command = request
+                .start_command
+                .as_deref()
+                .ok_or_else(|| Error::Domain("tmux launch requires a command".into()))?;
             (
                 format!(
                     "echo {} >> {}",
@@ -97,7 +68,7 @@ pub(super) fn write_launch_script(
                     )),
                     shell_quote_path(runtime_paths.log_path),
                 ),
-                format!("exec sh -lc {}\n", shell_quote(&command)),
+                format!("exec sh -lc {}\n", shell_quote(command)),
             )
         }
         RuntimeBehavior::InProcess => match client_spec.adapter.dispatch {
@@ -112,7 +83,7 @@ pub(super) fn write_launch_script(
                 ),
                 "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
             ),
-            DispatchBehavior::PiControl | DispatchBehavior::CodexProtocol => {
+            DispatchBehavior::Connected | DispatchBehavior::CodexProtocol => {
                 return Err(Error::Domain(format!(
                     "{} cannot use client protocol dispatch with an in-process runtime",
                     request.client_type
@@ -192,7 +163,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pi_runtime_script_uses_exact_project_session_id() {
+    fn runtime_script_uses_exact_project_session_id() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let script_path = tempdir.path().join("launch.sh");
         let log_path = tempdir.path().join("runtime.log");
@@ -206,7 +177,7 @@ mod tests {
             workspace_name: None,
             handle: None,
             role: None,
-            start_command: None,
+            start_command: Some("test-agent --approve --session-id sess_resume_1".into()),
             environment: [
                 ("PONTIA_WORKFLOW_ID".to_string(), "wf_123".to_string()),
                 (
@@ -225,12 +196,13 @@ mod tests {
             &request,
             "launch_1",
             "runtime_instance_1",
+            &crate::test_tmux_spec(),
         )
         .expect("write script");
 
         let script = std::fs::read_to_string(script_path).expect("script");
         assert!(
-            script.contains("pi --approve --session-id"),
+            script.contains("test-agent --approve --session-id"),
             "script was:\n{script}"
         );
         assert!(script.contains("sess_resume_1"), "script was:\n{script}");
@@ -291,6 +263,7 @@ mod tests {
             &request,
             "launch_explicit",
             "rtinst_explicit",
+            &crate::test_tmux_spec(),
         )
         .expect("write launch script");
 

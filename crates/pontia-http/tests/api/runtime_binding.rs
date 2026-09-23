@@ -28,7 +28,7 @@ pub(super) async fn post_upsert(state: AppState, body: Value) -> (StatusCode, Va
         state,
         "runtime.register",
         json!({
-            "version": pontia_runtime::pi_control::PROTOCOL_VERSION, "binding": body,
+            "version": pontia_client_pi::rpc::PROTOCOL_VERSION, "binding": body,
         }),
     )
     .await
@@ -141,7 +141,7 @@ async fn registration_request(state: AppState, method: &str, params: Value) -> (
         net::UnixStream,
     };
     let (server, client) = UnixStream::pair().unwrap();
-    let task = tokio::spawn(pontia_application::pi_ipc::serve_connection(state, server));
+    let task = tokio::spawn(pontia_client_pi::ipc::serve_connection(state, server));
     let mut client = BufReader::new(client);
     client
         .get_mut()

@@ -4,17 +4,14 @@
 //! module stays independent from HTTP transport details.
 
 pub mod codex;
-mod config;
 mod in_process;
 mod manager;
 mod paths;
-pub mod pi_control;
 mod script;
 mod session_identifier;
 mod tmux;
 mod types;
 
-pub use config::set_runtime_config;
 pub use manager::GenericRuntimeManager;
 use std::path::PathBuf;
 pub use tmux::TmuxProcessFingerprint;
@@ -38,6 +35,19 @@ pub fn pontia_log_paths(pontia_home: &std::path::Path) -> PontiaLogPaths {
         log_dir: paths.log_dir,
         runtime_log: paths.runtime_log,
     }
+}
+
+#[cfg(test)]
+fn test_tmux_spec() -> pontia_agent_clients::AgentClientSpec {
+    let mut spec = pontia_agent_clients::get_client_spec("generic")
+        .unwrap()
+        .clone();
+    spec.adapter.runtime =
+        pontia_agent_clients::RuntimeBehavior::Tmux(pontia_agent_clients::TmuxRuntimeBehavior {
+            process_names: &["test-agent"],
+            hook_log: None,
+        });
+    spec
 }
 
 #[cfg(test)]
@@ -204,6 +214,7 @@ mod tests {
                 },
                 1,
                 Some((&binding.socket_path, &binding.pane_id)),
+                &crate::test_tmux_spec(),
             )
             .expect("start by reusing pane");
 

@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use pontia_agent_clients as agent_clients;
 use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
 use serde_json::Value;
@@ -17,23 +16,39 @@ static RUNTIME_BINDING_UPSERT_LOCK: Mutex<()> = Mutex::const_new(());
 
 #[derive(Clone)]
 pub struct RuntimeBindingUpsertService {
+    pub(super) session_identity_hint: Option<String>,
+    pub(super) clients: crate::clients::ClientRegistry,
     pub(super) pool: SqlitePool,
     pub(super) pontia_home: PathBuf,
 }
 
 impl RuntimeBindingUpsertService {
+    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
+        self.clients = clients;
+        self
+    }
+
+    pub fn with_session_identity_hint(mut self, session_id: String) -> Self {
+        self.session_identity_hint = Some(session_id);
+        self
+    }
+
     pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
-        Self { pool, pontia_home }
+        Self {
+            pool,
+            pontia_home,
+            clients: Default::default(),
+            session_identity_hint: None,
+        }
     }
 
     pub async fn upsert(&self, request: RuntimeBindingUpsertRequest) -> Result<Value> {
         let _upsert_guard = RUNTIME_BINDING_UPSERT_LOCK.lock().await;
         validate_required("client_type", &request.client_type)?;
         validate_required("client_session_key", &request.client_session_key)?;
-        let client_spec =
-            agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
-                Error::Domain(format!("unsupported client_type: {}", request.client_type))
-            })?;
+        let client_spec = self.clients.spec(&request.client_type).ok_or_else(|| {
+            Error::Domain(format!("unsupported client_type: {}", request.client_type))
+        })?;
         let runtime_kind = client_spec.runtime_binding_kind().ok_or_else(|| {
             Error::Domain(format!(
                 "runtime binding upsert does not support client_type {}",

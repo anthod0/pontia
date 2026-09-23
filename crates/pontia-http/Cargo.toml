@@ -22,6 +22,7 @@ tracing = "0.1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+pontia-client-pi.workspace = true
 http-body-util = "0.1"
 pontia-agent-clients = { workspace = true, default-features = true, features = ["generic-test-client"] }
 pontia-application = { workspace = true, default-features = true }

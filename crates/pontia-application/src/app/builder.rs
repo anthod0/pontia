@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub struct AppStateBuilder {
+    pub(super) clients: crate::clients::ClientRegistry,
     pub(super) db: SqlitePool,
     pub(super) pontia_home: PathBuf,
     pub(super) external_api_token: Option<String>,
@@ -20,13 +21,14 @@ pub struct AppStateBuilder {
     pub(super) live_output: LiveOutputStore,
     pub(super) git_refresh: GitRefreshCoordinator,
     pub(super) idempotency: IdempotencyCoordinator,
-    pub(super) pi_control: crate::PiControlService,
+    pub(super) client_control: crate::ClientControlService,
 }
 
 impl AppStateBuilder {
     pub(super) fn new(db: SqlitePool, pontia_home: PathBuf) -> Self {
         Self {
-            pi_control: crate::PiControlService::new(db.clone(), pontia_home.clone()),
+            clients: Default::default(),
+            client_control: crate::ClientControlService::new(db.clone(), pontia_home.clone()),
             db,
             pontia_home,
             external_api_token: None,
@@ -86,8 +88,13 @@ impl AppStateBuilder {
         self
     }
 
-    pub(super) fn pi_control(mut self, pi_control: crate::PiControlService) -> Self {
-        self.pi_control = pi_control;
+    pub(super) fn client_control(mut self, client_control: crate::ClientControlService) -> Self {
+        self.client_control = client_control;
+        self
+    }
+
+    pub fn clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
+        self.clients = clients;
         self
     }
 

@@ -21,7 +21,7 @@ pub struct WorkflowControlOutcome {
 pub struct WorkflowControlService {
     pool: SqlitePool,
     event_ingest: pontia_application::EventIngestService,
-    pi_control: Option<pontia_application::PiControlService>,
+    client_control: Option<pontia_application::ClientControlService>,
     workflows: SqliteWorkflowRepository,
 }
 
@@ -32,12 +32,15 @@ impl WorkflowControlService {
             workflows: SqliteWorkflowRepository::new(pool.clone()),
             pool,
             event_ingest,
-            pi_control: None,
+            client_control: None,
         }
     }
 
-    pub fn with_pi_control(mut self, control: pontia_application::PiControlService) -> Self {
-        self.pi_control = Some(control);
+    pub fn with_client_control(
+        mut self,
+        control: pontia_application::ClientControlService,
+    ) -> Self {
+        self.client_control = Some(control);
         self
     }
 
@@ -50,6 +53,7 @@ impl WorkflowControlService {
         let mut interrupt_requested = false;
         if let Some(session_id) = self.current_session_id(workflow_id).await? {
             let session = ExternalQueryService::new(self.pool.clone())
+                .with_clients(self.event_ingest.clients())
                 .get_session(&session_id)
                 .await?;
             if session
@@ -76,6 +80,7 @@ impl WorkflowControlService {
         let mut continue_sent = false;
         if let Some(session_id) = self.current_session_id(workflow_id).await? {
             let session = ExternalQueryService::new(self.pool.clone())
+                .with_clients(self.event_ingest.clients())
                 .get_session(&session_id)
                 .await?;
             if session
@@ -83,8 +88,8 @@ impl WorkflowControlService {
                 .is_some_and(|session| session.state == "interrupted")
             {
                 let mut inbox = InboxCommandService::new(self.event_ingest.clone());
-                if let Some(control) = &self.pi_control {
-                    inbox = inbox.with_pi_control(control.clone());
+                if let Some(control) = &self.client_control {
+                    inbox = inbox.with_client_control(control.clone());
                 }
                 let outcome = inbox
                     .submit_message(

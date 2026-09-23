@@ -12,7 +12,7 @@ async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed(
     .await
     .unwrap();
     run_migrations(&pool).await.unwrap();
-    for client in ["pi", "codex"] {
+    for client in ["test-channel", "codex"] {
         sqlx::query("INSERT INTO sessions(session_id,client_type,state) VALUES (?,?,'idle')")
             .bind(client)
             .bind(client)
@@ -48,10 +48,12 @@ async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed(
             0
         );
     }
-    let service = InboxCommandService::new(EventIngestService::new(pool.clone()));
+    let service = InboxCommandService::new(
+        EventIngestService::new(pool.clone()).with_clients(crate::clients::testing::clients()),
+    );
     service.recover_deliveries().await.unwrap();
     service.recover_deliveries().await.unwrap();
-    for client in ["pi", "codex"] {
+    for client in ["test-channel", "codex"] {
         let first = service
             .get_message(client, &format!("{client}-one"))
             .await
@@ -111,13 +113,14 @@ async fn runtime_scoped_exit_and_interrupt_reject_replaced_instances_before_nati
     .unwrap();
     run_migrations(&pool).await.unwrap();
     sqlx::query(
-        "INSERT INTO sessions(session_id,client_type,state) VALUES ('session','pi','idle')",
+        "INSERT INTO sessions(session_id,client_type,state) VALUES ('session','test-channel','idle')",
     )
     .execute(&pool)
     .await
     .unwrap();
     sqlx::query("INSERT INTO runtime_bindings(session_id,runtime_kind,runtime_instance_id,binding_state) VALUES ('session','pi_tui','replacement','confirmed')").execute(&pool).await.unwrap();
-    let events = EventIngestService::new(pool.clone());
+    let events =
+        EventIngestService::new(pool.clone()).with_clients(crate::clients::testing::clients());
     let session = crate::SessionCommandService::new(events.clone(), root.path().into());
     for error in [
         session

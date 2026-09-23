@@ -50,15 +50,11 @@ impl AgentClientCapabilities {
             context_usage: ContextUsageCapability::Unsupported,
         }
     }
-
-    pub fn pi_m0_default() -> Self {
-        crate::pi::CAPABILITIES
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispatchBehavior {
-    PiControl,
+    Connected,
     CodexProtocol,
     InProcessRecorded,
     None,
@@ -82,15 +78,9 @@ pub enum RuntimeBehavior {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TmuxRuntimeBehavior {
-    pub command_env: Option<&'static str>,
-    pub default_command: &'static str,
-    pub startup_args: &'static [&'static str],
-    pub startup_session_identity_arg: Option<&'static str>,
-    pub resume_session_identity_arg: Option<&'static str>,
     /// Process names used to identify this agent below its bound tmux pane.
     pub process_names: &'static [&'static str],
     pub hook_log: Option<HookLogBehavior>,
-    pub runtime_config_key: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,7 +93,7 @@ pub struct HookLogBehavior {
 pub enum TerminateBehavior {
     CodexArchive,
     RuntimeManager,
-    PiControl,
+    Connected,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,7 +123,6 @@ pub enum StartupHook {}
 pub enum TranscriptBehavior {
     CodexRollout,
     Unsupported,
-    PiJsonl,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

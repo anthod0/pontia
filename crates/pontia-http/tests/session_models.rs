@@ -1,3 +1,4 @@
+mod common;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -19,6 +20,7 @@ async fn fixture() -> (tempfile::TempDir, AppState, String) {
     .unwrap();
     run_migrations(&pool).await.unwrap();
     let state = AppState::builder(pool, root.path().into())
+        .clients(crate::common::clients::clients())
         .external_api_token(Some("test-token".into()))
         .build();
     let request: CreateSessionRequest =

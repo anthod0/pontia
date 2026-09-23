@@ -20,10 +20,7 @@ use pontia_storage_sqlite::repositories::{
 
 use self::{
     effects::clear_exited_session_tmux_markers,
-    enrichment::{
-        consume_transient_pi_native_evidence, enrich_pi_topology, enrich_timeline_boundary,
-        should_resolve_pi_topology,
-    },
+    enrichment::{enrich_timeline_boundary, enrich_topology, should_resolve_topology},
     persistence::{insert_event_in_tx, persist_projections_in_tx},
     validation::{
         ensure_confirmed_event_matches_session_boundary, ensure_runtime_fence_in_tx,
@@ -39,16 +36,25 @@ use crate::{AgentEventBroker, InboxCommandService, LiveOutputService, UpsertAgen
 #[derive(Clone)]
 pub struct EventIngestService {
     pool: SqlitePool,
+    clients: crate::clients::ClientRegistry,
     inbox_scheduler: crate::inbox::InboxScheduler,
-    pi_control: Option<crate::PiControlService>,
+    client_control: Option<crate::ClientControlService>,
     agent_events: Option<AgentEventBroker>,
     live_output: Option<LiveOutputService>,
     volatile_events: Option<crate::app::VolatileEventBroker>,
 }
 
 impl EventIngestService {
-    pub(crate) fn pi_control(&self) -> Option<crate::PiControlService> {
-        self.pi_control.clone()
+    pub fn clients(&self) -> crate::clients::ClientRegistry {
+        self.clients.clone()
+    }
+    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
+        self.clients = clients;
+        self
+    }
+
+    pub(crate) fn client_control(&self) -> Option<crate::ClientControlService> {
+        self.client_control.clone()
     }
 
     pub(crate) fn inbox_scheduler(&self) -> crate::inbox::InboxScheduler {
@@ -64,28 +70,29 @@ impl EventIngestService {
 
     pub fn with_reporting_dependencies(
         mut self,
-        pi_control: crate::PiControlService,
+        client_control: crate::ClientControlService,
         agent_events: AgentEventBroker,
         live_output: LiveOutputService,
         volatile_events: crate::app::VolatileEventBroker,
     ) -> Self {
-        self.pi_control = Some(pi_control);
+        self.client_control = Some(client_control);
         self.agent_events = Some(agent_events);
         self.live_output = Some(live_output);
         self.volatile_events = Some(volatile_events);
         self
     }
 
-    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
-        self.pi_control = Some(pi_control);
+    pub fn with_client_control(mut self, client_control: crate::ClientControlService) -> Self {
+        self.client_control = Some(client_control);
         self
     }
 
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool,
+            clients: Default::default(),
             inbox_scheduler: Default::default(),
-            pi_control: None,
+            client_control: None,
             agent_events: None,
             live_output: None,
             volatile_events: None,
@@ -248,9 +255,22 @@ impl EventIngestService {
             }));
         }
 
-        enrich_timeline_boundary(&self.pool, &mut event).await;
-        let topology_evidence = consume_transient_pi_native_evidence(&mut event);
-        let topology_binding_id = if should_resolve_pi_topology(&event) {
+        let evidence = if let Some(data) = self.clients.data(&event.client_type) {
+            data.take_evidence(&mut event)
+        } else {
+            crate::clients::NativeEventEvidence {
+                entry_anchor: event
+                    .payload
+                    .get("native_turn_id")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+                topology: None,
+            }
+        };
+        enrich_timeline_boundary(&self.pool, &self.clients, &mut event, evidence.entry_anchor)
+            .await;
+        let topology_evidence = evidence.topology;
+        let topology_binding_id = if should_resolve_topology(&self.clients, &event) {
             crate::AgentBindingService::new(self.pool.clone())
                 .binding_for_session(&event.session_id)
                 .await
@@ -334,7 +354,13 @@ impl EventIngestService {
             .into_iter()
             .map(turn_from_row)
             .collect::<Result<Vec<_>>>()?;
-        enrich_pi_topology(&mut event, topology_binding_id, topology_evidence, &turns);
+        enrich_topology(
+            &self.clients,
+            &mut event,
+            topology_binding_id,
+            topology_evidence,
+            &turns,
+        );
         let mut projection = ProjectionState::with_existing(sessions, turns);
         projection.apply(&event)?;
 
@@ -356,12 +382,10 @@ impl EventIngestService {
 
         tx.commit().await?;
 
-        if event.client_type == "pi"
-            && matches!(
-                event.event_type,
-                EventType::SessionExited | EventType::SessionError
-            )
-            && let Some(control) = &self.pi_control
+        if matches!(
+            event.event_type,
+            EventType::SessionExited | EventType::SessionError
+        ) && let Some(control) = &self.client_control
         {
             control.refresh_session(&event.session_id).await;
         }

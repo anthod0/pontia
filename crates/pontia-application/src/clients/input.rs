@@ -13,7 +13,7 @@ use crate::{
 impl ClientAdapter {
     pub async fn await_initial_ready(&self, target: &ControlTarget) -> Result<()> {
         target.validate(&self.events.db()).await?;
-        if self.spec.adapter.dispatch == DispatchMode::PiControl {
+        if self.spec.adapter.dispatch == DispatchMode::Connected {
             crate::RuntimeReadinessService::new(self.events.db())
                 .wait_until_ready(
                     &target.session_id,
@@ -66,8 +66,8 @@ impl ClientAdapter {
             input,
         };
         match self.spec.adapter.dispatch {
-            DispatchMode::PiControl => {
-                self.pi_input(target, &input.input, metadata["inbox_message_id"].as_str())
+            DispatchMode::Connected => {
+                self.channel_input(target, &input.input, metadata["inbox_message_id"].as_str())
                     .await?
             }
             DispatchMode::InProcessRecorded => {
@@ -97,6 +97,6 @@ impl ClientAdapter {
                     .await,
             );
         }
-        ControlResult::from_result(self.pi_interrupt(target).await)
+        ControlResult::from_result(self.channel_interrupt(target).await)
     }
 }

@@ -201,7 +201,8 @@ where
     tokio::spawn(async move {
         let _keepalive = shutdown_tx;
         WorkflowCoordinator::with_services(
-            pontia_application::EventIngestService::new(pool),
+            pontia_application::EventIngestService::new(pool)
+                .with_clients(crate::test_doubles::clients()),
             sessions,
             exits,
             events,
@@ -216,4 +217,34 @@ impl AgentEventSubscriber for TestAgentEvents {
     fn subscribe(&self) -> broadcast::Receiver<DomainEvent> {
         self.sender.subscribe()
     }
+}
+
+// This fixture uses the persisted client identifier without loading its native adapter.
+pub(super) fn clients() -> pontia_application::clients::ClientRegistry {
+    static SPEC: std::sync::OnceLock<pontia_agent_clients::AgentClientSpec> =
+        std::sync::OnceLock::new();
+    let spec = SPEC.get_or_init(|| {
+        let mut spec = pontia_agent_clients::get_client_spec("generic")
+            .unwrap()
+            .clone();
+        spec.client_type = "pi";
+        spec.adapter.dispatch = pontia_agent_clients::DispatchBehavior::Connected;
+        spec.adapter.terminate = pontia_agent_clients::TerminateBehavior::Connected;
+        spec.adapter.runtime = pontia_agent_clients::RuntimeBehavior::Tmux(
+            pontia_agent_clients::TmuxRuntimeBehavior {
+                process_names: &[],
+                hook_log: None,
+            },
+        );
+        spec.adapter.turn_lifecycle =
+            pontia_agent_clients::TurnLifecycleBehavior::ClientManagedForInteractiveTmux;
+        spec
+    });
+    let mut clients = pontia_application::clients::ClientRegistry::default();
+    clients.register(pontia_application::clients::ClientRegistration {
+        spec,
+        data: None,
+        launcher: None,
+    });
+    clients
 }

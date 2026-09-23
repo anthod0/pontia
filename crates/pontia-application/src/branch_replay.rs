@@ -28,12 +28,21 @@ pub struct ResolvedBranchReplay {
 
 #[derive(Clone)]
 pub struct BranchReplayService {
+    clients: crate::clients::ClientRegistry,
     pool: SqlitePool,
 }
 
 impl BranchReplayService {
+    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
+        self.clients = clients;
+        self
+    }
+
     pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            clients: Default::default(),
+        }
     }
 
     pub(crate) async fn dispatch(
@@ -43,6 +52,7 @@ impl BranchReplayService {
         message: &str,
     ) -> pontia_core::Result<crate::control::ControlResult<crate::control::InputReceipt>> {
         let view = ExternalQueryService::new(self.pool.clone())
+            .with_clients(self.clients.clone())
             .get_session(session)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session} not found")))?;
@@ -59,7 +69,7 @@ impl BranchReplayService {
         let result = crate::clients::ClientAdapter::new(
             &view.client_type,
             events.clone(),
-            events.pi_control(),
+            events.client_control(),
         )?
         .replay(&target, message)
         .await;
@@ -157,7 +167,7 @@ impl BranchReplayService {
         session_id: &str,
         target_turn_id: &str,
     ) -> pontia_core::Result<String> {
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query = ExternalQueryService::new(self.pool.clone()).with_clients(self.clients.clone());
         let session = query
             .get_session(session_id)
             .await?
@@ -219,7 +229,7 @@ impl BranchReplayService {
             .is_some_and(|turn| turn.turn_id == target_turn_id);
         crate::clients::ClientAdapter::new(
             &session.client_type,
-            crate::EventIngestService::new(self.pool.clone()),
+            crate::EventIngestService::new(self.pool.clone()).with_clients(self.clients.clone()),
             None,
         )?
         .branch_target(binding, target, is_first_session_turn)

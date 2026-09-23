@@ -16,19 +16,19 @@ use crate::{
 pub struct TurnCommandService {
     pub(super) pool: SqlitePool,
     pub(super) event_ingest: EventIngestService,
-    pub(super) pi_control: Option<crate::PiControlService>,
+    pub(super) client_control: Option<crate::ClientControlService>,
 }
 
 impl TurnCommandService {
-    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
-        self.pi_control = Some(pi_control);
+    pub fn with_client_control(mut self, client_control: crate::ClientControlService) -> Self {
+        self.client_control = Some(client_control);
         self
     }
 
     pub fn new(event_ingest: EventIngestService) -> Self {
         Self {
             pool: event_ingest.db(),
-            pi_control: event_ingest.pi_control(),
+            client_control: event_ingest.client_control(),
             event_ingest,
         }
     }
@@ -56,7 +56,8 @@ impl TurnCommandService {
         if input.trim().is_empty() {
             return Err(Error::Domain("input must not be blank".into()));
         }
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -64,7 +65,7 @@ impl TurnCommandService {
         let adapter = ClientAdapter::new(
             &session.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?;
         let active = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
@@ -144,7 +145,8 @@ impl TurnCommandService {
         if input.trim().is_empty() {
             return Err(Error::Domain("input must not be blank".into()));
         }
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -152,7 +154,7 @@ impl TurnCommandService {
         let adapter = ClientAdapter::new(
             &session.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?;
         if adapter.client_owns_turn() {
             return Ok(None);
@@ -187,7 +189,8 @@ impl TurnCommandService {
         turn_id: Option<&str>,
     ) -> Result<()> {
         let session = target.session_id.as_str();
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session_view = query
             .get_session(session)
             .await?
@@ -195,7 +198,7 @@ impl TurnCommandService {
         let adapter = ClientAdapter::new(
             &session_view.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?;
         adapter.await_initial_ready(target).await?;
         let session_view = query

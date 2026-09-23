@@ -62,20 +62,20 @@ impl CreateSessionOutcome {
 pub struct SessionCommandService {
     pool: SqlitePool,
     event_ingest: crate::EventIngestService,
-    pi_control: Option<crate::PiControlService>,
+    client_control: Option<crate::ClientControlService>,
     pontia_home: PathBuf,
 }
 
 impl SessionCommandService {
-    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
-        self.pi_control = Some(pi_control);
+    pub fn with_client_control(mut self, client_control: crate::ClientControlService) -> Self {
+        self.client_control = Some(client_control);
         self
     }
 
     pub fn new(event_ingest: crate::EventIngestService, pontia_home: PathBuf) -> Self {
         Self {
             pool: event_ingest.db(),
-            pi_control: event_ingest.pi_control(),
+            client_control: event_ingest.client_control(),
             event_ingest,
             pontia_home,
         }

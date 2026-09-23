@@ -69,7 +69,7 @@ pub async fn list_tasks(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     let tasks = service.list_tasks().await?;
     Ok(ok(json!({ "tasks": tasks })))
 }
@@ -80,7 +80,7 @@ pub async fn get_task(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     let task = service
         .get_task(&task_id)
         .await?
@@ -94,7 +94,7 @@ pub async fn list_task_events(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     service
         .get_task(&task_id)
         .await?

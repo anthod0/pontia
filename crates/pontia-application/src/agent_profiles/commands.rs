@@ -41,7 +41,7 @@ impl AgentProfileService {
         &self,
         request: UpsertExecutionProfileRequest,
     ) -> Result<AgentProfileCommandOutcome> {
-        validate_request(&request)?;
+        validate_request(&self.clients, &request)?;
 
         let result = SqliteAgentProfileRepository::new(self.pool.clone())
             .insert_version(execution_profile_write_record(&request)?)
@@ -79,7 +79,7 @@ impl AgentProfileService {
                 "profile_id and version in path must match request body".to_string(),
             ));
         }
-        validate_request(&request)?;
+        validate_request(&self.clients, &request)?;
         let current = self
             .get_version(profile_id, version)
             .await?

@@ -48,6 +48,7 @@ fn event(
 
 async fn ingest(state: &AppState, event: ReportedEvent) {
     EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .ingest_reported_event(event)
         .await
         .expect("ingest event");

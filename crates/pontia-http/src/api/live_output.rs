@@ -22,7 +22,11 @@ pub async fn stream_live_output(
     Path(session_id): Path<String>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     authenticate(&state, &headers)?;
-    ensure_session_exists(&ExternalQueryService::new(state.db()), &session_id).await?;
+    ensure_session_exists(
+        &ExternalQueryService::new(state.db()).with_clients(state.clients()),
+        &session_id,
+    )
+    .await?;
 
     let subscription = state.live_output().subscribe_session(&session_id);
     Ok(live_output_sse_stream(state, session_id, subscription))

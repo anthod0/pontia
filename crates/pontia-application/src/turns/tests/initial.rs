@@ -1,14 +1,10 @@
 use crate::TurnCommandService;
-use crate::{EventIngestService, PiControlService};
+use crate::{ClientControlService, EventIngestService};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
-use serde_json::{Value, json};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::UnixStream,
-};
+use serde_json::json;
 
 #[tokio::test]
-async fn initial_pi_input_uses_the_shared_socket_after_ready() {
+async fn initial_input_uses_the_injected_channel_after_ready() {
     let root = tempfile::Builder::new().prefix("pi-").tempdir().unwrap();
     let pool = connect_sqlite(&format!(
         "sqlite://{}",
@@ -18,35 +14,28 @@ async fn initial_pi_input_uses_the_shared_socket_after_ready() {
     .unwrap();
     run_migrations(&pool).await.unwrap();
     sqlx::query(
-        "INSERT INTO sessions (session_id,client_type,state) VALUES ('sess_pi','pi','starting')",
+        "INSERT INTO sessions (session_id,client_type,state) VALUES ('sess_pi','test-channel','starting')",
     )
     .execute(&pool)
     .await
     .unwrap();
     sqlx::query("INSERT INTO runtime_bindings (session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('sess_pi','pi_tui','rtinst_pi','confirmed','/unused/tmux','%1','{\"accept_task\":true}')").execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','pi','/unused','native_pi','{}')").execute(&pool).await.unwrap();
-    let control = PiControlService::new(pool.clone(), root.path().into());
-    let (daemon_socket, socket) = UnixStream::pair().unwrap();
-    let (peer, _requests) = pontia_runtime::pi_control::PiRpcPeer::new(daemon_socket);
+    sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','test-channel','/unused','native_pi','{}')").execute(&pool).await.unwrap();
+    let control = ClientControlService::new(pool.clone(), root.path().into());
+    let channel = crate::clients::testing::channel();
     control
-        .attach("sess_pi", "rtinst_pi", "native_pi", peer)
+        .attach(
+            "test-channel",
+            "sess_pi",
+            "rtinst_pi",
+            "native_pi",
+            channel.clone(),
+        )
         .await
         .unwrap();
-    let server = tokio::spawn(async move {
-        let mut stream = BufReader::new(socket);
-        let mut line = String::new();
-        stream.read_line(&mut line).await.unwrap();
-        let request: Value = serde_json::from_str(&line).unwrap();
-        assert_eq!(request["method"], "submit");
-        assert_eq!(request["params"]["input"], "initial input");
-        let reply = json!({"jsonrpc":"2.0","id":request["id"],"result":{"accepted":true}});
-        stream
-            .get_mut()
-            .write_all(format!("{reply}\n").as_bytes())
-            .await
-            .unwrap();
-    });
-    let events = EventIngestService::new(pool.clone()).with_pi_control(control);
+    let events = EventIngestService::new(pool.clone())
+        .with_clients(crate::clients::testing::clients())
+        .with_client_control(control);
     let service = TurnCommandService::new(events.clone());
     let dispatch = tokio::spawn(async move {
         service
@@ -69,7 +58,7 @@ async fn initial_pi_input_uses_the_shared_socket_after_ready() {
             "sess_pi".into(),
             None,
             pontia_core::domain::EventSource::AgentClient,
-            "pi".into(),
+            "test-channel".into(),
             pontia_core::domain::EventType::SessionReady,
             json!({"runtime_instance_id":"rtinst_pi"}),
         ))
@@ -80,7 +69,7 @@ async fn initial_pi_input_uses_the_shared_socket_after_ready() {
         .unwrap()
         .unwrap()
         .unwrap();
-    server.await.unwrap();
+    assert_eq!(*channel.input.lock().unwrap(), vec!["initial input"]);
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
         .fetch_one(&pool)
         .await

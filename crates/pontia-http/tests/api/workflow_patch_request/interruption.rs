@@ -104,6 +104,7 @@ async fn reported_requester_interruption_starts_one_replanner() {
     )
     .await;
     let turn = EventIngestService::new(app.db.clone())
+        .with_clients(crate::common::clients::clients())
         .get_turn("turn_patch_request")
         .await
         .unwrap()

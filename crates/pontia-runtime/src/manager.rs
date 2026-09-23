@@ -30,11 +30,16 @@ impl GenericRuntimeManager {
         request: RuntimeStartRequest,
         restart_count: i64,
     ) -> Result<RuntimeStartResult> {
+        let client_spec =
+            agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
+                Error::Domain(format!("unsupported client_type: {}", request.client_type))
+            })?;
         self.start_session_with_restart_count_and_reuse_target(
             pontia_home,
             request,
             restart_count,
             None,
+            client_spec,
         )
     }
 
@@ -44,11 +49,8 @@ impl GenericRuntimeManager {
         request: RuntimeStartRequest,
         restart_count: i64,
         reuse_target: Option<(&str, &str)>,
+        client_spec: &agent_clients::AgentClientSpec,
     ) -> Result<RuntimeStartResult> {
-        let client_spec =
-            agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
-                Error::Domain(format!("unsupported client_type: {}", request.client_type))
-            })?;
         let capabilities = if client_spec.adapter.runtime == RuntimeBehavior::InProcess {
             agent_clients::in_process_capabilities(&request.client_type)
                 .unwrap_or_else(|| client_spec.capabilities.clone())
@@ -64,9 +66,7 @@ impl GenericRuntimeManager {
             return in_process::start_session(pontia_home, request, capabilities, restart_count);
         }
 
-        let start_command = client_spec
-            .tmux_runtime()
-            .map(|runtime| script::tmux_start_command(&request, runtime, false));
+        let start_command = request.start_command.clone();
         let base_tmux_session = tmux::tmux_session_name(&request);
         let reuse_target = reuse_target
             .filter(|(socket_path, pane_id)| tmux::is_reusable_shell_pane(socket_path, pane_id));
@@ -97,6 +97,7 @@ impl GenericRuntimeManager {
             &request,
             &launch_id,
             &runtime_instance_id,
+            client_spec,
         )?;
         let quoted_launch_script_path = script::shell_quote_path(&launch_script_path);
         let launch_command =
@@ -165,7 +166,10 @@ impl GenericRuntimeManager {
         if let Some((metadata_key, path)) = hook_log_metadata
             && let Some(object) = metadata.as_object_mut()
         {
-            object.insert(metadata_key.to_string(), json!(path));
+            object.insert(
+                "client_diagnostics".to_string(),
+                json!({metadata_key: path}),
+            );
         }
         Ok(RuntimeStartResult {
             runtime_kind: "tmux".to_string(),

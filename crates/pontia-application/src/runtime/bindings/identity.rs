@@ -23,14 +23,14 @@ impl RuntimeBindingUpsertService {
         &self,
         request: &RuntimeBindingUpsertRequest,
     ) -> Result<Option<String>> {
-        if request.client_type == "pi"
+        if let Some(hint) = &self.session_identity_hint
             && let Some(session_id) = sqlx::query_scalar(
                 r#"SELECT s.session_id
                    FROM sessions s
                    LEFT JOIN agent_bindings a ON a.session_id = s.session_id
                    WHERE s.session_id = ? AND s.client_type = ? AND a.id IS NULL"#,
             )
-            .bind(&request.client_session_key)
+            .bind(hint)
             .bind(&request.client_type)
             .fetch_optional(&self.pool)
             .await?

@@ -19,7 +19,8 @@ async fn app() -> (tempfile::TempDir, AppState, String) {
     let request: CreateSessionRequest =
         serde_json::from_value(json!({"client_type":"codex","workspace":root.path()})).unwrap();
     let created = SessionCommandService::new(
-        pontia_application::EventIngestService::new(pool.clone()),
+        pontia_application::EventIngestService::new(pool.clone())
+            .with_clients(crate::common::clients::clients()),
         root.path().into(),
     )
     .create_session(request)
@@ -38,7 +39,9 @@ async fn app() -> (tempfile::TempDir, AppState, String) {
         })
         .await
         .unwrap();
-    let state = AppState::builder(pool, root.path().into()).build();
+    let state = AppState::builder(pool, root.path().into())
+        .clients(crate::common::clients::clients())
+        .build();
     (root, state, session)
 }
 

@@ -48,9 +48,10 @@ struct LifecycleState {
 }
 
 struct IntegrationState {
+    clients: crate::clients::ClientRegistry,
     git_refresh: GitRefreshCoordinator,
     idempotency: IdempotencyCoordinator,
-    pi_control: crate::PiControlService,
+    client_control: crate::ClientControlService,
 }
 
 impl AppState {
@@ -60,10 +61,12 @@ impl AppState {
 
     pub(super) fn from_builder(builder: AppStateBuilder) -> Self {
         let ingest = crate::EventIngestService::new(builder.db.clone())
+            .with_clients(builder.clients.clone())
             .with_reporting_dependencies(
-                builder.pi_control.clone(),
+                builder.client_control.clone(),
                 builder.agent_events.clone(),
-                crate::LiveOutputService::new(builder.db.clone(), builder.live_output.clone()),
+                crate::LiveOutputService::new(builder.db.clone(), builder.live_output.clone())
+                    .with_clients(builder.clients.clone()),
                 builder.volatile_events.clone(),
             );
         Self {
@@ -85,12 +88,17 @@ impl AppState {
                     shutdown: builder.shutdown,
                 },
                 integrations: IntegrationState {
+                    clients: builder.clients,
                     git_refresh: builder.git_refresh,
                     idempotency: builder.idempotency,
-                    pi_control: builder.pi_control,
+                    client_control: builder.client_control,
                 },
             }),
         }
+    }
+
+    pub fn clients(&self) -> crate::clients::ClientRegistry {
+        self.inner.integrations.clients.clone()
     }
 
     pub fn db(&self) -> SqlitePool {
@@ -127,6 +135,7 @@ impl AppState {
 
     pub fn live_output(&self) -> LiveOutputService {
         LiveOutputService::new(self.db(), self.inner.events.live_output.clone())
+            .with_clients(self.clients())
     }
 
     pub fn event_ingest_service(&self) -> crate::EventIngestService {
@@ -137,8 +146,8 @@ impl AppState {
         self.inner.integrations.git_refresh.clone()
     }
 
-    pub fn pi_control(&self) -> crate::PiControlService {
-        self.inner.integrations.pi_control.clone()
+    pub fn client_control(&self) -> crate::ClientControlService {
+        self.inner.integrations.client_control.clone()
     }
 
     pub fn idempotency(&self) -> IdempotencyCoordinator {
@@ -162,6 +171,7 @@ impl AppState {
             .live_output(self.inner.events.live_output.clone())
             .git_refresh(self.git_refresh())
             .idempotency(self.idempotency())
-            .pi_control(self.pi_control())
+            .client_control(self.client_control())
+            .clients(self.clients())
     }
 }

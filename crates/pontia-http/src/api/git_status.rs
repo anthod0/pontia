@@ -18,7 +18,7 @@ pub async fn get_workspace_git_status(
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db());
+    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
     let git_status = service
         .get_workspace_git_status(&workspace_id)
         .await?

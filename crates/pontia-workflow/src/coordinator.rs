@@ -139,8 +139,11 @@ where
         }
     }
 
-    pub fn with_pi_control(mut self, control: pontia_application::PiControlService) -> Self {
-        self.inbox = self.inbox.with_pi_control(control);
+    pub fn with_client_control(
+        mut self,
+        control: pontia_application::ClientControlService,
+    ) -> Self {
+        self.inbox = self.inbox.with_client_control(control);
         self
     }
 

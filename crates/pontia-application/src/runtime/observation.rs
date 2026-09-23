@@ -4,7 +4,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 use tokio::sync::watch;
 
-use pontia_agent_clients::{RuntimeBehavior, get_client_spec};
+use pontia_agent_clients::RuntimeBehavior;
 use pontia_core::error::{Error, Result};
 use pontia_runtime::{GenericRuntimeManager, TmuxProcessFingerprint};
 use pontia_storage_sqlite::repositories::{
@@ -138,7 +138,7 @@ impl RuntimeObservationService {
             return Ok(());
         }
 
-        let Some(client_spec) = get_client_spec(&session.client_type) else {
+        let Some(client_spec) = self.event_ingest.clients().spec(&session.client_type) else {
             return Ok(());
         };
         match client_spec.adapter.runtime {

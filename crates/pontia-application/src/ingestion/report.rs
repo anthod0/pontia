@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::Value;
 use sqlx::SqlitePool;
 
 use pontia_core::{
@@ -24,12 +24,21 @@ pub struct ReportedFact {
 
 #[derive(Clone)]
 pub struct EventReportNormalizer {
+    clients: crate::clients::ClientRegistry,
     pool: SqlitePool,
 }
 
 impl EventReportNormalizer {
+    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
+        self.clients = clients;
+        self
+    }
+
     pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            clients: Default::default(),
+        }
     }
 
     pub async fn normalize(&self, mut fact: ReportedFact) -> Result<ReportedEvent> {
@@ -87,7 +96,10 @@ impl EventReportNormalizer {
         } else {
             EventSource::AgentClient
         };
-        let payload = normalize_payload(&session.client_type, fact.fact_type, fact.data)?;
+        let payload = match self.clients.data(&session.client_type) {
+            Some(data) => data.normalize_payload(fact.fact_type, fact.data)?,
+            None => fact.data,
+        };
 
         let event_id = if session.client_type == "codex" && fact.fact_type.is_turn_event() {
             format!(
@@ -115,79 +127,4 @@ fn event_type_can_create_turn(event_type: EventType) -> bool {
         event_type,
         EventType::TurnCreated | EventType::TurnQueued | EventType::TurnStarted
     )
-}
-
-fn normalize_payload(client_type: &str, event_type: EventType, data: Value) -> Result<Value> {
-    let object = data
-        .as_object()
-        .ok_or_else(|| Error::Domain("data must be a JSON object".to_string()))?;
-    if client_type != "pi" {
-        return Ok(data);
-    }
-
-    let payload = match event_type {
-        EventType::TurnStarted => {
-            let input_summary = object
-                .get("input_summary")
-                .or_else(|| data.pointer("/input/summary"))
-                .cloned()
-                .unwrap_or(Value::Null);
-            let previous_leaf_id = object
-                .get("previous_leaf_id")
-                .or_else(|| data.pointer("/timeline_anchor/previous_leaf_id"))
-                .cloned()
-                .unwrap_or(Value::Null);
-            let mut payload = json!({
-                "runtime_instance_id": object.get("runtime_instance_id").cloned().unwrap_or(Value::Null),
-                "input": { "summary": input_summary },
-                "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
-            });
-            if let Some(inbox_message_id) = object
-                .get("inbox_message_id")
-                .or_else(|| data.pointer("/metadata/inbox_message_id"))
-            {
-                payload["metadata"] = json!({ "inbox_message_id": inbox_message_id });
-            }
-            if let Some(topology_context) = object.get("topology_context") {
-                payload["topology_context"] = topology_context.clone();
-            }
-            payload
-        }
-        EventType::TurnOutput => json!({
-            "output": {
-                "summary": object
-                    .get("output_summary")
-                    .or_else(|| data.pointer("/output/summary"))
-                    .cloned()
-                    .unwrap_or(Value::Null),
-            }
-        }),
-        EventType::TurnCompleted | EventType::TurnInterrupted => json!({
-            "timeline_anchor": {
-                "terminal_leaf_id": object
-                    .get("terminal_leaf_id")
-                    .or_else(|| data.pointer("/timeline_anchor/terminal_leaf_id"))
-                    .cloned()
-                    .unwrap_or(Value::Null),
-            }
-        }),
-        EventType::TurnFailed => json!({
-            "failure": {
-                "message": object
-                    .get("failure_message")
-                    .or_else(|| data.pointer("/failure/message"))
-                    .cloned()
-                    .unwrap_or(Value::Null),
-            },
-            "timeline_anchor": {
-                "terminal_leaf_id": object
-                    .get("terminal_leaf_id")
-                    .or_else(|| data.pointer("/timeline_anchor/terminal_leaf_id"))
-                    .cloned()
-                    .unwrap_or(Value::Null),
-            }
-        }),
-        _ => data,
-    };
-    Ok(payload)
 }

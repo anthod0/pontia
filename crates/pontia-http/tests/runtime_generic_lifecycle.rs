@@ -3,7 +3,6 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_agent_clients::AgentClientCapabilities;
 use pontia_application::{AppState, RuntimeObservationService};
 use pontia_http as http;
 use serde_json::{Value, json};
@@ -247,7 +246,7 @@ async fn observe_missing_generic_runtime_does_not_fail_a_terminal_branch_leaf() 
 async fn observe_missing_generic_runtime_abandons_active_turn_without_forging_agent_failure() {
     let scope = GenericClientTestScope::new()
         .await
-        .with_capabilities(AgentClientCapabilities::pi_m0_default());
+        .with_capabilities(pontia_client_pi::CAPABILITIES);
     let state = test_state("generic_observe_turn_failed").await;
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;

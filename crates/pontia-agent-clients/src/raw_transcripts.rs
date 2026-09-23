@@ -1,8 +1,6 @@
-mod source;
 mod traits;
 mod types;
 
-pub(crate) use source::{read_range_from_source, source_len};
 pub use traits::{
     AgentBindingResolver, TimelineBoundaryCapturer, ToolUseParser, TurnTimelineReader,
 };

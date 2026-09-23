@@ -40,7 +40,8 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
     .await;
     let exits = RecordingExitRequester::default();
     let coordinator = WorkflowCoordinator::with_services(
-        pontia_application::EventIngestService::new(pool.clone()),
+        pontia_application::EventIngestService::new(pool.clone())
+            .with_clients(crate::test_doubles::clients()),
         PersistingSessionCreator::new(pool.clone()),
         exits.clone(),
         TestAgentEvents::new(pool.clone()),
@@ -245,7 +246,8 @@ output = "replacement.md"
     )
     .await;
     let second_coordinator = WorkflowCoordinator::with_services(
-        pontia_application::EventIngestService::new(pool.clone()),
+        pontia_application::EventIngestService::new(pool.clone())
+            .with_clients(crate::test_doubles::clients()),
         PersistingSessionCreator::with_identity(
             pool.clone(),
             "sess_replanner_second",
@@ -350,7 +352,8 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     )
     .await;
     WorkflowCoordinator::with_services(
-        pontia_application::EventIngestService::new(pool.clone()),
+        pontia_application::EventIngestService::new(pool.clone())
+            .with_clients(crate::test_doubles::clients()),
         PersistingSessionCreator::new(pool.clone()),
         RecordingExitRequester::default(),
         TestAgentEvents::new(pool.clone()),

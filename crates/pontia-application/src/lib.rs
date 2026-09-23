@@ -5,7 +5,8 @@ mod agent_events;
 mod agent_profiles;
 pub mod app;
 mod branch_replay;
-mod clients;
+mod client_control;
+pub mod clients;
 pub mod codex;
 pub mod control;
 mod git_status;
@@ -13,8 +14,6 @@ mod idempotency;
 mod inbox;
 pub mod ingestion;
 pub mod live_output;
-mod pi_control_socket;
-pub mod pi_ipc;
 pub mod queries;
 mod raw_transcripts;
 pub mod runtime;
@@ -32,8 +31,9 @@ pub use agent_profiles::{
     AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView,
     UpsertExecutionProfileRequest,
 };
-pub use app::{AppState, initialize};
+pub use app::AppState;
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
+pub use client_control::{ClientControlChannel, ClientControlOperation, ClientControlService};
 pub use control::ControlCommandOutcome;
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use idempotency::{IdempotencyCoordinator, IdempotencyOutcome};
@@ -47,7 +47,6 @@ pub use live_output::{
     LiveOutputProducer, LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshot,
     LiveOutputSnapshotReplacement, LiveOutputStreamEvent, LiveOutputSubscription, LiveOutputUpdate,
 };
-pub use pi_control_socket::{PiControlChannel, PiControlOperation, PiControlService};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
     TurnTimelineDirection, TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage,
@@ -73,5 +72,5 @@ pub use workspaces::{
     WorkspaceDirectoryListingView, WorkspaceRootConfig, WorkspaceRootView,
 };
 
-pub(crate) use app::{default_client_type, is_supported_client_type};
+pub(crate) use app::default_client_type;
 pub use workspaces::{WorkspaceRecord, get_workspace_record, upsert_workspace};

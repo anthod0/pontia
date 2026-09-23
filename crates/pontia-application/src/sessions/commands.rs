@@ -12,7 +12,7 @@ use super::{
 };
 use crate::{
     ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType, get_workspace_record,
-    is_supported_client_type, upsert_workspace,
+    upsert_workspace,
 };
 
 enum SessionManagementAction {
@@ -53,7 +53,12 @@ impl SessionCommandService {
         &self,
         request: CreateSessionRequest,
     ) -> Result<CreateSessionOutcome> {
-        if !is_supported_client_type(&request.client_type) {
+        if self
+            .event_ingest
+            .clients()
+            .spec(&request.client_type)
+            .is_none()
+        {
             return Err(pontia_core::error::Error::Domain(format!(
                 "unsupported client_type: {}",
                 request.client_type
@@ -136,7 +141,7 @@ impl SessionCommandService {
         let adapter = crate::clients::ClientAdapter::new(
             &request.client_type,
             self.event_ingest.clone(),
-            self.pi_control.clone(),
+            self.client_control.clone(),
         )?;
         if !adapter.prepares_on_input() {
             ingest
@@ -184,7 +189,7 @@ impl SessionCommandService {
                     .await?;
             }
             return Ok(CreateSessionOutcome {
-                data: json!({"session":ExternalQueryService::new(self.pool.clone()).get_session(&session_id).await?}),
+                data: json!({"session":ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients()).get_session(&session_id).await?}),
                 duplicate: false,
             });
         };
@@ -211,8 +216,8 @@ impl SessionCommandService {
             .await?;
 
         let mut turns = crate::TurnCommandService::new(self.event_ingest.clone());
-        if let Some(pi) = &self.pi_control {
-            turns = turns.with_pi_control(pi.clone());
+        if let Some(pi) = &self.client_control {
+            turns = turns.with_client_control(pi.clone());
         }
         let initial_turn = if let Some(task) = &request.initial_task {
             turns
@@ -221,7 +226,8 @@ impl SessionCommandService {
         } else {
             None
         };
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(&session_id)
             .await?
@@ -291,7 +297,8 @@ impl SessionCommandService {
             return Err(Error::NotFound(format!("session {session_id} not found")));
         }
 
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let session = query
             .get_session(session_id)
             .await?
@@ -304,7 +311,8 @@ impl SessionCommandService {
         session_id: &str,
         request: UpdateSessionRequest,
     ) -> Result<Value> {
-        let query = ExternalQueryService::new(self.pool.clone());
+        let query =
+            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
         let existing = query
             .get_session(session_id)
             .await?

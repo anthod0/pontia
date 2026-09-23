@@ -138,10 +138,12 @@ impl TestAppBuilder {
     }
 
     fn build_app_state(self, db: SqlitePool, pontia_home: PathBuf) -> AppState {
-        let mut builder = AppState::builder(db, pontia_home).external_api_token(
-            self.external_api_token
-                .unwrap_or_else(|| Some("test-token".to_string())),
-        );
+        let mut builder = AppState::builder(db, pontia_home)
+            .clients(crate::common::clients::clients())
+            .external_api_token(
+                self.external_api_token
+                    .unwrap_or_else(|| Some("test-token".to_string())),
+            );
         if let Some(workspace_browser) = self.workspace_browser {
             builder = builder.workspace_browser(workspace_browser);
         }

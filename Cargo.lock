@@ -1729,10 +1729,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "pontia-config"
+name = "pontia-client-pi"
 version = "0.2.1"
 dependencies = [
  "pontia-agent-clients",
+ "pontia-application",
+ "pontia-config",
+ "pontia-core",
+ "pontia-runtime",
+ "pontia-storage-sqlite",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "pontia-config"
+version = "0.2.1"
+dependencies = [
  "pontia-core",
  "serde",
  "tempfile",
@@ -1783,6 +1799,7 @@ dependencies = [
  "http-body-util",
  "pontia-agent-clients",
  "pontia-application",
+ "pontia-client-pi",
  "pontia-config",
  "pontia-core",
  "pontia-runtime",
@@ -1810,7 +1827,6 @@ dependencies = [
  "futures-util",
  "libc",
  "pontia-agent-clients",
- "pontia-config",
  "pontia-core",
  "serde",
  "serde_json",
@@ -1857,6 +1873,7 @@ dependencies = [
 name = "pontia-workflow"
 version = "0.2.1"
 dependencies = [
+ "pontia-agent-clients",
  "pontia-application",
  "pontia-core",
  "pontia-storage-sqlite",
@@ -1881,6 +1898,7 @@ dependencies = [
  "http-body-util",
  "pontia-agent-clients",
  "pontia-application",
+ "pontia-client-pi",
  "pontia-config",
  "pontia-core",
  "pontia-edge",

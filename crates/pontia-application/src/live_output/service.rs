@@ -1,4 +1,3 @@
-use pontia_agent_clients::get_client_spec;
 use pontia_core::{
     domain::TurnState,
     error::{Error, Result},
@@ -18,13 +17,23 @@ use super::{
 
 #[derive(Clone)]
 pub struct LiveOutputService {
+    clients: crate::clients::ClientRegistry,
     pool: SqlitePool,
     store: LiveOutputStore,
 }
 
 impl LiveOutputService {
+    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
+        self.clients = clients;
+        self
+    }
+
     pub(crate) fn new(pool: SqlitePool, store: LiveOutputStore) -> Self {
-        Self { pool, store }
+        Self {
+            pool,
+            store,
+            clients: Default::default(),
+        }
     }
 
     pub async fn publish_batch(&self, batch: LiveOutputBatch) -> Result<LiveOutputPublishOutcome> {
@@ -74,7 +83,9 @@ impl LiveOutputService {
             .get_session(&identity.session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {} not found", identity.session_id)))?;
-        let supports_streaming = get_client_spec(&session.client_type)
+        let supports_streaming = self
+            .clients
+            .spec(&session.client_type)
             .is_some_and(|spec| spec.capabilities.stream_output);
         if !supports_streaming {
             return Err(Error::CapabilityUnavailable(format!(

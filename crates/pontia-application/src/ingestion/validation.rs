@@ -6,11 +6,18 @@ use pontia_core::{
 };
 
 #[derive(Clone, Default)]
-pub struct InternalEventValidationService;
+pub struct InternalEventValidationService {
+    clients: crate::clients::ClientRegistry,
+}
 
 impl InternalEventValidationService {
+    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
+        self.clients = clients;
+        self
+    }
+
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 
     pub fn validate(&self, event: &DomainEvent) -> Result<()> {
@@ -26,7 +33,10 @@ impl InternalEventValidationService {
                         .to_string(),
                 ));
             }
-            if pontia_agent_clients::client_session_identity_required_on_ready(&event.client_type) {
+            if self.clients.spec(&event.client_type).is_some_and(|spec| {
+                spec.adapter.client_session_identity
+                    == pontia_agent_clients::ClientSessionIdentityBehavior::RequiredOnReady
+            }) {
                 let client_session_key = event
                     .payload
                     .get("client_session_key")

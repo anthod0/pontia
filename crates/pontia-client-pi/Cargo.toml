@@ -1,0 +1,21 @@
+[package]
+name = "pontia-client-pi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pontia-application.workspace = true
+pontia-agent-clients.workspace = true
+pontia-core.workspace = true
+pontia-runtime.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt", "sync", "time", "net", "io-util", "macros"] }
+
+[dev-dependencies]
+pontia-storage-sqlite.workspace = true
+pontia-config.workspace = true
+sqlx.workspace = true
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread"] }

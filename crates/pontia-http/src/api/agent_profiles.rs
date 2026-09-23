@@ -33,7 +33,7 @@ pub async fn list_agent_profiles(
     Query(query): Query<AgentProfilesQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db());
+    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let profiles = if query.include_archived {
         service.list_latest_including_archived().await?
     } else {
@@ -48,7 +48,7 @@ pub async fn get_agent_profile(
     Path(profile_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db());
+    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let profile = service
         .get_latest(&profile_id)
         .await?
@@ -62,7 +62,7 @@ pub async fn create_agent_profile(
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db());
+    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let outcome = idempotent(&state, &headers, "create_agent_profile", || async move {
         Ok(service.create_profile(request).await?.data)
     })
@@ -81,7 +81,7 @@ pub async fn delete_agent_profile(
     Path(profile_id): Path<String>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db());
+    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let operation = format!("archive_agent_profile:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.archive_profile(&profile_id).await?.data)
@@ -97,7 +97,7 @@ pub async fn list_agent_profile_versions(
     Query(query): Query<AgentProfileVersionsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db());
+    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let versions = service
         .list_versions(&profile_id, query.include_archived)
         .await?;
@@ -116,7 +116,7 @@ pub async fn create_agent_profile_version(
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db());
+    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let operation = format!("create_agent_profile_version:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service
@@ -139,7 +139,7 @@ pub async fn get_agent_profile_version(
     Path((profile_id, version)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db());
+    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let profile = service
         .get_version(&profile_id, &version)
         .await?
@@ -156,7 +156,7 @@ pub async fn update_agent_profile_version(
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db());
+    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let operation = format!("update_agent_profile_version:{profile_id}:{version}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service
@@ -174,7 +174,7 @@ pub async fn delete_agent_profile_version(
     Path((profile_id, version)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = AgentProfileService::new(state.db());
+    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let operation = format!("archive_agent_profile_version:{profile_id}:{version}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.archive_version(&profile_id, &version).await?.data)

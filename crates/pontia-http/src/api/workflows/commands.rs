@@ -92,7 +92,7 @@ pub async fn run_workflow(
             state.event_ingest_service(),
             state.pontia_home().to_path_buf(),
         )
-        .with_pi_control(state.pi_control()),
+        .with_client_control(state.client_control()),
         state.pontia_home().to_path_buf(),
     );
     let outcome = scheduler
@@ -208,7 +208,7 @@ pub async fn submit_workflow_output(
             state.event_ingest_service(),
             state.pontia_home().to_path_buf(),
         )
-        .with_pi_control(state.pi_control()),
+        .with_client_control(state.client_control()),
         state.pontia_home().to_path_buf(),
     );
     scheduler

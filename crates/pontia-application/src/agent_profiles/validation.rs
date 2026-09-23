@@ -2,14 +2,16 @@ use pontia_core::error::{Error, Result};
 use serde_json::Value;
 
 use super::{ExecutionProfileView, UpsertExecutionProfileRequest};
-use crate::is_supported_client_type;
 
-pub(super) fn validate_request(request: &UpsertExecutionProfileRequest) -> Result<()> {
+pub(super) fn validate_request(
+    clients: &crate::clients::ClientRegistry,
+    request: &UpsertExecutionProfileRequest,
+) -> Result<()> {
     validate_non_empty("profile_id", &request.profile_id)?;
     validate_non_empty("version", &request.version)?;
     validate_non_empty("name", &request.name)?;
     for client_type in &request.supported_client_types {
-        if !is_supported_client_type(client_type) {
+        if clients.spec(client_type).is_none() {
             return Err(Error::Domain(format!(
                 "unsupported client_type in supported_client_types: {client_type}"
             )));

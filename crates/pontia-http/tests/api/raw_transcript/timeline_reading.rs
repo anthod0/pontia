@@ -273,6 +273,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
     );
 
     let active_turn = EventIngestService::new(state.db())
+        .with_clients(crate::common::clients::clients())
         .get_turn("turn_active")
         .await
         .unwrap()
@@ -319,6 +320,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
     );
     assert!(
         EventIngestService::new(state.db())
+            .with_clients(crate::common::clients::clients())
             .get_turn("turn_active")
             .await
             .unwrap()
@@ -345,6 +347,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
     assert_eq!(sealed["data"]["items"], grown["data"]["items"]);
     assert!(
         EventIngestService::new(state.db())
+            .with_clients(crate::common::clients::clients())
             .get_turn("turn_active")
             .await
             .unwrap()

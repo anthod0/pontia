@@ -1,3 +1,4 @@
+mod initialization;
 use pontia_application as application;
 use pontia_config::AppConfig;
 use pontia_core::error::Result;
@@ -26,8 +27,8 @@ async fn main() -> Result<()> {
     })?;
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
-    let app_state = application::initialize(&config).await?;
-    let pi_listener = application::pi_ipc::PiIpcListener::bind(&config.pontia_home).await?;
+    let app_state = initialization::initialize(&config).await?;
+    let pi_listener = pontia_client_pi::ipc::PiIpcListener::bind(&config.pontia_home).await?;
     let pi_task =
         tokio::spawn(pi_listener.run(app_state.clone(), app_state.shutdown().subscribe()));
     let remote_task =
@@ -40,7 +41,7 @@ async fn main() -> Result<()> {
         .run(app_state.shutdown().subscribe()),
     );
     let inbox = application::InboxCommandService::new(app_state.event_ingest_service());
-    let pi_control = app_state.pi_control();
+    let client_control = app_state.client_control();
     let runtime_observer =
         application::RuntimeObservationService::new(app_state.event_ingest_service());
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
@@ -50,11 +51,11 @@ async fn main() -> Result<()> {
             app_state.event_ingest_service(),
             app_state.pontia_home().to_path_buf(),
         )
-        .with_pi_control(app_state.pi_control()),
+        .with_client_control(app_state.client_control()),
         app_state.agent_events(),
         app_state.pontia_home().to_path_buf(),
     );
-    let workflow_coordinator = workflow_coordinator.with_pi_control(app_state.pi_control());
+    let workflow_coordinator = workflow_coordinator.with_client_control(app_state.client_control());
     tokio::spawn(workflow_coordinator.run(app_state.shutdown().subscribe()));
     let dashboard =
         http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;
@@ -79,7 +80,7 @@ async fn main() -> Result<()> {
     .await;
 
     cleanup_shutdown.notify();
-    pi_control.close().await;
+    client_control.close().await;
     pi_task
         .await
         .map_err(|error| pontia_core::Error::Domain(error.to_string()))??;

@@ -142,7 +142,7 @@ fn runtime_payload(runtime_instance_id: &str, payload: Value) -> Value {
 async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime() {
     let _scope = GenericClientTestScope::new()
         .await
-        .with_capabilities(AgentClientCapabilities::pi_m0_default());
+        .with_capabilities(pontia_client_pi::CAPABILITIES);
     let state = test_state("generic_contract_pi_like_capabilities").await;
     let session_id = create_session(state.clone()).await;
 
