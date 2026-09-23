@@ -159,10 +159,10 @@ const modelCatalog = {
   ],
 };
 
-test('/model searches and changes the model, waiting for a client fact before updating', async () => {
+test.each(['codex', 'pi'])('/model searches and changes the %s model, waiting for a client fact before updating', async (client_type) => {
   vi.spyOn(api, 'listSessionModels').mockResolvedValue(modelCatalog);
   const change = vi.spyOn(api, 'setSessionModel').mockResolvedValue();
-  const selected = renderChat('/model', { model: 'model-a', state: 'busy', capabilities: { list_models: true, set_model: true } });
+  const selected = renderChat('/model', { client_type, model: 'model-a', state: 'busy', capabilities: { list_models: true, set_model: true } });
   await fireEvent.click(await screen.findByRole('button', { name: 'Choose model' }));
   expect(await screen.findByRole('button', { name: 'Model A' })).toBeDisabled();
   await fireEvent.input(screen.getByRole('textbox', { name: 'Search models' }), { target: { value: 'model-b' } });

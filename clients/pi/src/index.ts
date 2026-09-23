@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { connectPi, type PiConnection, type ControlInput } from "./control-socket.js";
+import { connectPi, RpcError, type PiConnection, type ControlInput } from "./control-socket.js";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
@@ -143,12 +143,27 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let controlSocket: PiConnection | undefined;
   let controlGeneration = 0;
   let piContext: ExtensionContext | undefined;
+  let changingModel = false;
   const directInput = new AsyncLocalStorage<{
     submission: ControlInput;
     sessionContext: SessionContext;
     consumed: boolean;
   }>();
   let queuedControlInput: ControlInput | undefined;
+
+  const modelId = (model: { provider: string; id: string }) => `${model.provider}/${model.id}`;
+
+  async function reportModel(): Promise<void> {
+    const context = boundSessionContext;
+    const model = piContext?.model;
+    if (!context || !model || !readyReported || reportingDisabled) return;
+    const result = await makeReporter(currentHookLogFile()).report(context, {
+      session_id: context.sessionId,
+      type: "session.model_updated",
+      data: { model: modelId(model), runtime_instance_id: context.runtimeInstanceId },
+    });
+    if (!reportAccepted(result)) throw new Error("Pi model observation was not accepted");
+  }
 
   function sendControlInput(submission: ControlInput): void {
     if (!boundSessionContext) throw new Error("Pi session is not bound");
@@ -189,6 +204,35 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         return;
       }
       sendControlInput(submission);
+    }, {
+      listModels() {
+        if (generation !== controlGeneration || reportingDisabled || !boundSessionContext || !piContext || !readyReported) {
+          throw new Error("Pi model control session is no longer current");
+        }
+        return piContext.modelRegistry.getAvailable().map((model) => ({
+          id: modelId(model), name: model.name, description: model.provider,
+        }));
+      },
+      async setModel(id) {
+        this.listModels();
+        if (changingModel) throw new Error("Pi already has a model change in progress");
+        const model = piContext!.modelRegistry.getAvailable().find((model) => modelId(model) === id);
+        if (!model) throw new Error("The selected model is not available");
+        changingModel = true;
+        try {
+          if (!await pi.setModel(model)) throw new RpcError(-32006, "Pi could not authenticate the selected model");
+          this.listModels();
+          // Selecting the current model does not emit model_select; observe it again.
+          await reportModel();
+        } catch (error) {
+          if (error instanceof RpcError) throw error;
+          throw new RpcError(-32007, `Pi model change outcome is unknown: ${error instanceof Error ? error.message : String(error)}`);
+        } finally { changingModel = false; }
+      },
+      async onReconnect() {
+        if (generation !== controlGeneration) throw new Error("Pi session changed during reconnect");
+        await reportModel();
+      },
     });
     if (generation !== controlGeneration) {
       await socket.close();
@@ -361,7 +405,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const usageJson = JSON.stringify(observation);
     if (usageJson === lastContextUsageJson) return;
     lastContextUsageJson = usageJson;
-    await activeTurn.reporter.report(activeTurn.context, buildSessionContextUsageUpdatedEvent(activeTurn.context, observation.context_usage, observation.model));
+    await activeTurn.reporter.report(activeTurn.context, buildSessionContextUsageUpdatedEvent(activeTurn.context, observation.context_usage));
   }
 
   pi.on("before_agent_start", async (event) => {
@@ -388,6 +432,11 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       });
       return { systemPrompt: currentSystemPrompt };
     }
+  });
+
+  pi.on("model_select", async (_event, ctx) => {
+    piContext = ctx;
+    await reportModel().catch(controlError);
   });
 
   pi.on("session_start", async (event, ctx) => {
@@ -480,6 +529,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       piContext = ctx;
       controlSocket!.registered(context);
       readyReported = reportAccepted(await makeReporter(logFile).report(context, buildSessionReadyEvent(context)));
+      await reportModel().catch(controlError);
     } catch (error) {
       await closeControlSocket();
       const logFile = currentHookLogFile();
@@ -568,6 +618,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
             piContext = ctx;
             controlSocket!.registered(boundSessionContext);
             readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
+            await reportModel().catch(controlError);
           }
         }
         if (boundSessionContext) {

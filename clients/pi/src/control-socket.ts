@@ -1,7 +1,7 @@
 import { createConnection, type Socket } from "node:net";
 import { isAbsolute, join } from "node:path";
 
-export const CONTROL_VERSION = 3;
+export const CONTROL_VERSION = 4;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
 // Match the former HTTP event body limit, including the RPC envelope.
 export const MAX_RPC_FRAME_BYTES = 2 * 1024 * 1024 + 1024;
@@ -13,6 +13,12 @@ export interface ControlIdentity {
   clientSessionKey?: string;
 }
 export interface ControlInput { input: string; inboxMessageId?: string }
+export interface PiModel { id: string; name: string; description: string }
+export interface ModelControl {
+  listModels(): PiModel[];
+  setModel(model: string): Promise<void>;
+  onReconnect(): Promise<void>;
+}
 export interface PiConnection {
   request(method: string, params: object): Promise<unknown>;
   registered(identity: ControlIdentity): void;
@@ -39,10 +45,12 @@ class RpcSocket {
 
   private socket: Socket;
   private onSubmit: (input: ControlInput) => void;
+  private models?: ModelControl;
 
-  constructor(socket: Socket, onSubmit: (input: ControlInput) => void) {
+  constructor(socket: Socket, onSubmit: (input: ControlInput) => void, models?: ModelControl) {
     this.socket = socket;
     this.onSubmit = onSubmit;
+    this.models = models;
     socket.on("data", (chunk: Buffer) => this.receive(chunk));
     socket.on("error", (error) => this.fail(error));
     socket.on("close", () => this.fail(new Error("Pi RPC connection closed; requests were not replayed")));
@@ -118,6 +126,25 @@ class RpcSocket {
       const params = message.params === undefined ? {} : message.params;
       if (!params || typeof params !== "object" || Array.isArray(params)) { error(-32602, "Expected named parameters"); return; }
       if (message.method === "ping") { respond({ result: { pong: true } }); return; }
+      if (this.models && (message.method === "models.list" || message.method === "model.set")) {
+        const models = this.models;
+        if (message.method === "model.set" && (typeof params.model !== "string" || !params.model.trim())) {
+          error(-32602, "model.set requires a non-empty model"); return;
+        }
+        // Keep reading responses while setModel emits an acknowledged model fact.
+        void (async () => {
+          try {
+            if (message.method === "models.list") respond({ result: { models: models.listModels() } });
+            else {
+              await models.setModel(params.model);
+              respond({ result: { accepted: true } });
+            }
+          } catch (failure) {
+            error(failure instanceof RpcError ? failure.code : -32006, failure instanceof Error ? failure.message : String(failure));
+          }
+        })().catch((failure) => this.fail(failure));
+        return;
+      }
       if (message.method !== "submit") { error(-32601, "Unknown Pi control method"); return; }
       if (Buffer.byteLength(JSON.stringify(message)) > MAX_CONTROL_FRAME_BYTES) { error(-32602, "Pi submit frame exceeds 64 KiB"); return; }
       if (typeof params.input !== "string" || !params.input.trim()
@@ -147,6 +174,7 @@ export async function connectPi(
   pontiaHome: string,
   onError: (error: Error) => void,
   onSubmit: (input: ControlInput) => void,
+  models?: ModelControl,
 ): Promise<PiConnection> {
   const path = piSocketPath(pontiaHome);
   let identity: ControlIdentity | undefined;
@@ -186,7 +214,7 @@ export async function connectPi(
       });
     } finally { connecting.delete(socket); }
     if (stopped) { socket.destroy(); throw new Error("Pi connection is closed"); }
-    const peer = new RpcSocket(socket, reportingOnly ? () => { throw new Error("Pi reporting connection cannot accept input"); } : onSubmit);
+    const peer = new RpcSocket(socket, reportingOnly ? () => { throw new Error("Pi reporting connection cannot accept input"); } : onSubmit, reportingOnly ? undefined : models);
     peers.add(peer);
     socket.once("close", () => {
       peers.delete(peer);
@@ -211,6 +239,7 @@ export async function connectPi(
         }
         attached = true;
         wakeRequests();
+        await models?.onReconnect();
       } catch (error) {
         onError(error instanceof Error ? error : new Error(String(error)));
         // A rejected identity cannot be repaired by repeating registration.

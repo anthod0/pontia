@@ -4,7 +4,7 @@ import type { SessionContext } from "./session.js";
 const MAX_TURN_INPUT_CHARS = 200;
 const MAX_TURN_OUTPUT_CHARS = 200;
 
-export type InternalEventType = "session.ready" | "session.exited" | "session.message_updated" | "session.context_usage_updated" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed" | "turn.interrupted";
+export type InternalEventType = "session.ready" | "session.exited" | "session.model_updated" | "session.message_updated" | "session.context_usage_updated" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed" | "turn.interrupted";
 
 export interface ContextUsagePayload {
   used_tokens: number | null;

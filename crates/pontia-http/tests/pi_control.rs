@@ -216,3 +216,180 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
     task.await.unwrap().unwrap();
     restarted.pi_control().close().await;
 }
+
+async fn model_request(
+    state: &AppState,
+    method: &str,
+    resource: &str,
+    body: Value,
+) -> (StatusCode, Value) {
+    let response = pontia_http::router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(format!("/external/v1/sessions/sess_models/{resource}"))
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer token")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    (
+        response.status(),
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap(),
+    )
+}
+
+#[tokio::test]
+async fn pi_models_use_the_bound_client_and_only_reported_facts_update_the_current_model() {
+    let (state, _root) = state().await;
+    bind(&state, "sess_models", "rt_models").await;
+    let (client, mut requests) = attach(&state, "sess_models", "rt_models").await;
+    let catalog = json!({"models":[
+        {"id":"one/shared", "name":"First", "description":"one"},
+        {"id":"two/shared", "name":"Second", "description":"two"}
+    ]});
+    let task = {
+        let state = state.clone();
+        tokio::spawn(async move { model_request(&state, "GET", "models", Value::Null).await })
+    };
+    let request = requests.recv().await.unwrap();
+    assert_eq!(request.method, "models.list");
+    client.reply(request.id, catalog.clone()).await.unwrap();
+    let (status, body) = task.await.unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["models"], catalog["models"]);
+    assert_eq!(body["data"]["runtime_instance_id"], "rt_models");
+    let change = json!({"model":"two/shared", "runtime_instance_id":"rt_models"});
+    let task = {
+        let state = state.clone();
+        let change = change.clone();
+        tokio::spawn(async move { model_request(&state, "PATCH", "model", change).await })
+    };
+    let request = requests.recv().await.unwrap();
+    assert_eq!(request.method, "model.set");
+    assert_eq!(request.params, json!({"model":"two/shared"}));
+    client
+        .reply(request.id, json!({"accepted":true}))
+        .await
+        .unwrap();
+    assert!(task.await.unwrap().0.is_success());
+    let query = pontia_application::ExternalQueryService::new(state.db());
+    assert_eq!(
+        query
+            .get_session("sess_models")
+            .await
+            .unwrap()
+            .unwrap()
+            .model,
+        None
+    );
+    state
+        .event_ingest_service()
+        .report_fact(pontia_application::ReportedFact {
+            session_id: "sess_models".into(),
+            turn_id: None,
+            fact_type: pontia_core::domain::EventType::SessionModelUpdated,
+            data: json!({"model":"two/shared", "runtime_instance_id":"rt_models"}),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        query
+            .get_session("sess_models")
+            .await
+            .unwrap()
+            .unwrap()
+            .model
+            .as_deref(),
+        Some("two/shared")
+    );
+    let stale = json!({"model":"one/shared", "runtime_instance_id":"rt_old"});
+    assert_eq!(
+        model_request(&state, "PATCH", "model", stale).await.0,
+        StatusCode::CONFLICT
+    );
+    assert!(requests.try_recv().is_err());
+    let task = {
+        let state = state.clone();
+        tokio::spawn(async move { model_request(&state, "PATCH", "model", change).await })
+    };
+    let request = requests.recv().await.unwrap();
+    client
+        .reply_error(request.id, -32006, "Model authentication failed")
+        .await
+        .unwrap();
+    assert!(!task.await.unwrap().0.is_success());
+    assert_eq!(
+        query
+            .get_session("sess_models")
+            .await
+            .unwrap()
+            .unwrap()
+            .model
+            .as_deref(),
+        Some("two/shared")
+    );
+    state.pi_control().close().await;
+    assert!(
+        !model_request(&state, "GET", "models", Value::Null)
+            .await
+            .0
+            .is_success()
+    );
+}
+
+#[tokio::test]
+async fn model_requests_reject_malformed_catalogs_and_runtime_replacement() {
+    let (state, _root) = state().await;
+    bind(&state, "sess_models", "rt_models").await;
+    let (client, mut requests) = attach(&state, "sess_models", "rt_models").await;
+    let task = {
+        let control = state.pi_control();
+        tokio::spawn(async move {
+            control
+                .set_model("sess_models", "rt_models", "one/shared")
+                .await
+        })
+    };
+    let request = requests.recv().await.unwrap();
+    client
+        .reply_error(request.id, -32007, "Observation acknowledgement lost")
+        .await
+        .unwrap();
+    assert!(matches!(
+        task.await.unwrap(),
+        Err(pontia_core::Error::ControlUnknown(_))
+    ));
+    let task = {
+        let control = state.pi_control();
+        tokio::spawn(async move { control.list_models("sess_models", "rt_models").await })
+    };
+    let request = requests.recv().await.unwrap();
+    let model = json!({"id":"one/shared", "name":"Model", "description":"one"});
+    client
+        .reply(request.id, json!({"models":[model, model]}))
+        .await
+        .unwrap();
+    assert!(matches!(
+        task.await.unwrap(),
+        Err(pontia_core::Error::ControlUnknown(_))
+    ));
+    let task = {
+        let control = state.pi_control();
+        tokio::spawn(async move {
+            control
+                .set_model("sess_models", "rt_models", "one/shared")
+                .await
+        })
+    };
+    requests.recv().await.unwrap();
+    bind(&state, "sess_models", "rt_new").await;
+    let (_new, _requests) = attach(&state, "sess_models", "rt_new").await;
+    assert!(matches!(
+        task.await.unwrap(),
+        Err(pontia_core::Error::ControlUnknown(_))
+    ));
+    state.pi_control().close().await;
+}

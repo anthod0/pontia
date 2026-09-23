@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
 import { onTestFinished, expect, test, vi } from "vitest";
-import { connectPi, piSocketPath, MAX_RPC_FRAME_BYTES } from "../src/control-socket.js";
+import { connectPi, piSocketPath, MAX_RPC_FRAME_BYTES, RpcError } from "../src/control-socket.js";
 import { EventReporter } from "../src/reporter.js";
 import { buildTurnStartedEvent } from "../src/events.js";
 import { tempDir } from "./temp-dir.js";
@@ -164,4 +164,54 @@ test("new event reports wait for reconnect attachment before they are sent", asy
   await vi.waitFor(() => expect(methods).toContain("runtime.attach"));
   await expect(client.request("event.report", {})).resolves.toEqual({ accepted: true });
   expect(methods).toEqual(["break", "runtime.attach", "event.report"]);
+});
+
+test("model control can report a confirmed fact before replying and refreshes it after reconnect", async () => {
+  const responses: any[] = [];
+  const methods: string[] = [];
+  const root = await server((socket, message) => {
+    if (!message.method) { responses.push(message); return; }
+    methods.push(message.method);
+    if (message.method === "begin") {
+      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "models.list" })}\n`);
+      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "set", method: "model.set", params: { model: "provider/model" } })}\n`);
+    }
+    if (message.method === "break") { socket.destroy(); return; }
+    reply(socket, message.id, message.method === "runtime.attach" ? { session_id: "s", runtime_instance_id: "r" } : { accepted: true });
+  });
+  const model = { id: "provider/model", name: "Model", description: "provider" };
+  const client = await connectPi(root, () => {}, () => {}, {
+    listModels: () => [model],
+    async setModel(id) {
+      expect(id).toBe(model.id);
+      await client.request("event.report", { event: { type: "session.model_updated", data: { model: id } } });
+    },
+    async onReconnect() { await client.request("event.report", {}); },
+  });
+  onTestFinished(() => client.close());
+  client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(responses).toHaveLength(2));
+  expect(responses).toContainEqual({ jsonrpc: "2.0", id: "list", result: { models: [model] } });
+  expect(responses).toContainEqual({ jsonrpc: "2.0", id: "set", result: { accepted: true } });
+  await expect(client.request("break", {})).rejects.toThrow();
+  await vi.waitFor(() => expect(methods.slice(-2)).toEqual(["runtime.attach", "event.report"]));
+});
+
+
+test("model control preserves uncertain outcomes across the RPC boundary", async () => {
+  let result: any;
+  const root = await server((socket, message) => {
+    if (!message.method) { result = message; return; }
+    socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "set", method: "model.set", params: { model: "provider/model" } })}\n`);
+    reply(socket, message.id, {});
+  });
+  const client = await connectPi(root, () => {}, () => {}, {
+    listModels: () => [],
+    async setModel() { throw new RpcError(-32007, "Observation acknowledgement lost"); },
+    async onReconnect() {},
+  });
+  onTestFinished(() => client.close());
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(result?.error?.code).toBe(-32007));
 });

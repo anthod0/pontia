@@ -324,6 +324,12 @@ impl crate::PiControlChannel for PiChannel {
             self.peer.close();
         }
     }
+    fn list_models(&self) -> crate::PiControlOperation<'_, Vec<crate::sessions::SessionModel>> {
+        self.peer.list_models()
+    }
+    fn set_model<'a>(&'a self, model: &'a str) -> crate::PiControlOperation<'a> {
+        self.peer.set_model(model)
+    }
     fn ping(&self) -> crate::PiControlOperation<'_> {
         self.peer.ping()
     }
@@ -342,6 +348,38 @@ impl crate::PiControlChannel for PiRpcPeer {
     }
     fn invalidate(&self) {
         self.close();
+    }
+    fn list_models(&self) -> crate::PiControlOperation<'_, Vec<crate::sessions::SessionModel>> {
+        Box::pin(async {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Catalog {
+                models: Vec<crate::sessions::SessionModel>,
+            }
+            let response = self.call("models.list", json!({})).await?;
+            let catalog: Catalog = serde_json::from_value(response).map_err(|error| {
+                Error::ControlUnknown(format!("Invalid Pi models response: {error}"))
+            })?;
+            let mut ids = std::collections::HashSet::new();
+            if catalog
+                .models
+                .iter()
+                .any(|model| model.id.trim().is_empty() || !ids.insert(&model.id))
+            {
+                return Err(Error::ControlUnknown("Invalid Pi model identifiers".into()));
+            }
+            Ok(catalog.models)
+        })
+    }
+    fn set_model<'a>(&'a self, model: &'a str) -> crate::PiControlOperation<'a> {
+        Box::pin(async move {
+            if self.call("model.set", json!({"model":model})).await? != json!({"accepted":true}) {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi model change acknowledgement".into(),
+                ));
+            }
+            Ok(())
+        })
     }
     fn ping(&self) -> crate::PiControlOperation<'_> {
         Box::pin(async {

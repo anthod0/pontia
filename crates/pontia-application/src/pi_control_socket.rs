@@ -4,11 +4,13 @@ use sqlx::SqlitePool;
 use std::{collections::HashMap, future::Future, io::Write, path::PathBuf, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-pub type PiControlOperation<'a> = Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
+pub type PiControlOperation<'a, T = ()> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
 pub trait PiControlChannel: Send + Sync {
     fn available(&self) -> bool;
     fn invalidate(&self);
+    fn list_models(&self) -> PiControlOperation<'_, Vec<crate::sessions::SessionModel>>;
+    fn set_model<'a>(&'a self, model: &'a str) -> PiControlOperation<'a>;
     fn ping(&self) -> PiControlOperation<'_>;
     fn submit<'a>(
         &'a self,
@@ -123,7 +125,10 @@ impl PiControlService {
     }
 
     pub async fn ping(&self, session_id: &str, runtime_instance_id: &str) -> Result<()> {
-        self.request(session_id, runtime_instance_id, None).await
+        self.request(session_id, runtime_instance_id, |channel| async move {
+            channel.ping().await
+        })
+        .await
     }
 
     pub async fn submit(
@@ -133,20 +138,41 @@ impl PiControlService {
         input: &str,
         inbox_message_id: Option<&str>,
     ) -> Result<()> {
-        self.request(
-            session_id,
-            runtime_instance_id,
-            Some((input, inbox_message_id)),
-        )
+        self.request(session_id, runtime_instance_id, |channel| async move {
+            channel.submit(input, inbox_message_id).await
+        })
         .await
     }
 
-    async fn request(
+    pub async fn list_models(
         &self,
         session_id: &str,
         runtime_instance_id: &str,
-        submission: Option<(&str, Option<&str>)>,
+    ) -> Result<Vec<crate::sessions::SessionModel>> {
+        self.request(session_id, runtime_instance_id, |channel| async move {
+            channel.list_models().await
+        })
+        .await
+    }
+
+    pub async fn set_model(
+        &self,
+        session_id: &str,
+        runtime_instance_id: &str,
+        model: &str,
     ) -> Result<()> {
+        self.request(session_id, runtime_instance_id, |channel| async move {
+            channel.set_model(model).await
+        })
+        .await
+    }
+
+    async fn request<T, F: Future<Output = Result<T>>>(
+        &self,
+        session_id: &str,
+        runtime_instance_id: &str,
+        operation: impl FnOnce(Arc<dyn PiControlChannel>) -> F,
+    ) -> Result<T> {
         let connection = self.connection(session_id).await?.ok_or_else(|| {
             Error::CapabilityUnavailable(format!(
                 "session {session_id} has no current Pi connection"
@@ -157,10 +183,7 @@ impl PiControlService {
                 "Pi control runtime is no longer current".into(),
             ));
         }
-        let result = match submission {
-            Some((input, message)) => connection.channel.submit(input, message).await,
-            None => connection.channel.ping().await,
-        };
+        let result = operation(connection.channel.clone()).await;
         if let Err(error) = &result {
             self.record_error(session_id, error);
         }

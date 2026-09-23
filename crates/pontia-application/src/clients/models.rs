@@ -8,24 +8,49 @@ use crate::{
 
 impl ClientAdapter {
     pub async fn list_models(&self, target: &ControlTarget) -> Result<Vec<SessionModel>> {
-        if self.spec.adapter.dispatch != DispatchMode::CodexProtocol {
-            return Err(Error::CapabilityUnavailable(
+        match self.spec.adapter.dispatch {
+            DispatchMode::CodexProtocol => {
+                crate::codex::CodexService::new(self.events.clone())
+                    .list_models(target)
+                    .await
+            }
+            DispatchMode::PiControl => {
+                self.pi_models()?
+                    .list_models(&target.session_id, target.instance()?)
+                    .await
+            }
+            _ => Err(Error::CapabilityUnavailable(
                 "Client model listing is unsupported".into(),
-            ));
+            )),
         }
-        crate::codex::CodexService::new(self.events.clone())
-            .list_models(target)
-            .await
     }
 
     pub async fn set_model(&self, target: &ControlTarget, model: &str) -> ControlResult<()> {
-        if self.spec.adapter.dispatch != DispatchMode::CodexProtocol {
-            return ControlResult::Unsupported("Client model selection is unsupported".into());
-        }
         ControlResult::from_result(
-            crate::codex::CodexService::new(self.events.clone())
-                .set_model(target, model)
-                .await,
+            async {
+                match self.spec.adapter.dispatch {
+                    DispatchMode::CodexProtocol => {
+                        crate::codex::CodexService::new(self.events.clone())
+                            .set_model(target, model)
+                            .await
+                    }
+                    DispatchMode::PiControl => {
+                        self.pi_models()?
+                            .set_model(&target.session_id, target.instance()?, model)
+                            .await
+                    }
+                    _ => Err(Error::CapabilityUnavailable(
+                        "Client model selection is unsupported".into(),
+                    )),
+                }
+            }
+            .await,
         )
+    }
+
+    fn pi_models(&self) -> Result<&crate::PiControlService> {
+        self.pi
+            .as_ref()
+            .ok_or_else(|| Error::CapabilityUnavailable("Pi control service is unavailable".into()))
     }
 }

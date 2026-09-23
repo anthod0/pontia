@@ -1216,7 +1216,7 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test("reports context usage from pi extension context", async () => {
+  test("reports context usage without overwriting the separately confirmed session model", async () => {
     const { handlers, reported } = install();
 
     await handlers.agent_start({}, {});
@@ -1225,6 +1225,7 @@ describe("pontia pi extension lifecycle", () => {
       getContextUsage: () => ({ tokens: 6037, contextWindow: 128000, percent: 4.716 }),
     });
 
+    expect(reported[1].data).not.toHaveProperty("model");
     expect(reported.map((event) => event.type)).toEqual(["turn.started", "session.context_usage_updated"]);
     expect(reported[1]).toMatchObject({
       data: {
@@ -1235,7 +1236,6 @@ describe("pontia pi extension lifecycle", () => {
           usage_ratio: 0.04716,
           confidence: "estimated",
         },
-        model: "gpt-5.5",
       },
     });
   });

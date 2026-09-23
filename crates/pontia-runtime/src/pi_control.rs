@@ -15,7 +15,7 @@ use tokio::{
     sync::{mpsc, oneshot, watch},
 };
 
-pub const PROTOCOL_VERSION: u32 = 3;
+pub const PROTOCOL_VERSION: u32 = 4;
 pub const MAX_CONTROL_FRAME_BYTES: usize = 64 * 1024;
 // The former HTTP event body limit plus space for the RPC envelope.
 pub const MAX_FRAME_BYTES: usize = 2 * 1024 * 1024 + 1024;
@@ -165,6 +165,11 @@ impl PiRpcPeer {
                 )
             })?;
             if let Some(error) = response.get("error") {
+                if error["code"] == -32007 {
+                    return Err(Error::ControlUnknown(
+                        error["message"].as_str().unwrap().into(),
+                    ));
+                }
                 return Err(Error::Domain(format!(
                     "Pi RPC {}: {}",
                     error["code"], error["message"]
