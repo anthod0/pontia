@@ -32,7 +32,7 @@ async fn initial_pi_input_uses_the_shared_socket_after_ready() {
             session_id: "sess_pi".into(),
             runtime_instance_id: "rtinst_pi".into(),
             socket_path: path.display().to_string(),
-            version: 1,
+            version: pontia_runtime::pi_control::PROTOCOL_VERSION,
         })
         .await
         .unwrap();
@@ -47,11 +47,11 @@ async fn initial_pi_input_uses_the_shared_socket_after_ready() {
             let result = match method {
                 "hello" => json!({"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}),
                 _ => {
-                    assert_eq!(request["input"], "initial input");
+                    assert_eq!(request["params"]["input"], "initial input");
                     json!({"accepted":true})
                 }
             };
-            let reply = json!({"version":1,"request_id":request["request_id"],"result":result});
+            let reply = json!({"jsonrpc":"2.0","id":request["id"],"result":result});
             stream
                 .get_mut()
                 .write_all(format!("{reply}\n").as_bytes())

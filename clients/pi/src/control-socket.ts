@@ -2,9 +2,28 @@ import { mkdtemp, rmdir, stat } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { isAbsolute, join } from "node:path";
 
-export const CONTROL_VERSION = 1;
+export const CONTROL_VERSION = 2;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 5_000;
+
+type RpcId = number | string | null;
+const ERROR_CODES = {
+  parse_error: -32700,
+  invalid_request: -32600,
+  unknown_method: -32601,
+  invalid_params: -32602,
+  connection_busy: -32001,
+  handshake_required: -32002,
+  identity_mismatch: -32003,
+  handshake_timeout: -32004,
+  message_too_large: -32005,
+  submit_rejected: -32006,
+} as const;
+type ErrorKind = keyof typeof ERROR_CODES;
+
+function rpcError(id: RpcId, kind: ErrorKind, message: string) {
+  return { jsonrpc: "2.0", id, error: { code: ERROR_CODES[kind], message, data: { code: kind } } };
+}
 
 export interface ControlIdentity {
   sessionId: string;
@@ -54,9 +73,7 @@ export async function startControlSocket(
   const server = createServer((socket) => {
     socket.on("error", onError);
     if (closing || active) {
-      socket.end(`${JSON.stringify({ version: CONTROL_VERSION, request_id: null, error: {
-        code: "connection_busy", message: "Pi control endpoint already has a controller",
-      } })}\n`);
+      socket.end(`${JSON.stringify(rpcError(null, "connection_busy", "Pi control endpoint already has a controller"))}\n`);
       socket.destroySoon();
       return;
     }
@@ -66,70 +83,104 @@ export async function startControlSocket(
     let pending = Buffer.alloc(0);
 
     const respond = (message: object) => {
-      if (!socket.write(`${JSON.stringify({ version: CONTROL_VERSION, ...message })}\n`)) {
+      const encoded = JSON.stringify(message);
+      if (Buffer.byteLength(encoded) > MAX_CONTROL_FRAME_BYTES) {
+        failed = true;
+        socket.destroy(new Error("Pi control response exceeds 64 KiB"));
+        return;
+      }
+      if (!socket.write(`${encoded}\n`)) {
         socket.destroy(new Error("Pi control response backpressure limit reached"));
       }
     };
-    const fail = (code: string, message: string, requestId: string | null = null) => {
+    const fail = (kind: ErrorKind, message: string, id: RpcId = null) => {
       failed = true;
-      onError(new Error(`${code}: ${message}`));
-      respond({ request_id: requestId, error: { code, message } });
-      socket.destroySoon();
+      onError(new Error(`${kind}: ${message}`));
+      return rpcError(id, kind, message);
     };
-    const timer = setTimeout(() => fail("handshake_timeout", "Pi control handshake timed out"), HANDSHAKE_TIMEOUT_MS);
+    const timer = setTimeout(() => {
+      respond(fail("handshake_timeout", "Pi control handshake timed out"));
+      socket.destroySoon();
+    }, HANDSHAKE_TIMEOUT_MS);
     timer.unref();
     socket.on("close", () => {
       clearTimeout(timer);
       if (active === socket) active = undefined;
     });
 
-    const handle = (frame: Buffer) => {
-      let request: Record<string, unknown>;
-      try {
-        const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(frame));
-        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("expected object");
-        request = value as Record<string, unknown>;
-      } catch {
-        fail("invalid_message", "Expected a UTF-8 JSON object");
-        return;
+    const handleRequest = (value: unknown): object | undefined => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return rpcError(null, "invalid_request", "Expected a JSON-RPC request object");
       }
-      const requestId = request.request_id;
-      if (typeof requestId !== "string" || !requestId || requestId.length > 128) {
-        fail("invalid_message", "request_id must contain 1 to 128 characters");
-        return;
+      const request = value as Record<string, unknown>;
+      const hasId = Object.hasOwn(request, "id");
+      if (request.jsonrpc !== "2.0" || typeof request.method !== "string"
+        || (hasId && request.id !== null && typeof request.id !== "string" && typeof request.id !== "number")
+        || (typeof request.id === "number" && !Number.isFinite(request.id))) {
+        return rpcError(null, "invalid_request", "Invalid JSON-RPC 2.0 request");
       }
-      if (request.version !== CONTROL_VERSION) {
-        fail("unsupported_version", "Unsupported Pi control protocol version", requestId);
-      } else if (!greeted) {
+      const id = hasId ? request.id as RpcId : null;
+      const reply = (response: object) => hasId ? response : undefined;
+      const result = (data: object) => reply({ jsonrpc: "2.0", id, result: data });
+      const error = (kind: ErrorKind, message: string) => reply(rpcError(id, kind, message));
+      if (failed) return error("handshake_required", "Pi control handshake failed");
+      if (request.params !== undefined && (!request.params || typeof request.params !== "object" || Array.isArray(request.params))) {
+        return error("invalid_params", "Pi control methods require named parameters");
+      }
+      const params = (request.params ?? {}) as Record<string, unknown>;
+      if (!greeted) {
         if (request.method !== "hello") {
-          fail("handshake_required", "The first request must be hello", requestId);
-        } else if (request.session_id !== identity.sessionId || request.runtime_instance_id !== identity.runtimeInstanceId) {
-          fail("identity_mismatch", "Pi control runtime identity does not match", requestId);
-        } else {
-          greeted = true;
-          clearTimeout(timer);
-          respond({ request_id: requestId, result: {
-            session_id: identity.sessionId, runtime_instance_id: identity.runtimeInstanceId,
-          } });
+          return reply(fail("handshake_required", "The first request must be hello", id));
         }
+        if (typeof params.session_id !== "string" || typeof params.runtime_instance_id !== "string") {
+          return error("invalid_params", "hello requires session_id and runtime_instance_id");
+        }
+        if (params.session_id !== identity.sessionId || params.runtime_instance_id !== identity.runtimeInstanceId) {
+          return reply(fail("identity_mismatch", "Pi control runtime identity does not match", id));
+        }
+        greeted = true;
+        clearTimeout(timer);
+        return result({ session_id: identity.sessionId, runtime_instance_id: identity.runtimeInstanceId });
       } else if (request.method === "ping") {
-        respond({ request_id: requestId, result: { pong: true } });
+        return result({ pong: true });
       } else if (request.method === "submit") {
-        if (typeof request.input !== "string" || !request.input.trim()
-          || (request.inbox_message_id != null && (typeof request.inbox_message_id !== "string" || !request.inbox_message_id))) {
-          respond({ request_id: requestId, error: { code: "invalid_input", message: "submit requires non-empty input and an optional inbox_message_id" } });
-          return;
+        if (typeof params.input !== "string" || !params.input.trim()
+          || (params.inbox_message_id != null && (typeof params.inbox_message_id !== "string" || !params.inbox_message_id))) {
+          return error("invalid_params", "submit requires non-empty input and an optional inbox_message_id");
         }
         try {
           if (!onSubmit) throw new Error("Pi input delivery is unavailable");
-          onSubmit({ input: request.input, inboxMessageId: request.inbox_message_id as string | undefined });
-          respond({ request_id: requestId, result: { accepted: true } });
+          onSubmit({ input: params.input, inboxMessageId: params.inbox_message_id as string | undefined });
+          return result({ accepted: true });
         } catch (error) {
-          respond({ request_id: requestId, error: { code: "submit_rejected", message: error instanceof Error ? error.message : String(error) } });
+          return reply(rpcError(id, "submit_rejected", error instanceof Error ? error.message : String(error)));
         }
       } else {
-        respond({ request_id: requestId, error: { code: "unknown_method", message: "Unknown Pi control method" } });
+        return error("unknown_method", "Unknown Pi control method");
       }
+    };
+
+    const handle = (frame: Buffer) => {
+      let value: unknown;
+      try {
+        value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(frame));
+      } catch {
+        respond(fail("parse_error", "Expected valid UTF-8 JSON"));
+        socket.destroySoon();
+        return;
+      }
+      if (Array.isArray(value) && value.length > 0) {
+        const responses = [];
+        for (const request of value) {
+          const response = handleRequest(request);
+          if (response) responses.push(response);
+        }
+        if (responses.length > 0) respond(responses);
+      } else {
+        const response = handleRequest(value);
+        if (response) respond(response);
+      }
+      if (failed) socket.destroySoon();
     };
 
     socket.on("data", (chunk: Buffer) => {
@@ -140,7 +191,8 @@ export async function startControlSocket(
         const end = newline === -1 ? chunk.length : newline;
         const part = chunk.subarray(offset, end);
         if (pending.length + part.length > MAX_CONTROL_FRAME_BYTES) {
-          fail("message_too_large", "Pi control frame exceeds 64 KiB");
+          respond(fail("message_too_large", "Pi control frame exceeds 64 KiB"));
+          socket.destroySoon();
           return;
         }
         pending = Buffer.concat([pending, part]);

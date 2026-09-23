@@ -12,7 +12,7 @@ fn endpoint(path: &Path, runtime_instance_id: &str) -> PiControlEndpoint {
     PiControlEndpoint {
         runtime_instance_id: runtime_instance_id.into(),
         socket_path: path.display().to_string(),
-        version: 1,
+        version: pontia_runtime::pi_control::PROTOCOL_VERSION,
     }
 }
 
@@ -96,6 +96,11 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
         "disconnect",
         "wrong_id",
         "invalid_result",
+        "wrong_version",
+        "missing_id",
+        "missing_result",
+        "result_and_error",
+        "invalid_error",
         "oversized",
         "wrong_identity",
     ] {
@@ -115,12 +120,19 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
             let mut line = String::new();
             stream.read_line(&mut line).await.unwrap();
             let hello: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(
+                hello,
+                json!({
+                    "jsonrpc": "2.0", "id": 0, "method": "hello",
+                    "params": {"session_id": "sess_pi", "runtime_instance_id": "rtinst_pi"},
+                })
+            );
             let identity = if failure == "wrong_identity" {
                 "rtinst_other"
             } else {
                 "rtinst_pi"
             };
-            let reply = json!({"version": 1, "request_id": hello["request_id"], "result": {"session_id": "sess_pi", "runtime_instance_id": identity}});
+            let reply = json!({"jsonrpc": "2.0", "id": hello["id"], "result": {"session_id": "sess_pi", "runtime_instance_id": identity}});
             // Deliberately split the response across writes.
             let encoded = format!("{reply}\n");
             stream
@@ -140,15 +152,49 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
             line.clear();
             stream.read_line(&mut line).await.unwrap();
             let ping: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(ping["jsonrpc"], "2.0");
+            assert_eq!(ping["id"], 1);
             assert_eq!(ping["method"], "submit");
-            assert_eq!(ping["input"], "exactly once");
+            assert_eq!(ping["params"]["input"], "exactly once");
             match failure {
                 "disconnect" => return,
                 "wrong_id" => {
-                    stream.get_mut().write_all(b"{\"version\":1,\"request_id\":\"other\",\"result\":{\"pong\":true}}\n").await.unwrap();
+                    stream
+                        .get_mut()
+                        .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"pong\":true}}\n")
+                        .await
+                        .unwrap();
                 }
                 "invalid_result" => {
-                    let reply = json!({"version":1,"request_id":ping["request_id"],"result":{"accepted":false}});
+                    let reply =
+                        json!({"jsonrpc":"2.0","id":ping["id"],"result":{"accepted":false}});
+                    stream
+                        .get_mut()
+                        .write_all(format!("{reply}\n").as_bytes())
+                        .await
+                        .unwrap();
+                }
+                "wrong_version" | "missing_id" | "missing_result" | "result_and_error"
+                | "invalid_error" => {
+                    let mut reply =
+                        json!({"jsonrpc":"2.0", "id":ping["id"], "result":{"accepted":true}});
+                    match failure {
+                        "wrong_version" => reply["jsonrpc"] = json!("1.0"),
+                        "missing_id" => {
+                            reply.as_object_mut().unwrap().remove("id");
+                        }
+                        "missing_result" => {
+                            reply.as_object_mut().unwrap().remove("result");
+                        }
+                        "result_and_error" => {
+                            reply["error"] = json!({"code":-32603, "message":"failed"})
+                        }
+                        "invalid_error" => {
+                            reply.as_object_mut().unwrap().remove("result");
+                            reply["error"] = json!({"code":"submit_rejected", "message":"failed"});
+                        }
+                        _ => unreachable!(),
+                    }
                     stream
                         .get_mut()
                         .write_all(format!("{reply}\n").as_bytes())
@@ -184,9 +230,13 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
         let expected = match failure {
             "timeout" => "timed out",
             "disconnect" => "closed",
-            "wrong_id" => "request_id mismatch",
+            "wrong_id" => "id mismatch",
             "oversized" => "64 KiB",
             "invalid_result" => "invalid Pi control submit response",
+            "wrong_version" | "missing_id" | "missing_result" | "result_and_error" => {
+                "invalid Pi control JSON-RPC response"
+            }
+            "invalid_error" => "invalid Pi control JSON-RPC error",
             "wrong_identity" => "identity mismatch",
             _ => unreachable!(),
         };

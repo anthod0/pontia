@@ -57,7 +57,7 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
             session_id: "sess_pi".into(),
             runtime_instance_id: "rtinst_pi".into(),
             socket_path: path.display().to_string(),
-            version: 1,
+            version: pontia_runtime::pi_control::PROTOCOL_VERSION,
         })
         .await
         .unwrap();
@@ -67,7 +67,7 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
         let mut line = String::new();
         stream.read_line(&mut line).await.unwrap();
         let hello: Value = serde_json::from_str(&line).unwrap();
-        let reply = json!({"version":1,"request_id":hello["request_id"],"result":{"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}});
+        let reply = json!({"jsonrpc":"2.0","id":hello["id"],"result":{"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}});
         stream
             .get_mut()
             .write_all(format!("{reply}\n").as_bytes())
@@ -77,10 +77,9 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
         stream.read_line(&mut line).await.unwrap();
         let request: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(request["method"], "submit");
-        assert_eq!(request["input"], "hello after ready");
-        assert_eq!(request["inbox_message_id"], "msg_one");
-        let reply =
-            json!({"version":1,"request_id":request["request_id"],"result":{"accepted":true}});
+        assert_eq!(request["params"]["input"], "hello after ready");
+        assert_eq!(request["params"]["inbox_message_id"], "msg_one");
+        let reply = json!({"jsonrpc":"2.0","id":request["id"],"result":{"accepted":true}});
         stream
             .get_mut()
             .write_all(format!("{reply}\n").as_bytes())

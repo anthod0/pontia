@@ -53,7 +53,7 @@ impl PiProcess {
             endpoint: PiControlEndpoint {
                 runtime_instance_id: runtime_id.into(),
                 socket_path: path.trim().into(),
-                version: 1,
+                version: pontia_runtime::pi_control::PROTOCOL_VERSION,
             },
             session_id: session_id.into(),
             _root: root,
@@ -146,7 +146,7 @@ async fn submissions_connect_on_demand_reuse_and_reconnect_only_for_the_next_req
             session_id: "sess_pi".into(),
             runtime_instance_id: "rtinst_pi".into(),
             socket_path: path.display().to_string(),
-            version: 1,
+            version: pontia_runtime::pi_control::PROTOCOL_VERSION,
         })
         .await
         .unwrap();
@@ -165,7 +165,8 @@ async fn submissions_connect_on_demand_reuse_and_reconnect_only_for_the_next_req
             stream.read_line(&mut line).await.unwrap();
             let hello: Value = serde_json::from_str(&line).unwrap();
             assert_eq!(hello["method"], "hello");
-            let reply = json!({"version":1,"request_id":hello["request_id"],"result":{"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}});
+            assert_eq!(hello["id"], 0);
+            let reply = json!({"jsonrpc":"2.0","id":hello["id"],"result":{"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}});
             stream
                 .get_mut()
                 .write_all(format!("{reply}\n").as_bytes())
@@ -176,11 +177,11 @@ async fn submissions_connect_on_demand_reuse_and_reconnect_only_for_the_next_req
                 stream.read_line(&mut line).await.unwrap();
                 let request: Value = serde_json::from_str(&line).unwrap();
                 assert_eq!(request["method"], "submit");
-                assert_eq!(request["input"], input);
+                assert_eq!(request["params"]["input"], input);
                 if input == "uncertain" {
                     break;
                 }
-                let reply = json!({"version":1,"request_id":request["request_id"],"result":{"accepted":true}});
+                let reply = json!({"jsonrpc":"2.0","id":request["id"],"result":{"accepted":true}});
                 stream
                     .get_mut()
                     .write_all(format!("{reply}\n").as_bytes())

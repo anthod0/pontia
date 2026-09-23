@@ -13,7 +13,7 @@ use tokio::{
     sync::{Mutex, watch},
 };
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 pub const MAX_FRAME_BYTES: usize = 64 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -129,6 +129,7 @@ impl PiControlConnection {
             None => {
                 let mut stream =
                     BufReader::new(UnixStream::connect(&self.endpoint.socket_path).await?);
+                self.sequence.store(0, Ordering::Relaxed);
                 let hello = self
                     .exchange(
                         &mut stream,
@@ -169,13 +170,12 @@ impl PiControlConnection {
         &self,
         stream: &mut BufReader<UnixStream>,
         method: &str,
-        mut request: Value,
+        params: Value,
         sent: Option<&AtomicBool>,
     ) -> Result<Value> {
-        let request_id = self.sequence.fetch_add(1, Ordering::Relaxed).to_string();
-        request["request_id"] = json!(request_id);
-        request["version"] = json!(PROTOCOL_VERSION);
-        request["method"] = json!(method);
+        let request_id = self.sequence.fetch_add(1, Ordering::Relaxed);
+        let request =
+            json!({ "jsonrpc": "2.0", "id": request_id, "method": method, "params": params });
         let mut encoded = serde_json::to_vec(&request)?;
         if encoded.len() > MAX_FRAME_BYTES {
             return Err(Error::Domain("Pi control request exceeds 64 KiB".into()));
@@ -201,19 +201,30 @@ impl PiControlConnection {
             serde_json::from_slice(&read_frame(stream).await.map_err(exchange_error)?)
                 .map_err(Error::from)
                 .map_err(exchange_error)?;
-        if response["version"] != PROTOCOL_VERSION {
+        if response["jsonrpc"] != "2.0"
+            || response.get("id").is_none()
+            || response.get("result").is_some() == response.get("error").is_some()
+            || response.get("method").is_some()
+        {
             return Err(exchange_error(Error::Domain(
-                "invalid Pi control response version".into(),
+                "invalid Pi control JSON-RPC response".into(),
             )));
         }
-        if response["request_id"] != request_id {
-            if response["request_id"].is_null() && response["error"]["code"] == "connection_busy" {
+        if let Some(error) = response.get("error")
+            && (!error["code"].is_i64() || !error["message"].is_string())
+        {
+            return Err(exchange_error(Error::Domain(
+                "invalid Pi control JSON-RPC error".into(),
+            )));
+        }
+        if response["id"] != request_id {
+            if sent.is_none() && response["id"].is_null() && response["error"]["code"] == -32001 {
                 return Err(Error::Domain(
                     "Pi control connection_busy: endpoint already has a controller".into(),
                 ));
             }
             return Err(exchange_error(Error::Domain(
-                "Pi control response request_id mismatch".into(),
+                "Pi control response id mismatch".into(),
             )));
         }
         if let Some(error) = response.get("error") {
