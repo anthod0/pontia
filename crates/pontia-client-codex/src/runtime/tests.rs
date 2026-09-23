@@ -4,8 +4,12 @@ use pontia_application::{
     AppState, CreateSessionRequest, ExternalQueryService, clients::ClientRegistry,
 };
 use serde_json::json;
+use std::time::Duration;
 use tokio::net::UnixListener;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
+
+mod lifecycle;
+mod live;
 
 #[derive(Default)]
 struct ServerState {
@@ -19,9 +23,6 @@ struct ServerState {
 struct RuntimeGuard(Arc<CodexRuntime>);
 impl Drop for RuntimeGuard {
     fn drop(&mut self) {
-        if let Ok(mut child) = self.0.child.try_lock() {
-            let _ = child.start_kill();
-        }
         if let Ok(mut runtimes) = registry().try_lock() {
             runtimes.remove(&self.0.root);
         }
@@ -54,7 +55,9 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
                 .unwrap_or_default()
                 .to_string();
             let result = match request["method"].as_str().unwrap() {
-                "initialize" => json!({}),
+                "initialize" => {
+                    json!({"userAgent":"pontia/0.156.1", "codexHome":cwd,"platformFamily":"unix","platformOs":"linux"})
+                }
                 "thread/start" => {
                     let id = format!("thread-{}", state.threads.len());
                     let thread = json!({"id":id,"cwd":cwd,"canAcceptDirectInput":true,"status":{"type":"idle"}});
@@ -103,18 +106,12 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
         }
     });
     let connection = Connection::connect(&socket).await.unwrap();
-    // A scoped child provides runtime liveness while the socket fixture speaks the native protocol.
-    let child = Command::new("sleep")
-        .arg("120")
-        .kill_on_drop(true)
-        .spawn()
-        .unwrap();
     let runtime = Arc::new(CodexRuntime {
         root: root.path().canonicalize().unwrap(),
-        instance_id: "shared-instance".into(),
-        socket_path: socket,
-        child: Mutex::new(child),
-        connection: Mutex::new(connection),
+        instance_id: connection.identity.instance_id.clone(),
+        connection_id: "connection-test".into(),
+        socket_path: socket.clone(),
+        connection,
         targets: broadcast::channel(128).0,
         gateways: Mutex::new(HashMap::new()),
         operations: Mutex::new(HashMap::new()),
@@ -256,7 +253,7 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
         .unwrap()
         .unwrap();
     assert!(
-        runtime.child.lock().await.try_wait().unwrap().is_none(),
+        runtime.connection.is_connected(),
         "runtime cleanup follows observer completion"
     );
     let status: String = sqlx::query_scalar("SELECT json_extract(adapter_details,'$.codex.connection') FROM runtime_bindings WHERE session_id=?")
@@ -264,7 +261,8 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
     assert_eq!(status, "unavailable");
     release_read.notify_one();
     CodexRuntime::shutdown(root.path()).await;
-    assert!(runtime.child.lock().await.try_wait().unwrap().is_some());
+    assert!(!runtime.connection.is_connected());
+    assert!(socket.exists(), "external daemon socket is never removed");
     assert!(!registry().lock().await.contains_key(&runtime.root));
     // A delayed response from the removed runtime cannot restore its binding.
     let old_binding = pontia_application::AgentBindingService::new(app.db())

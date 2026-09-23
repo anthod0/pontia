@@ -38,7 +38,7 @@ impl CodexService {
             .execute(&self.pool)
             .await?;
         // Persisted status is not evidence of a live connection owned by this daemon.
-        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','unavailable') WHERE runtime_kind='codex_app_server' AND runtime_instance_id IS NOT NULL")
+        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','unavailable') WHERE runtime_kind='codex_app_server'")
             .execute(&self.pool).await?;
         Ok(())
     }
@@ -66,7 +66,14 @@ impl CodexService {
     }
 
     pub(super) async fn runtime(&self, session_id: &str) -> Result<Arc<CodexRuntime>> {
-        CodexRuntime::ensure(&self.root(session_id).await?).await
+        let result = CodexRuntime::ensure(&self.root(session_id).await?).await;
+        if let Ok(runtime) = &result {
+            self.prepare_connection(runtime).await?;
+        } else {
+            sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','unavailable') WHERE session_id=?")
+                .bind(session_id).execute(&self.pool).await?;
+        }
+        result
     }
 
     pub(super) fn observed_session(
@@ -89,7 +96,7 @@ impl CodexService {
             provisioned_runtime: Self::provisioned_runtime(root, Path::new(cwd)),
             instance_id: runtime.instance_id.clone(),
             capabilities,
-            details: json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection":"reconciling"}),
+            details: json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection_id":runtime.connection_id,"connection":"reconciling"}),
         })
     }
 
@@ -122,7 +129,7 @@ impl CodexService {
                 &runtime.instance_id,
                 expected_instance,
                 &capabilities,
-                json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection":"reconciling"}),
+                json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection_id":runtime.connection_id,"connection":"reconciling"}),
             )
             .await?;
         Ok(())
@@ -177,7 +184,7 @@ impl CodexService {
                 connection
                     .call(
                         "thread/start",
-                        json!({"cwd":cwd,"config":{"shell_environment_policy.set":environment}}),
+                        json!({"cwd":cwd,"historyMode":"legacy","config":{"shell_environment_policy.set":environment}}),
                     )
                     .await?
             }
@@ -191,8 +198,7 @@ impl CodexService {
             target.runtime_instance_id.as_deref(),
         )
         .await?;
-        self.model_fact(session_id, &runtime.instance_id, &response)
-            .await?;
+        self.model_snapshot(session_id, &runtime, &response).await?;
         let thread_id = string(&thread, "id")?;
         // thread/start subscribes this connection. A resumed thread needs its actual turns,
         // because excludeTurns intentionally returned no execution history.
@@ -203,7 +209,7 @@ impl CodexService {
         };
         self.reconcile_turns(session_id, &runtime, &turns).await?;
         self.ready(session_id, &runtime, &thread).await?;
-        self.connection_state(session_id, &runtime.instance_id, "available")
+        self.connection_state(session_id, &runtime, "available")
             .await?;
         let active = turns.iter().find(|turn| turn["status"] == "inProgress");
         let mut params = json!({"threadId":thread_id,"input":[{"type":"text","text":input}]});
@@ -263,7 +269,7 @@ impl CodexService {
             Err(error) => {
                 if !connection.is_connected() {
                     let _ = self
-                        .connection_state(session_id, &runtime.instance_id, "unavailable")
+                        .connection_state(session_id, &runtime, "unavailable")
                         .await;
                 }
                 Err(error)
@@ -279,12 +285,7 @@ impl CodexService {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
         let _operation = runtime.lock_session(session_id).await;
-        target.validate(&self.pool).await?;
-        if target.instance()? != runtime.instance_id {
-            return Err(Error::StateConflict(
-                "Codex runtime changed before interrupt".into(),
-            ));
-        }
+        self.confirm_control_connection(target, &runtime).await?;
         let binding = AgentBindingService::new(self.pool.clone())
             .binding_for_session(session_id)
             .await?
@@ -328,12 +329,7 @@ impl CodexService {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
         let _operation = runtime.lock_session(session_id).await;
-        target.validate(&self.pool).await?;
-        if target.instance()? != runtime.instance_id {
-            return Err(Error::StateConflict(
-                "Codex runtime changed before archive".into(),
-            ));
-        }
+        self.confirm_control_connection(target, &runtime).await?;
         let binding = AgentBindingService::new(self.pool.clone())
             .binding_for_session(session_id)
             .await?
@@ -394,12 +390,11 @@ impl CodexService {
             target.runtime_instance_id.as_deref(),
         )
         .await?;
-        self.model_fact(session_id, &runtime.instance_id, &result)
-            .await?;
+        self.model_snapshot(session_id, &runtime, &result).await?;
         let turns = self.turns(&connection, &binding.client_session_key).await?;
         self.reconcile_turns(session_id, &runtime, &turns).await?;
         self.ready(session_id, &runtime, &result["thread"]).await?;
-        self.connection_state(session_id, &runtime.instance_id, "available")
+        self.connection_state(session_id, &runtime, "available")
             .await?;
         self.event_ingest.control_available(session_id);
         self.open_tui_with_runtime(session_id, &runtime, &result["thread"])
@@ -456,14 +451,43 @@ impl CodexService {
         Ok(())
     }
 
+    pub(super) async fn prepare_connection(&self, runtime: &CodexRuntime) -> Result<()> {
+        let _current = runtime.current_guard().await?;
+        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','reconciling') WHERE runtime_kind='codex_app_server' AND json_extract(adapter_details,'$.codex.connection_id') IS NOT ?")
+            .bind(&runtime.connection_id).execute(&self.pool).await?;
+        Ok(())
+    }
+
+    pub(super) async fn confirm_control_connection(
+        &self,
+        target: &pontia_application::runtime::ControlTarget,
+        runtime: &CodexRuntime,
+    ) -> Result<()> {
+        target.validate(&self.pool).await?;
+        if target.instance()? != runtime.instance_id {
+            return Err(Error::StateConflict(
+                "Codex runtime requires reconciliation before control".into(),
+            ));
+        }
+        let confirmed: bool = sqlx::query_scalar("SELECT COALESCE(json_extract(adapter_details,'$.codex.connection')='available' AND json_extract(adapter_details,'$.codex.connection_id')=?,FALSE) FROM runtime_bindings WHERE session_id=?")
+            .bind(&runtime.connection_id).bind(&target.session_id).fetch_one(&self.pool).await?;
+        if !confirmed {
+            return Err(Error::CapabilityUnavailable(
+                "Codex control awaits thread subscription and state reconciliation".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) async fn connection_state(
         &self,
         session_id: &str,
-        instance: &str,
+        runtime: &CodexRuntime,
         state: &str,
     ) -> Result<()> {
-        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection',?) WHERE session_id=? AND runtime_instance_id=?")
-            .bind(state).bind(session_id).bind(instance).execute(&self.pool).await?;
+        let _current = runtime.registered_guard().await?;
+        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection',?) WHERE session_id=? AND runtime_instance_id=? AND json_extract(adapter_details,'$.codex.connection_id')=?")
+            .bind(state).bind(session_id).bind(&runtime.instance_id).bind(&runtime.connection_id).execute(&self.pool).await?;
         Ok(())
     }
 }

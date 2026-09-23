@@ -19,7 +19,7 @@ async fn correlates_out_of_order_responses_and_leaves_questions_to_tui() {
             serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
         assert_eq!(init["method"], "initialize");
         wire.send(Message::Text(
-            json!({"id":init["id"],"result":{}}).to_string().into(),
+            json!({"id":init["id"],"result":{"userAgent":"pontia/0.156.1","codexHome":"/tmp","platformFamily":"unix","platformOs":"linux"}}).to_string().into(),
         ))
         .await
         .unwrap();
@@ -73,7 +73,7 @@ async fn disconnect_after_sending_input_returns_uncertainty_without_retry() {
         let init: Value =
             serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
         wire.send(Message::Text(
-            json!({"id":init["id"],"result":{}}).to_string().into(),
+            json!({"id":init["id"],"result":{"userAgent":"pontia/0.156.1","codexHome":"/tmp","platformFamily":"unix","platformOs":"linux"}}).to_string().into(),
         ))
         .await
         .unwrap();
@@ -109,7 +109,7 @@ async fn native_rejection_is_distinct_from_an_unconfirmed_request() {
         let init: Value =
             serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
         wire.send(Message::Text(
-            json!({"id":init["id"],"result":{}}).to_string().into(),
+            json!({"id":init["id"],"result":{"userAgent":"pontia/0.156.1","codexHome":"/tmp","platformFamily":"unix","platformOs":"linux"}}).to_string().into(),
         ))
         .await
         .unwrap();
@@ -131,4 +131,40 @@ async fn native_rejection_is_distinct_from_an_unconfirmed_request() {
         .unwrap_err();
     assert!(matches!(error, pontia_core::Error::StateConflict(_)));
     server.await.unwrap();
+}
+
+#[tokio::test]
+async fn unsupported_or_unidentified_daemons_never_receive_control_requests() {
+    for metadata in [
+        json!({}),
+        json!({"userAgent":"codex/0.155.1","codexHome":"/tmp","platformFamily":"unix","platformOs":"linux"}),
+        json!({"userAgent":"codex/0.156.1","codexHome":"relative","platformFamily":"unix","platformOs":"linux"}),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("socket");
+        let listener = UnixListener::bind(&path).unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut wire = accept_async(stream).await.unwrap();
+            let init: Value =
+                serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap())
+                    .unwrap();
+            wire.send(Message::Text(
+                json!({"id":init["id"],"result":metadata})
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .unwrap();
+            assert!(!matches!(
+                timeout(Duration::from_secs(1), wire.next()).await.unwrap(),
+                Some(Ok(Message::Text(_)))
+            ));
+        });
+        assert!(matches!(
+            Connection::connect(&path).await,
+            Err(pontia_core::Error::CapabilityUnavailable(_))
+        ));
+        server.await.unwrap();
+    }
 }

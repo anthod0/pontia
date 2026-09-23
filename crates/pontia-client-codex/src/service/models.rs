@@ -42,12 +42,7 @@ impl CodexService {
     }
 
     async fn model_target(&self, target: &ControlTarget, runtime: &CodexRuntime) -> Result<String> {
-        target.validate(&self.pool).await?;
-        if target.instance()? != runtime.instance_id {
-            return Err(Error::StateConflict(
-                "Codex runtime requires reconciliation before model control".into(),
-            ));
-        }
+        self.confirm_control_connection(target, runtime).await?;
         let available: bool = sqlx::query_scalar("SELECT s.state IN ('idle','busy') AND json_extract(r.adapter_details,'$.codex.connection')='available' FROM sessions s JOIN runtime_bindings r USING(session_id) WHERE s.session_id=?")
             .bind(&target.session_id).fetch_one(&self.pool).await?;
         if !available {
@@ -78,6 +73,17 @@ impl CodexService {
             json!({"model":model}),
         )
         .await
+    }
+
+    pub(super) async fn model_snapshot(
+        &self,
+        session: &str,
+        runtime: &CodexRuntime,
+        settings: &Value,
+    ) -> Result<()> {
+        let _current = runtime.current_guard().await?;
+        self.model_fact(session, &runtime.instance_id, settings)
+            .await
     }
 }
 

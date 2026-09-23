@@ -40,6 +40,7 @@ impl CodexService {
         runtime: &CodexRuntime,
         thread: &Value,
     ) -> Result<()> {
+        let _current = runtime.current_guard().await?;
         if thread["canAcceptDirectInput"].as_bool() != Some(true)
             || !matches!(
                 thread.pointer("/status/type").and_then(Value::as_str),
@@ -83,6 +84,7 @@ impl CodexService {
         runtime: &CodexRuntime,
         turns: &[Value],
     ) -> Result<()> {
+        let _current = runtime.current_guard().await?;
         for turn in turns {
             self.turn_fact(session, &runtime.instance_id, turn, "snapshot")
                 .await?;
@@ -208,11 +210,12 @@ impl CodexService {
             let turns = self.turns(&connection, &binding.client_session_key).await?;
             self.reconcile_turns(session, runtime, &turns).await?;
         }
+        let _current = runtime.current_guard().await?;
         NativeSessionService::new(self.pool.clone(), self.event_ingest.clone())
             .exited(session, &runtime.instance_id, "thread_archived")
             .await?;
-        self.connection_state(session, &runtime.instance_id, "archived")
-            .await
+        drop(_current);
+        self.connection_state(session, runtime, "archived").await
     }
 }
 

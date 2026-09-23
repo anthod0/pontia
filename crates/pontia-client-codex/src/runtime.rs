@@ -1,20 +1,16 @@
+mod daemon;
 mod gateway;
 pub mod protocol;
 
-use pontia_core::{Error, Result, ids::new_runtime_instance_id};
+use pontia_core::{Error, Result};
 use protocol::Connection;
 use serde_json::Value;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    process::Stdio,
     sync::{Arc, OnceLock},
-    time::Duration,
 };
-use tokio::{
-    process::{Child, Command},
-    sync::{Mutex, broadcast},
-};
+use tokio::sync::{Mutex, broadcast};
 
 fn registry() -> &'static Mutex<HashMap<PathBuf, Arc<CodexRuntime>>> {
     static RUNTIMES: OnceLock<Mutex<HashMap<PathBuf, Arc<CodexRuntime>>>> = OnceLock::new();
@@ -28,11 +24,11 @@ pub(crate) struct CurrentRuntimeGuard {
 pub struct CodexRuntime {
     pub root: PathBuf,
     pub instance_id: String,
+    pub connection_id: String,
     pub socket_path: PathBuf,
-    child: Mutex<Child>,
-    connection: Mutex<Arc<Connection>>,
+    connection: Arc<Connection>,
     pub targets: broadcast::Sender<TuiTarget>,
-    gateways: Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
+    gateways: Mutex<HashMap<String, gateway::Gateway>>,
     operations: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     pub tui_targets: Mutex<HashMap<String, TuiTarget>>,
 }
@@ -47,75 +43,44 @@ pub struct TuiTarget {
 
 impl CodexRuntime {
     pub async fn ensure(root: &Path) -> Result<Arc<Self>> {
-        std::fs::create_dir_all(root.join("state/codex"))?;
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(
-            root.join("state/codex"),
-            std::fs::Permissions::from_mode(0o700),
-        )?;
         let root = root.canonicalize()?;
         let mut registry = registry().lock().await;
         if let Some(runtime) = registry.get(&root)
-            && runtime.child.lock().await.try_wait()?.is_none()
+            && runtime.connection.is_connected()
         {
             return Ok(runtime.clone());
         }
-        let binary = std::env::var("PONTIA_CODEX_COMMAND").unwrap_or_else(|_| "codex".into());
-        let instance_id = new_runtime_instance_id().to_string();
-        let socket_path = root
-            .join("state/codex")
-            .join(format!("{}.sock", &instance_id[instance_id.len() - 12..]));
-        let log = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(root.join("state/codex/app-server.log"))?;
-        let mut command = Command::new(&binary);
-        command
-            .args([
-                "app-server",
-                "--listen",
-                &format!("unix://{}", socket_path.display()),
-            ])
-            .stdin(Stdio::null())
-            .stdout(log.try_clone()?)
-            .stderr(log)
-            .kill_on_drop(true);
-        // A daemon crash must not leave a second server executing the same
-        // persistent threads when the replacement daemon resumes them.
-        #[cfg(target_os = "linux")]
-        unsafe {
-            let parent = std::process::id() as libc::pid_t;
-            command.pre_exec(move || {
-                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                if libc::getppid() != parent {
-                    return Err(std::io::Error::other("Pontia exited before Codex started"));
-                }
-                Ok(())
-            });
+        let endpoint = match registry.get(&root) {
+            Some(runtime) => daemon::Endpoint {
+                socket: runtime.socket_path.clone(),
+                home: runtime.connection.codex_home.clone(),
+            },
+            None => daemon::Endpoint::resolve()?,
+        };
+        Self::connect(&mut registry, root, endpoint).await
+    }
+
+    async fn connect(
+        registry: &mut HashMap<PathBuf, Arc<Self>>,
+        root: PathBuf,
+        endpoint: daemon::Endpoint,
+    ) -> Result<Arc<Self>> {
+        let connection = Connection::connect(&endpoint.socket).await?;
+        if connection.codex_home.canonicalize().ok().as_ref() != Some(&endpoint.home) {
+            connection.close().await;
+            return Err(protocol::protocol_error(
+                "daemon Codex home does not match the selected environment",
+            ));
         }
-        let mut child = command.spawn()?;
-        let connection = tokio::time::timeout(Duration::from_secs(15), async {
-            loop {
-                if child.try_wait()?.is_some() {
-                    return Err(protocol::protocol_error("app-server exited during startup"));
-                }
-                if socket_path.exists() {
-                    return Connection::connect(&socket_path).await;
-                }
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await
-        .map_err(|_| protocol::protocol_error("app-server startup timed out"))??;
+        let instance_id = connection.identity.instance_id.clone();
+        let socket_path = endpoint.socket;
         let (targets, _) = broadcast::channel(128);
         let runtime = Arc::new(Self {
             root: root.clone(),
             instance_id,
+            connection_id: pontia_core::ids::new_runtime_instance_id().to_string(),
             socket_path,
-            child: Mutex::new(child),
-            connection: Mutex::new(connection),
+            connection,
             targets,
             gateways: Mutex::new(HashMap::new()),
             operations: Mutex::new(HashMap::new()),
@@ -123,17 +88,27 @@ impl CodexRuntime {
         });
         if let Some(old) = registry.insert(root, runtime.clone()) {
             old.close_gateways().await;
-            old.connection.lock().await.close().await;
+            old.connection.close().await;
         }
         Ok(runtime)
     }
 
     // Hold replacement/shutdown off until the binding transaction commits.
     pub(crate) async fn current_guard(&self) -> Result<CurrentRuntimeGuard> {
+        let guard = self.registered_guard().await?;
+        if !self.connection.is_connected() {
+            return Err(protocol::protocol_error(
+                "daemon connection is no longer live",
+            ));
+        }
+        Ok(guard)
+    }
+
+    pub(crate) async fn registered_guard(&self) -> Result<CurrentRuntimeGuard> {
         let registry = registry().lock().await;
         if !registry
             .get(&self.root)
-            .is_some_and(|runtime| runtime.instance_id == self.instance_id)
+            .is_some_and(|runtime| std::ptr::eq(runtime.as_ref(), self))
         {
             return Err(Error::StateConflict(
                 "Codex runtime has been replaced".into(),
@@ -145,11 +120,12 @@ impl CodexRuntime {
     }
 
     pub async fn connection(&self) -> Result<Arc<Connection>> {
-        let mut connection = self.connection.lock().await;
-        if !connection.is_connected() {
-            *connection = Connection::connect(&self.socket_path).await?;
+        if !self.connection.is_connected() {
+            return Err(protocol::protocol_error(
+                "daemon disconnected; awaiting instance verification and reconciliation",
+            ));
         }
-        Ok(connection.clone())
+        Ok(self.connection.clone())
     }
 
     pub async fn lock_session(&self, session: &str) -> tokio::sync::OwnedMutexGuard<()> {
@@ -184,15 +160,13 @@ impl CodexRuntime {
         let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         if let Some(runtime) = registry().lock().await.remove(&root) {
             runtime.close_gateways().await;
-            runtime.connection.lock().await.close().await;
-            let _ = runtime.child.lock().await.kill().await;
-            let _ = std::fs::remove_file(&runtime.socket_path);
+            runtime.connection.close().await;
         }
     }
 
     async fn close_gateways(&self) {
-        for (_, task) in self.gateways.lock().await.drain() {
-            task.abort();
+        for (_, gateway) in self.gateways.lock().await.drain() {
+            gateway.close().await;
         }
     }
 

@@ -43,7 +43,7 @@ impl CodexObserver {
                 _ = tokio::time::sleep(Duration::from_secs(1)) => {}
             }
             let count = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM agent_bindings WHERE client_type='codex'",
+                "SELECT COUNT(*) FROM runtime_bindings WHERE runtime_kind='codex_app_server'",
             )
             .fetch_one(&self.service.pool)
             .await
@@ -56,7 +56,7 @@ impl CodexObserver {
                     if let Err(error) = self.observe(runtime.clone(), &mut shutdown).await {
                         tracing::warn!(%error,"Codex observation interrupted; will reconcile before accepting input");
                     }
-                    let _ = sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','unavailable') WHERE runtime_kind='codex_app_server' AND runtime_instance_id=?").bind(&runtime.instance_id).execute(&self.service.pool).await;
+                    let _ = sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','unavailable') WHERE runtime_kind='codex_app_server' AND runtime_instance_id=? AND json_extract(adapter_details,'$.codex.connection_id')=?").bind(&runtime.instance_id).bind(&runtime.connection_id).execute(&self.service.pool).await;
                     let _ = sqlx::query(
                         "UPDATE codex_tui_bindings SET connected=FALSE WHERE runtime_instance_id=?",
                     )
@@ -64,7 +64,10 @@ impl CodexObserver {
                     .execute(&self.service.pool)
                     .await;
                 }
-                Err(error) => tracing::warn!(%error,"Codex runtime unavailable"),
+                Err(error) => {
+                    self.service.reset_connections().await.ok();
+                    tracing::warn!(%error,"Codex runtime unavailable");
+                }
             }
             if *shutdown.borrow() {
                 break;
@@ -77,6 +80,7 @@ impl CodexObserver {
         runtime: Arc<CodexRuntime>,
         shutdown: &mut watch::Receiver<bool>,
     ) -> Result<()> {
+        self.service.prepare_connection(&runtime).await?;
         let connection = runtime.connection().await?;
         let mut events = connection.events.subscribe();
         let mut targets = runtime.targets.subscribe();
@@ -94,6 +98,13 @@ impl CodexObserver {
             tokio::select! {
                 _ = shutdown.changed() => return Ok(()),
                 _ = interval.tick() => {
+                    let unbound: Vec<String> = sqlx::query_scalar("SELECT r.session_id FROM runtime_bindings r LEFT JOIN agent_bindings a USING(session_id) WHERE r.runtime_kind='codex_app_server' AND a.session_id IS NULL")
+                        .fetch_all(&self.service.pool).await?;
+                    for session in unbound {
+                        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','awaiting_input') WHERE session_id=? AND runtime_instance_id IS NULL")
+                            .bind(&session).execute(&self.service.pool).await?;
+                        self.service.event_ingest.control_available(&session);
+                    }
                     let known_targets: Vec<_> = runtime.tui_targets.lock().await.values().cloned().collect();
                     for target in known_targets { self.target(&runtime,target).await?; }
                     let bindings: Vec<(String,String)> = sqlx::query_as("SELECT session_id,client_session_key FROM agent_bindings WHERE client_type='codex'").fetch_all(&self.service.pool).await?;
@@ -108,7 +119,7 @@ impl CodexObserver {
                             if self.service.check_archived(&session,&runtime,&thread).await? { return Ok(()); }
                             let resumed = connection.call("thread/resume",json!({"threadId":thread,"excludeTurns":true})).await?;
                             self.service.bind(&session,&runtime,&resumed["thread"],Some(&runtime.instance_id)).await?;
-                            self.service.model_fact(&session,&runtime.instance_id,&resumed).await?;
+                            self.service.model_snapshot(&session,&runtime,&resumed).await?;
                             Some(resumed["thread"].clone())
                         } else { None };
                         let native = self.service.turns(&connection,&thread).await?;
@@ -117,12 +128,12 @@ impl CodexObserver {
                             self.service.ready(&session,&runtime,&resumed).await?;
                             subscribed.insert(thread.clone());
                         }
-                        self.service.connection_state(&session,&runtime.instance_id,"available").await?;
+                        self.service.connection_state(&session,&runtime,"available").await?;
                         self.service.event_ingest.control_available(&session);
                             Ok(())
                         }.await;
                         if let Err(error) = result {
-                            self.service.connection_state(&session,&runtime.instance_id,"unavailable").await?;
+                            self.service.connection_state(&session,&runtime,"unavailable").await?;
                             subscribed.remove(&thread);
                             if !connection.is_connected() { return Err(error); }
                             tracing::warn!(%session, %error, "Codex thread reconciliation failed");
@@ -131,7 +142,7 @@ impl CodexObserver {
                 }
                 event = events.recv() => {
                     let event = match event { Ok(event) => event, Err(broadcast::error::RecvError::Lagged(_)) => {
-                        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','reconciling') WHERE runtime_kind='codex_app_server' AND runtime_instance_id=?").bind(&runtime.instance_id).execute(&self.service.pool).await?;
+                        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','reconciling') WHERE runtime_kind='codex_app_server' AND runtime_instance_id=? AND json_extract(adapter_details,'$.codex.connection_id')=?").bind(&runtime.instance_id).bind(&runtime.connection_id).execute(&self.service.pool).await?;
                         subscribed.clear(); continue;
                     }, Err(_) => return Err(Error::CapabilityUnavailable("Codex event stream closed".into())) };
                     if event["method"] == "pontia/disconnected" { return Err(Error::CapabilityUnavailable("Codex disconnected".into())); }
@@ -141,20 +152,26 @@ impl CodexObserver {
                         None => match AgentBindingService::new(self.service.pool.clone()).binding_for_client_session("codex",thread).await? { Some(binding) => binding.session_id, None => continue },
                     };
                     match event["method"].as_str() {
-                        Some("thread/settings/updated") => self.service.model_fact(&session,&runtime.instance_id,&event["params"]["threadSettings"]).await?,
+                        Some("thread/settings/updated") => {
+                            let _current = runtime.current_guard().await?;
+                            self.service.model_fact(&session,&runtime.instance_id,&event["params"]["threadSettings"]).await?;
+                        },
                         Some("turn/started") => {
                             if let Ok(turns) = self.service.turns(&connection,thread).await {
                                 self.service.reconcile_turns(&session,&runtime,&turns).await?;
                             }
                         }
-                        Some("turn/completed") => self.service.turn_fact(&session,&runtime.instance_id,&event["params"]["turn"],"notification").await?,
+                        Some("turn/completed") => {
+                            let _current = runtime.current_guard().await?;
+                            self.service.turn_fact(&session,&runtime.instance_id,&event["params"]["turn"],"notification").await?;
+                        },
                         Some("thread/archived") => { self.service.archived(&session,&runtime).await?; subscribed.remove(thread); }
                         Some("thread/unarchived") => {
-                            self.service.connection_state(&session,&runtime.instance_id,"reconciling").await?;
+                            self.service.connection_state(&session,&runtime,"reconciling").await?;
                             subscribed.remove(thread);
                         }
                         Some("thread/status/changed") if event.pointer("/params/status/type").and_then(Value::as_str) == Some("notLoaded") => {
-                            self.service.connection_state(&session,&runtime.instance_id,"unavailable").await?;
+                            self.service.connection_state(&session,&runtime,"unavailable").await?;
                             subscribed.remove(thread);
                         }
                         _ => {}

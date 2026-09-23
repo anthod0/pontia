@@ -17,7 +17,7 @@ async fn model_control_uses_native_catalog_and_settings_protocol() {
             serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
         assert_eq!(init["params"]["capabilities"]["experimentalApi"], true);
         wire.send(Message::Text(
-            json!({"id":init["id"],"result":{}}).to_string().into(),
+            json!({"id":init["id"],"result":{"userAgent":"pontia/0.156.1","codexHome":"/tmp","platformFamily":"unix","platformOs":"linux"}}).to_string().into(),
         ))
         .await
         .unwrap();
@@ -89,7 +89,7 @@ async fn repeated_model_cursor_fails_instead_of_looping() {
         let init: Value =
             serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
         wire.send(Message::Text(
-            json!({"id":init["id"],"result":{}}).to_string().into(),
+            json!({"id":init["id"],"result":{"userAgent":"pontia/0.156.1","codexHome":"/tmp","platformFamily":"unix","platformOs":"linux"}}).to_string().into(),
         ))
         .await
         .unwrap();

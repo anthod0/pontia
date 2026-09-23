@@ -1,9 +1,10 @@
+use super::daemon::{DaemonIdentity, SUPPORTED_VERSION};
 use futures_util::{SinkExt, StreamExt};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -20,11 +21,20 @@ pub type Socket = WebSocketStream<UnixStream>;
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value>>>>>;
 
 pub async fn open(path: &Path) -> Result<Socket> {
-    let stream = UnixStream::connect(path).await?;
-    let (socket, _) = tokio_tungstenite::client_async("ws://localhost/", stream)
-        .await
-        .map_err(protocol_error)?;
-    Ok(socket)
+    tokio::time::timeout(Duration::from_secs(5), async {
+        let stream = UnixStream::connect(path).await.map_err(|error| {
+            protocol_error(format!(
+                "daemon at {} is unavailable: {error}; start Codex daemon externally",
+                path.display()
+            ))
+        })?;
+        let (socket, _) = tokio_tungstenite::client_async("ws://localhost/", stream)
+            .await
+            .map_err(protocol_error)?;
+        Ok(socket)
+    })
+    .await
+    .map_err(|_| protocol_error("daemon connection timed out"))?
 }
 
 pub fn protocol_error(error: impl std::fmt::Display) -> Error {
@@ -33,6 +43,10 @@ pub fn protocol_error(error: impl std::fmt::Display) -> Error {
 
 pub struct Connection {
     outgoing: mpsc::Sender<Message>,
+    task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    pub identity: DaemonIdentity,
+    pub server_version: String,
+    pub codex_home: PathBuf,
     pending: Pending,
     next_id: AtomicU64,
     pub events: broadcast::Sender<Value>,
@@ -41,16 +55,85 @@ pub struct Connection {
 impl Connection {
     pub async fn connect(path: &Path) -> Result<Arc<Self>> {
         let mut socket = open(path).await?;
+        let identity = DaemonIdentity::capture(socket.get_ref())?;
+        // Validate the peer's response before exposing a usable control connection.
+        socket
+            .send(Message::Text(
+                json!({"id":0,"method":"initialize","params":{
+                    "clientInfo":{"name":"pontia","version":env!("CARGO_PKG_VERSION")},
+                    "capabilities":{"experimentalApi":true}
+                }})
+                .to_string()
+                .into(),
+            ))
+            .await
+            .map_err(protocol_error)?;
+        let metadata = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match socket.next().await {
+                    Some(Ok(Message::Text(text))) => {
+                        let value: Value = serde_json::from_str(&text).map_err(protocol_error)?;
+                        if value["id"] == 0 && value.get("method").is_none() {
+                            if let Some(error) = value.get("error") {
+                                return Err(protocol_error(error));
+                            }
+                            return Ok(value["result"].clone());
+                        }
+                    }
+                    Some(Ok(Message::Ping(data))) => socket
+                        .send(Message::Pong(data))
+                        .await
+                        .map_err(protocol_error)?,
+                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => {
+                        return Err(protocol_error("daemon disconnected during initialization"));
+                    }
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .map_err(|_| protocol_error("daemon initialization timed out"))??;
+        let version = metadata["userAgent"]
+            .as_str()
+            .and_then(|agent| agent.split_once('/'))
+            .and_then(|(_, rest)| rest.split_whitespace().next())
+            .ok_or_else(|| protocol_error("daemon did not identify its version"))?;
+        if version != SUPPORTED_VERSION {
+            return Err(protocol_error(format!(
+                "unsupported daemon version {version}; verified version is {SUPPORTED_VERSION}"
+            )));
+        }
+        let codex_home = metadata["codexHome"]
+            .as_str()
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .ok_or_else(|| protocol_error("daemon did not identify its Codex home"))?;
+        if metadata["platformOs"] != "linux" || metadata["platformFamily"] != "unix" {
+            return Err(protocol_error("daemon must run locally on Linux"));
+        }
+        if DaemonIdentity::capture(socket.get_ref())? != identity {
+            return Err(protocol_error("daemon changed during initialization"));
+        }
+        socket
+            .send(Message::Text(
+                json!({"method":"initialized"}).to_string().into(),
+            ))
+            .await
+            .map_err(protocol_error)?;
         let (outgoing, mut incoming) = mpsc::channel(128);
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
         let (events, _) = broadcast::channel(4096);
         let connection = Arc::new(Self {
             outgoing,
+            task: Mutex::new(None),
+            identity,
+            server_version: version.into(),
+            codex_home,
             pending: pending.clone(),
             next_id: AtomicU64::new(1),
             events: events.clone(),
         });
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             loop {
                 tokio::select! {
                     message = incoming.recv() => {
@@ -85,19 +168,7 @@ impl Connection {
             }
             let _ = events.send(json!({"method":"pontia/disconnected"}));
         });
-        connection
-            .call(
-                "initialize",
-                json!({"clientInfo":{"name":"pontia","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":true}}),
-            )
-            .await?;
-        connection
-            .outgoing
-            .send(Message::Text(
-                json!({"method":"initialized"}).to_string().into(),
-            ))
-            .await
-            .map_err(protocol_error)?;
+        *connection.task.lock().await = Some(task);
         Ok(connection)
     }
 
@@ -129,6 +200,13 @@ impl Connection {
     }
 
     pub async fn close(&self) {
-        let _ = self.outgoing.send(Message::Close(None)).await;
+        if let Some(task) = self.task.lock().await.take() {
+            task.abort();
+            let _ = task.await;
+        }
+        for (_, reply) in self.pending.lock().await.drain() {
+            let _ = reply.send(Err(Error::ControlUnknown("Codex connection closed".into())));
+        }
+        let _ = self.events.send(json!({"method":"pontia/disconnected"}));
     }
 }
