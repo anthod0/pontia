@@ -1,4 +1,4 @@
-use pontia_agent_clients::AgentClientSpec;
+use crate::client_contract::AgentClientSpec;
 use pontia_core::{
     error::{Error, Result},
     ids::new_runtime_instance_id,

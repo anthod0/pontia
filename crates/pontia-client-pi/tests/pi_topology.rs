@@ -1,4 +1,4 @@
-use pontia_agent_clients::{
+use pontia_application::client_contract::{
     TopologyDiagnostic, TopologyResolution, TopologyResolveRequest, TurnTopologyCandidate,
 };
 use pontia_client_pi::raw_transcripts::{PiJsonlV2Cursor, TimelineBoundaryRelation};
@@ -24,7 +24,7 @@ fn candidate(turn_id: &str, _candidate_order: i64, anchor: Option<&str>) -> Turn
 fn resolve(
     evidence: Option<serde_json::Value>,
     earlier_turns: Vec<TurnTopologyCandidate>,
-) -> pontia_agent_clients::TopologyResolveResult {
+) -> pontia_application::client_contract::TopologyResolveResult {
     pontia_client_pi::registration(None)
         .data
         .unwrap()

@@ -1,4 +1,4 @@
-use pontia_agent_clients::raw_transcripts::{ManagedToolUse, ManagedToolUseInput};
+use crate::client_contract::raw_transcripts::{ManagedToolUse, ManagedToolUseInput};
 use pontia_core::error::{Error, Result};
 use serde_json::Value;
 

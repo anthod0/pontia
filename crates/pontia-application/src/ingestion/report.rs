@@ -74,8 +74,16 @@ impl EventReportNormalizer {
             }
         }
 
-        let native_turn_id = if session.client_type == "codex" && fact.fact_type.is_turn_event() {
-            Some(crate::codex::native_turn_identity(&self.pool, &fact).await?)
+        let has_native_turn = self
+            .clients
+            .spec(&session.client_type)
+            .is_some_and(|spec| spec.adapter.native_turn_identity)
+            && fact.fact_type.is_turn_event();
+        if has_native_turn && let Some(data) = self.clients.data(&session.client_type) {
+            fact.data = data.normalize_payload(fact.fact_type, fact.data)?;
+        }
+        let native_turn_id = if has_native_turn {
+            Some(crate::native_turns::native_turn_identity(&self.pool, &fact).await?)
         } else {
             None
         };
@@ -96,14 +104,19 @@ impl EventReportNormalizer {
         } else {
             EventSource::AgentClient
         };
-        let payload = match self.clients.data(&session.client_type) {
-            Some(data) => data.normalize_payload(fact.fact_type, fact.data)?,
-            None => fact.data,
+        let payload = if has_native_turn {
+            fact.data
+        } else {
+            match self.clients.data(&session.client_type) {
+                Some(data) => data.normalize_payload(fact.fact_type, fact.data)?,
+                None => fact.data,
+            }
         };
 
-        let event_id = if session.client_type == "codex" && fact.fact_type.is_turn_event() {
+        let event_id = if has_native_turn {
             format!(
-                "evt_codex_{}_{}",
+                "evt_{}_{}_{}",
+                session.client_type,
                 turn_id.as_deref().unwrap(),
                 fact.fact_type
             )

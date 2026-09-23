@@ -1,27 +1,32 @@
 use super::ClientAdapter;
+use crate::client_contract::TerminateBehavior;
 use crate::{control::ControlResult, runtime::control_target::ControlTarget};
-use pontia_agent_clients::TerminateBehavior;
 use pontia_core::{Error, Result};
 use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
 use std::path::Path;
 
 impl ClientAdapter {
+    fn start_in_process(
+        &self,
+        root: &Path,
+        request: RuntimeStartRequest,
+        count: i64,
+    ) -> Result<RuntimeStartResult> {
+        let clients = self.events.clients();
+        let client = clients
+            .get(self.spec.client_type)
+            .and_then(|entry| entry.in_process.as_ref())
+            .ok_or_else(|| Error::CapabilityUnavailable("Client launcher is unavailable".into()))?;
+        GenericRuntimeManager.start_in_process(root, request, client.capabilities(), count)
+    }
+
     pub async fn start(
         &self,
         root: &Path,
         request: RuntimeStartRequest,
     ) -> Result<Option<RuntimeStartResult>> {
-        if self.prepares_on_input() {
-            let cwd = request
-                .workspace
-                .as_deref()
-                .map(std::path::PathBuf::from)
-                .unwrap_or(std::env::current_dir()?);
-            crate::codex::CodexService::new(self.events.clone())
-                .provision(&request.session_id, root, &cwd)
-                .await?;
-            sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex_environment',json(?)) WHERE session_id=?")
-                .bind(serde_json::to_string(&request.environment)?).bind(&request.session_id).execute(&self.events.db()).await?;
+        if let Some(client) = self.session_client() {
+            client.provision(self.events.clone(), root, request).await?;
             return Ok(None);
         }
         if let Some(launcher) = self
@@ -40,14 +45,16 @@ impl ClientAdapter {
                 })
                 .map(Some);
         }
-        GenericRuntimeManager.start_session(root, request).map(Some)
+        self.start_in_process(root, request, 0).map(Some)
     }
 
     pub async fn exit(&self, target: &ControlTarget) -> ControlResult<()> {
         let result = async {
             target.validate(&self.events.db()).await?;
+            if let Some(client) = self.session_client() {
+                return client.exit(self.events.clone(), target).await;
+            }
             match self.spec.adapter.terminate {
-                TerminateBehavior::CodexArchive => crate::codex::CodexService::new(self.events.clone()).archive(target).await,
                 TerminateBehavior::Connected => self.control.as_ref()
                     .ok_or_else(|| Error::CapabilityUnavailable("Client control service is unavailable".into()))?
                     .shutdown(&target.session_id, target.instance()?).await,
@@ -70,10 +77,8 @@ impl ClientAdapter {
         count: i64,
     ) -> Result<Option<RuntimeStartResult>> {
         target.validate(&self.events.db()).await?;
-        if self.prepares_on_input() {
-            crate::codex::CodexService::new(self.events.clone())
-                .resume(target)
-                .await?;
+        if let Some(client) = self.session_client() {
+            client.resume(self.events.clone(), target).await?;
             return Ok(None);
         }
         let binding = crate::AgentBindingService::new(self.events.db())
@@ -101,16 +106,7 @@ impl ClientAdapter {
                 })
                 .map(Some);
         }
-        GenericRuntimeManager
-            .start_session_with_restart_count_and_reuse_target(
-                root,
-                request,
-                count,
-                pane.as_ref()
-                    .map(|(socket, pane)| (socket.as_str(), pane.as_str())),
-                self.spec,
-            )
-            .map(Some)
+        self.start_in_process(root, request, count).map(Some)
     }
 
     pub async fn restart(
@@ -134,7 +130,6 @@ impl ClientAdapter {
             TerminateBehavior::RuntimeManager => {
                 self.exit(target).await.into_result()?;
             }
-            TerminateBehavior::CodexArchive => unreachable!(),
         }
         if let Some(launcher) = self
             .events
@@ -150,13 +145,13 @@ impl ClientAdapter {
                 native_session_key: None,
             });
         }
-        GenericRuntimeManager.start_session_with_restart_count(root, request, count)
+        self.start_in_process(root, request, count)
     }
 
     pub async fn ensure_exit_available(&self, target: &ControlTarget) -> Result<()> {
         target.validate(&self.events.db()).await?;
         match self.spec.adapter.terminate {
-            TerminateBehavior::Connected | TerminateBehavior::CodexArchive => {
+            TerminateBehavior::Connected => {
                 if !self.input_available(&target.session_id).await? {
                     return Err(Error::CapabilityUnavailable(
                         "client control channel is unavailable".into(),
@@ -170,7 +165,5 @@ impl ClientAdapter {
 }
 
 pub(crate) fn discard_unbound_runtime(runtime: &RuntimeStartResult) {
-    if runtime.runtime_kind != "codex_app_server" {
-        let _ = GenericRuntimeManager.terminate_session(&runtime.runtime_handle);
-    }
+    let _ = GenericRuntimeManager.terminate_session(&runtime.runtime_handle);
 }

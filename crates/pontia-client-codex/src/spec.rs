@@ -1,5 +1,8 @@
-use crate::types::*;
-pub mod rollout;
+use pontia_application::client_contract::{
+    AgentClientAdapter, AgentClientCapabilities, AgentClientSpec, ClientSessionIdentityBehavior,
+    ContextUsageCapability, DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior,
+    TerminateBehavior, TurnLifecycleBehavior,
+};
 
 pub const SUPPORTED_VERSION: &str = "0.155.1";
 
@@ -22,15 +25,14 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "codex",
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
-        runtime: RuntimeBehavior::CodexAppServer,
-        dispatch: DispatchBehavior::CodexProtocol,
+        native_turn_identity: true,
+        runtime: RuntimeBehavior::External,
+        dispatch: DispatchBehavior::Connected,
         client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
-        terminate: TerminateBehavior::CodexArchive,
+        terminate: TerminateBehavior::Connected,
         turn_lifecycle: TurnLifecycleBehavior::ClientManaged,
-        runtime_binding: RuntimeBindingBehavior::CodexAppServer,
-        system_prompt_injection: SystemPromptInjectionBehavior::Disabled,
-        startup_hooks: &[],
-        timeline_source: TimelineSourceBehavior::Transcript,
-        transcript: TranscriptBehavior::CodexRollout,
+        runtime_binding: RuntimeBindingBehavior::Named {
+            runtime_kind: "codex_app_server",
+        },
     },
 };

@@ -4,7 +4,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 use tokio::sync::watch;
 
-use pontia_agent_clients::RuntimeBehavior;
+use crate::client_contract::RuntimeBehavior;
 use pontia_core::error::{Error, Result};
 use pontia_runtime::{GenericRuntimeManager, TmuxProcessFingerprint};
 use pontia_storage_sqlite::repositories::{
@@ -170,7 +170,7 @@ impl RuntimeObservationService {
                     })
                     .await;
             }
-            RuntimeBehavior::InProcess | RuntimeBehavior::CodexAppServer => {
+            RuntimeBehavior::InProcess | RuntimeBehavior::External => {
                 let Some(runtime_target) = SqliteRuntimeBindingRepository::new(self.pool.clone())
                     .runtime_handle(session_id)
                     .await?

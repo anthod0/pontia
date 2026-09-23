@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use pontia_agent_clients::raw_transcripts::{
+use crate::client_contract::raw_transcripts::{
     AgentBindingResolveRequest, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
 };
-use pontia_agent_clients::{
+use crate::client_contract::{
     TopologyDiagnostic, TopologyResolution, TopologyResolveRequest, TurnTopologyCandidate,
 };
 use pontia_core::{

@@ -11,7 +11,7 @@ use crate::{RuntimeStartRequest, session_identifier::short_session_id};
 
 use super::identifier::sanitize_tmux_identifier;
 
-pub(crate) fn spawn_tmux_session(
+pub fn spawn_tmux_session(
     tmux_session: &str,
     workspace: &Path,
     launch_command: &str,
@@ -54,7 +54,7 @@ pub(crate) fn terminate_session(runtime_handle: &str) -> Result<()> {
     }
 }
 
-pub(crate) fn is_alive(runtime_handle: &str) -> bool {
+pub fn is_alive(runtime_handle: &str) -> bool {
     Command::new("tmux")
         .args(["has-session", "-t", runtime_handle])
         .stderr(Stdio::null())

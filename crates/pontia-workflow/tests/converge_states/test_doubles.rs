@@ -221,27 +221,29 @@ impl AgentEventSubscriber for TestAgentEvents {
 
 // This fixture uses the persisted client identifier without loading its native adapter.
 pub(super) fn clients() -> pontia_application::clients::ClientRegistry {
-    static SPEC: std::sync::OnceLock<pontia_agent_clients::AgentClientSpec> =
+    static SPEC: std::sync::OnceLock<pontia_application::client_contract::AgentClientSpec> =
         std::sync::OnceLock::new();
     let spec = SPEC.get_or_init(|| {
-        let mut spec = pontia_agent_clients::get_client_spec("generic")
-            .unwrap()
-            .clone();
+        let mut spec = pontia_application::client_contract::TEST_SPEC.clone();
         spec.client_type = "pi";
-        spec.adapter.dispatch = pontia_agent_clients::DispatchBehavior::Connected;
-        spec.adapter.terminate = pontia_agent_clients::TerminateBehavior::Connected;
-        spec.adapter.runtime = pontia_agent_clients::RuntimeBehavior::Tmux(
-            pontia_agent_clients::TmuxRuntimeBehavior {
+        spec.adapter.dispatch = pontia_application::client_contract::DispatchBehavior::Connected;
+        spec.adapter.terminate = pontia_application::client_contract::TerminateBehavior::Connected;
+        spec.adapter.runtime = pontia_application::client_contract::RuntimeBehavior::Tmux(
+            pontia_application::client_contract::TmuxRuntimeBehavior {
                 process_names: &[],
                 hook_log: None,
             },
         );
         spec.adapter.turn_lifecycle =
-            pontia_agent_clients::TurnLifecycleBehavior::ClientManagedForInteractiveTmux;
+            pontia_application::client_contract::TurnLifecycleBehavior::ClientManagedForInteractiveTmux;
         spec
     });
     let mut clients = pontia_application::clients::ClientRegistry::default();
     clients.register(pontia_application::clients::ClientRegistration {
+        in_process: None,
+        session: None,
+        prepare_on_input: false,
+        steer: false,
         spec,
         data: None,
         launcher: None,

@@ -4,13 +4,13 @@ mod pane;
 mod process;
 mod session;
 
-pub(super) use marker::{clear_pontia_pane_markers, is_reusable_shell_pane, mark_pontia_pane};
-pub(super) use pane::{
-    TmuxPaneBinding, is_pane_alive, kill_pane, pane_binding, run_launch_command_in_pane,
-};
+pub(crate) use marker::{clear_pontia_pane_markers, is_reusable_shell_pane, mark_pontia_pane};
+pub use pane::{TmuxPaneBinding, pane_binding};
+pub(crate) use pane::{is_pane_alive, kill_pane, run_launch_command_in_pane};
 pub use process::TmuxProcessFingerprint;
 pub(crate) use process::{capture_fingerprint, validate_fingerprint};
-pub(super) use session::{is_alive, spawn_tmux_session, terminate_session, tmux_session_name};
+pub use session::{is_alive, spawn_tmux_session};
+pub(crate) use session::{terminate_session, tmux_session_name};
 
 #[cfg(test)]
 mod tests;

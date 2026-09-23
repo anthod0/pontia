@@ -1,4 +1,4 @@
-use pontia_agent_clients::DispatchMode;
+use crate::client_contract::DispatchMode;
 use pontia_core::{Error, Result};
 
 use super::ClientAdapter;
@@ -8,12 +8,10 @@ use crate::{
 
 impl ClientAdapter {
     pub async fn list_models(&self, target: &ControlTarget) -> Result<Vec<SessionModel>> {
+        if let Some(client) = self.session_client() {
+            return client.list_models(self.events.clone(), target).await;
+        }
         match self.spec.adapter.dispatch {
-            DispatchMode::CodexProtocol => {
-                crate::codex::CodexService::new(self.events.clone())
-                    .list_models(target)
-                    .await
-            }
             DispatchMode::Connected => {
                 self.channel_models()?
                     .list_models(&target.session_id, target.instance()?)
@@ -28,12 +26,10 @@ impl ClientAdapter {
     pub async fn set_model(&self, target: &ControlTarget, model: &str) -> ControlResult<()> {
         ControlResult::from_result(
             async {
+                if let Some(client) = self.session_client() {
+                    return client.set_model(self.events.clone(), target, model).await;
+                }
                 match self.spec.adapter.dispatch {
-                    DispatchMode::CodexProtocol => {
-                        crate::codex::CodexService::new(self.events.clone())
-                            .set_model(target, model)
-                            .await
-                    }
                     DispatchMode::Connected => {
                         self.channel_models()?
                             .set_model(&target.session_id, target.instance()?, model)

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 
-use pontia_agent_clients::topology::{
+use pontia_application::client_contract::topology::{
     TopologyDiagnostic, TopologyResolution, TopologyResolveRequest, TopologyResolveResult,
     TurnTopologyResolver,
 };

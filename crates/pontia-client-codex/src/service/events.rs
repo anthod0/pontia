@@ -1,8 +1,11 @@
 use super::{CodexService, string};
-use crate::{EventReportError, ReportedFact};
+use crate::runtime::{CodexRuntime, protocol::Connection};
+use pontia_application::{
+    EventReportError, ReportedFact,
+    native_sessions::{NativeSessionService, NativeTurnObservation},
+};
 use pontia_core::domain::EventType;
 use pontia_core::{Error, Result};
-use pontia_runtime::codex::{CodexRuntime, protocol::Connection};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 
@@ -48,15 +51,7 @@ impl CodexService {
                 "Codex thread is not ready to accept input".into(),
             ));
         }
-        let needs_ready =
-            crate::SessionCommandService::new(self.event_ingest.clone(), self.root(session).await?)
-                .observe_resumed_session(session)
-                .await?;
-        let already: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='session.ready' AND json_extract(payload,'$.runtime_instance_id')=?")
-            .bind(session).bind(&runtime.instance_id).fetch_one(&self.pool).await?;
-        if already == 0 || needs_ready {
-            self.report(session,&runtime.instance_id,EventType::SessionReady,json!({"client_session_key":thread["id"],"launch_cwd":thread["cwd"],"client_session_file":thread["path"]})).await?;
-        }
+        NativeSessionService::new(self.event_ingest.clone()).ready(session, &runtime.instance_id, &self.root(session).await?, json!({"client_session_key":thread["id"],"launch_cwd":thread["cwd"],"client_session_file":thread["path"]})).await?;
         Ok(())
     }
 
@@ -102,43 +97,24 @@ impl CodexService {
         origin: &str,
     ) -> Result<()> {
         let native_id = string(turn, "id")?;
-        let existing: Option<(String,String)> = sqlx::query_as("SELECT t.turn_id,t.state FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id WHERE b.session_id=? AND b.client_turn_id=?")
-            .bind(session).bind(native_id).fetch_optional(&self.pool).await?;
-        if existing.as_ref().is_some_and(|(_, state)| {
-            matches!(state.as_str(), "completed" | "failed" | "interrupted")
-        }) {
-            return Ok(());
-        }
         let items = turn["items"].as_array().cloned().unwrap_or_default();
-        if existing.is_none() {
-            let input = items
-                .iter()
-                .find(|item| item["type"] == "userMessage")
-                .and_then(|item| item["content"].as_array())
-                .map(|content| {
-                    content
-                        .iter()
-                        .filter_map(|part| part["text"].as_str())
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                });
-            let dispatch = crate::InboxCommandService::new(self.event_ingest.clone())
-                .native_dispatch(session, native_id)
-                .await?;
-            let summary = input
-                .as_deref()
-                .or_else(|| dispatch.as_ref().map(|(_, input)| input.as_str()));
-            self.report(session,runtime_instance_id,EventType::TurnStarted,json!({"native_turn_id":native_id,"input":{"summary":bounded(summary)},"metadata":{"native_turn_id":native_id,"native_started_at":turn["startedAt"],"observation":origin,"inbox_message_id":dispatch.map(|(id,_)|id)}})).await?;
-        }
-        crate::InboxCommandService::new(self.event_ingest.clone())
-            .link_native_turn(session, native_id)
-            .await?;
+        let input = items
+            .iter()
+            .find(|item| item["type"] == "userMessage")
+            .and_then(|item| item["content"].as_array())
+            .map(|parts| {
+                parts
+                    .iter()
+                    .filter_map(|part| part["text"].as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            });
         let kind = match turn["status"].as_str() {
-            Some("completed") => EventType::TurnCompleted,
-            Some("failed") => EventType::TurnFailed,
-            Some("interrupted") => EventType::TurnInterrupted,
-            Some("inProgress") => return Ok(()),
-            _ => return Err(Error::Domain("Unknown Codex turn status".into())),
+            Some("completed") => Ok(Some(EventType::TurnCompleted)),
+            Some("failed") => Ok(Some(EventType::TurnFailed)),
+            Some("interrupted") => Ok(Some(EventType::TurnInterrupted)),
+            Some("inProgress") => Ok(None),
+            _ => Err(Error::Domain("Unknown Codex turn status".into())),
         };
         let final_message = items
             .iter()
@@ -150,16 +126,22 @@ impl CodexService {
                     .rev()
                     .find(|item| item["type"] == "agentMessage" && item["phase"].is_null())
             });
-        if let Some(text) = final_message.and_then(|item| item["text"].as_str()) {
-            self.report(
+        NativeSessionService::new(self.event_ingest.clone())
+            .observe_turn(
                 session,
                 runtime_instance_id,
-                EventType::TurnOutput,
-                json!({"native_turn_id":native_id,"output":{"summary":bounded(Some(text))}}),
+                NativeTurnObservation {
+                    native_turn_id: native_id.into(),
+                    input_summary: bounded(input.as_deref()),
+                    output_summary: bounded(final_message.and_then(|item| item["text"].as_str())),
+                    terminal: kind,
+                    started_at: turn["startedAt"].clone(),
+                    completed_at: turn["completedAt"].clone(),
+                    failure: bounded(turn.pointer("/error/message").and_then(Value::as_str)),
+                    origin: origin.into(),
+                },
             )
-            .await?;
-        }
-        self.report(session,runtime_instance_id,kind,json!({"native_turn_id":native_id,"native_completed_at":turn["completedAt"],"observation":origin,"failure":{"message":bounded(turn.pointer("/error/message").and_then(Value::as_str))}})).await
+            .await
     }
 
     pub(super) async fn check_archived(
@@ -196,7 +178,7 @@ impl CodexService {
     }
 
     pub(super) async fn archived(&self, session: &str, runtime: &CodexRuntime) -> Result<()> {
-        if let Some(binding) = crate::AgentBindingService::new(self.pool.clone())
+        if let Some(binding) = pontia_application::AgentBindingService::new(self.pool.clone())
             .binding_for_session(session)
             .await?
         {
@@ -213,19 +195,9 @@ impl CodexService {
             let turns = self.turns(&connection, &binding.client_session_key).await?;
             self.reconcile_turns(session, runtime, &turns).await?;
         }
-        let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
-            .bind(session)
-            .fetch_one(&self.pool)
+        NativeSessionService::new(self.event_ingest.clone())
+            .exited(session, &runtime.instance_id, "thread_archived")
             .await?;
-        if state != "exited" {
-            self.report(
-                session,
-                &runtime.instance_id,
-                EventType::SessionExited,
-                json!({"reason":"thread_archived"}),
-            )
-            .await?;
-        }
         self.connection_state(session, &runtime.instance_id, "archived")
             .await
     }

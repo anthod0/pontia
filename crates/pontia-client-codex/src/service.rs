@@ -4,9 +4,12 @@ mod observer;
 #[cfg(test)]
 mod tests;
 
-use crate::{AgentBindingService, ReportedFact, UpsertAgentBindingRequest};
-use pontia_core::{Error, Result, ids::new_turn_id};
-use pontia_runtime::{RuntimeStartResult, codex::CodexRuntime};
+use crate::runtime::CodexRuntime;
+use pontia_application::{
+    AgentBindingService, UpsertAgentBindingRequest, native_sessions::NativeSessionService,
+};
+use pontia_core::{Error, Result};
+use pontia_runtime::RuntimeStartResult;
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use std::{
@@ -19,11 +22,11 @@ pub use observer::CodexObserver;
 #[derive(Clone)]
 pub struct CodexService {
     pub(super) pool: SqlitePool,
-    pub(super) event_ingest: crate::EventIngestService,
+    pub(super) event_ingest: pontia_application::EventIngestService,
 }
 
 impl CodexService {
-    pub fn new(event_ingest: crate::EventIngestService) -> Self {
+    pub fn new(event_ingest: pontia_application::EventIngestService) -> Self {
         Self {
             pool: event_ingest.db(),
             event_ingest,
@@ -41,19 +44,19 @@ impl CodexService {
     }
 
     pub async fn provision(&self, session_id: &str, root: &Path, cwd: &Path) -> Result<()> {
-        let runtime = RuntimeStartResult {
+        let runtime = Self::provisioned_runtime(root, cwd);
+        NativeSessionService::new(self.event_ingest.clone())
+            .provision(session_id, &runtime)
+            .await
+    }
+
+    fn provisioned_runtime(root: &Path, cwd: &Path) -> RuntimeStartResult {
+        RuntimeStartResult {
             runtime_kind: "codex_app_server".into(),
             runtime_handle: root.display().to_string(),
-            capabilities: pontia_agent_clients::codex::CAPABILITIES,
-            metadata: json!({"launch_cwd":cwd,"codex":{"connection":"awaiting_input"}}),
-        };
-        pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository::new(
-            self.pool.clone(),
-        )
-        .upsert_binding(crate::sessions::runtime_binding_record(
-            session_id, &runtime,
-        )?)
-        .await
+            capabilities: crate::CAPABILITIES,
+            metadata: json!({"launch_cwd":cwd,"adapter_details":{"codex":{"connection":"awaiting_input"}}}),
+        }
     }
 
     pub(super) async fn root(&self, session_id: &str) -> Result<PathBuf> {
@@ -66,6 +69,32 @@ impl CodexService {
         CodexRuntime::ensure(&self.root(session_id).await?).await
     }
 
+    pub(super) fn observed_session(
+        &self,
+        root: &Path,
+        runtime: &CodexRuntime,
+        thread: &Value,
+    ) -> Result<pontia_application::native_sessions::NativeSessionObservation> {
+        let id = string(thread, "id")?;
+        let cwd = string(thread, "cwd")?;
+        let mut capabilities = crate::CAPABILITIES;
+        capabilities.timeline = thread["path"].as_str().is_some_and(|path| {
+            crate::rollout::identity(Path::new(path)).is_ok_and(|native| native == id)
+        });
+        Ok(
+            pontia_application::native_sessions::NativeSessionObservation {
+                identity: pontia_application::native_sessions::NativeSessionIdentity {
+                    launch_cwd: cwd.into(),
+                    client_session_file: thread["path"].as_str().map(str::to_owned),
+                },
+                provisioned_runtime: Self::provisioned_runtime(root, Path::new(cwd)),
+                instance_id: runtime.instance_id.clone(),
+                capabilities,
+                details: json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection":"reconciling"}),
+            },
+        )
+    }
+
     pub(super) async fn bind(
         &self,
         session_id: &str,
@@ -76,36 +105,35 @@ impl CodexService {
         let cwd = thread["cwd"]
             .as_str()
             .ok_or_else(|| Error::Domain("Codex thread has no cwd".into()))?;
-        AgentBindingService::new(self.pool.clone())
-            .upsert_binding(UpsertAgentBindingRequest {
-                session_id: session_id.into(),
-                client_type: "codex".into(),
-                launch_cwd: cwd.into(),
-                client_session_key: id.into(),
-                client_session_file: thread["path"].as_str().map(str::to_string),
-                metadata: json!({}),
-            })
-            .await?;
-        let mut capabilities = pontia_agent_clients::codex::CAPABILITIES;
+        let mut capabilities = crate::CAPABILITIES;
         capabilities.timeline = thread["path"].as_str().is_some_and(|path| {
-            pontia_agent_clients::codex::rollout::identity(Path::new(path))
-                .is_ok_and(|native| native == id)
+            crate::rollout::identity(Path::new(path)).is_ok_and(|native| native == id)
         });
-        let capabilities = serde_json::to_string(&capabilities)?;
-        sqlx::query("UPDATE runtime_bindings SET runtime_instance_id=?, binding_state='confirmed', capabilities=?, adapter_details=json_set(adapter_details,'$.codex',json(?)) WHERE session_id=?")
-            .bind(&runtime.instance_id).bind(capabilities)
-            .bind(json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection":"reconciling"}).to_string())
-            .bind(session_id).execute(&self.pool).await?;
+        NativeSessionService::new(self.event_ingest.clone())
+            .confirm(
+                UpsertAgentBindingRequest {
+                    session_id: session_id.into(),
+                    client_type: "codex".into(),
+                    launch_cwd: cwd.into(),
+                    client_session_key: id.into(),
+                    client_session_file: thread["path"].as_str().map(str::to_string),
+                    metadata: json!({}),
+                },
+                &runtime.instance_id,
+                &capabilities,
+                json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection":"reconciling"}),
+            )
+            .await?;
         Ok(())
     }
 
     pub(crate) async fn submit(
         &self,
-        target: &crate::runtime::control_target::ControlTarget,
+        target: &pontia_application::runtime::control_target::ControlTarget,
         input: &str,
         message_id: Option<&str>,
-        intent: &crate::turns::InputIntent,
-    ) -> Result<crate::control::InputReceipt> {
+        intent: &pontia_application::turns::InputIntent,
+    ) -> Result<pontia_application::control::InputReceipt> {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
         let _operation = runtime.lock_session(session_id).await;
@@ -176,8 +204,8 @@ impl CodexService {
             params["clientUserMessageId"] = json!(message_id);
         }
         let method = match intent {
-            crate::turns::InputIntent::Start if active.is_none() => "turn/start",
-            crate::turns::InputIntent::Steer { turn_id } => {
+            pontia_application::turns::InputIntent::Start if active.is_none() => "turn/start",
+            pontia_application::turns::InputIntent::Steer { turn_id } => {
                 let native: Option<String> = sqlx::query_scalar("SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?")
                     .bind(session_id).bind(turn_id).fetch_optional(&self.pool).await?;
                 if active.and_then(|turn| turn["id"].as_str()) != native.as_deref()
@@ -196,7 +224,7 @@ impl CodexService {
                 ));
             }
         };
-        let execution_target = crate::runtime::control_target::ControlTarget {
+        let execution_target = pontia_application::runtime::control_target::ControlTarget {
             session_id: session_id.clone(),
             runtime_instance_id: Some(runtime.instance_id.clone()),
         };
@@ -220,7 +248,7 @@ impl CodexService {
                 {
                     tracing::warn!(%session_id, %error, "Codex input delivered but TUI could not attach");
                 }
-                Ok(crate::control::InputReceipt {
+                Ok(pontia_application::control::InputReceipt {
                     native_turn_id,
                     runtime_instance_id: Some(runtime.instance_id.clone()),
                 })
@@ -238,7 +266,7 @@ impl CodexService {
 
     pub(crate) async fn interrupt(
         &self,
-        target: &crate::runtime::control_target::ControlTarget,
+        target: &pontia_application::runtime::control_target::ControlTarget,
         turn_id: &str,
     ) -> Result<()> {
         let session_id = &target.session_id;
@@ -288,7 +316,7 @@ impl CodexService {
 
     pub(crate) async fn archive(
         &self,
-        target: &crate::runtime::control_target::ControlTarget,
+        target: &pontia_application::runtime::control_target::ControlTarget,
     ) -> Result<()> {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
@@ -325,7 +353,7 @@ impl CodexService {
 
     pub(crate) async fn resume(
         &self,
-        target: &crate::runtime::control_target::ControlTarget,
+        target: &pontia_application::runtime::control_target::ControlTarget,
     ) -> Result<()> {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
@@ -432,29 +460,4 @@ pub(super) fn string<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
         .as_str()
         .filter(|s| !s.is_empty())
         .ok_or_else(|| Error::Domain(format!("Codex response missing {field}")))
-}
-
-pub(crate) async fn native_turn_identity(pool: &SqlitePool, fact: &ReportedFact) -> Result<String> {
-    let native = string(&fact.data, "native_turn_id")?;
-    let runtime = string(&fact.data, "runtime_instance_id")?;
-    let current: Option<String> =
-        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id=?")
-            .bind(&fact.session_id)
-            .fetch_optional(pool)
-            .await?
-            .flatten();
-    if current.as_deref() != Some(runtime) {
-        return Err(Error::StateConflict(
-            "Codex fact belongs to an obsolete runtime".into(),
-        ));
-    }
-    sqlx::query("INSERT INTO native_turn_bindings(session_id,client_turn_id,turn_id) VALUES(?,?,?) ON CONFLICT(session_id,client_turn_id) DO NOTHING")
-        .bind(&fact.session_id).bind(native).bind(new_turn_id().to_string()).execute(pool).await?;
-    Ok(sqlx::query_scalar(
-        "SELECT turn_id FROM native_turn_bindings WHERE session_id=? AND client_turn_id=?",
-    )
-    .bind(&fact.session_id)
-    .bind(native)
-    .fetch_one(pool)
-    .await?)
 }

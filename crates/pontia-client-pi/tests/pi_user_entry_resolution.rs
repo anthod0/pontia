@@ -1,6 +1,6 @@
 use std::fs;
 
-use pontia_agent_clients::raw_transcripts::ResolvedAgentBinding;
+use pontia_application::client_contract::raw_transcripts::ResolvedAgentBinding;
 use pontia_client_pi::raw_transcripts::{
     PiJsonlV2Cursor, PiTimelineAdapter, PiTurnUserEntryResolveError, PiTurnUserEntryResolveRequest,
     PiTurnUserEntryResolver, TimelineBoundaryRelation,

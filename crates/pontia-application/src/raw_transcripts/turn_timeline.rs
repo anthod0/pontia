@@ -8,7 +8,7 @@ use pontia_core::error::Error;
 use serde::Serialize;
 use sqlx::SqlitePool;
 
-use pontia_agent_clients::raw_transcripts::TurnTimelineItem;
+use crate::client_contract::raw_transcripts::TurnTimelineItem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]

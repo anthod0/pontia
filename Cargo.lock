@@ -1695,23 +1695,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pontia-agent-clients"
-version = "0.2.1"
-dependencies = [
- "pontia-core",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "pontia-application"
 version = "0.2.1"
 dependencies = [
- "futures-util",
  "ignore",
  "nucleo-matcher",
- "pontia-agent-clients",
+ "pontia-application",
  "pontia-config",
  "pontia-core",
  "pontia-runtime",
@@ -1723,16 +1712,34 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "tokio-tungstenite 0.30.0",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "pontia-client-codex"
+version = "0.2.1"
+dependencies = [
+ "futures-util",
+ "libc",
+ "pontia-application",
+ "pontia-core",
+ "pontia-runtime",
+ "pontia-storage-sqlite",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "time",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "tracing",
 ]
 
 [[package]]
 name = "pontia-client-pi"
 version = "0.2.1"
 dependencies = [
- "pontia-agent-clients",
  "pontia-application",
  "pontia-config",
  "pontia-core",
@@ -1797,8 +1804,8 @@ dependencies = [
  "axum",
  "flate2",
  "http-body-util",
- "pontia-agent-clients",
  "pontia-application",
+ "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",
  "pontia-core",
@@ -1824,16 +1831,13 @@ dependencies = [
 name = "pontia-runtime"
 version = "0.2.1"
 dependencies = [
- "futures-util",
  "libc",
- "pontia-agent-clients",
  "pontia-core",
  "serde",
  "serde_json",
  "tempfile",
  "time",
  "tokio",
- "tokio-tungstenite 0.30.0",
 ]
 
 [[package]]
@@ -1873,7 +1877,6 @@ dependencies = [
 name = "pontia-workflow"
 version = "0.2.1"
 dependencies = [
- "pontia-agent-clients",
  "pontia-application",
  "pontia-core",
  "pontia-storage-sqlite",
@@ -1896,8 +1899,8 @@ dependencies = [
  "axum",
  "axum-server",
  "http-body-util",
- "pontia-agent-clients",
  "pontia-application",
+ "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",
  "pontia-core",

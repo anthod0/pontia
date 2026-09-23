@@ -3,8 +3,8 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_agent_clients::{AgentClientCapabilities, GenericTestClient};
 use pontia_application::AppState;
+use pontia_application::client_contract::{AgentClientCapabilities, GenericTestClient};
 use pontia_http as http;
 use pontia_storage_sqlite::repositories::workflows::{
     CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,

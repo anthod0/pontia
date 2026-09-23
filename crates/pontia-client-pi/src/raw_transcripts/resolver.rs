@@ -2,7 +2,7 @@ use std::fs;
 
 use pontia_core::{Error, Result};
 
-use pontia_agent_clients::raw_transcripts::{
+use pontia_application::client_contract::raw_transcripts::{
     AgentBindingResolveRequest, AgentBindingResolver, ResolvedAgentBinding,
 };
 

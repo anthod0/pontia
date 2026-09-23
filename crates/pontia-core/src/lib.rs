@@ -4,3 +4,5 @@ pub mod ids;
 pub mod time;
 
 pub use error::{Error, Result};
+
+pub mod client_capabilities;

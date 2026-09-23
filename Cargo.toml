@@ -5,11 +5,11 @@ members = [
     "crates/pontiad",
     "crates/pontia-core",
     "crates/pontia-storage-sqlite",
-    "crates/pontia-agent-clients",
     "crates/pontia-config",
     "crates/pontia-runtime",
     "crates/pontia-application",
     "crates/pontia-client-pi",
+    "crates/pontia-client-codex",
     "crates/pontia-http",
     "crates/pontia",
     "crates/pontia-workflow",
@@ -24,7 +24,7 @@ license = "Apache-2.0"
 repository = "https://github.com/anthod0/pontia"
 
 [workspace.dependencies]
-pontia-agent-clients = { path = "crates/pontia-agent-clients", default-features = false }
+pontia-client-codex = { path = "crates/pontia-client-codex" }
 pontia-client-pi = { path = "crates/pontia-client-pi" }
 pontia-application = { path = "crates/pontia-application", default-features = false }
 pontia-config = { path = "crates/pontia-config", default-features = false }

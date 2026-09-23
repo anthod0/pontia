@@ -7,7 +7,7 @@ use std::{
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
-use pontia_agent_clients::AgentClientCapabilities;
+use pontia_core::client_capabilities::AgentClientCapabilities;
 use pontia_core::{
     error::{Error, Result},
     ids::new_runtime_instance_id,

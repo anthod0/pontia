@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use pontia_core::{Error, Result};
 use serde_json::Value;
 
-use pontia_agent_clients::raw_transcripts::{
+use pontia_application::client_contract::raw_transcripts::{
     CapturedTimelineBoundary, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
     TimelineBoundaryCapturer, TurnTimelineItem, TurnTimelineReadError, TurnTimelineReadRequest,
     TurnTimelineReader,

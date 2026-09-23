@@ -7,13 +7,13 @@ pub mod app;
 mod branch_replay;
 mod client_control;
 pub mod clients;
-pub mod codex;
 pub mod control;
 mod git_status;
 mod idempotency;
 mod inbox;
 pub mod ingestion;
 pub mod live_output;
+mod native_turns;
 pub mod queries;
 mod raw_transcripts;
 pub mod runtime;
@@ -74,3 +74,7 @@ pub use workspaces::{
 
 pub(crate) use app::default_client_type;
 pub use workspaces::{WorkspaceRecord, get_workspace_record, upsert_workspace};
+
+pub mod native_sessions;
+
+pub mod client_contract;

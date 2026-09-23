@@ -3,9 +3,9 @@ use std::process::{Command, Stdio};
 use pontia_core::error::{Error, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct TmuxPaneBinding {
-    pub(crate) socket_path: String,
-    pub(crate) pane_id: String,
+pub struct TmuxPaneBinding {
+    pub socket_path: String,
+    pub pane_id: String,
 }
 
 pub(crate) fn run_launch_command_in_pane(
@@ -67,7 +67,7 @@ pub(crate) fn is_pane_alive(socket_path: &str, pane_id: &str) -> bool {
     })
 }
 
-pub(crate) fn pane_binding(runtime_handle: &str) -> Option<TmuxPaneBinding> {
+pub fn pane_binding(runtime_handle: &str) -> Option<TmuxPaneBinding> {
     let output = Command::new("tmux")
         .args([
             "display-message",

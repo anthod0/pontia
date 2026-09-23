@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
     let remote_task =
         remote.map(|remote| tokio::spawn(remote.run(app_state.shutdown().subscribe())));
     tokio::spawn(
-        application::codex::CodexObserver::new(
+        pontia_client_codex::CodexObserver::new(
             app_state.event_ingest_service(),
             app_state.pontia_home().to_path_buf(),
         )
@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
         let _ = task.await;
     }
 
-    pontia_runtime::codex::CodexRuntime::shutdown(&codex_root).await;
+    pontia_client_codex::runtime::CodexRuntime::shutdown(&codex_root).await;
 
     server_result?;
 

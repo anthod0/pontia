@@ -75,11 +75,19 @@ pub(crate) fn runtime_binding_record(
             .expect("diagnostics object")
             .extend(client.clone());
     }
-    let adapter_details = json!({
-        "codex": metadata.get("codex"),
+    let mut adapter_details = json!({
         "tmux": metadata.get("tmux"),
         "in_process": metadata.get("in_process"),
     });
+    if let Some(details) = metadata
+        .get("adapter_details")
+        .and_then(serde_json::Value::as_object)
+    {
+        adapter_details
+            .as_object_mut()
+            .expect("details object")
+            .extend(details.clone());
+    }
     Ok(RuntimeBindingUpsertRecord {
         session_id: session_id.to_string(),
         runtime_kind: runtime.runtime_kind.clone(),

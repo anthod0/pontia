@@ -4,16 +4,8 @@ use serde_json::Value;
 use pontia_core::error::Result;
 use pontia_storage_sqlite::models::sessions::SessionRow;
 
-pub use pontia_agent_clients::ContextUsageCapability;
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub(crate) struct CodexTuiView {
-    pub owner_session_id: String,
-    pub target_session_id: String,
-    pub connected: bool,
-    pub socket_path: Option<String>,
-    pub pane_id: Option<String>,
-}
-pub type SessionCapabilities = pontia_agent_clients::AgentClientCapabilities;
+pub use crate::client_contract::ContextUsageCapability;
+pub type SessionCapabilities = crate::client_contract::AgentClientCapabilities;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ContextUsageView {
@@ -41,8 +33,8 @@ pub struct SessionLineageView {
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct SessionView {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub codex: Option<Value>,
+    #[serde(flatten)]
+    pub client_details: std::collections::BTreeMap<String, Value>,
     pub session_id: String,
     pub client_type: String,
     pub title: Option<String>,
@@ -80,7 +72,7 @@ pub(crate) fn row_to_view(row: SessionRow) -> Result<SessionView> {
         .map(str::to_string);
 
     Ok(SessionView {
-        codex: None,
+        client_details: Default::default(),
         session_id: row.session_id,
         client_type: row.client_type,
         title: row.title,

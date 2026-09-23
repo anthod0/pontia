@@ -1,7 +1,9 @@
 use serde_json::Value;
 
 use super::tool_use::PiToolUseParser;
-use pontia_agent_clients::raw_transcripts::{ManagedToolUse, TimelineItem, ToolUseParser};
+use pontia_application::client_contract::raw_transcripts::{
+    ManagedToolUse, TimelineItem, ToolUseParser,
+};
 
 pub(super) fn pi_entry_to_items(entry: &Value, start: usize) -> Vec<TimelineItem> {
     if entry.get("type").and_then(Value::as_str).is_some()

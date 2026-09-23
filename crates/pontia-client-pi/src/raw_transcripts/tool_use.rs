@@ -1,6 +1,8 @@
 use serde_json::Value;
 
-use pontia_agent_clients::raw_transcripts::{ManagedToolUse, ManagedToolUseInput, ToolUseParser};
+use pontia_application::client_contract::raw_transcripts::{
+    ManagedToolUse, ManagedToolUseInput, ToolUseParser,
+};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(super) struct PiToolUseParser;

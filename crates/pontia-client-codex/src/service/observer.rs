@@ -1,9 +1,7 @@
-use super::{CodexService, string};
-use crate::{
-    AgentBindingService, EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType,
-};
-use pontia_core::{Error, Result, ids::new_session_id};
-use pontia_runtime::codex::{CodexRuntime, TuiTarget};
+use super::CodexService;
+use crate::runtime::{CodexRuntime, TuiTarget};
+use pontia_application::{AgentBindingService, EventIngestService};
+use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
@@ -165,38 +163,14 @@ impl CodexObserver {
             sqlx::query("UPDATE codex_tui_bindings SET connected=FALSE WHERE owner_session_id=? AND runtime_instance_id=? AND connection_id=?").bind(&target.owner_session_id).bind(&runtime.instance_id).bind(&target.connection_id).execute(&self.service.pool).await?;
             return Ok(());
         }
-        let session = match AgentBindingService::new(self.service.pool.clone())
-            .binding_for_client_session("codex", thread_id)
-            .await?
-        {
-            Some(binding) => binding.session_id,
-            None => {
-                let session = new_session_id().to_string();
-                let cwd = string(&target.thread, "cwd")?;
-                let workspace = crate::upsert_workspace(&self.service.pool, cwd).await?;
-                self.service
-                    .event_ingest
-                    .ingest_pontia_event(PontiaEvent::new(
-                        &session,
-                        None,
-                        PontiaEventSource::RuntimeManager,
-                        "codex",
-                        PontiaEventType::SessionCreated,
-                        json!({"workspace":cwd}),
-                    ))
-                    .await?;
-                pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository::new(
-                    self.service.pool.clone(),
-                )
-                .update_session_workspace(&session, Some(cwd), Some(&workspace.workspace_id))
-                .await?;
-                self.service
-                    .provision(&session, &self.root, std::path::Path::new(cwd))
-                    .await?;
-                self.service.bind(&session, runtime, &target.thread).await?;
-                session
-            }
-        };
+        let observation = self
+            .service
+            .observed_session(&self.root, runtime, &target.thread);
+        let session = pontia_application::native_sessions::NativeSessionService::new(
+            self.service.event_ingest.clone(),
+        )
+        .resolve_observed_session("codex", thread_id, observation)
+        .await?;
         sqlx::query("UPDATE codex_tui_bindings SET target_session_id=?,connected=TRUE,runtime_instance_id=?,connection_id=? WHERE owner_session_id=?")
             .bind(&session).bind(&runtime.instance_id).bind(&target.connection_id).bind(&target.owner_session_id).execute(&self.service.pool).await?;
         Ok(())

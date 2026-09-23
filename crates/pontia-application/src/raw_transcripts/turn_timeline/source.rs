@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use pontia_agent_clients::raw_transcripts::{
+use crate::client_contract::raw_transcripts::{
     AgentBindingResolveRequest, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
     TurnTimelineReadRequest,
 };

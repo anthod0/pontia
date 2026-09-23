@@ -26,12 +26,12 @@ impl ClientLauncher for PiLauncher {
                 }
             },
         );
-        pontia_runtime::GenericRuntimeManager.start_session_with_restart_count_and_reuse_target(
+        pontia_runtime::GenericRuntimeManager.start_tmux(
             request.root,
             runtime,
             request.restart_count,
             request.reuse_pane,
-            &crate::SPEC,
+            &crate::SPEC.launch_options(),
         )
     }
 }

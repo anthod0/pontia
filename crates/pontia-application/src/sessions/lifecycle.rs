@@ -14,6 +14,25 @@ use crate::{
 };
 
 impl SessionCommandService {
+    pub async fn open_client_interface(&self, session_id: &str) -> Result<()> {
+        let session = pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository::new(
+            self.pool.clone(),
+        )
+        .get_session(session_id)
+        .await?
+        .ok_or_else(|| Error::NotFound("session not found".into()))?;
+        let clients = self.event_ingest.clients();
+        let client = clients
+            .get(&session.client_type)
+            .and_then(|entry| entry.session.as_ref())
+            .ok_or_else(|| {
+                Error::CapabilityUnavailable("Client interface is unavailable".into())
+            })?;
+        client
+            .open_interface(self.event_ingest.clone(), session_id)
+            .await
+    }
+
     pub(crate) async fn observe_resumed_session(&self, session_id: &str) -> Result<bool> {
         let session = ExternalQueryService::new(self.pool.clone())
             .with_clients(self.event_ingest.clients())

@@ -1,6 +1,6 @@
 use super::{list_models, update_model};
+use crate::runtime::protocol::Connection;
 use futures_util::{SinkExt, StreamExt};
-use pontia_runtime::codex::protocol::Connection;
 use serde_json::{Value, json};
 use tokio::net::UnixListener;
 use tokio_tungstenite::{accept_async, tungstenite::Message};

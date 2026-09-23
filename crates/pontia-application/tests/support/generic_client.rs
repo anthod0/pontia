@@ -1,6 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use pontia_agent_clients::{AgentClientCapabilities, GenericTestClient};
+use pontia_application::client_contract::{AgentClientCapabilities, GenericTestClient};
 use pontia_application::AppState;
 use pontia_runtime::{AgentInput, GenericRuntimeManager};
 use serde_json::Value;

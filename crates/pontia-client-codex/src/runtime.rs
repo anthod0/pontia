@@ -60,14 +60,11 @@ impl CodexRuntime {
         let version = Command::new(&binary).arg("--version").output().await?;
         if !version.status.success()
             || String::from_utf8_lossy(&version.stdout).trim()
-                != format!(
-                    "codex-cli {}",
-                    pontia_agent_clients::codex::SUPPORTED_VERSION
-                )
+                != format!("codex-cli {}", crate::SUPPORTED_VERSION)
         {
             return Err(Error::CapabilityUnavailable(format!(
                 "Codex {} is required; set PONTIA_CODEX_COMMAND to its executable",
-                pontia_agent_clients::codex::SUPPORTED_VERSION
+                crate::SUPPORTED_VERSION
             )));
         }
         let instance_id = new_runtime_instance_id().to_string();
@@ -197,7 +194,7 @@ impl CodexRuntime {
     ) -> Result<(String, String)> {
         let endpoint = self.gateway(owner).await?;
         let name = format!("pontia_codex_{}", owner.replace('-', "_"));
-        if !crate::tmux::is_alive(&name) {
+        if !pontia_runtime::is_alive(&name) {
             let binary = std::env::var("PONTIA_CODEX_COMMAND").unwrap_or_else(|_| "codex".into());
             let quote = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
             let command = format!(
@@ -206,12 +203,15 @@ impl CodexRuntime {
                 quote(&endpoint),
                 quote(thread_id)
             );
-            if !crate::tmux::spawn_tmux_session(&name, cwd, &command)?.success() {
+            if !pontia_runtime::spawn_tmux_session(&name, cwd, &command)?.success() {
                 return Err(Error::Domain("could not open Codex TUI".into()));
             }
         }
-        let pane = crate::tmux::pane_binding(&name)
+        let pane = pontia_runtime::pane_binding(&name)
             .ok_or_else(|| Error::Domain("Codex TUI pane is missing".into()))?;
         Ok((pane.socket_path, pane.pane_id))
     }
 }
+
+#[cfg(test)]
+mod tests;

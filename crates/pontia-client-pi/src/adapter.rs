@@ -3,7 +3,9 @@ use crate::raw_transcripts::{
     PiAgentBindingResolver, PiTimelineAdapter, PiTurnUserEntryResolveRequest,
     PiTurnUserEntryResolver,
 };
-use pontia_agent_clients::{TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend};
+use pontia_application::client_contract::{
+    TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend,
+};
 use pontia_application::clients::{
     BranchTargetRequest, ClientData, ClientRegistration, NativeEventEvidence,
 };
@@ -16,6 +18,10 @@ use std::sync::Arc;
 
 pub fn registration(tui_command: Option<String>) -> ClientRegistration {
     ClientRegistration {
+        in_process: None,
+        session: None,
+        prepare_on_input: false,
+        steer: false,
         spec: &crate::SPEC,
         data: Some(Arc::new(PiData)),
         launcher: Some(Arc::new(PiLauncher { tui_command })),
@@ -68,7 +74,7 @@ impl ClientData for PiData {
             .timeline()
             .resolver
             .resolve(
-                &pontia_agent_clients::raw_transcripts::AgentBindingResolveRequest {
+                &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest {
                     id: binding.id,
                     session_id: binding.session_id.clone(),
                     client_type: binding.client_type,

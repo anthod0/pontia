@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use pontia_agent_clients::{AgentClientCapabilities, AgentInput};
+pub use pontia_core::client_capabilities::{AgentClientCapabilities, AgentInput};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeStartRequest {
@@ -50,4 +50,10 @@ impl RuntimeStartResult {
     pub fn tmux_pane_id(&self) -> Option<&str> {
         self.metadata["tmux_pane_id"].as_str()
     }
+}
+
+#[derive(Clone)]
+pub struct TmuxLaunchOptions {
+    pub capabilities: AgentClientCapabilities,
+    pub hook_log: Option<(&'static str, &'static str)>,
 }

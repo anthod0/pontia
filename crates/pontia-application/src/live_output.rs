@@ -1,4 +1,4 @@
-use pontia_agent_clients::raw_transcripts::ManagedToolUse;
+use crate::client_contract::raw_transcripts::ManagedToolUse;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

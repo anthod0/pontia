@@ -1,6 +1,6 @@
 use std::fs;
 
-use pontia_agent_clients::raw_transcripts::{
+use pontia_application::client_contract::raw_transcripts::{
     ResolvedAgentBinding, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
     TimelineBoundaryCapturer, TurnTimelineRange, TurnTimelineReadRequest, TurnTimelineReader,
 };

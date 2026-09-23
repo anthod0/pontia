@@ -35,7 +35,7 @@ impl InternalEventValidationService {
             }
             if self.clients.spec(&event.client_type).is_some_and(|spec| {
                 spec.adapter.client_session_identity
-                    == pontia_agent_clients::ClientSessionIdentityBehavior::RequiredOnReady
+                    == crate::client_contract::ClientSessionIdentityBehavior::RequiredOnReady
             }) {
                 let client_session_key = event
                     .payload

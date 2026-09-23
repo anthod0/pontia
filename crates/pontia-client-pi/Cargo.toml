@@ -6,7 +6,6 @@ license.workspace = true
 
 [dependencies]
 pontia-application.workspace = true
-pontia-agent-clients.workspace = true
 pontia-core.workspace = true
 pontia-runtime.workspace = true
 serde = { workspace = true, features = ["derive"] }

@@ -1,6 +1,6 @@
 use pontia_core::Error;
 
-use pontia_agent_clients::raw_transcripts::{
+use pontia_application::client_contract::raw_transcripts::{
     ResolvedAgentBinding, TurnTimelineRange, TurnTimelineReadError, TurnTimelineReadRequest,
 };
 

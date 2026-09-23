@@ -1,5 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
-use pontia_runtime::codex::protocol::Connection;
+use pontia_client_codex::runtime::protocol::Connection;
 use serde_json::{Value, json};
 use tokio::{
     net::UnixListener,

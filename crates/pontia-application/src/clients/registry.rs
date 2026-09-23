@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
-use pontia_agent_clients::{
+use crate::client_contract::{
     AgentClientSpec, TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend,
 };
 use pontia_core::{
@@ -46,6 +46,10 @@ pub trait ClientLauncher: Send + Sync {
 
 #[derive(Clone)]
 pub struct ClientRegistration {
+    pub in_process: Option<Arc<dyn super::InProcessClient>>,
+    pub session: Option<Arc<dyn super::ClientSession>>,
+    pub prepare_on_input: bool,
+    pub steer: bool,
     pub spec: &'static AgentClientSpec,
     pub data: Option<Arc<dyn ClientData>>,
     pub launcher: Option<Arc<dyn ClientLauncher>>,
@@ -59,21 +63,7 @@ pub struct ClientRegistry {
 impl Default for ClientRegistry {
     fn default() -> Self {
         Self {
-            entries: Arc::new(
-                pontia_agent_clients::AGENT_CLIENTS
-                    .iter()
-                    .map(|spec| {
-                        (
-                            spec.client_type,
-                            ClientRegistration {
-                                spec,
-                                data: None,
-                                launcher: None,
-                            },
-                        )
-                    })
-                    .collect(),
-            ),
+            entries: Arc::new(HashMap::new()),
         }
     }
 }
@@ -96,14 +86,10 @@ impl ClientRegistry {
     }
 
     pub fn timeline(&self, client: &str) -> Option<TurnTimelineBackend> {
-        self.data(client)
-            .map(|data| data.timeline())
-            .or_else(|| pontia_agent_clients::turn_timeline_backend_for(client))
+        self.data(client).map(|data| data.timeline())
     }
 
     pub fn boundaries(&self, client: &str) -> Option<TimelineBoundaryBackend> {
-        self.data(client)
-            .map(|data| data.boundaries())
-            .or_else(|| pontia_agent_clients::timeline_boundary_backend_for(client))
+        self.data(client).map(|data| data.boundaries())
     }
 }

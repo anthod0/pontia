@@ -47,9 +47,12 @@ pub async fn open_codex_tui(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    pontia_application::codex::CodexService::new(state.event_ingest_service())
-        .open_tui(&session_id)
-        .await?;
+    SessionCommandService::new(
+        state.event_ingest_service(),
+        state.pontia_home().to_path_buf(),
+    )
+    .open_client_interface(&session_id)
+    .await?;
     Ok(ok(
         json!({"session":ExternalQueryService::new(state.db()).with_clients(state.clients()).get_session(&session_id).await?}),
     ))

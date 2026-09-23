@@ -6,9 +6,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+pontia-client-codex.workspace = true
 pontia-client-pi.workspace = true
 axum = "0.8"
-pontia-agent-clients = { workspace = true, default-features = true }
 pontia-application = { workspace = true, default-features = true }
 pontia-config = { workspace = true, default-features = true }
 pontia-core.workspace = true

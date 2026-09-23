@@ -3,69 +3,38 @@ use std::path::Path;
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
-use pontia_agent_clients::{self as agent_clients, RuntimeBehavior};
+use crate::TmuxLaunchOptions;
 use pontia_core::{
     error::{Error, Result},
     ids::{new_event_id, new_runtime_instance_id},
     time::utc_now,
 };
 
-use super::{AgentInput, RuntimeStartRequest, RuntimeStartResult, in_process, paths, script, tmux};
+use super::{RuntimeStartRequest, RuntimeStartResult, in_process, paths, script, tmux};
 
 #[derive(Debug, Clone, Default)]
 pub struct GenericRuntimeManager;
 
 impl GenericRuntimeManager {
-    pub fn start_session(
+    pub fn start_in_process(
         &self,
-        pontia_home: &Path,
+        root: &Path,
         request: RuntimeStartRequest,
+        capabilities: pontia_core::client_capabilities::AgentClientCapabilities,
+        count: i64,
     ) -> Result<RuntimeStartResult> {
-        self.start_session_with_restart_count(pontia_home, request, 0)
+        in_process::start_session(root, request, capabilities, count)
     }
 
-    pub fn start_session_with_restart_count(
-        &self,
-        pontia_home: &Path,
-        request: RuntimeStartRequest,
-        restart_count: i64,
-    ) -> Result<RuntimeStartResult> {
-        let client_spec =
-            agent_clients::get_client_spec(&request.client_type).ok_or_else(|| {
-                Error::Domain(format!("unsupported client_type: {}", request.client_type))
-            })?;
-        self.start_session_with_restart_count_and_reuse_target(
-            pontia_home,
-            request,
-            restart_count,
-            None,
-            client_spec,
-        )
-    }
-
-    pub fn start_session_with_restart_count_and_reuse_target(
+    pub fn start_tmux(
         &self,
         pontia_home: &Path,
         request: RuntimeStartRequest,
         restart_count: i64,
         reuse_target: Option<(&str, &str)>,
-        client_spec: &agent_clients::AgentClientSpec,
+        options: &TmuxLaunchOptions,
     ) -> Result<RuntimeStartResult> {
-        let capabilities = if client_spec.adapter.runtime == RuntimeBehavior::InProcess {
-            agent_clients::in_process_capabilities(&request.client_type)
-                .unwrap_or_else(|| client_spec.capabilities.clone())
-        } else {
-            client_spec.capabilities.clone()
-        };
-        if client_spec.adapter.runtime == RuntimeBehavior::CodexAppServer {
-            return Err(Error::Domain(
-                "Codex requires the asynchronous app-server controller".into(),
-            ));
-        }
-        if client_spec.adapter.runtime == RuntimeBehavior::InProcess {
-            return in_process::start_session(pontia_home, request, capabilities, restart_count);
-        }
-
+        let capabilities = options.capabilities.clone();
         let start_command = request.start_command.clone();
         let base_tmux_session = tmux::tmux_session_name(&request);
         let reuse_target = reuse_target
@@ -78,7 +47,6 @@ impl GenericRuntimeManager {
             base_tmux_session
         };
         let workspace = paths::workspace_path(pontia_home, &request)?;
-        script::run_startup_hooks(client_spec.adapter.startup_hooks, &workspace)?;
         let log_paths = paths::log_paths(pontia_home);
         std::fs::create_dir_all(&log_paths.log_dir)?;
         let log_path = log_paths.runtime_log.clone();
@@ -97,7 +65,6 @@ impl GenericRuntimeManager {
             &request,
             &launch_id,
             &runtime_instance_id,
-            client_spec,
         )?;
         let quoted_launch_script_path = script::shell_quote_path(&launch_script_path);
         let launch_command =
@@ -122,18 +89,9 @@ impl GenericRuntimeManager {
         let started_at = utc_now()
             .format(&Rfc3339)
             .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
-        let hook_log_metadata = client_spec
-            .tmux_runtime()
-            .and_then(|runtime| runtime.hook_log)
-            .map(|hook_log| {
-                (
-                    hook_log.metadata_key,
-                    log_paths
-                        .client_hook_log(hook_log.file_name)
-                        .display()
-                        .to_string(),
-                )
-            });
+        let hook_log_metadata = options
+            .hook_log
+            .map(|(file, key)| (key, log_paths.client_hook_log(file).display().to_string()));
         let workspace = workspace.display().to_string();
         let log_dir = log_paths.log_dir.display().to_string();
         let log_path = log_path.display().to_string();
@@ -177,10 +135,6 @@ impl GenericRuntimeManager {
             capabilities,
             metadata,
         })
-    }
-
-    pub fn submit_input(&self, client_type: &str, input: AgentInput) -> Result<()> {
-        agent_clients::accept_in_process_input(client_type, input)
     }
 
     pub fn terminate_session(&self, runtime_handle: &str) -> Result<()> {
@@ -239,14 +193,6 @@ impl GenericRuntimeManager {
         fingerprint: &crate::TmuxProcessFingerprint,
     ) -> bool {
         tmux::validate_fingerprint(socket_path, pane_id, fingerprint)
-    }
-
-    pub fn restart_session(
-        &self,
-        pontia_home: &Path,
-        request: RuntimeStartRequest,
-    ) -> Result<RuntimeStartResult> {
-        self.start_session(pontia_home, request)
     }
 
     pub fn is_alive(&self, runtime_handle: &str) -> bool {

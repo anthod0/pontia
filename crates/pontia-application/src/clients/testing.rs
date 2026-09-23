@@ -1,8 +1,8 @@
-use crate::{ClientControlChannel, ClientControlOperation};
-use pontia_agent_clients::{
+use crate::client_contract::{
     AgentClientSpec, DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior, TerminateBehavior,
     TmuxRuntimeBehavior, TurnLifecycleBehavior,
 };
+use crate::{ClientControlChannel, ClientControlOperation};
 use std::sync::{
     Arc, OnceLock,
     atomic::{AtomicBool, Ordering},
@@ -11,9 +11,7 @@ use std::sync::{
 pub(crate) fn clients() -> super::ClientRegistry {
     static SPEC: OnceLock<AgentClientSpec> = OnceLock::new();
     let spec = SPEC.get_or_init(|| {
-        let mut spec = pontia_agent_clients::get_client_spec("generic")
-            .unwrap()
-            .clone();
+        let mut spec = crate::client_contract::TEST_SPEC.clone();
         spec.client_type = "test-channel";
         spec.capabilities.interrupt = true;
         spec.adapter.dispatch = DispatchBehavior::Connected;
@@ -29,7 +27,12 @@ pub(crate) fn clients() -> super::ClientRegistry {
         spec
     });
     let mut registry = super::ClientRegistry::default();
+    registry.register(crate::client_contract::test_registration());
     registry.register(super::ClientRegistration {
+        in_process: None,
+        session: None,
+        prepare_on_input: false,
+        steer: false,
         spec,
         data: None,
         launcher: None,

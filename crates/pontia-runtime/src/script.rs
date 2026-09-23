@@ -5,7 +5,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia_agent_clients::{self as agent_clients, DispatchBehavior, RuntimeBehavior};
 use pontia_core::error::{Error, Result};
 
 use super::RuntimeStartRequest;
@@ -20,7 +19,6 @@ pub(super) fn write_ephemeral_launch_script(
     request: &RuntimeStartRequest,
     launch_id: &str,
     runtime_instance_id: &str,
-    client_spec: &agent_clients::AgentClientSpec,
 ) -> Result<PathBuf> {
     let launch_dir = pontia_home.join("state/launch");
     std::fs::create_dir_all(&launch_dir)?;
@@ -32,7 +30,6 @@ pub(super) fn write_ephemeral_launch_script(
         request,
         launch_id,
         runtime_instance_id,
-        client_spec,
     )?;
     let mut permissions = std::fs::metadata(&path)?.permissions();
     permissions.set_mode(0o700);
@@ -47,50 +44,21 @@ pub(super) fn write_launch_script(
     request: &RuntimeStartRequest,
     launch_id: &str,
     runtime_instance_id: &str,
-    client_spec: &agent_clients::AgentClientSpec,
 ) -> Result<()> {
     let runtime_environment = render_runtime_environment(request)?;
-    let (log_setup, runtime_body) = match client_spec.adapter.runtime {
-        RuntimeBehavior::CodexAppServer => {
-            return Err(Error::Domain("Codex uses a managed app-server".into()));
-        }
-        RuntimeBehavior::Tmux(_) => {
-            let command = request
-                .start_command
-                .as_deref()
-                .ok_or_else(|| Error::Domain("tmux launch requires a command".into()))?;
-            (
-                format!(
-                    "echo {} >> {}",
-                    shell_quote(&format!(
-                        "session={} launch={} pontia runtime started",
-                        request.session_id, launch_id
-                    )),
-                    shell_quote_path(runtime_paths.log_path),
-                ),
-                format!("exec sh -lc {}\n", shell_quote(command)),
-            )
-        }
-        RuntimeBehavior::InProcess => match client_spec.adapter.dispatch {
-            DispatchBehavior::InProcessRecorded | DispatchBehavior::None => (
-                format!(
-                    "exec >> {} 2>&1\necho {}",
-                    shell_quote_path(runtime_paths.log_path),
-                    shell_quote(&format!(
-                        "session={} launch={} pontia runtime started",
-                        request.session_id, launch_id
-                    )),
-                ),
-                "trap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n".to_string(),
-            ),
-            DispatchBehavior::Connected | DispatchBehavior::CodexProtocol => {
-                return Err(Error::Domain(format!(
-                    "{} cannot use client protocol dispatch with an in-process runtime",
-                    request.client_type
-                )));
-            }
-        },
-    };
+    let command = request
+        .start_command
+        .as_deref()
+        .ok_or_else(|| Error::Domain("tmux launch requires a command".into()))?;
+    let log_setup = format!(
+        "echo {} >> {}",
+        shell_quote(&format!(
+            "session={} launch={} pontia runtime started",
+            request.session_id, launch_id
+        )),
+        shell_quote_path(runtime_paths.log_path)
+    );
+    let runtime_body = format!("exec sh -lc {}\n", shell_quote(command));
     let content = format!(
         r#"#!/usr/bin/env sh
 unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_PATCH_ID
@@ -151,13 +119,6 @@ pub(super) fn shell_quote_path(path: &Path) -> String {
     shell_quote(&path.display().to_string())
 }
 
-pub(super) fn run_startup_hooks(
-    hooks: &[agent_clients::StartupHook],
-    workspace: &Path,
-) -> Result<()> {
-    agent_clients::run_startup_hooks(hooks, workspace)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,7 +157,6 @@ mod tests {
             &request,
             "launch_1",
             "runtime_instance_1",
-            &crate::test_tmux_spec(),
         )
         .expect("write script");
 
@@ -263,7 +223,6 @@ mod tests {
             &request,
             "launch_explicit",
             "rtinst_explicit",
-            &crate::test_tmux_spec(),
         )
         .expect("write launch script");
 

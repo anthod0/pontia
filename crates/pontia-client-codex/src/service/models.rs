@@ -1,11 +1,13 @@
 use std::collections::HashSet;
 
+use crate::runtime::{CodexRuntime, protocol::Connection};
 use pontia_core::{Error, Result, domain::EventType};
-use pontia_runtime::codex::{CodexRuntime, protocol::Connection};
 use serde_json::{Value, json};
 
 use super::{CodexService, string};
-use crate::{AgentBindingService, runtime::control_target::ControlTarget, sessions::SessionModel};
+use pontia_application::{
+    AgentBindingService, runtime::control_target::ControlTarget, sessions::SessionModel,
+};
 
 impl CodexService {
     pub(crate) async fn list_models(&self, target: &ControlTarget) -> Result<Vec<SessionModel>> {

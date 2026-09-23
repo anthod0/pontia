@@ -3,7 +3,6 @@
 //! The MVP generic runtime records a binding and immediately reports ready. This
 //! module stays independent from HTTP transport details.
 
-pub mod codex;
 mod in_process;
 mod manager;
 mod paths;
@@ -14,8 +13,8 @@ mod types;
 
 pub use manager::GenericRuntimeManager;
 use std::path::PathBuf;
-pub use tmux::TmuxProcessFingerprint;
-pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult};
+pub use tmux::{TmuxProcessFingerprint, is_alive, pane_binding, spawn_tmux_session};
+pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult, TmuxLaunchOptions};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PontiaLogPaths {
@@ -38,16 +37,11 @@ pub fn pontia_log_paths(pontia_home: &std::path::Path) -> PontiaLogPaths {
 }
 
 #[cfg(test)]
-fn test_tmux_spec() -> pontia_agent_clients::AgentClientSpec {
-    let mut spec = pontia_agent_clients::get_client_spec("generic")
-        .unwrap()
-        .clone();
-    spec.adapter.runtime =
-        pontia_agent_clients::RuntimeBehavior::Tmux(pontia_agent_clients::TmuxRuntimeBehavior {
-            process_names: &["test-agent"],
-            hook_log: None,
-        });
-    spec
+fn test_tmux_spec() -> TmuxLaunchOptions {
+    TmuxLaunchOptions {
+        capabilities: pontia_core::client_capabilities::AgentClientCapabilities::generic_default(),
+        hook_log: None,
+    }
 }
 
 #[cfg(test)]
@@ -67,7 +61,7 @@ mod tests {
         let session_id = "sess_generic_in_process".to_string();
 
         let runtime = manager
-            .start_session(
+            .start_in_process(
                 Path::new("/pontia-test-home"),
                 RuntimeStartRequest {
                     session_id: session_id.clone(),
@@ -79,6 +73,8 @@ mod tests {
                     start_command: None,
                     environment: Default::default(),
                 },
+                pontia_core::client_capabilities::AgentClientCapabilities::generic_default(),
+                0,
             )
             .expect("generic runtime should start");
 
@@ -101,7 +97,7 @@ mod tests {
         let session_id = "sess_1234567890abcdef".to_string();
 
         let runtime = manager
-            .start_session(
+            .start_in_process(
                 Path::new("/pontia-test-home"),
                 RuntimeStartRequest {
                     session_id,
@@ -113,6 +109,8 @@ mod tests {
                     start_command: None,
                     environment: Default::default(),
                 },
+                pontia_core::client_capabilities::AgentClientCapabilities::generic_default(),
+                0,
             )
             .expect("generic runtime should start");
 
@@ -137,7 +135,12 @@ mod tests {
         };
 
         let first = manager
-            .start_session(Path::new("/pontia-test-home"), request.clone())
+            .start_in_process(
+                Path::new("/pontia-test-home"),
+                request.clone(),
+                pontia_core::client_capabilities::AgentClientCapabilities::generic_default(),
+                0,
+            )
             .expect("generic runtime should start");
         assert!(manager.is_alive(&first.runtime_handle));
 
@@ -147,7 +150,12 @@ mod tests {
         assert!(!manager.is_alive(&first.runtime_handle));
 
         let second = manager
-            .start_session_with_restart_count(Path::new("/pontia-test-home"), request, 1)
+            .start_in_process(
+                Path::new("/pontia-test-home"),
+                request,
+                pontia_core::client_capabilities::AgentClientCapabilities::generic_default(),
+                1,
+            )
             .expect("generic runtime should restart");
         assert_eq!(second.runtime_handle, first.runtime_handle);
         assert!(manager.is_alive(&second.runtime_handle));
@@ -200,7 +208,7 @@ mod tests {
         ));
 
         let runtime = manager
-            .start_session_with_restart_count_and_reuse_target(
+            .start_tmux(
                 dir.path(),
                 RuntimeStartRequest {
                     session_id: session_id.clone(),

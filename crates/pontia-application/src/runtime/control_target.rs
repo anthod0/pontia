@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 
 /// Resolves once, then fences every execution against that same instance.
 #[derive(Clone, Debug)]
-pub(crate) struct ControlTarget {
+pub struct ControlTarget {
     pub session_id: String,
     pub runtime_instance_id: Option<String>,
 }

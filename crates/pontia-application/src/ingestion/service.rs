@@ -60,7 +60,7 @@ impl EventIngestService {
     pub(crate) fn inbox_scheduler(&self) -> crate::inbox::InboxScheduler {
         self.inbox_scheduler.clone()
     }
-    pub(crate) fn control_available(&self, session: &str) {
+    pub fn control_available(&self, session: &str) {
         InboxCommandService::new(self.clone()).notify_available(session);
     }
 
@@ -162,11 +162,10 @@ impl EventIngestService {
         runtime_instance_id: Option<&str>,
     ) -> Result<()> {
         let Some(event) = runtime_instance_id.and_then(|runtime_instance_id| {
-            pontia_agent_clients::in_process_ready_event(
-                client_type,
-                session_id,
-                runtime_instance_id,
-            )
+            self.clients
+                .get(client_type)
+                .and_then(|entry| entry.in_process.as_ref())
+                .map(|client| client.ready(session_id, runtime_instance_id))
         }) else {
             return Ok(());
         };

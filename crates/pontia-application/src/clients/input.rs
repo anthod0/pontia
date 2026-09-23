@@ -1,6 +1,6 @@
-use pontia_agent_clients::DispatchMode;
+use crate::client_contract::DispatchMode;
 use pontia_core::{Error, Result, ids::new_dispatch_id};
-use pontia_runtime::{AgentInput, GenericRuntimeManager};
+use pontia_runtime::AgentInput;
 use serde_json::Value;
 
 use super::ClientAdapter;
@@ -13,7 +13,7 @@ use crate::{
 impl ClientAdapter {
     pub async fn await_initial_ready(&self, target: &ControlTarget) -> Result<()> {
         target.validate(&self.events.db()).await?;
-        if self.spec.adapter.dispatch == DispatchMode::Connected {
+        if !self.prepares_on_input() && self.spec.adapter.dispatch == DispatchMode::Connected {
             crate::RuntimeReadinessService::new(self.events.db())
                 .wait_until_ready(
                     &target.session_id,
@@ -50,9 +50,10 @@ impl ClientAdapter {
         intent: &InputIntent,
     ) -> Result<InputReceipt> {
         target.validate(&self.events.db()).await?;
-        if self.spec.adapter.dispatch == DispatchMode::CodexProtocol {
-            return crate::codex::CodexService::new(self.events.clone())
-                .submit(
+        if let Some(client) = self.session_client() {
+            return client
+                .input(
+                    self.events.clone(),
                     target,
                     &input,
                     metadata["inbox_message_id"].as_str(),
@@ -71,14 +72,20 @@ impl ClientAdapter {
                     .await?
             }
             DispatchMode::InProcessRecorded => {
-                GenericRuntimeManager.submit_input(self.spec.client_type, input)?;
+                self.events
+                    .clients()
+                    .get(self.spec.client_type)
+                    .and_then(|entry| entry.in_process.as_ref())
+                    .ok_or_else(|| {
+                        Error::CapabilityUnavailable("in-process client is unavailable".into())
+                    })?
+                    .submit(input)?;
             }
             DispatchMode::None => {
                 return Err(Error::CapabilityUnavailable(
                     "client has no input channel".into(),
                 ));
             }
-            DispatchMode::CodexProtocol => unreachable!(),
         }
         Ok(InputReceipt {
             native_turn_id: None,
@@ -90,11 +97,9 @@ impl ClientAdapter {
         if !self.spec.capabilities.interrupt {
             return ControlResult::Unsupported("client does not support interrupt".into());
         }
-        if self.spec.adapter.dispatch == DispatchMode::CodexProtocol {
+        if let Some(client) = self.session_client() {
             return ControlResult::from_result(
-                crate::codex::CodexService::new(self.events.clone())
-                    .interrupt(target, turn)
-                    .await,
+                client.interrupt(self.events.clone(), target, turn).await,
             );
         }
         ControlResult::from_result(self.channel_interrupt(target).await)

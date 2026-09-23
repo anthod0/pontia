@@ -1,5 +1,5 @@
 use super::CodexService;
-use crate::{AppState, CreateSessionRequest, SessionCommandService};
+use pontia_application::{AppState, CreateSessionRequest, SessionCommandService};
 use pontia_core::{Error, domain::EventType};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
@@ -13,6 +13,23 @@ struct Fixture {
 }
 
 impl Fixture {
+    async fn report(
+        &self,
+        kind: EventType,
+        turn: Option<&str>,
+        data: serde_json::Value,
+    ) -> Result<pontia_application::EventIngestResult, pontia_application::EventReportError> {
+        self.state
+            .event_ingest_service()
+            .report_fact(pontia_application::ReportedFact {
+                session_id: self.session.clone(),
+                turn_id: turn.map(str::to_owned),
+                fact_type: kind,
+                data,
+            })
+            .await
+    }
+
     async fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
         let pool = connect_sqlite(&format!(
@@ -22,7 +39,11 @@ impl Fixture {
         .await
         .unwrap();
         run_migrations(&pool).await.unwrap();
-        let state = AppState::builder(pool, root.path().into()).build();
+        let mut clients = pontia_application::clients::ClientRegistry::default();
+        clients.register(crate::registration());
+        let state = AppState::builder(pool, root.path().into())
+            .clients(clients)
+            .build();
         let request: CreateSessionRequest =
             serde_json::from_value(json!({"client_type":"codex","workspace":root.path()})).unwrap();
         let created = SessionCommandService::new(state.event_ingest_service(), root.path().into())
@@ -307,98 +328,6 @@ async fn model_observations_update_the_projection_and_publish_without_creating_a
 }
 
 #[tokio::test]
-async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
-    let fixture = Fixture::new().await;
-    let inbox = crate::InboxCommandService::new(fixture.state.event_ingest_service());
-    for response_first in [true, false] {
-        let id = if response_first {
-            "response-first"
-        } else {
-            "fact-first"
-        };
-        sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES (?,?,'dispatching','after_idle','input','{}')")
-            .bind(id).bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
-        let receipt = crate::control::InputReceipt {
-            native_turn_id: Some(id.into()),
-            runtime_instance_id: Some("runtime".into()),
-        };
-        let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
-            .fetch_one(&fixture.state.db())
-            .await
-            .unwrap();
-        if response_first {
-            inbox
-                .record_receipt(&fixture.session, id, &receipt)
-                .await
-                .unwrap();
-            // Fact ingestion reserves its identity before committing the Turn projection.
-            sqlx::query("INSERT INTO native_turn_bindings(session_id,client_turn_id,turn_id) VALUES (?,?,'reserved-turn')")
-                .bind(&fixture.session).bind(id).execute(&fixture.state.db()).await.unwrap();
-            inbox
-                .record_receipt(&fixture.session, id, &receipt)
-                .await
-                .unwrap();
-            assert!(
-                inbox
-                    .get_message(&fixture.session, id)
-                    .await
-                    .unwrap()
-                    .unwrap()
-                    .turn_id
-                    .is_none()
-            );
-            let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
-                .fetch_one(&fixture.state.db())
-                .await
-                .unwrap();
-            assert_eq!(before, after, "a control reply cannot create a Turn");
-        }
-        fixture.service.turn_fact(&fixture.session, "runtime", &json!({"id":id,"status":"completed","items":[{"type":"userMessage","content":[{"text":"input"}]}]}), "snapshot").await.unwrap();
-        inbox
-            .record_receipt(&fixture.session, id, &receipt)
-            .await
-            .unwrap();
-        inbox
-            .record_receipt(&fixture.session, id, &receipt)
-            .await
-            .unwrap();
-        let message = inbox
-            .get_message(&fixture.session, id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(message.turn_id.is_some());
-        let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
-            .fetch_one(&fixture.state.db())
-            .await
-            .unwrap();
-        assert_eq!(after, before + 1);
-    }
-    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES ('stale',?,'dispatching','after_idle','input','{}')")
-        .bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
-    inbox
-        .record_receipt(
-            &fixture.session,
-            "stale",
-            &crate::control::InputReceipt {
-                native_turn_id: Some("fact-first".into()),
-                runtime_instance_id: Some("old-runtime".into()),
-            },
-        )
-        .await
-        .unwrap();
-    assert!(
-        inbox
-            .get_message(&fixture.session, "stale")
-            .await
-            .unwrap()
-            .unwrap()
-            .turn_id
-            .is_none()
-    );
-}
-
-#[tokio::test]
 async fn model_snapshot_before_resume_updates_metadata_without_resuming_the_session() {
     let fixture = Fixture::new().await;
     fixture
@@ -424,16 +353,11 @@ async fn model_snapshot_before_resume_updates_metadata_without_resuming_the_sess
     let session = ingest.get_session(&fixture.session).await.unwrap().unwrap();
     assert_eq!(session.state.to_string(), "exited");
     assert_eq!(session.metadata["model"], "resumed-model");
-    SessionCommandService::new(ingest.clone(), fixture._root.path().into())
-        .observe_resumed_session(&fixture.session)
-        .await
-        .unwrap();
-    fixture
-        .service
-        .report(
+    pontia_application::native_sessions::NativeSessionService::new(ingest.clone())
+        .ready(
             &fixture.session,
             "runtime",
-            EventType::SessionReady,
+            fixture._root.path(),
             json!({"client_session_key":"thread"}),
         )
         .await
@@ -441,4 +365,90 @@ async fn model_snapshot_before_resume_updates_metadata_without_resuming_the_sess
     let session = ingest.get_session(&fixture.session).await.unwrap().unwrap();
     assert_eq!(session.state.to_string(), "idle");
     assert_eq!(session.metadata["model"], "resumed-model");
+}
+
+#[tokio::test]
+async fn concurrent_native_facts_create_one_turn_and_one_committed_notification() {
+    let fixture = Fixture::new().await;
+    let service = fixture.state.event_ingest_service();
+    let before = service.list_events(&fixture.session).await.unwrap().len();
+    let mut subscriber = fixture.state.agent_events().subscribe();
+    let data = json!({"runtime_instance_id":"runtime","native_turn_id":"native-one","input":{"summary":"manual input"}});
+    let (first, second) = tokio::join!(
+        fixture.report(EventType::TurnStarted, None, data.clone()),
+        fixture.report(EventType::TurnStarted, None, data),
+    );
+    let (first, second) = (first.unwrap(), second.unwrap());
+    assert_eq!(first.turn_id, second.turn_id);
+    assert_eq!(first.event_id, second.event_id);
+    assert_ne!(first.duplicate, second.duplicate);
+    assert_eq!(subscriber.try_recv().unwrap().event_id, first.event_id);
+    assert!(matches!(subscriber.try_recv(), Err(TryRecvError::Empty)));
+    assert_eq!(
+        service.list_events(&fixture.session).await.unwrap().len(),
+        before + 1
+    );
+    sqlx::query(
+        "UPDATE runtime_bindings SET runtime_instance_id = 'replacement' WHERE session_id = ?",
+    )
+    .bind(&fixture.session)
+    .execute(&fixture.state.db())
+    .await
+    .unwrap();
+    for kind in [EventType::TurnStarted, EventType::TurnCompleted] {
+        let error = fixture
+            .report(
+                kind,
+                None,
+                json!({"runtime_instance_id":"runtime","native_turn_id":"native-one"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.is_permanent_rejection());
+    }
+    assert!(matches!(subscriber.try_recv(), Err(TryRecvError::Empty)));
+    assert_eq!(
+        service
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .state
+            .to_string(),
+        "busy"
+    );
+    fixture
+        .report(
+            EventType::SessionExited,
+            None,
+            json!({"runtime_instance_id":"replacement","reason":"thread_archived"}),
+        )
+        .await
+        .unwrap();
+    let turn_id = first.turn_id.unwrap();
+    assert_eq!(
+        service
+            .get_turn(&turn_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .state
+            .to_string(),
+        "running"
+    );
+    fixture.report(EventType::TurnInterrupted, None, json!({"runtime_instance_id":"replacement","native_turn_id":"native-one","native_completed_at":null,"observation":"snapshot"})).await.unwrap();
+    let query = pontia_application::ExternalQueryService::new(fixture.state.db());
+    let turns = query.list_turns(&fixture.session).await.unwrap();
+    assert_eq!(turns.len(), 1);
+    assert_eq!(turns[0].state, "interrupted");
+    assert_eq!(turns[0].completed_at, None);
+    assert_eq!(
+        query
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "exited"
+    );
 }

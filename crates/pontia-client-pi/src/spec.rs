@@ -1,8 +1,7 @@
-use pontia_agent_clients::{
+use pontia_application::client_contract::{
     AgentClientAdapter, AgentClientCapabilities, AgentClientSpec, ClientSessionIdentityBehavior,
     ContextUsageCapability, DispatchBehavior, HookLogBehavior, RuntimeBehavior,
-    RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
-    TimelineSourceBehavior, TmuxRuntimeBehavior, TranscriptBehavior, TurnLifecycleBehavior,
+    RuntimeBindingBehavior, TerminateBehavior, TmuxRuntimeBehavior, TurnLifecycleBehavior,
 };
 
 pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
@@ -24,6 +23,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "pi",
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
+        native_turn_identity: false,
         runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
             process_names: &["pi"],
             hook_log: Some(HookLogBehavior {
@@ -38,9 +38,5 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         runtime_binding: RuntimeBindingBehavior::Tmux {
             runtime_kind: "pi_tui",
         },
-        system_prompt_injection: SystemPromptInjectionBehavior::AppendFromExternalApi,
-        startup_hooks: &[],
-        timeline_source: TimelineSourceBehavior::Transcript,
-        transcript: TranscriptBehavior::Unsupported,
     },
 };

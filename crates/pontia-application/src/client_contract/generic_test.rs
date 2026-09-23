@@ -7,12 +7,11 @@ use pontia_core::{
     ids::new_event_id,
 };
 
-use crate::{
+use crate::client_contract::{
     AgentClientCapabilities, AgentInput, ContextUsageCapability,
     types::{
         AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, DispatchBehavior,
-        RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
-        TimelineSourceBehavior, TranscriptBehavior, TurnLifecycleBehavior,
+        RuntimeBehavior, RuntimeBindingBehavior, TerminateBehavior, TurnLifecycleBehavior,
     },
 };
 
@@ -35,16 +34,13 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "generic",
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
+        native_turn_identity: false,
         runtime: RuntimeBehavior::InProcess,
         dispatch: DispatchBehavior::InProcessRecorded,
         client_session_identity: ClientSessionIdentityBehavior::Unsupported,
         terminate: TerminateBehavior::RuntimeManager,
         turn_lifecycle: TurnLifecycleBehavior::BackendManaged,
         runtime_binding: RuntimeBindingBehavior::Unsupported,
-        system_prompt_injection: SystemPromptInjectionBehavior::Disabled,
-        startup_hooks: &[],
-        timeline_source: TimelineSourceBehavior::Unsupported,
-        transcript: TranscriptBehavior::Unsupported,
     },
 };
 
@@ -110,4 +106,27 @@ fn recorded_inputs() -> &'static Mutex<Vec<AgentInput>> {
 fn test_capabilities() -> &'static Mutex<AgentClientCapabilities> {
     static TEST_CAPABILITIES: OnceLock<Mutex<AgentClientCapabilities>> = OnceLock::new();
     TEST_CAPABILITIES.get_or_init(|| Mutex::new(AgentClientCapabilities::generic_default()))
+}
+
+impl crate::clients::InProcessClient for GenericTestClient {
+    fn capabilities(&self) -> AgentClientCapabilities {
+        self.capabilities()
+    }
+    fn submit(&self, input: AgentInput) -> pontia_core::Result<()> {
+        self.accept_input(input)
+    }
+    fn ready(&self, session: &str, instance: &str) -> ReportedEvent {
+        Self::ready_event(session, instance)
+    }
+}
+pub fn registration() -> crate::clients::ClientRegistration {
+    crate::clients::ClientRegistration {
+        spec: &SPEC,
+        data: None,
+        launcher: None,
+        session: None,
+        prepare_on_input: false,
+        steer: false,
+        in_process: Some(std::sync::Arc::new(GenericTestClient)),
+    }
 }
