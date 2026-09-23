@@ -254,3 +254,95 @@ async fn storage_failure_keeps_its_error_type_and_does_not_publish_a_fact() {
         "idle"
     );
 }
+
+#[tokio::test]
+async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
+    let fixture = Fixture::new().await;
+    let inbox = crate::InboxCommandService::new(fixture.state.event_ingest_service());
+    for response_first in [true, false] {
+        let id = if response_first {
+            "response-first"
+        } else {
+            "fact-first"
+        };
+        sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES (?,?,'dispatching','after_idle','input','{}')")
+            .bind(id).bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
+        let receipt = crate::control::InputReceipt {
+            native_turn_id: Some(id.into()),
+            runtime_instance_id: Some("runtime".into()),
+        };
+        let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
+            .fetch_one(&fixture.state.db())
+            .await
+            .unwrap();
+        if response_first {
+            inbox
+                .record_receipt(&fixture.session, id, &receipt)
+                .await
+                .unwrap();
+            // Fact ingestion reserves its identity before committing the Turn projection.
+            sqlx::query("INSERT INTO native_turn_bindings(session_id,client_turn_id,turn_id) VALUES (?,?,'reserved-turn')")
+                .bind(&fixture.session).bind(id).execute(&fixture.state.db()).await.unwrap();
+            inbox
+                .record_receipt(&fixture.session, id, &receipt)
+                .await
+                .unwrap();
+            assert!(
+                inbox
+                    .get_message(&fixture.session, id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .turn_id
+                    .is_none()
+            );
+            let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
+                .fetch_one(&fixture.state.db())
+                .await
+                .unwrap();
+            assert_eq!(before, after, "a control reply cannot create a Turn");
+        }
+        fixture.service.turn_fact(&fixture.session, "runtime", &json!({"id":id,"status":"completed","items":[{"type":"userMessage","content":[{"text":"input"}]}]}), "snapshot").await.unwrap();
+        inbox
+            .record_receipt(&fixture.session, id, &receipt)
+            .await
+            .unwrap();
+        inbox
+            .record_receipt(&fixture.session, id, &receipt)
+            .await
+            .unwrap();
+        let message = inbox
+            .get_message(&fixture.session, id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(message.turn_id.is_some());
+        let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
+            .fetch_one(&fixture.state.db())
+            .await
+            .unwrap();
+        assert_eq!(after, before + 1);
+    }
+    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES ('stale',?,'dispatching','after_idle','input','{}')")
+        .bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
+    inbox
+        .record_receipt(
+            &fixture.session,
+            "stale",
+            &crate::control::InputReceipt {
+                native_turn_id: Some("fact-first".into()),
+                runtime_instance_id: Some("old-runtime".into()),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        inbox
+            .get_message(&fixture.session, "stale")
+            .await
+            .unwrap()
+            .unwrap()
+            .turn_id
+            .is_none()
+    );
+}

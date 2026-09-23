@@ -15,9 +15,16 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     set_default_client_type(config.default_client_type.clone());
     set_runtime_config(config.runtime.clone());
     set_runtime_bind_addr(config.bind_addr);
-    Ok(AppState::builder(db, config.pontia_home.clone())
+    let state = AppState::builder(db, config.pontia_home.clone())
         .external_api_token(config.external_api_token.clone())
         .workspace_browser(config.workspace_browser.clone())
         .file_picker(config.file_picker.clone())
-        .build())
+        .build();
+    crate::codex::CodexService::new(state.event_ingest_service())
+        .reset_connections()
+        .await?;
+    crate::InboxCommandService::new(state.event_ingest_service())
+        .recover_deliveries()
+        .await?;
+    Ok(state)
 }

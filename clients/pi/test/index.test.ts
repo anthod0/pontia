@@ -211,6 +211,9 @@ describe("pontia pi extension lifecycle", () => {
   test("pontia-edit resolves, navigates once without summarization, clears restored text, then submits replacement", async () => {
     const calls: string[] = [];
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (!_url.endsWith("/inbox/branch-replay/resolve")) {
+        return Response.json({ data: { workspaces: [{ canonical_path: defaultPontiaHome, state: "active" }] } });
+      }
       calls.push("resolve");
       expect(init?.headers).toEqual({
         Authorization: "Bearer token",
@@ -235,14 +238,28 @@ describe("pontia pi extension lifecycle", () => {
         },
       }), { status: 200 });
     });
-    const { commands, sendUserMessage } = install({
+    const { handlers, reported, commands, sendUserMessage } = install({
       env: {
         PONTIA_SESSION_ID: "sess_replay",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
       },
       fetch: fetchImpl as any,
+      loadContext: vi.fn(async () => ({ ok: false as const, silent: true, reason: "no pending input", logFile: "hook.log" })),
     });
-    sendUserMessage.mockImplementation(() => calls.push("send"));
+    const ctx = persistentTuiContext({ isIdle: () => true, sessionManager: {
+      getSessionFile: () => "/tmp/pi/default-session.jsonl",
+      getSessionId: () => "pi_replay", getCwd: () => defaultPontiaHome,
+    } });
+    await handlers.session_start({ reason: "startup" }, ctx);
+    let started: Promise<void> | undefined;
+    sendUserMessage.mockImplementation((input: string) => {
+      calls.push("send");
+      started = (async () => {
+        await Promise.resolve();
+        await handlers.before_agent_start({ prompt: input }, ctx);
+        await handlers.agent_start({}, ctx);
+      })();
+    });
     const commandContext = {
       waitForIdle: vi.fn(async () => calls.push("idle")),
       navigateTree: vi.fn(async () => {
@@ -254,7 +271,10 @@ describe("pontia pi extension lifecycle", () => {
 
     await commands["pontia-edit"].handler("msg_replay", persistentTuiContext(commandContext));
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("http://localhost/internal/v1/inbox/branch-replay/resolve");
+    await started;
+    expect(reported.find((event) => event.type === "turn.started")?.data)
+      .toMatchObject({ input_summary: "replacement prompt", inbox_message_id: "msg_replay" });
+    expect(fetchImpl.mock.calls.some(([url]) => url === "http://localhost/internal/v1/inbox/branch-replay/resolve")).toBe(true);
     expect(commandContext.waitForIdle).toHaveBeenCalledOnce();
     expect(commandContext.navigateTree).toHaveBeenCalledOnce();
     expect(commandContext.navigateTree).toHaveBeenCalledWith("native-user", { summarize: false });

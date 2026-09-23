@@ -174,11 +174,13 @@ async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_request
                 "failed requests must not reconnect themselves"
             );
         });
-        let error = connection
-            .submit("exactly once", None)
-            .await
-            .unwrap_err()
-            .to_string();
+        let error = connection.submit("exactly once", None).await.unwrap_err();
+        assert_eq!(
+            matches!(error, pontia_core::Error::ControlUnknown(_)),
+            failure != "wrong_identity",
+            "{failure}: {error}"
+        );
+        let error = error.to_string();
         let expected = match failure {
             "timeout" => "timed out",
             "disconnect" => "closed",

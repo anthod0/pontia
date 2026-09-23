@@ -1,5 +1,5 @@
 use super::{CodexService, string};
-use crate::{EventReportError, ExternalQueryService, PontiaEventType, ReportedFact};
+use crate::{EventReportError, ReportedFact};
 use pontia_core::domain::EventType;
 use pontia_core::{Error, Result};
 use pontia_runtime::codex::{CodexRuntime, protocol::Connection};
@@ -48,17 +48,13 @@ impl CodexService {
                 "Codex thread is not ready to accept input".into(),
             ));
         }
-        let state = ExternalQueryService::new(self.pool.clone())
-            .get_session(session)
-            .await?
-            .ok_or_else(|| Error::NotFound(session.into()))?;
-        if state.state == "exited" {
-            self.owned_event(session, PontiaEventType::SessionResuming)
+        let needs_ready =
+            crate::SessionCommandService::new(self.event_ingest.clone(), self.root(session).await?)
+                .observe_resumed_session(session)
                 .await?;
-        }
         let already: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='session.ready' AND json_extract(payload,'$.runtime_instance_id')=?")
             .bind(session).bind(&runtime.instance_id).fetch_one(&self.pool).await?;
-        if already == 0 || state.state == "exited" {
+        if already == 0 || needs_ready {
             self.report(session,&runtime.instance_id,EventType::SessionReady,json!({"client_session_key":thread["id"],"launch_cwd":thread["cwd"],"client_session_file":thread["path"]})).await?;
         }
         Ok(())
@@ -126,14 +122,17 @@ impl CodexService {
                         .collect::<Vec<_>>()
                         .join("\n")
                 });
-            let dispatch: Option<(String,String)> = sqlx::query_as("SELECT message_id,input_summary FROM inbox_messages WHERE session_id=? AND json_extract(metadata,'$.codex_turn_id')=? ORDER BY created_at LIMIT 1").bind(session).bind(native_id).fetch_optional(&self.pool).await?;
+            let dispatch = crate::InboxCommandService::new(self.event_ingest.clone())
+                .native_dispatch(session, native_id)
+                .await?;
             let summary = input
                 .as_deref()
                 .or_else(|| dispatch.as_ref().map(|(_, input)| input.as_str()));
             self.report(session,runtime_instance_id,EventType::TurnStarted,json!({"native_turn_id":native_id,"input":{"summary":bounded(summary)},"metadata":{"native_turn_id":native_id,"native_started_at":turn["startedAt"],"observation":origin,"inbox_message_id":dispatch.map(|(id,_)|id)}})).await?;
         }
-        sqlx::query("UPDATE inbox_messages SET turn_id=(SELECT turn_id FROM native_turn_bindings WHERE session_id=? AND client_turn_id=?) WHERE session_id=? AND json_extract(metadata,'$.codex_turn_id')=? AND turn_id IS NULL")
-            .bind(session).bind(native_id).bind(session).bind(native_id).execute(&self.pool).await?;
+        crate::InboxCommandService::new(self.event_ingest.clone())
+            .link_native_turn(session, native_id)
+            .await?;
         let kind = match turn["status"].as_str() {
             Some("completed") => EventType::TurnCompleted,
             Some("failed") => EventType::TurnFailed,

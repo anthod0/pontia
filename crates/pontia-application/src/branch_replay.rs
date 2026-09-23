@@ -1,10 +1,3 @@
-use pontia_agent_clients::{
-    self as agent_clients,
-    pi::raw_transcripts::{
-        PiTimelineAdapter, PiTurnUserEntryResolveRequest, PiTurnUserEntryResolver,
-    },
-    raw_transcripts::AgentBindingResolveRequest,
-};
 use pontia_core::{domain::TurnState, error::Error};
 use pontia_storage_sqlite::repositories::{
     agent_bindings::SqliteAgentBindingRepository, inbox::SqliteInboxRepository,
@@ -43,6 +36,45 @@ impl BranchReplayService {
         Self { pool }
     }
 
+    pub(crate) async fn dispatch(
+        &self,
+        events: crate::EventIngestService,
+        session: &str,
+        message: &str,
+    ) -> pontia_core::Result<crate::control::ControlResult<crate::control::InputReceipt>> {
+        let view = ExternalQueryService::new(self.pool.clone())
+            .get_session(session)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session} not found")))?;
+        let target =
+            crate::runtime::control_target::ControlTarget::resolve(&self.pool, session, None)
+                .await?;
+        self.resolve_command(ResolveBranchReplayRequest {
+            inbox_message_id: message.into(),
+            session_id: session.into(),
+            runtime_instance_id: target.instance()?.into(),
+            client_type: view.client_type.clone(),
+        })
+        .await?;
+        let result = crate::clients::ClientAdapter::new(
+            &view.client_type,
+            events.clone(),
+            events.pi_control(),
+        )?
+        .replay(&target, message)
+        .await;
+        Ok(match result {
+            crate::control::ControlResult::Sent(()) => {
+                crate::control::ControlResult::Sent(crate::control::InputReceipt::default())
+            }
+            other => crate::control::ControlResult::from_result(
+                other
+                    .into_result()
+                    .map(|_| crate::control::InputReceipt::default()),
+            ),
+        })
+    }
+
     pub async fn validate_submission(
         &self,
         session_id: &str,
@@ -56,11 +88,6 @@ impl BranchReplayService {
         &self,
         request: ResolveBranchReplayRequest,
     ) -> pontia_core::Result<ResolvedBranchReplay> {
-        if request.client_type != "pi" {
-            return Err(Error::CapabilityUnavailable(
-                "branch replay is supported only for pi".to_string(),
-            ));
-        }
         let runtime_instance_id = SqliteRuntimeBindingRepository::new(self.pool.clone())
             .runtime_instance_id(&request.session_id)
             .await?
@@ -135,7 +162,7 @@ impl BranchReplayService {
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        if session.client_type != "pi" || !session.capabilities.branch_control {
+        if !session.capabilities.branch_control {
             return Err(Error::CapabilityUnavailable(format!(
                 "session {session_id} does not support branch control"
             )));
@@ -181,40 +208,20 @@ impl BranchReplayService {
             .ok_or_else(|| {
                 Error::StateConflict(format!("Session {session_id} has no Agent binding"))
             })?;
-        if binding.client_type != "pi" {
-            return Err(Error::CapabilityUnavailable(format!(
-                "session {session_id} is not bound to pi"
-            )));
+        if binding.client_type != session.client_type {
+            return Err(Error::StateConflict(
+                "Agent binding does not match Session client".into(),
+            ));
         }
-        let backend = agent_clients::turn_timeline_backend_for("pi").ok_or_else(|| {
-            Error::CapabilityUnavailable("Pi timeline resolution is unavailable".to_string())
-        })?;
-        let source = backend
-            .resolver
-            .resolve(&AgentBindingResolveRequest {
-                id: binding.id.clone(),
-                session_id: binding.session_id,
-                client_type: binding.client_type,
-                client_session_file: binding.client_session_file.map(Into::into),
-            })
-            .map_err(|error| {
-                Error::StateConflict(format!("Pi branch target source unavailable: {error}"))
-            })?;
         let all_turns = turns.list_turns(session_id).await?;
         let is_first_session_turn = all_turns
             .first()
             .is_some_and(|turn| turn.turn_id == target_turn_id);
-        PiTimelineAdapter::new()
-            .resolve_user_entry(PiTurnUserEntryResolveRequest {
-                source,
-                session_id: session_id.to_string(),
-                turn_session_id: target.session_id,
-                turn_id: target.turn_id,
-                is_first_session_turn,
-                head_cursor: target.head_cursor,
-                tail_cursor: target.tail_cursor,
-            })
-            .map(|resolved| resolved.entry_id)
-            .map_err(|error| Error::StateConflict(error.to_string()))
+        crate::clients::ClientAdapter::new(
+            &session.client_type,
+            crate::EventIngestService::new(self.pool.clone()),
+            None,
+        )?
+        .branch_target(binding, target, is_first_session_turn)
     }
 }

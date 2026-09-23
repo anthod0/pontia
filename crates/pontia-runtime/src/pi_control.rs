@@ -1,6 +1,6 @@
 use std::{
     path::Path,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
     time::Duration,
 };
 
@@ -98,16 +98,30 @@ impl PiControlConnection {
                 "Pi control binding has changed".into(),
             ));
         }
+        let sent = AtomicBool::new(false);
+        let uncertain = |message: &str| {
+            if sent.load(Ordering::Acquire) {
+                Error::ControlUnknown(message.into())
+            } else {
+                Error::CapabilityUnavailable(message.into())
+            }
+        };
         tokio::select! {
             biased;
-            _ = invalidated.changed() => Err(Error::StateConflict("Pi control binding has changed".into())),
-            result = tokio::time::timeout(REQUEST_TIMEOUT, self.request_inner(method, payload, expected)) => {
-                result.map_err(|_| Error::Domain("Pi control request timed out; request was not replayed".into()))?
+            _ = invalidated.changed() => Err(uncertain("Pi control binding has changed")),
+            result = tokio::time::timeout(REQUEST_TIMEOUT, self.request_inner(method, payload, expected, &sent)) => {
+                result.map_err(|_| uncertain("Pi control request timed out; request was not replayed"))?
             }
         }
     }
 
-    async fn request_inner(&self, method: &str, payload: Value, expected: Value) -> Result<()> {
+    async fn request_inner(
+        &self,
+        method: &str,
+        payload: Value,
+        expected: Value,
+        sent: &AtomicBool,
+    ) -> Result<()> {
         let mut slot = self.stream.lock().await;
         // Keep the stream outside the slot during I/O so cancellation also disconnects it.
         let mut stream = match slot.take() {
@@ -123,6 +137,7 @@ impl PiControlConnection {
                             "session_id": self.session_id,
                             "runtime_instance_id": self.endpoint.runtime_instance_id,
                         }),
+                        None,
                     )
                     .await?;
                 if hello
@@ -138,9 +153,11 @@ impl PiControlConnection {
                 stream
             }
         };
-        let result = self.exchange(&mut stream, method, payload).await?;
+        let result = self
+            .exchange(&mut stream, method, payload, Some(sent))
+            .await?;
         if result != expected {
-            return Err(Error::Domain(format!(
+            return Err(Error::ControlUnknown(format!(
                 "invalid Pi control {method} response; delivery may be uncertain"
             )));
         }
@@ -153,6 +170,7 @@ impl PiControlConnection {
         stream: &mut BufReader<UnixStream>,
         method: &str,
         mut request: Value,
+        sent: Option<&AtomicBool>,
     ) -> Result<Value> {
         let request_id = self.sequence.fetch_add(1, Ordering::Relaxed).to_string();
         request["request_id"] = json!(request_id);
@@ -163,10 +181,30 @@ impl PiControlConnection {
             return Err(Error::Domain("Pi control request exceeds 64 KiB".into()));
         }
         encoded.push(b'\n');
-        stream.get_mut().write_all(&encoded).await?;
-        let response: Value = serde_json::from_slice(&read_frame(stream).await?)?;
+        if let Some(sent) = sent {
+            sent.store(true, Ordering::Release);
+        }
+        let exchange_error = |error: Error| {
+            if sent.is_some() {
+                Error::ControlUnknown(error.to_string())
+            } else {
+                error
+            }
+        };
+        stream
+            .get_mut()
+            .write_all(&encoded)
+            .await
+            .map_err(Error::from)
+            .map_err(exchange_error)?;
+        let response: Value =
+            serde_json::from_slice(&read_frame(stream).await.map_err(exchange_error)?)
+                .map_err(Error::from)
+                .map_err(exchange_error)?;
         if response["version"] != PROTOCOL_VERSION {
-            return Err(Error::Domain("invalid Pi control response version".into()));
+            return Err(exchange_error(Error::Domain(
+                "invalid Pi control response version".into(),
+            )));
         }
         if response["request_id"] != request_id {
             if response["request_id"].is_null() && response["error"]["code"] == "connection_busy" {
@@ -174,9 +212,9 @@ impl PiControlConnection {
                     "Pi control connection_busy: endpoint already has a controller".into(),
                 ));
             }
-            return Err(Error::Domain(
+            return Err(exchange_error(Error::Domain(
                 "Pi control response request_id mismatch".into(),
-            ));
+            )));
         }
         if let Some(error) = response.get("error") {
             return Err(Error::Domain(format!(
@@ -184,10 +222,9 @@ impl PiControlConnection {
                 error["code"], error["message"]
             )));
         }
-        response
-            .get("result")
-            .cloned()
-            .ok_or_else(|| Error::Domain("Pi control response missing result".into()))
+        response.get("result").cloned().ok_or_else(|| {
+            exchange_error(Error::Domain("Pi control response missing result".into()))
+        })
     }
 }
 

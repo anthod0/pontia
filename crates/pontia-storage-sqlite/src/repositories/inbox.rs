@@ -155,7 +155,10 @@ impl SqliteInboxRepository {
         Ok(sqlx::query(
             r#"UPDATE inbox_messages
                SET state = 'dispatching', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE message_id = ? AND state = 'pending'"#,
+               WHERE message_id = ? AND state = 'pending'
+                 AND NOT EXISTS (SELECT 1 FROM inbox_messages AS in_flight
+                     WHERE in_flight.session_id = inbox_messages.session_id
+                     AND (in_flight.state = 'dispatching' OR (in_flight.state = 'dispatched' AND in_flight.turn_id IS NULL)))"#,
         )
         .bind(message_id)
         .execute(&self.pool)
@@ -168,7 +171,7 @@ impl SqliteInboxRepository {
             r#"UPDATE inbox_messages
                SET state = 'dispatched', turn_id = COALESCE(?, turn_id), dispatched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE message_id = ?"#,
+               WHERE message_id = ? AND state = 'dispatching'"#,
         )
         .bind(turn_id)
         .bind(message_id)

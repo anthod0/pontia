@@ -1,6 +1,6 @@
 use std::path::{Component, Path, PathBuf};
 
-use pontia_application::PiGracefulExitService;
+use pontia_application::SessionCommandService;
 use pontia_storage_sqlite::repositories::workflows::{
     CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
 };
@@ -24,12 +24,15 @@ pub struct WorkflowScheduler<S, X> {
     pontia_home: PathBuf,
 }
 
-impl<S> WorkflowScheduler<S, PiGracefulExitService>
+impl<S> WorkflowScheduler<S, SessionCommandService>
 where
     S: SessionCreator,
 {
     pub fn new(pool: SqlitePool, sessions: S, pontia_home: PathBuf) -> Self {
-        let exits = PiGracefulExitService::new(pool.clone());
+        let exits = SessionCommandService::new(
+            pontia_application::EventIngestService::new(pool.clone()),
+            pontia_home.clone(),
+        );
         Self::with_services(pool, sessions, exits, pontia_home)
     }
 }

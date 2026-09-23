@@ -1,7 +1,6 @@
-use pontia_agent_clients::{DispatchMode, get_client_spec};
 use pontia_core::{
     error::{Error, Result},
-    ids::{new_dispatch_id, new_session_id, new_turn_id},
+    ids::new_session_id,
 };
 use pontia_runtime::RuntimeStartRequest;
 use pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository;
@@ -9,11 +8,11 @@ use serde_json::{Value, json};
 
 use super::{
     CreateSessionOutcome, CreateSessionRequest, SessionCommandService, UpdateSessionRequest,
-    validation::{client_dispatch_mode, validate_handle},
+    validation::validate_handle,
 };
 use crate::{
-    EventIngestService, ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType,
-    get_workspace_record, is_supported_client_type, upsert_workspace,
+    ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType, get_workspace_record,
+    is_supported_client_type, upsert_workspace,
 };
 
 enum SessionManagementAction {
@@ -104,7 +103,16 @@ impl SessionCommandService {
             .and_then(|workspace| workspace.name.clone());
 
         let session_id = new_session_id().to_string();
-        let ingest = EventIngestService::new(self.pool.clone());
+        let initial_slot = if request.initial_task.is_some() {
+            Some(
+                crate::InboxCommandService::new(self.event_ingest.clone())
+                    .reserve_initial_input(&session_id)
+                    .await,
+            )
+        } else {
+            None
+        };
+        let ingest = self.event_ingest.clone();
 
         ingest
             .ingest_pontia_event(PontiaEvent::new(
@@ -125,18 +133,43 @@ impl SessionCommandService {
                 }),
             ))
             .await?;
-        if request.client_type == "codex" {
-            let cwd = runtime_workspace
-                .clone()
-                .map(std::path::PathBuf::from)
-                .unwrap_or(std::env::current_dir()?);
-            crate::codex::CodexService::new(self.event_ingest.clone())
-                .provision(&session_id, &self.pontia_home, &cwd)
+        let adapter = crate::clients::ClientAdapter::new(
+            &request.client_type,
+            self.event_ingest.clone(),
+            self.pi_control.clone(),
+        )?;
+        if !adapter.prepares_on_input() {
+            ingest
+                .ingest_pontia_event(PontiaEvent::new(
+                    session_id.clone(),
+                    None,
+                    PontiaEventSource::ExternalApi,
+                    request.client_type.clone(),
+                    PontiaEventType::SessionStarting,
+                    json!({}),
+                ))
                 .await?;
+        }
+
+        let runtime = adapter
+            .start(
+                &self.pontia_home,
+                RuntimeStartRequest {
+                    session_id: session_id.clone(),
+                    client_type: request.client_type.clone(),
+                    workspace: runtime_workspace.clone(),
+                    workspace_name: runtime_workspace_name,
+                    handle: request.handle.clone(),
+                    role: request.role.clone(),
+                    start_command: None,
+                    environment: request.runtime_environment.clone(),
+                },
+            )
+            .await?;
+        let Some(runtime) = runtime else {
+            drop(initial_slot);
             self.update_session_workspace(&session_id, workspace_record.as_ref())
                 .await?;
-            sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex_environment',json(?)) WHERE session_id=?")
-                .bind(serde_json::to_string(&request.runtime_environment)?).bind(&session_id).execute(&self.pool).await?;
             if let Some(task) = request.initial_task {
                 crate::InboxCommandService::new(self.event_ingest.clone())
                     .submit_message(
@@ -150,38 +183,11 @@ impl SessionCommandService {
                     )
                     .await?;
             }
-            let session = ExternalQueryService::new(self.pool.clone())
-                .get_session(&session_id)
-                .await?;
             return Ok(CreateSessionOutcome {
-                data: json!({"session":session}),
+                data: json!({"session":ExternalQueryService::new(self.pool.clone()).get_session(&session_id).await?}),
                 duplicate: false,
             });
-        }
-        ingest
-            .ingest_pontia_event(PontiaEvent::new(
-                session_id.clone(),
-                None,
-                PontiaEventSource::ExternalApi,
-                request.client_type.clone(),
-                PontiaEventType::SessionStarting,
-                json!({}),
-            ))
-            .await?;
-
-        let runtime = self.runtime.start_session(
-            &self.pontia_home,
-            RuntimeStartRequest {
-                session_id: session_id.clone(),
-                client_type: request.client_type.clone(),
-                workspace: runtime_workspace.clone(),
-                workspace_name: runtime_workspace_name,
-                handle: request.handle.clone(),
-                role: request.role.clone(),
-                start_command: None,
-                environment: request.runtime_environment.clone(),
-            },
-        )?;
+        };
         self.upsert_runtime_binding(&session_id, &runtime).await?;
         self.update_session_workspace(&session_id, workspace_record.as_ref())
             .await?;
@@ -204,105 +210,41 @@ impl SessionCommandService {
             )
             .await?;
 
-        let initial_dispatch = if let Some(initial_task) = request.initial_task {
-            let client_spec = get_client_spec(&request.client_type).ok_or_else(|| {
-                Error::Domain(format!("unsupported client_type: {}", request.client_type))
-            })?;
-            let plugin_owns_turn = client_spec.owns_initial_tmux_turn();
-            let dispatch_identity = if plugin_owns_turn {
-                new_dispatch_id().to_string()
-            } else {
-                new_turn_id().to_string()
-            };
-            if !plugin_owns_turn {
-                ingest
-                    .ingest_pontia_event(PontiaEvent::new(
-                        session_id.clone(),
-                        Some(dispatch_identity.clone()),
-                        PontiaEventSource::ExternalApi,
-                        request.client_type.clone(),
-                        PontiaEventType::TurnCreated,
-                        json!({
-                            "input": { "summary": initial_task.input },
-                            "metadata": initial_task.metadata,
-                        }),
-                    ))
-                    .await?;
-                ingest
-                    .ingest_pontia_event(PontiaEvent::new(
-                        session_id.clone(),
-                        Some(dispatch_identity.clone()),
-                        PontiaEventSource::ExternalApi,
-                        request.client_type.clone(),
-                        PontiaEventType::TurnQueued,
-                        json!({}),
-                    ))
-                    .await?;
-            }
-            Some((
-                dispatch_identity.clone(),
-                initial_task.input,
-                client_dispatch_mode(&request.client_type)?,
-                (!plugin_owns_turn).then_some(dispatch_identity),
-            ))
+        let mut turns = crate::TurnCommandService::new(self.event_ingest.clone());
+        if let Some(pi) = &self.pi_control {
+            turns = turns.with_pi_control(pi.clone());
+        }
+        let initial_turn = if let Some(task) = &request.initial_task {
+            turns
+                .prepare_initial(&session_id, &task.input, &task.metadata)
+                .await?
         } else {
             None
         };
-        let initial_turn_id = initial_dispatch
-            .as_ref()
-            .and_then(|(_, _, _, initial_turn_id)| initial_turn_id.clone());
-
         let query = ExternalQueryService::new(self.pool.clone());
-        let session = query.get_session(&session_id).await?.ok_or_else(|| {
-            pontia_core::error::Error::Domain("created session missing".to_string())
-        })?;
-        let initial_turn = if let Some(turn_id) = initial_turn_id {
-            query.get_turn(&session_id, &turn_id).await?
-        } else {
-            None
-        };
+        let session = query
+            .get_session(&session_id)
+            .await?
+            .ok_or_else(|| Error::Domain("created session missing".into()))?;
+        let initial_turn_id = initial_turn.as_ref().map(|turn| turn.turn_id.clone());
         let data = json!({ "session": session, "initial_turn": initial_turn });
-
-        if let Some((turn_id, input, dispatch_mode, _)) = initial_dispatch {
-            let service = self.clone();
-            let dispatch_session_id = session_id.clone();
-            let dispatch_client_type = request.client_type.clone();
-            let dispatch_runtime = runtime.clone();
+        if let Some(task) = request.initial_task {
+            let target = crate::runtime::control_target::ControlTarget {
+                session_id: session_id.clone(),
+                runtime_instance_id: runtime.runtime_instance_id().map(str::to_string),
+            };
             tokio::spawn(async move {
-                let result = match dispatch_mode {
-                    DispatchMode::InProcessRecorded => {
-                        service
-                            .dispatch_initial_generic_turn(
-                                &dispatch_session_id,
-                                &dispatch_client_type,
-                                &input,
-                            )
-                            .await
-                    }
-                    DispatchMode::TmuxPaste | DispatchMode::PiControl => {
-                        service
-                            .wait_and_dispatch_initial_tui_turn(
-                                &dispatch_session_id,
-                                &turn_id,
-                                &dispatch_client_type,
-                                &input,
-                                &dispatch_runtime,
-                            )
-                            .await
-                    }
-                    DispatchMode::None => Ok(()),
-                    DispatchMode::CodexProtocol => {
-                        unreachable!("Codex dispatch uses its async controller")
-                    }
-                };
-                if let Err(error) = result {
-                    tracing::warn!(
-                        session_id = %dispatch_session_id,
-                        turn_id = %turn_id,
-                        client_type = %dispatch_client_type,
-                        error = %error,
-                        "initial turn dispatch failed"
-                    );
+                let _initial_slot = initial_slot;
+                if let Err(error) = turns
+                    .dispatch_initial(
+                        &target,
+                        &task.input,
+                        &task.metadata,
+                        initial_turn_id.as_deref(),
+                    )
+                    .await
+                {
+                    tracing::warn!(%session_id, %error, "initial input dispatch failed");
                 }
             });
         }
@@ -374,7 +316,8 @@ impl SessionCommandService {
             .filter(|value| !value.is_empty())
             .map(ToString::to_string);
 
-        EventIngestService::new(self.pool.clone())
+        self.event_ingest
+            .clone()
             .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
                 None,

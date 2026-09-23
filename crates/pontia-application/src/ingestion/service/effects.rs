@@ -1,13 +1,8 @@
 use serde_json::Value;
 
-use pontia_core::{
-    domain::{DomainEvent, EventType},
-    error::Result,
-};
+use pontia_core::domain::{DomainEvent, EventType};
 use pontia_runtime::GenericRuntimeManager;
-use pontia_storage_sqlite::repositories::{
-    inbox::SqliteInboxRepository, runtime_bindings::SqliteRuntimeBindingRepository,
-};
+use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
 
 pub(super) async fn clear_exited_session_tmux_markers(
     pool: &sqlx::SqlitePool,
@@ -50,28 +45,4 @@ pub(super) async fn clear_exited_session_tmux_markers(
         &event.session_id,
         &runtime_instance_id,
     );
-}
-
-pub(super) async fn link_started_turn_to_inbox_message(
-    pool: &sqlx::SqlitePool,
-    event: &DomainEvent,
-) -> Result<()> {
-    if event.event_type != EventType::TurnStarted {
-        return Ok(());
-    }
-    let Some(turn_id) = event.turn_id.as_deref() else {
-        return Ok(());
-    };
-    let inbox_message_id = event
-        .payload
-        .pointer("/metadata/inbox_message_id")
-        .or_else(|| event.payload.pointer("/input/inbox_message_id"))
-        .and_then(Value::as_str);
-    let Some(inbox_message_id) = inbox_message_id else {
-        return Ok(());
-    };
-
-    SqliteInboxRepository::new(pool.clone())
-        .link_started_turn(&event.session_id, inbox_message_id, turn_id)
-        .await
 }

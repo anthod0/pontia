@@ -5,18 +5,18 @@ mod agent_events;
 mod agent_profiles;
 pub mod app;
 mod branch_replay;
+mod clients;
 pub mod codex;
+pub mod control;
 mod git_status;
 mod idempotency;
 mod inbox;
 pub mod ingestion;
 pub mod live_output;
-mod pi_control;
 mod pi_control_socket;
 pub mod queries;
 mod raw_transcripts;
 pub mod runtime;
-pub mod runtime_control;
 pub mod sessions;
 pub mod tasks;
 pub mod turns;
@@ -34,6 +34,7 @@ pub use agent_profiles::{
 };
 pub use app::{AppState, initialize};
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
+pub use control::ControlCommandOutcome;
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use idempotency::{IdempotencyCoordinator, IdempotencyOutcome};
 pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
@@ -46,7 +47,6 @@ pub use live_output::{
     LiveOutputProducer, LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshot,
     LiveOutputSnapshotReplacement, LiveOutputStreamEvent, LiveOutputSubscription, LiveOutputUpdate,
 };
-pub use pi_control::PiGracefulExitService;
 pub use pi_control_socket::{PiControlService, PublishPiControlEndpoint};
 pub use queries::ExternalQueryService;
 pub use raw_transcripts::{
@@ -55,7 +55,6 @@ pub use raw_transcripts::{
 };
 pub use runtime::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
 pub use runtime::{RuntimeObservationService, RuntimeReadinessService};
-pub use runtime_control::{ControlCommandOutcome, RuntimeControlService};
 pub use sessions::{
     CreateSessionOutcome, CreateSessionRequest, InitialTaskRequest, SessionCommandService,
     UpdateSessionRequest,

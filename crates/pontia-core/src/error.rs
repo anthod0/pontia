@@ -19,6 +19,9 @@ pub enum Error {
     #[error("domain error: {0}")]
     Domain(String),
 
+    #[error("control result unknown (delivery uncertain): {0}; input was not retried")]
+    ControlUnknown(String),
+
     #[error("state conflict: {0}")]
     StateConflict(String),
 

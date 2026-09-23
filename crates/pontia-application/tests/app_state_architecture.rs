@@ -45,11 +45,9 @@ fn application_exposes_workspaces_namespace() {
 fn application_exposes_command_namespaces() {
     fn assert_session_service(_: pontia_application::sessions::SessionCommandService) {}
     fn assert_task_service(_: pontia_application::tasks::TaskCommandService) {}
-    fn assert_runtime_control(_: pontia_application::runtime_control::RuntimeControlService) {}
 
     let _ = assert_session_service;
     let _ = assert_task_service;
-    let _ = assert_runtime_control;
 }
 
 #[test]

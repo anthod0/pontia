@@ -1,7 +1,13 @@
 pub mod claim;
 pub mod commands;
 mod context;
-mod tmux;
+mod interrupt;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InputIntent {
+    Start,
+    Steer { turn_id: String },
+}
 
 pub use claim::{CurrentTurnClaimRequest, CurrentTurnClaimService};
 pub use commands::TurnCommandService;

@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
-use pontia_application::{AppState, EventIngestService};
+use pontia_application::AppState;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -33,9 +33,8 @@ pub async fn report_turn_start_failure(
         TurnStartFailureReason::TransportFailed => "transport_failed",
         TurnStartFailureReason::MissingTurnId => "missing_turn_id",
     };
-    EventIngestService::new(state.db())
-        .with_pi_control(state.pi_control())
-        .with_agent_events(state.agent_events())
+    state
+        .event_ingest_service()
         .report_turn_start_failure(&session_id, &request.runtime_instance_id, reason)
         .await?;
     Ok(Json(json!({ "accepted": true })))

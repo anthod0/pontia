@@ -1,8 +1,7 @@
 use std::future::Future;
 
 use pontia_application::{
-    AgentEventBroker, CreateSessionRequest, PiGracefulExitService, RuntimeControlService,
-    SessionCommandService,
+    AgentEventBroker, CreateSessionRequest, SessionCommandService, TurnCommandService,
 };
 use pontia_core::domain::DomainEvent;
 
@@ -67,7 +66,7 @@ pub trait TurnInterruptionRequester {
     ) -> impl Future<Output = Result<()>> + Send;
 }
 
-impl TurnInterruptionRequester for RuntimeControlService {
+impl TurnInterruptionRequester for TurnCommandService {
     async fn request_turn_interruption(
         &self,
         session_id: &str,
@@ -80,13 +79,13 @@ impl TurnInterruptionRequester for RuntimeControlService {
     }
 }
 
-impl GracefulExitRequester for PiGracefulExitService {
+impl GracefulExitRequester for SessionCommandService {
     async fn ensure_current_runtime(
         &self,
         session_id: &str,
         runtime_instance_id: &str,
     ) -> Result<()> {
-        PiGracefulExitService::ensure_current_runtime(self, session_id, runtime_instance_id)
+        SessionCommandService::ensure_current_runtime(self, session_id, runtime_instance_id)
             .await
             .map_err(|error| match error {
                 pontia_core::Error::CapabilityUnavailable(message)
@@ -103,8 +102,9 @@ impl GracefulExitRequester for PiGracefulExitService {
         session_id: &str,
         runtime_instance_id: &str,
     ) -> Result<()> {
-        self.request_exit(session_id, runtime_instance_id)
+        self.request_exit(session_id, Some(runtime_instance_id))
             .await
+            .map(|_| ())
             .map_err(Into::into)
     }
 }

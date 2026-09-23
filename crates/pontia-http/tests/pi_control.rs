@@ -389,8 +389,7 @@ async fn session_errors_and_process_exit_observations_release_idle_connections()
         if process_exit {
             sqlx::query("UPDATE runtime_bindings SET tmux_socket_path='/unused/tmux', tmux_pane_id='%1' WHERE session_id='sess_pi'")
                 .execute(&state.db()).await.unwrap();
-            pontia_application::RuntimeObservationService::new(state.db())
-                .with_pi_control(service.clone())
+            pontia_application::RuntimeObservationService::new(state.event_ingest_service())
                 .observe_session("sess_pi")
                 .await
                 .unwrap();

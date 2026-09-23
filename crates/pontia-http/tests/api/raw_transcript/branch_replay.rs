@@ -331,6 +331,10 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         .await
         .unwrap();
 
+    pontia_application::InboxCommandService::new(state.event_ingest_service())
+        .recover_deliveries()
+        .await
+        .unwrap();
     let (failed_delivery_status, failed_delivery_body) = post_external_json(
         state.clone(),
         &inbox_uri,

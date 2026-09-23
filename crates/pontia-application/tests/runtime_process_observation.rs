@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use pontia_application::RuntimeObservationService;
+use pontia_application::{EventIngestService, RuntimeObservationService};
 use pontia_runtime::GenericRuntimeManager;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
@@ -68,7 +68,7 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
         .stderr(Stdio::null())
         .status();
 
-    RuntimeObservationService::new(db.clone())
+    RuntimeObservationService::new(EventIngestService::new(db.clone()))
         .sweep_active_tmux_sessions()
         .await
         .expect("sweep runtime bindings");
@@ -119,7 +119,7 @@ async fn active_tmux_session_without_a_fingerprint_exits_immediately() {
     .await
     .expect("insert binding");
 
-    RuntimeObservationService::new(db.clone())
+    RuntimeObservationService::new(EventIngestService::new(db.clone()))
         .sweep_active_tmux_sessions()
         .await
         .expect("sweep runtime bindings");

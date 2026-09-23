@@ -27,12 +27,6 @@ impl CodexObserver {
     }
 
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
-        let _ = sqlx::query("UPDATE codex_tui_bindings SET connected=FALSE")
-            .execute(&self.service.pool)
-            .await;
-        let _ = sqlx::query("UPDATE inbox_messages SET state='failed',failure_message='Delivery is uncertain after Pontia restarted; input was not retried' WHERE state='dispatching' AND session_id IN (SELECT session_id FROM sessions WHERE client_type='codex')").execute(&self.service.pool).await;
-        // A persisted connection status never proves this daemon owns a live connection.
-        let _ = sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','unavailable') WHERE runtime_kind='codex_app_server' AND runtime_instance_id IS NOT NULL").execute(&self.service.pool).await;
         loop {
             tokio::select! {
                 _ = shutdown.changed() => break,
@@ -95,6 +89,7 @@ impl CodexObserver {
                     for target in known_targets { self.target(&runtime,target).await?; }
                     let bindings: Vec<(String,String)> = sqlx::query_as("SELECT session_id,client_session_key FROM agent_bindings WHERE client_type='codex'").fetch_all(&self.service.pool).await?;
                     for (session,thread) in bindings {
+                        let _operation = runtime.lock_session(&session).await;
                         threads.insert(thread.clone(),session.clone());
                         let result: Result<()> = async {
                         let resumed_thread = if !subscribed.contains(&thread) {
@@ -112,7 +107,7 @@ impl CodexObserver {
                             subscribed.insert(thread.clone());
                         }
                         self.service.connection_state(&session,&runtime.instance_id,"available").await?;
-                        crate::InboxCommandService::new(self.service.event_ingest.clone()).drain_inbox(&session).await?;
+                        self.service.event_ingest.control_available(&session);
                             Ok(())
                         }.await;
                         if let Err(error) = result {
@@ -124,7 +119,10 @@ impl CodexObserver {
                     }
                 }
                 event = events.recv() => {
-                    let event = match event { Ok(event) => event, Err(broadcast::error::RecvError::Lagged(_)) => { subscribed.clear(); continue; }, Err(_) => return Err(Error::CapabilityUnavailable("Codex event stream closed".into())) };
+                    let event = match event { Ok(event) => event, Err(broadcast::error::RecvError::Lagged(_)) => {
+                        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','reconciling') WHERE runtime_kind='codex_app_server' AND runtime_instance_id=?").bind(&runtime.instance_id).execute(&self.service.pool).await?;
+                        subscribed.clear(); continue;
+                    }, Err(_) => return Err(Error::CapabilityUnavailable("Codex event stream closed".into())) };
                     if event["method"] == "pontia/disconnected" { return Err(Error::CapabilityUnavailable("Codex disconnected".into())); }
                     let Some(thread) = event.pointer("/params/threadId").and_then(Value::as_str) else { continue };
                     let session = match threads.get(thread) {
@@ -140,6 +138,7 @@ impl CodexObserver {
                         Some("turn/completed") => self.service.turn_fact(&session,&runtime.instance_id,&event["params"]["turn"],"notification").await?,
                         Some("thread/archived") => { self.service.archived(&session,&runtime).await?; subscribed.remove(thread); }
                         Some("thread/unarchived") => {
+                            self.service.connection_state(&session,&runtime.instance_id,"reconciling").await?;
                             subscribed.remove(thread);
                         }
                         Some("thread/status/changed") if event.pointer("/params/status/type").and_then(Value::as_str) == Some("notLoaded") => {
@@ -173,7 +172,8 @@ impl CodexObserver {
                 let session = new_session_id().to_string();
                 let cwd = string(&target.thread, "cwd")?;
                 let workspace = crate::upsert_workspace(&self.service.pool, cwd).await?;
-                EventIngestService::new(self.service.pool.clone())
+                self.service
+                    .event_ingest
                     .ingest_pontia_event(PontiaEvent::new(
                         &session,
                         None,

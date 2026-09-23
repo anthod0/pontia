@@ -1,3 +1,7 @@
+mod association;
+mod scheduling;
+pub(crate) use scheduling::InboxScheduler;
+
 use pontia_core::{
     error::{Error, Result},
     ids::new_message_id,
@@ -10,9 +14,8 @@ use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
 use crate::{
-    BranchReplayService, EventIngestService, ExternalQueryService, InboxMessageView, PontiaEvent,
-    PontiaEventSource, PontiaEventType, RuntimeControlService, TurnCommandService,
-    views::inbox::row_to_view,
+    BranchReplayService, ExternalQueryService, InboxMessageView, PontiaEvent, PontiaEventSource,
+    PontiaEventType, TurnCommandService, views::inbox::row_to_view,
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -52,8 +55,8 @@ impl InboxCommandService {
     pub fn new(event_ingest: crate::EventIngestService) -> Self {
         Self {
             pool: event_ingest.db(),
+            pi_control: event_ingest.pi_control(),
             event_ingest,
-            pi_control: None,
         }
     }
 
@@ -125,7 +128,14 @@ impl InboxCommandService {
                 )
                 .await?;
         }
-        if request.delivery_policy == "steer" && session.client_type != "codex" {
+        if request.delivery_policy == "steer"
+            && !crate::clients::ClientAdapter::new(
+                &session.client_type,
+                self.event_ingest.clone(),
+                self.pi_control.clone(),
+            )?
+            .supports_steer()
+        {
             return Err(Error::CapabilityUnavailable(
                 "This client does not support steer".into(),
             ));
@@ -188,7 +198,7 @@ impl InboxCommandService {
                     "session ".to_string() + session_id + " runtime does not support interrupt",
                 )
                 .await?;
-            } else if let Err(error) = RuntimeControlService::new(self.event_ingest.clone())
+            } else if let Err(error) = TurnCommandService::new(self.event_ingest.clone())
                 .interrupt_current_turn(session_id)
                 .await
             {
@@ -311,32 +321,52 @@ impl InboxCommandService {
     }
 
     pub async fn drain_inbox(&self, session_id: &str) -> Result<()> {
-        let query = ExternalQueryService::new(self.pool.clone());
-        let session = match query.get_session(session_id).await? {
-            Some(session) => session,
-            None => return Ok(()),
-        };
-        let codex = session.client_type == "codex";
-        if !codex
-            && (!matches!(session.state.as_str(), "idle" | "interrupted")
-                || SqliteTurnRepository::new(self.pool.clone())
-                    .active_turn(session_id)
-                    .await?
-                    .is_some())
+        let lock = self.event_ingest.inbox_scheduler().session_lock(session_id);
+        let _guard = lock.lock().await;
+        if self
+            .event_ingest
+            .inbox_scheduler()
+            .awaiting_initial(session_id)
         {
             return Ok(());
         }
-
+        let query = ExternalQueryService::new(self.pool.clone());
+        let Some(session) = query.get_session(session_id).await? else {
+            return Ok(());
+        };
+        let adapter = crate::clients::ClientAdapter::new(
+            &session.client_type,
+            self.event_ingest.clone(),
+            self.pi_control.clone(),
+        )?;
+        let active = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
+            .await?;
         let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
         let Some(row) = inbox_repository.next_pending_message(session_id).await? else {
             return Ok(());
         };
-        if codex
-            && (matches!(session.state.as_str(), "exited" | "error")
-                || (session.state == "busy" && row.delivery_policy != "steer"))
-        {
+        if row.branch_target_turn_id.is_none() && !adapter.input_available(session_id).await? {
             return Ok(());
         }
+        if matches!(session.state.as_str(), "exited" | "error") {
+            return Ok(());
+        }
+        let intent = match active {
+            Some(turn) if row.delivery_policy == "steer" && adapter.supports_steer() => {
+                crate::turns::InputIntent::Steer {
+                    turn_id: turn.turn_id,
+                }
+            }
+            Some(_) => return Ok(()),
+            None if matches!(session.state.as_str(), "idle" | "interrupted")
+                || (matches!(session.state.as_str(), "created" | "starting")
+                    && adapter.prepares_on_input()) =>
+            {
+                crate::turns::InputIntent::Start
+            }
+            None => return Ok(()),
+        };
         let message_id = row.message_id;
         let input = row.input_summary;
         let branch_target_turn_id = row.branch_target_turn_id;
@@ -361,17 +391,23 @@ impl InboxCommandService {
             turns = turns.with_pi_control(control.clone());
         }
         let delivery = if branch_target_turn_id.is_some() {
-            turns
-                .dispatch_tui_command(session_id, format!("/pontia-edit {message_id}"))
+            BranchReplayService::new(self.pool.clone())
+                .dispatch(self.event_ingest.clone(), session_id, &message_id)
                 .await
-                .map(|()| None)
+                .map(|result| (None, result))
         } else {
             turns
-                .create_and_dispatch_turn(session_id, input, metadata)
+                .submit_input(session_id, input, metadata, intent)
                 .await
         };
+        let delivery = match delivery {
+            Ok((turn, result)) => result.into_result().map(|receipt| (turn, receipt)),
+            Err(error) => Err(error),
+        };
         match delivery {
-            Ok(turn) => {
+            Ok((turn, receipt)) => {
+                self.record_receipt(session_id, &message_id, &receipt)
+                    .await?;
                 let turn_id = turn.as_ref().map(|turn| turn.turn_id.as_str());
                 inbox_repository
                     .mark_dispatched(&message_id, turn_id)
@@ -387,6 +423,7 @@ impl InboxCommandService {
                     payload,
                 )
                 .await?;
+                self.notify_available(session_id);
             }
             Err(error) => {
                 self.mark_failed(&message_id, error.to_string()).await?;
@@ -408,7 +445,7 @@ impl InboxCommandService {
         event_type: PontiaEventType,
         payload: Value,
     ) -> Result<()> {
-        EventIngestService::new(self.pool.clone())
+        self.event_ingest
             .ingest_pontia_event(PontiaEvent::new(
                 session_id,
                 None,
@@ -421,3 +458,6 @@ impl InboxCommandService {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

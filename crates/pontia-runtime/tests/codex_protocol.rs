@@ -93,7 +93,42 @@ async fn disconnect_after_sending_input_returns_uncertainty_without_retry() {
         .call("turn/start", json!({"input":"hello"}))
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("uncertain"));
+    assert!(matches!(error, pontia_core::Error::ControlUnknown(_)));
     server.await.unwrap();
     assert!(!connection.is_connected());
+}
+
+#[tokio::test]
+async fn native_rejection_is_distinct_from_an_unconfirmed_request() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("socket");
+    let listener = UnixListener::bind(&path).unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut wire = accept_async(stream).await.unwrap();
+        let init: Value =
+            serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+        wire.send(Message::Text(
+            json!({"id":init["id"],"result":{}}).to_string().into(),
+        ))
+        .await
+        .unwrap();
+        wire.next().await.unwrap().unwrap();
+        let input: Value =
+            serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+        wire.send(Message::Text(
+            json!({"id":input["id"],"error":{"code":-32000,"message":"Turn is no longer active"}})
+                .to_string()
+                .into(),
+        ))
+        .await
+        .unwrap();
+    });
+    let connection = Connection::connect(&path).await.unwrap();
+    let error = connection
+        .call("turn/steer", json!({"expectedTurnId":"old"}))
+        .await
+        .unwrap_err();
+    assert!(matches!(error, pontia_core::Error::StateConflict(_)));
+    server.await.unwrap();
 }

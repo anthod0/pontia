@@ -225,11 +225,21 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
     .await;
     assert_eq!(completed_status, StatusCode::OK);
 
-    let (get_status, get_body) = get_json(
-        state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}"),
-    )
-    .await;
+    let (get_status, get_body) = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let result = get_json(
+                state.clone(),
+                &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}"),
+            )
+            .await;
+            if result.1["data"]["inbox_message"]["state"] == "dispatched" {
+                break result;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("committed terminal event wakes Inbox scheduling");
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(get_body["data"]["inbox_message"]["state"], "dispatched");
     assert!(

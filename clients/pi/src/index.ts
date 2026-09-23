@@ -329,7 +329,16 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
       try {
         ctx.ui.setEditorText("");
-        await pi.sendUserMessage(replacementInput);
+        const current = await currentManagedSessionContext();
+        if (current?.sessionId !== commandContext.sessionId ||
+            current?.runtimeInstanceId !== commandContext.runtimeInstanceId) {
+          throw new Error("branch replay Runtime is no longer current");
+        }
+        await directInput.run({
+          submission: { input: replacementInput, inboxMessageId },
+          sessionContext: current,
+          consumed: false,
+        }, () => pi.sendUserMessage(replacementInput));
       } catch (error) {
         await logDiagnostic(loaded.logFile, {
           level: "error",

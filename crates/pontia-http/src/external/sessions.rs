@@ -8,8 +8,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use pontia_application::{
-    AppState, CreateSessionRequest, ExternalQueryService, RuntimeControlService,
-    SessionCommandService, UpdateSessionRequest,
+    AppState, CreateSessionRequest, ExternalQueryService, SessionCommandService,
+    TurnCommandService, UpdateSessionRequest,
 };
 
 use super::{
@@ -173,7 +173,7 @@ pub async fn interrupt_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = RuntimeControlService::new(state.event_ingest_service());
+    let service = TurnCommandService::new(state.event_ingest_service());
     let operation = format!("interrupt_current:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.interrupt_current_turn(&session_id).await?.data)
@@ -188,7 +188,10 @@ pub async fn terminate_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = RuntimeControlService::new(state.event_ingest_service());
+    let service = SessionCommandService::new(
+        state.event_ingest_service(),
+        state.pontia_home().to_path_buf(),
+    );
     let operation = format!("terminate_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.terminate_session(&session_id).await?.data)
@@ -203,7 +206,10 @@ pub async fn restart_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = RuntimeControlService::new(state.event_ingest_service());
+    let service = SessionCommandService::new(
+        state.event_ingest_service(),
+        state.pontia_home().to_path_buf(),
+    );
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("restart_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -222,7 +228,10 @@ pub async fn resume_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = RuntimeControlService::new(state.event_ingest_service());
+    let service = SessionCommandService::new(
+        state.event_ingest_service(),
+        state.pontia_home().to_path_buf(),
+    );
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("resume_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {

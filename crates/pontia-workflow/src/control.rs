@@ -1,5 +1,5 @@
 use pontia_application::{
-    ExternalQueryService, InboxCommandService, RuntimeControlService, SubmitInboxMessageRequest,
+    ExternalQueryService, InboxCommandService, SubmitInboxMessageRequest, TurnCommandService,
 };
 use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use serde::Serialize;
@@ -56,7 +56,7 @@ impl WorkflowControlService {
                 .as_ref()
                 .is_some_and(|session| session.state == "busy")
             {
-                RuntimeControlService::new(self.event_ingest.clone())
+                TurnCommandService::new(self.event_ingest.clone())
                     .interrupt_current_turn(&session_id)
                     .await?;
                 interrupt_requested = true;

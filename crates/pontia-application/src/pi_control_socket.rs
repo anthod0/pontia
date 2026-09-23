@@ -142,10 +142,13 @@ impl PiControlService {
         };
         if !self
             .connection(session_id)
-            .await?
+            .await
+            .map_err(|error| {
+                Error::ControlUnknown(format!("cannot verify Pi binding after request: {error}"))
+            })?
             .is_some_and(|current| Arc::ptr_eq(&current, &connection))
         {
-            return Err(Error::StateConflict(
+            return Err(Error::ControlUnknown(
                 "Pi control binding changed during request".into(),
             ));
         }

@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
-use pontia_runtime::GenericRuntimeManager;
 use serde::Deserialize;
 use serde_json::Value;
 use sqlx::SqlitePool;
@@ -8,7 +7,9 @@ use sqlx::SqlitePool;
 use crate::default_client_type;
 
 mod commands;
-mod dispatch;
+mod lifecycle;
+mod runtime_binding;
+pub(crate) use runtime_binding::runtime_binding_record;
 mod persistence;
 mod validation;
 
@@ -61,7 +62,6 @@ pub struct SessionCommandService {
     event_ingest: crate::EventIngestService,
     pi_control: Option<crate::PiControlService>,
     pontia_home: PathBuf,
-    runtime: GenericRuntimeManager,
 }
 
 impl SessionCommandService {
@@ -73,10 +73,9 @@ impl SessionCommandService {
     pub fn new(event_ingest: crate::EventIngestService, pontia_home: PathBuf) -> Self {
         Self {
             pool: event_ingest.db(),
+            pi_control: event_ingest.pi_control(),
             event_ingest,
-            pi_control: None,
             pontia_home,
-            runtime: GenericRuntimeManager,
         }
     }
 }

@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use pontia_application::{AppState, ExternalQueryService, RuntimeControlService};
+use pontia_application::{AppState, ExternalQueryService, TurnCommandService};
 
 use super::{
     authentication::authenticate,
@@ -21,7 +21,7 @@ pub async fn interrupt_turn(
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Response, ExternalApiError> {
     authenticate(&state, &headers)?;
-    let service = RuntimeControlService::new(state.event_ingest_service());
+    let service = TurnCommandService::new(state.event_ingest_service());
     let operation = format!("interrupt_turn:{session_id}:{turn_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.interrupt_turn(&session_id, &turn_id).await?.data)

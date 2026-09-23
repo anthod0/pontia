@@ -37,11 +37,10 @@ async fn main() -> Result<()> {
         )
         .run(app_state.shutdown().subscribe()),
     );
+    let inbox = application::InboxCommandService::new(app_state.event_ingest_service());
     let pi_control = app_state.pi_control();
-    let runtime_observer = application::RuntimeObservationService::new(app_state.db())
-        .with_pi_control(pi_control.clone())
-        .with_agent_events(app_state.agent_events())
-        .with_live_output(app_state.live_output());
+    let runtime_observer =
+        application::RuntimeObservationService::new(app_state.event_ingest_service());
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
     let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
         app_state.event_ingest_service(),
@@ -65,6 +64,7 @@ async fn main() -> Result<()> {
     let shutdown = state.app().shutdown();
     let cleanup_shutdown = shutdown.clone();
     let codex_root = state.app().pontia_home().to_path_buf();
+    inbox.resume_pending().await?;
     let server_result = http::serve_with_shutdown_timeout(
         listener,
         http::router(state),
@@ -78,6 +78,7 @@ async fn main() -> Result<()> {
 
     cleanup_shutdown.notify();
     pi_control.close().await;
+    inbox.stop_scheduling().await;
     if let Some(task) = remote_task {
         let _ = task.await;
     }

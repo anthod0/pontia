@@ -37,6 +37,7 @@ struct AppRuntimeState {
 }
 
 struct EventState {
+    ingest: crate::EventIngestService,
     agent_events: AgentEventBroker,
     volatile_events: VolatileEventBroker,
     live_output: LiveOutputStore,
@@ -58,6 +59,13 @@ impl AppState {
     }
 
     pub(super) fn from_builder(builder: AppStateBuilder) -> Self {
+        let ingest = crate::EventIngestService::new(builder.db.clone())
+            .with_reporting_dependencies(
+                builder.pi_control.clone(),
+                builder.agent_events.clone(),
+                crate::LiveOutputService::new(builder.db.clone(), builder.live_output.clone()),
+                builder.volatile_events.clone(),
+            );
         Self {
             inner: Arc::new(AppStateInner {
                 persistence: PersistenceState { db: builder.db },
@@ -68,6 +76,7 @@ impl AppState {
                     file_picker: builder.file_picker,
                 },
                 events: EventState {
+                    ingest,
                     agent_events: builder.agent_events,
                     volatile_events: builder.volatile_events,
                     live_output: builder.live_output,
@@ -121,12 +130,7 @@ impl AppState {
     }
 
     pub fn event_ingest_service(&self) -> crate::EventIngestService {
-        crate::EventIngestService::new(self.db()).with_reporting_dependencies(
-            self.pi_control(),
-            self.agent_events(),
-            self.live_output(),
-            self.volatile_events(),
-        )
+        self.inner.events.ingest.clone()
     }
 
     pub fn git_refresh(&self) -> GitRefreshCoordinator {

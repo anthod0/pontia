@@ -1,4 +1,5 @@
 pub mod bindings;
+pub(crate) mod control_target;
 pub mod observation;
 pub mod readiness;
 

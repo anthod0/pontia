@@ -81,9 +81,7 @@ impl Connection {
             }
             incoming.close();
             for (_, reply) in pending.lock().await.drain() {
-                let _ = reply.send(Err(protocol_error(
-                    "disconnected; delivery may be uncertain; input was not retried",
-                )));
+                let _ = reply.send(Err(Error::ControlUnknown("Codex disconnected".into())));
             }
             let _ = events.send(json!({"method":"pontia/disconnected"}));
         });
@@ -122,12 +120,8 @@ impl Connection {
                 .map_err(protocol_error)?;
             tokio::time::timeout(Duration::from_secs(30), receiver)
                 .await
-                .map_err(|_| {
-                    protocol_error(
-                        "RPC timed out; delivery may be uncertain; input was not retried",
-                    )
-                })?
-                .map_err(protocol_error)?
+                .map_err(|_| Error::ControlUnknown("Codex RPC timed out".into()))?
+                .map_err(|error| Error::ControlUnknown(error.to_string()))?
         }
         .await;
         self.pending.lock().await.remove(&id);

@@ -15,8 +15,7 @@ use pontia_storage_sqlite::repositories::{
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
-    AgentEventBroker, EventIngestService, ExternalQueryService, LiveOutputService, PontiaEvent,
-    PontiaEventSource, PontiaEventType,
+    EventIngestService, ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType,
 };
 
 const PROCESS_OBSERVATION_INTERVAL: Duration = Duration::from_secs(10);
@@ -28,35 +27,16 @@ const STARTUP_TIMEOUT_SWEEP_INTERVAL: Duration = Duration::from_secs(1);
 pub struct RuntimeObservationService {
     pool: SqlitePool,
     runtime: GenericRuntimeManager,
-    agent_events: Option<AgentEventBroker>,
-    live_output: Option<LiveOutputService>,
-    pi_control: Option<crate::PiControlService>,
+    event_ingest: EventIngestService,
 }
 
 impl RuntimeObservationService {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(event_ingest: EventIngestService) -> Self {
         Self {
-            pool,
+            pool: event_ingest.db(),
             runtime: GenericRuntimeManager,
-            agent_events: None,
-            live_output: None,
-            pi_control: None,
+            event_ingest,
         }
-    }
-
-    pub fn with_agent_events(mut self, agent_events: AgentEventBroker) -> Self {
-        self.agent_events = Some(agent_events);
-        self
-    }
-
-    pub fn with_live_output(mut self, live_output: LiveOutputService) -> Self {
-        self.live_output = Some(live_output);
-        self
-    }
-
-    pub fn with_pi_control(mut self, pi_control: crate::PiControlService) -> Self {
-        self.pi_control = Some(pi_control);
-        self
     }
 
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
@@ -290,17 +270,7 @@ impl RuntimeObservationService {
     }
 
     fn ingest_service(&self) -> EventIngestService {
-        let mut ingest = EventIngestService::new(self.pool.clone());
-        if let Some(agent_events) = &self.agent_events {
-            ingest = ingest.with_agent_events(agent_events.clone());
-        }
-        if let Some(live_output) = &self.live_output {
-            ingest = ingest.with_live_output(live_output.clone());
-        }
-        if let Some(control) = &self.pi_control {
-            ingest = ingest.with_pi_control(control.clone());
-        }
-        ingest
+        self.event_ingest.clone()
     }
 }
 
@@ -360,7 +330,7 @@ mod tests {
         .await
         .expect("age startup event");
 
-        RuntimeObservationService::new(pool.clone())
+        RuntimeObservationService::new(EventIngestService::new(pool.clone()))
             .sweep_startup_timeouts()
             .await
             .expect("sweep startup timeouts");
@@ -399,7 +369,7 @@ mod tests {
             .await
             .expect("ready session");
 
-        RuntimeObservationService::new(pool.clone())
+        RuntimeObservationService::new(EventIngestService::new(pool.clone()))
             .sweep_startup_timeouts()
             .await
             .expect("sweep startup timeouts");

@@ -19,7 +19,7 @@ use pontia_storage_sqlite::repositories::{
 };
 
 use self::{
-    effects::{clear_exited_session_tmux_markers, link_started_turn_to_inbox_message},
+    effects::clear_exited_session_tmux_markers,
     enrichment::{
         consume_transient_pi_native_evidence, enrich_pi_topology, enrich_timeline_boundary,
         should_resolve_pi_topology,
@@ -39,6 +39,7 @@ use crate::{AgentEventBroker, InboxCommandService, LiveOutputService, UpsertAgen
 #[derive(Clone)]
 pub struct EventIngestService {
     pool: SqlitePool,
+    inbox_scheduler: crate::inbox::InboxScheduler,
     pi_control: Option<crate::PiControlService>,
     agent_events: Option<AgentEventBroker>,
     live_output: Option<LiveOutputService>,
@@ -46,6 +47,17 @@ pub struct EventIngestService {
 }
 
 impl EventIngestService {
+    pub(crate) fn pi_control(&self) -> Option<crate::PiControlService> {
+        self.pi_control.clone()
+    }
+
+    pub(crate) fn inbox_scheduler(&self) -> crate::inbox::InboxScheduler {
+        self.inbox_scheduler.clone()
+    }
+    pub(crate) fn control_available(&self, session: &str) {
+        InboxCommandService::new(self.clone()).notify_available(session);
+    }
+
     pub fn db(&self) -> SqlitePool {
         self.pool.clone()
     }
@@ -72,6 +84,7 @@ impl EventIngestService {
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool,
+            inbox_scheduler: Default::default(),
             pi_control: None,
             agent_events: None,
             live_output: None,
@@ -375,25 +388,9 @@ impl EventIngestService {
         }
 
         clear_exited_session_tmux_markers(&self.pool, &event, true).await;
-        link_started_turn_to_inbox_message(&self.pool, &event).await?;
-
-        if event.client_type != "codex"
-            && matches!(
-                event.event_type,
-                EventType::SessionReady
-                    | EventType::TurnCompleted
-                    | EventType::TurnFailed
-                    | EventType::TurnDispatchFailed
-                    | EventType::TurnAbandoned
-                    | EventType::TurnInterrupted
-            )
-        {
-            let mut inbox = InboxCommandService::new(self.clone());
-            if let Some(control) = &self.pi_control {
-                inbox = inbox.with_pi_control(control.clone());
-            }
-            Box::pin(inbox.drain_inbox(&event.session_id)).await?;
-        }
+        InboxCommandService::new(self.clone())
+            .observe_committed(&event)
+            .await?;
 
         Ok(Some(EventIngestResult {
             accepted: true,

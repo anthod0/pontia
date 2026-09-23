@@ -6,7 +6,7 @@ use std::{
 
 use pontia_application::{
     AgentEventBroker, CreateSessionRequest, InboxCommandService, InitialTaskRequest,
-    PiGracefulExitService, RuntimeControlService, SubmitInboxMessageRequest,
+    SessionCommandService, SubmitInboxMessageRequest, TurnCommandService,
 };
 use pontia_core::domain::EventType;
 use pontia_storage_sqlite::{
@@ -76,7 +76,7 @@ pub struct WorkflowCoordinator<S, X, I, B> {
     pontia_home: PathBuf,
 }
 
-impl<S> WorkflowCoordinator<S, PiGracefulExitService, RuntimeControlService, AgentEventBroker>
+impl<S> WorkflowCoordinator<S, SessionCommandService, TurnCommandService, AgentEventBroker>
 where
     S: SessionCreator + Send + Sync + 'static,
 {
@@ -86,8 +86,8 @@ where
         agent_events: AgentEventBroker,
         pontia_home: PathBuf,
     ) -> Self {
-        let exits = PiGracefulExitService::new(event_ingest.db());
-        let interruptions = RuntimeControlService::new(event_ingest.clone());
+        let exits = SessionCommandService::new(event_ingest.clone(), pontia_home.clone());
+        let interruptions = TurnCommandService::new(event_ingest.clone());
         Self::with_services_and_interruptions(
             event_ingest,
             sessions,
