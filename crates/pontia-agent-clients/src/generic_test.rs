@@ -27,6 +27,8 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     timeline: false,
     topology: false,
     branch_control: false,
+    list_models: false,
+    set_model: false,
     context_usage: ContextUsageCapability::Unsupported,
 };
 

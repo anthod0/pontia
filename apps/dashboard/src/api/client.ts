@@ -11,6 +11,7 @@ import type {
   RegisterWorkspaceInput,
   RenameWorkspaceInput,
   SessionView,
+  SessionModels,
   SubmitInboxMessageInput,
   TurnTimelineDirection,
   TurnTimelinePage,
@@ -35,7 +36,7 @@ import type {
 
 const API_BASE = '/external/v1';
 
-type RequestOptions = Omit<RequestInit, 'body'> & { body?: unknown; mutating?: boolean };
+type RequestOptions = Omit<RequestInit, 'body'> & { body?: unknown; mutating?: boolean; retryNetworkErrors?: boolean };
 export type ReadRequestOptions = Pick<RequestOptions, 'signal'>;
 
 const TRANSIENT_NETWORK_RETRY_DELAYS_MS = [250, 750, 1500];
@@ -118,7 +119,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
   if (options.mutating || options.method && options.method !== 'GET') headers.set('Idempotency-Key', idempotencyKey());
 
-  const response = await fetchWithTransientNetworkRetry(`${API_BASE}${path}`, {
+  const fetchRequest = options.retryNetworkErrors === false ? fetch : fetchWithTransientNetworkRetry;
+  const response = await fetchRequest(`${API_BASE}${path}`, {
     ...options,
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -411,4 +413,15 @@ export async function terminateSession(sessionId: string): Promise<unknown> {
 
 export async function openCodexTui(sessionId: string): Promise<{ session: SessionView }> {
   return request(`/sessions/${encodeURIComponent(sessionId)}/tui`, { method: 'POST', body: {}, mutating: true });
+}
+
+
+export async function listSessionModels(sessionId: string, options: ReadRequestOptions = {}): Promise<SessionModels> {
+  return boundedReadRequest<SessionModels>(`/sessions/${encodeURIComponent(sessionId)}/models`, options);
+}
+
+export async function setSessionModel(sessionId: string, model: string, runtimeInstanceId: string): Promise<void> {
+  await request<{ accepted: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/model`, {
+    method: 'PATCH', body: { model, runtime_instance_id: runtimeInstanceId }, retryNetworkErrors: false,
+  });
 }

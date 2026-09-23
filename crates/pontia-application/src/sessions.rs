@@ -7,6 +7,8 @@ use sqlx::SqlitePool;
 use crate::default_client_type;
 
 mod commands;
+mod models;
+pub use models::{SessionModel, SessionModels, SetSessionModelRequest};
 mod lifecycle;
 mod runtime_binding;
 pub(crate) use runtime_binding::runtime_binding_record;

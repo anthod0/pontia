@@ -92,6 +92,11 @@ impl From<Error> for ExternalApiError {
                 message,
             },
             Error::CapabilityUnavailable(message) => Self::capability_unavailable(message),
+            Error::ControlUnknown(message) => Self {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                code: "control_unknown",
+                message,
+            },
             Error::NotFound(message) => Self::not_found(message),
             Error::Domain(message) => Self {
                 status: StatusCode::BAD_REQUEST,

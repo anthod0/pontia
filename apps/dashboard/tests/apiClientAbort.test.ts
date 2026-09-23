@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
+import { setSessionModel, getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
 import { token } from '../src/stores/auth';
 
 beforeEach(() => {
@@ -153,4 +153,15 @@ test('clears the saved token when an API request is unauthorized', async () => {
   await expect(listWorkspaces()).rejects.toMatchObject({ code: 'authentication_failed', status: 401 });
 
   expect(localStorage.getItem('pontia.externalApiToken')).toBe('');
+});
+
+
+test('does not replay an uncertain model change after a network failure', async () => {
+  const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(setSessionModel('session-1', 'model-b', 'runtime-1')).rejects.toThrow('Failed to fetch');
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledWith('/external/v1/sessions/session-1/model', expect.objectContaining({
+    method: 'PATCH', body: JSON.stringify({ model: 'model-b', runtime_instance_id: 'runtime-1' }),
+  }));
 });

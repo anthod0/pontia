@@ -122,6 +122,8 @@ export interface SessionCapabilities {
   timeline?: boolean;
   topology?: boolean;
   branch_control?: boolean;
+  list_models?: boolean;
+  set_model?: boolean;
   context_usage?: ContextUsageCapability;
   [key: string]: unknown;
 }
@@ -224,6 +226,7 @@ export interface SessionView {
   archived_at: string | null;
   capabilities: SessionCapabilities;
   model: string | null;
+  model_control_unavailable_reason?: string | null;
   context_usage: ContextUsageView | null;
   lineage: SessionLineageView | null;
   created_at: string;
@@ -469,4 +472,17 @@ export interface ApiEnvelope<T> {
   data: T | null;
   meta?: JsonObject;
   error?: { code: string; message: string } | null;
+}
+
+
+export interface SessionModel {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface SessionModels {
+  models: SessionModel[];
+  current_model: string | null;
+  runtime_instance_id: string;
 }

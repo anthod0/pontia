@@ -256,6 +256,57 @@ async fn storage_failure_keeps_its_error_type_and_does_not_publish_a_fact() {
 }
 
 #[tokio::test]
+async fn model_observations_update_the_projection_and_publish_without_creating_a_turn() {
+    let fixture = Fixture::new().await;
+    let mut events = fixture.state.agent_events().subscribe();
+    for model in ["model-a", "model-b"] {
+        fixture
+            .service
+            .model_fact(&fixture.session, "runtime", &json!({"model":model}))
+            .await
+            .unwrap();
+        let event = events.try_recv().unwrap();
+        assert_eq!(event.event_type, EventType::SessionModelUpdated);
+        let session = fixture
+            .state
+            .event_ingest_service()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(session.metadata["model"], model);
+        assert_eq!(session.state.to_string(), "idle");
+        assert!(session.current_turn_id.is_none());
+    }
+    assert!(
+        fixture
+            .service
+            .model_fact(&fixture.session, "old", &json!({"model":"stale"}))
+            .await
+            .is_err()
+    );
+    assert!(
+        fixture
+            .service
+            .model_fact(&fixture.session, "runtime", &json!({"model":""}))
+            .await
+            .is_err()
+    );
+    assert!(matches!(events.try_recv(), Err(TryRecvError::Empty)));
+    assert_eq!(
+        fixture
+            .state
+            .event_ingest_service()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .metadata["model"],
+        "model-b"
+    );
+}
+
+#[tokio::test]
 async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
     let fixture = Fixture::new().await;
     let inbox = crate::InboxCommandService::new(fixture.state.event_ingest_service());
@@ -345,4 +396,49 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
             .turn_id
             .is_none()
     );
+}
+
+#[tokio::test]
+async fn model_snapshot_before_resume_updates_metadata_without_resuming_the_session() {
+    let fixture = Fixture::new().await;
+    fixture
+        .service
+        .report(
+            &fixture.session,
+            "runtime",
+            EventType::SessionExited,
+            json!({"reason":"thread_archived"}),
+        )
+        .await
+        .unwrap();
+    fixture
+        .service
+        .model_fact(
+            &fixture.session,
+            "runtime",
+            &json!({"model":"resumed-model"}),
+        )
+        .await
+        .unwrap();
+    let ingest = fixture.state.event_ingest_service();
+    let session = ingest.get_session(&fixture.session).await.unwrap().unwrap();
+    assert_eq!(session.state.to_string(), "exited");
+    assert_eq!(session.metadata["model"], "resumed-model");
+    SessionCommandService::new(ingest.clone(), fixture._root.path().into())
+        .observe_resumed_session(&fixture.session)
+        .await
+        .unwrap();
+    fixture
+        .service
+        .report(
+            &fixture.session,
+            "runtime",
+            EventType::SessionReady,
+            json!({"client_session_key":"thread"}),
+        )
+        .await
+        .unwrap();
+    let session = ingest.get_session(&fixture.session).await.unwrap().unwrap();
+    assert_eq!(session.state.to_string(), "idle");
+    assert_eq!(session.metadata["model"], "resumed-model");
 }

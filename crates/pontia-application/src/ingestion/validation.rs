@@ -41,6 +41,17 @@ impl InternalEventValidationService {
             }
         }
 
+        if event.event_type == EventType::SessionModelUpdated
+            && !event
+                .payload
+                .get("model")
+                .and_then(Value::as_str)
+                .is_some_and(|model| !model.trim().is_empty())
+        {
+            return Err(Error::Domain(
+                "payload.model must be a non-empty string".into(),
+            ));
+        }
         Ok(())
     }
 }

@@ -5,6 +5,7 @@
   import StopIcon from 'phosphor-svelte/lib/StopIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
+  import CpuIcon from 'phosphor-svelte/lib/CpuIcon'
   import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import ChatCommandInput from './ChatCommandInput.svelte'
@@ -59,6 +60,7 @@
     '/new': { label: 'New chat', icon: NotePencilIcon },
     '/rename': { label: 'Rename', icon: PencilSimpleIcon },
     '/exit': { label: 'Exit', icon: SignOutIcon },
+    '/model': { label: 'Choose model', icon: CpuIcon },
   }
   const mentionIdentities = new Map<string, FilePickerFileView>()
   let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)
@@ -132,6 +134,7 @@
       {/if}
     </div>
   </PromptInput.Body>
+  {#if command?.disabledReason}<p role="status" class="px-4 pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
   <PromptInput.Toolbar class="justify-end pt-0">
     {#if interruptMode}
       <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
@@ -160,6 +163,7 @@
         <PromptInput.Body class="min-h-0 flex-1">
           <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] pr-2" />
         </PromptInput.Body>
+        {#if command?.disabledReason}<p role="status" class="pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
         <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
           {#if interruptMode}
             <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt(true)}>

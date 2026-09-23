@@ -51,6 +51,7 @@
       },
     },
     { name: '/rename', description: 'Rename the current session', disabledReason: 'No current session', run: () => {} },
+    { name: '/model', description: 'Choose a model', disabledReason: 'No current session', run: () => {} },
     { name: '/exit', description: 'End the current session', disabledReason: 'No current session', run: () => {} },
   ]
 </script>

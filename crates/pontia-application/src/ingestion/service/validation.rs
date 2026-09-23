@@ -49,7 +49,7 @@ pub(super) async fn ensure_runtime_fence_in_tx(
     let Some(expected_runtime_instance_id) = expected_runtime_instance_id else {
         if matches!(
             event.event_type,
-            EventType::SessionReady | EventType::SessionError
+            EventType::SessionReady | EventType::SessionError | EventType::SessionModelUpdated
         ) {
             return Err(Error::Domain(format!(
                 "{} from {} requires a confirmed Runtime binding for session {}",
@@ -116,7 +116,10 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
         .await?;
 
     let Some(expected_runtime_instance_id) = expected_runtime_instance_id else {
-        if event.event_type == EventType::SessionReady {
+        if matches!(
+            event.event_type,
+            EventType::SessionReady | EventType::SessionModelUpdated
+        ) {
             return Err(Error::Domain(format!(
                 "{} from {} requires a confirmed Runtime binding for session {}",
                 event.event_type, event.source, event.session_id
@@ -201,6 +204,7 @@ fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {
     matches!(
         event_type,
         EventType::SessionReady
+            | EventType::SessionModelUpdated
             | EventType::SessionExited
             | EventType::SessionError
             | EventType::TurnStarted

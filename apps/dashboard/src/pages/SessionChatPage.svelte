@@ -534,6 +534,10 @@
         const inboxMessageId = (metadata as Record<string, unknown>).inbox_message_id
         if (typeof inboxMessageId === 'string') consumeInboxSubmission(inboxMessageId, streamEvent.event.session_id)
       }
+      if (streamEvent.event.type === 'session.model_updated') {
+        void loadSessionDetail(selectedSessionId, { showLoading: false })
+        return
+      }
       if (!sessionSupportsTimeline(currentSelectedSession())) {
         void loadSessionDetail(selectedSessionId, { showLoading: false })
         return

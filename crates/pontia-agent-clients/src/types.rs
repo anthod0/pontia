@@ -28,6 +28,8 @@ pub struct AgentClientCapabilities {
     pub timeline: bool,
     pub topology: bool,
     pub branch_control: bool,
+    pub list_models: bool,
+    pub set_model: bool,
     pub context_usage: ContextUsageCapability,
 }
 
@@ -43,6 +45,8 @@ impl AgentClientCapabilities {
             timeline: false,
             topology: false,
             branch_control: false,
+            list_models: false,
+            set_model: false,
             context_usage: ContextUsageCapability::Unsupported,
         }
     }

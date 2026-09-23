@@ -1,5 +1,6 @@
 mod input;
 mod lifecycle;
+mod models;
 pub(crate) use lifecycle::discard_unbound_runtime;
 mod pi;
 

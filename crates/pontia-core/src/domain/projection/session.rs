@@ -84,6 +84,23 @@ impl ProjectionState {
         Ok(())
     }
 
+    pub(super) fn apply_model(&mut self, event: &DomainEvent) -> Result<()> {
+        let model = event
+            .payload
+            .get("model")
+            .and_then(Value::as_str)
+            .filter(|model| !model.trim().is_empty())
+            .ok_or_else(|| Error::Domain("payload.model must be a non-empty string".into()))?;
+        if let Some(session) = self.sessions.get_mut(&event.session_id) {
+            if !session.metadata.is_object() {
+                session.metadata = json!({});
+            }
+            session.metadata["model"] = json!(model);
+            session.state_version += 1;
+        }
+        Ok(())
+    }
+
     pub(super) fn apply_context_usage(&mut self, event: &DomainEvent) -> Result<()> {
         let Some(session) = self.sessions.get_mut(&event.session_id) else {
             return Ok(());

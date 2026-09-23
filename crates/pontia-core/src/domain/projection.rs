@@ -94,6 +94,7 @@ impl ProjectionState {
                 && event.event_type == EventType::SessionResuming)
             && event.event_type != EventType::SessionTitleUpdated
             && event.event_type != EventType::SessionContextUsageUpdated
+            && event.event_type != EventType::SessionModelUpdated
             && !(event.client_type == "codex" && event.event_type.is_turn_event())
         {
             if event.topology.is_some() {
@@ -133,6 +134,7 @@ impl ProjectionState {
                     .unwrap_or(SessionState::Created),
             ),
             EventType::SessionMessageUpdated => Ok(()),
+            EventType::SessionModelUpdated => self.apply_model(event),
             EventType::SessionContextUsageUpdated => self.apply_context_usage(event),
             EventType::TurnCreated | EventType::TurnQueued => {
                 self.apply_turn(event, TurnState::Queued)

@@ -88,7 +88,7 @@ impl Connection {
         connection
             .call(
                 "initialize",
-                json!({"clientInfo":{"name":"pontia","version":env!("CARGO_PKG_VERSION")}}),
+                json!({"clientInfo":{"name":"pontia","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":true}}),
             )
             .await?;
         connection

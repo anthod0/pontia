@@ -32,9 +32,9 @@ pub use inbox::{
 pub use live_output::stream_live_output;
 pub use response::{ApiResponse, ExternalApiError};
 pub use sessions::{
-    archive_session, create_session, get_session, interrupt_session, list_sessions, open_codex_tui,
-    pin_session, restart_session, resume_session, terminate_session, unarchive_session,
-    unpin_session, update_session,
+    archive_session, create_session, get_session, interrupt_session, list_session_models,
+    list_sessions, open_codex_tui, pin_session, restart_session, resume_session, set_session_model,
+    terminate_session, unarchive_session, unpin_session, update_session,
 };
 pub use tasks::{cancel_task, create_task, get_task, interrupt_task, list_task_events, list_tasks};
 pub use timeline::{get_turn_timeline, get_turn_tree_history, get_turn_tree_updates};

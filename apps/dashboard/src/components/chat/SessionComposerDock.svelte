@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { InboxMessageView, SessionView, WorkspaceGitStatusView } from '../../api/types'
   import { canSendSessionMessage } from '$lib/session-chat/sessionChat'
+  import ModelPicker from './ModelPicker.svelte'
+  import { modelPickerDisabledReason } from '$lib/modelControls'
   import MessageComposer from './MessageComposer.svelte'
   import QueuedMessages from './QueuedMessages.svelte'
   import SessionMetadata from './SessionMetadata.svelte'
@@ -56,9 +58,12 @@
     onExit,
   }: Props = $props()
 
+  let modelDialogSessionId = $state<string | null>(null)
+
   let composerDisabled = $derived(submitting || actionBusy)
   let interruptMode = $derived(session.state === 'busy' && session.capabilities?.interrupt === true && input.trim() === '')
   const commands: ChatCommand[] = $derived([
+    { name: '/model', description: 'Choose a model', disabledReason: modelPickerDisabledReason(session), run: () => { modelDialogSessionId = session.session_id; input = '' } },
     { name: '/new', description: 'Start a new chat in this workspace', run: onNewChat },
     { name: '/rename', description: 'Rename the current session', run: onRename },
     {
@@ -88,3 +93,8 @@
     {/if}
   </div>
 </div>
+
+
+{#if modelDialogSessionId === session.session_id}
+  <ModelPicker {session} onClose={() => { modelDialogSessionId = null }} />
+{/if}

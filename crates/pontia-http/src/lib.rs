@@ -230,6 +230,14 @@ pub fn router(state: impl Into<HttpState>) -> Router {
                 .delete(external::terminate_session),
         )
         .route(
+            "/external/v1/sessions/{session_id}/models",
+            get(external::list_session_models),
+        )
+        .route(
+            "/external/v1/sessions/{session_id}/model",
+            axum::routing::patch(external::set_session_model),
+        )
+        .route(
             "/external/v1/sessions/{session_id}/pin",
             post(external::pin_session),
         )

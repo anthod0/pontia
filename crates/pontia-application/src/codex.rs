@@ -1,4 +1,5 @@
 mod events;
+mod models;
 mod observer;
 #[cfg(test)]
 mod tests;
@@ -123,15 +124,14 @@ impl CodexService {
             .binding_for_session(session_id)
             .await?;
         let new_thread = binding.is_none();
-        let thread = match binding {
+        let response = match binding {
             Some(binding) => {
-                let result = connection
+                connection
                     .call(
                         "thread/resume",
                         json!({"threadId":binding.client_session_key,"excludeTurns":true}),
                     )
-                    .await?;
-                result["thread"].clone()
+                    .await?
             }
             None => {
                 let cwd: String = sqlx::query_scalar(
@@ -145,17 +145,19 @@ impl CodexService {
                     .map(|value| serde_json::from_str(&value))
                     .transpose()?
                     .unwrap_or_else(|| json!({}));
-                let result = connection
+                connection
                     .call(
                         "thread/start",
                         json!({"cwd":cwd,"config":{"shell_environment_policy.set":environment}}),
                     )
-                    .await?;
-                result["thread"].clone()
+                    .await?
             }
         };
+        let thread = response["thread"].clone();
         target.validate(&self.pool).await?;
         self.bind(session_id, &runtime, &thread).await?;
+        self.model_fact(session_id, &runtime.instance_id, &response)
+            .await?;
         let thread_id = string(&thread, "id")?;
         // thread/start subscribes this connection. A resumed thread needs its actual turns,
         // because excludeTurns intentionally returned no execution history.
@@ -351,6 +353,8 @@ impl CodexService {
             .await
             .map_err(|error| Error::ControlUnknown(error.to_string()))?;
         self.bind(session_id, &runtime, &result["thread"]).await?;
+        self.model_fact(session_id, &runtime.instance_id, &result)
+            .await?;
         let turns = self.turns(&connection, &binding.client_session_key).await?;
         self.reconcile_turns(session_id, &runtime, &turns).await?;
         self.ready(session_id, &runtime, &result["thread"]).await?;

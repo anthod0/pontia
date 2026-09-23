@@ -243,3 +243,34 @@ pub async fn resume_session(
     .await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
+
+pub async fn list_session_models(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = SessionCommandService::new(
+        state.event_ingest_service(),
+        state.pontia_home().to_path_buf(),
+    );
+    Ok(ok(serde_json::to_value(
+        service.list_session_models(&session_id).await?,
+    )
+    .map_err(pontia_core::Error::from)?))
+}
+
+pub async fn set_session_model(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+    Json(request): Json<pontia_application::sessions::SetSessionModelRequest>,
+) -> Result<Response, ExternalApiError> {
+    authenticate(&state, &headers)?;
+    let service = SessionCommandService::new(
+        state.event_ingest_service(),
+        state.pontia_home().to_path_buf(),
+    );
+    service.set_session_model(&session_id, request).await?;
+    Ok((StatusCode::ACCEPTED, ok(json!({"accepted":true}))).into_response())
+}

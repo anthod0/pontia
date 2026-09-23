@@ -98,6 +98,7 @@ impl CodexObserver {
                             if self.service.check_archived(&session,&runtime,&thread).await? { return Ok(()); }
                             let resumed = connection.call("thread/resume",json!({"threadId":thread,"excludeTurns":true})).await?;
                             self.service.bind(&session,&runtime,&resumed["thread"]).await?;
+                            self.service.model_fact(&session,&runtime.instance_id,&resumed).await?;
                             Some(resumed["thread"].clone())
                         } else { None };
                         let native = self.service.turns(&connection,&thread).await?;
@@ -130,6 +131,7 @@ impl CodexObserver {
                         None => match AgentBindingService::new(self.service.pool.clone()).binding_for_client_session("codex",thread).await? { Some(binding) => binding.session_id, None => continue },
                     };
                     match event["method"].as_str() {
+                        Some("thread/settings/updated") => self.service.model_fact(&session,&runtime.instance_id,&event["params"]["threadSettings"]).await?,
                         Some("turn/started") => {
                             if let Ok(turns) = self.service.turns(&connection,thread).await {
                                 self.service.reconcile_turns(&session,&runtime,&turns).await?;

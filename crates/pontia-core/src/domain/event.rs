@@ -65,6 +65,8 @@ pub enum EventType {
     SessionMessageUpdated,
     #[serde(rename = "session.context_usage_updated")]
     SessionContextUsageUpdated,
+    #[serde(rename = "session.model_updated")]
+    SessionModelUpdated,
     #[serde(rename = "turn.created")]
     TurnCreated,
     #[serde(rename = "turn.queued")]
@@ -127,6 +129,7 @@ impl EventType {
                 | Self::SessionExited
                 | Self::SessionMessageUpdated
                 | Self::SessionContextUsageUpdated
+                | Self::SessionModelUpdated
                 | Self::TurnStarted
                 | Self::TurnOutput
                 | Self::TurnCompleted
@@ -148,6 +151,7 @@ impl std::fmt::Display for EventType {
             Self::SessionError => "session.error",
             Self::SessionTitleUpdated => "session.title_updated",
             Self::SessionMessageUpdated => "session.message_updated",
+            Self::SessionModelUpdated => "session.model_updated",
             Self::SessionContextUsageUpdated => "session.context_usage_updated",
             Self::TurnCreated => "turn.created",
             Self::TurnQueued => "turn.queued",
@@ -183,6 +187,7 @@ impl std::str::FromStr for EventType {
             "session.error" => Ok(Self::SessionError),
             "session.title_updated" => Ok(Self::SessionTitleUpdated),
             "session.message_updated" => Ok(Self::SessionMessageUpdated),
+            "session.model_updated" => Ok(Self::SessionModelUpdated),
             "session.context_usage_updated" => Ok(Self::SessionContextUsageUpdated),
             "turn.created" => Ok(Self::TurnCreated),
             "turn.queued" => Ok(Self::TurnQueued),

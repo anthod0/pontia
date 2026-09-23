@@ -108,7 +108,7 @@ test.each(['exited', 'error'])('/exit is unavailable for an already terminal %s 
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 });
 
-test.each([['/exit', 'Exit'], ['/rename New title', 'Rename']])('new chat disables %s and /new clears the prompt while preserving workspace selection', async (value, label) => {
+test.each([['/exit', 'Exit'], ['/rename New title', 'Rename'], ['/model', 'Choose model']])('new chat disables %s and /new clears the prompt while preserving workspace selection', async (value, label) => {
   chatDraft.set(value);
   render(NewChatPage);
   expect(await screen.findByRole('button', { name: label })).toBeDisabled();
@@ -136,4 +136,86 @@ test('file mentions keep their keyboard selection before ordinary message submis
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-1', expect.objectContaining({
     input: '@src/main.rs',
   })));
+});
+
+test.each([
+  { capabilities: { list_models: false, set_model: false } },
+  { capabilities: { list_models: true, set_model: true }, model_control_unavailable_reason: 'Disconnected' },
+  { capabilities: { list_models: true, set_model: true }, state: 'exited' },
+])('/model is handled locally when unavailable: %j', async (overrides) => {
+  const list = vi.spyOn(api, 'listSessionModels');
+  renderChat('/model', overrides);
+  expect(await screen.findByRole('button', { name: 'Choose model' })).toBeDisabled();
+  await fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  expect(list).not.toHaveBeenCalled();
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
+
+const modelCatalog = {
+  runtime_instance_id: 'runtime-1', current_model: 'model-a',
+  models: [
+    { id: 'model-a', name: 'Model A', description: 'First model' },
+    { id: 'model-b', name: 'Model B', description: 'Second model' },
+  ],
+};
+
+test('/model searches and changes the model, waiting for a client fact before updating', async () => {
+  vi.spyOn(api, 'listSessionModels').mockResolvedValue(modelCatalog);
+  const change = vi.spyOn(api, 'setSessionModel').mockResolvedValue();
+  const selected = renderChat('/model', { model: 'model-a', state: 'busy', capabilities: { list_models: true, set_model: true } });
+  await fireEvent.click(await screen.findByRole('button', { name: 'Choose model' }));
+  expect(await screen.findByRole('button', { name: 'Model A' })).toBeDisabled();
+  await fireEvent.input(screen.getByRole('textbox', { name: 'Search models' }), { target: { value: 'model-b' } });
+  expect(screen.queryByRole('button', { name: 'Model A' })).not.toBeInTheDocument();
+  await fireEvent.click(screen.getByRole('button', { name: 'Model B' }));
+  await waitFor(() => expect(change).toHaveBeenCalledExactlyOnceWith(selected.session_id, 'model-b', 'runtime-1'));
+  expect(mocks.sessionDetail.get()?.session.model).toBe('model-a');
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  mocks.sessionDetail.set({ session: { ...selected, model: 'model-b' }, turns: [], inboxMessages: [], events: [] });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
+
+test('/model exposes a read-only catalog when selection is unsupported', async () => {
+  vi.spyOn(api, 'listSessionModels').mockResolvedValue(modelCatalog);
+  const change = vi.spyOn(api, 'setSessionModel');
+  renderChat('/model', { capabilities: { list_models: true, set_model: false } });
+  await fireEvent.click(await screen.findByRole('button', { name: 'Choose model' }));
+  expect(await screen.findByRole('button', { name: 'Model B' })).toBeDisabled();
+  expect(change).not.toHaveBeenCalled();
+});
+
+test('/model keeps the confirmed model when selection fails and permits an explicit retry', async () => {
+  vi.spyOn(api, 'listSessionModels').mockResolvedValue(modelCatalog);
+  const change = vi.spyOn(api, 'setSessionModel').mockRejectedValueOnce(new Error('Model unavailable')).mockResolvedValue();
+  renderChat('/model', { model: 'model-a', capabilities: { list_models: true, set_model: true } });
+  await fireEvent.click(await screen.findByRole('button', { name: 'Choose model' }));
+  await fireEvent.click(await screen.findByRole('button', { name: 'Model B' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Model unavailable');
+  expect(mocks.sessionDetail.get()?.session.model).toBe('model-a');
+  await fireEvent.click(screen.getByRole('button', { name: 'Model B' }));
+  await waitFor(() => expect(change).toHaveBeenCalledTimes(2));
+});
+
+test('/model shows catalog failures without sending a message', async () => {
+  vi.spyOn(api, 'listSessionModels').mockRejectedValue(new Error('Connection lost'));
+  renderChat('/model', { capabilities: { list_models: true, set_model: true } });
+  await fireEvent.click(await screen.findByRole('button', { name: 'Choose model' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Connection lost');
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
+
+
+test('a model fact refreshes session metadata even when native history is available', async () => {
+  const selected = renderChat('', { model: 'model-a' });
+  await screen.findByRole('textbox');
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
+  mocks.loadSessionDetail.mockImplementationOnce(async () => {
+    mocks.sessionDetail.set({ session: { ...selected, model: 'model-b' }, turns: [], inboxMessages: [], events: [] });
+    return null;
+  });
+  for (const listener of mocks.dashboardEventListeners) listener({
+    kind: 'session_event', event: { session_id: selected.session_id, type: 'session.model_updated', payload: { model: 'model-b' } },
+  });
+  expect(await screen.findByRole('button', { name: /Session details:.*model-b/ })).toBeInTheDocument();
 });

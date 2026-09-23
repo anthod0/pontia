@@ -88,6 +88,13 @@ impl ExternalQueryService {
             if let Some(tui) = tuis.first() {
                 details["tui"] = serde_json::to_value(tui)?;
             }
+            session.model_control_unavailable_reason = match details["connection"].as_str() {
+                Some("available") => None,
+                Some("awaiting_input") => Some(
+                    "Send the first message to start this session before choosing a model.".into(),
+                ),
+                _ => Some("The agent control connection is unavailable.".into()),
+            };
             session.codex = Some(details);
         }
 
