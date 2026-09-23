@@ -152,7 +152,6 @@ pub async fn serve_connection(state: AppState, stream: UnixStream) {
             "session.get"
                 | "profile.get"
                 | "workspaces.list"
-                | "turn.claim"
                 | "session.context"
                 | "runtime.register"
                 | "runtime.attach"
@@ -228,9 +227,9 @@ async fn dispatch(
 ) -> Result<Value> {
     if matches!(
         request.method.as_str(),
-        "session.get" | "profile.get" | "workspaces.list" | "turn.claim"
+        "session.get" | "profile.get" | "workspaces.list"
     ) {
-        return queries::dispatch(state, request, registered.as_ref()).await;
+        return queries::dispatch(state, request).await;
     }
     if request.method == "liveOutput.publish" {
         let identity = registered

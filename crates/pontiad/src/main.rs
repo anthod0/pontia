@@ -27,7 +27,6 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
     let app_state = application::initialize(&config).await?;
-    pontia_runtime::set_runtime_bind_addr(bound_addr);
     let pi_listener = application::pi_ipc::PiIpcListener::bind(&config.pontia_home).await?;
     let pi_task =
         tokio::spawn(pi_listener.run(app_state.clone(), app_state.shutdown().subscribe()));

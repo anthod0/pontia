@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { connectPi, RpcError, type PiConnection, type ControlInput } from "./control-socket.js";
-import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
+import { defaultHookLogFile, type EnvLike, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv } from "./discovery.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
@@ -31,7 +31,6 @@ function isPersistentTuiContext(ctx: unknown): boolean {
 
 export interface PontiaPiExtensionDependencies {
   env?: EnvLike;
-  loadContext?: (env: EnvLike, sessionContext?: SessionContext) => Promise<LoadTurnContextResult>;
   makeReporter?: (logFile: string) => ReporterLike;
   logDiagnostic?: (logFile: string, entry: DiagnosticEntry) => Promise<void>;
   loadManagedRuntime?: (env: EnvLike) => Promise<ManagedRuntimeIdentity | undefined>;
@@ -116,7 +115,6 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   const currentEnv = () => ({ ...sourceEnv, PONTIA_HOME: currentPontiaHome() });
   const currentHookLogFile = () => defaultHookLogFile(currentPontiaHome());
 
-  const contextLoader = dependencies.loadContext ?? ((contextEnv, sessionContext) => loadTurnContext(contextEnv, { sessionContext, connection: rpcConnection }));
   const rpcConnection: Pick<PiConnection, "request"> = {
     request(method, params) {
       if (!controlSocket) return Promise.reject(new Error("Pi connection is unavailable"));
@@ -568,68 +566,48 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       const submission = dispatch && !dispatch.consumed && dispatch.sessionContext === boundSessionContext
         ? dispatch.submission : undefined;
       if (dispatch) dispatch.consumed = true;
-      const loaded: LoadTurnContextResult = submission && boundSessionContext
-        ? { ok: true, context: { ...boundSessionContext, ...submission }, logFile: currentHookLogFile() }
-        : await contextLoader(currentEnv(), boundSessionContext);
-      let turnContext: TurnContext | undefined;
-      let logFile: string;
-      if (loaded.ok) {
-        turnContext = loaded.context;
-        logFile = loaded.logFile;
-      } else if (loaded.silent) {
-        if (!loaded.logFile) {
+      const logFile = currentHookLogFile();
+      if (!boundSessionContext) {
+        const hookSessionDetails = piSessionDetailsFromHookContext(ctx);
+        const sessionDetails = hookSessionDetails.clientSessionKey ? hookSessionDetails : deferredManualSessionDetails;
+        if (!sessionDetails) {
           activeTurn = undefined;
           pendingPrompt = undefined;
           return;
         }
-        logFile = loaded.logFile;
-        if (!boundSessionContext) {
-          const hookSessionDetails = piSessionDetailsFromHookContext(ctx);
-          const sessionDetails = hookSessionDetails.clientSessionKey ? hookSessionDetails : deferredManualSessionDetails;
-          if (!sessionDetails) {
-            activeTurn = undefined;
-            pendingPrompt = undefined;
-            return;
-          }
-          const workspaceActive = await isActiveRegisteredWorkspace(await registrationConnection(), sessionDetails.clientCwd);
-          if (!workspaceActive) {
-            await closeControlSocket();
-            reportingDisabled = true;
-            await logDiagnostic(logFile, {
-              level: "info",
-              code: "workspace_not_active",
-              message: "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
-              details: { client_cwd: sessionDetails.clientCwd },
-            });
-            activeTurn = undefined;
-            pendingPrompt = undefined;
-            return;
-          }
-          boundSessionContext = await bindSession(await registrationConnection(), currentEnv(), sessionDetails);
-          if (boundSessionContext && !readyReported) {
-            piContext = ctx;
-            controlSocket!.registered(boundSessionContext);
-            readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
-            await reportModel().catch(controlError);
-          }
-        }
-        if (boundSessionContext) {
-          turnContext = {
-            sessionId: boundSessionContext.sessionId,
-            runtimeInstanceId: boundSessionContext.runtimeInstanceId,
-            clientType: "pi",
-            input: pendingPrompt,
-          };
-        } else {
+        const workspaceActive = await isActiveRegisteredWorkspace(await registrationConnection(), sessionDetails.clientCwd);
+        if (!workspaceActive) {
+          await closeControlSocket();
+          reportingDisabled = true;
+          await logDiagnostic(logFile, {
+            level: "info",
+            code: "workspace_not_active",
+            message: "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
+            details: { client_cwd: sessionDetails.clientCwd },
+          });
           activeTurn = undefined;
           pendingPrompt = undefined;
           return;
         }
-      } else {
+        boundSessionContext = await bindSession(await registrationConnection(), currentEnv(), sessionDetails);
+        if (boundSessionContext && !readyReported) {
+          piContext = ctx;
+          controlSocket!.registered(boundSessionContext);
+          readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
+          await reportModel().catch(controlError);
+        }
+      }
+      if (!boundSessionContext) {
         activeTurn = undefined;
-        if (!loaded.silent && ctx?.hasUI) ctx.ui.notify(`pontia: ${loaded.reason}`, "warning");
+        pendingPrompt = undefined;
         return;
       }
+      const turnContext: TurnContext = {
+        sessionId: boundSessionContext.sessionId,
+        runtimeInstanceId: boundSessionContext.runtimeInstanceId,
+        clientType: "pi",
+        ...(submission ?? { input: pendingPrompt }),
+      };
 
       pendingPrompt = undefined;
       if (!await confirmManagedPane(true)) {

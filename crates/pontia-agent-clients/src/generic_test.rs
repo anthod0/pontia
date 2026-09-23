@@ -10,10 +10,9 @@ use pontia_core::{
 use crate::{
     AgentClientCapabilities, AgentInput, ContextUsageCapability,
     types::{
-        AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
-        DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior,
-        TerminateBehavior, TimelineSourceBehavior, TranscriptBehavior, TurnContextBehavior,
-        TurnLifecycleBehavior,
+        AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, DispatchBehavior,
+        RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
+        TimelineSourceBehavior, TranscriptBehavior, TurnLifecycleBehavior,
     },
 };
 
@@ -40,8 +39,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         dispatch: DispatchBehavior::InProcessRecorded,
         client_session_identity: ClientSessionIdentityBehavior::Unsupported,
         terminate: TerminateBehavior::RuntimeManager,
-        turn_context: TurnContextBehavior::Disabled,
-        current_turn_id: CurrentTurnIdBehavior::Include,
         turn_lifecycle: TurnLifecycleBehavior::BackendManaged,
         runtime_binding: RuntimeBindingBehavior::Unsupported,
         system_prompt_injection: SystemPromptInjectionBehavior::Disabled,

@@ -25,8 +25,7 @@ pub mod views;
 pub mod workspaces;
 
 pub use agent_bindings::{
-    AgentBinding, AgentBindingCurrentTurn, AgentBindingService, AgentBindingSessionContext,
-    UpsertAgentBindingRequest,
+    AgentBinding, AgentBindingService, AgentBindingSessionContext, UpsertAgentBindingRequest,
 };
 pub use agent_events::AgentEventBroker;
 pub use agent_profiles::{
@@ -61,7 +60,7 @@ pub use sessions::{
     UpdateSessionRequest,
 };
 pub use tasks::{CreateTaskOutcome, TaskCommandService};
-pub use turns::{CurrentTurnClaimRequest, CurrentTurnClaimService, TurnCommandService};
+pub use turns::TurnCommandService;
 pub use views::{
     ContextUsageCapability, ContextUsageView, EventStreamItem, EventStreamScope, EventView,
     InboxInputView, InboxMessageView, SessionCapabilities, SessionLineageView, SessionView,

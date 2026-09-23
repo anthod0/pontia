@@ -1,7 +1,7 @@
 import { createConnection, type Socket } from "node:net";
 import { isAbsolute, join } from "node:path";
 
-export const CONTROL_VERSION = 5;
+export const CONTROL_VERSION = 6;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
 // Match the former HTTP event body limit, including the RPC envelope.
 export const MAX_RPC_FRAME_BYTES = 2 * 1024 * 1024 + 1024;

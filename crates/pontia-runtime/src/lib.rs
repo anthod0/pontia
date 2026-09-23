@@ -14,9 +14,7 @@ mod session_identifier;
 mod tmux;
 mod types;
 
-#[cfg(test)]
-pub use config::reset_runtime_bind_addr_for_tests;
-pub use config::{configured_internal_event_url, set_runtime_bind_addr, set_runtime_config};
+pub use config::set_runtime_config;
 pub use manager::GenericRuntimeManager;
 use std::path::PathBuf;
 pub use tmux::TmuxProcessFingerprint;

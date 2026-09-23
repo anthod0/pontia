@@ -15,7 +15,7 @@ use tokio::{
     sync::{mpsc, oneshot, watch},
 };
 
-pub const PROTOCOL_VERSION: u32 = 5;
+pub const PROTOCOL_VERSION: u32 = 6;
 pub const MAX_CONTROL_FRAME_BYTES: usize = 64 * 1024;
 // The former HTTP event body limit plus space for the RPC envelope.
 pub const MAX_FRAME_BYTES: usize = 2 * 1024 * 1024 + 1024;

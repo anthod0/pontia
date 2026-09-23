@@ -8,7 +8,6 @@ use pontia_storage_sqlite::{
         agent_bindings::{AgentBindingUpsertRecord, SqliteAgentBindingRepository},
         runtime_bindings::SqliteRuntimeBindingRepository,
         sessions::SqliteSessionRepository,
-        turns::SqliteTurnRepository,
     },
 };
 use serde::Serialize;
@@ -45,20 +44,6 @@ pub struct AgentBindingSessionContext {
     pub client_session_key: String,
     pub client_session_file: Option<String>,
     pub runtime_instance_id: Option<String>,
-    pub internal_event_url: String,
-    pub binding_metadata: Value,
-    pub runtime_metadata: Value,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct AgentBindingCurrentTurn {
-    pub session_id: String,
-    pub turn_id: String,
-    pub client_type: String,
-    pub client_session_key: String,
-    pub client_session_file: Option<String>,
-    pub runtime_instance_id: Option<String>,
-    pub internal_event_url: String,
     pub binding_metadata: Value,
     pub runtime_metadata: Value,
 }
@@ -113,7 +98,6 @@ impl AgentBindingService {
         let Some(row) = sqlx::query(
             r#"SELECT s.state AS session_state,
                       r.runtime_instance_id,
-                      r.internal_event_url,
                       r.launch_cwd
                FROM sessions s
                JOIN runtime_bindings r ON r.session_id = s.session_id
@@ -127,7 +111,6 @@ impl AgentBindingService {
         };
 
         let runtime_metadata = runtime_metadata_from_row(&row)?;
-        let internal_event_url = internal_event_url(&runtime_metadata);
         Ok(Some(AgentBindingSessionContext {
             session_id: binding.session_id,
             session_state: row.try_get("session_state")?,
@@ -135,56 +118,6 @@ impl AgentBindingService {
             client_session_key: binding.client_session_key,
             client_session_file: binding.client_session_file,
             runtime_instance_id: row.try_get("runtime_instance_id")?,
-            internal_event_url,
-            binding_metadata: binding.metadata,
-            runtime_metadata,
-        }))
-    }
-
-    pub async fn current_turn_for_client_session(
-        &self,
-        client_type: &str,
-        client_session_key: &str,
-    ) -> Result<Option<AgentBindingCurrentTurn>> {
-        let Some(binding) = self
-            .binding_for_client_session(client_type, client_session_key)
-            .await?
-        else {
-            return Ok(None);
-        };
-
-        let Some(row) = sqlx::query(
-            r#"SELECT r.runtime_instance_id,
-                      r.internal_event_url,
-                      r.launch_cwd
-               FROM runtime_bindings r
-               WHERE r.session_id = ?"#,
-        )
-        .bind(&binding.session_id)
-        .fetch_optional(&self.pool)
-        .await?
-        else {
-            return Ok(None);
-        };
-
-        let Some(active_turn) = SqliteTurnRepository::new(self.pool.clone())
-            .active_turn(&binding.session_id)
-            .await?
-        else {
-            return Ok(None);
-        };
-        let turn_id = active_turn.turn_id;
-        let runtime_metadata = runtime_metadata_from_row(&row)?;
-        let internal_event_url = internal_event_url(&runtime_metadata);
-
-        Ok(Some(AgentBindingCurrentTurn {
-            session_id: binding.session_id,
-            turn_id,
-            client_type: binding.client_type,
-            client_session_key: binding.client_session_key,
-            client_session_file: binding.client_session_file,
-            runtime_instance_id: row.try_get("runtime_instance_id")?,
-            internal_event_url,
             binding_metadata: binding.metadata,
             runtime_metadata,
         }))
@@ -236,19 +169,8 @@ impl AgentBindingService {
 fn runtime_metadata_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Value> {
     Ok(serde_json::json!({
         "runtime_instance_id": row.try_get::<Option<String>, _>("runtime_instance_id")?,
-        "internal_event_url": row.try_get::<Option<String>, _>("internal_event_url")?,
         "launch_cwd": row.try_get::<Option<String>, _>("launch_cwd")?,
     }))
-}
-
-fn internal_event_url(runtime_metadata: &Value) -> String {
-    runtime_metadata
-        .get("internal_event_url")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("http://127.0.0.1:8080/internal/v1/events")
-        .to_string()
 }
 
 pub(crate) async fn register_agent_binding_for_ready_event_in_tx(

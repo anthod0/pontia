@@ -34,22 +34,6 @@ pub(super) async fn post_upsert(state: AppState, body: Value) -> (StatusCode, Va
     .await
 }
 
-pub(super) async fn get_current_turn_by_client_session(
-    state: AppState,
-    client_type: &str,
-    client_session_key: &str,
-) -> (StatusCode, Value) {
-    request_json(
-        state,
-        "GET",
-        &format!(
-            "/internal/v1/agent-bindings/current-turn?client_type={client_type}&client_session_key={client_session_key}",
-        ),
-        None,
-    )
-    .await
-}
-
 pub(super) async fn get_session_context_by_client_session(
     state: AppState,
     client_type: &str,

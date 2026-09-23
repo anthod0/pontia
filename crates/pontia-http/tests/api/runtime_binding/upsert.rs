@@ -151,12 +151,6 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
         .as_str()
         .expect("runtime_instance_id");
     assert!(runtime_instance_id.starts_with("rtinst_"));
-    assert!(
-        body["runtime"]["internal_event_url"]
-            .as_str()
-            .unwrap()
-            .ends_with("/internal/v1/events")
-    );
     assert_eq!(body["runtime"]["capabilities"]["accept_task"], true);
     assert_eq!(body["runtime"]["capabilities"]["interrupt"], true);
     assert_eq!(body["runtime"]["capabilities"]["stream_output"], true);
@@ -171,7 +165,7 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     );
 
     let row = sqlx::query(
-        "SELECT runtime_kind, runtime_instance_id, binding_state, start_command, launch_cwd, internal_event_url, tmux_socket_path, tmux_pane_id, capabilities, diagnostics, adapter_details FROM runtime_bindings WHERE session_id = ?",
+        "SELECT runtime_kind, runtime_instance_id, binding_state, start_command, launch_cwd, tmux_socket_path, tmux_pane_id, capabilities, diagnostics, adapter_details FROM runtime_bindings WHERE session_id = ?",
     )
     .bind(session_id)
     .fetch_one(&state.db())
@@ -190,10 +184,6 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     );
     assert_eq!(row.get::<String, _>("tmux_pane_id"), "%42");
     assert_eq!(row.get::<String, _>("binding_state"), "confirmed");
-    assert!(
-        row.get::<String, _>("internal_event_url")
-            .ends_with("/internal/v1/events")
-    );
     let capabilities: Value = serde_json::from_str(&row.get::<String, _>("capabilities")).unwrap();
     assert_eq!(capabilities["accept_task"], true);
     assert_eq!(capabilities["context_usage"], "estimated");

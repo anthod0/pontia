@@ -108,18 +108,6 @@ pub enum TerminateBehavior {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TurnContextBehavior {
-    Disabled,
-    InternalApiClaim,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CurrentTurnIdBehavior {
-    Include,
-    Omit,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TurnLifecycleBehavior {
     ClientManaged,
     BackendManaged,
@@ -159,16 +147,13 @@ pub enum TimelineSourceBehavior {
 ///
 /// These fields describe how the Rust backend starts, controls, observes, or
 /// reads client-specific resources for the client. They intentionally do not
-/// describe how a client extension internally reports facts through the
-/// Internal Event API.
+/// describe how a client extension reports facts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentClientAdapter {
     pub runtime: RuntimeBehavior,
     pub dispatch: DispatchBehavior,
     pub client_session_identity: ClientSessionIdentityBehavior,
     pub terminate: TerminateBehavior,
-    pub turn_context: TurnContextBehavior,
-    pub current_turn_id: CurrentTurnIdBehavior,
     pub turn_lifecycle: TurnLifecycleBehavior,
     pub runtime_binding: RuntimeBindingBehavior,
     pub system_prompt_injection: SystemPromptInjectionBehavior,
@@ -203,10 +188,6 @@ impl AgentClientSpec {
     pub fn owns_initial_tmux_turn(&self) -> bool {
         self.tmux_runtime().is_some()
             && self.adapter.turn_lifecycle == TurnLifecycleBehavior::ClientManagedForInteractiveTmux
-    }
-
-    pub fn current_turn_context_includes_turn_id(&self) -> bool {
-        self.adapter.current_turn_id == CurrentTurnIdBehavior::Include
     }
 
     pub fn runtime_binding_kind(&self) -> Option<&'static str> {

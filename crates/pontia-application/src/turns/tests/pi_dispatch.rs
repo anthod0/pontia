@@ -99,19 +99,11 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    let contexts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pending_turn_contexts")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
     assert_eq!(turns, 0);
-    assert_eq!(
-        contexts, 0,
-        "socket submissions carry metadata directly, never through a stale claim"
-    );
 }
 
 #[tokio::test]
-async fn missing_pi_connection_rejects_delivery_without_creating_a_turn_or_pending_context() {
+async fn missing_pi_connection_rejects_delivery_without_creating_a_turn() {
     let (pool, _root, control) = setup().await;
     ready(&pool).await;
     let error = TurnCommandService::new(crate::EventIngestService::new(pool.clone()))
@@ -120,11 +112,9 @@ async fn missing_pi_connection_rejects_delivery_without_creating_a_turn_or_pendi
         .await
         .unwrap_err();
     assert!(error.to_string().contains("no current Pi connection"));
-    for table in ["turns", "pending_turn_contexts"] {
-        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(count, 0);
-    }
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
 }

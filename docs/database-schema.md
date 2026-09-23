@@ -318,7 +318,6 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 | `runtime_handle` | TEXT | |
 | `start_command` | TEXT | |
 | `launch_cwd` | TEXT | |
-| `internal_event_url` | TEXT | |
 | `started_at` | TEXT | |
 | `last_seen_at` | TEXT | |
 | `restart_count` | INTEGER | NOT NULL, default `0` |
@@ -370,16 +369,6 @@ Turn projection. Retries and recovery reuse this identity.
 The owner identifies a reattachable TUI gateway. The target follows successful
 user-thread start, resume and fork responses on that TUI connection. Changing
 the target does not change either Session's persistent Agent binding.
-
-## `pending_turn_contexts`
-
-| Column | Type | Constraints / default |
-|---|---|---|
-| `session_id` | TEXT | primary key, NOT NULL, foreign key → `runtime_bindings.session_id` ON DELETE CASCADE |
-| `runtime_instance_id` | TEXT | NOT NULL |
-| `client_type` | TEXT | NOT NULL |
-| `payload` | TEXT | NOT NULL, CHECK `json_valid(payload)` |
-| `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 
 ## `session_lineage`
 

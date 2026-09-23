@@ -10,10 +10,7 @@ use pontia_agent_clients::{
 };
 use pontia_core::error::{Error, Result};
 
-use super::{
-    RuntimeStartRequest,
-    config::{configured_internal_event_url, configured_tui_command},
-};
+use super::{RuntimeStartRequest, config::configured_tui_command};
 
 pub(super) struct RuntimePaths<'a> {
     pub(super) log_path: &'a Path,
@@ -185,20 +182,6 @@ pub(super) fn shell_quote_path(path: &Path) -> String {
     shell_quote(&path.display().to_string())
 }
 
-pub(super) fn internal_event_url() -> String {
-    configured_internal_event_url().unwrap_or_else(|| default_internal_event_url().to_string())
-}
-
-#[cfg(test)]
-fn default_internal_event_url() -> &'static str {
-    "http://127.0.0.1:9/internal/v1/events"
-}
-
-#[cfg(not(test))]
-fn default_internal_event_url() -> &'static str {
-    "http://127.0.0.1:8080/internal/v1/events"
-}
-
 pub(super) fn run_startup_hooks(
     hooks: &[agent_clients::StartupHook],
     workspace: &Path,
@@ -316,26 +299,5 @@ mod tests {
         let content = std::fs::read_to_string(script_path).expect("launch script");
         assert!(content.contains("pi --resume-user-command"));
         assert!(!content.contains("--session-id sess_explicit_start"));
-    }
-
-    #[test]
-    fn runtime_script_internal_event_url_uses_test_default_and_configured_bind_port() {
-        crate::reset_runtime_bind_addr_for_tests();
-        assert_eq!(
-            default_internal_event_url(),
-            "http://127.0.0.1:9/internal/v1/events"
-        );
-
-        crate::set_runtime_bind_addr("127.0.0.1:18080".parse().expect("bind addr"));
-        assert_eq!(
-            internal_event_url(),
-            "http://127.0.0.1:18080/internal/v1/events"
-        );
-
-        crate::set_runtime_bind_addr("0.0.0.0:18081".parse().expect("bind addr"));
-        assert_eq!(
-            internal_event_url(),
-            "http://127.0.0.1:18081/internal/v1/events"
-        );
     }
 }

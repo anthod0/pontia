@@ -52,7 +52,6 @@ async fn seed_running_turn(state: &AppState, session_id: &str, turn_id: &str, ru
             runtime_handle: None,
             start_command: None,
             launch_cwd: Some("/tmp".into()),
-            internal_event_url: None,
             started_at: None,
             last_seen_at: None,
             restart_count: 0,

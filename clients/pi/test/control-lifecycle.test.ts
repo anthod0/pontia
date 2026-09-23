@@ -99,7 +99,6 @@ test("a disconnected deferred registration can initialize on the next manual tur
   createPontiaPiExtension({ on(name: string, handler: any) { handlers[name] = handler; }, registerCommand() {} } as any, {
     env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
     isManagedPane: async () => managed,
-    loadContext: async () => ({ ok: false, silent: true, reason: "unbound", logFile: join(root, "hook.log") }),
     makeReporter: () => ({ report: async (_context, event) => { events.push(event); return { accepted: true, turnId: "turn_recovered" }; } }),
     logDiagnostic: vi.fn(async () => {}),
   });
@@ -146,9 +145,6 @@ test("the default extension streams over its registered connection and closes th
     env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
     connectPi: connect,
     isManagedPane: async () => true,
-    loadContext: async () => ({ ok: true, logFile: join(root, "hook.log"), context: {
-      sessionId: "sess_live", runtimeInstanceId: "rt_live", clientType: "pi",
-    } }),
   });
   const context = { mode: "tui", sessionManager: {
     getSessionId: () => "native", getSessionFile: () => join(root, "pi.jsonl"), getCwd: () => workspace,

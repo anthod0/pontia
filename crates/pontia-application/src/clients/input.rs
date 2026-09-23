@@ -1,4 +1,4 @@
-use pontia_agent_clients::{DispatchMode, TurnContextBehavior};
+use pontia_agent_clients::DispatchMode;
 use pontia_core::{Error, Result, ids::new_dispatch_id};
 use pontia_runtime::{AgentInput, GenericRuntimeManager};
 use serde_json::Value;
@@ -88,16 +88,6 @@ impl ClientAdapter {
                     )
                     .await?;
                 let (socket, pane) = target.tmux_pane(&self.events.db()).await?;
-                if self.spec.adapter.turn_context == TurnContextBehavior::InternalApiClaim {
-                    crate::turns::store_client_current_turn_context(
-                        self.events.db(),
-                        &target.session_id,
-                        &input,
-                        self.spec.client_type,
-                        Some(metadata),
-                    )
-                    .await?;
-                }
                 target.validate(&self.events.db()).await?;
                 GenericRuntimeManager
                     .dispatch_tui_turn(&socket, &pane, self.spec.client_type, &input)

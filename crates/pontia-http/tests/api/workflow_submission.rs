@@ -1,4 +1,7 @@
-use std::{fs, os::unix::fs::PermissionsExt};
+use std::{fs, sync::Arc};
+
+use pontia_runtime::pi_control::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
+use tokio::net::UnixStream;
 
 use axum::{
     body::Body,
@@ -15,7 +18,9 @@ use tower::ServiceExt;
 
 use crate::common::test_app::TestApp;
 
-async fn seed_running_workflow(app: &TestApp) {
+async fn seed_running_workflow(
+    app: &TestApp,
+) -> (Arc<PiRpcPeer>, tokio::sync::mpsc::Receiver<RpcRequest>) {
     let workflows = SqliteWorkflowRepository::new(app.db.clone());
     workflows
         .create_workflow(CreateWorkflowRecord {
@@ -41,13 +46,11 @@ async fn seed_running_workflow(app: &TestApp) {
         })
         .await
         .expect("create node");
-    sqlx::query(
-        "INSERT INTO sessions (session_id, client_type, state) VALUES (?, 'pi', 'working')",
-    )
-    .bind("sess_http_submit")
-    .execute(&app.db)
-    .await
-    .expect("create session");
+    sqlx::query("INSERT INTO sessions (session_id, client_type, state) VALUES (?, 'pi', 'busy')")
+        .bind("sess_http_submit")
+        .execute(&app.db)
+        .await
+        .expect("create session");
     workflows
         .bind_node_session("node_http_submit", "sess_http_submit")
         .await
@@ -61,7 +64,6 @@ async fn seed_running_workflow(app: &TestApp) {
             runtime_handle: None,
             start_command: None,
             launch_cwd: Some(app.workspace().path().display().to_string()),
-            internal_event_url: None,
             started_at: None,
             last_seen_at: None,
             restart_count: 0,
@@ -80,30 +82,31 @@ async fn seed_running_workflow(app: &TestApp) {
             .join("workflows/wf_http_submit/handoff"),
     )
     .expect("create handoff directory");
-}
 
-fn install_successful_tmux(app: &mut TestApp) {
-    let bin = app.pontia_home().path().join("test-bin");
-    fs::create_dir(&bin).expect("create test bin");
-    let tmux = bin.join("tmux");
-    fs::write(
-        &tmux,
-        "#!/bin/sh\ncase \"$*\" in\n  *list-panes*) printf '%%42\\n' ;;\nesac\nexit 0\n",
-    )
-    .expect("write fake tmux");
-    let mut permissions = fs::metadata(&tmux)
-        .expect("fake tmux metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(tmux, permissions).expect("make fake tmux executable");
-    app.set_env(
-        "PATH",
-        format!(
-            "{}:{}",
-            bin.display(),
-            std::env::var("PATH").unwrap_or_default()
-        ),
-    );
+    sqlx::query("INSERT INTO agent_bindings (id, session_id, client_type, launch_cwd, client_session_key, metadata) VALUES ('binding_http_submit', 'sess_http_submit', 'pi', ?, 'native_http_submit', '{}')")
+        .bind(app.workspace().path().display().to_string())
+        .execute(&app.db)
+        .await
+        .expect("bind native Pi session");
+    let (server, client) = UnixStream::pair().unwrap();
+    tokio::spawn(pontia_application::pi_ipc::serve_connection(
+        app.state.clone(),
+        server,
+    ));
+    let (client, requests) = PiRpcPeer::new(client);
+    client
+        .call(
+            "runtime.attach",
+            json!({
+                "version": PROTOCOL_VERSION,
+                "session_id": "sess_http_submit",
+                "runtime_instance_id": "rtinst_http_submit",
+                "client_session_key": "native_http_submit",
+            }),
+        )
+        .await
+        .expect("attach Pi control channel");
+    (client, requests)
 }
 
 async fn post_submission(app: &TestApp, body: Value) -> (StatusCode, Value) {
@@ -142,7 +145,7 @@ async fn post_submission_with_auth(
 #[tokio::test]
 async fn internal_workflow_submission_accepts_the_node_owned_output_file() {
     let app = TestApp::new().await;
-    seed_running_workflow(&app).await;
+    let (_pi, mut requests) = seed_running_workflow(&app).await;
     fs::write(
         app.pontia_home()
             .path()
@@ -177,6 +180,10 @@ async fn internal_workflow_submission_accepts_the_node_owned_output_file() {
         .expect("load node")
         .expect("node exists");
     assert!(node.submitted_at.is_some());
+    assert!(matches!(
+        requests.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+    ));
 }
 
 #[tokio::test]
@@ -196,9 +203,8 @@ async fn internal_workflow_submission_requires_local_api_authentication() {
 
 #[tokio::test]
 async fn internal_workflow_submission_preserves_service_conflicts() {
-    let mut app = TestApp::new().await;
-    seed_running_workflow(&app).await;
-    install_successful_tmux(&mut app);
+    let app = TestApp::new().await;
+    let (_pi, _requests) = seed_running_workflow(&app).await;
 
     let (status, body) = post_submission(
         &app,

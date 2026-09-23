@@ -56,7 +56,6 @@ pub(super) fn start_session(
             "runtime_log": log_path,
             "log_path": log_path,
             "launch_cwd": request.workspace,
-            "internal_event_url": "in-process://internal-events",
             "handle": request.handle,
             "role": request.role,
             "started_at": started_at,

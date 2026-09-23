@@ -77,7 +77,6 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
             runtime_handle: None,
             start_command: None,
             launch_cwd: None,
-            internal_event_url: None,
             started_at: None,
             last_seen_at: None,
             restart_count: 0,

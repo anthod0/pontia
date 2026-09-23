@@ -2,7 +2,7 @@ use pontia_storage_sqlite::connect_sqlite;
 use serde_json::Value;
 
 #[tokio::test]
-async fn migration_splits_runtime_binding_metadata_without_losing_process_or_turn_context() {
+async fn runtime_binding_migrations_preserve_process_identity_and_retire_pending_context() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("runtime-binding-structure-migration.db");
     let pool = connect_sqlite(&format!("sqlite://{}", db_path.display()))
@@ -120,4 +120,40 @@ async fn migration_splits_runtime_binding_metadata_without_losing_process_or_tur
         serde_json::from_str::<Value>(&pending.2).unwrap()["input"],
         "hello"
     );
+
+    sqlx::raw_sql(include_str!(
+        "../migrations/0022_remove_internal_agent_context.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("remove obsolete agent context storage");
+
+    let current: (String, String, String, String, String) = sqlx::query_as(
+        r#"SELECT binding_state, process_fingerprint, capabilities, diagnostics, adapter_details
+           FROM runtime_bindings WHERE session_id = 'sess_migrated'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("preserved runtime binding");
+    assert_eq!(current.0, row.0);
+    assert_eq!(current.1, row.1);
+    assert_eq!(current.2, row.2);
+    assert_eq!(
+        serde_json::from_str::<Value>(&current.3).unwrap(),
+        diagnostics
+    );
+    assert_eq!(current.4, row.4);
+    let columns: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM pragma_table_info('runtime_bindings')")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(!columns.iter().any(|column| column == "internal_event_url"));
+    let pending_tables: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'pending_turn_contexts'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pending_tables, 0);
 }

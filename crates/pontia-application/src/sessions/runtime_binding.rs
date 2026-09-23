@@ -84,9 +84,6 @@ pub(crate) fn runtime_binding_record(
         runtime_handle: Some(runtime.runtime_handle.clone()),
         start_command: metadata["start_command"].as_str().map(ToString::to_string),
         launch_cwd: runtime.launch_cwd().map(ToString::to_string),
-        internal_event_url: metadata["internal_event_url"]
-            .as_str()
-            .map(ToString::to_string),
         started_at: metadata["started_at"].as_str().map(ToString::to_string),
         last_seen_at: runtime.last_seen_at().map(ToString::to_string),
         restart_count: metadata["restart_count"].as_i64().unwrap_or(0),

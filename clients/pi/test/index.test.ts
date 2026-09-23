@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { type PiConnection } from "../src/control-socket.js";
 import { createPontiaPiExtension } from "../src/index.js";
-import { loadTurnContext, type TurnContext } from "../src/context.js";
+import type { TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
 import type { LiveOutputPublisherLike } from "../src/live-output.js";
 import { tempDir as isolatedTempDir } from "./temp-dir.js";
@@ -52,13 +52,6 @@ function persistentTuiContext<T extends Record<string, unknown>>(ctx: T): T & {
     ...ctx,
   };
 }
-
-const context: TurnContext = {
-  sessionId: "sess_1",
-  turnId: "turn_1",
-  runtimeInstanceId: "rtinst_1",
-  clientType: "pi",
-};
 
 let defaultPontiaHome: string;
 
@@ -109,8 +102,6 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
   const connection: PiConnection = { request, registered() {}, async close() {} };
   const suppliedConnect = overrides.connectPi;
   createPontiaPiExtension(pi as any, {
-
-    loadContext: vi.fn(async () => ({ ok: true as const, context, logFile: "hook.log" })),
     makeReporter: vi.fn(() => ({ report: vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
       reported.push(event);
       turnSequence += event.type === "turn.started" ? 1 : 0;
@@ -131,16 +122,32 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
   return { handlers, commands, sendUserMessage, reported, env };
 }
 
+async function installBound(overrides: Parameters<typeof install>[0] = {}) {
+  const workspace = await realpath(defaultPontiaHome);
+  const extension = install({
+    env: { PONTIA_SESSION_ID: "sess_1", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1" },
+    request: async (method) => {
+      if (method === "workspaces.list") return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+      if (method === "session.get") return { session: {} };
+      throw new Error(`Unexpected RPC: ${method}`);
+    },
+    ...overrides,
+  });
+  await extension.handlers.session_start({ reason: "startup" }, {
+    sessionManager: { getSessionId: () => "native_1", getCwd: () => workspace },
+  });
+  extension.reported.length = 0;
+  return extension;
+}
+
 describe("pontia pi extension lifecycle", () => {
   test("socket input retains its Inbox identity across async hooks and never labels manual input", async () => {
     let submit: ((input: { input: string; inboxMessageId?: string }) => void) | undefined;
     let idle = true;
     const workspace = await realpath(await tempDir());
-    const loadContext = vi.fn(async () => ({ ok: false as const, silent: true, reason: "no pending input", logFile: "hook.log" }));
     const { handlers, reported, sendUserMessage } = install({
       env: { PONTIA_SESSION_ID: "sess_direct", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_direct" },
       request: vi.fn(async () => ({ workspaces: [{ canonical_path: workspace, state: "active" }] })) as any,
-      loadContext,
       connectPi: async (_home, _onError, onSubmit) => {
         submit = onSubmit;
         return { request: async () => null, registered() {}, close: async () => {} };
@@ -237,7 +244,6 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
       },
       request: requestImpl as any,
-      loadContext: vi.fn(async () => ({ ok: false as const, silent: true, reason: "no pending input", logFile: "hook.log" })),
     });
     const ctx = persistentTuiContext({ isIdle: () => true, sessionManager: {
       getSessionFile: () => "/tmp/pi/default-session.jsonl",
@@ -673,12 +679,6 @@ describe("pontia pi extension lifecycle", () => {
         TMUX_PANE: "%42",
       },
       request: requestImpl as any,
-      loadContext: vi.fn(async () => ({
-        ok: false as const,
-        reason: "current turn claim unavailable",
-        logFile: "fallback/pi-hook.log",
-        silent: true,
-      })),
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -818,12 +818,6 @@ describe("pontia pi extension lifecycle", () => {
     const { handlers, reported, env } = install({
       env: { PONTIA_HOME: join(root, ".pontia") },
       request: requestImpl as any,
-      loadContext: vi.fn(async () => ({
-        ok: false as const,
-        reason: "current turn claim unavailable",
-        logFile: "fallback/pi-hook.log",
-        silent: true,
-      })),
     });
 
     env.PONTIA_HOME = stableHome;
@@ -837,19 +831,9 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported[0]).toMatchObject({ session_id: "sess_late_env" });
   });
 
-  test("agent_start does not claim a turn from tmux marker identity alone", async () => {
+  test("agent_start does not report a turn from tmux marker identity alone", async () => {
     const dir = await tempDir();
-    const requestImpl = vi.fn(async () =>
-      ({
-            current_turn: {
-              session_id: "sess_consumed",
-              input: "from web",
-              inbox_message_id: "msg_consumed",
-              runtime_instance_id: "rtinst_consumed",
-              client_type: "pi",
-            },
-          }),
-    );
+    const requestImpl = vi.fn(async () => { throw new Error("unexpected request"); });
 
     const { handlers, reported } = install({
       env: {
@@ -858,7 +842,6 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_HOME: dir,
       },
       request: requestImpl as any,
-      loadContext: (env, sessionContext) => loadTurnContext(env, { connection: { request: requestImpl as any }, sessionContext }),
     });
 
     await handlers.agent_start({}, {});
@@ -867,7 +850,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(requestImpl).not.toHaveBeenCalled();
   });
 
-  test("manual tui agent_start uses the bound session when current-turn context is absent", async () => {
+  test("manual tui agent_start uses the bound session and hook input", async () => {
     const workspace = await realpath(await tempDir());
     const requestImpl = vi.fn(async (method: string) => {
       if (method === "workspaces.list") {
@@ -884,12 +867,6 @@ describe("pontia pi extension lifecycle", () => {
       env: {
       },
       request: requestImpl as any,
-      loadContext: vi.fn(async () => ({
-        ok: false as const,
-        reason: "current turn claim unavailable",
-        logFile: "fallback/pi-hook.log",
-        silent: true,
-      })),
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -932,12 +909,6 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_parent",
       },
       request: requestImpl as any,
-      loadContext: vi.fn(async () => ({
-        ok: false as const,
-        reason: "current turn claim unavailable",
-        logFile: "fallback/pi-hook.log",
-        silent: true,
-      })),
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -1032,7 +1003,6 @@ describe("pontia pi extension lifecycle", () => {
         TMUX: "/tmp/tmux-1000/default,2071,502",
         TMUX_PANE: "%42",
       },
-      loadContext: vi.fn(),
       makeReporter: vi.fn(),
       logDiagnostic: vi.fn(),
     });
@@ -1165,7 +1135,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("reports context usage when a hook event exposes valid usage", async () => {
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.message_update({ context_usage: { used_tokens: 2, max_tokens: 8, usage_ratio: 0.25, confidence: "estimated" } }, {});
@@ -1185,7 +1155,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("reports context usage without overwriting the separately confirmed session model", async () => {
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.message_update({ assistantMessageEvent: { text_delta: "hello" } }, {
@@ -1209,7 +1179,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("does not report fake context usage when hook events do not expose usage", async () => {
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.message_update({ assistantMessageEvent: { text_delta: "hello " } }, {});
@@ -1218,8 +1188,8 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).not.toContain("session.context_usage_updated");
   });
 
-  test("reads context on agent_start and reports started, output, then completed", async () => {
-    const { handlers, reported } = install();
+  test("reports started, output, then completed for a bound session", async () => {
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.message_update({ assistantMessageEvent: { text_delta: "hello " } }, {});
@@ -1246,9 +1216,11 @@ describe("pontia pi extension lifecycle", () => {
     const report = vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
       observations.push(`report:${event.type}`);
       if (event.type === "turn.started") await startedReported;
-      return true;
+      return { accepted: true, turnId: "turn_canonical" };
     });
-    const { handlers } = install({ makeReporter: vi.fn(() => ({ report })) });
+    const { handlers } = await installBound({ makeReporter: vi.fn(() => ({ report })) });
+    report.mockClear();
+    observations.length = 0;
     const hookContext = {
       sessionManager: {
         getLeafId: () => {
@@ -1281,9 +1253,11 @@ describe("pontia pi extension lifecycle", () => {
     const observations: string[] = [];
     const report = vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
       observations.push(`report:${event.type}`);
-      return true;
+      return { accepted: true, turnId: "turn_canonical" };
     });
-    const { handlers } = install({ makeReporter: vi.fn(() => ({ report })) });
+    const { handlers } = await installBound({ makeReporter: vi.fn(() => ({ report })) });
+    report.mockClear();
+    observations.length = 0;
     const hookContext = {
       sessionManager: {
         getLeafId: () => "assistant_1",
@@ -1340,7 +1314,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("uses assistant message_end full text without TUI parsing", async () => {
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.message_end({ message: { role: "assistant", content: [{ type: "text", text: "final answer" }] } }, {});
@@ -1354,7 +1328,7 @@ describe("pontia pi extension lifecycle", () => {
 
   test("reports transcript refresh hints for structured assistant stream boundaries but not text deltas", async () => {
     vi.useFakeTimers();
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.message_update({ assistantMessageEvent: { type: "thinking_start", contentIndex: 0, partial: {} } }, {});
@@ -1397,7 +1371,7 @@ describe("pontia pi extension lifecycle", () => {
     const appendText = vi.fn();
     const appendToolCall = vi.fn();
     const close = vi.fn(async () => undefined);
-    const { handlers } = install({
+    const { handlers } = await installBound({
       makeLiveOutputPublisher: vi.fn(() => ({ appendText, appendToolCall, close })),
     });
 
@@ -1426,7 +1400,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("reports transcript refresh hints when tool calls start and finish successfully or with errors", async () => {
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.message_update({ assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: {} } }, {});
@@ -1454,13 +1428,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("uses a fresh backend-provided canonical turn id for each real pi agent_start", async () => {
-    const { handlers, reported } = install({
-      loadContext: vi.fn(async () => ({
-        ok: true as const,
-        context: { ...context, turnId: undefined },
-        logFile: "hook.log",
-      })),
-    });
+    const { handlers, reported } = await installBound();
 
     await handlers.before_agent_start({ prompt: "first from dashboard", systemPrompt: "Base prompt" }, {});
     await handlers.agent_start({}, {});
@@ -1481,9 +1449,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("does not report completion when context is missing", async () => {
-    const { handlers, reported } = install({
-      loadContext: vi.fn(async () => ({ ok: false as const, reason: "missing", logFile: "hook.log" })),
-    });
+    const { handlers, reported } = install();
 
     await handlers.agent_start({}, {});
     await handlers.message_update({ assistantMessageEvent: { text_delta: "hello" } }, {});
@@ -1492,16 +1458,9 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("does not show a UI warning when missing context is a silent manual session skip", async () => {
+  test("does not show a UI warning when missing context is an unbound manual session skip", async () => {
     const notify = vi.fn();
-    const { handlers, reported } = install({
-      loadContext: vi.fn(async () => ({
-        ok: false as const,
-        reason: "current turn claim unavailable",
-        logFile: "fallback/pi-hook.log",
-        silent: true,
-      })),
-    });
+    const { handlers, reported } = install();
 
     await handlers.agent_start({}, { hasUI: true, ui: { notify } });
 
@@ -1510,7 +1469,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("ignores duplicate agent_end for the same active turn", async () => {
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.message_update({ assistantMessageEvent: { text_delta: "hello" } }, {});
@@ -1521,7 +1480,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("reports turn.interrupted when Pi ends with an aborted assistant message", async () => {
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.agent_end({
@@ -1539,7 +1498,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("reports turn.interrupted when Pi surfaces an aborted operation as an error", async () => {
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
     const abortController = new AbortController();
     abortController.abort();
 
@@ -1558,7 +1517,7 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("reports turn.failed when Pi ends with an errored assistant message", async () => {
-    const { handlers, reported } = install();
+    const { handlers, reported } = await installBound();
 
     await handlers.agent_start({}, {});
     await handlers.agent_end({

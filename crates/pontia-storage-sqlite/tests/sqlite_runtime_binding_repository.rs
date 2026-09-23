@@ -1,7 +1,7 @@
 use pontia_storage_sqlite::{
     connect_sqlite,
     repositories::runtime_bindings::{
-        PendingTurnContextRecord, RuntimeBindingConfirmationRecord, RuntimeBindingUpsertRecord,
+        RuntimeBindingConfirmationRecord, RuntimeBindingUpsertRecord,
         SqliteRuntimeBindingRepository,
     },
     run_migrations,
@@ -25,7 +25,6 @@ fn binding(runtime_instance_id: &str, suffix: &str) -> RuntimeBindingUpsertRecor
         runtime_handle: Some(format!("runtime-{suffix}")),
         start_command: Some(format!("pi --{suffix}")),
         launch_cwd: Some(format!("/workspace/{suffix}")),
-        internal_event_url: Some("http://127.0.0.1/internal/v1/events".to_string()),
         started_at: Some("2026-06-18T12:00:00Z".to_string()),
         last_seen_at: Some("2026-06-18T12:01:00Z".to_string()),
         restart_count: 1,
@@ -103,7 +102,6 @@ async fn stale_provisioning_write_cannot_downgrade_confirmed_process_identity() 
             runtime_instance_id: "rtinst_one".to_string(),
             start_command: None,
             launch_cwd: "/workspace/one".to_string(),
-            internal_event_url: "http://127.0.0.1/internal/v1/events".to_string(),
             last_seen_at: "2026-06-18T12:02:00Z".to_string(),
             tmux_socket_path: Some("/tmp/one.sock".to_string()),
             tmux_pane_id: Some("%one".to_string()),
@@ -133,55 +131,4 @@ async fn stale_provisioning_write_cannot_downgrade_confirmed_process_identity() 
         state_and_fingerprint.1.as_deref(),
         Some(r#"{"agent_pid":42}"#)
     );
-}
-
-#[tokio::test]
-async fn pending_turn_context_is_claimed_atomically_without_updating_runtime_binding() {
-    let (pool, _pontia_home) = test_pool().await;
-    sqlx::query("INSERT INTO sessions (session_id, client_type, state, metadata) VALUES ('sess_runtime', 'pi', 'ready', '{}')")
-        .execute(&pool)
-        .await
-        .expect("insert session");
-    let repository = SqliteRuntimeBindingRepository::new(pool.clone());
-    repository
-        .upsert_binding(binding("rtinst_one", "one"))
-        .await
-        .expect("insert binding");
-    repository
-        .store_pending_turn_context(PendingTurnContextRecord {
-            session_id: "sess_runtime".to_string(),
-            runtime_instance_id: "rtinst_one".to_string(),
-            client_type: "pi".to_string(),
-            payload: r#"{"input":"hello"}"#.to_string(),
-        })
-        .await
-        .expect("store pending context");
-
-    let before: (String, String) = sqlx::query_as(
-        "SELECT binding_state, diagnostics FROM runtime_bindings WHERE session_id = 'sess_runtime'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("binding before claim");
-    assert_eq!(
-        repository
-            .claim_pending_turn_context("sess_runtime", "rtinst_one", "pi")
-            .await
-            .expect("claim"),
-        Some(r#"{"input":"hello"}"#.to_string())
-    );
-    assert_eq!(
-        repository
-            .claim_pending_turn_context("sess_runtime", "rtinst_one", "pi")
-            .await
-            .expect("second claim"),
-        None
-    );
-    let after: (String, String) = sqlx::query_as(
-        "SELECT binding_state, diagnostics FROM runtime_bindings WHERE session_id = 'sess_runtime'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("binding after claim");
-    assert_eq!(after, before);
 }

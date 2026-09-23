@@ -42,7 +42,6 @@ pub(super) async fn bind_runtime(state: &AppState, session_id: &str, runtime_ins
             runtime_handle: None,
             start_command: None,
             launch_cwd: Some("/tmp".to_string()),
-            internal_event_url: None,
             started_at: None,
             last_seen_at: None,
             restart_count: 0,

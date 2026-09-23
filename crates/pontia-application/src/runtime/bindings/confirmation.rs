@@ -3,7 +3,7 @@ use pontia_core::{
     error::{Error, Result},
     ids::new_runtime_instance_id,
 };
-use pontia_runtime::{GenericRuntimeManager, configured_internal_event_url, pontia_log_paths};
+use pontia_runtime::{GenericRuntimeManager, pontia_log_paths};
 use pontia_storage_sqlite::repositories::runtime_bindings::{
     RuntimeBindingConfirmationRecord, SqliteRuntimeBindingRepository,
 };
@@ -51,8 +51,6 @@ impl RuntimeBindingUpsertService {
                 .append(true)
                 .open(hook_log_path)?;
         }
-        let internal_event_url = configured_internal_event_url()
-            .unwrap_or_else(|| "http://127.0.0.1:8080/internal/v1/events".to_string());
         let capabilities = client_spec.capabilities.clone();
         let last_seen_at = OffsetDateTime::now_utc()
             .format(&Rfc3339)
@@ -125,7 +123,6 @@ impl RuntimeBindingUpsertService {
                 runtime_instance_id: runtime_instance_id.clone(),
                 start_command: non_empty(request.start_command.as_deref()),
                 launch_cwd: workspace.canonical_path.clone(),
-                internal_event_url: internal_event_url.clone(),
                 last_seen_at,
                 tmux_socket_path: tmux_socket_path.clone(),
                 tmux_pane_id: tmux_pane_id.clone(),
@@ -172,7 +169,6 @@ impl RuntimeBindingUpsertService {
             "session": session,
             "runtime": {
                 "runtime_instance_id": runtime_instance_id,
-                "internal_event_url": internal_event_url,
                 "capabilities": capabilities,
             }
         }))

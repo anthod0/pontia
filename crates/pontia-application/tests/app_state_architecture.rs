@@ -130,28 +130,6 @@ fn application_exposes_runtime_observation_and_readiness_namespaces() {
 }
 
 #[test]
-fn application_exposes_turns_namespace() {
-    fn assert_turn_service(_: pontia_application::turns::TurnCommandService) {}
-    fn assert_claim_service(_: pontia_application::turns::CurrentTurnClaimService) {}
-    fn assert_claim_request(_: pontia_application::turns::CurrentTurnClaimRequest) {}
-
-    let _ = assert_turn_service;
-    let _ = assert_claim_service;
-    let _ = assert_claim_request;
-}
-
-#[test]
-fn application_exposes_turns_submodule_namespaces() {
-    fn assert_command_service(_: pontia_application::turns::commands::TurnCommandService) {}
-    fn assert_claim_service(_: pontia_application::turns::claim::CurrentTurnClaimService) {}
-    fn assert_claim_request(_: pontia_application::turns::claim::CurrentTurnClaimRequest) {}
-
-    let _ = assert_command_service;
-    let _ = assert_claim_service;
-    let _ = assert_claim_request;
-}
-
-#[test]
 fn application_exposes_ingestion_namespace() {
     fn assert_ingest_service(_: pontia_application::ingestion::EventIngestService) {}
     fn assert_validation_service(_: pontia_application::ingestion::InternalEventValidationService) {

@@ -43,16 +43,24 @@ async fn healthz_returns_ok_json() {
 }
 
 #[tokio::test]
-async fn migrated_pi_reporting_endpoints_are_removed() {
+async fn obsolete_agent_http_endpoints_are_removed() {
     let state = test_state().await;
-    for path in [
-        "/internal/v1/events",
-        "/internal/v1/sessions/session/turn-start-failure",
+    for (method, path) in [
+        ("POST", "/internal/v1/events"),
+        ("POST", "/internal/v1/sessions/session/turn-start-failure"),
+        (
+            "GET",
+            "/internal/v1/agent-bindings?client_type=pi&client_session_key=native",
+        ),
+        (
+            "GET",
+            "/internal/v1/agent-bindings/current-turn?client_type=pi&client_session_key=native",
+        ),
     ] {
         let response = http::router(state.clone())
             .oneshot(
                 Request::builder()
-                    .method("POST")
+                    .method(method)
                     .uri(path)
                     .header("content-type", "application/json")
                     .body(Body::from("{}"))

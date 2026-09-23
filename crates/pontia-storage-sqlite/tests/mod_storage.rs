@@ -89,7 +89,6 @@ async fn runtime_bindings_schema_uses_structured_runtime_fields_without_runtime_
         "runtime_handle",
         "start_command",
         "launch_cwd",
-        "internal_event_url",
         "started_at",
         "last_seen_at",
         "restart_count",
@@ -104,12 +103,4 @@ async fn runtime_bindings_schema_uses_structured_runtime_fields_without_runtime_
     }
     assert!(!columns.contains(&"metadata".to_string()));
     assert!(!columns.contains(&"runtime_ref".to_string()));
-
-    let pending_context_table: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'pending_turn_contexts'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("inspect pending_turn_contexts");
-    assert_eq!(pending_context_table, 1);
 }

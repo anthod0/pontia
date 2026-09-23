@@ -4,10 +4,10 @@ pub mod topology;
 use crate::{
     AgentClientCapabilities, ContextUsageCapability,
     types::{
-        AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
-        DispatchBehavior, HookLogBehavior, RuntimeBehavior, RuntimeBindingBehavior,
-        SystemPromptInjectionBehavior, TerminateBehavior, TimelineSourceBehavior,
-        TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
+        AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, DispatchBehavior,
+        HookLogBehavior, RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior,
+        TerminateBehavior, TimelineSourceBehavior, TmuxRuntimeBehavior, TranscriptBehavior,
+        TurnLifecycleBehavior,
     },
 };
 
@@ -46,8 +46,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         dispatch: DispatchBehavior::PiControl,
         client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
         terminate: TerminateBehavior::PiControl,
-        turn_context: TurnContextBehavior::InternalApiClaim,
-        current_turn_id: CurrentTurnIdBehavior::Omit,
         turn_lifecycle: TurnLifecycleBehavior::ClientManagedForInteractiveTmux,
         runtime_binding: RuntimeBindingBehavior::Tmux {
             runtime_kind: "pi_tui",

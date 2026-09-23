@@ -26,8 +26,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         dispatch: DispatchBehavior::CodexProtocol,
         client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
         terminate: TerminateBehavior::CodexArchive,
-        turn_context: TurnContextBehavior::Disabled,
-        current_turn_id: CurrentTurnIdBehavior::Omit,
         turn_lifecycle: TurnLifecycleBehavior::ClientManaged,
         runtime_binding: RuntimeBindingBehavior::CodexAppServer,
         system_prompt_injection: SystemPromptInjectionBehavior::Disabled,

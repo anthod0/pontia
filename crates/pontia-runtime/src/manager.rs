@@ -82,7 +82,6 @@ impl GenericRuntimeManager {
         let log_paths = paths::log_paths(pontia_home);
         std::fs::create_dir_all(&log_paths.log_dir)?;
         let log_path = log_paths.runtime_log.clone();
-        let internal_event_url = script::internal_event_url();
         let launch_id = format!("launch_{}", new_event_id());
         let runtime_instance_id = new_runtime_instance_id().to_string();
         std::fs::OpenOptions::new()
@@ -148,7 +147,6 @@ impl GenericRuntimeManager {
             "log_dir": log_dir,
             "runtime_log": log_path,
             "log_path": log_path,
-            "internal_event_url": internal_event_url,
             "handle": request.handle,
             "role": request.role,
             "started_at": started_at,
