@@ -310,3 +310,29 @@ test("oversized live output stops retrying without closing the shared control co
   await expect(client.request("ping", {})).resolves.toEqual({});
   expect(methods).toEqual(["ping"]);
 });
+
+
+test.each(["interrupt", "shutdown"] as const)("%s acknowledges native requests and preserves rejection and uncertainty", async (method) => {
+  const responses: any[] = [];
+  const root = await server((socket, message) => {
+    if (!message.method) { responses.push(message); return; }
+    socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "control", method })}\n`);
+    reply(socket, message.id, {});
+  });
+  const lifecycle = { interrupt: vi.fn(), shutdown: vi.fn() };
+  const callback = lifecycle[method];
+  const client = await connectPi(root, () => {}, () => {}, undefined, undefined, lifecycle);
+  onTestFinished(() => client.close());
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(responses).toHaveLength(1));
+  expect(callback).toHaveBeenCalledOnce();
+  expect(responses[0].result).toEqual({ accepted: true });
+  callback.mockImplementationOnce(() => { throw new Error("Session is no longer current"); });
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(responses).toHaveLength(2));
+  expect(responses[1].error.code).toBe(-32006);
+  callback.mockImplementationOnce(() => { throw new RpcError(-32007, "Native result is unknown"); });
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(responses).toHaveLength(3));
+  expect(responses[2].error.code).toBe(-32007);
+});

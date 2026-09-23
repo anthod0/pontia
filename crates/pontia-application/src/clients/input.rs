@@ -130,9 +130,6 @@ impl ClientAdapter {
                     .await,
             );
         }
-        match self.pi_interrupt(target).await {
-            Ok(()) => ControlResult::Sent(()),
-            Err(error) => ControlResult::from_result(Err(error)),
-        }
+        ControlResult::from_result(self.pi_interrupt(target).await)
     }
 }

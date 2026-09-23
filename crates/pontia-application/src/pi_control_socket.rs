@@ -11,6 +11,8 @@ pub trait PiControlChannel: Send + Sync {
     fn invalidate(&self);
     fn list_models(&self) -> PiControlOperation<'_, Vec<crate::sessions::SessionModel>>;
     fn set_model<'a>(&'a self, model: &'a str) -> PiControlOperation<'a>;
+    fn interrupt(&self) -> PiControlOperation<'_>;
+    fn shutdown(&self) -> PiControlOperation<'_>;
     fn ping(&self) -> PiControlOperation<'_>;
     fn replay<'a>(&'a self, inbox_message_id: &'a str) -> PiControlOperation<'a>;
     fn submit<'a>(
@@ -125,10 +127,33 @@ impl PiControlService {
         Ok(self.connection(session_id).await?.is_some())
     }
 
+    pub async fn interrupt(&self, session_id: &str, runtime_instance_id: &str) -> Result<()> {
+        self.request(
+            session_id,
+            runtime_instance_id,
+            false,
+            |channel| async move { channel.interrupt().await },
+        )
+        .await
+    }
+
+    pub async fn shutdown(&self, session_id: &str, runtime_instance_id: &str) -> Result<()> {
+        self.request(
+            session_id,
+            runtime_instance_id,
+            true,
+            |channel| async move { channel.shutdown().await },
+        )
+        .await
+    }
+
     pub async fn ping(&self, session_id: &str, runtime_instance_id: &str) -> Result<()> {
-        self.request(session_id, runtime_instance_id, |channel| async move {
-            channel.ping().await
-        })
+        self.request(
+            session_id,
+            runtime_instance_id,
+            false,
+            |channel| async move { channel.ping().await },
+        )
         .await
     }
 
@@ -139,9 +164,12 @@ impl PiControlService {
         input: &str,
         inbox_message_id: Option<&str>,
     ) -> Result<()> {
-        self.request(session_id, runtime_instance_id, |channel| async move {
-            channel.submit(input, inbox_message_id).await
-        })
+        self.request(
+            session_id,
+            runtime_instance_id,
+            false,
+            |channel| async move { channel.submit(input, inbox_message_id).await },
+        )
         .await
     }
 
@@ -151,9 +179,12 @@ impl PiControlService {
         runtime_instance_id: &str,
         inbox_message_id: &str,
     ) -> Result<()> {
-        self.request(session_id, runtime_instance_id, |channel| async move {
-            channel.replay(inbox_message_id).await
-        })
+        self.request(
+            session_id,
+            runtime_instance_id,
+            false,
+            |channel| async move { channel.replay(inbox_message_id).await },
+        )
         .await
     }
 
@@ -162,9 +193,12 @@ impl PiControlService {
         session_id: &str,
         runtime_instance_id: &str,
     ) -> Result<Vec<crate::sessions::SessionModel>> {
-        self.request(session_id, runtime_instance_id, |channel| async move {
-            channel.list_models().await
-        })
+        self.request(
+            session_id,
+            runtime_instance_id,
+            false,
+            |channel| async move { channel.list_models().await },
+        )
         .await
     }
 
@@ -174,9 +208,12 @@ impl PiControlService {
         runtime_instance_id: &str,
         model: &str,
     ) -> Result<()> {
-        self.request(session_id, runtime_instance_id, |channel| async move {
-            channel.set_model(model).await
-        })
+        self.request(
+            session_id,
+            runtime_instance_id,
+            false,
+            |channel| async move { channel.set_model(model).await },
+        )
         .await
     }
 
@@ -184,6 +221,7 @@ impl PiControlService {
         &self,
         session_id: &str,
         runtime_instance_id: &str,
+        expect_exit: bool,
         operation: impl FnOnce(Arc<dyn PiControlChannel>) -> F,
     ) -> Result<T> {
         let connection = self.connection(session_id).await?.ok_or_else(|| {
@@ -200,17 +238,29 @@ impl PiControlService {
         if let Err(error) = &result {
             self.record_error(session_id, error);
         }
+        let connections = self.connections.lock().await;
         let current_runtime = self
             .current_runtime(session_id)
             .await
             .map_err(|error| Error::ControlUnknown(error.to_string()))?;
-        let connections = self.connections.lock().await;
         if current_runtime.as_deref() != Some(runtime_instance_id)
             || !connections
                 .entries
                 .get(session_id)
                 .is_some_and(|current| Arc::ptr_eq(current, &connection))
         {
+            // A shutdown acknowledgement may race with its own session.exited fact.
+            // Accept that exit only after a valid reply, never after a lost reply or replacement.
+            if expect_exit
+                && result.is_ok()
+                && connections.entries.get(session_id)
+                    .is_none_or(|current| Arc::ptr_eq(current, &connection))
+                && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM sessions s JOIN runtime_bindings r ON r.session_id=s.session_id WHERE s.session_id=? AND s.state='exited' AND r.runtime_instance_id=?)")
+                    .bind(session_id).bind(runtime_instance_id).fetch_one(&self.pool).await
+                    .map_err(|error| Error::ControlUnknown(error.to_string()))?
+            {
+                return result;
+            }
             return Err(Error::ControlUnknown(
                 "Pi binding or connection changed during request".into(),
             ));

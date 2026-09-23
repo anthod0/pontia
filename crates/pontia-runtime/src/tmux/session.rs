@@ -39,25 +39,6 @@ pub(crate) fn spawn_tmux_session(
     command()
 }
 
-pub(crate) fn interrupt_session(socket_path: &str, pane_id: &str) -> Result<()> {
-    if !super::pane::is_pane_alive(socket_path, pane_id) {
-        return Err(Error::Domain(format!(
-            "tmux runtime pane {pane_id} is not alive"
-        )));
-    }
-    let status = Command::new("tmux")
-        .args(["-S", socket_path, "send-keys", "-t", pane_id, "Escape"])
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|err| Error::Domain(format!("tmux runtime interrupt failed: {err}")))?;
-    if !status.success() {
-        return Err(Error::Domain(format!(
-            "tmux runtime interrupt failed with status {status}"
-        )));
-    }
-    Ok(())
-}
-
 pub(crate) fn terminate_session(runtime_handle: &str) -> Result<()> {
     let status = Command::new("tmux")
         .args(["kill-session", "-t", runtime_handle])

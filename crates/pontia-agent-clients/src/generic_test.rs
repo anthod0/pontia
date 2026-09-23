@@ -11,9 +11,9 @@ use crate::{
     AgentClientCapabilities, AgentInput, ContextUsageCapability,
     types::{
         AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
-        DispatchBehavior, InterruptBehavior, RuntimeBehavior, RuntimeBindingBehavior,
-        SystemPromptInjectionBehavior, TerminateBehavior, TimelineSourceBehavior,
-        TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
+        DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior, SystemPromptInjectionBehavior,
+        TerminateBehavior, TimelineSourceBehavior, TranscriptBehavior, TurnContextBehavior,
+        TurnLifecycleBehavior,
     },
 };
 
@@ -39,7 +39,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         runtime: RuntimeBehavior::InProcess,
         dispatch: DispatchBehavior::InProcessRecorded,
         client_session_identity: ClientSessionIdentityBehavior::Unsupported,
-        interrupt: InterruptBehavior::Unsupported,
         terminate: TerminateBehavior::RuntimeManager,
         turn_context: TurnContextBehavior::Disabled,
         current_turn_id: CurrentTurnIdBehavior::Include,

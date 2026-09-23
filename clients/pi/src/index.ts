@@ -194,6 +194,12 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   async function registrationConnection(): Promise<PiConnection> {
     if (controlSocket) return controlSocket;
     const generation = controlGeneration;
+    const lifecycleContext = () => {
+      if (generation !== controlGeneration || reportingDisabled || !boundSessionContext || !piContext || !readyReported) {
+        throw new Error("Pi lifecycle control session is no longer current");
+      }
+      return piContext;
+    };
     const socket = await (dependencies.connectPi ?? connectPi)(currentPontiaHome(), (error) => {
       void controlError(error).catch(() => {});
     }, (submission) => {
@@ -242,6 +248,15 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       }
       // Command dispatch supplies the native context required by navigateTree.
       pi.sendUserMessage(`/pontia-edit ${inboxMessageId}`, { expandPromptTemplates: true });
+    }, {
+      interrupt() { lifecycleContext().abort(); },
+      shutdown() {
+        const ctx = lifecycleContext();
+        // Ordinary extension context: abort first, then exit after Pi settles.
+        // Unlike double Ctrl+C, this allows turn cleanup before session_shutdown.
+        ctx.abort();
+        ctx.shutdown();
+      },
     });
     if (generation !== controlGeneration) {
       await socket.close();

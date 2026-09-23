@@ -3,7 +3,7 @@ use std::path::Path;
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 
-use pontia_agent_clients::{self as agent_clients, InterruptBehavior, RuntimeBehavior};
+use pontia_agent_clients::{self as agent_clients, RuntimeBehavior};
 use pontia_core::{
     error::{Error, Result},
     ids::{new_event_id, new_runtime_instance_id},
@@ -191,30 +191,11 @@ impl GenericRuntimeManager {
         tmux::dispatch_tui_turn(socket_path, pane_id, client_type, input)
     }
 
-    pub fn interrupt_session(
-        &self,
-        socket_path: &str,
-        pane_id: &str,
-        behavior: InterruptBehavior,
-    ) -> Result<()> {
-        match behavior {
-            InterruptBehavior::Unsupported => Ok(()),
-            InterruptBehavior::CodexProtocol => Err(Error::Domain(
-                "Codex interrupt requires its protocol controller".into(),
-            )),
-            InterruptBehavior::TmuxInterrupt => tmux::interrupt_session(socket_path, pane_id),
-        }
-    }
-
     pub fn terminate_session(&self, runtime_handle: &str) -> Result<()> {
         if in_process::terminate_session(runtime_handle) {
             return Ok(());
         }
         tmux::terminate_session(runtime_handle)
-    }
-
-    pub fn send_tmux_keys(&self, socket_path: &str, pane_id: &str, keys: &[&str]) -> Result<()> {
-        tmux::send_keys(socket_path, pane_id, keys)
     }
 
     pub fn mark_tmux_pane_for_session(

@@ -217,7 +217,7 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
     restarted.pi_control().close().await;
 }
 
-async fn model_request(
+async fn control_request(
     state: &AppState,
     method: &str,
     resource: &str,
@@ -227,7 +227,7 @@ async fn model_request(
         .oneshot(
             Request::builder()
                 .method(method)
-                .uri(format!("/external/v1/sessions/sess_models/{resource}"))
+                .uri(format!("/external/v1/sessions/sess_models/{resource}").trim_end_matches('/'))
                 .header("content-type", "application/json")
                 .header("authorization", "Bearer token")
                 .body(Body::from(body.to_string()))
@@ -252,7 +252,7 @@ async fn pi_models_use_the_bound_client_and_only_reported_facts_update_the_curre
     ]});
     let task = {
         let state = state.clone();
-        tokio::spawn(async move { model_request(&state, "GET", "models", Value::Null).await })
+        tokio::spawn(async move { control_request(&state, "GET", "models", Value::Null).await })
     };
     let request = requests.recv().await.unwrap();
     assert_eq!(request.method, "models.list");
@@ -265,7 +265,7 @@ async fn pi_models_use_the_bound_client_and_only_reported_facts_update_the_curre
     let task = {
         let state = state.clone();
         let change = change.clone();
-        tokio::spawn(async move { model_request(&state, "PATCH", "model", change).await })
+        tokio::spawn(async move { control_request(&state, "PATCH", "model", change).await })
     };
     let request = requests.recv().await.unwrap();
     assert_eq!(request.method, "model.set");
@@ -307,13 +307,13 @@ async fn pi_models_use_the_bound_client_and_only_reported_facts_update_the_curre
     );
     let stale = json!({"model":"one/shared", "runtime_instance_id":"rt_old"});
     assert_eq!(
-        model_request(&state, "PATCH", "model", stale).await.0,
+        control_request(&state, "PATCH", "model", stale).await.0,
         StatusCode::CONFLICT
     );
     assert!(requests.try_recv().is_err());
     let task = {
         let state = state.clone();
-        tokio::spawn(async move { model_request(&state, "PATCH", "model", change).await })
+        tokio::spawn(async move { control_request(&state, "PATCH", "model", change).await })
     };
     let request = requests.recv().await.unwrap();
     client
@@ -333,7 +333,7 @@ async fn pi_models_use_the_bound_client_and_only_reported_facts_update_the_curre
     );
     state.pi_control().close().await;
     assert!(
-        !model_request(&state, "GET", "models", Value::Null)
+        !control_request(&state, "GET", "models", Value::Null)
             .await
             .0
             .is_success()
@@ -392,4 +392,167 @@ async fn model_requests_reject_malformed_catalogs_and_runtime_replacement() {
         Err(pontia_core::Error::ControlUnknown(_))
     ));
     state.pi_control().close().await;
+}
+
+#[tokio::test]
+async fn pi_interrupt_and_shutdown_use_rpc_and_wait_for_client_lifecycle_facts() {
+    let (state, _root) = state().await;
+    bind(&state, "sess_models", "rt_models").await;
+    sqlx::query("UPDATE sessions SET state='busy' WHERE session_id='sess_models'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO turns(turn_id,session_id,state) VALUES ('turn_control','sess_models','running')")
+        .execute(&state.db()).await.unwrap();
+    let (client, mut requests) = attach(&state, "sess_models", "rt_models").await;
+    for (method, resource, rpc_method) in [
+        ("POST", "interrupt", "interrupt"),
+        ("DELETE", "", "shutdown"),
+    ] {
+        let task = {
+            let state = state.clone();
+            tokio::spawn(
+                async move { control_request(&state, method, resource, Value::Null).await },
+            )
+        };
+        let request = tokio::time::timeout(Duration::from_secs(2), requests.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(request.method, rpc_method);
+        assert_eq!(request.params, json!({}));
+        client
+            .reply(request.id, json!({"accepted":true}))
+            .await
+            .unwrap();
+        let (status, body) = task.await.unwrap();
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    let query = pontia_application::ExternalQueryService::new(state.db());
+    assert_eq!(
+        query
+            .get_session("sess_models")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "busy"
+    );
+    assert_eq!(
+        query
+            .get_turn("sess_models", "turn_control")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "running"
+    );
+    let facts: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM events WHERE event_type IN ('turn.interrupted','session.exited')",
+    )
+    .fetch_one(&state.db())
+    .await
+    .unwrap();
+    assert_eq!(facts, 0);
+    assert!(
+        state
+            .pi_control()
+            .interrupt("sess_models", "rt_old")
+            .await
+            .is_err()
+    );
+    assert!(
+        state
+            .pi_control()
+            .shutdown("sess_models", "rt_old")
+            .await
+            .is_err()
+    );
+    assert!(requests.try_recv().is_err());
+    state.pi_control().close().await;
+    for (method, resource) in [("POST", "interrupt"), ("DELETE", "")] {
+        let (status, body) = control_request(&state, method, resource, Value::Null).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+        assert_eq!(body["error"]["code"], "capability_unavailable");
+    }
+}
+
+#[tokio::test]
+async fn pi_lifecycle_controls_preserve_rejection_and_unknown_delivery() {
+    for method in ["interrupt", "shutdown"] {
+        let (state, _root) = state().await;
+        bind(&state, "sess_control", "rt_control").await;
+        let (client, mut requests) = attach(&state, "sess_control", "rt_control").await;
+        for outcome in ["rejected", "malformed", "disconnected"] {
+            let task = {
+                let control = state.pi_control();
+                tokio::spawn(async move {
+                    if method == "interrupt" {
+                        control.interrupt("sess_control", "rt_control").await
+                    } else {
+                        control.shutdown("sess_control", "rt_control").await
+                    }
+                })
+            };
+            let request = requests.recv().await.unwrap();
+            assert_eq!(request.method, method);
+            match outcome {
+                "rejected" => client
+                    .reply_error(request.id, -32006, "Session is no longer current")
+                    .await
+                    .unwrap(),
+                "malformed" => client
+                    .reply(request.id, json!({"accepted": false}))
+                    .await
+                    .unwrap(),
+                _ => client.close(),
+            }
+            let error = task.await.unwrap().unwrap_err();
+            if outcome == "rejected" {
+                assert!(matches!(error, pontia_core::Error::Domain(_)));
+            } else {
+                assert!(matches!(error, pontia_core::Error::ControlUnknown(_)));
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn shutdown_accepts_its_own_exit_but_not_a_replacement_instances_exit() {
+    for runtime in ["rt_control", "rt_replacement"] {
+        let (state, _root) = state().await;
+        bind(&state, "sess_control", "rt_control").await;
+        let (client, mut requests) = attach(&state, "sess_control", "rt_control").await;
+        let task = {
+            let control = state.pi_control();
+            tokio::spawn(async move { control.shutdown("sess_control", "rt_control").await })
+        };
+        let request = requests.recv().await.unwrap();
+        // Commit the exit before the shutdown caller can perform its post-reply check.
+        // Keep the socket open here to deliver the native acknowledgement separately.
+        bind(&state, "sess_control", runtime).await;
+        EventIngestService::new(state.db())
+            .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
+                "evt_shutdown".into(),
+                "sess_control".into(),
+                None,
+                pontia_core::domain::EventSource::AgentClient,
+                "pi".into(),
+                pontia_core::domain::EventType::SessionExited,
+                json!({"runtime_instance_id":runtime}),
+            ))
+            .await
+            .unwrap();
+        client
+            .reply(request.id, json!({"accepted":true}))
+            .await
+            .unwrap();
+        let result = task.await.unwrap();
+        if runtime == "rt_control" {
+            result.unwrap();
+        } else {
+            assert!(matches!(result, Err(pontia_core::Error::ControlUnknown(_))));
+        }
+        state.pi_control().close().await;
+    }
 }

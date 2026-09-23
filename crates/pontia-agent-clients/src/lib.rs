@@ -15,9 +15,9 @@ pub use topology::{
 pub use types::{
     AgentClientAdapter, AgentClientCapabilities, AgentClientSpec, AgentInput,
     ClientSessionIdentityBehavior, ContextUsageCapability, CurrentTurnIdBehavior, DispatchBehavior,
-    DispatchMode, HookLogBehavior, InterruptBehavior, RuntimeBehavior, RuntimeBindingBehavior,
-    StartupHook, SystemPromptInjectionBehavior, TerminateBehavior, TimelineSourceBehavior,
-    TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
+    DispatchMode, HookLogBehavior, RuntimeBehavior, RuntimeBindingBehavior, StartupHook,
+    SystemPromptInjectionBehavior, TerminateBehavior, TimelineSourceBehavior, TmuxRuntimeBehavior,
+    TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
 };
 
 use raw_transcripts::{AgentBindingResolver, TimelineBoundaryCapturer, TurnTimelineReader};

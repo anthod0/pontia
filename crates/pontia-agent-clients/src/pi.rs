@@ -5,10 +5,9 @@ use crate::{
     AgentClientCapabilities, ContextUsageCapability,
     types::{
         AgentClientAdapter, AgentClientSpec, ClientSessionIdentityBehavior, CurrentTurnIdBehavior,
-        DispatchBehavior, HookLogBehavior, InterruptBehavior, RuntimeBehavior,
-        RuntimeBindingBehavior, SystemPromptInjectionBehavior, TerminateBehavior,
-        TimelineSourceBehavior, TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior,
-        TurnLifecycleBehavior,
+        DispatchBehavior, HookLogBehavior, RuntimeBehavior, RuntimeBindingBehavior,
+        SystemPromptInjectionBehavior, TerminateBehavior, TimelineSourceBehavior,
+        TmuxRuntimeBehavior, TranscriptBehavior, TurnContextBehavior, TurnLifecycleBehavior,
     },
 };
 
@@ -46,8 +45,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         }),
         dispatch: DispatchBehavior::PiControl,
         client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
-        interrupt: InterruptBehavior::TmuxInterrupt,
-        terminate: TerminateBehavior::TmuxSendKeys(&["C-c", "C-c"]),
+        terminate: TerminateBehavior::PiControl,
         turn_context: TurnContextBehavior::InternalApiClaim,
         current_turn_id: CurrentTurnIdBehavior::Omit,
         turn_lifecycle: TurnLifecycleBehavior::ClientManagedForInteractiveTmux,

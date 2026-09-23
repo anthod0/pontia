@@ -101,17 +101,10 @@ pub struct HookLogBehavior {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InterruptBehavior {
-    CodexProtocol,
-    Unsupported,
-    TmuxInterrupt,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerminateBehavior {
     CodexArchive,
     RuntimeManager,
-    TmuxSendKeys(&'static [&'static str]),
+    PiControl,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,7 +166,6 @@ pub struct AgentClientAdapter {
     pub runtime: RuntimeBehavior,
     pub dispatch: DispatchBehavior,
     pub client_session_identity: ClientSessionIdentityBehavior,
-    pub interrupt: InterruptBehavior,
     pub terminate: TerminateBehavior,
     pub turn_context: TurnContextBehavior,
     pub current_turn_id: CurrentTurnIdBehavior,

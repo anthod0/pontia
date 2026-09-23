@@ -1,7 +1,7 @@
 import { createConnection, type Socket } from "node:net";
 import { isAbsolute, join } from "node:path";
 
-export const CONTROL_VERSION = 4;
+export const CONTROL_VERSION = 5;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
 // Match the former HTTP event body limit, including the RPC envelope.
 export const MAX_RPC_FRAME_BYTES = 2 * 1024 * 1024 + 1024;
@@ -18,6 +18,10 @@ export interface ModelControl {
   listModels(): PiModel[];
   setModel(model: string): Promise<void>;
   onReconnect(): Promise<void>;
+}
+export interface LifecycleControl {
+  interrupt(): void;
+  shutdown(): void;
 }
 export interface PiConnection {
   request(method: string, params: object): Promise<unknown>;
@@ -46,13 +50,15 @@ class RpcSocket {
   private socket: Socket;
   private onSubmit: (input: ControlInput) => void;
   private models?: ModelControl;
+  private lifecycle?: LifecycleControl;
   private onReplay?: (inboxMessageId: string) => void;
 
-  constructor(socket: Socket, onSubmit: (input: ControlInput) => void, models?: ModelControl, onReplay?: (inboxMessageId: string) => void) {
+  constructor(socket: Socket, onSubmit: (input: ControlInput) => void, models?: ModelControl, onReplay?: (inboxMessageId: string) => void, lifecycle?: LifecycleControl) {
     this.socket = socket;
     this.onSubmit = onSubmit;
     this.models = models;
     this.onReplay = onReplay;
+    this.lifecycle = lifecycle;
     socket.on("data", (chunk: Buffer) => this.receive(chunk));
     socket.on("error", (error) => this.fail(error));
     socket.on("close", () => this.fail(new Error("Pi RPC connection closed; requests were not replayed")));
@@ -128,6 +134,15 @@ class RpcSocket {
       const params = message.params === undefined ? {} : message.params;
       if (!params || typeof params !== "object" || Array.isArray(params)) { error(-32602, "Expected named parameters"); return; }
       if (message.method === "ping") { respond({ result: { pong: true } }); return; }
+      if (this.lifecycle && (message.method === "interrupt" || message.method === "shutdown")) {
+        try {
+          this.lifecycle[message.method as "interrupt" | "shutdown"]();
+          respond({ result: { accepted: true } });
+        } catch (failure) {
+          error(failure instanceof RpcError ? failure.code : -32006, failure instanceof Error ? failure.message : String(failure));
+        }
+        return;
+      }
       if (message.method === "branch.replay" && this.onReplay) {
         if (typeof params.inbox_message_id !== "string" || !/^msg_[^\s]+$/.test(params.inbox_message_id)) {
           error(-32602, "branch.replay requires an Inbox Message identifier"); return;
@@ -188,6 +203,7 @@ export async function connectPi(
   onSubmit: (input: ControlInput) => void,
   models?: ModelControl,
   onReplay?: (inboxMessageId: string) => void,
+  lifecycle?: LifecycleControl,
 ): Promise<PiConnection> {
   const path = piSocketPath(pontiaHome);
   let identity: ControlIdentity | undefined;
@@ -227,7 +243,7 @@ export async function connectPi(
       });
     } finally { connecting.delete(socket); }
     if (stopped) { socket.destroy(); throw new Error("Pi connection is closed"); }
-    const peer = new RpcSocket(socket, reportingOnly ? () => { throw new Error("Pi reporting connection cannot accept input"); } : onSubmit, reportingOnly ? undefined : models, reportingOnly ? undefined : onReplay);
+    const peer = new RpcSocket(socket, reportingOnly ? () => { throw new Error("Pi reporting connection cannot accept input"); } : onSubmit, reportingOnly ? undefined : models, reportingOnly ? undefined : onReplay, reportingOnly ? undefined : lifecycle);
     peers.add(peer);
     socket.once("close", () => {
       peers.delete(peer);

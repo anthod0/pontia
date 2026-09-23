@@ -1,7 +1,6 @@
 use super::ClientAdapter;
 use crate::{RuntimeReadinessService, runtime::control_target::ControlTarget};
 use pontia_core::{Error, Result};
-use pontia_runtime::GenericRuntimeManager;
 
 impl ClientAdapter {
     pub(super) async fn pi_input(
@@ -28,10 +27,14 @@ impl ClientAdapter {
     }
 
     pub(super) async fn pi_interrupt(&self, target: &ControlTarget) -> Result<()> {
-        let (socket, pane) = target.tmux_pane(&self.events.db()).await?;
-        GenericRuntimeManager
-            .interrupt_session(&socket, &pane, self.spec.adapter.interrupt)
-            .map_err(|error| Error::ControlUnknown(error.to_string()))
+        target.validate(&self.events.db()).await?;
+        self.pi
+            .as_ref()
+            .ok_or_else(|| {
+                Error::CapabilityUnavailable("Pi control service is unavailable".into())
+            })?
+            .interrupt(&target.session_id, target.instance()?)
+            .await
     }
 
     pub async fn replay(

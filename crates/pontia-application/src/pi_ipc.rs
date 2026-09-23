@@ -358,6 +358,12 @@ impl crate::PiControlChannel for PiChannel {
     fn set_model<'a>(&'a self, model: &'a str) -> crate::PiControlOperation<'a> {
         self.peer.set_model(model)
     }
+    fn interrupt(&self) -> crate::PiControlOperation<'_> {
+        self.peer.interrupt()
+    }
+    fn shutdown(&self) -> crate::PiControlOperation<'_> {
+        self.peer.shutdown()
+    }
     fn ping(&self) -> crate::PiControlOperation<'_> {
         self.peer.ping()
     }
@@ -424,6 +430,26 @@ impl crate::PiControlChannel for PiRpcPeer {
             if self.call("model.set", json!({"model":model})).await? != json!({"accepted":true}) {
                 return Err(Error::ControlUnknown(
                     "Invalid Pi model change acknowledgement".into(),
+                ));
+            }
+            Ok(())
+        })
+    }
+    fn interrupt(&self) -> crate::PiControlOperation<'_> {
+        Box::pin(async {
+            if self.call("interrupt", json!({})).await? != json!({"accepted":true}) {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi interrupt acknowledgement".into(),
+                ));
+            }
+            Ok(())
+        })
+    }
+    fn shutdown(&self) -> crate::PiControlOperation<'_> {
+        Box::pin(async {
+            if self.call("shutdown", json!({})).await? != json!({"accepted":true}) {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi shutdown acknowledgement".into(),
                 ));
             }
             Ok(())

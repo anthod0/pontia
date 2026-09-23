@@ -1,8 +1,4 @@
-use std::{
-    process::{Command, Stdio},
-    thread,
-    time::Duration,
-};
+use std::process::{Command, Stdio};
 
 use pontia_core::error::{Error, Result};
 
@@ -56,32 +52,6 @@ pub(crate) fn kill_pane(socket_path: &str, pane_id: &str) -> Result<()> {
             "tmux kill-pane failed with status {status}"
         )))
     }
-}
-
-pub(crate) fn send_keys(socket_path: &str, pane_id: &str, keys: &[&str]) -> Result<()> {
-    if !is_pane_alive(socket_path, pane_id) {
-        return Err(Error::Domain(format!(
-            "tmux runtime pane {pane_id} is not alive"
-        )));
-    }
-    if keys.is_empty() {
-        return Ok(());
-    }
-
-    for key in keys {
-        let status = Command::new("tmux")
-            .args(["-S", socket_path, "send-keys", "-t", pane_id, key])
-            .stderr(Stdio::null())
-            .status()
-            .map_err(|err| Error::Domain(format!("tmux send-keys failed: {err}")))?;
-        if !status.success() {
-            return Err(Error::Domain(format!(
-                "tmux send-keys failed with status {status}"
-            )));
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
-    Ok(())
 }
 
 pub(crate) fn is_pane_alive(socket_path: &str, pane_id: &str) -> bool {

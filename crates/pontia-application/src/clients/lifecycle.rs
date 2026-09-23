@@ -32,10 +32,9 @@ impl ClientAdapter {
             target.validate(&self.events.db()).await?;
             match self.spec.adapter.terminate {
                 TerminateBehavior::CodexArchive => crate::codex::CodexService::new(self.events.clone()).archive(target).await,
-                TerminateBehavior::TmuxSendKeys(keys) => {
-                    let (socket, pane) = target.tmux_pane(&self.events.db()).await?;
-                    GenericRuntimeManager.send_tmux_keys(&socket, &pane, keys).map_err(|error| Error::ControlUnknown(error.to_string()))
-                }
+                TerminateBehavior::PiControl => self.pi.as_ref()
+                    .ok_or_else(|| Error::CapabilityUnavailable("Pi control service is unavailable".into()))?
+                    .shutdown(&target.session_id, target.instance()?).await,
                 TerminateBehavior::RuntimeManager => {
                     if let Some(handle) = pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository::new(self.events.db()).runtime_handle(&target.session_id).await? {
                         GenericRuntimeManager.terminate_session(&handle)?;
@@ -44,17 +43,7 @@ impl ClientAdapter {
                 }
             }
         }.await;
-        match result {
-            Ok(())
-                if matches!(
-                    self.spec.adapter.terminate,
-                    TerminateBehavior::TmuxSendKeys(_)
-                ) =>
-            {
-                ControlResult::Sent(())
-            }
-            other => ControlResult::from_result(other),
-        }
+        ControlResult::from_result(result)
     }
 
     pub async fn resume(
@@ -112,7 +101,7 @@ impl ClientAdapter {
         }
         target.validate(&self.events.db()).await?;
         match self.spec.adapter.terminate {
-            TerminateBehavior::TmuxSendKeys(_) => {
+            TerminateBehavior::PiControl => {
                 let (socket, pane) = target.tmux_pane(&self.events.db()).await?;
                 GenericRuntimeManager.kill_tmux_pane(&socket, &pane)?;
             }
@@ -127,10 +116,7 @@ impl ClientAdapter {
     pub async fn ensure_exit_available(&self, target: &ControlTarget) -> Result<()> {
         target.validate(&self.events.db()).await?;
         match self.spec.adapter.terminate {
-            TerminateBehavior::TmuxSendKeys(_) => {
-                target.tmux_pane(&self.events.db()).await?;
-            }
-            TerminateBehavior::CodexArchive => {
+            TerminateBehavior::PiControl | TerminateBehavior::CodexArchive => {
                 if !self.input_available(&target.session_id).await? {
                     return Err(Error::CapabilityUnavailable(
                         "client control channel is unavailable".into(),
