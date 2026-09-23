@@ -105,6 +105,8 @@ The following tables belong to the local control-plane database.
 
 ## `turns`
 
+Each Turn belongs to one Session and uses an immutable, Pontia-generated `turn_<UUID v7>` primary key (`turn_id`) for ordering and pagination within that Session.
+
 | Column | Type | Constraints / default |
 |---|---|---|
 | `turn_id` | TEXT | primary key, NOT NULL |
