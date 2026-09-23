@@ -60,7 +60,7 @@
     <Card.Root>
       <Card.Header>
         <Card.Title class="flex items-center gap-2"><KeyIcon class="size-5" /> External API token</Card.Title>
-        <Card.Description>Sent as Authorization: Bearer &lt;token&gt; to /external/v1/*.</Card.Description>
+        <Card.Description>Sent as Authorization: Bearer &lt;token&gt; to /api/v1/*.</Card.Description>
       </Card.Header>
       <Card.Content class="space-y-4">
         <div class="space-y-2">

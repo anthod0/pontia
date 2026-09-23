@@ -99,9 +99,9 @@ async fn stream_response(
     authorized: bool,
     session_id: &str,
 ) -> axum::response::Response {
-    let mut request = Request::builder().method("GET").uri(format!(
-        "/external/v1/sessions/{session_id}/live-output/stream"
-    ));
+    let mut request = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/sessions/{session_id}/live-output/stream"));
     if authorized {
         request = request.header(header::AUTHORIZATION, "Bearer test-token");
     }

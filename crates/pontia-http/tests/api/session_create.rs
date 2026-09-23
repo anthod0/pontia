@@ -110,7 +110,7 @@ async fn create_session_rejects_unauthenticated_requests() {
 
     let (status, body) = post_json(
         state,
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         None,
         None,
         json!({"client_type":"generic"}),
@@ -129,7 +129,7 @@ async fn create_session_rejects_unsupported_client_type() {
 
     let (status, body) = post_json(
         state,
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({"client_type":"unsupported"}),
@@ -147,7 +147,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
 
     let (status, body) = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -180,7 +180,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
 
     let (events_status, events_body) = get(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/events"),
     )
     .await;
     assert_eq!(events_status, StatusCode::OK);
@@ -215,7 +215,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
         ]
     );
 
-    let (get_status, get_body) = get(state, &format!("/external/v1/sessions/{session_id}")).await;
+    let (get_status, get_body) = get(state, &format!("/api/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(get_body["data"]["session"]["state"], "idle");
     assert_eq!(
@@ -239,7 +239,7 @@ async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
 
     let (status, body) = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -255,15 +255,12 @@ async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
     let session_id = session["session_id"].as_str().expect("session id");
     assert_eq!(session["handle"], "@reviewer");
 
-    let (get_status, get_body) = get(
-        state.clone(),
-        &format!("/external/v1/sessions/{session_id}"),
-    )
-    .await;
+    let (get_status, get_body) =
+        get(state.clone(), &format!("/api/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(get_body["data"]["session"]["handle"], "@reviewer");
 
-    let (list_status, list_body) = get(state, "/external/v1/sessions").await;
+    let (list_status, list_body) = get(state, "/api/v1/sessions").await;
     assert_eq!(list_status, StatusCode::OK);
     assert_eq!(list_body["data"]["sessions"][0]["handle"], "@reviewer");
 }
@@ -275,7 +272,7 @@ async fn create_session_accepts_title_and_exposes_it_on_session_views() {
 
     let (status, body) = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -291,18 +288,15 @@ async fn create_session_accepts_title_and_exposes_it_on_session_views() {
     let session_id = session["session_id"].as_str().expect("session id");
     assert_eq!(session["title"], "Inspect dashboard session titles");
 
-    let (get_status, get_body) = get(
-        state.clone(),
-        &format!("/external/v1/sessions/{session_id}"),
-    )
-    .await;
+    let (get_status, get_body) =
+        get(state.clone(), &format!("/api/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(
         get_body["data"]["session"]["title"],
         "Inspect dashboard session titles"
     );
 
-    let (list_status, list_body) = get(state, "/external/v1/sessions").await;
+    let (list_status, list_body) = get(state, "/api/v1/sessions").await;
     assert_eq!(list_status, StatusCode::OK);
     assert_eq!(
         list_body["data"]["sessions"][0]["title"],
@@ -319,7 +313,7 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
 
     let (create_status, create_body) = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({"client_type":"generic", "title":"managed session", "workspace": workspace_path}),
@@ -334,7 +328,7 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
 
     let (pin_status, pin_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/pin"),
+        &format!("/api/v1/sessions/{session_id}/pin"),
         Some(TOKEN),
         None,
         json!({}),
@@ -346,7 +340,7 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
 
     let (archive_status, archive_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/archive"),
+        &format!("/api/v1/sessions/{session_id}/archive"),
         Some(TOKEN),
         None,
         json!({}),
@@ -356,12 +350,12 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
     assert_eq!(archive_body["data"]["session"]["pinned_at"], Value::Null);
     assert!(archive_body["data"]["session"]["archived_at"].is_string());
 
-    let (list_status, list_body) = get(state.clone(), "/external/v1/sessions").await;
+    let (list_status, list_body) = get(state.clone(), "/api/v1/sessions").await;
     assert_eq!(list_status, StatusCode::OK);
     assert!(list_body["data"]["sessions"].as_array().unwrap().is_empty());
 
     let (include_status, include_body) =
-        get(state.clone(), "/external/v1/sessions?include_archived=true").await;
+        get(state.clone(), "/api/v1/sessions?include_archived=true").await;
     assert_eq!(include_status, StatusCode::OK);
     let included_sessions = include_body["data"]["sessions"].as_array().unwrap();
     assert_eq!(included_sessions.len(), 1);
@@ -370,7 +364,7 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
 
     let (unarchive_status, unarchive_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/unarchive"),
+        &format!("/api/v1/sessions/{session_id}/unarchive"),
         Some(TOKEN),
         None,
         json!({}),
@@ -384,7 +378,7 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
 
     let (repin_status, repin_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/pin"),
+        &format!("/api/v1/sessions/{session_id}/pin"),
         Some(TOKEN),
         None,
         json!({}),
@@ -395,7 +389,7 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
 
     let (unpin_status, unpin_body) = post_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/unpin"),
+        &format!("/api/v1/sessions/{session_id}/unpin"),
         Some(TOKEN),
         None,
         json!({}),
@@ -412,7 +406,7 @@ async fn patch_session_updates_title_through_session_events() {
 
     let (_, create_body) = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -428,7 +422,7 @@ async fn patch_session_updates_title_through_session_events() {
 
     let (patch_status, patch_body) = patch_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         json!({"title":"Renamed from dashboard"}),
     )
     .await;
@@ -441,7 +435,7 @@ async fn patch_session_updates_title_through_session_events() {
 
     let (events_status, events_body) = get(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/events"),
     )
     .await;
     assert_eq!(events_status, StatusCode::OK);
@@ -454,7 +448,7 @@ async fn patch_session_updates_title_through_session_events() {
         "session.title_updated"
     );
 
-    let (get_status, get_body) = get(state, &format!("/external/v1/sessions/{session_id}")).await;
+    let (get_status, get_body) = get(state, &format!("/api/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(
         get_body["data"]["session"]["title"],
@@ -469,7 +463,7 @@ async fn create_session_accepts_role_and_description_and_exposes_them_on_session
 
     let (status, body) = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -491,11 +485,8 @@ async fn create_session_accepts_role_and_description_and_exposes_them_on_session
         "Reviews Rust backend changes for event projection correctness."
     );
 
-    let (get_status, get_body) = get(
-        state.clone(),
-        &format!("/external/v1/sessions/{session_id}"),
-    )
-    .await;
+    let (get_status, get_body) =
+        get(state.clone(), &format!("/api/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(get_body["data"]["session"]["role"], "reviewer");
     assert_eq!(
@@ -503,7 +494,7 @@ async fn create_session_accepts_role_and_description_and_exposes_them_on_session
         "Reviews Rust backend changes for event projection correctness."
     );
 
-    let (list_status, list_body) = get(state, "/external/v1/sessions").await;
+    let (list_status, list_body) = get(state, "/api/v1/sessions").await;
     assert_eq!(list_status, StatusCode::OK);
     assert_eq!(list_body["data"]["sessions"][0]["role"], "reviewer");
     assert_eq!(
@@ -519,7 +510,7 @@ async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_fr
 
     let first = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -534,7 +525,7 @@ async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_fr
 
     let duplicate = post_json(
         state,
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -561,7 +552,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
 
     let first = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -589,7 +580,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
 
     let second = post_json(
         state,
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -616,7 +607,7 @@ async fn create_session_rejects_handle_without_workspace() {
 
     let (status, body) = post_json(
         state,
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -642,7 +633,7 @@ async fn create_session_rejects_invalid_handle_format() {
 
     let (status, body) = post_json(
         state,
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -669,7 +660,7 @@ async fn create_session_with_initial_task_creates_queued_initial_turn() {
 
     let (status, body) = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         json!({
@@ -691,7 +682,7 @@ async fn create_session_with_initial_task_creates_queued_initial_turn() {
 
     let (turn_status, turn_body) = get(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
     )
     .await;
     assert_eq!(turn_status, StatusCode::OK);
@@ -714,7 +705,7 @@ async fn create_session_is_idempotent_when_idempotency_key_is_retried() {
 
     let first = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         Some("create-session-once"),
         body.clone(),
@@ -722,7 +713,7 @@ async fn create_session_is_idempotent_when_idempotency_key_is_retried() {
     .await;
     let second = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         Some("create-session-once"),
         body,
@@ -735,7 +726,7 @@ async fn create_session_is_idempotent_when_idempotency_key_is_retried() {
 
     let session_id = first.1["data"]["session"]["session_id"].as_str().unwrap();
     let (events_status, events_body) =
-        get(state, &format!("/external/v1/sessions/{session_id}/events")).await;
+        get(state, &format!("/api/v1/sessions/{session_id}/events")).await;
     assert_eq!(events_status, StatusCode::OK);
     assert_eq!(events_body["data"]["events"].as_array().unwrap().len(), 6);
 }

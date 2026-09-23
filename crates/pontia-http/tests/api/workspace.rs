@@ -146,7 +146,7 @@ async fn git_status_read_returns_unknown_until_workspace_is_observed() {
     .await;
     let (_, body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"app"}),
     )
     .await;
@@ -154,7 +154,7 @@ async fn git_status_read_returns_unknown_until_workspace_is_observed() {
 
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/workspaces/{workspace_id}/git-status"),
+        &format!("/api/v1/workspaces/{workspace_id}/git-status"),
     )
     .await;
 
@@ -195,7 +195,7 @@ async fn refreshing_git_status_updates_sqlite_projection_read_by_get() {
     .await;
     let (_, body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"app"}),
     )
     .await;
@@ -203,7 +203,7 @@ async fn refreshing_git_status_updates_sqlite_projection_read_by_get() {
 
     let (status, body) = post_empty(
         state.clone(),
-        &format!("/external/v1/workspaces/{workspace_id}/git-status/refresh"),
+        &format!("/api/v1/workspaces/{workspace_id}/git-status/refresh"),
     )
     .await;
 
@@ -218,7 +218,7 @@ async fn refreshing_git_status_updates_sqlite_projection_read_by_get() {
 
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/workspaces/{workspace_id}/git-status"),
+        &format!("/api/v1/workspaces/{workspace_id}/git-status"),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -246,7 +246,7 @@ async fn file_picker_returns_directories_and_files_and_respects_ignore_config() 
     .await;
     let (_, body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"app"}),
     )
     .await;
@@ -254,7 +254,7 @@ async fn file_picker_returns_directories_and_files_and_respects_ignore_config() 
 
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/workspaces/{workspace_id}/file-picker?query=src"),
+        &format!("/api/v1/workspaces/{workspace_id}/file-picker?query=src"),
     )
     .await;
 
@@ -311,7 +311,7 @@ async fn file_picker_can_include_hidden_and_normally_ignored_files_from_config()
     .await;
     let (_, body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"app"}),
     )
     .await;
@@ -319,7 +319,7 @@ async fn file_picker_can_include_hidden_and_normally_ignored_files_from_config()
 
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/workspaces/{workspace_id}/file-picker?query=head"),
+        &format!("/api/v1/workspaces/{workspace_id}/file-picker?query=head"),
     )
     .await;
 
@@ -344,7 +344,7 @@ async fn lists_configured_workspace_roots_without_persisting_them() {
     }])
     .await;
 
-    let (status, body) = get_json(state, "/external/v1/workspace-roots").await;
+    let (status, body) = get_json(state, "/api/v1/workspace-roots").await;
 
     assert_eq!(status, StatusCode::OK);
     let roots = body["data"]["roots"].as_array().expect("roots");
@@ -368,7 +368,7 @@ async fn browses_only_directories_inside_configured_root() {
     }])
     .await;
 
-    let (status, body) = get_json(state, "/external/v1/workspace-roots/projects/entries").await;
+    let (status, body) = get_json(state, "/api/v1/workspace-roots/projects/entries").await;
 
     assert_eq!(status, StatusCode::OK);
     let entries = body["data"]["entries"].as_array().expect("entries");
@@ -389,11 +389,7 @@ async fn rejects_directory_browsing_that_escapes_root() {
     }])
     .await;
 
-    let (status, body) = get_json(
-        state,
-        "/external/v1/workspace-roots/projects/entries?path=..",
-    )
-    .await;
+    let (status, body) = get_json(state, "/api/v1/workspace-roots/projects/entries?path=..").await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"]["code"], "invalid_request");
@@ -414,7 +410,7 @@ async fn registers_existing_directory_under_allowed_root_without_storing_root_id
 
     let (status, body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"app", "name":"App"}),
     )
     .await;
@@ -426,7 +422,7 @@ async fn registers_existing_directory_under_allowed_root_without_storing_root_id
     assert!(workspace.get("root_id").is_none());
 
     let workspace_id = workspace["workspace_id"].as_str().expect("workspace id");
-    let (status, body) = get_json(state, &format!("/external/v1/workspaces/{workspace_id}")).await;
+    let (status, body) = get_json(state, &format!("/api/v1/workspaces/{workspace_id}")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["workspace"]["workspace_id"], workspace_id);
     assert!(body["data"]["workspace"].get("root_id").is_none());
@@ -446,7 +442,7 @@ async fn renames_workspace_without_changing_path() {
     .await;
     let (_, body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"app", "name":"App"}),
     )
     .await;
@@ -454,7 +450,7 @@ async fn renames_workspace_without_changing_path() {
 
     let (status, body) = patch_json(
         state.clone(),
-        &format!("/external/v1/workspaces/{workspace_id}"),
+        &format!("/api/v1/workspaces/{workspace_id}"),
         json!({"name":"Renamed App"}),
     )
     .await;
@@ -467,7 +463,7 @@ async fn renames_workspace_without_changing_path() {
 
     let (status, body) = patch_json(
         state,
-        &format!("/external/v1/workspaces/{workspace_id}"),
+        &format!("/api/v1/workspaces/{workspace_id}"),
         json!({"name":"   "}),
     )
     .await;
@@ -491,7 +487,7 @@ async fn list_workspaces_returns_only_active_workspaces() {
 
     let (_, active_body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"active-app"}),
     )
     .await;
@@ -500,7 +496,7 @@ async fn list_workspaces_returns_only_active_workspaces() {
         .unwrap();
     let (_, archived_body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"archived-app"}),
     )
     .await;
@@ -514,7 +510,7 @@ async fn list_workspaces_returns_only_active_workspaces() {
         .await
         .expect("archive workspace");
 
-    let (status, body) = get_json(state.clone(), "/external/v1/workspaces").await;
+    let (status, body) = get_json(state.clone(), "/api/v1/workspaces").await;
     assert_eq!(status, StatusCode::OK);
     let workspaces = body["data"]["workspaces"].as_array().unwrap();
     assert_eq!(workspaces.len(), 1);
@@ -523,7 +519,7 @@ async fn list_workspaces_returns_only_active_workspaces() {
 
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/workspaces/{archived_workspace_id}"),
+        &format!("/api/v1/workspaces/{archived_workspace_id}"),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -543,36 +539,29 @@ async fn soft_deletes_workspace_hiding_it_from_list_but_preserving_direct_lookup
     .await;
     let (_, body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"app"}),
     )
     .await;
     let workspace_id = body["data"]["workspace"]["workspace_id"].as_str().unwrap();
 
-    let (status, body) = delete_json(
-        state.clone(),
-        &format!("/external/v1/workspaces/{workspace_id}"),
-    )
-    .await;
+    let (status, body) =
+        delete_json(state.clone(), &format!("/api/v1/workspaces/{workspace_id}")).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["workspace"]["workspace_id"], workspace_id);
     assert_eq!(body["data"]["workspace"]["state"], "deleted");
 
-    let (status, body) = get_json(state.clone(), "/external/v1/workspaces").await;
+    let (status, body) = get_json(state.clone(), "/api/v1/workspaces").await;
     assert_eq!(status, StatusCode::OK);
     assert!(body["data"]["workspaces"].as_array().unwrap().is_empty());
 
-    let (status, body) = get_json(
-        state.clone(),
-        &format!("/external/v1/workspaces/{workspace_id}"),
-    )
-    .await;
+    let (status, body) =
+        get_json(state.clone(), &format!("/api/v1/workspaces/{workspace_id}")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["workspace"]["state"], "deleted");
 
-    let (status, body) =
-        delete_json(state, &format!("/external/v1/workspaces/{workspace_id}")).await;
+    let (status, body) = delete_json(state, &format!("/api/v1/workspaces/{workspace_id}")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["workspace"]["state"], "deleted");
 }
@@ -589,7 +578,7 @@ async fn does_not_register_missing_directory() {
 
     let (status, body) = post_json(
         state,
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"missing"}),
     )
     .await;
@@ -613,7 +602,7 @@ async fn creates_session_from_known_workspace_id() {
     .await;
     let (_, body) = post_json(
         state.clone(),
-        "/external/v1/workspaces",
+        "/api/v1/workspaces",
         json!({"root_id":"projects", "path":"app"}),
     )
     .await;
@@ -621,7 +610,7 @@ async fn creates_session_from_known_workspace_id() {
 
     let (status, body) = post_json(
         state,
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         json!({"client_type":"generic", "workspace_id": workspace_id}),
     )
     .await;

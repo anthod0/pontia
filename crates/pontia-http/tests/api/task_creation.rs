@@ -11,14 +11,14 @@ async fn common_task_creation_endpoint_is_removed() {
 
     let (status, _body) = post_json(
         state.clone(),
-        "/external/v1/tasks",
+        "/api/v1/tasks",
         json!({"input":"legacy common task", "client_type":"generic"}),
     )
     .await;
 
     assert_eq!(status, StatusCode::GONE);
 
-    let (status, body) = get_json(state, "/external/v1/tasks").await;
+    let (status, body) = get_json(state, "/api/v1/tasks").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["tasks"].as_array().unwrap().len(), 0);
 }

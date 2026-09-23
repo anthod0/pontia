@@ -271,7 +271,7 @@ async fn run_workflow(args: RunArgs, config: &AppConfig) -> Result<(), String> {
         .as_deref()
         .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
     let url = format!(
-        "http://{}/internal/v1/workflows",
+        "http://{}/api/v1/workflows",
         local_api_addr(config.bind_addr)
     );
     let response = reqwest::Client::new()
@@ -308,7 +308,7 @@ async fn show_workflow(args: ShowArgs, config: &AppConfig) -> Result<(), String>
         .as_deref()
         .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
     let base = format!(
-        "http://{}/external/v1/workflows",
+        "http://{}/api/v1/workflows",
         local_api_addr(config.bind_addr)
     );
     let mut url = reqwest::Url::parse(&base)
@@ -420,7 +420,7 @@ async fn submit_workflow(config: &AppConfig) -> Result<(), String> {
         .as_deref()
         .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
     let url = format!(
-        "http://{}/internal/v1/workflow/submissions",
+        "http://{}/api/v1/workflow/submissions",
         local_api_addr(config.bind_addr)
     );
     let response = reqwest::Client::new()
@@ -450,7 +450,7 @@ async fn request_workflow_patch(config: &AppConfig) -> Result<(), String> {
         .as_deref()
         .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
     let url = format!(
-        "http://{}/internal/v1/workflow/patches/request",
+        "http://{}/api/v1/workflow/patches/request",
         local_api_addr(config.bind_addr)
     );
     let response = reqwest::Client::new()
@@ -485,7 +485,7 @@ async fn apply_workflow_patch(config: &AppConfig) -> Result<(), String> {
         .as_deref()
         .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
     let url = format!(
-        "http://{}/internal/v1/workflow/patches/apply",
+        "http://{}/api/v1/workflow/patches/apply",
         local_api_addr(config.bind_addr)
     );
     let response = reqwest::Client::new()
@@ -528,7 +528,7 @@ async fn block_workflow_patch(config: &AppConfig) -> Result<(), String> {
         .as_deref()
         .ok_or_else(|| "Pontia local API token is not configured".to_string())?;
     let url = format!(
-        "http://{}/internal/v1/workflow/patches/block",
+        "http://{}/api/v1/workflow/patches/block",
         local_api_addr(config.bind_addr)
     );
     let response = reqwest::Client::new()

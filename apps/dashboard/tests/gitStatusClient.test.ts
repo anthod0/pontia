@@ -20,7 +20,7 @@ describe('workspace git status API client', () => {
 
     expect(await getWorkspaceGitStatus('workspace-1')).toMatchObject({ state: 'unknown' });
     expect(await refreshWorkspaceGitStatus('workspace-1')).toMatchObject({ branch: 'main', clean: true });
-    expect(fetchMock).toHaveBeenCalledWith('/external/v1/workspaces/workspace-1/git-status', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/external/v1/workspaces/workspace-1/git-status/refresh', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspaces/workspace-1/git-status', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/workspaces/workspace-1/git-status/refresh', expect.objectContaining({ method: 'POST' }));
   });
 });

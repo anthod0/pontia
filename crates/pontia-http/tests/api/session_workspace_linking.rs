@@ -17,7 +17,7 @@ async fn create_session_upserts_canonical_workspace_and_links_session() {
 
     let (status, body) = post_json(
         state.clone(),
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         json!({"client_type":"generic", "workspace": workspace.path().display().to_string()}),
     )
     .await;
@@ -33,7 +33,7 @@ async fn create_session_upserts_canonical_workspace_and_links_session() {
         .expect("workspace id");
     assert!(workspace_id.starts_with("wks_"));
 
-    let (status, body) = get_json(state, "/external/v1/workspaces").await;
+    let (status, body) = get_json(state, "/api/v1/workspaces").await;
     assert_eq!(status, StatusCode::OK);
     let workspaces = body["data"]["workspaces"].as_array().unwrap();
     assert_eq!(workspaces.len(), 1);

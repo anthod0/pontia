@@ -79,7 +79,7 @@ async fn binding_fields(state: &AppState, session_id: &str) -> Value {
 }
 
 async fn create_session_with_body(state: AppState, body: Value) -> String {
-    let (status, body) = request(state, "POST", "/external/v1/sessions", Some(body)).await;
+    let (status, body) = request(state, "POST", "/api/v1/sessions", Some(body)).await;
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
     body["data"]["session"]["session_id"]
         .as_str()
@@ -91,7 +91,7 @@ async fn submit_turn(state: AppState, session_id: &str) -> String {
     let (status, body) = request(
         state,
         "POST",
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         Some(json!({"input":"work through generic"})),
     )
     .await;
@@ -146,7 +146,7 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
     let (status, body) = request(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/restart"),
+        &format!("/api/v1/sessions/{session_id}/restart"),
         None,
     )
     .await;
@@ -166,7 +166,7 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
     let (status, body) = request(
         state.clone(),
         "DELETE",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         None,
     )
     .await;
@@ -192,7 +192,7 @@ async fn observe_missing_generic_runtime_projects_session_error() {
     let (status, body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         None,
     )
     .await;
@@ -229,7 +229,7 @@ async fn observe_missing_generic_runtime_does_not_fail_a_terminal_branch_leaf() 
     let (status, body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/events"),
         None,
     )
     .await;
@@ -263,7 +263,7 @@ async fn observe_missing_generic_runtime_abandons_active_turn_without_forging_ag
     let (status, body) = request(
         state.clone(),
         "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
         None,
     )
     .await;
@@ -273,7 +273,7 @@ async fn observe_missing_generic_runtime_abandons_active_turn_without_forging_ag
     let (status, body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}/events"),
         None,
     )
     .await;

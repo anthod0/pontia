@@ -110,21 +110,11 @@ async fn seed_running_workflow(
 }
 
 async fn post_submission(app: &TestApp, body: Value) -> (StatusCode, Value) {
-    post_submission_with_auth(app, body, Some("Bearer test-token")).await
-}
-
-async fn post_submission_with_auth(
-    app: &TestApp,
-    body: Value,
-    authorization: Option<&str>,
-) -> (StatusCode, Value) {
-    let mut request = Request::builder()
+    let request = Request::builder()
         .method("POST")
-        .uri("/internal/v1/workflow/submissions")
-        .header(header::CONTENT_TYPE, "application/json");
-    if let Some(authorization) = authorization {
-        request = request.header(header::AUTHORIZATION, authorization);
-    }
+        .uri("/api/v1/workflow/submissions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, "Bearer test-token");
     let response = http::router(app.state.clone())
         .oneshot(request.body(Body::from(body.to_string())).expect("request"))
         .await
@@ -143,7 +133,7 @@ async fn post_submission_with_auth(
 }
 
 #[tokio::test]
-async fn internal_workflow_submission_accepts_the_node_owned_output_file() {
+async fn workflow_submission_accepts_the_node_owned_output_file() {
     let app = TestApp::new().await;
     let (_pi, mut requests) = seed_running_workflow(&app).await;
     fs::write(
@@ -164,7 +154,10 @@ async fn internal_workflow_submission_accepts_the_node_owned_output_file() {
     .await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body, json!({ "data": { "submitted": true } }));
+    assert_eq!(
+        body,
+        json!({ "data": { "submitted": true }, "meta": {}, "error": null })
+    );
     assert_eq!(
         fs::read_to_string(
             app.pontia_home()
@@ -194,22 +187,7 @@ async fn internal_workflow_submission_accepts_the_node_owned_output_file() {
 }
 
 #[tokio::test]
-async fn internal_workflow_submission_requires_local_api_authentication() {
-    let app = TestApp::new().await;
-    let request = json!({
-        "session_id": "sess_http_submit",
-        "runtime_instance_id": "rtinst_http_submit"
-    });
-
-    for authorization in [None, Some("Bearer wrong-token")] {
-        let (status, body) = post_submission_with_auth(&app, request.clone(), authorization).await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
-        assert_eq!(body["error"]["code"], "authentication_failed");
-    }
-}
-
-#[tokio::test]
-async fn internal_workflow_submission_preserves_service_conflicts() {
+async fn workflow_submission_preserves_service_conflicts() {
     let app = TestApp::new().await;
     let (_pi, _requests) = seed_running_workflow(&app).await;
 

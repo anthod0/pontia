@@ -34,7 +34,7 @@ import type {
   WorkflowListItemView,
 } from './types';
 
-const API_BASE = '/external/v1';
+const API_BASE = '/api/v1';
 
 type RequestOptions = Omit<RequestInit, 'body'> & { body?: unknown; mutating?: boolean; retryNetworkErrors?: boolean };
 export type ReadRequestOptions = Pick<RequestOptions, 'signal'>;
@@ -330,7 +330,7 @@ export async function getSession(sessionId: string, options: ReadRequestOptions 
 }
 
 // GET /sessions/:id/turns is read-only turn history. WebUI dispatch must use
-// submitInboxMessage(); hook/internal events remain authoritative for turn lifecycle facts.
+// submitInboxMessage(); reported Agent facts remain authoritative for turn lifecycle.
 export async function listTurns(sessionId: string): Promise<TurnView[]> {
   return (await request<{ turns: TurnView[] }>(`/sessions/${sessionId}/turns`)).turns;
 }

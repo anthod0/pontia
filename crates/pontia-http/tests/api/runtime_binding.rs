@@ -59,7 +59,7 @@ pub(super) async fn delete_session(state: AppState, session_id: &str) -> (Status
     request_json(
         state,
         "DELETE",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         None,
     )
     .await
@@ -75,7 +75,7 @@ pub(super) async fn request_json(
     if body.is_some() {
         builder = builder.header(header::CONTENT_TYPE, "application/json");
     }
-    if uri.starts_with("/external/v1/") {
+    if uri.starts_with("/api/v1/") {
         builder = builder.header(header::AUTHORIZATION, "Bearer test-token");
     }
     let response = http::router(state)

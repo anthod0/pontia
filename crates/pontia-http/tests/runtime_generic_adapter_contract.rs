@@ -78,7 +78,7 @@ async fn response_json(response: axum::response::Response) -> (StatusCode, Value
 async fn create_session(state: AppState) -> String {
     let (status, body) = post_json(
         state,
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         json!({"client_type":"generic"}),
     )
@@ -91,7 +91,7 @@ async fn create_session(state: AppState) -> String {
 }
 
 async fn create_session_with_body(state: AppState, body: Value) -> Value {
-    let (status, body) = post_json(state, "/external/v1/sessions", Some(TOKEN), body).await;
+    let (status, body) = post_json(state, "/api/v1/sessions", Some(TOKEN), body).await;
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
     body
 }
@@ -99,7 +99,7 @@ async fn create_session_with_body(state: AppState, body: Value) -> Value {
 async fn submit_turn(state: AppState, session_id: &str, input: &str) -> (String, Value) {
     let (status, body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         Some(TOKEN),
         json!({"input":input,"turn_id":"turn_client_must_be_ignored"}),
     )
@@ -111,7 +111,7 @@ async fn submit_turn(state: AppState, session_id: &str, input: &str) -> (String,
         .to_string();
     let (turn_status, turn_body) = get_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
     )
     .await;
     assert_eq!(turn_status, StatusCode::OK);
@@ -146,11 +146,7 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
     let state = test_state("generic_contract_pi_like_capabilities").await;
     let session_id = create_session(state.clone()).await;
 
-    let (status, body) = get_json(
-        state.clone(),
-        &format!("/external/v1/sessions/{session_id}"),
-    )
-    .await;
+    let (status, body) = get_json(state.clone(), &format!("/api/v1/sessions/{session_id}")).await;
 
     assert_eq!(status, StatusCode::OK);
     let session = &body["data"]["session"];
@@ -173,7 +169,7 @@ async fn capability_model_declares_default_generic_adapter_capabilities() {
     let state = test_state("generic_contract_capabilities").await;
     let session_id = create_session(state.clone()).await;
 
-    let (status, body) = get_json(state, &format!("/external/v1/sessions/{session_id}")).await;
+    let (status, body) = get_json(state, &format!("/api/v1/sessions/{session_id}")).await;
 
     assert_eq!(status, StatusCode::OK);
     let capabilities = &body["data"]["session"]["capabilities"];
@@ -265,7 +261,7 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
 
     let (turn_status, turn_body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
     )
     .await;
     assert_eq!(turn_status, StatusCode::OK);
@@ -274,7 +270,7 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
 
     let (events_status, events_body) = get_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}/events"),
     )
     .await;
     assert_eq!(events_status, StatusCode::OK);
@@ -387,7 +383,7 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
 
     let (interrupt_status, interrupt_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/interrupt"),
+        &format!("/api/v1/sessions/{session_id}/interrupt"),
         Some(TOKEN),
         json!({}),
     )
@@ -397,7 +393,7 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
 
     let (events_status, events_body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}/events"),
     )
     .await;
     assert_eq!(events_status, StatusCode::OK);

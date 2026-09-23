@@ -78,7 +78,7 @@ test('reconnects the dashboard event stream with the saved cursor', async () => 
   await vi.waitFor(() => {
     const streamUrls = fetchMock.mock.calls.map((call) => String(call[0])).filter((url) => url.includes('/dashboard/events/stream'));
     expect(streamUrls.length).toBeGreaterThanOrEqual(2);
-    expect(streamUrls[1]).toBe('/external/v1/dashboard/events/stream?after=cursor-1');
+    expect(streamUrls[1]).toBe('/api/v1/dashboard/events/stream?after=cursor-1');
   });
 });
 
@@ -97,7 +97,7 @@ test('visible recovery aborts the old stream and reconnects with the saved curso
 
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   expect(signals[0].aborted).toBe(true);
-  expect(String(fetchMock.mock.calls[1][0])).toBe('/external/v1/dashboard/events/stream?after=session%3A4%3Btask%3A9');
+  expect(String(fetchMock.mock.calls[1][0])).toBe('/api/v1/dashboard/events/stream?after=session%3A4%3Btask%3A9');
   expect(get(dashboardStreamCursor)).toBe('session:4;task:9');
 });
 

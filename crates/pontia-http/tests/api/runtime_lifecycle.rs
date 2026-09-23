@@ -63,7 +63,7 @@ async fn create_session(state: AppState) -> String {
     let (status, body) = request(
         state,
         "POST",
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(TOKEN),
         None,
         Some(json!({"client_type":"generic"})),
@@ -95,7 +95,7 @@ async fn submit_turn(state: AppState, session_id: &str) -> String {
     let (status, body) = request(
         state,
         "POST",
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         Some(TOKEN),
         None,
         Some(json!({"input":"work"})),
@@ -118,7 +118,7 @@ async fn interrupt_current_turn_returns_capability_unavailable_for_generic_runti
     let (status, body) = request(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/interrupt"),
+        &format!("/api/v1/sessions/{session_id}/interrupt"),
         Some(TOKEN),
         None,
         None,
@@ -131,7 +131,7 @@ async fn interrupt_current_turn_returns_capability_unavailable_for_generic_runti
     let (events_status, events_body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}/events"),
         Some(TOKEN),
         None,
         None,
@@ -157,7 +157,7 @@ async fn interrupt_specified_turn_returns_capability_unavailable_for_generic_run
     let (status, body) = request(
         state,
         "POST",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/interrupt"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}/interrupt"),
         Some(TOKEN),
         Some("interrupt-once"),
         None,
@@ -177,7 +177,7 @@ async fn terminate_session_requests_runtime_shutdown_without_fabricating_exit_an
     let first = request(
         state.clone(),
         "DELETE",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         Some(TOKEN),
         Some("terminate-once"),
         None,
@@ -186,7 +186,7 @@ async fn terminate_session_requests_runtime_shutdown_without_fabricating_exit_an
     let second = request(
         state.clone(),
         "DELETE",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         Some(TOKEN),
         Some("terminate-once"),
         None,
@@ -195,7 +195,7 @@ async fn terminate_session_requests_runtime_shutdown_without_fabricating_exit_an
     let third = request(
         state.clone(),
         "DELETE",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         Some(TOKEN),
         None,
         None,
@@ -213,7 +213,7 @@ async fn terminate_session_requests_runtime_shutdown_without_fabricating_exit_an
     let (events_status, events_body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/events"),
         Some(TOKEN),
         None,
         None,
@@ -251,7 +251,7 @@ async fn restart_idle_session_with_a_sticky_branch_leaf_runs_a_new_start_cycle()
     let first = request(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/restart"),
+        &format!("/api/v1/sessions/{session_id}/restart"),
         Some(TOKEN),
         Some("restart-once"),
         None,
@@ -260,7 +260,7 @@ async fn restart_idle_session_with_a_sticky_branch_leaf_runs_a_new_start_cycle()
     let second = request(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/restart"),
+        &format!("/api/v1/sessions/{session_id}/restart"),
         Some(TOKEN),
         Some("restart-once"),
         None,
@@ -283,7 +283,7 @@ async fn restart_idle_session_with_a_sticky_branch_leaf_runs_a_new_start_cycle()
     let (events_status, events_body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/events"),
         Some(TOKEN),
         None,
         None,
@@ -326,7 +326,7 @@ async fn restart_rejects_replacing_the_runtime_while_a_turn_is_active() {
     let (status, body) = request(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/restart"),
+        &format!("/api/v1/sessions/{session_id}/restart"),
         Some(TOKEN),
         None,
         None,
@@ -345,7 +345,7 @@ async fn restart_rejects_replacing_the_runtime_while_a_turn_is_active() {
     let (turn_status, turn_body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
         Some(TOKEN),
         None,
         None,
@@ -363,7 +363,7 @@ async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
     let terminate = request(
         state.clone(),
         "DELETE",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         Some(TOKEN),
         None,
         None,
@@ -375,7 +375,7 @@ async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
     let first = request(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/resume"),
+        &format!("/api/v1/sessions/{session_id}/resume"),
         Some(TOKEN),
         Some("resume-once"),
         None,
@@ -384,7 +384,7 @@ async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
     let second = request(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/resume"),
+        &format!("/api/v1/sessions/{session_id}/resume"),
         Some(TOKEN),
         Some("resume-once"),
         None,
@@ -399,7 +399,7 @@ async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
     let (events_status, events_body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/events"),
         Some(TOKEN),
         None,
         None,
@@ -436,7 +436,7 @@ async fn resume_rejects_non_exited_session() {
     let (status, body) = request(
         state,
         "POST",
-        &format!("/external/v1/sessions/{session_id}/resume"),
+        &format!("/api/v1/sessions/{session_id}/resume"),
         Some(TOKEN),
         None,
         None,
@@ -468,7 +468,7 @@ async fn resume_rejects_error_session() {
     let (status, body) = request(
         state,
         "POST",
-        &format!("/external/v1/sessions/{session_id}/resume"),
+        &format!("/api/v1/sessions/{session_id}/resume"),
         Some(TOKEN),
         None,
         None,
@@ -487,7 +487,7 @@ async fn restart_rejects_terminal_session() {
     let terminate = request(
         state.clone(),
         "DELETE",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         Some(TOKEN),
         None,
         None,
@@ -499,7 +499,7 @@ async fn restart_rejects_terminal_session() {
     let (status, body) = request(
         state,
         "POST",
-        &format!("/external/v1/sessions/{session_id}/restart"),
+        &format!("/api/v1/sessions/{session_id}/restart"),
         Some(TOKEN),
         None,
         None,

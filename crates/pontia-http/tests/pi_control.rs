@@ -157,7 +157,7 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/external/v1/sessions/sess_input/inbox/messages")
+                .uri("/api/v1/sessions/sess_input/inbox/messages")
                 .header("content-type", "application/json")
                 .header("authorization", "Bearer token")
                 .body(Body::from(json!({"input":"first\n你好"}).to_string()))
@@ -227,7 +227,7 @@ async fn control_request(
         .oneshot(
             Request::builder()
                 .method(method)
-                .uri(format!("/external/v1/sessions/sess_models/{resource}").trim_end_matches('/'))
+                .uri(format!("/api/v1/sessions/sess_models/{resource}").trim_end_matches('/'))
                 .header("content-type", "application/json")
                 .header("authorization", "Bearer token")
                 .body(Body::from(body.to_string()))

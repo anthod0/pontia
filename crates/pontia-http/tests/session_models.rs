@@ -43,7 +43,7 @@ async fn request(
 ) -> (StatusCode, Value) {
     let mut request = Request::builder()
         .method(method)
-        .uri(format!("/external/v1/sessions/{session}{resource}"))
+        .uri(format!("/api/v1/sessions/{session}{resource}"))
         .header("content-type", "application/json");
     if authenticated {
         request = request.header("authorization", "Bearer test-token");

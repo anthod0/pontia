@@ -11,14 +11,14 @@ use pontia_application::{AppState, ExternalQueryService, TaskCommandService};
 use super::{
     authentication::authenticate,
     idempotency::idempotent,
-    response::{ApiResponse, ExternalApiError, ok},
+    response::{ApiError, ApiResponse, ok},
 };
 
 pub async fn create_task(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(_request): Json<Value>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     Ok((
         StatusCode::GONE,
@@ -38,7 +38,7 @@ pub async fn interrupt_task(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(task_id): Path<String>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = TaskCommandService::new(state.event_ingest_service());
     let operation = format!("interrupt_task:{task_id}");
@@ -53,7 +53,7 @@ pub async fn cancel_task(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(task_id): Path<String>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = TaskCommandService::new(state.event_ingest_service());
     let operation = format!("cancel_task:{task_id}");
@@ -67,7 +67,7 @@ pub async fn cancel_task(
 pub async fn list_tasks(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     let tasks = service.list_tasks().await?;
@@ -78,13 +78,13 @@ pub async fn get_task(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(task_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     let task = service
         .get_task(&task_id)
         .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("task {task_id} not found")))?;
+        .ok_or_else(|| ApiError::not_found(format!("task {task_id} not found")))?;
     Ok(ok(json!({ "task": task })))
 }
 
@@ -92,13 +92,13 @@ pub async fn list_task_events(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(task_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     service
         .get_task(&task_id)
         .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("task {task_id} not found")))?;
+        .ok_or_else(|| ApiError::not_found(format!("task {task_id} not found")))?;
     let events = service.list_task_events(&task_id).await?;
     Ok(ok(json!({ "events": events })))
 }

@@ -117,7 +117,7 @@ async fn fork_upsert_creates_independent_child_session_with_lineage() {
     let (get_status, get_body) = request_json(
         state,
         "GET",
-        &format!("/external/v1/sessions/{child_session_id}"),
+        &format!("/api/v1/sessions/{child_session_id}"),
         None,
     )
     .await;

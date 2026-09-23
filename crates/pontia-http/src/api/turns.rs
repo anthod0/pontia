@@ -11,7 +11,7 @@ use pontia_application::{AppState, ExternalQueryService, TurnCommandService};
 use super::{
     authentication::authenticate,
     idempotency::idempotent,
-    response::{ApiResponse, ExternalApiError, ok},
+    response::{ApiError, ApiResponse, ok},
     session_guard::ensure_session_exists,
 };
 
@@ -19,7 +19,7 @@ pub async fn interrupt_turn(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((session_id, turn_id)): Path<(String, String)>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = TurnCommandService::new(state.event_ingest_service());
     let operation = format!("interrupt_turn:{session_id}:{turn_id}");
@@ -34,7 +34,7 @@ pub async fn list_turns(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     ensure_session_exists(&service, &session_id).await?;
@@ -46,14 +46,14 @@ pub async fn get_turn(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((session_id, turn_id)): Path<(String, String)>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     ensure_session_exists(&service, &session_id).await?;
     let turn = service
         .get_turn(&session_id, &turn_id)
         .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("turn {turn_id} not found")))?;
+        .ok_or_else(|| ApiError::not_found(format!("turn {turn_id} not found")))?;
     Ok(ok(json!({ "turn": turn })))
 }
 
@@ -61,7 +61,7 @@ pub async fn list_session_events(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     ensure_session_exists(&service, &session_id).await?;
@@ -73,14 +73,14 @@ pub async fn list_turn_events(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((session_id, turn_id)): Path<(String, String)>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     ensure_session_exists(&service, &session_id).await?;
     service
         .get_turn(&session_id, &turn_id)
         .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("turn {turn_id} not found")))?;
+        .ok_or_else(|| ApiError::not_found(format!("turn {turn_id} not found")))?;
     let events = service.list_turn_events(&session_id, &turn_id).await?;
     Ok(ok(json!({ "events": events })))
 }

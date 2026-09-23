@@ -65,7 +65,7 @@ async fn create_session(state: AppState) -> String {
     let (status, body) = request(
         state,
         "POST",
-        "/external/v1/sessions",
+        "/api/v1/sessions",
         Some(json!({"client_type":"generic"})),
     )
     .await;
@@ -80,7 +80,7 @@ async fn submit_inbox_message(state: AppState, session_id: &str, input: &str) ->
     let (status, body) = request(
         state,
         "POST",
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         Some(json!({"input": input, "metadata": {}})),
     )
     .await;
@@ -109,7 +109,7 @@ async fn post_turn_external_endpoint_is_removed() {
     let (status, _) = request(
         state,
         "POST",
-        &format!("/external/v1/sessions/{session_id}/turns"),
+        &format!("/api/v1/sessions/{session_id}/turns"),
         Some(json!({"input":"continue work"})),
     )
     .await;
@@ -128,7 +128,7 @@ async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
     let (turn_status, turn_body) = request(
         state.clone(),
         "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
         None,
     )
     .await;
@@ -146,7 +146,7 @@ async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
     let (events_status, events_body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}/events"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}/events"),
         None,
     )
     .await;
@@ -185,7 +185,7 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
     let (busy_status, busy_body) = request(
         state.clone(),
         "GET",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         None,
     )
     .await;
@@ -207,7 +207,7 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
     let (turn_status, turn_body) = request(
         state.clone(),
         "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
         None,
     )
     .await;
@@ -217,7 +217,7 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
     let (session_status, session_body) = request(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         None,
     )
     .await;

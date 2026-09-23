@@ -108,7 +108,7 @@ test('rejects an invalid entered token without opening the dashboard', async () 
   await fireEvent.input(screen.getByLabelText(/bearer token/i), { target: { value: ' wrong-token ' } });
   await fireEvent.click(screen.getByRole('button', { name: /continue/i }));
 
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/external/v1/auth/validate', expect.objectContaining({
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/validate', expect.objectContaining({
     headers: expect.any(Headers),
   })));
   const headers = fetchMock.mock.calls[0][1]?.headers as Headers;

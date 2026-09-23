@@ -3,7 +3,7 @@ import type { LiveOutputEvent } from '../lib/session-chat/liveOutput';
 import { token } from '../stores/auth';
 import { isAuthenticationFailure } from '../api/client';
 
-const API_BASE = '/external/v1';
+const API_BASE = '/api/v1';
 const RECONNECT_DELAY_MS = 1_000;
 
 export interface LiveOutputStreamHandlers {

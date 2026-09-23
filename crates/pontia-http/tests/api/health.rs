@@ -43,10 +43,21 @@ async fn healthz_returns_ok_json() {
 }
 
 #[tokio::test]
-async fn obsolete_agent_http_endpoints_are_removed() {
+async fn obsolete_http_endpoints_are_removed() {
     let state = test_state().await;
     for (method, path) in [
         ("POST", "/internal/v1/events"),
+        ("POST", "/internal/v1/workflows"),
+        ("POST", "/internal/v1/workflow/submissions"),
+        ("POST", "/internal/v1/workflow/patches/request"),
+        ("POST", "/internal/v1/workflow/patches/apply"),
+        ("POST", "/internal/v1/workflow/patches/block"),
+        ("GET", "/external/v1/auth/validate"),
+        ("GET", "/external/v1/sessions"),
+        ("POST", "/external/v1/sessions"),
+        ("GET", "/external/v1/workflows"),
+        ("GET", "/external/v1/dashboard/events/stream"),
+        ("GET", "/external/v1/sessions/session/live-output/stream"),
         ("POST", "/internal/v1/sessions/session/turn-start-failure"),
         (
             "GET",
@@ -62,12 +73,13 @@ async fn obsolete_agent_http_endpoints_are_removed() {
                 Request::builder()
                     .method(method)
                     .uri(path)
+                    .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
                     .body(Body::from("{}"))
                     .unwrap(),
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
     }
 }

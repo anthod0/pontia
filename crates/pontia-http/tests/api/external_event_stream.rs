@@ -142,13 +142,13 @@ async fn event_stream_rejects_missing_or_wrong_bearer_token() {
 
     let missing = stream_get(
         state.clone(),
-        "/external/v1/sessions/sess_stream_1/events/stream",
+        "/api/v1/sessions/sess_stream_1/events/stream",
         None,
     )
     .await;
     let wrong = stream_get(
         state,
-        "/external/v1/sessions/sess_stream_1/events/stream",
+        "/api/v1/sessions/sess_stream_1/events/stream",
         Some("wrong-token"),
     )
     .await;
@@ -163,10 +163,10 @@ async fn event_stream_rejects_missing_or_wrong_bearer_token() {
 async fn dashboard_event_stream_rejects_missing_or_wrong_bearer_token() {
     let state = test_state("dashboard_auth").await;
 
-    let missing = stream_get(state.clone(), "/external/v1/dashboard/events/stream", None).await;
+    let missing = stream_get(state.clone(), "/api/v1/dashboard/events/stream", None).await;
     let wrong = stream_get(
         state,
-        "/external/v1/dashboard/events/stream",
+        "/api/v1/dashboard/events/stream",
         Some("wrong-token"),
     )
     .await;
@@ -184,7 +184,7 @@ async fn dashboard_event_stream_without_cursor_starts_at_current_tail() {
     seed_task_event(&state).await;
 
     let (status, content_type, body) =
-        stream_get(state, "/external/v1/dashboard/events/stream", Some(TOKEN)).await;
+        stream_get(state, "/api/v1/dashboard/events/stream", Some(TOKEN)).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(content_type.starts_with("text/event-stream"));
@@ -200,7 +200,7 @@ async fn dashboard_event_stream_emits_session_events_after_explicit_zero_cursor(
 
     let (status, content_type, body) = stream_get(
         state,
-        "/external/v1/dashboard/events/stream?after=session:0;task:0",
+        "/api/v1/dashboard/events/stream?after=session:0;task:0",
         Some(TOKEN),
     )
     .await;
@@ -221,7 +221,7 @@ async fn dashboard_event_stream_emits_task_events_after_explicit_zero_cursor() {
 
     let (status, _, body) = stream_get(
         state,
-        "/external/v1/dashboard/events/stream?after=session:0;task:0",
+        "/api/v1/dashboard/events/stream?after=session:0;task:0",
         Some(TOKEN),
     )
     .await;
@@ -241,7 +241,7 @@ async fn dashboard_event_stream_after_cursor_does_not_repeat_read_events() {
 
     let (status, _, first_body) = stream_get(
         state.clone(),
-        "/external/v1/dashboard/events/stream?after=session:0;task:0",
+        "/api/v1/dashboard/events/stream?after=session:0;task:0",
         Some(TOKEN),
     )
     .await;
@@ -254,7 +254,7 @@ async fn dashboard_event_stream_after_cursor_does_not_repeat_read_events() {
 
     let (status, _, second_body) = stream_get(
         state,
-        &format!("/external/v1/dashboard/events/stream?after={cursor}"),
+        &format!("/api/v1/dashboard/events/stream?after={cursor}"),
         Some(TOKEN),
     )
     .await;
@@ -272,7 +272,7 @@ async fn session_event_stream_emits_existing_events_as_sse_frames() {
 
     let (status, content_type, body) = stream_get(
         state,
-        "/external/v1/sessions/sess_stream_1/events/stream",
+        "/api/v1/sessions/sess_stream_1/events/stream",
         Some(TOKEN),
     )
     .await;
@@ -293,7 +293,7 @@ async fn session_event_stream_after_cursor_resumes_with_later_events_only() {
 
     let (status, _, body) = stream_get(
         state,
-        "/external/v1/sessions/sess_stream_1/events/stream?after=evt_stream_1",
+        "/api/v1/sessions/sess_stream_1/events/stream?after=evt_stream_1",
         Some(TOKEN),
     )
     .await;
@@ -343,7 +343,7 @@ async fn turn_event_stream_only_emits_events_for_requested_turn() {
 
     let (status, _, body) = stream_get(
         state,
-        "/external/v1/sessions/sess_stream_1/turns/turn_stream_1/events/stream",
+        "/api/v1/sessions/sess_stream_1/turns/turn_stream_1/events/stream",
         Some(TOKEN),
     )
     .await;
@@ -372,7 +372,7 @@ async fn event_stream_rejects_cursor_outside_requested_scope() {
 
     let (status, _, body) = stream_get(
         state,
-        "/external/v1/sessions/sess_stream_1/events/stream?after=evt_other_session",
+        "/api/v1/sessions/sess_stream_1/events/stream?after=evt_other_session",
         Some(TOKEN),
     )
     .await;
@@ -407,7 +407,7 @@ async fn dashboard_event_stream_pushes_volatile_session_message_updated_after_cu
         .expect("connect sse client");
     stream
         .write_all(
-            b"GET /external/v1/dashboard/events/stream?after=session:999;task:0 HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer test-token\r\n\r\n",
+            b"GET /api/v1/dashboard/events/stream?after=session:999;task:0 HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer test-token\r\n\r\n",
         )
         .await
         .expect("send request");
@@ -487,7 +487,7 @@ async fn session_event_stream_pushes_volatile_session_message_updated_after_curs
         .expect("connect sse client");
     stream
         .write_all(
-            b"GET /external/v1/sessions/sess_stream_1/events/stream?after=evt_stream_2 HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer test-token\r\n\r\n",
+            b"GET /api/v1/sessions/sess_stream_1/events/stream?after=evt_stream_2 HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer test-token\r\n\r\n",
         )
         .await
         .expect("send request");
@@ -562,7 +562,7 @@ async fn graceful_shutdown_closes_event_stream_without_waiting_for_timeout() {
         .expect("connect sse client");
     stream
         .write_all(
-            b"GET /external/v1/sessions/sess_stream_1/events/stream HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer test-token\r\n\r\n",
+            b"GET /api/v1/sessions/sess_stream_1/events/stream HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer test-token\r\n\r\n",
         )
         .await
         .expect("send request");

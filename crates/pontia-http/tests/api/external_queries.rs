@@ -170,9 +170,9 @@ async fn get(state: AppState, uri: &str, token: Option<&str>) -> (StatusCode, Va
 async fn external_api_validates_bearer_token_explicitly() {
     let state = test_state().await;
 
-    let valid = get(state.clone(), "/external/v1/auth/validate", Some(TOKEN)).await;
-    let missing = get(state.clone(), "/external/v1/auth/validate", None).await;
-    let wrong = get(state, "/external/v1/auth/validate", Some("wrong-token")).await;
+    let valid = get(state.clone(), "/api/v1/auth/validate", Some(TOKEN)).await;
+    let missing = get(state.clone(), "/api/v1/auth/validate", None).await;
+    let wrong = get(state, "/api/v1/auth/validate", Some("wrong-token")).await;
 
     assert_eq!(valid.0, StatusCode::OK);
     assert_eq!(valid.1["error"], Value::Null);
@@ -188,8 +188,8 @@ async fn external_api_validates_bearer_token_explicitly() {
 async fn external_api_rejects_missing_or_wrong_bearer_token() {
     let state = test_state().await;
 
-    let missing = get(state.clone(), "/external/v1/sessions", None).await;
-    let wrong = get(state, "/external/v1/sessions", Some("wrong-token")).await;
+    let missing = get(state.clone(), "/api/v1/sessions", None).await;
+    let wrong = get(state, "/api/v1/sessions", Some("wrong-token")).await;
 
     assert_eq!(missing.0, StatusCode::UNAUTHORIZED);
     assert_eq!(missing.1["data"], Value::Null);
@@ -203,10 +203,10 @@ async fn external_api_lists_and_gets_session_views() {
     let state = test_state().await;
     seed_session_turn(&state).await;
 
-    let (list_status, list_body) = get(state.clone(), "/external/v1/sessions", Some(TOKEN)).await;
+    let (list_status, list_body) = get(state.clone(), "/api/v1/sessions", Some(TOKEN)).await;
     let (get_status, get_body) = get(
         state,
-        "/external/v1/sessions/sess_external_queries_1",
+        "/api/v1/sessions/sess_external_queries_1",
         Some(TOKEN),
     )
     .await;
@@ -291,7 +291,7 @@ async fn external_api_reads_runtime_binding_capabilities_column() {
 
     let (status, body) = get(
         state,
-        "/external/v1/sessions/sess_external_queries_legacy_cap",
+        "/api/v1/sessions/sess_external_queries_legacy_cap",
         Some(TOKEN),
     )
     .await;
@@ -335,10 +335,10 @@ async fn external_api_exposes_projected_session_context_usage() {
         .unwrap();
     bind_session_to_active_workspace(&state, "sess_external_queries_context").await;
 
-    let (list_status, list_body) = get(state.clone(), "/external/v1/sessions", Some(TOKEN)).await;
+    let (list_status, list_body) = get(state.clone(), "/api/v1/sessions", Some(TOKEN)).await;
     let (get_status, get_body) = get(
         state,
-        "/external/v1/sessions/sess_external_queries_context",
+        "/api/v1/sessions/sess_external_queries_context",
         Some(TOKEN),
     )
     .await;
@@ -378,13 +378,13 @@ async fn external_api_lists_and_gets_turn_views() {
 
     let (list_status, list_body) = get(
         state.clone(),
-        "/external/v1/sessions/sess_external_queries_1/turns",
+        "/api/v1/sessions/sess_external_queries_1/turns",
         Some(TOKEN),
     )
     .await;
     let (get_status, get_body) = get(
         state,
-        "/external/v1/sessions/sess_external_queries_1/turns/turn_external_queries_1",
+        "/api/v1/sessions/sess_external_queries_1/turns/turn_external_queries_1",
         Some(TOKEN),
     )
     .await;
@@ -477,7 +477,7 @@ async fn external_api_lists_linked_topology_in_turn_id_order() {
 
     let (status, body) = get(
         state,
-        "/external/v1/sessions/sess_topology_external/turns",
+        "/api/v1/sessions/sess_topology_external/turns",
         Some(TOKEN),
     )
     .await;
@@ -524,12 +524,7 @@ async fn external_api_orders_turns_by_uuid_v7_id() {
     .await
     .unwrap();
 
-    let (status, body) = get(
-        state,
-        "/external/v1/sessions/sess_uuid_order/turns",
-        Some(TOKEN),
-    )
-    .await;
+    let (status, body) = get(state, "/api/v1/sessions/sess_uuid_order/turns", Some(TOKEN)).await;
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     let turn_ids = body["data"]["turns"]
@@ -554,13 +549,13 @@ async fn external_api_lists_session_and_turn_events() {
 
     let (session_status, session_body) = get(
         state.clone(),
-        "/external/v1/sessions/sess_external_queries_1/events",
+        "/api/v1/sessions/sess_external_queries_1/events",
         Some(TOKEN),
     )
     .await;
     let (turn_status, turn_body) = get(
         state,
-        "/external/v1/sessions/sess_external_queries_1/turns/turn_external_queries_1/events",
+        "/api/v1/sessions/sess_external_queries_1/turns/turn_external_queries_1/events",
         Some(TOKEN),
     )
     .await;
@@ -586,12 +581,7 @@ async fn external_api_lists_session_and_turn_events() {
 async fn external_api_returns_clear_not_found_errors() {
     let state = test_state().await;
 
-    let session = get(
-        state.clone(),
-        "/external/v1/sessions/sess_missing",
-        Some(TOKEN),
-    )
-    .await;
+    let session = get(state.clone(), "/api/v1/sessions/sess_missing", Some(TOKEN)).await;
 
     assert_eq!(session.0, StatusCode::NOT_FOUND);
     assert_eq!(session.1["data"], Value::Null);

@@ -17,7 +17,7 @@ async fn post_run(app: &TestApp, body: Value) -> (StatusCode, Value) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/internal/v1/workflows")
+                .uri("/api/v1/workflows")
                 .header(header::AUTHORIZATION, "Bearer test-token")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(body.to_string()))
@@ -39,7 +39,7 @@ async fn post_run(app: &TestApp, body: Value) -> (StatusCode, Value) {
 }
 
 #[tokio::test]
-async fn internal_workflow_run_rejects_unsupported_node_types_before_creation() {
+async fn workflow_run_rejects_unsupported_node_types_before_creation() {
     let app = TestApp::new().await;
 
     let (status, body) = post_run(
@@ -77,7 +77,7 @@ async fn internal_workflow_run_rejects_unsupported_node_types_before_creation() 
 }
 
 #[tokio::test]
-async fn internal_workflow_run_rejects_duplicate_output_owners_with_an_actionable_error() {
+async fn workflow_run_rejects_duplicate_output_owners_with_an_actionable_error() {
     let app = TestApp::new().await;
 
     let (status, body) = post_run(
@@ -119,7 +119,7 @@ async fn internal_workflow_run_rejects_duplicate_output_owners_with_an_actionabl
 }
 
 #[tokio::test]
-async fn internal_workflow_run_creates_and_starts_a_linear_agent_workflow() {
+async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
     let app = TestApp::builder().pi_runtime_stub(true).build().await;
     let cwd = app.workspace().path().display().to_string();
 
@@ -168,6 +168,8 @@ async fn internal_workflow_run_creates_and_starts_a_linear_agent_workflow() {
 
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["data"]["workflow_id"], "wf_http_run");
+    assert_eq!(body["meta"], json!({}));
+    assert_eq!(body["error"], Value::Null);
     assert!(body["data"]["node_id"].as_str().is_some());
     assert!(body["data"]["session_id"].as_str().is_some());
 
@@ -225,7 +227,7 @@ async fn internal_workflow_run_creates_and_starts_a_linear_agent_workflow() {
 }
 
 #[tokio::test]
-async fn internal_workflow_run_requires_a_valid_phase() {
+async fn workflow_run_requires_a_valid_phase() {
     for (workflow_id, phase, expected_message) in [
         ("wf_empty_phase", "", "Agent Node phase must not be empty"),
         (
@@ -270,7 +272,7 @@ async fn internal_workflow_run_requires_a_valid_phase() {
 }
 
 #[tokio::test]
-async fn internal_workflow_run_rejects_a_missing_phase_during_json_decoding() {
+async fn workflow_run_rejects_a_missing_phase_during_json_decoding() {
     let app = TestApp::new().await;
     let (status, body) = post_run(
         &app,

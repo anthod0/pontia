@@ -132,7 +132,7 @@ fn custom_profile_body(profile_id: &str, version: &str) -> Value {
 async fn list_agent_profiles_includes_builtin_latest_profiles() {
     let state = test_state().await;
 
-    let (status, body) = get_json(state, "/external/v1/agent-profiles").await;
+    let (status, body) = get_json(state, "/api/v1/agent-profiles").await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
     let profiles = body["data"]["agent_profiles"].as_array().unwrap();
@@ -157,7 +157,7 @@ async fn list_agent_profiles_includes_builtin_latest_profiles() {
 async fn get_agent_profile_returns_latest_version() {
     let state = test_state().await;
 
-    let (status, body) = get_json(state, "/external/v1/agent-profiles/default").await;
+    let (status, body) = get_json(state, "/api/v1/agent-profiles/default").await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
     let profile = &body["data"]["agent_profile"];
@@ -177,7 +177,7 @@ async fn create_agent_profile_persists_and_is_idempotent() {
 
     let (status, created) = post_json(
         state.clone(),
-        "/external/v1/agent-profiles",
+        "/api/v1/agent-profiles",
         body.clone(),
         Some("create-api-reviewer"),
     )
@@ -191,7 +191,7 @@ async fn create_agent_profile_persists_and_is_idempotent() {
 
     let (status, replay) = post_json(
         state.clone(),
-        "/external/v1/agent-profiles",
+        "/api/v1/agent-profiles",
         body,
         Some("create-api-reviewer"),
     )
@@ -199,7 +199,7 @@ async fn create_agent_profile_persists_and_is_idempotent() {
     assert_eq!(status, StatusCode::OK, "{replay}");
     assert_eq!(replay["data"], created["data"]);
 
-    let (status, fetched) = get_json(state, "/external/v1/agent-profiles/api-reviewer").await;
+    let (status, fetched) = get_json(state, "/api/v1/agent-profiles/api-reviewer").await;
     assert_eq!(status, StatusCode::OK, "{fetched}");
     assert_eq!(fetched["data"]["agent_profile"]["version"], "1");
 }
@@ -210,7 +210,7 @@ async fn create_agent_profile_rejects_unsupported_agent_kind() {
     let mut body = custom_profile_body("invalid-kind", "1");
     body["agent_kind"] = json!("unsupported");
 
-    let (status, response) = post_json(state, "/external/v1/agent-profiles", body, None).await;
+    let (status, response) = post_json(state, "/api/v1/agent-profiles", body, None).await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
     assert_eq!(response["error"]["code"], "invalid_request");
@@ -220,7 +220,7 @@ async fn create_agent_profile_rejects_unsupported_agent_kind() {
 async fn add_agent_profile_version_updates_latest_without_modifying_previous_versions() {
     let state = test_state().await;
     let body_v1 = custom_profile_body("release-reviewer", "1");
-    let (status, _) = post_json(state.clone(), "/external/v1/agent-profiles", body_v1, None).await;
+    let (status, _) = post_json(state.clone(), "/api/v1/agent-profiles", body_v1, None).await;
     assert_eq!(status, StatusCode::CREATED);
 
     let mut body_v2 = custom_profile_body("release-reviewer", "2");
@@ -228,7 +228,7 @@ async fn add_agent_profile_version_updates_latest_without_modifying_previous_ver
     body_v2["expected_output_schema"] = json!("release_review_v2");
     let (status, created) = post_json(
         state.clone(),
-        "/external/v1/agent-profiles/release-reviewer/versions",
+        "/api/v1/agent-profiles/release-reviewer/versions",
         body_v2,
         Some("release-reviewer-v2"),
     )
@@ -236,7 +236,7 @@ async fn add_agent_profile_version_updates_latest_without_modifying_previous_ver
     assert_eq!(status, StatusCode::CREATED, "{created}");
     assert_eq!(created["data"]["agent_profile"]["version"], "2");
 
-    let (status, fetched) = get_json(state, "/external/v1/agent-profiles/release-reviewer").await;
+    let (status, fetched) = get_json(state, "/api/v1/agent-profiles/release-reviewer").await;
     assert_eq!(status, StatusCode::OK, "{fetched}");
     assert_eq!(
         fetched["data"]["agent_profile"]["name"],
@@ -252,13 +252,13 @@ async fn add_agent_profile_version_updates_latest_without_modifying_previous_ver
 async fn lists_and_gets_exact_agent_profile_versions() {
     let state = test_state().await;
     let body_v1 = custom_profile_body("versioned-reviewer", "1");
-    let (status, _) = post_json(state.clone(), "/external/v1/agent-profiles", body_v1, None).await;
+    let (status, _) = post_json(state.clone(), "/api/v1/agent-profiles", body_v1, None).await;
     assert_eq!(status, StatusCode::CREATED);
     let mut body_v2 = custom_profile_body("versioned-reviewer", "2");
     body_v2["name"] = json!("Versioned Reviewer v2");
     let (status, _) = post_json(
         state.clone(),
-        "/external/v1/agent-profiles/versioned-reviewer/versions",
+        "/api/v1/agent-profiles/versioned-reviewer/versions",
         body_v2,
         None,
     )
@@ -267,7 +267,7 @@ async fn lists_and_gets_exact_agent_profile_versions() {
 
     let (status, listed) = get_json(
         state.clone(),
-        "/external/v1/agent-profiles/versioned-reviewer/versions",
+        "/api/v1/agent-profiles/versioned-reviewer/versions",
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{listed}");
@@ -278,7 +278,7 @@ async fn lists_and_gets_exact_agent_profile_versions() {
 
     let (status, fetched) = get_json(
         state,
-        "/external/v1/agent-profiles/versioned-reviewer/versions/1",
+        "/api/v1/agent-profiles/versioned-reviewer/versions/1",
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{fetched}");
@@ -289,7 +289,7 @@ async fn lists_and_gets_exact_agent_profile_versions() {
 async fn updates_agent_profile_version_with_put() {
     let state = test_state().await;
     let body = custom_profile_body("editable-reviewer", "1");
-    let (status, _) = post_json(state.clone(), "/external/v1/agent-profiles", body, None).await;
+    let (status, _) = post_json(state.clone(), "/api/v1/agent-profiles", body, None).await;
     assert_eq!(status, StatusCode::CREATED);
 
     let mut updated = custom_profile_body("editable-reviewer", "1");
@@ -297,7 +297,7 @@ async fn updates_agent_profile_version_with_put() {
     updated["metadata"] = json!({"team":"platform", "edited": true});
     let (status, body) = put_json(
         state.clone(),
-        "/external/v1/agent-profiles/editable-reviewer/versions/1",
+        "/api/v1/agent-profiles/editable-reviewer/versions/1",
         updated,
         Some("edit-reviewer-v1"),
     )
@@ -307,7 +307,7 @@ async fn updates_agent_profile_version_with_put() {
     assert_eq!(body["data"]["agent_profile"]["name"], "Edited Reviewer");
     assert_eq!(body["data"]["agent_profile"]["metadata"]["edited"], true);
 
-    let (status, fetched) = get_json(state, "/external/v1/agent-profiles/editable-reviewer").await;
+    let (status, fetched) = get_json(state, "/api/v1/agent-profiles/editable-reviewer").await;
     assert_eq!(status, StatusCode::OK, "{fetched}");
     assert_eq!(fetched["data"]["agent_profile"]["name"], "Edited Reviewer");
 }
@@ -316,13 +316,13 @@ async fn updates_agent_profile_version_with_put() {
 async fn deleting_latest_version_archives_it_and_falls_back_to_previous_version() {
     let state = test_state().await;
     let body_v1 = custom_profile_body("archive-version-reviewer", "1");
-    let (status, _) = post_json(state.clone(), "/external/v1/agent-profiles", body_v1, None).await;
+    let (status, _) = post_json(state.clone(), "/api/v1/agent-profiles", body_v1, None).await;
     assert_eq!(status, StatusCode::CREATED);
     let mut body_v2 = custom_profile_body("archive-version-reviewer", "2");
     body_v2["name"] = json!("Archive Version Reviewer v2");
     let (status, _) = post_json(
         state.clone(),
-        "/external/v1/agent-profiles/archive-version-reviewer/versions",
+        "/api/v1/agent-profiles/archive-version-reviewer/versions",
         body_v2,
         None,
     )
@@ -331,7 +331,7 @@ async fn deleting_latest_version_archives_it_and_falls_back_to_previous_version(
 
     let (status, deleted) = delete_json(
         state.clone(),
-        "/external/v1/agent-profiles/archive-version-reviewer/versions/2",
+        "/api/v1/agent-profiles/archive-version-reviewer/versions/2",
         Some("archive-v2"),
     )
     .await;
@@ -341,7 +341,7 @@ async fn deleting_latest_version_archives_it_and_falls_back_to_previous_version(
 
     let (status, latest) = get_json(
         state.clone(),
-        "/external/v1/agent-profiles/archive-version-reviewer",
+        "/api/v1/agent-profiles/archive-version-reviewer",
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{latest}");
@@ -349,7 +349,7 @@ async fn deleting_latest_version_archives_it_and_falls_back_to_previous_version(
 
     let (status, versions) = get_json(
         state,
-        "/external/v1/agent-profiles/archive-version-reviewer/versions?include_archived=true",
+        "/api/v1/agent-profiles/archive-version-reviewer/versions?include_archived=true",
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{versions}");
@@ -366,28 +366,25 @@ async fn deleting_latest_version_archives_it_and_falls_back_to_previous_version(
 async fn deleting_profile_archives_custom_versions_and_hides_latest() {
     let state = test_state().await;
     let body = custom_profile_body("archive-all-reviewer", "1");
-    let (status, _) = post_json(state.clone(), "/external/v1/agent-profiles", body, None).await;
+    let (status, _) = post_json(state.clone(), "/api/v1/agent-profiles", body, None).await;
     assert_eq!(status, StatusCode::CREATED);
 
     let (status, deleted) = delete_json(
         state.clone(),
-        "/external/v1/agent-profiles/archive-all-reviewer",
+        "/api/v1/agent-profiles/archive-all-reviewer",
         Some("archive-profile"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{deleted}");
     assert_eq!(deleted["data"]["archived_versions"], 1);
 
-    let (status, missing) = get_json(
-        state.clone(),
-        "/external/v1/agent-profiles/archive-all-reviewer",
-    )
-    .await;
+    let (status, missing) =
+        get_json(state.clone(), "/api/v1/agent-profiles/archive-all-reviewer").await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{missing}");
 
     let (status, listed) = get_json(
         state.clone(),
-        "/external/v1/agent-profiles?include_archived=true",
+        "/api/v1/agent-profiles?include_archived=true",
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{listed}");
@@ -403,7 +400,7 @@ async fn deleting_profile_archives_custom_versions_and_hides_latest() {
 
     let (status, versions) = get_json(
         state,
-        "/external/v1/agent-profiles/archive-all-reviewer/versions?include_archived=true",
+        "/api/v1/agent-profiles/archive-all-reviewer/versions?include_archived=true",
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{versions}");
@@ -421,14 +418,14 @@ async fn builtin_agent_profiles_cannot_be_updated_or_deleted() {
 
     let (status, updated) = put_json(
         state.clone(),
-        "/external/v1/agent-profiles/default/versions/1",
+        "/api/v1/agent-profiles/default/versions/1",
         body,
         None,
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{updated}");
 
-    let (status, deleted) = delete_json(state, "/external/v1/agent-profiles/default", None).await;
+    let (status, deleted) = delete_json(state, "/api/v1/agent-profiles/default", None).await;
     assert_eq!(status, StatusCode::CONFLICT, "{deleted}");
 }
 
@@ -436,16 +433,10 @@ async fn builtin_agent_profiles_cannot_be_updated_or_deleted() {
 async fn duplicate_agent_profile_version_returns_conflict() {
     let state = test_state().await;
     let body = custom_profile_body("duplicate-reviewer", "1");
-    let (status, _) = post_json(
-        state.clone(),
-        "/external/v1/agent-profiles",
-        body.clone(),
-        None,
-    )
-    .await;
+    let (status, _) = post_json(state.clone(), "/api/v1/agent-profiles", body.clone(), None).await;
     assert_eq!(status, StatusCode::CREATED);
 
-    let (status, duplicate) = post_json(state, "/external/v1/agent-profiles", body, None).await;
+    let (status, duplicate) = post_json(state, "/api/v1/agent-profiles", body, None).await;
 
     assert_eq!(status, StatusCode::CONFLICT, "{duplicate}");
     assert_eq!(duplicate["error"]["code"], "state_conflict");
@@ -455,7 +446,7 @@ async fn duplicate_agent_profile_version_returns_conflict() {
 async fn missing_agent_profile_returns_not_found() {
     let state = test_state().await;
 
-    let (status, body) = get_json(state, "/external/v1/agent-profiles/missing-profile").await;
+    let (status, body) = get_json(state, "/api/v1/agent-profiles/missing-profile").await;
 
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert_eq!(body["error"]["code"], "not_found");

@@ -121,7 +121,7 @@ async fn request_patch(app: &TestApp, runtime: &str) -> (StatusCode, Value) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/internal/v1/workflow/patches/request")
+                .uri("/api/v1/workflow/patches/request")
                 .header(header::AUTHORIZATION, "Bearer test-token")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
@@ -168,7 +168,7 @@ async fn apply_patch(app: &TestApp, runtime: &str, decision: &str) -> (StatusCod
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/internal/v1/workflow/patches/apply")
+                .uri("/api/v1/workflow/patches/apply")
                 .header(header::AUTHORIZATION, "Bearer test-token")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
@@ -207,7 +207,7 @@ async fn block_patch(app: &TestApp, runtime: &str, reason: &str) -> (StatusCode,
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/internal/v1/workflow/patches/block")
+                .uri("/api/v1/workflow/patches/block")
                 .header(header::AUTHORIZATION, "Bearer test-token")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
@@ -278,6 +278,8 @@ async fn request_is_durable_before_the_coordinator_interrupts() {
     let (status, body) = request_patch(&app, "runtime_patch_request").await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["meta"], json!({}));
+    assert_eq!(body["error"], Value::Null);
     let patch_id = body["data"]["patch_id"].as_str().expect("Patch ID");
     assert!(patch_id.starts_with("patch_"));
     assert_eq!(body["data"]["state"], "requested");
@@ -326,7 +328,7 @@ async fn request_is_durable_before_the_coordinator_interrupts() {
 }
 
 #[tokio::test]
-async fn active_replanner_can_reject_an_unchanged_definition_over_internal_api() {
+async fn active_replanner_can_reject_an_unchanged_definition_over_api() {
     let app = TestApp::new().await;
     seed_requester(&app).await;
     let (_, requested) = request_patch(&app, "runtime_patch_request").await;
@@ -344,6 +346,8 @@ async fn active_replanner_can_reject_an_unchanged_definition_over_internal_api()
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["meta"], json!({}));
+    assert_eq!(body["error"], Value::Null);
     assert_eq!(body["data"]["patch_id"], patch_id);
     assert_eq!(body["data"]["outcome"], "rejected");
     assert_eq!(body["data"]["revision"], 1);
@@ -384,6 +388,8 @@ async fn active_replanner_can_block_without_supplying_target_identifiers() {
     );
     let (status, body) = block_patch(&app, "runtime_patch_replanner", "Cannot continue").await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["meta"], json!({}));
+    assert_eq!(body["error"], Value::Null);
     assert_eq!(body["data"]["patch_id"], patch_id);
     assert_eq!(body["data"]["state"], "blocked");
     let repository = SqliteWorkflowRepository::new(app.db.clone());

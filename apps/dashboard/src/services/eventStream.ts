@@ -17,7 +17,7 @@ import { createDashboardRefreshScheduler } from './dashboardRefreshScheduler';
 import { isAuthenticationFailure } from '../api/client';
 import { refreshDashboardSnapshot } from './dashboardSnapshotRefresh';
 
-const API_BASE = '/external/v1';
+const API_BASE = '/api/v1';
 
 type DashboardEventListener = (event: DashboardStreamEvent) => void;
 const dashboardEventListeners = new Set<DashboardEventListener>();

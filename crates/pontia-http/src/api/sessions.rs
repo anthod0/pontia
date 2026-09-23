@@ -15,14 +15,14 @@ use pontia_application::{
 use super::{
     authentication::authenticate,
     idempotency::idempotent,
-    response::{ApiResponse, ExternalApiError, ok},
+    response::{ApiError, ApiResponse, ok},
 };
 
 pub async fn create_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(request): Json<CreateSessionRequest>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -45,7 +45,7 @@ pub async fn open_codex_tui(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     pontia_application::codex::CodexService::new(state.event_ingest_service())
         .open_tui(&session_id)
@@ -68,7 +68,7 @@ pub async fn list_sessions(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<ListSessionsQuery>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     let sessions = service
@@ -82,7 +82,7 @@ pub async fn update_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
     Json(request): Json<UpdateSessionRequest>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -97,7 +97,7 @@ pub async fn pin_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -112,7 +112,7 @@ pub async fn unpin_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -127,7 +127,7 @@ pub async fn archive_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -142,7 +142,7 @@ pub async fn unarchive_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -157,13 +157,13 @@ pub async fn get_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     let session = service
         .get_session(&session_id)
         .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("session {session_id} not found")))?;
+        .ok_or_else(|| ApiError::not_found(format!("session {session_id} not found")))?;
     Ok(ok(json!({ "session": session })))
 }
 
@@ -171,7 +171,7 @@ pub async fn interrupt_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = TurnCommandService::new(state.event_ingest_service());
     let operation = format!("interrupt_current:{session_id}");
@@ -186,7 +186,7 @@ pub async fn terminate_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -204,7 +204,7 @@ pub async fn restart_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -226,7 +226,7 @@ pub async fn resume_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -248,7 +248,7 @@ pub async fn list_session_models(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),
@@ -265,7 +265,7 @@ pub async fn set_session_model(
     headers: HeaderMap,
     Path(session_id): Path<String>,
     Json(request): Json<pontia_application::sessions::SetSessionModelRequest>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = SessionCommandService::new(
         state.event_ingest_service(),

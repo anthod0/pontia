@@ -252,7 +252,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     .unwrap();
     assert_eq!(after, before);
 
-    let inbox_uri = format!("/external/v1/sessions/{session_id}/inbox/messages");
+    let inbox_uri = format!("/api/v1/sessions/{session_id}/inbox/messages");
     let (unknown_status, _) = post_external_json(
         state.clone(),
         &inbox_uri,
@@ -626,7 +626,7 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
         (request.params, requests)
     });
 
-    let uri = format!("/external/v1/sessions/{session_id}/inbox/messages");
+    let uri = format!("/api/v1/sessions/{session_id}/inbox/messages");
     let request = json!({
         "input": "secret replacement content",
         "branch_target_turn_id": target_turn_id

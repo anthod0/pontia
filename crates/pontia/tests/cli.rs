@@ -45,7 +45,10 @@ esac
 }
 
 fn capture_one_request(listener: TcpListener) -> thread::JoinHandle<String> {
-    capture_one_request_with_response(listener, r#"{"data":{"submitted":true}}"#)
+    capture_one_request_with_response(
+        listener,
+        r#"{"data":{"submitted":true},"meta":{},"error":null}"#,
+    )
 }
 
 fn capture_one_request_with_response(
@@ -180,7 +183,7 @@ output = "result.md"
     write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request_with_response(
         listener,
-        r#"{"data":{"workflow_id":"wf_created","node_id":"node_root","session_id":"sess_root"}}"#,
+        r#"{"data":{"workflow_id":"wf_created","node_id":"node_root","session_id":"sess_root"},"meta":{},"error":null}"#,
     );
 
     let output = pontia()
@@ -199,7 +202,7 @@ output = "result.md"
         "wf_created\n"
     );
     let request = request.join().expect("request capture thread");
-    assert!(request.starts_with("POST /internal/v1/workflows HTTP/1.1"));
+    assert!(request.starts_with("POST /api/v1/workflows HTTP/1.1"));
     assert!(request.contains("authorization: Bearer cli-test-token"));
     let (_, body) = request.split_once("\r\n\r\n").expect("request body");
     let body: serde_json::Value = serde_json::from_str(body).expect("JSON request");
@@ -274,7 +277,7 @@ fn workflow_show_prints_compact_agent_readable_context() {
     write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request_with_response(
         listener,
-        r#"{"data":{"context":{"workflow":{"workflow_id":"wf_show","title":"Ship release","state":"running","failure_message":null,"agent_submitted_count":1,"agent_total_count":3,"current_node_id":"node_build","nodes":[{"node_id":"node_plan","phase":"Plan","title":"Plan release","status":"submitted"},{"node_id":"node_build","phase":"Build","title":"Build release","status":"running"},{"node_id":"node_review","phase":"Review","title":"Review release","status":"pending"}]},"current_node":{"instructions":"Build the release.","inputs":[{"name":"plan.md","content":"Use the compact plan.\n"}],"output":"result.md"}}}}"#,
+        r#"{"data":{"context":{"workflow":{"workflow_id":"wf_show","title":"Ship release","state":"running","failure_message":null,"agent_submitted_count":1,"agent_total_count":3,"current_node_id":"node_build","nodes":[{"node_id":"node_plan","phase":"Plan","title":"Plan release","status":"submitted"},{"node_id":"node_build","phase":"Build","title":"Build release","status":"running"},{"node_id":"node_review","phase":"Review","title":"Review release","status":"pending"}]},"current_node":{"instructions":"Build the release.","inputs":[{"name":"plan.md","content":"Use the compact plan.\n"}],"output":"result.md"}}},"meta":{},"error":null}"#,
     );
 
     let output = pontia()
@@ -299,7 +302,7 @@ fn workflow_show_prints_compact_agent_readable_context() {
     assert!(stdout.contains("- · Review — Review release (pending)"));
 
     let request = request.join().expect("request capture thread");
-    assert!(request.starts_with("GET /external/v1/workflows/wf_show/context HTTP/1.1"));
+    assert!(request.starts_with("GET /api/v1/workflows/wf_show/context HTTP/1.1"));
     assert!(request.contains("authorization: Bearer cli-test-token"));
 }
 
@@ -311,7 +314,7 @@ fn workflow_show_uses_workflow_id_from_environment_when_argument_is_omitted() {
     write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request_with_response(
         listener,
-        r#"{"data":{"context":{"workflow":{"workflow_id":"wf_environment","title":"Environment workflow","state":"running","failure_message":null,"agent_submitted_count":0,"agent_total_count":1,"current_node_id":"node_current","nodes":[{"node_id":"node_current","phase":"Build","title":"Build","status":"running"}]},"current_node":{"instructions":"Build.","inputs":[],"output":"result.md"}}}}"#,
+        r#"{"data":{"context":{"workflow":{"workflow_id":"wf_environment","title":"Environment workflow","state":"running","failure_message":null,"agent_submitted_count":0,"agent_total_count":1,"current_node_id":"node_current","nodes":[{"node_id":"node_current","phase":"Build","title":"Build","status":"running"}]},"current_node":{"instructions":"Build.","inputs":[],"output":"result.md"}}},"meta":{},"error":null}"#,
     );
 
     let output = pontia()
@@ -327,7 +330,7 @@ fn workflow_show_uses_workflow_id_from_environment_when_argument_is_omitted() {
         String::from_utf8_lossy(&output.stderr)
     );
     let request = request.join().expect("request capture thread");
-    assert!(request.starts_with("GET /external/v1/workflows/wf_environment/context HTTP/1.1"));
+    assert!(request.starts_with("GET /api/v1/workflows/wf_environment/context HTTP/1.1"));
 }
 
 #[test]
@@ -380,7 +383,7 @@ fn workflow_submit_discovers_managed_pane_and_posts_identity() {
         String::from_utf8_lossy(&output.stderr)
     );
     let request = request.join().expect("request capture thread");
-    assert!(request.starts_with("POST /internal/v1/workflow/submissions HTTP/1.1"));
+    assert!(request.starts_with("POST /api/v1/workflow/submissions HTTP/1.1"));
     assert!(request.contains(&format!("host: 127.0.0.1:{}", addr.port())));
     assert!(request.contains("authorization: Bearer cli-test-token"));
     assert!(request.contains(
@@ -399,7 +402,7 @@ fn workflow_patch_request_posts_identity_and_prints_patch_id() {
     write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request_with_response(
         listener,
-        r#"{"data":{"patch_id":"patch_cli_1","state":"requested"}}"#,
+        r#"{"data":{"patch_id":"patch_cli_1","state":"requested"},"meta":{},"error":null}"#,
     );
     let path = format!(
         "{}:{}",
@@ -426,7 +429,7 @@ fn workflow_patch_request_posts_identity_and_prints_patch_id() {
         "patch_cli_1\n"
     );
     let request = request.join().expect("request capture thread");
-    assert!(request.starts_with("POST /internal/v1/workflow/patches/request HTTP/1.1"));
+    assert!(request.starts_with("POST /api/v1/workflow/patches/request HTTP/1.1"));
     assert!(request.contains(
         r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli"}"#
     ));
@@ -443,7 +446,7 @@ fn workflow_patch_apply_posts_identity_and_prints_outcome() {
     write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request_with_response(
         listener,
-        r#"{"data":{"patch_id":"patch_cli_1","workflow_id":"wf_cli","outcome":"applied","revision":2}}"#,
+        r#"{"data":{"patch_id":"patch_cli_1","workflow_id":"wf_cli","outcome":"applied","revision":2},"meta":{},"error":null}"#,
     );
     let path = format!(
         "{}:{}",
@@ -465,7 +468,7 @@ fn workflow_patch_apply_posts_identity_and_prints_outcome() {
     );
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "applied 2\n");
     let request = request.join().unwrap();
-    assert!(request.starts_with("POST /internal/v1/workflow/patches/apply HTTP/1.1"));
+    assert!(request.starts_with("POST /api/v1/workflow/patches/apply HTTP/1.1"));
     assert!(request.contains(
         r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli"}"#
     ));
@@ -482,7 +485,7 @@ fn workflow_patch_block_posts_managed_identity() {
     write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request_with_response(
         listener,
-        r#"{"data":{"patch_id":"patch_cli_1","workflow_id":"wf_cli","state":"blocked"}}"#,
+        r#"{"data":{"patch_id":"patch_cli_1","workflow_id":"wf_cli","state":"blocked"},"meta":{},"error":null}"#,
     );
     let path = format!(
         "{}:{}",
@@ -505,7 +508,7 @@ fn workflow_patch_block_posts_managed_identity() {
     );
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "blocked\n");
     let request = request.join().unwrap();
-    assert!(request.starts_with("POST /internal/v1/workflow/patches/block HTTP/1.1"));
+    assert!(request.starts_with("POST /api/v1/workflow/patches/block HTTP/1.1"));
     assert!(request.contains(
         r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli"}"#
     ));

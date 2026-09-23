@@ -77,7 +77,7 @@ async fn external_workflow_queries_return_ordered_nodes_for_frontend_phase_group
     let app = TestApp::new().await;
     create_observable_workflow(&app).await;
 
-    let (list_status, list) = get(&app, "/external/v1/workflows").await;
+    let (list_status, list) = get(&app, "/api/v1/workflows").await;
     assert_eq!(list_status, StatusCode::OK, "{list}");
     assert_eq!(list["data"]["workflows"][0]["workflow_id"], "wf_observe");
     assert_eq!(list["data"]["workflows"][0]["current_revision"], 1);
@@ -86,7 +86,7 @@ async fn external_workflow_queries_return_ordered_nodes_for_frontend_phase_group
         "Research"
     );
 
-    let (detail_status, detail) = get(&app, "/external/v1/workflows/wf_observe").await;
+    let (detail_status, detail) = get(&app, "/api/v1/workflows/wf_observe").await;
     assert_eq!(detail_status, StatusCode::OK, "{detail}");
     assert_eq!(detail["data"]["workflow"]["current_revision"], 1);
     let nodes = detail["data"]["workflow"]["nodes"]
@@ -127,7 +127,7 @@ async fn external_workflow_context_returns_current_node_instructions_and_handoff
     std::fs::write(handoff_dir.join("requirements.md"), "Build it compactly.\n")
         .expect("write handoff");
 
-    let (status, body) = get(&app, "/external/v1/workflows/wf_observe/context").await;
+    let (status, body) = get(&app, "/api/v1/workflows/wf_observe/context").await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
     let context = &body["data"]["context"];
@@ -207,8 +207,7 @@ async fn revision_membership_reconstructs_historical_and_current_node_chains() {
         vec!["node_a", "node_e"]
     );
 
-    let (revision_status, revision) =
-        get(&app, "/external/v1/workflows/wf_observe/revisions/1").await;
+    let (revision_status, revision) = get(&app, "/api/v1/workflows/wf_observe/revisions/1").await;
     assert_eq!(revision_status, StatusCode::OK, "{revision}");
     assert_eq!(revision["data"]["revision"]["revision"], 1);
     assert_eq!(
@@ -216,7 +215,7 @@ async fn revision_membership_reconstructs_historical_and_current_node_chains() {
         "node_b"
     );
 
-    let (status, detail) = get(&app, "/external/v1/workflows/wf_observe").await;
+    let (status, detail) = get(&app, "/api/v1/workflows/wf_observe").await;
     assert_eq!(status, StatusCode::OK, "{detail}");
     assert_eq!(detail["data"]["workflow"]["current_revision"], 2);
     assert_eq!(
@@ -284,7 +283,7 @@ async fn workflow_detail_and_context_expose_the_active_patch_snapshot() {
     .await
     .expect("activate Patch");
 
-    let (detail_status, detail) = get(&app, "/external/v1/workflows/wf_observe").await;
+    let (detail_status, detail) = get(&app, "/api/v1/workflows/wf_observe").await;
     assert_eq!(detail_status, StatusCode::OK, "{detail}");
     assert_eq!(
         detail["data"]["workflow"]["active_patch"]["patch_id"],
@@ -297,7 +296,7 @@ async fn workflow_detail_and_context_expose_the_active_patch_snapshot() {
             .starts_with('/')
     );
 
-    let (context_status, context) = get(&app, "/external/v1/workflows/wf_observe/context").await;
+    let (context_status, context) = get(&app, "/api/v1/workflows/wf_observe/context").await;
     assert_eq!(context_status, StatusCode::OK, "{context}");
     assert_eq!(
         context["data"]["context"]["active_patch"]["patch_id"],
@@ -426,7 +425,7 @@ async fn multiple_patch_snapshots_reconstruct_history_timeline_and_documents() {
     std::fs::create_dir_all(&document_dir).expect("create Patch document directory");
     std::fs::write(document_dir.join("request.md"), "change the plan").expect("write request");
 
-    let (patch_status, patch_body) = get(&app, "/external/v1/workflows/wf_observe/patches").await;
+    let (patch_status, patch_body) = get(&app, "/api/v1/workflows/wf_observe/patches").await;
     assert_eq!(patch_status, StatusCode::OK, "{patch_body}");
     let patches = patch_body["data"]["patches"].as_array().expect("patches");
     assert_eq!(patches.len(), 2);
@@ -447,7 +446,7 @@ async fn multiple_patch_snapshots_reconstruct_history_timeline_and_documents() {
     );
 
     let (revision_status, revision_body) =
-        get(&app, "/external/v1/workflows/wf_observe/revisions/3").await;
+        get(&app, "/api/v1/workflows/wf_observe/revisions/3").await;
     assert_eq!(revision_status, StatusCode::OK, "{revision_body}");
     assert_eq!(
         revision_body["data"]["revision"]["nodes"][2]["node_id"],
@@ -462,8 +461,7 @@ async fn multiple_patch_snapshots_reconstruct_history_timeline_and_documents() {
         serde_json::json!(["turn_after"])
     );
 
-    let (timeline_status, timeline_body) =
-        get(&app, "/external/v1/workflows/wf_observe/timeline").await;
+    let (timeline_status, timeline_body) = get(&app, "/api/v1/workflows/wf_observe/timeline").await;
     assert_eq!(timeline_status, StatusCode::OK, "{timeline_body}");
     let entries = timeline_body["data"]["timeline"]["entries"]
         .as_array()
@@ -482,7 +480,7 @@ async fn multiple_patch_snapshots_reconstruct_history_timeline_and_documents() {
 
     let (document_status, document_body) = get(
         &app,
-        "/external/v1/workflows/wf_observe/documents?ref=patches%2Fpatch_1%2Frequest.md",
+        "/api/v1/workflows/wf_observe/documents?ref=patches%2Fpatch_1%2Frequest.md",
     )
     .await;
     assert_eq!(document_status, StatusCode::OK, "{document_body}");
@@ -493,7 +491,7 @@ async fn multiple_patch_snapshots_reconstruct_history_timeline_and_documents() {
 
     let (forbidden_status, forbidden_body) = get(
         &app,
-        "/external/v1/workflows/wf_observe/documents?ref=..%2F..%2Fsecret",
+        "/api/v1/workflows/wf_observe/documents?ref=..%2F..%2Fsecret",
     )
     .await;
     assert_eq!(
@@ -507,7 +505,7 @@ async fn multiple_patch_snapshots_reconstruct_history_timeline_and_documents() {
 async fn external_workflow_queries_reject_invalid_limits() {
     let app = TestApp::new().await;
     for value in ["0", "101", "nope", "-1"] {
-        let (status, body) = get(&app, &format!("/external/v1/workflows?limit={value}")).await;
+        let (status, body) = get(&app, &format!("/api/v1/workflows?limit={value}")).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
         assert_eq!(body["error"]["code"], "invalid_request");
     }
@@ -529,14 +527,14 @@ async fn invalid_legacy_phase_is_visible_in_list_but_detail_conflicts() {
         .await
         .expect("create legacy workflow");
 
-    let (list_status, list) = get(&app, "/external/v1/workflows").await;
+    let (list_status, list) = get(&app, "/api/v1/workflows").await;
     assert_eq!(list_status, StatusCode::OK, "{list}");
     assert_eq!(
         list["data"]["workflows"][0]["observation_error"],
         "invalid_definition"
     );
 
-    let (detail_status, detail) = get(&app, "/external/v1/workflows/wf_observe").await;
+    let (detail_status, detail) = get(&app, "/api/v1/workflows/wf_observe").await;
     assert_eq!(detail_status, StatusCode::CONFLICT, "{detail}");
     assert_eq!(detail["error"]["code"], "state_conflict");
 }

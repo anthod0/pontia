@@ -1,6 +1,5 @@
 //! Seed client facts through the shared application service in HTTP scenarios.
-use axum::{http::StatusCode, response::IntoResponse};
-use http_body_util::BodyExt;
+use axum::http::StatusCode;
 use pontia_application::{AppState, EventIngestResult, EventReportError, ReportedFact};
 use pontia_core::domain::EventType;
 use serde_json::{Value, json};
@@ -29,7 +28,7 @@ pub(crate) async fn report_fact(state: AppState, body: Value) -> (StatusCode, Va
                 "turn_id": result.turn_id, "state_version": result.state_version,
             }),
         ),
-        Err(error) => error_response(error.into()).await,
+        Err(error) => error_response(error),
     }
 }
 
@@ -48,9 +47,32 @@ pub(crate) async fn report_start_failure(
         .await
 }
 
-async fn error_response(error: pontia_http::internal::ApiError) -> (StatusCode, Value) {
-    let response = error.into_response();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&bytes).unwrap())
+fn error_response(error: EventReportError) -> (StatusCode, Value) {
+    use pontia_core::Error;
+
+    let (status, code, message) = match error {
+        EventReportError::InvalidFact(message) => {
+            (StatusCode::BAD_REQUEST, "invalid_request", message)
+        }
+        EventReportError::Ingestion(Error::Domain(message) | Error::StateConflict(message)) => {
+            (StatusCode::CONFLICT, "state_conflict", message)
+        }
+        EventReportError::Ingestion(Error::NotFound(message)) => {
+            (StatusCode::NOT_FOUND, "not_found", message)
+        }
+        EventReportError::Ingestion(Error::CapabilityUnavailable(message)) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "capability_unavailable",
+            message,
+        ),
+        other => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            other.to_string(),
+        ),
+    };
+    (
+        status,
+        json!({ "error": { "code": code, "message": message } }),
+    )
 }

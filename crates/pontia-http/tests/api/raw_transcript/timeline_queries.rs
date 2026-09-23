@@ -12,7 +12,7 @@ async fn turn_timeline_returns_empty_for_a_session_without_turns_or_binding() {
 
     let (status, body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
     )
     .await;
 
@@ -29,7 +29,7 @@ async fn turn_timeline_returns_empty_for_a_session_without_turns_or_binding() {
 
     let (status, history) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/tree/history"),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/history"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{history:?}");
@@ -44,7 +44,7 @@ async fn turn_timeline_returns_empty_for_a_session_without_turns_or_binding() {
 
     let (status, updates) = get_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/turns/tree/updates"),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/updates"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{updates:?}");
@@ -74,7 +74,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
     ] {
         let (status, body) = get_json(
             state.clone(),
-            &format!("/external/v1/sessions/{session_id}/turns/timeline{query}"),
+            &format!("/api/v1/sessions/{session_id}/turns/timeline{query}"),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
@@ -83,7 +83,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
 
     let (status, body) = get_json(
         state.clone(),
-        "/external/v1/sessions/missing/turns/timeline?direction=forward",
+        "/api/v1/sessions/missing/turns/timeline?direction=forward",
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body:?}");
@@ -103,9 +103,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
         .unwrap();
     let (status, body) = get_json(
         state.clone(),
-        &format!(
-            "/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=missing"
-        ),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=missing"),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body:?}");
@@ -128,7 +126,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
     let (status, body) = get_json(
         state.clone(),
         &format!(
-            "/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=turn_other_session"
+            "/api/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=turn_other_session"
         ),
     )
     .await;
@@ -137,7 +135,7 @@ async fn turn_timeline_validates_queries_anchors_and_complete_ranges() {
 
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=forward"),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
@@ -173,7 +171,7 @@ async fn turn_timeline_only_allows_the_globally_newest_active_turn() {
 
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward&limit=1"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=forward&limit=1"),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
@@ -220,7 +218,7 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
         insert_sealed_turn(&state, session_id, turn_id, "head", "tail").await;
         let (status, body) = get_json(
             state.clone(),
-            &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+            &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=forward"),
         )
         .await;
         assert_eq!(status, expected_status, "{body:?}");
@@ -256,7 +254,7 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
     .await;
     let (status, body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{pi_session}/turns/timeline?direction=forward"),
+        &format!("/api/v1/sessions/{pi_session}/turns/timeline?direction=forward"),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
@@ -277,7 +275,7 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
         .unwrap();
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/sessions/{pi_session}/turns/timeline?direction=forward"),
+        &format!("/api/v1/sessions/{pi_session}/turns/timeline?direction=forward"),
     )
     .await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body:?}");

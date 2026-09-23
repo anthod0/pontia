@@ -34,7 +34,7 @@ test('uses a Bearer-authenticated fetch stream and parses live output events', a
   const close = openLiveOutputStream('session/1', { onEvent, onDisconnected: vi.fn() });
 
   await vi.waitFor(() => expect(onEvent).toHaveBeenCalledWith(snapshot));
-  expect(fetchMock.mock.calls[0][0]).toBe('/external/v1/sessions/session%2F1/live-output/stream');
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/sessions/session%2F1/live-output/stream');
   expect((fetchMock.mock.calls[0][1]?.headers as Record<string, string>).Authorization).toBe('Bearer secret');
   close();
 });

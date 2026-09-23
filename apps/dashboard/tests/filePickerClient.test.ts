@@ -8,7 +8,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe('workspace file picker API client', () => {
   test('searches workspace file picker entries with query and limit', async () => {
     const fetchMock = vi.fn(async (url: string) => {
-      expect(url).toBe('/external/v1/workspaces/workspace-1/file-picker?query=src%2Fmain&limit=25');
+      expect(url).toBe('/api/v1/workspaces/workspace-1/file-picker?query=src%2Fmain&limit=25');
       return jsonResponse({
         data: {
           files: [{ path: 'src/main.rs', name: 'main.rs' }],

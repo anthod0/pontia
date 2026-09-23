@@ -13,14 +13,14 @@ use pontia_application::{
 };
 
 use super::{
-    authentication::authenticate, response::ExternalApiError, session_guard::ensure_session_exists,
+    authentication::authenticate, response::ApiError, session_guard::ensure_session_exists,
 };
 
 pub async fn stream_live_output(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ExternalApiError> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     authenticate(&state, &headers)?;
     ensure_session_exists(&ExternalQueryService::new(state.db()), &session_id).await?;
 

@@ -21,7 +21,7 @@ async fn task_events_endpoint_returns_task_lifecycle_history() {
     .await
     .expect("insert task event");
 
-    let (status, body) = get_json(state, &format!("/external/v1/tasks/{task_id}/events")).await;
+    let (status, body) = get_json(state, &format!("/api/v1/tasks/{task_id}/events")).await;
 
     assert_eq!(status, StatusCode::OK);
     let events = body["data"]["events"].as_array().expect("events");
@@ -34,7 +34,7 @@ async fn task_events_endpoint_returns_task_lifecycle_history() {
 async fn task_events_endpoint_returns_not_found_for_missing_task() {
     let state = test_state().await;
 
-    let (status, body) = get_json(state, "/external/v1/tasks/task_missing/events").await;
+    let (status, body) = get_json(state, "/api/v1/tasks/task_missing/events").await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"]["code"], "not_found");

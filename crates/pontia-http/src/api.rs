@@ -30,7 +30,7 @@ pub use inbox::{
     submit_inbox_message,
 };
 pub use live_output::stream_live_output;
-pub use response::{ApiResponse, ExternalApiError};
+pub use response::{ApiError, ApiResponse};
 pub use sessions::{
     archive_session, create_session, get_session, interrupt_session, list_session_models,
     list_sessions, open_codex_tui, pin_session, restart_session, resume_session, set_session_model,
@@ -40,8 +40,11 @@ pub use tasks::{cancel_task, create_task, get_task, interrupt_task, list_task_ev
 pub use timeline::{get_turn_timeline, get_turn_tree_history, get_turn_tree_updates};
 pub use turns::{get_turn, interrupt_turn, list_session_events, list_turn_events, list_turns};
 pub use workflows::{
-    get_workflow, get_workflow_context, get_workflow_document, get_workflow_revision,
-    get_workflow_timeline, list_workflow_patches, list_workflows, pause_workflow, resume_workflow,
+    WorkflowPatchApplyRequest, WorkflowPatchBlockRequest, WorkflowPatchRequest, WorkflowRunRequest,
+    WorkflowSubmissionRequest, apply_workflow_patch, block_workflow_patch, get_workflow,
+    get_workflow_context, get_workflow_document, get_workflow_revision, get_workflow_timeline,
+    list_workflow_patches, list_workflows, pause_workflow, request_workflow_patch, resume_workflow,
+    run_workflow, submit_workflow_output,
 };
 pub use workspaces::{
     delete_workspace, get_workspace, list_workspace_root_entries, list_workspace_roots,

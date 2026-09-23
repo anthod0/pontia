@@ -6,7 +6,7 @@ use serde_json::Value;
 use pontia_application::{AppState, IdempotencyOutcome};
 use pontia_core::error::Error;
 
-use super::response::ExternalApiError;
+use super::response::ApiError;
 
 fn idempotency_key(headers: &HeaderMap) -> Option<&str> {
     headers
@@ -19,7 +19,7 @@ pub(super) async fn idempotent<F, Fut>(
     headers: &HeaderMap,
     operation: impl Into<String>,
     action: F,
-) -> Result<IdempotencyOutcome, ExternalApiError>
+) -> Result<IdempotencyOutcome, ApiError>
 where
     F: FnOnce() -> Fut,
     Fut: Future<Output = Result<Value, Error>>,

@@ -63,7 +63,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
 
     let (pending_status, pending_body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
     )
     .await;
     assert_eq!(pending_status, StatusCode::OK, "{pending_body:?}");
@@ -82,7 +82,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     .unwrap();
     let (active_status, active_body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
     )
     .await;
     assert_eq!(active_status, StatusCode::OK, "{active_body:?}");
@@ -106,7 +106,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
 
     let (status, body) = get_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
@@ -220,7 +220,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
 
     let (timeline_status, timeline_body) = get_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
     )
     .await;
     assert_eq!(timeline_status, StatusCode::OK, "{timeline_body:?}");
@@ -321,7 +321,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
     );
     let (status, body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
@@ -438,7 +438,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
 
     let (status, body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");

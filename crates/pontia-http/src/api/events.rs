@@ -13,7 +13,7 @@ use pontia_application::{AppState, EventStreamScope, EventView, ExternalQuerySer
 use pontia_core::domain::{DomainEvent, EventType};
 
 use super::{
-    authentication::authenticate, response::ExternalApiError, session_guard::ensure_session_exists,
+    authentication::authenticate, response::ApiError, session_guard::ensure_session_exists,
 };
 
 #[derive(Debug, Deserialize)]
@@ -26,7 +26,7 @@ pub async fn stream_session_events(
     headers: HeaderMap,
     Path(session_id): Path<String>,
     Query(query): Query<EventStreamQuery>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ExternalApiError> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     ensure_session_exists(&service, &session_id).await?;
@@ -58,14 +58,14 @@ pub async fn stream_turn_events(
     headers: HeaderMap,
     Path((session_id, turn_id)): Path<(String, String)>,
     Query(query): Query<EventStreamQuery>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ExternalApiError> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     authenticate(&state, &headers)?;
     let service = ExternalQueryService::new(state.db());
     ensure_session_exists(&service, &session_id).await?;
     service
         .get_turn(&session_id, &turn_id)
         .await?
-        .ok_or_else(|| ExternalApiError::not_found(format!("turn {turn_id} not found")))?;
+        .ok_or_else(|| ApiError::not_found(format!("turn {turn_id} not found")))?;
     let after_rowid = match query.after.as_deref() {
         Some(after) => {
             service

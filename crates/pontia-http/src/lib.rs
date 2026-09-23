@@ -14,10 +14,9 @@ use pontia_core::error::Result;
 
 pub use state::HttpState;
 
+pub mod api;
 pub mod dashboard;
-pub mod external;
 pub mod health;
-pub mod internal;
 pub mod state;
 
 pub async fn serve_with_shutdown_timeout<F>(
@@ -65,237 +64,218 @@ pub fn router(state: impl Into<HttpState>) -> Router {
         .route("/dashboard/", get(dashboard::dashboard))
         .route("/dashboard/assets/{*path}", get(dashboard::dashboard_asset))
         .route("/dashboard/{*path}", get(dashboard::dashboard_path))
-        .route("/internal/v1/workflows", post(internal::run_workflow))
         .route(
-            "/internal/v1/workflow/submissions",
-            post(internal::submit_workflow_output),
+            "/api/v1/workflow/submissions",
+            post(api::submit_workflow_output),
         )
         .route(
-            "/internal/v1/workflow/patches/request",
-            post(internal::request_workflow_patch),
+            "/api/v1/workflow/patches/request",
+            post(api::request_workflow_patch),
         )
         .route(
-            "/internal/v1/workflow/patches/apply",
-            post(internal::apply_workflow_patch),
+            "/api/v1/workflow/patches/apply",
+            post(api::apply_workflow_patch),
         )
         .route(
-            "/internal/v1/workflow/patches/block",
-            post(internal::block_workflow_patch),
+            "/api/v1/workflow/patches/block",
+            post(api::block_workflow_patch),
         )
-        .route("/external/v1/auth/validate", get(external::validate_auth))
+        .route("/api/v1/auth/validate", get(api::validate_auth))
         .route(
-            "/external/v1/sessions",
-            get(external::list_sessions).post(external::create_session),
-        )
-        .route(
-            "/external/v1/agent-profiles",
-            get(external::list_agent_profiles).post(external::create_agent_profile),
+            "/api/v1/sessions",
+            get(api::list_sessions).post(api::create_session),
         )
         .route(
-            "/external/v1/agent-profiles/{profile_id}",
-            get(external::get_agent_profile).delete(external::delete_agent_profile),
+            "/api/v1/agent-profiles",
+            get(api::list_agent_profiles).post(api::create_agent_profile),
         )
         .route(
-            "/external/v1/agent-profiles/{profile_id}/versions",
-            get(external::list_agent_profile_versions).post(external::create_agent_profile_version),
+            "/api/v1/agent-profiles/{profile_id}",
+            get(api::get_agent_profile).delete(api::delete_agent_profile),
         )
         .route(
-            "/external/v1/agent-profiles/{profile_id}/versions/{version}",
-            get(external::get_agent_profile_version)
-                .put(external::update_agent_profile_version)
-                .delete(external::delete_agent_profile_version),
-        )
-        .route("/external/v1/workflows", get(external::list_workflows))
-        .route(
-            "/external/v1/workflows/{workflow_id}",
-            get(external::get_workflow),
+            "/api/v1/agent-profiles/{profile_id}/versions",
+            get(api::list_agent_profile_versions).post(api::create_agent_profile_version),
         )
         .route(
-            "/external/v1/workflows/{workflow_id}/context",
-            get(external::get_workflow_context),
+            "/api/v1/agent-profiles/{profile_id}/versions/{version}",
+            get(api::get_agent_profile_version)
+                .put(api::update_agent_profile_version)
+                .delete(api::delete_agent_profile_version),
         )
         .route(
-            "/external/v1/workflows/{workflow_id}/revisions/{revision}",
-            get(external::get_workflow_revision),
+            "/api/v1/workflows",
+            get(api::list_workflows).post(api::run_workflow),
+        )
+        .route("/api/v1/workflows/{workflow_id}", get(api::get_workflow))
+        .route(
+            "/api/v1/workflows/{workflow_id}/context",
+            get(api::get_workflow_context),
         )
         .route(
-            "/external/v1/workflows/{workflow_id}/patches",
-            get(external::list_workflow_patches),
+            "/api/v1/workflows/{workflow_id}/revisions/{revision}",
+            get(api::get_workflow_revision),
         )
         .route(
-            "/external/v1/workflows/{workflow_id}/timeline",
-            get(external::get_workflow_timeline),
+            "/api/v1/workflows/{workflow_id}/patches",
+            get(api::list_workflow_patches),
         )
         .route(
-            "/external/v1/workflows/{workflow_id}/documents",
-            get(external::get_workflow_document),
+            "/api/v1/workflows/{workflow_id}/timeline",
+            get(api::get_workflow_timeline),
         )
         .route(
-            "/external/v1/workflows/{workflow_id}/pause",
-            post(external::pause_workflow),
+            "/api/v1/workflows/{workflow_id}/documents",
+            get(api::get_workflow_document),
         )
         .route(
-            "/external/v1/workflows/{workflow_id}/resume",
-            post(external::resume_workflow),
+            "/api/v1/workflows/{workflow_id}/pause",
+            post(api::pause_workflow),
         )
         .route(
-            "/external/v1/workspaces",
-            get(external::list_workspaces).post(external::register_workspace),
+            "/api/v1/workflows/{workflow_id}/resume",
+            post(api::resume_workflow),
         )
         .route(
-            "/external/v1/workspaces/{workspace_id}/git-status",
-            get(external::get_workspace_git_status),
+            "/api/v1/workspaces",
+            get(api::list_workspaces).post(api::register_workspace),
         )
         .route(
-            "/external/v1/workspaces/{workspace_id}/file-picker",
-            get(external::pick_workspace_files),
+            "/api/v1/workspaces/{workspace_id}/git-status",
+            get(api::get_workspace_git_status),
         )
         .route(
-            "/external/v1/workspaces/{workspace_id}/git-status/refresh",
-            post(external::refresh_workspace_git_status),
+            "/api/v1/workspaces/{workspace_id}/file-picker",
+            get(api::pick_workspace_files),
         )
         .route(
-            "/external/v1/workspaces/{workspace_id}",
-            get(external::get_workspace)
-                .patch(external::rename_workspace)
-                .delete(external::delete_workspace),
+            "/api/v1/workspaces/{workspace_id}/git-status/refresh",
+            post(api::refresh_workspace_git_status),
         )
         .route(
-            "/external/v1/workspace-roots",
-            get(external::list_workspace_roots),
+            "/api/v1/workspaces/{workspace_id}",
+            get(api::get_workspace)
+                .patch(api::rename_workspace)
+                .delete(api::delete_workspace),
+        )
+        .route("/api/v1/workspace-roots", get(api::list_workspace_roots))
+        .route(
+            "/api/v1/workspace-roots/{root_id}/entries",
+            get(api::list_workspace_root_entries),
+        )
+        .route("/api/v1/tasks", get(api::list_tasks).post(api::create_task))
+        .route(
+            "/api/v1/dashboard/events/stream",
+            get(api::stream_dashboard_events),
+        )
+        .route("/api/v1/tasks/{task_id}", get(api::get_task))
+        .route("/api/v1/tasks/{task_id}/events", get(api::list_task_events))
+        .route(
+            "/api/v1/tasks/{task_id}/interrupt",
+            post(api::interrupt_task),
+        )
+        .route("/api/v1/tasks/{task_id}/cancel", post(api::cancel_task))
+        .route(
+            "/api/v1/sessions/{session_id}",
+            get(api::get_session)
+                .patch(api::update_session)
+                .delete(api::terminate_session),
         )
         .route(
-            "/external/v1/workspace-roots/{root_id}/entries",
-            get(external::list_workspace_root_entries),
+            "/api/v1/sessions/{session_id}/models",
+            get(api::list_session_models),
         )
         .route(
-            "/external/v1/tasks",
-            get(external::list_tasks).post(external::create_task),
+            "/api/v1/sessions/{session_id}/model",
+            axum::routing::patch(api::set_session_model),
+        )
+        .route("/api/v1/sessions/{session_id}/pin", post(api::pin_session))
+        .route(
+            "/api/v1/sessions/{session_id}/unpin",
+            post(api::unpin_session),
         )
         .route(
-            "/external/v1/dashboard/events/stream",
-            get(external::stream_dashboard_events),
-        )
-        .route("/external/v1/tasks/{task_id}", get(external::get_task))
-        .route(
-            "/external/v1/tasks/{task_id}/events",
-            get(external::list_task_events),
+            "/api/v1/sessions/{session_id}/archive",
+            post(api::archive_session),
         )
         .route(
-            "/external/v1/tasks/{task_id}/interrupt",
-            post(external::interrupt_task),
+            "/api/v1/sessions/{session_id}/unarchive",
+            post(api::unarchive_session),
         )
         .route(
-            "/external/v1/tasks/{task_id}/cancel",
-            post(external::cancel_task),
+            "/api/v1/sessions/{session_id}/interrupt",
+            post(api::interrupt_session),
         )
         .route(
-            "/external/v1/sessions/{session_id}",
-            get(external::get_session)
-                .patch(external::update_session)
-                .delete(external::terminate_session),
+            "/api/v1/sessions/{session_id}/restart",
+            post(api::restart_session),
         )
         .route(
-            "/external/v1/sessions/{session_id}/models",
-            get(external::list_session_models),
+            "/api/v1/sessions/{session_id}/resume",
+            post(api::resume_session),
         )
         .route(
-            "/external/v1/sessions/{session_id}/model",
-            axum::routing::patch(external::set_session_model),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/pin",
-            post(external::pin_session),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/unpin",
-            post(external::unpin_session),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/archive",
-            post(external::archive_session),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/unarchive",
-            post(external::unarchive_session),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/interrupt",
-            post(external::interrupt_session),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/restart",
-            post(external::restart_session),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/resume",
-            post(external::resume_session),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/tui",
-            post(external::open_codex_tui),
+            "/api/v1/sessions/{session_id}/tui",
+            post(api::open_codex_tui),
         )
         // Read-only turn history. Direct turn dispatch via POST is intentionally not exposed:
-        // Web input is submitted through the inbox API, and hook/internal events own turn lifecycle facts.
+        // Web input is submitted through the inbox API, and reported Agent facts own turn lifecycle.
+        .route("/api/v1/sessions/{session_id}/turns", get(api::list_turns))
         .route(
-            "/external/v1/sessions/{session_id}/turns",
-            get(external::list_turns),
+            "/api/v1/sessions/{session_id}/turns/timeline",
+            get(api::get_turn_timeline),
         )
         .route(
-            "/external/v1/sessions/{session_id}/turns/timeline",
-            get(external::get_turn_timeline),
+            "/api/v1/sessions/{session_id}/live-output/stream",
+            get(api::stream_live_output),
         )
         .route(
-            "/external/v1/sessions/{session_id}/live-output/stream",
-            get(external::stream_live_output),
+            "/api/v1/sessions/{session_id}/turns/tree/history",
+            get(api::get_turn_tree_history),
         )
         .route(
-            "/external/v1/sessions/{session_id}/turns/tree/history",
-            get(external::get_turn_tree_history),
+            "/api/v1/sessions/{session_id}/turns/tree/updates",
+            get(api::get_turn_tree_updates),
         )
         .route(
-            "/external/v1/sessions/{session_id}/turns/tree/updates",
-            get(external::get_turn_tree_updates),
+            "/api/v1/sessions/{session_id}/inbox/messages",
+            get(api::list_inbox_messages).post(api::submit_inbox_message),
         )
         .route(
-            "/external/v1/sessions/{session_id}/inbox/messages",
-            get(external::list_inbox_messages).post(external::submit_inbox_message),
+            "/api/v1/sessions/{session_id}/inbox/messages/{message_id}",
+            get(api::get_inbox_message),
         )
         .route(
-            "/external/v1/sessions/{session_id}/inbox/messages/{message_id}",
-            get(external::get_inbox_message),
+            "/api/v1/sessions/{session_id}/inbox/messages/{message_id}/cancel",
+            post(api::cancel_inbox_message),
         )
         .route(
-            "/external/v1/sessions/{session_id}/inbox/messages/{message_id}/cancel",
-            post(external::cancel_inbox_message),
+            "/api/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss",
+            post(api::dismiss_inbox_message),
         )
         .route(
-            "/external/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss",
-            post(external::dismiss_inbox_message),
+            "/api/v1/sessions/{session_id}/turns/{turn_id}",
+            get(api::get_turn),
         )
         .route(
-            "/external/v1/sessions/{session_id}/turns/{turn_id}",
-            get(external::get_turn),
+            "/api/v1/sessions/{session_id}/turns/{turn_id}/interrupt",
+            post(api::interrupt_turn),
         )
         .route(
-            "/external/v1/sessions/{session_id}/turns/{turn_id}/interrupt",
-            post(external::interrupt_turn),
+            "/api/v1/sessions/{session_id}/events/stream",
+            get(api::stream_session_events),
         )
         .route(
-            "/external/v1/sessions/{session_id}/events/stream",
-            get(external::stream_session_events),
+            "/api/v1/sessions/{session_id}/events",
+            get(api::list_session_events),
         )
         .route(
-            "/external/v1/sessions/{session_id}/events",
-            get(external::list_session_events),
+            "/api/v1/sessions/{session_id}/turns/{turn_id}/events/stream",
+            get(api::stream_turn_events),
         )
         .route(
-            "/external/v1/sessions/{session_id}/turns/{turn_id}/events/stream",
-            get(external::stream_turn_events),
-        )
-        .route(
-            "/external/v1/sessions/{session_id}/turns/{turn_id}/events",
-            get(external::list_turn_events),
+            "/api/v1/sessions/{session_id}/turns/{turn_id}/events",
+            get(api::list_turn_events),
         )
         .with_state(state)
 }

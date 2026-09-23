@@ -220,7 +220,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
 
     let (status, initial_history) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/tree/history?limit=5"),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/history?limit=5"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{initial_history:?}");
@@ -237,7 +237,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     let (status, history) = get_json(
         state.clone(),
         &format!(
-            "/external/v1/sessions/{session_id}/turns/tree/history?from_turn_id=turn_pi_linear_5&limit=2"
+            "/api/v1/sessions/{session_id}/turns/tree/history?from_turn_id=turn_pi_linear_5&limit=2"
         ),
     )
     .await;
@@ -256,7 +256,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     let (status, older_history) = get_json(
         state.clone(),
         &format!(
-            "/external/v1/sessions/{session_id}/turns/tree/history?from_turn_id=turn_pi_linear_1&limit=2"
+            "/api/v1/sessions/{session_id}/turns/tree/history?from_turn_id=turn_pi_linear_1&limit=2"
         ),
     )
     .await;
@@ -269,9 +269,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
 
     let (status, updates) = get_json(
         state.clone(),
-        &format!(
-            "/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_3"
-        ),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_3"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{updates:?}");
@@ -292,9 +290,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
 
     let (status, inclusive_updates) = get_json(
         state.clone(),
-        &format!(
-            "/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_4"
-        ),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_4"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{inclusive_updates:?}");
@@ -362,9 +358,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
 
     let (status, disconnected_updates) = get_json(
         state.clone(),
-        &format!(
-            "/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_5"
-        ),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_5"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{disconnected_updates:?}");
@@ -415,7 +409,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
 
     let (status, body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns"),
+        &format!("/api/v1/sessions/{session_id}/turns"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
@@ -437,9 +431,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
 
     let (status, unknown_updates) = get_json(
         state.clone(),
-        &format!(
-            "/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_5"
-        ),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_5"),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{unknown_updates:?}");
@@ -452,7 +444,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         let (status, selected) = get_json(
             state.clone(),
             &format!(
-                "/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id={selected_turn_id}&limit=1"
+                "/api/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id={selected_turn_id}&limit=1"
             ),
         )
         .await;

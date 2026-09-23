@@ -43,7 +43,7 @@ async fn current_runtime_exit_abandons_its_active_turn() {
     let (turn_status, turn_body) = request_json(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
         None,
     )
     .await;
@@ -106,7 +106,7 @@ async fn stale_runtime_exit_cannot_exit_the_current_runtime_session() {
     let (session_status, session_body) = request_json(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         None,
     )
     .await;
@@ -179,7 +179,7 @@ async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
     let (session_status, session_body) = request_json(
         state.clone(),
         "GET",
-        &format!("/external/v1/sessions/{session_id}"),
+        &format!("/api/v1/sessions/{session_id}"),
         None,
     )
     .await;
@@ -191,7 +191,7 @@ async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
     let (turn_status, turn_body) = request_json(
         state,
         "GET",
-        &format!("/external/v1/sessions/{session_id}/turns/{second_turn_id}"),
+        &format!("/api/v1/sessions/{session_id}/turns/{second_turn_id}"),
         None,
     )
     .await;
@@ -313,7 +313,7 @@ async fn exit_and_resume(state: AppState, session_id: &str, runtime_instance_id:
     let (resume_status, resume) = request_json(
         state.clone(),
         "POST",
-        &format!("/external/v1/sessions/{session_id}/resume"),
+        &format!("/api/v1/sessions/{session_id}/resume"),
         None,
     )
     .await;

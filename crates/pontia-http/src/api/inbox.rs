@@ -11,7 +11,7 @@ use pontia_application::{AppState, InboxCommandService, SubmitInboxMessageReques
 use super::{
     authentication::authenticate,
     idempotency::idempotent,
-    response::{ApiResponse, ExternalApiError, ok},
+    response::{ApiError, ApiResponse, ok},
 };
 
 pub async fn submit_inbox_message(
@@ -19,7 +19,7 @@ pub async fn submit_inbox_message(
     headers: HeaderMap,
     Path(session_id): Path<String>,
     Json(request): Json<SubmitInboxMessageRequest>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service =
         InboxCommandService::new(state.event_ingest_service()).with_pi_control(state.pi_control());
@@ -61,7 +61,7 @@ pub async fn list_inbox_messages(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service =
         InboxCommandService::new(state.event_ingest_service()).with_pi_control(state.pi_control());
@@ -73,16 +73,14 @@ pub async fn get_inbox_message(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((session_id, message_id)): Path<(String, String)>,
-) -> Result<Json<ApiResponse<Value>>, ExternalApiError> {
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
     let service =
         InboxCommandService::new(state.event_ingest_service()).with_pi_control(state.pi_control());
     let message = service
         .get_message(&session_id, &message_id)
         .await?
-        .ok_or_else(|| {
-            ExternalApiError::not_found(format!("inbox message {message_id} not found"))
-        })?;
+        .ok_or_else(|| ApiError::not_found(format!("inbox message {message_id} not found")))?;
     Ok(ok(json!({ "inbox_message": message })))
 }
 
@@ -90,7 +88,7 @@ pub async fn cancel_inbox_message(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((session_id, message_id)): Path<(String, String)>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service =
         InboxCommandService::new(state.event_ingest_service()).with_pi_control(state.pi_control());
@@ -102,7 +100,7 @@ pub async fn dismiss_inbox_message(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((session_id, message_id)): Path<(String, String)>,
-) -> Result<Response, ExternalApiError> {
+) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service =
         InboxCommandService::new(state.event_ingest_service()).with_pi_control(state.pi_control());

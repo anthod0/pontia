@@ -54,7 +54,7 @@ test('serializes session list limit and pinned inclusion query options', async (
 
   await listSessions({ limit: 50, includePinned: true });
 
-  expect(fetchMock).toHaveBeenCalledWith('/external/v1/sessions?limit=50&include_pinned=true', expect.any(Object));
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions?limit=50&include_pinned=true', expect.any(Object));
 });
 
 test('loads projected Turn timeline ranges without exposing client-native cursors', async () => {
@@ -69,7 +69,7 @@ test('loads projected Turn timeline ranges without exposing client-native cursor
   await getTurnTimeline('session-1', { direction: 'backward', turnId: 'turn-latest', limit: 3 });
 
   expect(fetchMock).toHaveBeenCalledWith(
-    '/external/v1/sessions/session-1/turns/timeline?direction=backward&turn_id=turn-latest&limit=3',
+    '/api/v1/sessions/session-1/turns/timeline?direction=backward&turn_id=turn-latest&limit=3',
     expect.any(Object),
   );
 });
@@ -83,12 +83,12 @@ test('loads topology-aware Turn history and updates with generic Turn identifier
 
   expect(fetchMock).toHaveBeenNthCalledWith(
     1,
-    '/external/v1/sessions/session-1/turns/tree/history?from_turn_id=turn-5&limit=3',
+    '/api/v1/sessions/session-1/turns/tree/history?from_turn_id=turn-5&limit=3',
     expect.any(Object),
   );
   expect(fetchMock).toHaveBeenNthCalledWith(
     2,
-    '/external/v1/sessions/session-1/turns/tree/updates?from_turn_id=turn-3',
+    '/api/v1/sessions/session-1/turns/tree/updates?from_turn_id=turn-3',
     expect.any(Object),
   );
 });
@@ -109,7 +109,7 @@ test.each([
 
   await expect(request).resolves.toEqual([]);
   expect(fetchMock).toHaveBeenCalledTimes(2);
-  expect(fetchMock).toHaveBeenLastCalledWith('/external/v1/sessions/session-1/turns', expect.any(Object));
+  expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/sessions/session-1/turns', expect.any(Object));
 });
 
 test('retries mutating transient fetch failures with the same idempotency key', async () => {
@@ -161,7 +161,7 @@ test('does not replay an uncertain model change after a network failure', async 
   vi.stubGlobal('fetch', fetchMock);
   await expect(setSessionModel('session-1', 'model-b', 'runtime-1')).rejects.toThrow('Failed to fetch');
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(fetchMock).toHaveBeenCalledWith('/external/v1/sessions/session-1/model', expect.objectContaining({
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/session-1/model', expect.objectContaining({
     method: 'PATCH', body: JSON.stringify({ model: 'model-b', runtime_instance_id: 'runtime-1' }),
   }));
 });

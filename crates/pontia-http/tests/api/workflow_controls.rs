@@ -71,31 +71,19 @@ async fn external_workflow_pause_and_resume_are_persisted_and_idempotent() {
     let app = TestApp::new().await;
     let repository = seed_running_workflow(&app).await;
 
-    let (pause_status, pause) = post(
-        &app,
-        "/external/v1/workflows/wf_control/pause",
-        "pause-once",
-    )
-    .await;
+    let (pause_status, pause) =
+        post(&app, "/api/v1/workflows/wf_control/pause", "pause-once").await;
     assert_eq!(pause_status, StatusCode::OK, "{pause}");
     assert_eq!(pause["data"]["workflow"]["state"], "paused");
     assert_eq!(pause["data"]["control"]["interrupt_requested"], false);
 
-    let (retry_status, retry) = post(
-        &app,
-        "/external/v1/workflows/wf_control/pause",
-        "pause-once",
-    )
-    .await;
+    let (retry_status, retry) =
+        post(&app, "/api/v1/workflows/wf_control/pause", "pause-once").await;
     assert_eq!(retry_status, StatusCode::OK, "{retry}");
     assert_eq!(retry["data"], pause["data"]);
 
-    let (resume_status, resume) = post(
-        &app,
-        "/external/v1/workflows/wf_control/resume",
-        "resume-once",
-    )
-    .await;
+    let (resume_status, resume) =
+        post(&app, "/api/v1/workflows/wf_control/resume", "resume-once").await;
     assert_eq!(resume_status, StatusCode::OK, "{resume}");
     assert_eq!(resume["data"]["workflow"]["state"], "running");
     assert_eq!(resume["data"]["control"]["continue_sent"], false);
@@ -116,7 +104,7 @@ async fn external_workflow_controls_reject_invalid_source_states() {
 
     let (status, body) = post(
         &app,
-        "/external/v1/workflows/wf_control/resume",
+        "/api/v1/workflows/wf_control/resume",
         "resume-running",
     )
     .await;

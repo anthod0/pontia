@@ -30,13 +30,17 @@ pub(super) fn ok(data: Value) -> Json<ApiResponse<Value>> {
 }
 
 #[derive(Debug)]
-pub struct ExternalApiError {
+pub struct ApiError {
     status: StatusCode,
     code: &'static str,
     message: String,
 }
 
-impl ExternalApiError {
+impl ApiError {
+    pub(super) fn invalid_request(message: impl Into<String>) -> Self {
+        Self::custom(StatusCode::BAD_REQUEST, "invalid_request", message)
+    }
+
     pub(super) fn authentication_failed(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
@@ -82,7 +86,7 @@ impl ExternalApiError {
     }
 }
 
-impl From<Error> for ExternalApiError {
+impl From<Error> for ApiError {
     fn from(error: Error) -> Self {
         match error {
             Error::StateConflict(message) => Self::state_conflict(message),
@@ -112,7 +116,7 @@ impl From<Error> for ExternalApiError {
     }
 }
 
-impl IntoResponse for ExternalApiError {
+impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let body = Json(ApiResponse::<Value> {
             data: None,

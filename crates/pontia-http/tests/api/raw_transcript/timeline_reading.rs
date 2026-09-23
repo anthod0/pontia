@@ -159,7 +159,7 @@ async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
 
     let (status, recent) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward&limit=1"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward&limit=1"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{recent:?}");
@@ -176,7 +176,7 @@ async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
     let (status, older) = get_json(
         state.clone(),
         &format!(
-            "/external/v1/sessions/{session_id}/turns/timeline?direction=backward&turn_id=turn_one&limit=1"
+            "/api/v1/sessions/{session_id}/turns/timeline?direction=backward&turn_id=turn_one&limit=1"
         ),
     )
     .await;
@@ -190,7 +190,7 @@ async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
 
     let (status, all) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=forward"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{all:?}");
@@ -221,7 +221,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
 
     let (status, body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=backward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
     )
     .await;
 
@@ -243,7 +243,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
         .unwrap();
     let (status, growing) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=turn_active&limit=1"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=turn_active&limit=1"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{growing:?}");
@@ -259,7 +259,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
     );
     let (status, growing_tree) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_active"),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_active"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{growing_tree:?}");
@@ -293,7 +293,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
         .unwrap();
     let (status, grown) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=turn_active&limit=1"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=forward&turn_id=turn_active&limit=1"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{grown:?}");
@@ -302,7 +302,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
     assert_eq!(grown["data"]["items"][4]["content_preview"], "final answer");
     let (status, grown_tree) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_active"),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_active"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{grown_tree:?}");
@@ -338,7 +338,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
     .await;
     let (status, sealed) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=forward"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{sealed:?}");
@@ -381,7 +381,7 @@ async fn turn_timeline_rejects_unassignable_active_pi_entries() {
 
     let (status, body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns/timeline?direction=forward"),
+        &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=forward"),
     )
     .await;
 

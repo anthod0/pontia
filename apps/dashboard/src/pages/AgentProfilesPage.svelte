@@ -399,7 +399,7 @@
   {#if $agentProfilesLoading}
     <div class="grid gap-4 lg:grid-cols-[22rem_1fr]"><Skeleton class="h-96 w-full" /><Skeleton class="h-96 w-full" /></div>
   {:else if !sortedProfiles.length}
-    <Empty.Root><Empty.Header><Empty.Title>No agent profiles</Empty.Title><Empty.Description>No execution profiles are available from /external/v1/agent-profiles.</Empty.Description></Empty.Header></Empty.Root>
+    <Empty.Root><Empty.Header><Empty.Title>No agent profiles</Empty.Title><Empty.Description>No execution profiles are available from /api/v1/agent-profiles.</Empty.Description></Empty.Header></Empty.Root>
   {:else}
     <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
       <Card.Root>

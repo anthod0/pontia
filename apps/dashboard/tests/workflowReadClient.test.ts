@@ -11,9 +11,9 @@ test('reads patch history, Session and documents only through encoded External A
   expect(await getWorkflowDocument('wf/1', 'requests/a & b.md')).toEqual({ content: 'Reason' });
   expect(await getSession('session/1')).toEqual({ state: 'idle' });
   expect(fetch.mock.calls.map(call => call[0])).toEqual([
-    '/external/v1/workflows/wf%2F1/patches',
-    '/external/v1/workflows/wf%2F1/documents?ref=requests%2Fa+%26+b.md',
-    '/external/v1/sessions/session%2F1',
+    '/api/v1/workflows/wf%2F1/patches',
+    '/api/v1/workflows/wf%2F1/documents?ref=requests%2Fa+%26+b.md',
+    '/api/v1/sessions/session%2F1',
   ]);
 });
 

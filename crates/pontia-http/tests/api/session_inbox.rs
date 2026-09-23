@@ -80,7 +80,7 @@ async fn create_session(state: AppState) -> String {
 }
 
 async fn create_session_with_body(state: AppState, body: Value) -> String {
-    let (status, body) = post_json(state, "/external/v1/sessions", None, body).await;
+    let (status, body) = post_json(state, "/api/v1/sessions", None, body).await;
     assert_eq!(status, StatusCode::CREATED);
     body["data"]["session"]["session_id"]
         .as_str()
@@ -91,7 +91,7 @@ async fn create_session_with_body(state: AppState, body: Value) -> String {
 async fn submit_inbox_turn(state: AppState, session_id: &str, input: &str) -> String {
     let (status, body) = post_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input": input}),
     )
@@ -137,7 +137,7 @@ async fn idle_after_idle_inbox_message_dispatches_immediately() {
 
     let (status, body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input":"continue via inbox","metadata":{"source":"test"}}),
     )
@@ -154,7 +154,7 @@ async fn idle_after_idle_inbox_message_dispatches_immediately() {
     let turn_id = message["turn_id"].as_str().expect("turn id");
 
     let (turns_status, turns_body) =
-        get_json(state, &format!("/external/v1/sessions/{session_id}/turns")).await;
+        get_json(state, &format!("/api/v1/sessions/{session_id}/turns")).await;
     assert_eq!(turns_status, StatusCode::OK);
     assert_eq!(turns_body["data"]["turns"].as_array().unwrap().len(), 1);
     assert_eq!(turns_body["data"]["turns"][0]["turn_id"], turn_id);
@@ -179,7 +179,7 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
 
     let (status, body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input":"second"}),
     )
@@ -195,7 +195,7 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
 
     let (turns_status, turns_body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/turns"),
+        &format!("/api/v1/sessions/{session_id}/turns"),
     )
     .await;
     assert_eq!(turns_status, StatusCode::OK);
@@ -217,7 +217,7 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
         loop {
             let result = get_json(
                 state.clone(),
-                &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}"),
+                &format!("/api/v1/sessions/{session_id}/inbox/messages/{message_id}"),
             )
             .await;
             if result.1["data"]["inbox_message"]["state"] == "dispatched" {
@@ -237,7 +237,7 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
     );
 
     let (turns_status, turns_body) =
-        get_json(state, &format!("/external/v1/sessions/{session_id}/turns")).await;
+        get_json(state, &format!("/api/v1/sessions/{session_id}/turns")).await;
     assert_eq!(turns_status, StatusCode::OK);
     assert_eq!(turns_body["data"]["turns"].as_array().unwrap().len(), 2);
 }
@@ -247,7 +247,7 @@ async fn idempotent_inbox_retry_returns_current_message_state_without_duplicate_
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    let uri = format!("/external/v1/sessions/{session_id}/inbox/messages");
+    let uri = format!("/api/v1/sessions/{session_id}/inbox/messages");
 
     let first = post_json(
         state.clone(),
@@ -269,7 +269,7 @@ async fn idempotent_inbox_retry_returns_current_message_state_without_duplicate_
     assert_eq!(first.1["data"], second.1["data"]);
 
     let (turns_status, turns_body) =
-        get_json(state, &format!("/external/v1/sessions/{session_id}/turns")).await;
+        get_json(state, &format!("/api/v1/sessions/{session_id}/turns")).await;
     assert_eq!(turns_status, StatusCode::OK);
     assert_eq!(turns_body["data"]["turns"].as_array().unwrap().len(), 1);
 }
@@ -282,7 +282,7 @@ async fn inbox_submission_rejects_whitespace_only_input() {
 
     let (status, body) = post_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input":" \n\t "}),
     )
@@ -300,7 +300,7 @@ async fn branch_submission_rejects_interrupt_delivery() {
 
     let (status, body) = post_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({
             "input":"replacement",
@@ -328,7 +328,7 @@ async fn branch_submission_rejects_an_unsupported_session_before_persisting() {
 
     let (status, body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({
             "input":"replacement",
@@ -347,7 +347,7 @@ async fn branch_submission_rejects_an_unsupported_session_before_persisting() {
     );
     let (_, list) = get_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
     )
     .await;
     assert!(
@@ -372,7 +372,7 @@ async fn cancel_pending_message_prevents_later_dispatch() {
 
     let (_, body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input":"cancel me"}),
     )
@@ -383,7 +383,7 @@ async fn cancel_pending_message_prevents_later_dispatch() {
 
     let (cancel_status, cancel_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}/cancel"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages/{message_id}/cancel"),
         None,
         json!({}),
     )
@@ -403,7 +403,7 @@ async fn cancel_pending_message_prevents_later_dispatch() {
     .await;
 
     let (turns_status, turns_body) =
-        get_json(state, &format!("/external/v1/sessions/{session_id}/turns")).await;
+        get_json(state, &format!("/api/v1/sessions/{session_id}/turns")).await;
     assert_eq!(turns_status, StatusCode::OK);
     assert_eq!(turns_body["data"]["turns"].as_array().unwrap().len(), 1);
 }
@@ -427,14 +427,14 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
 
     let (_, older_interrupt) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input":"old interrupt","delivery_policy":"interrupt_now"}),
     )
     .await;
     let (_, newer_interrupt) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input":"new interrupt","delivery_policy":"interrupt_now"}),
     )
@@ -449,7 +449,7 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
 
     let (_, old_body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages/{older_id}"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages/{older_id}"),
     )
     .await;
     assert_eq!(old_body["data"]["inbox_message"]["state"], "superseded");
@@ -460,13 +460,13 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
 
     let (_, new_body) = get_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages/{newer_id}"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages/{newer_id}"),
     )
     .await;
     assert_eq!(new_body["data"]["inbox_message"]["state"], "pending");
 
     let (turns_status, turns_body) =
-        get_json(state, &format!("/external/v1/sessions/{session_id}/turns")).await;
+        get_json(state, &format!("/api/v1/sessions/{session_id}/turns")).await;
     assert_eq!(turns_status, StatusCode::OK);
     assert!(turns_body["data"]["turns"].as_array().unwrap().is_empty());
 }
@@ -491,7 +491,7 @@ async fn interrupt_now_without_interrupt_capability_marks_message_failed() {
 
     let (status, body) = post_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input":"cannot interrupt","delivery_policy":"interrupt_now"}),
     )
@@ -528,7 +528,7 @@ async fn failed_inbox_message_can_be_dismissed_idempotently() {
     .await;
     let (_, failed_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input":"cannot interrupt","delivery_policy":"interrupt_now"}),
     )
@@ -539,7 +539,7 @@ async fn failed_inbox_message_can_be_dismissed_idempotently() {
 
     let (dismiss_status, dismiss_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
         None,
         json!({}),
     )
@@ -554,7 +554,7 @@ async fn failed_inbox_message_can_be_dismissed_idempotently() {
 
     let (again_status, again_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
         None,
         json!({}),
     )
@@ -563,7 +563,7 @@ async fn failed_inbox_message_can_be_dismissed_idempotently() {
     assert_eq!(again_body["data"]["inbox_message"]["state"], "dismissed");
 
     let (events_status, events_body) =
-        get_json(state, &format!("/external/v1/sessions/{session_id}/events")).await;
+        get_json(state, &format!("/api/v1/sessions/{session_id}/events")).await;
     assert_eq!(events_status, StatusCode::OK);
     let dismissed_events = events_body["data"]["events"]
         .as_array()
@@ -593,7 +593,7 @@ async fn pending_inbox_message_cannot_be_dismissed() {
     .await;
     let (_, pending_body) = post_json(
         state.clone(),
-        &format!("/external/v1/sessions/{session_id}/inbox/messages"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
         json!({"input":"wait until idle"}),
     )
@@ -604,7 +604,7 @@ async fn pending_inbox_message_cannot_be_dismissed() {
 
     let (status, body) = post_json(
         state,
-        &format!("/external/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
+        &format!("/api/v1/sessions/{session_id}/inbox/messages/{message_id}/dismiss"),
         None,
         json!({}),
     )
