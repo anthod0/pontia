@@ -97,18 +97,6 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             get(internal::get_agent_binding_current_turn),
         )
         .route(
-            "/internal/v1/agent-bindings/session-context",
-            get(internal::get_agent_binding_session_context),
-        )
-        .route(
-            "/internal/v1/runtime-bindings/upsert",
-            post(internal::upsert_runtime_binding),
-        )
-        .route(
-            "/internal/v1/runtime-bindings/pi-control",
-            post(internal::publish_pi_control_endpoint),
-        )
-        .route(
             "/internal/v1/sessions/{session_id}/current-turn/claim",
             post(internal::claim_current_turn),
         )

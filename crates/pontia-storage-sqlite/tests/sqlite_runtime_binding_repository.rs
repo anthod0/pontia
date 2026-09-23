@@ -16,54 +16,6 @@ async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     (pool, dir)
 }
 
-#[tokio::test]
-async fn confirming_a_new_instance_drops_the_previous_control_endpoint() {
-    let (pool, _root) = test_pool().await;
-    sqlx::query("INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_runtime', 'pi', 'idle')")
-        .execute(&pool).await.unwrap();
-    let repository = SqliteRuntimeBindingRepository::new(pool.clone());
-    let mut old = binding("rtinst_old", "one");
-    old.binding_state = "confirmed".into();
-    old.adapter_details = r#"{"pi_control":{"runtime_instance_id":"rtinst_old","socket_path":"/unused/old.sock","version":1}}"#.into();
-    repository.upsert_binding(old).await.unwrap();
-    for runtime in ["rtinst_old", "rtinst_new"] {
-        let mut tx = pool.begin().await.unwrap();
-        SqliteRuntimeBindingRepository::confirm_binding_in_tx(
-            &mut tx,
-            RuntimeBindingConfirmationRecord {
-                session_id: "sess_runtime".into(),
-                runtime_kind: "tmux".into(),
-                runtime_instance_id: runtime.into(),
-                start_command: None,
-                launch_cwd: "/unused".into(),
-                internal_event_url: "http://localhost/internal/v1/events".into(),
-                last_seen_at: "2026-09-22T00:00:00Z".into(),
-                tmux_socket_path: None,
-                tmux_pane_id: None,
-                process_fingerprint: None,
-                capabilities: "{}".into(),
-                diagnostics: "{}".into(),
-                adapter_details: "{}".into(),
-            },
-        )
-        .await
-        .unwrap();
-        tx.commit().await.unwrap();
-        let endpoint = repository
-            .pi_control_endpoint("sess_runtime")
-            .await
-            .unwrap();
-        assert_eq!(endpoint.is_some(), runtime == "rtinst_old");
-    }
-    let details: String = sqlx::query_scalar(
-        "SELECT adapter_details FROM runtime_bindings WHERE session_id = 'sess_runtime'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(details, "{}");
-}
-
 fn binding(runtime_instance_id: &str, suffix: &str) -> RuntimeBindingUpsertRecord {
     RuntimeBindingUpsertRecord {
         session_id: "sess_runtime".to_string(),

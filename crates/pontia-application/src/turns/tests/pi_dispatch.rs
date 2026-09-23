@@ -6,10 +6,10 @@ use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::UnixListener,
+    net::UnixStream,
 };
 
-use crate::{EventIngestService, PiControlService, PublishPiControlEndpoint, TurnCommandService};
+use crate::{EventIngestService, PiControlService, TurnCommandService};
 
 async fn setup() -> (SqlitePool, tempfile::TempDir, PiControlService) {
     let root = tempfile::Builder::new().prefix("pd-").tempdir().unwrap();
@@ -28,6 +28,7 @@ async fn setup() -> (SqlitePool, tempfile::TempDir, PiControlService) {
     .unwrap();
     sqlx::query("INSERT INTO runtime_bindings (session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('sess_pi','pi_tui','rtinst_pi','confirmed','/unused/tmux','%1',?)")
         .bind(serde_json::to_string(&pontia_agent_clients::pi::CAPABILITIES).unwrap()).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','pi','/unused','native_pi','{}')").execute(&pool).await.unwrap();
     let control = PiControlService::new(pool.clone(), root.path().into());
     (pool, root, control)
 }
@@ -49,31 +50,16 @@ async fn ready(pool: &SqlitePool) {
 
 #[tokio::test]
 async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
-    let (pool, root, control) = setup().await;
-    let path = root.path().join("s");
-    let listener = UnixListener::bind(&path).unwrap();
+    let (pool, _root, control) = setup().await;
+    let (daemon_socket, socket) = UnixStream::pair().unwrap();
+    let (peer, _requests) = pontia_runtime::pi_control::PiRpcPeer::new(daemon_socket);
     control
-        .publish_endpoint(PublishPiControlEndpoint {
-            session_id: "sess_pi".into(),
-            runtime_instance_id: "rtinst_pi".into(),
-            socket_path: path.display().to_string(),
-            version: pontia_runtime::pi_control::PROTOCOL_VERSION,
-        })
+        .attach("sess_pi", "rtinst_pi", "native_pi", peer)
         .await
         .unwrap();
     let server = tokio::spawn(async move {
-        let (socket, _) = listener.accept().await.unwrap();
         let mut stream = BufReader::new(socket);
         let mut line = String::new();
-        stream.read_line(&mut line).await.unwrap();
-        let hello: Value = serde_json::from_str(&line).unwrap();
-        let reply = json!({"jsonrpc":"2.0","id":hello["id"],"result":{"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}});
-        stream
-            .get_mut()
-            .write_all(format!("{reply}\n").as_bytes())
-            .await
-            .unwrap();
-        line.clear();
         stream.read_line(&mut line).await.unwrap();
         let request: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(request["method"], "submit");
@@ -125,7 +111,7 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
 }
 
 #[tokio::test]
-async fn missing_pi_endpoint_rejects_delivery_without_creating_a_turn_or_pending_context() {
+async fn missing_pi_connection_rejects_delivery_without_creating_a_turn_or_pending_context() {
     let (pool, _root, control) = setup().await;
     ready(&pool).await;
     let error = TurnCommandService::new(crate::EventIngestService::new(pool.clone()))
@@ -133,7 +119,7 @@ async fn missing_pi_endpoint_rejects_delivery_without_creating_a_turn_or_pending
         .create_and_dispatch_turn("sess_pi", "not delivered".into(), json!({}))
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("no current Pi control endpoint"));
+    assert!(error.to_string().contains("no current Pi connection"));
     for table in ["turns", "pending_turn_contexts"] {
         let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
             .fetch_one(&pool)

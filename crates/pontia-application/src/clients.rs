@@ -52,7 +52,10 @@ impl ClientAdapter {
             ));
         }
         if self.spec.adapter.dispatch == DispatchMode::PiControl {
-            return Ok(self.pi.is_some() && pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository::new(self.events.db()).pi_control_endpoint(session).await?.is_some());
+            return match &self.pi {
+                Some(pi) => pi.available(session).await,
+                None => Ok(false),
+            };
         }
         Ok(true)
     }

@@ -24,11 +24,12 @@ pub(super) async fn test_state() -> (AppState, TestApp) {
 }
 
 pub(super) async fn post_upsert(state: AppState, body: Value) -> (StatusCode, Value) {
-    request_json(
+    registration_request(
         state,
-        "POST",
-        "/internal/v1/runtime-bindings/upsert",
-        Some(body),
+        "runtime.register",
+        json!({
+            "version": pontia_runtime::pi_control::PROTOCOL_VERSION, "binding": body,
+        }),
     )
     .await
 }
@@ -54,15 +55,20 @@ pub(super) async fn get_session_context_by_client_session(
     client_type: &str,
     client_session_key: &str,
 ) -> (StatusCode, Value) {
-    request_json(
+    assert_eq!(client_type, "pi");
+    let (status, value) = registration_request(
         state,
-        "GET",
-        &format!(
-            "/internal/v1/agent-bindings/session-context?client_type={client_type}&client_session_key={client_session_key}",
-        ),
-        None,
+        "session.context",
+        json!({"client_session_key":client_session_key}),
     )
-    .await
+    .await;
+    if status != StatusCode::OK {
+        return (status, value);
+    }
+    if value["session_context"].is_null() {
+        return (StatusCode::NOT_FOUND, json!({}));
+    }
+    (status, json!({"data":value}))
 }
 
 pub(super) async fn delete_session(state: AppState, session_id: &str) -> (StatusCode, Value) {
@@ -142,4 +148,51 @@ pub(super) fn upsert_body_with_tmux(
         "start_command": "pi --approve",
         "tmux": tmux
     })
+}
+
+// Keep the mixed HTTP/lifecycle scenarios while exercising registration over the actual RPC adapter.
+async fn registration_request(state: AppState, method: &str, params: Value) -> (StatusCode, Value) {
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        net::UnixStream,
+    };
+    let (server, client) = UnixStream::pair().unwrap();
+    let task = tokio::spawn(pontia_application::pi_ipc::serve_connection(state, server));
+    let mut client = BufReader::new(client);
+    client
+        .get_mut()
+        .write_all(
+            format!(
+                "{}\n",
+                json!({"jsonrpc":"2.0","id":1,"method":method,"params":params})
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    let mut line = String::new();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        client.read_line(&mut line),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let response: Value = serde_json::from_str(&line).unwrap();
+    drop(client);
+    task.await.unwrap();
+    if let Some(error) = response.get("error") {
+        let (status, code) = match error["code"].as_i64().unwrap() {
+            -32602 => (StatusCode::BAD_REQUEST, "invalid_request"),
+            -32004 => (StatusCode::NOT_FOUND, "not_found"),
+            -32009 => (StatusCode::CONFLICT, "state_conflict"),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+        };
+        (
+            status,
+            json!({"error":{"code":code,"message":error["message"]}}),
+        )
+    } else {
+        (StatusCode::OK, response["result"].clone())
+    }
 }

@@ -1,13 +1,14 @@
-// Cross-language fixture: exercise the actual extension listener from Rust.
+// Cross-language fixture: the production Pi client connects to the Rust listener.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { startControlSocket } from "../src/control-socket.ts";
+import { connectPi, CONTROL_VERSION } from "../src/control-socket.ts";
 
-const [directory, sessionId, runtimeInstanceId] = process.argv.slice(2);
-const server = await startControlSocket({ sessionId, runtimeInstanceId }, { XDG_RUNTIME_DIR: directory }, undefined,
-  (input) => appendFileSync(join(directory, "messages.jsonl"), `${JSON.stringify(input)}\n`));
-process.stdout.write(`${server.socketPath}\n`);
+const [directory, sessionId, runtimeInstanceId, clientSessionKey] = process.argv.slice(2);
 process.stdin.resume();
-process.stdin.once("end", async () => {
-  await server.close();
-});
+const identity = { sessionId, runtimeInstanceId, clientSessionKey };
+const client = await connectPi(directory, (error) => process.stderr.write(`${error}\n`),
+  (input) => appendFileSync(join(directory, "messages.jsonl"), `${JSON.stringify(input)}\n`));
+await client.request("runtime.attach", { version: CONTROL_VERSION, session_id: sessionId, runtime_instance_id: runtimeInstanceId, client_session_key: clientSessionKey });
+client.registered(identity);
+process.stdout.write("connected\n");
+process.stdin.once("end", async () => { await client.close(); });

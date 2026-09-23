@@ -1,279 +1,154 @@
-use std::{os::unix::fs::PermissionsExt, path::Path, process::Stdio, sync::Arc, time::Duration};
-
-use pontia_runtime::pi_control::{PiControlConnection, PiControlEndpoint};
+use pontia_core::Error;
+use pontia_runtime::pi_control::{MAX_FRAME_BYTES, PiRpcPeer};
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::UnixListener,
-    process::Command,
+    net::UnixStream,
 };
 
-fn endpoint(path: &Path, runtime_instance_id: &str) -> PiControlEndpoint {
-    PiControlEndpoint {
-        runtime_instance_id: runtime_instance_id.into(),
-        socket_path: path.display().to_string(),
-        version: pontia_runtime::pi_control::PROTOCOL_VERSION,
-    }
+#[tokio::test]
+async fn serves_reverse_requests_while_awaiting_a_response() {
+    let (left, right) = UnixStream::pair().unwrap();
+    let (daemon, mut incoming) = PiRpcPeer::new(left);
+    let task = {
+        let daemon = daemon.clone();
+        tokio::spawn(async move { daemon.call("submit", json!({"input":"你好"})).await })
+    };
+    let mut pi = BufReader::new(right);
+    let mut line = String::new();
+    pi.read_line(&mut line).await.unwrap();
+    let submit: Value = serde_json::from_str(&line).unwrap();
+    pi.get_mut()
+        .write_all(
+            b"{\"jsonrpc\":\"2.0\",\"id\":\"pi:1\",\"method\":\"session.context\",\"params\":{}}\n",
+        )
+        .await
+        .unwrap();
+    let request = incoming.recv().await.unwrap();
+    assert_eq!(request.method, "session.context");
+    daemon
+        .reply(request.id, json!({"session_context":null}))
+        .await
+        .unwrap();
+    line.clear();
+    pi.read_line(&mut line).await.unwrap();
+    let context: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(context["id"], "pi:1");
+    assert!(!task.is_finished());
+    pi.get_mut()
+        .write_all(
+            format!(
+                "{}\n",
+                json!({"jsonrpc":"2.0","id":submit["id"],"result":{"accepted":true}})
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(task.await.unwrap().unwrap(), json!({"accepted":true}));
+    daemon.close();
 }
 
 #[tokio::test]
-async fn rust_controls_actual_pi_extension_and_recovers_after_controller_restart() {
-    let root = tempfile::Builder::new()
-        .prefix("pc-")
-        .permissions(std::fs::Permissions::from_mode(0o700))
-        .tempdir()
-        .unwrap();
-    let fixture =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../clients/pi/test/control-server.mjs");
-    let mut child = Command::new("node")
-        .arg(fixture)
-        .arg(root.path())
-        .args(["sess_pi", "rtinst_pi"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .expect("Node 24 is required for the Pi cross-language test");
-    let mut output = BufReader::new(child.stdout.take().unwrap());
-    let mut path = String::new();
-    tokio::time::timeout(Duration::from_secs(10), output.read_line(&mut path))
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(!path.is_empty(), "Pi listener must publish its socket path");
-    let endpoint = endpoint(Path::new(path.trim()), "rtinst_pi");
-    let connection =
-        Arc::new(PiControlConnection::new("sess_pi".into(), endpoint.clone()).unwrap());
-    let (first, concurrent) = tokio::join!(connection.ping(), connection.ping());
-    first.unwrap();
-    concurrent.unwrap();
-    connection
-        .submit("hello\n你好", Some("msg_one"))
-        .await
-        .unwrap();
-    let message: Value =
-        serde_json::from_str(&std::fs::read_to_string(root.path().join("messages.jsonl")).unwrap())
-            .unwrap();
-    assert_eq!(
-        message,
-        json!({"input":"hello\n你好", "inboxMessageId":"msg_one"})
-    );
-    std::fs::remove_file(root.path().join("messages.jsonl")).unwrap();
-    let second = PiControlConnection::new("sess_pi".into(), endpoint.clone()).unwrap();
-    assert!(
-        second
-            .ping()
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("connection_busy")
-    );
-    connection.ping().await.unwrap();
-    connection.invalidate();
-    assert!(connection.ping().await.is_err());
-    // The peer processes FIN asynchronously; each retry here is a fresh ping invocation.
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            if second.ping().await.is_ok() {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .unwrap();
-    second.invalidate();
-    child.stdin.take();
-    assert!(child.wait().await.unwrap().success());
-    assert!(!Path::new(path.trim()).exists());
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
-}
-
-#[tokio::test]
-async fn timeout_disconnect_and_malformed_replies_fail_without_replaying_requests() {
-    for failure in [
-        "timeout",
-        "disconnect",
-        "wrong_id",
-        "invalid_result",
-        "wrong_version",
-        "missing_id",
-        "missing_result",
-        "result_and_error",
-        "invalid_error",
-        "oversized",
-        "wrong_identity",
-    ] {
-        let root = tempfile::Builder::new()
-            .prefix("pc-")
-            .permissions(std::fs::Permissions::from_mode(0o700))
-            .tempdir()
-            .unwrap();
-        let path = root.path().join("s");
-        let listener = UnixListener::bind(&path).unwrap();
-        let connection = Arc::new(
-            PiControlConnection::new("sess_pi".into(), endpoint(&path, "rtinst_pi")).unwrap(),
-        );
-        let server = tokio::spawn(async move {
-            let (socket, _) = listener.accept().await.unwrap();
-            let mut stream = BufReader::new(socket);
+async fn correlates_concurrent_calls_with_out_of_order_responses() {
+    let (left, right) = UnixStream::pair().unwrap();
+    let (peer, _incoming) = PiRpcPeer::new(left);
+    let server = tokio::spawn(async move {
+        let mut stream = BufReader::new(right);
+        let mut requests = Vec::new();
+        for _ in 0..2 {
             let mut line = String::new();
             stream.read_line(&mut line).await.unwrap();
-            let hello: Value = serde_json::from_str(&line).unwrap();
-            assert_eq!(
-                hello,
-                json!({
-                    "jsonrpc": "2.0", "id": 0, "method": "hello",
-                    "params": {"session_id": "sess_pi", "runtime_instance_id": "rtinst_pi"},
-                })
-            );
-            let identity = if failure == "wrong_identity" {
-                "rtinst_other"
-            } else {
-                "rtinst_pi"
-            };
-            let reply = json!({"jsonrpc": "2.0", "id": hello["id"], "result": {"session_id": "sess_pi", "runtime_instance_id": identity}});
-            // Deliberately split the response across writes.
-            let encoded = format!("{reply}\n");
+            requests.push(serde_json::from_str::<Value>(&line).unwrap());
+        }
+        for request in requests.into_iter().rev() {
             stream
                 .get_mut()
-                .write_all(&encoded.as_bytes()[..9])
+                .write_all(
+                    format!(
+                        "{}\n",
+                        json!({"jsonrpc":"2.0","id":request["id"],"result":request["method"]})
+                    )
+                    .as_bytes(),
+                )
                 .await
                 .unwrap();
-            tokio::task::yield_now().await;
-            stream
-                .get_mut()
-                .write_all(&encoded.as_bytes()[9..])
-                .await
-                .unwrap();
-            if failure == "wrong_identity" {
-                return;
-            }
-            line.clear();
+        }
+    });
+    let (a, b) = tokio::join!(peer.call("one", json!({})), peer.call("two", json!({})));
+    assert_eq!(a.unwrap(), "one");
+    assert_eq!(b.unwrap(), "two");
+    server.await.unwrap();
+    peer.close();
+}
+
+#[tokio::test]
+async fn a_lost_response_is_unknown_and_is_never_replayed() {
+    let (left, right) = UnixStream::pair().unwrap();
+    let (peer, _incoming) = PiRpcPeer::new(left);
+    let server = tokio::spawn(async move {
+        let mut stream = BufReader::new(right);
+        let mut line = String::new();
+        stream.read_line(&mut line).await.unwrap();
+        let request: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(request["method"], "submit");
+    });
+    assert!(matches!(
+        peer.call("submit", json!({"input":"one"})).await,
+        Err(Error::ControlUnknown(_))
+    ));
+    assert!(matches!(
+        peer.call("submit", json!({"input":"two"})).await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn malformed_responses_close_the_connection_without_accepting_delivery() {
+    for response in [
+        json!({"jsonrpc":"1.0","id":"pontia:0","result":{}}),
+        json!({"jsonrpc":"2.0","id":"wrong","result":{}}),
+        json!({"jsonrpc":"2.0","id":"pontia:0","result":{},"error":{"code":1,"message":"bad"}}),
+        json!({"jsonrpc":"2.0","id":"pontia:0","error":{"code":"bad","message":"bad"}}),
+    ] {
+        let (left, right) = UnixStream::pair().unwrap();
+        let (peer, _incoming) = PiRpcPeer::new(left);
+        let server = tokio::spawn(async move {
+            let mut stream = BufReader::new(right);
+            let mut line = String::new();
             stream.read_line(&mut line).await.unwrap();
-            let ping: Value = serde_json::from_str(&line).unwrap();
-            assert_eq!(ping["jsonrpc"], "2.0");
-            assert_eq!(ping["id"], 1);
-            assert_eq!(ping["method"], "submit");
-            assert_eq!(ping["params"]["input"], "exactly once");
-            match failure {
-                "disconnect" => return,
-                "wrong_id" => {
-                    stream
-                        .get_mut()
-                        .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"pong\":true}}\n")
-                        .await
-                        .unwrap();
-                }
-                "invalid_result" => {
-                    let reply =
-                        json!({"jsonrpc":"2.0","id":ping["id"],"result":{"accepted":false}});
-                    stream
-                        .get_mut()
-                        .write_all(format!("{reply}\n").as_bytes())
-                        .await
-                        .unwrap();
-                }
-                "wrong_version" | "missing_id" | "missing_result" | "result_and_error"
-                | "invalid_error" => {
-                    let mut reply =
-                        json!({"jsonrpc":"2.0", "id":ping["id"], "result":{"accepted":true}});
-                    match failure {
-                        "wrong_version" => reply["jsonrpc"] = json!("1.0"),
-                        "missing_id" => {
-                            reply.as_object_mut().unwrap().remove("id");
-                        }
-                        "missing_result" => {
-                            reply.as_object_mut().unwrap().remove("result");
-                        }
-                        "result_and_error" => {
-                            reply["error"] = json!({"code":-32603, "message":"failed"})
-                        }
-                        "invalid_error" => {
-                            reply.as_object_mut().unwrap().remove("result");
-                            reply["error"] = json!({"code":"submit_rejected", "message":"failed"});
-                        }
-                        _ => unreachable!(),
-                    }
-                    stream
-                        .get_mut()
-                        .write_all(format!("{reply}\n").as_bytes())
-                        .await
-                        .unwrap();
-                }
-                "oversized" => {
-                    let _ = stream.get_mut().write_all(&vec![b'a'; 65537]).await;
-                }
-                "timeout" => {}
-                _ => unreachable!(),
-            }
-            line.clear();
-            assert_eq!(
-                stream.read_line(&mut line).await.unwrap(),
-                0,
-                "failed connection must close without another request"
-            );
-            assert!(
-                tokio::time::timeout(Duration::from_millis(50), listener.accept())
-                    .await
-                    .is_err(),
-                "failed requests must not reconnect themselves"
-            );
+            stream
+                .get_mut()
+                .write_all(format!("{response}\n").as_bytes())
+                .await
+                .unwrap();
         });
-        let error = connection.submit("exactly once", None).await.unwrap_err();
-        assert_eq!(
-            matches!(error, pontia_core::Error::ControlUnknown(_)),
-            failure != "wrong_identity",
-            "{failure}: {error}"
-        );
-        let error = error.to_string();
-        let expected = match failure {
-            "timeout" => "timed out",
-            "disconnect" => "closed",
-            "wrong_id" => "id mismatch",
-            "oversized" => "64 KiB",
-            "invalid_result" => "invalid Pi control submit response",
-            "wrong_version" | "missing_id" | "missing_result" | "result_and_error" => {
-                "invalid Pi control JSON-RPC response"
-            }
-            "invalid_error" => "invalid Pi control JSON-RPC error",
-            "wrong_identity" => "identity mismatch",
-            _ => unreachable!(),
-        };
-        assert!(error.contains(expected), "{failure}: {error}");
+        assert!(matches!(
+            peer.call("submit", json!({})).await,
+            Err(Error::ControlUnknown(_))
+        ));
         server.await.unwrap();
     }
 }
 
 #[tokio::test]
-async fn invalidation_ends_an_in_flight_request() {
-    let root = tempfile::Builder::new()
-        .prefix("pc-")
-        .permissions(std::fs::Permissions::from_mode(0o700))
-        .tempdir()
-        .unwrap();
-    let path = root.path().join("s");
-    let listener = UnixListener::bind(&path).unwrap();
-    let connection =
-        Arc::new(PiControlConnection::new("sess_pi".into(), endpoint(&path, "rtinst_pi")).unwrap());
-    let caller = {
-        let connection = connection.clone();
-        tokio::spawn(async move { connection.ping().await })
+async fn oversized_frames_are_rejected_and_cancellation_releases_pending_calls() {
+    let (left, mut right) = UnixStream::pair().unwrap();
+    let (peer, _incoming) = PiRpcPeer::new(left);
+    assert!(matches!(
+        peer.call("submit", json!({"input":"x".repeat(MAX_FRAME_BYTES)}))
+            .await,
+        Err(Error::Domain(_))
+    ));
+    let task = {
+        let peer = peer.clone();
+        tokio::spawn(async move { peer.call("ping", json!({})).await })
     };
-    let (socket, _) = listener.accept().await.unwrap();
-    let mut stream = BufReader::new(socket);
+    let mut stream = BufReader::new(&mut right);
     let mut line = String::new();
     stream.read_line(&mut line).await.unwrap();
-    connection.invalidate();
-    assert!(
-        tokio::time::timeout(Duration::from_millis(250), caller)
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap_err()
-            .to_string()
-            .contains("binding has changed")
-    );
-    line.clear();
-    assert_eq!(stream.read_line(&mut line).await.unwrap(), 0);
+    task.abort();
+    let _ = task.await;
+    assert!(peer.is_closed());
 }

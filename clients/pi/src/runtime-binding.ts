@@ -1,29 +1,9 @@
 import type { EnvLike } from "./context.js";
-import { CONTROL_VERSION } from "./control-socket.js";
-import { resolvePontiaConnection } from "./discovery.js";
-import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
+import { CONTROL_VERSION, type PiConnection } from "./control-socket.js";
+import { asRecord, optionalString } from "./internal-api.js";
 import type { SessionContext } from "./session.js";
 
 export type PiSessionDetails = Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">;
-
-export async function publishControlEndpoint(
-  context: SessionContext,
-  socketPath: string,
-  fetchImpl: typeof fetch,
-): Promise<void> {
-  const response = await fetchImpl(context.internalEventUrl.replace(/\/events\/?$/, "/runtime-bindings/pi-control"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(5_000),
-    body: JSON.stringify({
-      session_id: context.sessionId,
-      runtime_instance_id: context.runtimeInstanceId,
-      socket_path: socketPath,
-      version: CONTROL_VERSION,
-    }),
-  });
-  if (!response.ok) throw new Error(`Pi control endpoint registration failed: ${response.status} ${response.statusText}`);
-}
 
 function callSessionManagerString(sessionManager: unknown, method: string): string | undefined {
   if (!sessionManager || typeof sessionManager !== "object") return undefined;
@@ -46,13 +26,6 @@ export function piSessionDetailsFromHookContext(ctx: unknown): PiSessionDetails 
   };
 }
 
-function agentBindingSessionContextUrl(discoveredBindingUpsertUrl?: string): string | undefined {
-  return discoveredBindingUpsertUrl?.replace(
-    /\/runtime-bindings\/upsert\/?$/,
-    "/agent-bindings/session-context",
-  );
-}
-
 function tmuxBindingFromEnv(env: EnvLike): { socket_path: string; pane_id: string } | undefined {
   const tmux = optionalString(env.TMUX);
   const paneId = optionalString(env.TMUX_PANE);
@@ -62,22 +35,16 @@ function tmuxBindingFromEnv(env: EnvLike): { socket_path: string; pane_id: strin
 }
 
 export async function bindSession(
-  pontiaHome: string,
+  connection: PiConnection,
   env: EnvLike,
-  fetchImpl: typeof fetch,
   sessionDetails: PiSessionDetails,
   options: { startKind?: "fork"; parentSessionId?: string; runtimeInstanceId?: string } = {},
 ): Promise<SessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
-  const discovered = await resolvePontiaConnection({ pontiaHome, fetch: fetchImpl });
-  const url = discovered?.bindingUpsertUrl;
-  if (!url) return undefined;
-
   const tmux = tmuxBindingFromEnv(env);
-  const response = await fetchImpl(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const body = await connection.request("runtime.register", {
+    version: CONTROL_VERSION,
+    binding: {
       client_type: "pi",
       client_session_key: sessionDetails.clientSessionKey,
       client_session_file: sessionDetails.clientSessionFile,
@@ -89,17 +56,15 @@ export async function bindSession(
       ...(options.parentSessionId ? { parent_session_id: options.parentSessionId } : {}),
       ...(options.runtimeInstanceId ? { runtime_instance_id: options.runtimeInstanceId } : {}),
       ...(tmux ? { tmux } : {}),
-    }),
+    },
   });
-  const body = await parseJsonResponse(response);
-  if (!response.ok) throw new Error(`runtime binding upsert failed: ${response.status} ${response.statusText}`);
 
   const record = asRecord(body);
   const session = asRecord(record?.session);
   const runtime = asRecord(record?.runtime);
   const sessionId = optionalString(session?.session_id);
   const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id);
-  const internalEventUrl = optionalString(runtime?.internal_event_url) ?? discovered?.internalEventUrl;
+  const internalEventUrl = optionalString(runtime?.internal_event_url);
   if (!sessionId) throw new Error("runtime binding upsert response missing session.session_id");
   if (!resolvedRuntimeInstanceId) throw new Error("runtime binding upsert response missing runtime.runtime_instance_id");
   if (!internalEventUrl) throw new Error("runtime binding upsert response missing runtime.internal_event_url");
@@ -117,28 +82,18 @@ export interface ExistingPiSessionContext extends SessionContext {
 }
 
 export async function loadExistingSessionContext(
-  pontiaHome: string,
-  fetchImpl: typeof fetch,
+  connection: PiConnection,
   sessionDetails: PiSessionDetails,
 ): Promise<ExistingPiSessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
-  const discovered = await resolvePontiaConnection({ pontiaHome, fetch: fetchImpl });
-  const baseUrl = agentBindingSessionContextUrl(discovered?.bindingUpsertUrl);
-  if (!baseUrl) return undefined;
-  const url = new URL(baseUrl);
-  url.searchParams.set("client_type", "pi");
-  url.searchParams.set("client_session_key", sessionDetails.clientSessionKey);
-  const response = await fetchImpl(url.toString());
-  if (response.status === 404) return undefined;
-  const body = await parseJsonResponse(response);
-  if (!response.ok) throw new Error(`agent binding session context lookup failed: ${response.status} ${response.statusText}`);
-
-  const record = asRecord(asRecord(asRecord(body)?.data)?.session_context);
+  const body = await connection.request("session.context", { client_session_key: sessionDetails.clientSessionKey });
+  const record = asRecord(asRecord(body)?.session_context);
+  if (!record) return undefined;
   const sessionId = optionalString(record?.session_id);
   const sessionState = optionalString(record?.session_state);
   const clientType = optionalString(record?.client_type);
   const runtimeInstanceId = optionalString(record?.runtime_instance_id);
-  const internalEventUrl = optionalString(record?.internal_event_url) ?? discovered?.internalEventUrl;
+  const internalEventUrl = optionalString(record?.internal_event_url);
   if (!sessionId || !sessionState || clientType !== "pi" || !runtimeInstanceId || !internalEventUrl) {
     throw new Error("agent binding session context lookup returned an invalid context");
   }

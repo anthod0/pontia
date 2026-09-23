@@ -1,10 +1,10 @@
 use crate::TurnCommandService;
-use crate::{EventIngestService, PiControlService, PublishPiControlEndpoint};
+use crate::{EventIngestService, PiControlService};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::UnixListener,
+    net::UnixStream,
 };
 
 #[tokio::test]
@@ -24,40 +24,27 @@ async fn initial_pi_input_uses_the_shared_socket_after_ready() {
     .await
     .unwrap();
     sqlx::query("INSERT INTO runtime_bindings (session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('sess_pi','pi_tui','rtinst_pi','confirmed','/unused/tmux','%1','{\"accept_task\":true}')").execute(&pool).await.unwrap();
-    let path = root.path().join("s");
-    let listener = UnixListener::bind(&path).unwrap();
+    sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','pi','/unused','native_pi','{}')").execute(&pool).await.unwrap();
     let control = PiControlService::new(pool.clone(), root.path().into());
+    let (daemon_socket, socket) = UnixStream::pair().unwrap();
+    let (peer, _requests) = pontia_runtime::pi_control::PiRpcPeer::new(daemon_socket);
     control
-        .publish_endpoint(PublishPiControlEndpoint {
-            session_id: "sess_pi".into(),
-            runtime_instance_id: "rtinst_pi".into(),
-            socket_path: path.display().to_string(),
-            version: pontia_runtime::pi_control::PROTOCOL_VERSION,
-        })
+        .attach("sess_pi", "rtinst_pi", "native_pi", peer)
         .await
         .unwrap();
     let server = tokio::spawn(async move {
-        let (socket, _) = listener.accept().await.unwrap();
         let mut stream = BufReader::new(socket);
-        for method in ["hello", "submit"] {
-            let mut line = String::new();
-            stream.read_line(&mut line).await.unwrap();
-            let request: Value = serde_json::from_str(&line).unwrap();
-            assert_eq!(request["method"], method);
-            let result = match method {
-                "hello" => json!({"session_id":"sess_pi","runtime_instance_id":"rtinst_pi"}),
-                _ => {
-                    assert_eq!(request["params"]["input"], "initial input");
-                    json!({"accepted":true})
-                }
-            };
-            let reply = json!({"jsonrpc":"2.0","id":request["id"],"result":result});
-            stream
-                .get_mut()
-                .write_all(format!("{reply}\n").as_bytes())
-                .await
-                .unwrap();
-        }
+        let mut line = String::new();
+        stream.read_line(&mut line).await.unwrap();
+        let request: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(request["method"], "submit");
+        assert_eq!(request["params"]["input"], "initial input");
+        let reply = json!({"jsonrpc":"2.0","id":request["id"],"result":{"accepted":true}});
+        stream
+            .get_mut()
+            .write_all(format!("{reply}\n").as_bytes())
+            .await
+            .unwrap();
     });
     let events = EventIngestService::new(pool.clone()).with_pi_control(control);
     let service = TurnCommandService::new(events.clone());
