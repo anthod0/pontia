@@ -6,8 +6,7 @@ use super::{
     service::RuntimeBindingUpsertService,
 };
 use crate::{
-    EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType, UpsertAgentBindingRequest,
-    WorkspaceRecord,
+    PontiaEvent, PontiaEventSource, PontiaEventType, UpsertAgentBindingRequest, WorkspaceRecord,
 };
 
 impl RuntimeBindingUpsertService {
@@ -25,7 +24,7 @@ impl RuntimeBindingUpsertService {
             return Ok(());
         }
 
-        let ingest = EventIngestService::new(self.pool.clone()).with_clients(self.clients.clone());
+        let ingest = &self.events;
         ingest
             .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
@@ -55,7 +54,7 @@ impl RuntimeBindingUpsertService {
         workspace: &WorkspaceRecord,
     ) -> Result<String> {
         let session_id = new_session_id().to_string();
-        let ingest = EventIngestService::new(self.pool.clone()).with_clients(self.clients.clone());
+        let ingest = &self.events;
         ingest
             .ingest_pontia_event_with_agent_binding(
                 PontiaEvent::new(

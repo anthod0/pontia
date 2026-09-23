@@ -1,5 +1,4 @@
 mod initialization;
-use pontia_application as application;
 use pontia_config::AppConfig;
 use pontia_core::error::Result;
 use pontia_http as http;
@@ -40,22 +39,16 @@ async fn main() -> Result<()> {
         )
         .run(app_state.shutdown().subscribe()),
     );
-    let inbox = application::InboxCommandService::new(app_state.event_ingest_service());
+    let inbox = app_state.inbox_commands();
     let client_control = app_state.client_control();
-    let runtime_observer =
-        application::RuntimeObservationService::new(app_state.event_ingest_service());
+    let runtime_observer = app_state.runtime_observer();
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
     let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
-        app_state.event_ingest_service(),
-        application::SessionCommandService::new(
-            app_state.event_ingest_service(),
-            app_state.pontia_home().to_path_buf(),
-        )
-        .with_client_control(app_state.client_control()),
+        &app_state,
+        app_state.session_commands(),
         app_state.agent_events(),
         app_state.pontia_home().to_path_buf(),
     );
-    let workflow_coordinator = workflow_coordinator.with_client_control(app_state.client_control());
     tokio::spawn(workflow_coordinator.run(app_state.shutdown().subscribe()));
     let dashboard =
         http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;

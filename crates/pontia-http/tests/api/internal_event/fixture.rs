@@ -18,7 +18,7 @@ pub(super) async fn test_state() -> AppState {
 }
 
 pub(super) async fn create_session(state: &AppState, session_id: &str, client_type: &str) {
-    EventIngestService::new(state.db())
+    EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             new_event_id().to_string(),

@@ -30,8 +30,8 @@ async fn state_with_running_turn() -> AppState {
 }
 
 async fn seed_running_turn(state: &AppState, session_id: &str, turn_id: &str, runtime_id: &str) {
-    let ingestion =
-        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
+    let ingestion = EventIngestService::for_projection_tests(state.db())
+        .with_clients(crate::common::clients::clients());
     ingestion
         .ingest_reported_event(ReportedEvent::new(
             new_event_id().to_string(),
@@ -66,7 +66,7 @@ async fn seed_running_turn(state: &AppState, session_id: &str, turn_id: &str, ru
         .await
         .unwrap();
     ingestion
-        .ingest_confirmed_event(ReportedEvent::new(
+        .ingest_reported_event(ReportedEvent::new(
             new_event_id().to_string(),
             session_id.into(),
             Some(turn_id.into()),

@@ -19,25 +19,27 @@ pub struct RuntimeBindingUpsertService {
     pub(super) session_identity_hint: Option<String>,
     pub(super) clients: crate::clients::ClientRegistry,
     pub(super) pool: SqlitePool,
+    pub(super) events: crate::EventIngestService,
     pub(super) pontia_home: PathBuf,
 }
 
 impl RuntimeBindingUpsertService {
-    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
-        self.clients = clients;
-        self
-    }
-
     pub fn with_session_identity_hint(mut self, session_id: String) -> Self {
         self.session_identity_hint = Some(session_id);
         self
     }
 
-    pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
+    pub(crate) fn new(
+        pool: SqlitePool,
+        pontia_home: PathBuf,
+        clients: crate::clients::ClientRegistry,
+        events: crate::EventIngestService,
+    ) -> Self {
         Self {
             pool,
             pontia_home,
-            clients: Default::default(),
+            clients,
+            events,
             session_identity_hint: None,
         }
     }

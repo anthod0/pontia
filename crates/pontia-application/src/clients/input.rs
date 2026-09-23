@@ -6,15 +6,15 @@ use serde_json::Value;
 use super::ClientAdapter;
 use crate::{
     control::{ControlResult, InputReceipt},
-    runtime::control_target::ControlTarget,
+    runtime::ControlTarget,
     turns::InputIntent,
 };
 
 impl ClientAdapter {
     pub async fn await_initial_ready(&self, target: &ControlTarget) -> Result<()> {
-        target.validate(&self.events.db()).await?;
+        target.validate(&self.pool.clone()).await?;
         if !self.prepares_on_input() && self.spec.adapter.dispatch == DispatchMode::Connected {
-            crate::RuntimeReadinessService::new(self.events.db())
+            crate::RuntimeReadinessService::new(self.pool.clone())
                 .wait_until_ready(
                     &target.session_id,
                     self.spec.client_type,
@@ -22,7 +22,7 @@ impl ClientAdapter {
                 )
                 .await?;
         }
-        target.validate(&self.events.db()).await
+        target.validate(&self.pool.clone()).await
     }
 
     pub async fn input(
@@ -49,7 +49,7 @@ impl ClientAdapter {
         metadata: &Value,
         intent: &InputIntent,
     ) -> Result<InputReceipt> {
-        target.validate(&self.events.db()).await?;
+        target.validate(&self.pool.clone()).await?;
         if let Some(client) = self.session_client() {
             return client
                 .input(
@@ -72,8 +72,7 @@ impl ClientAdapter {
                     .await?
             }
             DispatchMode::InProcessRecorded => {
-                self.events
-                    .clients()
+                self.registry
                     .get(self.spec.client_type)
                     .and_then(|entry| entry.in_process.as_ref())
                     .ok_or_else(|| {

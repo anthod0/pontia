@@ -2,7 +2,7 @@ use pontia_core::{
     Error,
     domain::{DomainEvent, EventType, MAX_TURN_INPUT_SUMMARY_CHARS, MAX_TURN_OUTPUT_SUMMARY_CHARS},
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::EventIngestService;
 use crate::ingestion::{
@@ -13,6 +13,28 @@ use crate::ingestion::{
 const MAX_EVENT_PAYLOAD_BYTES: usize = 64 * 1024;
 
 impl EventIngestService {
+    pub(crate) async fn report_native_fact(
+        &self,
+        session: &str,
+        instance: &str,
+        kind: EventType,
+        mut data: Value,
+    ) -> pontia_core::Result<()> {
+        data["runtime_instance_id"] = json!(instance);
+        self.report_fact(ReportedFact {
+            session_id: session.into(),
+            turn_id: None,
+            fact_type: kind,
+            data,
+        })
+        .await
+        .map_err(|error| match error {
+            crate::EventReportError::InvalidFact(message) => Error::Domain(message),
+            crate::EventReportError::Ingestion(error) => error,
+        })?;
+        Ok(())
+    }
+
     /// Processes a client fact, including validation and post-commit effects.
     ///
     /// This is the production entry point for all client adapters, whether called
@@ -27,10 +49,10 @@ impl EventIngestService {
     ) -> Result<EventIngestResult, EventReportError> {
         // Low-level projection callers can construct a database-only service;
         // client reports require the complete set of shared effects.
-        if self.client_control.is_none()
-            || self.agent_events.is_none()
-            || self.live_output.is_none()
-            || self.volatile_events.is_none()
+        if self.effects.client_control.is_none()
+            || self.effects.agent_events.is_none()
+            || self.effects.live_output.is_none()
+            || self.effects.volatile_events.is_none()
         {
             return Err(Error::InvalidConfig {
                 key: "event_reporting",
@@ -103,7 +125,8 @@ impl EventIngestService {
             .map_err(EventReportError::validation)?;
         if event.event_type == EventType::SessionMessageUpdated {
             let state_version = self.volatile_state_version(&event.session_id).await?;
-            self.volatile_events
+            self.effects
+                .volatile_events
                 .as_ref()
                 .expect("validated reporting dependencies")
                 .publish_debounced_session_message_updated(event.clone());

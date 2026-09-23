@@ -47,7 +47,7 @@ fn event(
 }
 
 async fn ingest(state: &AppState, event: ReportedEvent) {
-    EventIngestService::new(state.db())
+    EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .ingest_reported_event(event)
         .await

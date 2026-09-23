@@ -272,7 +272,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
         3
     );
 
-    let active_turn = EventIngestService::new(state.db())
+    let active_turn = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .get_turn("turn_active")
         .await
@@ -319,7 +319,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
         "final answer"
     );
     assert!(
-        EventIngestService::new(state.db())
+        EventIngestService::for_projection_tests(state.db())
             .with_clients(crate::common::clients::clients())
             .get_turn("turn_active")
             .await
@@ -346,7 +346,7 @@ async fn turn_timeline_reads_growing_active_output_without_persisting_temporary_
     assert_eq!(status, StatusCode::OK, "{sealed:?}");
     assert_eq!(sealed["data"]["items"], grown["data"]["items"]);
     assert!(
-        EventIngestService::new(state.db())
+        EventIngestService::for_projection_tests(state.db())
             .with_clients(crate::common::clients::clients())
             .get_turn("turn_active")
             .await

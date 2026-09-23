@@ -7,10 +7,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use pontia_application::{
-    AppState, CreateSessionRequest, ExternalQueryService, SessionCommandService,
-    TurnCommandService, UpdateSessionRequest,
-};
+use pontia_application::{AppState, CreateSessionRequest, UpdateSessionRequest};
 
 use super::{
     authentication::authenticate,
@@ -24,11 +21,7 @@ pub async fn create_session(
     Json(request): Json<CreateSessionRequest>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    )
-    .with_client_control(state.client_control());
+    let service = state.session_commands();
     let outcome = idempotent(&state, &headers, "create_session", || async move {
         Ok(service.create_session(request).await?.data)
     })
@@ -47,14 +40,12 @@ pub async fn open_codex_tui(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    )
-    .open_client_interface(&session_id)
-    .await?;
+    state
+        .session_commands()
+        .open_client_interface(&session_id)
+        .await?;
     Ok(ok(
-        json!({"session":ExternalQueryService::new(state.db()).with_clients(state.clients()).get_session(&session_id).await?}),
+        json!({"session":state.queries().get_session(&session_id).await?}),
     ))
 }
 
@@ -73,7 +64,7 @@ pub async fn list_sessions(
     Query(query): Query<ListSessionsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     let sessions = service
         .list_sessions(query.include_archived, query.limit, query.include_pinned)
         .await?;
@@ -87,11 +78,7 @@ pub async fn update_session(
     Json(request): Json<UpdateSessionRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    )
-    .with_client_control(state.client_control());
+    let service = state.session_commands();
     let data = service.update_session(&session_id, request).await?;
     Ok(ok(data))
 }
@@ -102,11 +89,7 @@ pub async fn pin_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    )
-    .with_client_control(state.client_control());
+    let service = state.session_commands();
     let data = service.pin_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -117,11 +100,7 @@ pub async fn unpin_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    )
-    .with_client_control(state.client_control());
+    let service = state.session_commands();
     let data = service.unpin_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -132,11 +111,7 @@ pub async fn archive_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    )
-    .with_client_control(state.client_control());
+    let service = state.session_commands();
     let data = service.archive_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -147,11 +122,7 @@ pub async fn unarchive_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    )
-    .with_client_control(state.client_control());
+    let service = state.session_commands();
     let data = service.unarchive_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -162,7 +133,7 @@ pub async fn get_session(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     let session = service
         .get_session(&session_id)
         .await?
@@ -176,7 +147,7 @@ pub async fn interrupt_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = TurnCommandService::new(state.event_ingest_service());
+    let service = state.turn_commands();
     let operation = format!("interrupt_current:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.interrupt_current_turn(&session_id).await?.data)
@@ -191,10 +162,7 @@ pub async fn terminate_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    );
+    let service = state.session_commands();
     let operation = format!("terminate_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.terminate_session(&session_id).await?.data)
@@ -209,10 +177,7 @@ pub async fn restart_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    );
+    let service = state.session_commands();
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("restart_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -231,10 +196,7 @@ pub async fn resume_session(
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    );
+    let service = state.session_commands();
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("resume_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -253,10 +215,7 @@ pub async fn list_session_models(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    );
+    let service = state.session_commands();
     Ok(ok(serde_json::to_value(
         service.list_session_models(&session_id).await?,
     )
@@ -270,10 +229,7 @@ pub async fn set_session_model(
     Json(request): Json<pontia_application::sessions::SetSessionModelRequest>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = SessionCommandService::new(
-        state.event_ingest_service(),
-        state.pontia_home().to_path_buf(),
-    );
+    let service = state.session_commands();
     service.set_session_model(&session_id, request).await?;
     Ok((StatusCode::ACCEPTED, ok(json!({"accepted":true}))).into_response())
 }

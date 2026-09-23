@@ -174,7 +174,7 @@ fn spawn_coordinator(
     tokio::spawn(async move {
         let _keepalive = shutdown_tx;
         WorkflowCoordinator::with_services(
-            pontia_application::EventIngestService::new(pool),
+            &pontia_application::AppState::builder(pool, pontia_home.clone()).build(),
             sessions,
             exits,
             events,

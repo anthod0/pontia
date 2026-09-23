@@ -42,33 +42,9 @@ impl ExternalQueryService {
     }
 
     async fn enrich_session_view(&self, session: &mut SessionView) -> Result<()> {
-        let repository = SqliteSessionRepository::new(self.pool.clone());
-        let row = repository
-            .get_runtime_binding_capabilities(&session.session_id)
+        session.capabilities = self
+            .session_capabilities(&session.session_id, &session.client_type)
             .await?;
-
-        if let Some(row) = row {
-            let capabilities: SessionCapabilities = serde_json::from_str(&row.capabilities)?;
-            session.capabilities = if self
-                .clients
-                .spec(&session.client_type)
-                .and_then(|spec| spec.tmux_runtime())
-                .is_some()
-            {
-                crate::runtime::bindings::writable_capabilities(
-                    capabilities,
-                    row.tmux_socket_path
-                        .as_deref()
-                        .is_some_and(|value| !value.trim().is_empty())
-                        && row
-                            .tmux_pane_id
-                            .as_deref()
-                            .is_some_and(|value| !value.trim().is_empty()),
-                )
-            } else {
-                capabilities
-            };
-        }
 
         session.lineage = self.session_lineage(&session.session_id).await?;
         if let Some(client) = self
@@ -86,6 +62,41 @@ impl ExternalQueryService {
         }
 
         Ok(())
+    }
+
+    pub(super) async fn session_capabilities(
+        &self,
+        session_id: &str,
+        client_type: &str,
+    ) -> Result<SessionCapabilities> {
+        let row = SqliteSessionRepository::new(self.pool.clone())
+            .get_runtime_binding_capabilities(session_id)
+            .await?;
+        let Some(row) = row else {
+            return Ok(SessionCapabilities::default());
+        };
+        let capabilities: SessionCapabilities = serde_json::from_str(&row.capabilities)?;
+        Ok(
+            if self
+                .clients
+                .spec(client_type)
+                .and_then(|spec| spec.tmux_runtime())
+                .is_some()
+            {
+                crate::runtime::bindings::writable_capabilities(
+                    capabilities,
+                    row.tmux_socket_path
+                        .as_deref()
+                        .is_some_and(|value| !value.trim().is_empty())
+                        && row
+                            .tmux_pane_id
+                            .as_deref()
+                            .is_some_and(|value| !value.trim().is_empty()),
+                )
+            } else {
+                capabilities
+            },
+        )
     }
 
     async fn session_lineage(&self, session_id: &str) -> Result<Option<SessionLineageView>> {

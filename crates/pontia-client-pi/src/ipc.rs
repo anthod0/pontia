@@ -4,9 +4,7 @@ mod queries;
 mod reporting;
 
 use crate::rpc::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
-use pontia_application::{
-    AgentBindingService, AppState, RuntimeBindingUpsertRequest, RuntimeBindingUpsertService,
-};
+use pontia_application::{AgentBindingService, AppState, RuntimeBindingUpsertRequest};
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -291,8 +289,8 @@ async fn dispatch(
                 ));
             }
             let client_session_key = registration.binding.client_session_key.clone();
-            let result = RuntimeBindingUpsertService::new(state.db(), state.pontia_home().into())
-                .with_clients(state.clients())
+            let result = state
+                .runtime_bindings()
                 .with_session_identity_hint(client_session_key.clone())
                 .upsert(registration.binding)
                 .await?;
@@ -333,7 +331,8 @@ async fn dispatch(
         )
         .await?;
 
-    pontia_application::InboxCommandService::new(state.event_ingest_service())
+    state
+        .inbox_commands()
         .notify_available(&identity.session_id);
     *registered = Some(identity);
     Ok(result)

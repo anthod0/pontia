@@ -7,29 +7,33 @@ use super::InputIntent;
 use crate::{
     EventIngestService, ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType,
     TurnView,
-    clients::ClientAdapter,
     control::{ControlResult, InputReceipt},
-    runtime::control_target::ControlTarget,
+    runtime::ControlTarget,
 };
 
 #[derive(Clone)]
 pub struct TurnCommandService {
     pub(super) pool: SqlitePool,
     pub(super) event_ingest: EventIngestService,
-    pub(super) client_control: Option<crate::ClientControlService>,
+    pub(super) queries: ExternalQueryService,
+    pub(super) clients: crate::clients::ClientExecutionService,
+    pub(super) scheduler: crate::inbox::InboxScheduler,
 }
 
 impl TurnCommandService {
-    pub fn with_client_control(mut self, client_control: crate::ClientControlService) -> Self {
-        self.client_control = Some(client_control);
-        self
-    }
-
-    pub fn new(event_ingest: EventIngestService) -> Self {
+    pub(crate) fn new(
+        pool: SqlitePool,
+        event_ingest: EventIngestService,
+        queries: ExternalQueryService,
+        clients: crate::clients::ClientExecutionService,
+        scheduler: crate::inbox::InboxScheduler,
+    ) -> Self {
         Self {
-            pool: event_ingest.db(),
-            client_control: event_ingest.client_control(),
+            pool,
             event_ingest,
+            queries,
+            clients,
+            scheduler,
         }
     }
 
@@ -56,17 +60,12 @@ impl TurnCommandService {
         if input.trim().is_empty() {
             return Err(Error::Domain("input must not be blank".into()));
         }
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let adapter = ClientAdapter::new(
-            &session.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?;
+        let adapter = self.clients.for_client(&session.client_type)?;
         let active = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
             .await?;
@@ -145,17 +144,12 @@ impl TurnCommandService {
         if input.trim().is_empty() {
             return Err(Error::Domain("input must not be blank".into()));
         }
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let adapter = ClientAdapter::new(
-            &session.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?;
+        let adapter = self.clients.for_client(&session.client_type)?;
         if adapter.client_owns_turn() {
             return Ok(None);
         }
@@ -189,20 +183,15 @@ impl TurnCommandService {
         turn_id: Option<&str>,
     ) -> Result<()> {
         let session = target.session_id.as_str();
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session_view = query
-            .get_session(session)
+            .get_session_control(session)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session} not found")))?;
-        let adapter = ClientAdapter::new(
-            &session_view.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?;
+        let adapter = self.clients.for_client(&session_view.client_type)?;
         adapter.await_initial_ready(target).await?;
         let session_view = query
-            .get_session(session)
+            .get_session_control(session)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session} not found")))?;
         if !matches!(session_view.state.as_str(), "idle" | "interrupted") {
@@ -223,7 +212,7 @@ impl TurnCommandService {
                 "Session has another active Turn".into(),
             ));
         }
-        self.event_ingest.inbox_scheduler().begin_initial(session);
+        self.scheduler.begin_initial(session);
         let result = adapter
             .input(target, input.into(), metadata, &InputIntent::Start)
             .await;
@@ -231,8 +220,8 @@ impl TurnCommandService {
             result,
             ControlResult::Rejected(_) | ControlResult::Unsupported(_)
         ) {
-            self.event_ingest.inbox_scheduler().finish_initial(session);
-            self.event_ingest.control_available(session);
+            self.scheduler.finish_initial(session);
+            self.scheduler.wake(session.into());
         }
         if let (Some(turn), ControlResult::Rejected(error)) = (turn_id, &result) {
             self.event_ingest

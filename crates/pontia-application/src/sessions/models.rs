@@ -2,10 +2,7 @@ use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::SessionCommandService;
-use crate::{
-    ExternalQueryService, SessionView, clients::ClientAdapter,
-    runtime::control_target::ControlTarget,
-};
+use crate::{SessionView, runtime::ControlTarget};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionModel {
@@ -33,15 +30,13 @@ impl SessionCommandService {
         let session = self.model_session(session_id, false).await?;
         let target = ControlTarget::resolve(&self.pool, session_id, None).await?;
         let runtime_instance_id = target.instance()?.to_owned();
-        let models = ClientAdapter::new(
-            &session.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?
-        .list_models(&target)
-        .await?;
-        let current_model = ExternalQueryService::new(self.pool.clone())
-            .with_clients(self.event_ingest.clients())
+        let models = self
+            .clients
+            .for_client(&session.client_type)?
+            .list_models(&target)
+            .await?;
+        let current_model = self
+            .queries
             .get_session(session_id)
             .await?
             .and_then(|session| session.model);
@@ -66,19 +61,16 @@ impl SessionCommandService {
         let target =
             ControlTarget::resolve(&self.pool, session_id, Some(&request.runtime_instance_id))
                 .await?;
-        ClientAdapter::new(
-            &session.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?
-        .set_model(&target, &request.model)
-        .await
-        .into_result()
+        self.clients
+            .for_client(&session.client_type)?
+            .set_model(&target, &request.model)
+            .await
+            .into_result()
     }
 
     async fn model_session(&self, session_id: &str, modifying: bool) -> Result<SessionView> {
-        let session = ExternalQueryService::new(self.pool.clone())
-            .with_clients(self.event_ingest.clients())
+        let session = self
+            .queries
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;

@@ -3,7 +3,7 @@ use pontia_storage_sqlite::repositories::tasks::SqliteTaskRepository;
 use serde_json::json;
 
 use super::{CreateTaskOutcome, TaskCommandService, is_terminal_task_state};
-use crate::{ExternalQueryService, TurnCommandService};
+use crate::ExternalQueryService;
 
 impl TaskCommandService {
     pub async fn interrupt_task(&self, task_id: &str) -> Result<CreateTaskOutcome> {
@@ -23,9 +23,7 @@ impl TaskCommandService {
             Error::StateConflict(format!("task {task_id} has no turn to interrupt"))
         })?;
 
-        TurnCommandService::new(self.event_ingest.clone())
-            .interrupt_turn(&session_id, &turn_id)
-            .await?;
+        self.turns.interrupt_turn(&session_id, &turn_id).await?;
         let task = ExternalQueryService::new(self.pool.clone())
             .get_task(task_id)
             .await?

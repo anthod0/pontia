@@ -4,7 +4,6 @@ use pontia_application::{
 use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use serde::Serialize;
 use serde_json::json;
-use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::{Error, Result};
@@ -19,29 +18,20 @@ pub struct WorkflowControlOutcome {
 
 #[derive(Clone)]
 pub struct WorkflowControlService {
-    pool: SqlitePool,
-    event_ingest: pontia_application::EventIngestService,
-    client_control: Option<pontia_application::ClientControlService>,
+    queries: ExternalQueryService,
+    turns: TurnCommandService,
+    inbox: std::sync::Arc<InboxCommandService>,
     workflows: SqliteWorkflowRepository,
 }
 
 impl WorkflowControlService {
-    pub fn new(event_ingest: pontia_application::EventIngestService) -> Self {
-        let pool = event_ingest.db();
+    pub fn new(app: &pontia_application::AppState) -> Self {
         Self {
-            workflows: SqliteWorkflowRepository::new(pool.clone()),
-            pool,
-            event_ingest,
-            client_control: None,
+            workflows: SqliteWorkflowRepository::new(app.db()),
+            queries: app.queries(),
+            turns: app.turn_commands(),
+            inbox: app.inbox_commands(),
         }
-    }
-
-    pub fn with_client_control(
-        mut self,
-        control: pontia_application::ClientControlService,
-    ) -> Self {
-        self.client_control = Some(control);
-        self
     }
 
     pub async fn pause(&self, workflow_id: &str) -> Result<WorkflowControlOutcome> {
@@ -52,17 +42,12 @@ impl WorkflowControlService {
 
         let mut interrupt_requested = false;
         if let Some(session_id) = self.current_session_id(workflow_id).await? {
-            let session = ExternalQueryService::new(self.pool.clone())
-                .with_clients(self.event_ingest.clients())
-                .get_session(&session_id)
-                .await?;
+            let session = self.queries.get_session(&session_id).await?;
             if session
                 .as_ref()
                 .is_some_and(|session| session.state == "busy")
             {
-                TurnCommandService::new(self.event_ingest.clone())
-                    .interrupt_current_turn(&session_id)
-                    .await?;
+                self.turns.interrupt_current_turn(&session_id).await?;
                 interrupt_requested = true;
             }
         }
@@ -79,19 +64,13 @@ impl WorkflowControlService {
         self.require_state(workflow_id, "paused").await?;
         let mut continue_sent = false;
         if let Some(session_id) = self.current_session_id(workflow_id).await? {
-            let session = ExternalQueryService::new(self.pool.clone())
-                .with_clients(self.event_ingest.clients())
-                .get_session(&session_id)
-                .await?;
+            let session = self.queries.get_session(&session_id).await?;
             if session
                 .as_ref()
                 .is_some_and(|session| session.state == "interrupted")
             {
-                let mut inbox = InboxCommandService::new(self.event_ingest.clone());
-                if let Some(control) = &self.client_control {
-                    inbox = inbox.with_client_control(control.clone());
-                }
-                let outcome = inbox
+                let outcome = self
+                    .inbox
                     .submit_message(
                         &session_id,
                         SubmitInboxMessageRequest {

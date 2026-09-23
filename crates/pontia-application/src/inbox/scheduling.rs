@@ -1,7 +1,7 @@
 use super::InboxCommandService;
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, Weak},
 };
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -13,9 +13,15 @@ struct State {
     running: HashMap<String, bool>,
     stopped: bool,
     initial_inputs: HashSet<String>,
+    // AppState owns delivery; a weak link prevents the event/scheduler/delivery cycle from leaking.
+    delivery: Weak<InboxCommandService>,
 }
 
 impl InboxScheduler {
+    pub(crate) fn connect(&self, delivery: &Arc<InboxCommandService>) {
+        self.0.lock().expect("inbox scheduler lock").delivery = Arc::downgrade(delivery);
+    }
+
     pub fn begin_initial(&self, session: &str) {
         self.0
             .lock()
@@ -48,7 +54,7 @@ impl InboxScheduler {
             .clone()
     }
 
-    pub fn wake(&self, inbox: InboxCommandService, session: String) {
+    pub fn wake(&self, session: String) {
         let mut state = self.0.lock().expect("inbox scheduler lock");
         if state.stopped {
             return;
@@ -57,6 +63,9 @@ impl InboxScheduler {
             *pending = true;
             return;
         }
+        let Some(inbox) = state.delivery.upgrade() else {
+            return;
+        };
         state.running.insert(session.clone(), false);
         let scheduler = self.clone();
         tokio::spawn(async move {
@@ -97,17 +106,11 @@ impl InboxCommandService {
         &self,
         session: &str,
     ) -> tokio::sync::OwnedMutexGuard<()> {
-        self.event_ingest
-            .inbox_scheduler()
-            .session_lock(session)
-            .lock_owned()
-            .await
+        self.scheduler.session_lock(session).lock_owned().await
     }
 
     pub fn notify_available(&self, session: &str) {
-        self.event_ingest
-            .inbox_scheduler()
-            .wake(self.clone(), session.into());
+        self.scheduler.wake(session.into());
     }
 
     pub async fn recover_deliveries(&self) -> pontia_core::Result<()> {
@@ -129,6 +132,6 @@ impl InboxCommandService {
     }
 
     pub async fn stop_scheduling(&self) {
-        self.event_ingest.inbox_scheduler().stop().await;
+        self.scheduler.stop().await;
     }
 }

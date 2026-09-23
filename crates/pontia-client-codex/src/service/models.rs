@@ -5,9 +5,7 @@ use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 
 use super::{CodexService, string};
-use pontia_application::{
-    AgentBindingService, runtime::control_target::ControlTarget, sessions::SessionModel,
-};
+use pontia_application::{AgentBindingService, runtime::ControlTarget, sessions::SessionModel};
 
 impl CodexService {
     pub(crate) async fn list_models(&self, target: &ControlTarget) -> Result<Vec<SessionModel>> {

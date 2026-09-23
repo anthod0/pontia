@@ -44,7 +44,7 @@ async fn build_state_remains_usable_after_helper_returns() {
 #[tokio::test]
 async fn build_state_supports_event_projection_updates() {
     let state = TestApp::builder().build_state().await;
-    EventIngestService::new(state.db())
+    EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             "evt_test_app_projection".to_string(),

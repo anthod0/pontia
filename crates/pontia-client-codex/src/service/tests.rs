@@ -1,5 +1,5 @@
 use super::CodexService;
-use pontia_application::{AppState, CreateSessionRequest, SessionCommandService};
+use pontia_application::{AppState, CreateSessionRequest};
 use pontia_core::{Error, domain::EventType};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
@@ -46,7 +46,8 @@ impl Fixture {
             .build();
         let request: CreateSessionRequest =
             serde_json::from_value(json!({"client_type":"codex","workspace":root.path()})).unwrap();
-        let created = SessionCommandService::new(state.event_ingest_service(), root.path().into())
+        let created = state
+            .session_commands()
             .create_session(request)
             .await
             .unwrap();
@@ -353,11 +354,10 @@ async fn model_snapshot_before_resume_updates_metadata_without_resuming_the_sess
     let session = ingest.get_session(&fixture.session).await.unwrap().unwrap();
     assert_eq!(session.state.to_string(), "exited");
     assert_eq!(session.metadata["model"], "resumed-model");
-    pontia_application::native_sessions::NativeSessionService::new(ingest.clone())
+    pontia_application::sessions::NativeSessionService::new(fixture.state.db(), ingest.clone())
         .ready(
             &fixture.session,
             "runtime",
-            fixture._root.path(),
             json!({"client_session_key":"thread"}),
         )
         .await
@@ -458,7 +458,9 @@ async fn generic_runtime_observation_does_not_mark_external_session_failed() {
     let fixture = Fixture::new().await;
     let events = fixture.state.event_ingest_service();
     let before = events.list_events(&fixture.session).await.unwrap().len();
-    pontia_application::RuntimeObservationService::new(events.clone())
+    fixture
+        .state
+        .runtime_observer()
         .observe_session(&fixture.session)
         .await
         .unwrap();

@@ -9,7 +9,7 @@ pub(super) use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 
-use pontia_application::{AppState, EventStreamScope, EventView, ExternalQueryService};
+use pontia_application::{AppState, EventStreamScope, EventView};
 use pontia_core::domain::{DomainEvent, EventType};
 
 use super::{
@@ -28,7 +28,7 @@ pub async fn stream_session_events(
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     let after_rowid = match query.after.as_deref() {
         Some(after) => {
@@ -60,7 +60,7 @@ pub async fn stream_turn_events(
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     service
         .get_turn(&session_id, &turn_id)
@@ -109,7 +109,7 @@ fn event_sse_stream(
 
     tokio::spawn(async move {
         let mut shutdown = state.shutdown().subscribe();
-        let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+        let service = state.queries();
         let mut volatile_events = state.volatile_events().subscribe();
         let mut cursor = after_rowid;
 

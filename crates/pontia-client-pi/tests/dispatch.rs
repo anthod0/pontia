@@ -10,9 +10,9 @@ use tokio::{
     net::UnixStream,
 };
 
-use pontia_application::{ClientControlService, EventIngestService, TurnCommandService};
+use pontia_application::{AppState, EventIngestService};
 
-async fn setup() -> (SqlitePool, tempfile::TempDir, ClientControlService) {
+async fn setup() -> (SqlitePool, tempfile::TempDir, AppState) {
     let root = tempfile::Builder::new().prefix("pd-").tempdir().unwrap();
     let pool = connect_sqlite(&format!(
         "sqlite://{}",
@@ -30,12 +30,14 @@ async fn setup() -> (SqlitePool, tempfile::TempDir, ClientControlService) {
     sqlx::query("INSERT INTO runtime_bindings (session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('sess_pi','pi_tui','rtinst_pi','confirmed','/unused/tmux','%1',?)")
         .bind(serde_json::to_string(&pontia_client_pi::CAPABILITIES).unwrap()).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','pi','/unused','native_pi','{}')").execute(&pool).await.unwrap();
-    let control = ClientControlService::new(pool.clone(), root.path().into());
-    (pool, root, control)
+    let state = AppState::builder(pool.clone(), root.path().into())
+        .clients(support::clients())
+        .build();
+    (pool, root, state)
 }
 
 async fn ready(pool: &SqlitePool) {
-    EventIngestService::new(pool.clone())
+    EventIngestService::for_projection_tests(pool.clone())
         .with_clients(support::clients())
         .ingest_reported_event(ReportedEvent::new(
             "evt_ready".into(),
@@ -52,7 +54,8 @@ async fn ready(pool: &SqlitePool) {
 
 #[tokio::test]
 async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
-    let (pool, _root, control) = setup().await;
+    let (pool, _root, state) = setup().await;
+    let control = state.client_control();
     let (daemon_socket, socket) = UnixStream::pair().unwrap();
     let (peer, _requests) = pontia_client_pi::rpc::PiRpcPeer::new(daemon_socket);
     control
@@ -74,10 +77,7 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
             .await
             .unwrap();
     });
-    let service = TurnCommandService::new(
-        pontia_application::EventIngestService::new(pool.clone()).with_clients(support::clients()),
-    )
-    .with_client_control(control);
+    let service = state.turn_commands();
     let dispatch = tokio::spawn(async move {
         service
             .create_and_dispatch_turn(
@@ -108,15 +108,14 @@ async fn pi_input_waits_for_ready_uses_socket_and_leaves_lifecycle_to_client() {
 
 #[tokio::test]
 async fn missing_pi_connection_rejects_delivery_without_creating_a_turn() {
-    let (pool, _root, control) = setup().await;
+    let (pool, _root, state) = setup().await;
+    let _control = state.client_control();
     ready(&pool).await;
-    let error = TurnCommandService::new(
-        pontia_application::EventIngestService::new(pool.clone()).with_clients(support::clients()),
-    )
-    .with_client_control(control)
-    .create_and_dispatch_turn("sess_pi", "not delivered".into(), json!({}))
-    .await
-    .unwrap_err();
+    let error = state
+        .turn_commands()
+        .create_and_dispatch_turn("sess_pi", "not delivered".into(), json!({}))
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("no current Client connection"));
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
         .fetch_one(&pool)

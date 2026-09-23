@@ -27,13 +27,19 @@ const STARTUP_TIMEOUT_SWEEP_INTERVAL: Duration = Duration::from_secs(1);
 pub struct RuntimeObservationService {
     pool: SqlitePool,
     runtime: GenericRuntimeManager,
+    clients: crate::clients::ClientRegistry,
     event_ingest: EventIngestService,
 }
 
 impl RuntimeObservationService {
-    pub fn new(event_ingest: EventIngestService) -> Self {
+    pub(crate) fn new(
+        pool: SqlitePool,
+        clients: crate::clients::ClientRegistry,
+        event_ingest: EventIngestService,
+    ) -> Self {
         Self {
-            pool: event_ingest.db(),
+            pool,
+            clients,
             runtime: GenericRuntimeManager,
             event_ingest,
         }
@@ -138,7 +144,7 @@ impl RuntimeObservationService {
             return Ok(());
         }
 
-        let Some(client_spec) = self.event_ingest.clients().spec(&session.client_type) else {
+        let Some(client_spec) = self.clients.spec(&session.client_type) else {
             return Ok(());
         };
         match client_spec.adapter.runtime {
@@ -295,7 +301,7 @@ mod tests {
     }
 
     async fn create_starting_session(pool: &SqlitePool, session_id: &str) {
-        let ingest = EventIngestService::new(pool.clone());
+        let ingest = EventIngestService::for_projection_tests(pool.clone());
         ingest
             .ingest_pontia_event(PontiaEvent::new(
                 session_id.to_string(),
@@ -331,7 +337,9 @@ mod tests {
         .await
         .expect("age startup event");
 
-        RuntimeObservationService::new(EventIngestService::new(pool.clone()))
+        crate::AppState::builder(pool.clone(), _dir.path().into())
+            .build()
+            .runtime_observer()
             .sweep_startup_timeouts()
             .await
             .expect("sweep startup timeouts");
@@ -357,7 +365,7 @@ mod tests {
     async fn startup_timeout_does_not_change_session_that_became_ready() {
         let (pool, _dir) = pool().await;
         create_starting_session(&pool, "sess_ready").await;
-        EventIngestService::new(pool.clone())
+        EventIngestService::for_projection_tests(pool.clone())
             .ingest_reported_event(ReportedEvent::new(
                 new_event_id().to_string(),
                 "sess_ready".to_string(),
@@ -370,7 +378,9 @@ mod tests {
             .await
             .expect("ready session");
 
-        RuntimeObservationService::new(EventIngestService::new(pool.clone()))
+        crate::AppState::builder(pool.clone(), _dir.path().into())
+            .build()
+            .runtime_observer()
             .sweep_startup_timeouts()
             .await
             .expect("sweep startup timeouts");

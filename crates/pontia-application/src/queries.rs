@@ -1,3 +1,5 @@
+mod control;
+pub(crate) use control::SessionControlState;
 use sqlx::SqlitePool;
 
 mod events;

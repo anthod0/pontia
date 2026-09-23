@@ -20,10 +20,11 @@ async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marke
     sqlx::query(
         r#"INSERT INTO runtime_bindings
            (session_id, runtime_kind, runtime_instance_id, binding_state, launch_cwd, tmux_socket_path, tmux_pane_id)
-           VALUES (?, 'pi_tui', 'rtinst_precreated', 'provisioned', ?, '/tmp/tmux-1000/default', '%42')"#,
+           VALUES (?, 'pi_tui', 'rtinst_precreated', 'provisioned', ?, ?, '%42')"#,
     )
     .bind(session_id)
     .bind(&workspace)
+    .bind(std::path::Path::new(&workspace).join("missing-tmux.sock").to_str().unwrap())
     .execute(&state.db())
     .await
     .expect("precreate runtime binding");
@@ -180,7 +181,10 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     assert_eq!(row.get::<String, _>("launch_cwd"), workspace);
     assert_eq!(
         row.get::<String, _>("tmux_socket_path"),
-        "/tmp/tmux-1000/default"
+        std::path::Path::new(&workspace)
+            .join("missing-tmux.sock")
+            .to_str()
+            .unwrap()
     );
     assert_eq!(row.get::<String, _>("tmux_pane_id"), "%42");
     assert_eq!(row.get::<String, _>("binding_state"), "confirmed");

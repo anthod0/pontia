@@ -31,7 +31,7 @@ pub(super) async fn test_pool(database_name: &str) -> (SqlitePool, Arc<tempfile:
 pub(super) async fn service() -> TestService {
     let (pool, pontia_home) = test_pool("m1.db").await;
     TestService {
-        service: EventIngestService::new(pool),
+        service: EventIngestService::for_projection_tests(pool),
         _pontia_home: pontia_home,
     }
 }
@@ -41,7 +41,8 @@ pub(super) async fn service_with_agent_events() -> (TestService, AgentEventBroke
     let (pool, pontia_home) = test_pool("agent-events.db").await;
     (
         TestService {
-            service: EventIngestService::new(pool).with_agent_events(broker.clone()),
+            service: EventIngestService::for_projection_tests(pool)
+                .with_agent_events(broker.clone()),
             _pontia_home: pontia_home,
         },
         broker,

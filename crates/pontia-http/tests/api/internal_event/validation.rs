@@ -248,7 +248,7 @@ async fn reporting_service_validates_context_usage_and_truncates_output() {
     .await
     .unwrap();
 
-    let turn = EventIngestService::new(state.db())
+    let turn = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .get_turn(turn_id)
         .await

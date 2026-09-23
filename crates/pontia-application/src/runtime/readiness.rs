@@ -134,7 +134,7 @@ mod tests {
     #[tokio::test]
     async fn readiness_matches_current_runtime_instance_id() {
         let (pool, _pontia_home) = pool().await;
-        let service = EventIngestService::new(pool.clone());
+        let service = EventIngestService::for_projection_tests(pool.clone());
         service
             .ingest_reported_event(ReportedEvent::new(
                 new_event_id().to_string(),

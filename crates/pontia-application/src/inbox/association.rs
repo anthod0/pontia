@@ -1,12 +1,22 @@
-use super::InboxCommandService;
+use super::InboxScheduler;
 use crate::control::InputReceipt;
 use pontia_core::{
     Result,
     domain::{DomainEvent, EventType},
 };
 use pontia_storage_sqlite::repositories::inbox::SqliteInboxRepository;
+use sqlx::SqlitePool;
 
-impl InboxCommandService {
+#[derive(Clone)]
+pub(crate) struct InboxAssociations {
+    pool: SqlitePool,
+}
+
+impl InboxAssociations {
+    pub(crate) fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
     pub(crate) async fn record_receipt(
         &self,
         session: &str,
@@ -43,14 +53,16 @@ impl InboxCommandService {
         Ok(())
     }
 
-    pub(crate) async fn observe_committed(&self, event: &DomainEvent) -> Result<()> {
+    pub(crate) async fn observe_committed(
+        &self,
+        scheduler: &InboxScheduler,
+        event: &DomainEvent,
+    ) -> Result<()> {
         if matches!(
             event.event_type,
             EventType::TurnStarted | EventType::SessionExited | EventType::SessionError
         ) {
-            self.event_ingest
-                .inbox_scheduler()
-                .finish_initial(&event.session_id);
+            scheduler.finish_initial(&event.session_id);
         }
         if event.event_type == EventType::TurnStarted
             && let Some(turn) = &event.turn_id
@@ -88,7 +100,7 @@ impl InboxCommandService {
                 | EventType::TurnAbandoned
                 | EventType::TurnInterrupted
         ) {
-            self.notify_available(&event.session_id);
+            scheduler.wake(event.session_id.clone());
         }
         Ok(())
     }

@@ -1,53 +1,13 @@
-use std::{collections::HashMap, path::Path, sync::Arc};
-
 use crate::client_contract::{
-    AgentClientSpec, TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend,
+    AgentClientSpec, ClientData, ClientLauncher, ClientSession, InProcessClient,
+    TimelineBoundaryBackend, TurnTimelineBackend,
 };
-use pontia_core::{
-    Result,
-    domain::{DomainEvent, EventType},
-};
-use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
-use serde_json::Value;
-
-#[derive(Default)]
-pub struct NativeEventEvidence {
-    pub entry_anchor: Option<String>,
-    pub topology: Option<Value>,
-}
-
-pub struct BranchTargetRequest {
-    pub binding: pontia_storage_sqlite::models::agent_bindings::AgentBindingRow,
-    pub turn: pontia_storage_sqlite::models::turns::TurnProjectionRow,
-    pub is_first_session_turn: bool,
-}
-
-/// Native parsing operates on opaque client evidence; business identity stays with services.
-pub trait ClientData: Send + Sync {
-    fn normalize_payload(&self, kind: EventType, data: Value) -> Result<Value>;
-    fn take_evidence(&self, event: &mut DomainEvent) -> NativeEventEvidence;
-    fn timeline(&self) -> TurnTimelineBackend;
-    fn boundaries(&self) -> TimelineBoundaryBackend;
-    fn topology(&self) -> Option<TurnTopologyBackend>;
-    fn branch_target(&self, request: BranchTargetRequest) -> Result<String>;
-}
-
-pub struct ClientLaunchRequest<'a> {
-    pub root: &'a Path,
-    pub runtime: RuntimeStartRequest,
-    pub restart_count: i64,
-    pub reuse_pane: Option<(&'a str, &'a str)>,
-    pub native_session_key: Option<&'a str>,
-}
-
-pub trait ClientLauncher: Send + Sync {
-    fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult>;
-}
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Clone)]
 pub struct ClientRegistration {
-    pub in_process: Option<Arc<dyn super::InProcessClient>>,
-    pub session: Option<Arc<dyn super::ClientSession>>,
+    pub in_process: Option<Arc<dyn InProcessClient>>,
+    pub session: Option<Arc<dyn ClientSession>>,
     pub prepare_on_input: bool,
     pub steer: bool,
     pub spec: &'static AgentClientSpec,

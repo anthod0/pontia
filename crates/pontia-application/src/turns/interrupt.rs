@@ -1,15 +1,12 @@
 use super::TurnCommandService;
-use crate::{
-    ControlCommandOutcome, ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType,
-};
+use crate::{ControlCommandOutcome, PontiaEvent, PontiaEventSource, PontiaEventType};
 use pontia_core::{Error, Result};
 use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 use serde_json::json;
 impl TurnCommandService {
     pub async fn interrupt_current_turn(&self, session_id: &str) -> Result<ControlCommandOutcome> {
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
-        if query.get_session(session_id).await?.is_none() {
+        let query = &self.queries;
+        if query.get_session_control(session_id).await?.is_none() {
             return Err(Error::NotFound(format!("session {session_id} not found")));
         }
         let active_turn = SqliteTurnRepository::new(self.pool.clone())
@@ -47,14 +44,11 @@ impl TurnCommandService {
         turn_id: &str,
         expected: Option<&str>,
     ) -> Result<ControlCommandOutcome> {
-        let target = crate::runtime::control_target::ControlTarget::resolve(
-            &self.pool, session_id, expected,
-        )
-        .await?;
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let target =
+            crate::runtime::ControlTarget::resolve(&self.pool, session_id, expected).await?;
+        let query = &self.queries;
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         let turn = query
@@ -88,22 +82,18 @@ impl TurnCommandService {
 
     async fn interrupt_validated(
         &self,
-        session: &crate::SessionView,
+        session: &crate::queries::SessionControlState,
         turn: &crate::TurnView,
-        target: crate::runtime::control_target::ControlTarget,
+        target: crate::runtime::ControlTarget,
     ) -> Result<ControlCommandOutcome> {
         let session_id = &session.session_id;
         let turn_id = &turn.turn_id;
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
-        crate::clients::ClientAdapter::new(
-            &session.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?
-        .interrupt(&target, turn_id)
-        .await
-        .into_result()?;
+        let query = &self.queries;
+        self.clients
+            .for_client(&session.client_type)?
+            .interrupt(&target, turn_id)
+            .await
+            .into_result()?;
         let ingest = self.event_ingest.clone();
         ingest
             .ingest_pontia_event(PontiaEvent::new(

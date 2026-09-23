@@ -101,7 +101,15 @@ pub(super) async fn request_json(
 }
 
 pub(super) fn upsert_body(workspace: &str, pane_id: Option<&str>) -> Value {
-    upsert_body_with_tmux(workspace, "/tmp/tmux-1000/default", pane_id, Some("dev"))
+    upsert_body_with_tmux(
+        workspace,
+        std::path::Path::new(workspace)
+            .join("missing-tmux.sock")
+            .to_str()
+            .unwrap(),
+        pane_id,
+        Some("dev"),
+    )
 }
 
 pub(super) fn upsert_body_with_tmux(

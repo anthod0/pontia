@@ -61,7 +61,7 @@ pub struct WorkflowCoordinator<S, X, I, B> {
     exits: X,
     interruptions: I,
     agent_events: B,
-    inbox: InboxCommandService,
+    inbox: std::sync::Arc<InboxCommandService>,
     pontia_home: PathBuf,
 }
 
@@ -70,15 +70,15 @@ where
     S: SessionCreator + Send + Sync + 'static,
 {
     pub fn new(
-        event_ingest: pontia_application::EventIngestService,
+        app: &pontia_application::AppState,
         sessions: S,
         agent_events: AgentEventBroker,
         pontia_home: PathBuf,
     ) -> Self {
-        let exits = SessionCommandService::new(event_ingest.clone(), pontia_home.clone());
-        let interruptions = TurnCommandService::new(event_ingest.clone());
+        let exits = app.session_commands();
+        let interruptions = app.turn_commands();
         Self::with_services_and_interruptions(
-            event_ingest,
+            app,
             sessions,
             exits,
             interruptions,
@@ -95,14 +95,14 @@ where
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services(
-        event_ingest: pontia_application::EventIngestService,
+        app: &pontia_application::AppState,
         sessions: S,
         exits: X,
         agent_events: B,
         pontia_home: PathBuf,
     ) -> Self {
         Self::with_services_and_interruptions(
-            event_ingest,
+            app,
             sessions,
             exits.clone(),
             exits,
@@ -120,7 +120,7 @@ where
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services_and_interruptions(
-        event_ingest: pontia_application::EventIngestService,
+        app: &pontia_application::AppState,
         sessions: S,
         exits: X,
         interruptions: I,
@@ -128,23 +128,15 @@ where
         pontia_home: PathBuf,
     ) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(event_ingest.db()),
-            persisted_events: SqliteEventRepository::new(event_ingest.db()),
-            inbox: InboxCommandService::new(event_ingest),
+            repository: SqliteWorkflowRepository::new(app.db()),
+            persisted_events: SqliteEventRepository::new(app.db()),
+            inbox: app.inbox_commands(),
             sessions,
             exits,
             interruptions,
             agent_events,
             pontia_home,
         }
-    }
-
-    pub fn with_client_control(
-        mut self,
-        control: pontia_application::ClientControlService,
-    ) -> Self {
-        self.inbox = self.inbox.with_client_control(control);
-        self
     }
 
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {

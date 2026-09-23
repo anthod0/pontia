@@ -9,9 +9,7 @@ use serde_json::json;
 
 use super::SessionCommandService;
 use crate::ControlCommandOutcome;
-use crate::{
-    ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType, get_workspace_record,
-};
+use crate::{PontiaEvent, PontiaEventSource, PontiaEventType, get_workspace_record};
 
 impl SessionCommandService {
     pub async fn open_client_interface(&self, session_id: &str) -> Result<()> {
@@ -21,41 +19,10 @@ impl SessionCommandService {
         .get_session(session_id)
         .await?
         .ok_or_else(|| Error::NotFound("session not found".into()))?;
-        let clients = self.event_ingest.clients();
-        let client = clients
-            .get(&session.client_type)
-            .and_then(|entry| entry.session.as_ref())
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Client interface is unavailable".into())
-            })?;
-        client
-            .open_interface(self.event_ingest.clone(), session_id)
+        self.clients
+            .for_client(&session.client_type)?
+            .open_interface(session_id)
             .await
-    }
-
-    pub(crate) async fn observe_resumed_session(
-        &self,
-        session_id: &str,
-        instance: &str,
-    ) -> Result<bool> {
-        let session = ExternalQueryService::new(self.pool.clone())
-            .with_clients(self.event_ingest.clients())
-            .get_session(session_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        if session.state == "exited" {
-            self.event_ingest
-                .ingest_runtime_observation_event(PontiaEvent::new(
-                    session_id,
-                    None,
-                    PontiaEventSource::RuntimeManager,
-                    session.client_type,
-                    PontiaEventType::SessionResuming,
-                    json!({"runtime_instance_id":instance}),
-                ))
-                .await?;
-        }
-        Ok(matches!(session.state.as_str(), "exited" | "starting"))
     }
 
     pub async fn ensure_current_runtime(
@@ -63,24 +30,21 @@ impl SessionCommandService {
         session_id: &str,
         runtime_instance_id: &str,
     ) -> Result<()> {
-        let session = ExternalQueryService::new(self.pool.clone())
-            .with_clients(self.event_ingest.clients())
-            .get_session(session_id)
+        let session = self
+            .queries
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let target = crate::runtime::control_target::ControlTarget::resolve(
+        let target = crate::runtime::ControlTarget::resolve(
             &self.pool,
             session_id,
             Some(runtime_instance_id),
         )
         .await?;
-        crate::clients::ClientAdapter::new(
-            &session.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?
-        .ensure_exit_available(&target)
-        .await
+        self.clients
+            .for_client(&session.client_type)?
+            .ensure_exit_available(&target)
+            .await
     }
 
     pub async fn terminate_session(&self, session_id: &str) -> Result<ControlCommandOutcome> {
@@ -92,27 +56,20 @@ impl SessionCommandService {
         session_id: &str,
         expected_runtime: Option<&str>,
     ) -> Result<ControlCommandOutcome> {
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let target = crate::runtime::control_target::ControlTarget::resolve(
-            &self.pool,
-            session_id,
-            expected_runtime,
-        )
-        .await?;
+        let target =
+            crate::runtime::ControlTarget::resolve(&self.pool, session_id, expected_runtime)
+                .await?;
         if !matches!(session.state.as_str(), "exited" | "error") {
-            crate::clients::ClientAdapter::new(
-                &session.client_type,
-                self.event_ingest.clone(),
-                self.client_control.clone(),
-            )?
-            .exit(&target)
-            .await
-            .into_result()?;
+            self.clients
+                .for_client(&session.client_type)?
+                .exit(&target)
+                .await
+                .into_result()?;
         }
         Ok(ControlCommandOutcome {
             data: json!({"session":query.get_session(session_id).await?}),
@@ -125,10 +82,9 @@ impl SessionCommandService {
         session_id: &str,
         pontia_home: &Path,
     ) -> Result<ControlCommandOutcome> {
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         if session.state != "exited" {
@@ -137,14 +93,8 @@ impl SessionCommandService {
                 session.state
             )));
         }
-        let adapter = crate::clients::ClientAdapter::new(
-            &session.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?;
-        let target =
-            crate::runtime::control_target::ControlTarget::resolve(&self.pool, session_id, None)
-                .await?;
+        let adapter = self.clients.for_client(&session.client_type)?;
+        let target = crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
         let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
         let ingest = self.event_ingest.clone();
         ingest
@@ -224,10 +174,9 @@ impl SessionCommandService {
         session_id: &str,
         pontia_home: &Path,
     ) -> Result<ControlCommandOutcome> {
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         if matches!(session.state.as_str(), "exited" | "error") {
@@ -235,19 +184,13 @@ impl SessionCommandService {
                 "terminal session {session_id} cannot be restarted"
             )));
         }
-        let adapter = crate::clients::ClientAdapter::new(
-            &session.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?;
+        let adapter = self.clients.for_client(&session.client_type)?;
         if !adapter.supports_restart() {
             return Err(Error::CapabilityUnavailable(
                 "A Session cannot restart a shared runtime".into(),
             ));
         }
-        let target =
-            crate::runtime::control_target::ControlTarget::resolve(&self.pool, session_id, None)
-                .await?;
+        let target = crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
         let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
         let mut runtime_replacement_tx = self.pool.begin().await?;
         SqliteTurnRepository::serialize_session_turn_writes_in_tx(

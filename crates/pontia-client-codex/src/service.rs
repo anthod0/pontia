@@ -6,7 +6,7 @@ mod tests;
 
 use crate::runtime::CodexRuntime;
 use pontia_application::{
-    AgentBindingService, UpsertAgentBindingRequest, native_sessions::NativeSessionService,
+    AgentBindingService, UpsertAgentBindingRequest, sessions::NativeSessionService,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartResult;
@@ -45,7 +45,7 @@ impl CodexService {
 
     pub async fn provision(&self, session_id: &str, root: &Path, cwd: &Path) -> Result<()> {
         let runtime = Self::provisioned_runtime(root, cwd);
-        NativeSessionService::new(self.event_ingest.clone())
+        NativeSessionService::new(self.pool.clone(), self.event_ingest.clone())
             .provision(session_id, &runtime)
             .await
     }
@@ -74,25 +74,23 @@ impl CodexService {
         root: &Path,
         runtime: &CodexRuntime,
         thread: &Value,
-    ) -> Result<pontia_application::native_sessions::NativeSessionObservation> {
+    ) -> Result<pontia_application::sessions::NativeSessionObservation> {
         let id = string(thread, "id")?;
         let cwd = string(thread, "cwd")?;
         let mut capabilities = crate::CAPABILITIES;
         capabilities.timeline = thread["path"].as_str().is_some_and(|path| {
             crate::rollout::identity(Path::new(path)).is_ok_and(|native| native == id)
         });
-        Ok(
-            pontia_application::native_sessions::NativeSessionObservation {
-                identity: pontia_application::native_sessions::NativeSessionIdentity {
-                    launch_cwd: cwd.into(),
-                    client_session_file: thread["path"].as_str().map(str::to_owned),
-                },
-                provisioned_runtime: Self::provisioned_runtime(root, Path::new(cwd)),
-                instance_id: runtime.instance_id.clone(),
-                capabilities,
-                details: json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection":"reconciling"}),
+        Ok(pontia_application::sessions::NativeSessionObservation {
+            identity: pontia_application::sessions::NativeSessionIdentity {
+                launch_cwd: cwd.into(),
+                client_session_file: thread["path"].as_str().map(str::to_owned),
             },
-        )
+            provisioned_runtime: Self::provisioned_runtime(root, Path::new(cwd)),
+            instance_id: runtime.instance_id.clone(),
+            capabilities,
+            details: json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection":"reconciling"}),
+        })
     }
 
     pub(super) async fn bind(
@@ -111,7 +109,7 @@ impl CodexService {
         capabilities.timeline = thread["path"].as_str().is_some_and(|path| {
             crate::rollout::identity(Path::new(path)).is_ok_and(|native| native == id)
         });
-        NativeSessionService::new(self.event_ingest.clone())
+        NativeSessionService::new(self.pool.clone(), self.event_ingest.clone())
             .confirm(
                 UpsertAgentBindingRequest {
                     session_id: session_id.into(),
@@ -132,7 +130,7 @@ impl CodexService {
 
     pub(crate) async fn submit(
         &self,
-        target: &pontia_application::runtime::control_target::ControlTarget,
+        target: &pontia_application::runtime::ControlTarget,
         input: &str,
         message_id: Option<&str>,
         intent: &pontia_application::turns::InputIntent,
@@ -233,7 +231,7 @@ impl CodexService {
                 ));
             }
         };
-        let execution_target = pontia_application::runtime::control_target::ControlTarget {
+        let execution_target = pontia_application::runtime::ControlTarget {
             session_id: session_id.clone(),
             runtime_instance_id: Some(runtime.instance_id.clone()),
         };
@@ -275,7 +273,7 @@ impl CodexService {
 
     pub(crate) async fn interrupt(
         &self,
-        target: &pontia_application::runtime::control_target::ControlTarget,
+        target: &pontia_application::runtime::ControlTarget,
         turn_id: &str,
     ) -> Result<()> {
         let session_id = &target.session_id;
@@ -325,7 +323,7 @@ impl CodexService {
 
     pub(crate) async fn archive(
         &self,
-        target: &pontia_application::runtime::control_target::ControlTarget,
+        target: &pontia_application::runtime::ControlTarget,
     ) -> Result<()> {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
@@ -362,7 +360,7 @@ impl CodexService {
 
     pub(crate) async fn resume(
         &self,
-        target: &pontia_application::runtime::control_target::ControlTarget,
+        target: &pontia_application::runtime::ControlTarget,
     ) -> Result<()> {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;

@@ -1,8 +1,7 @@
 mod common;
 use axum::http::StatusCode;
 use pontia_application::{
-    AgentBindingService, AppState, CreateSessionRequest, SessionCommandService,
-    UpsertAgentBindingRequest,
+    AgentBindingService, AppState, CreateSessionRequest, UpsertAgentBindingRequest,
 };
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
@@ -18,14 +17,14 @@ async fn app() -> (tempfile::TempDir, AppState, String) {
     run_migrations(&pool).await.unwrap();
     let request: CreateSessionRequest =
         serde_json::from_value(json!({"client_type":"codex","workspace":root.path()})).unwrap();
-    let created = SessionCommandService::new(
-        pontia_application::EventIngestService::new(pool.clone())
-            .with_clients(crate::common::clients::clients()),
-        root.path().into(),
-    )
-    .create_session(request)
-    .await
-    .unwrap();
+    let state = AppState::builder(pool.clone(), root.path().into())
+        .clients(crate::common::clients::clients())
+        .build();
+    let created = state
+        .session_commands()
+        .create_session(request)
+        .await
+        .unwrap();
     let session = created.session_id().unwrap().to_string();
     sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='instance',binding_state='confirmed' WHERE session_id=?").bind(&session).execute(&pool).await.unwrap();
     AgentBindingService::new(pool.clone())
@@ -39,9 +38,6 @@ async fn app() -> (tempfile::TempDir, AppState, String) {
         })
         .await
         .unwrap();
-    let state = AppState::builder(pool, root.path().into())
-        .clients(crate::common::clients::clients())
-        .build();
     (root, state, session)
 }
 

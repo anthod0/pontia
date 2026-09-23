@@ -68,7 +68,7 @@ async fn reconcile_reporting_workflow(state: &AppState) {
     }
     let root = tempfile::tempdir().unwrap();
     pontia_workflow::WorkflowCoordinator::new(
-        state.event_ingest_service(),
+        state,
         NoSessions,
         state.agent_events(),
         root.path().to_path_buf(),
@@ -175,7 +175,7 @@ async fn turn_start_reporting_failure_fails_workflow_without_fabricating_turn_fa
             .count(),
         1
     );
-    let events = EventIngestService::new(state.db())
+    let events = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .list_events("sess_reporting")
         .await
@@ -262,7 +262,7 @@ async fn lost_started_response_administratively_abandons_the_committed_turn() {
     .await
     .unwrap();
 
-    let turn = EventIngestService::new(state.db())
+    let turn = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .get_turn(started.turn_id.as_deref().unwrap())
         .await
@@ -323,7 +323,7 @@ async fn reporting_failure_notifications_persist_only_one_error_per_runtime() {
         .await
         .unwrap();
     }
-    let events = EventIngestService::new(state.db())
+    let events = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .list_events("sess_reporting")
         .await

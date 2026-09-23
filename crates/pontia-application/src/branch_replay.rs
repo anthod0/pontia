@@ -47,18 +47,16 @@ impl BranchReplayService {
 
     pub(crate) async fn dispatch(
         &self,
-        events: crate::EventIngestService,
+        clients: &crate::clients::ClientExecutionService,
         session: &str,
         message: &str,
     ) -> pontia_core::Result<crate::control::ControlResult<crate::control::InputReceipt>> {
         let view = ExternalQueryService::new(self.pool.clone())
             .with_clients(self.clients.clone())
-            .get_session(session)
+            .get_session_control(session)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session} not found")))?;
-        let target =
-            crate::runtime::control_target::ControlTarget::resolve(&self.pool, session, None)
-                .await?;
+        let target = crate::runtime::ControlTarget::resolve(&self.pool, session, None).await?;
         self.resolve_command(ResolveBranchReplayRequest {
             inbox_message_id: message.into(),
             session_id: session.into(),
@@ -66,13 +64,10 @@ impl BranchReplayService {
             client_type: view.client_type.clone(),
         })
         .await?;
-        let result = crate::clients::ClientAdapter::new(
-            &view.client_type,
-            events.clone(),
-            events.client_control(),
-        )?
-        .replay(&target, message)
-        .await;
+        let result = clients
+            .for_client(&view.client_type)?
+            .replay(&target, message)
+            .await;
         Ok(match result {
             crate::control::ControlResult::Sent(()) => {
                 crate::control::ControlResult::Sent(crate::control::InputReceipt::default())
@@ -169,7 +164,7 @@ impl BranchReplayService {
     ) -> pontia_core::Result<String> {
         let query = ExternalQueryService::new(self.pool.clone()).with_clients(self.clients.clone());
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         if !session.capabilities.branch_control {
@@ -227,11 +222,13 @@ impl BranchReplayService {
         let is_first_session_turn = all_turns
             .first()
             .is_some_and(|turn| turn.turn_id == target_turn_id);
-        crate::clients::ClientAdapter::new(
-            &session.client_type,
-            crate::EventIngestService::new(self.pool.clone()).with_clients(self.clients.clone()),
-            None,
-        )?
-        .branch_target(binding, target, is_first_session_turn)
+        self.clients
+            .data(&session.client_type)
+            .ok_or_else(|| Error::CapabilityUnavailable("branch target source unavailable".into()))?
+            .branch_target(crate::client_contract::BranchTargetRequest {
+                binding,
+                turn: target,
+                is_first_session_turn,
+            })
     }
 }

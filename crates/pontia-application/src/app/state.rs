@@ -15,6 +15,7 @@ use crate::{
 #[derive(Clone)]
 pub struct AppState {
     inner: Arc<AppStateInner>,
+    external_api_token: Option<String>,
 }
 
 struct AppStateInner {
@@ -23,6 +24,7 @@ struct AppStateInner {
     events: EventState,
     lifecycle: LifecycleState,
     integrations: IntegrationState,
+    commands: CommandServices,
 }
 
 struct PersistenceState {
@@ -31,7 +33,6 @@ struct PersistenceState {
 
 struct AppRuntimeState {
     pontia_home: PathBuf,
-    external_api_token: Option<String>,
     workspace_browser: WorkspaceBrowserConfig,
     file_picker: FilePickerConfig,
 }
@@ -54,27 +55,81 @@ struct IntegrationState {
     client_control: crate::ClientControlService,
 }
 
+struct CommandServices {
+    sessions: crate::SessionCommandService,
+    turns: crate::TurnCommandService,
+    inbox: Arc<crate::InboxCommandService>,
+    tasks: crate::TaskCommandService,
+}
+
 impl AppState {
     pub fn builder(db: SqlitePool, pontia_home: PathBuf) -> AppStateBuilder {
         AppStateBuilder::new(db, pontia_home)
     }
 
     pub(super) fn from_builder(builder: AppStateBuilder) -> Self {
-        let ingest = crate::EventIngestService::new(builder.db.clone())
-            .with_clients(builder.clients.clone())
-            .with_reporting_dependencies(
+        let scheduler = crate::inbox::InboxScheduler::default();
+        let ingest = crate::EventIngestService::new(
+            builder.db.clone(),
+            builder.clients.clone(),
+            crate::ingestion::PostCommitEffects::new(
                 builder.client_control.clone(),
                 builder.agent_events.clone(),
                 crate::LiveOutputService::new(builder.db.clone(), builder.live_output.clone())
                     .with_clients(builder.clients.clone()),
                 builder.volatile_events.clone(),
-            );
+                scheduler.clone(),
+            ),
+        );
+        let queries = crate::ExternalQueryService::new(builder.db.clone())
+            .with_clients(builder.clients.clone());
+        let execution = crate::clients::ClientExecutionService::new(
+            builder.db.clone(),
+            builder.clients.clone(),
+            ingest.clone(),
+            builder.client_control.clone(),
+        );
+        let turns = crate::TurnCommandService::new(
+            builder.db.clone(),
+            ingest.clone(),
+            queries.clone(),
+            execution.clone(),
+            scheduler.clone(),
+        );
+        let branches = crate::BranchReplayService::new(builder.db.clone())
+            .with_clients(builder.clients.clone());
+        let inbox = Arc::new(crate::InboxCommandService::new(
+            builder.db.clone(),
+            ingest.clone(),
+            queries.clone(),
+            execution.clone(),
+            turns.clone(),
+            branches,
+            scheduler.clone(),
+        ));
+        scheduler.connect(&inbox);
+        let sessions = crate::SessionCommandService::new(
+            builder.db.clone(),
+            ingest.clone(),
+            queries,
+            execution,
+            turns.clone(),
+            inbox.clone(),
+            builder.pontia_home.clone(),
+        );
+        let tasks = crate::TaskCommandService::new(builder.db.clone(), turns.clone());
         Self {
+            external_api_token: builder.external_api_token,
             inner: Arc::new(AppStateInner {
+                commands: CommandServices {
+                    sessions,
+                    turns,
+                    inbox,
+                    tasks,
+                },
                 persistence: PersistenceState { db: builder.db },
                 config: AppRuntimeState {
                     pontia_home: builder.pontia_home,
-                    external_api_token: builder.external_api_token,
                     workspace_browser: builder.workspace_browser,
                     file_picker: builder.file_picker,
                 },
@@ -110,7 +165,7 @@ impl AppState {
     }
 
     pub fn external_api_token(&self) -> Option<&str> {
-        self.inner.config.external_api_token.as_deref()
+        self.external_api_token.as_deref()
     }
 
     pub fn workspace_browser(&self) -> WorkspaceBrowserConfig {
@@ -154,24 +209,41 @@ impl AppState {
         self.inner.integrations.idempotency.clone()
     }
 
-    pub fn with_external_api_token(&self, external_api_token: Option<String>) -> Self {
-        self.rebuild()
-            .external_api_token(external_api_token)
-            .build()
+    pub fn session_commands(&self) -> crate::SessionCommandService {
+        self.inner.commands.sessions.clone()
+    }
+    pub fn turn_commands(&self) -> crate::TurnCommandService {
+        self.inner.commands.turns.clone()
+    }
+    pub fn inbox_commands(&self) -> Arc<crate::InboxCommandService> {
+        self.inner.commands.inbox.clone()
+    }
+    pub fn task_commands(&self) -> crate::TaskCommandService {
+        self.inner.commands.tasks.clone()
+    }
+    pub fn queries(&self) -> crate::ExternalQueryService {
+        crate::ExternalQueryService::new(self.db()).with_clients(self.clients())
+    }
+    pub fn runtime_observer(&self) -> crate::RuntimeObservationService {
+        crate::RuntimeObservationService::new(
+            self.db(),
+            self.clients(),
+            self.event_ingest_service(),
+        )
+    }
+    pub fn runtime_bindings(&self) -> crate::RuntimeBindingUpsertService {
+        crate::RuntimeBindingUpsertService::new(
+            self.db(),
+            self.pontia_home().into(),
+            self.clients(),
+            self.event_ingest_service(),
+        )
     }
 
-    fn rebuild(&self) -> AppStateBuilder {
-        AppState::builder(self.db(), self.inner.config.pontia_home.clone())
-            .external_api_token(self.inner.config.external_api_token.clone())
-            .workspace_browser(self.workspace_browser())
-            .file_picker(self.file_picker())
-            .shutdown(self.shutdown())
-            .agent_events(self.agent_events())
-            .volatile_events(self.volatile_events())
-            .live_output(self.inner.events.live_output.clone())
-            .git_refresh(self.git_refresh())
-            .idempotency(self.idempotency())
-            .client_control(self.client_control())
-            .clients(self.clients())
+    pub fn with_external_api_token(&self, external_api_token: Option<String>) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            external_api_token,
+        }
     }
 }

@@ -1,156 +1,91 @@
-use pontia_application::{AppState, app};
+use pontia_application::client_contract::{RuntimeBindingBehavior, test_registration};
+use pontia_application::clients::ClientRegistry;
+use pontia_application::{AppState, PontiaEvent, PontiaEventSource, PontiaEventType};
+use pontia_core::domain::EventType;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+use serde_json::json;
 
 #[tokio::test]
-async fn app_state_is_constructed_through_builder() {
+async fn runtime_registration_and_resume_publish_to_the_application_broker() {
+    let root = tempfile::tempdir().unwrap();
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
-
-    let state = AppState::builder(db.clone(), "/tmp/pontia-test-home".into()).build();
-
-    let fetched: i64 = sqlx::query_scalar("SELECT 1")
-        .fetch_one(&state.db())
+    static SPEC: std::sync::OnceLock<pontia_application::client_contract::AgentClientSpec> =
+        std::sync::OnceLock::new();
+    let mut registration = test_registration();
+    registration.spec = SPEC.get_or_init(|| {
+        let mut spec = pontia_application::client_contract::TEST_SPEC.clone();
+        spec.adapter.runtime_binding = RuntimeBindingBehavior::Named {
+            runtime_kind: "test",
+        };
+        spec
+    });
+    let mut clients = ClientRegistry::default();
+    clients.register(registration);
+    let state = AppState::builder(db, root.path().into())
+        .clients(clients)
+        .build();
+    let mut notices = state.agent_events().subscribe();
+    let request = json!({
+        "client_type":"generic", "client_session_key":"native", "launch_cwd":root.path(),
+        "tmux":{"socket_path":root.path().join("missing.sock"),"pane_id":"%1"}
+    });
+    let registered = state
+        .runtime_bindings()
+        .upsert(serde_json::from_value(request.clone()).unwrap())
         .await
         .unwrap();
-    assert_eq!(fetched, 1);
-}
-
-#[tokio::test]
-async fn app_state_is_available_from_app_namespace() {
-    let db = connect_sqlite("sqlite::memory:").await.unwrap();
-    run_migrations(&db).await.unwrap();
-
-    let state: app::AppState =
-        AppState::builder(db.clone(), "/tmp/pontia-test-home".into()).build();
-
-    let fetched: i64 = sqlx::query_scalar("SELECT 1")
-        .fetch_one(&state.db())
+    let session = registered["session"]["session_id"].as_str().unwrap();
+    for kind in [
+        EventType::SessionCreated,
+        EventType::SessionStarting,
+        EventType::SessionStarted,
+    ] {
+        let event = notices
+            .try_recv()
+            .expect("registration must publish through shared dependencies");
+        assert_eq!(event.event_type, kind);
+        assert_eq!(event.session_id, session);
+        assert!(
+            state
+                .event_ingest_service()
+                .list_events(session)
+                .await
+                .unwrap()
+                .iter()
+                .any(|stored| stored.event_id == event.event_id)
+        );
+    }
+    assert!(notices.try_recv().is_err());
+    state
+        .event_ingest_service()
+        .ingest_pontia_event(PontiaEvent::new(
+            session,
+            None,
+            PontiaEventSource::RuntimeManager,
+            "generic",
+            PontiaEventType::SessionExited,
+            json!({}),
+        ))
         .await
         .unwrap();
-    assert_eq!(fetched, 1);
-}
-
-#[test]
-fn application_exposes_workspaces_namespace() {
-    fn assert_browser_service(_: pontia_application::workspaces::WorkspaceBrowserService) {}
-    fn assert_register_request(_: pontia_application::workspaces::RegisterWorkspaceRequest) {}
-    fn assert_workspace_record(_: pontia_application::workspaces::WorkspaceRecord) {}
-
-    let _ = assert_browser_service;
-    let _ = assert_register_request;
-    let _ = assert_workspace_record;
-}
-
-#[test]
-fn application_exposes_command_namespaces() {
-    fn assert_session_service(_: pontia_application::sessions::SessionCommandService) {}
-    fn assert_task_service(_: pontia_application::tasks::TaskCommandService) {}
-
-    let _ = assert_session_service;
-    let _ = assert_task_service;
-}
-
-#[test]
-fn application_exposes_query_namespace() {
-    fn assert_query_service(_: pontia_application::queries::ExternalQueryService) {}
-
-    let _ = assert_query_service;
-}
-
-#[test]
-fn application_exposes_view_submodule_namespaces() {
-    fn assert_session_view(_: pontia_application::views::sessions::SessionView) {}
-    fn assert_workspace_view(_: pontia_application::views::workspaces::WorkspaceView) {}
-    fn assert_task_view(_: pontia_application::views::tasks::TaskView) {}
-    fn assert_turn_view(_: pontia_application::views::turns::TurnView) {}
-    fn assert_inbox_view(_: pontia_application::views::inbox::InboxMessageView) {}
-    fn assert_event_view(_: pontia_application::views::events::EventView) {}
-    let _ = assert_session_view;
-    let _ = assert_workspace_view;
-    let _ = assert_task_view;
-    let _ = assert_turn_view;
-    let _ = assert_inbox_view;
-    let _ = assert_event_view;
-}
-
-#[test]
-fn application_exposes_runtime_namespace() {
-    fn assert_binding_service(_: pontia_application::runtime::RuntimeBindingUpsertService) {}
-    fn assert_observation_service(_: pontia_application::runtime::RuntimeObservationService) {}
-    fn assert_readiness_service(_: pontia_application::runtime::RuntimeReadinessService) {}
-
-    let _ = assert_binding_service;
-    let _ = assert_observation_service;
-    let _ = assert_readiness_service;
-}
-
-#[test]
-fn application_exposes_runtime_bindings_namespace() {
-    fn assert_binding_service(
-        _: pontia_application::runtime::bindings::RuntimeBindingUpsertService,
-    ) {
+    assert_eq!(
+        notices.try_recv().unwrap().event_type,
+        EventType::SessionExited
+    );
+    state
+        .runtime_bindings()
+        .upsert(serde_json::from_value(request).unwrap())
+        .await
+        .unwrap();
+    for kind in [EventType::SessionResuming, EventType::SessionStarted] {
+        assert_eq!(
+            notices
+                .try_recv()
+                .expect("resume must publish through shared dependencies")
+                .event_type,
+            kind
+        );
     }
-    fn assert_binding_request(
-        _: pontia_application::runtime::bindings::RuntimeBindingUpsertRequest,
-    ) {
-    }
-
-    let _ = assert_binding_service;
-    let _ = assert_binding_request;
-}
-
-#[test]
-fn application_exposes_runtime_bindings_submodule_namespaces() {
-    fn assert_binding_service(
-        _: pontia_application::runtime::bindings::service::RuntimeBindingUpsertService,
-    ) {
-    }
-    fn assert_binding_request(
-        _: pontia_application::runtime::bindings::types::RuntimeBindingUpsertRequest,
-    ) {
-    }
-
-    let _ = assert_binding_service;
-    let _ = assert_binding_request;
-}
-
-#[test]
-fn application_exposes_runtime_observation_and_readiness_namespaces() {
-    fn assert_observation_service(
-        _: pontia_application::runtime::observation::RuntimeObservationService,
-    ) {
-    }
-    fn assert_readiness_service(
-        _: pontia_application::runtime::readiness::RuntimeReadinessService,
-    ) {
-    }
-
-    let _ = assert_observation_service;
-    let _ = assert_readiness_service;
-}
-
-#[test]
-fn application_exposes_ingestion_namespace() {
-    fn assert_ingest_service(_: pontia_application::ingestion::EventIngestService) {}
-    fn assert_validation_service(_: pontia_application::ingestion::InternalEventValidationService) {
-    }
-    fn assert_ingest_result(_: pontia_application::ingestion::EventIngestResult) {}
-
-    let _ = assert_ingest_service;
-    let _ = assert_validation_service;
-    let _ = assert_ingest_result;
-}
-
-#[test]
-fn application_exposes_ingestion_submodule_namespaces() {
-    fn assert_ingest_service(_: pontia_application::ingestion::service::EventIngestService) {}
-    fn assert_validation_service(
-        _: pontia_application::ingestion::validation::InternalEventValidationService,
-    ) {
-    }
-    fn assert_ingest_result(_: pontia_application::ingestion::types::EventIngestResult) {}
-
-    let _ = assert_ingest_service;
-    let _ = assert_validation_service;
-    let _ = assert_ingest_result;
+    assert!(notices.try_recv().is_err());
 }

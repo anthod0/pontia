@@ -1,3 +1,4 @@
+mod commit;
 mod effects;
 mod enrichment;
 mod persistence;
@@ -8,11 +9,8 @@ mod validation;
 use sqlx::SqlitePool;
 
 use pontia_core::{
-    domain::{
-        DomainEvent, EventType, MAX_TURN_INPUT_SUMMARY_CHARS, ProjectionState, ReportedEvent,
-        SessionProjection, SessionState, TurnProjection, TurnTopology,
-    },
-    error::{Error, Result},
+    domain::{DomainEvent, ReportedEvent, SessionProjection, SessionState, TurnProjection},
+    error::Result,
 };
 use pontia_storage_sqlite::repositories::{
     events::SqliteEventRepository, sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
@@ -20,92 +18,75 @@ use pontia_storage_sqlite::repositories::{
 
 use self::{
     effects::clear_exited_session_tmux_markers,
-    enrichment::{enrich_timeline_boundary, enrich_topology, should_resolve_topology},
-    persistence::{insert_event_in_tx, persist_projections_in_tx},
-    validation::{
-        ensure_confirmed_event_matches_session_boundary, ensure_runtime_fence_in_tx,
-        validate_turn_identity_in_tx,
-    },
+    validation::ensure_confirmed_event_matches_session_boundary,
 };
 use super::{
     EventIngestResult, PontiaEvent,
     projection_rows::{event_from_row, session_from_row, turn_from_row},
 };
-use crate::{AgentEventBroker, InboxCommandService, LiveOutputService, UpsertAgentBindingRequest};
+use crate::UpsertAgentBindingRequest;
+#[cfg(any(test, feature = "generic-test-client"))]
+use crate::{AgentEventBroker, LiveOutputService};
+pub(crate) use effects::PostCommitEffects;
+#[cfg(any(test, feature = "generic-test-client"))]
+use pontia_core::domain::TurnTopology;
 
 #[derive(Clone)]
 pub struct EventIngestService {
     pool: SqlitePool,
     clients: crate::clients::ClientRegistry,
-    inbox_scheduler: crate::inbox::InboxScheduler,
-    client_control: Option<crate::ClientControlService>,
-    agent_events: Option<AgentEventBroker>,
-    live_output: Option<LiveOutputService>,
-    volatile_events: Option<crate::app::VolatileEventBroker>,
+    effects: PostCommitEffects,
 }
 
 impl EventIngestService {
     pub fn clients(&self) -> crate::clients::ClientRegistry {
         self.clients.clone()
     }
+    #[cfg(any(test, feature = "generic-test-client"))]
     pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
         self.clients = clients;
         self
     }
 
-    pub(crate) fn client_control(&self) -> Option<crate::ClientControlService> {
-        self.client_control.clone()
-    }
-
-    pub(crate) fn inbox_scheduler(&self) -> crate::inbox::InboxScheduler {
-        self.inbox_scheduler.clone()
-    }
+    /// Notifies the input scheduler that a client channel can accept work.
     pub fn control_available(&self, session: &str) {
-        InboxCommandService::new(self.clone()).notify_available(session);
+        self.effects.scheduler.wake(session.into());
     }
 
     pub fn db(&self) -> SqlitePool {
         self.pool.clone()
     }
 
-    pub fn with_reporting_dependencies(
-        mut self,
-        client_control: crate::ClientControlService,
-        agent_events: AgentEventBroker,
-        live_output: LiveOutputService,
-        volatile_events: crate::app::VolatileEventBroker,
+    pub(crate) fn new(
+        pool: SqlitePool,
+        clients: crate::clients::ClientRegistry,
+        effects: PostCommitEffects,
     ) -> Self {
-        self.client_control = Some(client_control);
-        self.agent_events = Some(agent_events);
-        self.live_output = Some(live_output);
-        self.volatile_events = Some(volatile_events);
-        self
-    }
-
-    pub fn with_client_control(mut self, client_control: crate::ClientControlService) -> Self {
-        self.client_control = Some(client_control);
-        self
-    }
-
-    pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool,
-            clients: Default::default(),
-            inbox_scheduler: Default::default(),
-            client_control: None,
-            agent_events: None,
-            live_output: None,
-            volatile_events: None,
+            clients,
+            effects,
         }
     }
 
+    #[cfg(any(test, feature = "generic-test-client"))]
+    pub fn for_projection_tests(pool: SqlitePool) -> Self {
+        Self {
+            pool,
+            clients: Default::default(),
+            effects: PostCommitEffects::default(),
+        }
+    }
+
+    #[cfg(any(test, feature = "generic-test-client"))]
     pub fn with_agent_events(mut self, agent_events: AgentEventBroker) -> Self {
-        self.agent_events = Some(agent_events);
+        self.effects.agent_events = Some(agent_events);
         self
     }
 
+    #[cfg(any(test, feature = "generic-test-client"))]
     pub fn with_live_output(mut self, live_output: LiveOutputService) -> Self {
-        self.live_output = Some(live_output);
+        self.effects.live_output = Some(live_output);
         self
     }
 
@@ -140,13 +121,14 @@ impl EventIngestService {
 
     /// Injects an event for storage/projection tests and the in-process generic test client.
     ///
-    /// This is a test-support entry point by convention, not by compile-time enforcement.
+    /// Available only with test support enabled.
     /// It bypasses fact normalization, report validation and runtime fencing; it still
     /// runs the shared persistence, projection and configured post-commit effects.
     /// Do not use it for production adapters or add a replay path through it.
     /// Client facts must use [`Self::report_fact`]; Pontia-owned facts must use
     /// [`Self::ingest_pontia_event`] (or [`Self::ingest_runtime_observation_event`]
     /// for runtime observations that require fencing).
+    #[cfg(any(test, feature = "generic-test-client"))]
     pub async fn ingest_reported_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into(), None, false, None)
             .await
@@ -169,7 +151,8 @@ impl EventIngestService {
         }) else {
             return Ok(());
         };
-        self.ingest_reported_event(event).await?;
+        self.ingest_domain_event(event.into(), None, false, None)
+            .await?;
         Ok(())
     }
 
@@ -179,7 +162,10 @@ impl EventIngestService {
     /// "Confirmed" means the caller has already normalized and validated the fact;
     /// this method does not perform the full report validation itself.
     /// Production adapters must call [`Self::report_fact`], even for in-process reports.
-    pub async fn ingest_confirmed_event(&self, event: ReportedEvent) -> Result<EventIngestResult> {
+    pub(crate) async fn ingest_confirmed_event(
+        &self,
+        event: ReportedEvent,
+    ) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into(), None, true, None)
             .await
             .map(|result| result.expect("unconditional event ingestion returns a result"))
@@ -187,8 +173,9 @@ impl EventIngestService {
 
     /// Injects an event with explicit topology for storage/projection and query tests.
     /// Like [`Self::ingest_reported_event`], this bypasses report validation and runtime
-    /// fencing and is not compile-time restricted to tests. Production client facts
+    /// fencing and requires test support. Production client facts
     /// must use [`Self::report_fact`], which derives topology through normal ingestion.
+    #[cfg(any(test, feature = "generic-test-client"))]
     pub async fn ingest_event_with_topology(
         &self,
         event: ReportedEvent,
@@ -218,218 +205,32 @@ impl EventIngestService {
 
     async fn ingest_domain_event(
         &self,
-        mut event: DomainEvent,
+        event: DomainEvent,
         initial_agent_binding: Option<UpsertAgentBindingRequest>,
         enforce_runtime_fence: bool,
         expected_session_state: Option<SessionState>,
     ) -> Result<Option<EventIngestResult>> {
-        // Bound durable input at the shared ingestion boundary, including
-        // Pontia-owned and in-process events that do not pass through HTTP.
-        if event.event_type.is_turn_event() {
-            for pointer in ["/input/summary", "/input_summary"] {
-                if let Some(serde_json::Value::String(summary)) = event.payload.pointer_mut(pointer)
-                {
-                    *summary = summary.chars().take(MAX_TURN_INPUT_SUMMARY_CHARS).collect();
-                }
-            }
-        }
-        if event.event_type.is_turn_event() && event.turn_id.is_none() {
-            return Err(Error::Domain(format!(
-                "{} must carry turn_id",
-                event.event_type
-            )));
-        }
-        if let Some(existing_version) = self
-            .existing_event_state_version(&event.event_id, &event.session_id)
-            .await?
-        {
-            clear_exited_session_tmux_markers(&self.pool, &event, false).await;
-            return Ok(Some(EventIngestResult {
-                accepted: true,
-                duplicate: true,
-                event_id: event.event_id,
-                session_id: event.session_id,
-                turn_id: event.turn_id,
-                state_version: existing_version,
-            }));
-        }
-
-        let evidence = if let Some(data) = self.clients.data(&event.client_type) {
-            data.take_evidence(&mut event)
-        } else {
-            crate::clients::NativeEventEvidence {
-                entry_anchor: event
-                    .payload
-                    .get("native_turn_id")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned),
-                topology: None,
-            }
-        };
-        enrich_timeline_boundary(&self.pool, &self.clients, &mut event, evidence.entry_anchor)
-            .await;
-        let topology_evidence = evidence.topology;
-        let topology_binding_id = if should_resolve_topology(&self.clients, &event) {
-            crate::AgentBindingService::new(self.pool.clone())
-                .binding_for_session(&event.session_id)
-                .await
-                .ok()
-                .flatten()
-                .map(|binding| binding.id)
-        } else {
-            None
-        };
-
-        let mut tx = self.pool.begin().await?;
-        if event.event_type != EventType::SessionCreated {
-            let session_exists =
-                SqliteTurnRepository::serialize_session_turn_writes_if_exists_in_tx(
-                    &mut tx,
-                    &event.session_id,
-                )
-                .await?;
-            if !session_exists && (event.event_type.is_turn_event() || enforce_runtime_fence) {
-                SqliteTurnRepository::serialize_session_turn_writes_in_tx(
-                    &mut tx,
-                    &event.session_id,
-                )
-                .await?;
-            }
-            if enforce_runtime_fence {
-                ensure_runtime_fence_in_tx(
-                    &mut tx,
-                    &event,
-                    self.clients
-                        .spec(&event.client_type)
-                        .is_some_and(|spec| spec.adapter.native_turn_identity),
-                )
-                .await?;
-            }
-        }
-        if let Some(event_id) =
-            reporting_failure::existing_reporting_failure_in_tx(&mut tx, &event).await?
-        {
-            let state_version =
-                SqliteEventRepository::session_event_count_in_tx(&mut tx, &event.session_id)
-                    .await?;
-            tx.commit().await?;
-            return Ok(Some(EventIngestResult {
-                accepted: true,
-                duplicate: true,
-                event_id,
-                session_id: event.session_id,
-                turn_id: None,
-                state_version,
-            }));
-        }
-        if sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM events WHERE event_id=?")
-            .bind(&event.event_id)
-            .fetch_one(&mut *tx)
-            .await?
-            > 0
-        {
-            let state_version =
-                SqliteEventRepository::session_event_count_in_tx(&mut tx, &event.session_id)
-                    .await?;
-            tx.commit().await?;
-            return Ok(Some(EventIngestResult {
-                accepted: true,
-                duplicate: true,
-                event_id: event.event_id,
-                session_id: event.session_id,
-                turn_id: event.turn_id,
-                state_version,
-            }));
-        }
-        validate_turn_identity_in_tx(&mut tx, &event, enforce_runtime_fence).await?;
-        let sessions =
-            SqliteSessionRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
-                .await?
-                .into_iter()
-                .map(session_from_row)
-                .collect::<Result<Vec<_>>>()?;
-        if let Some(expected_state) = expected_session_state
-            && !sessions
-                .first()
-                .is_some_and(|session| session.state == expected_state)
-        {
-            return Ok(None);
-        }
-        let turns = SqliteTurnRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
-            .await?
-            .into_iter()
-            .map(turn_from_row)
-            .collect::<Result<Vec<_>>>()?;
-        enrich_topology(
-            &self.clients,
-            &mut event,
-            topology_binding_id,
-            topology_evidence,
-            &turns,
-        );
-        let mut projection = ProjectionState::with_existing(sessions, turns);
-        projection.apply(&event)?;
-
-        insert_event_in_tx(&mut tx, &event).await?;
-
-        let state_version =
-            SqliteEventRepository::session_event_count_in_tx(&mut tx, &event.session_id).await?;
-
-        if event.event_type != EventType::SessionMessageUpdated {
-            persist_projections_in_tx(&mut tx, &projection, state_version).await?;
-        }
-
-        if let Some(binding) = initial_agent_binding {
-            crate::agent_bindings::upsert_agent_binding_in_tx(&mut tx, binding).await?;
-        }
-
-        crate::agent_bindings::register_agent_binding_for_ready_event_in_tx(&mut tx, &event)
+        let outcome = commit::EventCommitter::new(self.pool.clone(), self.clients.clone())
+            .commit(
+                event,
+                initial_agent_binding,
+                enforce_runtime_fence,
+                expected_session_state,
+            )
             .await?;
-
-        tx.commit().await?;
-
-        if matches!(
-            event.event_type,
-            EventType::SessionExited | EventType::SessionError
-        ) && let Some(control) = &self.client_control
-        {
-            control.refresh_session(&event.session_id).await;
-        }
-
-        if let Some(agent_events) = &self.agent_events {
-            agent_events.publish(event.clone());
-        }
-        if let Some(live_output) = &self.live_output {
-            match event.event_type {
-                EventType::TurnCompleted
-                | EventType::TurnFailed
-                | EventType::TurnDispatchFailed
-                | EventType::TurnAbandoned
-                | EventType::TurnInterrupted => {
-                    if let Some(turn_id) = event.turn_id.as_deref() {
-                        live_output.discard_turn(&event.session_id, turn_id);
-                    }
+        match outcome {
+            commit::CommitOutcome::Skipped => Ok(None),
+            commit::CommitOutcome::Duplicate { result, cleanup } => {
+                if let Some(event) = cleanup {
+                    clear_exited_session_tmux_markers(&self.pool, &event, false).await;
                 }
-                EventType::SessionExited | EventType::SessionError => {
-                    live_output.discard_session(&event.session_id);
-                }
-                _ => {}
+                Ok(Some(result))
+            }
+            commit::CommitOutcome::Committed { result, event } => {
+                self.effects.apply(&self.pool, &event).await?;
+                Ok(Some(result))
             }
         }
-
-        clear_exited_session_tmux_markers(&self.pool, &event, true).await;
-        InboxCommandService::new(self.clone())
-            .observe_committed(&event)
-            .await?;
-
-        Ok(Some(EventIngestResult {
-            accepted: true,
-            duplicate: false,
-            event_id: event.event_id,
-            session_id: event.session_id,
-            turn_id: event.turn_id,
-            state_version,
-        }))
     }
 
     async fn ensure_confirmed_event_matches_session_boundary(
@@ -463,16 +264,6 @@ impl EventIngestService {
     async fn volatile_state_version(&self, session_id: &str) -> Result<i64> {
         SqliteEventRepository::new(self.pool.clone())
             .session_event_count(session_id)
-            .await
-    }
-
-    async fn existing_event_state_version(
-        &self,
-        event_id: &str,
-        session_id: &str,
-    ) -> Result<Option<i64>> {
-        SqliteEventRepository::new(self.pool.clone())
-            .existing_event_state_version(event_id, session_id)
             .await
     }
 

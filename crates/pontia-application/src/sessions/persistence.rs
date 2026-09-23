@@ -35,9 +35,7 @@ impl SessionCommandService {
         runtime: &RuntimeStartResult,
     ) -> Result<()> {
         let result = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .upsert_binding_guarded(crate::sessions::runtime_binding_record(
-                session_id, runtime,
-            )?)
+            .upsert_binding_guarded(crate::runtime::runtime_binding_record(session_id, runtime)?)
             .await;
         if result.is_err() {
             crate::clients::discard_unbound_runtime(runtime);

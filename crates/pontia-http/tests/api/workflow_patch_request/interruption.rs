@@ -85,7 +85,7 @@ async fn reported_requester_interruption_starts_one_replanner() {
     assert_eq!(status, StatusCode::OK, "{requested}");
     let patch_id = requested["data"]["patch_id"].as_str().unwrap();
     let coordinator = WorkflowCoordinator::with_services(
-        app.state.event_ingest_service(),
+        &app.state,
         ReplannerCreator(app.db.clone()),
         RuntimeControl::default(),
         app.state.agent_events(),
@@ -103,7 +103,7 @@ async fn reported_requester_interruption_starts_one_replanner() {
         json!({ "terminal_leaf_id": null }),
     )
     .await;
-    let turn = EventIngestService::new(app.db.clone())
+    let turn = EventIngestService::for_projection_tests(app.db.clone())
         .with_clients(crate::common::clients::clients())
         .get_turn("turn_patch_request")
         .await
@@ -230,7 +230,7 @@ async fn planning_patch(app: &TestApp, control: RuntimeControl) -> (String, Coor
     let patch_id = requested["data"]["patch_id"].as_str().unwrap().to_string();
     report_requester_fact(app, "turn.interrupted", json!({ "terminal_leaf_id": null })).await;
     let coordinator = WorkflowCoordinator::with_services(
-        app.state.event_ingest_service(),
+        &app.state,
         ReplannerCreator(app.db.clone()),
         control,
         app.state.agent_events(),

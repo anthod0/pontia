@@ -1,60 +1,81 @@
 mod input;
-mod session;
-pub use session::{ClientOperation, ClientSession, ClientSessionDetails, InProcessClient};
+pub use crate::client_contract::{
+    BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, ClientOperation,
+    ClientSession, ClientSessionDetails, InProcessClient, NativeEventEvidence,
+};
+mod connections;
+pub use connections::ClientControlService;
 mod lifecycle;
 mod models;
 pub(crate) use lifecycle::discard_unbound_runtime;
 mod channel;
 mod registry;
-pub use registry::{
-    BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, ClientRegistration,
-    ClientRegistry, NativeEventEvidence,
-};
+pub use registry::{ClientRegistration, ClientRegistry};
 
+use crate::EventIngestService;
 use crate::client_contract::{AgentClientSpec, DispatchMode};
-use crate::{ClientControlService, EventIngestService};
 use pontia_core::{Error, Result};
 
-/// Client selection and native execution live here. Business policy stays with
-/// the service that owns the operation.
+/// Selects a registered client and executes its application-owned control operations.
+#[derive(Clone)]
+pub(crate) struct ClientExecutionService {
+    pool: sqlx::SqlitePool,
+    registry: ClientRegistry,
+    events: EventIngestService,
+    control: ClientControlService,
+}
+
+impl ClientExecutionService {
+    pub(crate) fn new(
+        pool: sqlx::SqlitePool,
+        registry: ClientRegistry,
+        events: EventIngestService,
+        control: ClientControlService,
+    ) -> Self {
+        Self {
+            pool,
+            registry,
+            events,
+            control,
+        }
+    }
+
+    pub(crate) fn for_client(&self, client: &str) -> Result<ClientAdapter> {
+        Ok(ClientAdapter {
+            spec: self
+                .registry
+                .spec(client)
+                .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client}")))?,
+            pool: self.pool.clone(),
+            registry: self.registry.clone(),
+            events: self.events.clone(),
+            control: self.control.clone(),
+        })
+    }
+}
+
 pub(crate) struct ClientAdapter {
     pub spec: &'static AgentClientSpec,
-    pub events: EventIngestService,
-    pub control: Option<ClientControlService>,
+    pool: sqlx::SqlitePool,
+    registry: ClientRegistry,
+    events: EventIngestService,
+    control: ClientControlService,
 }
 
 impl ClientAdapter {
-    pub fn new(
-        client: &str,
-        events: EventIngestService,
-        control: Option<ClientControlService>,
-    ) -> Result<Self> {
-        Ok(Self {
-            spec: events
-                .clients()
-                .spec(client)
-                .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client}")))?,
-            events,
-            control,
-        })
-    }
-
     fn session_client(&self) -> Option<std::sync::Arc<dyn ClientSession>> {
-        self.events
-            .clients()
+        self.registry
             .get(self.spec.client_type)
             .and_then(|entry| entry.session.clone())
     }
 
     pub fn supports_steer(&self) -> bool {
-        self.events
-            .clients()
+        self.registry
             .get(self.spec.client_type)
             .is_some_and(|entry| entry.steer)
     }
     pub fn prepares_on_input(&self) -> bool {
-        self.events
-            .clients()
+        self.registry
             .get(self.spec.client_type)
             .is_some_and(|entry| entry.prepare_on_input)
     }
@@ -67,13 +88,10 @@ impl ClientAdapter {
 
     pub async fn input_available(&self, session: &str) -> Result<bool> {
         if let Some(client) = self.session_client() {
-            return client.available(self.events.db(), session).await;
+            return client.available(self.pool.clone(), session).await;
         }
         if self.spec.adapter.dispatch == DispatchMode::Connected {
-            return match &self.control {
-                Some(pi) => pi.available(session).await,
-                None => Ok(false),
-            };
+            return self.control.available(session).await;
         }
         Ok(true)
     }

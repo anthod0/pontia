@@ -47,7 +47,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
-    let started_turn = EventIngestService::new(state.db())
+    let started_turn = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .get_turn("turn_delayed_first")
         .await
@@ -330,7 +330,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
     assert!(body["data"]["turn"].get("head_cursor").is_none());
     assert!(body["data"]["turn"].get("tail_cursor").is_none());
 
-    let events = EventIngestService::new(state.db())
+    let events = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .list_events(session_id)
         .await
@@ -454,7 +454,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
         "pi-jsonl-v2:{}:{tail_offset}:after:terminal_leaf",
         binding.id
     );
-    let turn = EventIngestService::new(state.db())
+    let turn = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .get_turn(turn_id)
         .await
@@ -463,7 +463,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
     assert_eq!(turn.head_cursor.as_deref(), Some(expected_head.as_str()));
     assert_eq!(turn.tail_cursor.as_deref(), Some(expected_tail.as_str()));
 
-    let events = EventIngestService::new(state.db())
+    let events = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .list_events(session_id)
         .await
@@ -485,7 +485,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
     let state = test_state().await;
     let session_id = "sess_pi_boundary_missing";
     seed_session(&state, session_id).await;
-    EventIngestService::new(state.db())
+    EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             "evt_existing_created".to_string(),
@@ -498,7 +498,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
         ))
         .await
         .unwrap();
-    EventIngestService::new(state.db())
+    EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .ingest_reported_event(ReportedEvent::new(
             "evt_existing_completed".to_string(),
@@ -548,7 +548,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
         .with_subscriber(subscriber)
         .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
-    let turn = EventIngestService::new(state.db())
+    let turn = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .get_turn("turn_pi_boundary_missing")
         .await

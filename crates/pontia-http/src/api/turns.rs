@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use pontia_application::{AppState, ExternalQueryService, TurnCommandService};
+use pontia_application::AppState;
 
 use super::{
     authentication::authenticate,
@@ -21,7 +21,7 @@ pub async fn interrupt_turn(
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = TurnCommandService::new(state.event_ingest_service());
+    let service = state.turn_commands();
     let operation = format!("interrupt_turn:{session_id}:{turn_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.interrupt_turn(&session_id, &turn_id).await?.data)
@@ -36,7 +36,7 @@ pub async fn list_turns(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     let turns = service.list_turns(&session_id).await?;
     Ok(ok(json!({ "turns": turns })))
@@ -48,7 +48,7 @@ pub async fn get_turn(
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     let turn = service
         .get_turn(&session_id, &turn_id)
@@ -63,7 +63,7 @@ pub async fn list_session_events(
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     let events = service.list_session_events(&session_id).await?;
     Ok(ok(json!({ "events": events })))
@@ -75,7 +75,7 @@ pub async fn list_turn_events(
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     service
         .get_turn(&session_id, &turn_id)

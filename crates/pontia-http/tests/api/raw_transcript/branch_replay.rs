@@ -455,10 +455,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         .execute(&state.db())
         .await
         .unwrap();
-    pontia_application::InboxCommandService::new(state.event_ingest_service())
-        .recover_deliveries()
-        .await
-        .unwrap();
+    state.inbox_commands().recover_deliveries().await.unwrap();
     sqlx::query(
         "INSERT INTO events (event_id, session_id, source, client_type, event_type, occurred_at, payload) VALUES ('evt_branch_resolve_ready', ?, 'agent_client', 'pi', 'session.ready', '2026-07-24T00:00:00Z', ?)",
     )

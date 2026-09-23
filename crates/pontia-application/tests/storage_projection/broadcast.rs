@@ -142,7 +142,8 @@ async fn rejected_agent_event_is_not_broadcast() {
 async fn persistence_failure_is_not_broadcast() {
     let (pool, _pontia_home) = test_pool("closed-agent-events.db").await;
     let broker = AgentEventBroker::default();
-    let service = EventIngestService::new(pool.clone()).with_agent_events(broker.clone());
+    let service =
+        EventIngestService::for_projection_tests(pool.clone()).with_agent_events(broker.clone());
     let mut subscriber = broker.subscribe();
     pool.close().await;
 

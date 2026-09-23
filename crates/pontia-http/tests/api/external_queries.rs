@@ -66,8 +66,8 @@ async fn bind_session_to_active_workspace(state: &AppState, session_id: &str) {
 }
 
 async fn seed_session_turn(state: &AppState) {
-    let service =
-        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
+    let service = EventIngestService::for_projection_tests(state.db())
+        .with_clients(crate::common::clients::clients());
     service
         .ingest_reported_event(event(
             "evt_external_queries_1",
@@ -246,8 +246,8 @@ async fn external_api_lists_and_gets_session_views() {
 #[tokio::test]
 async fn external_api_reads_runtime_binding_capabilities_column() {
     let state = test_state().await;
-    let service =
-        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
+    let service = EventIngestService::for_projection_tests(state.db())
+        .with_clients(crate::common::clients::clients());
     service
         .ingest_reported_event(ReportedEvent::new(
             "evt_external_queries_legacy_cap_created".to_string(),
@@ -306,8 +306,8 @@ async fn external_api_reads_runtime_binding_capabilities_column() {
 #[tokio::test]
 async fn external_api_exposes_projected_session_context_usage() {
     let state = test_state().await;
-    let service =
-        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
+    let service = EventIngestService::for_projection_tests(state.db())
+        .with_clients(crate::common::clients::clients());
     service
         .ingest_reported_event(event(
             "evt_external_queries_context_created",
@@ -429,8 +429,8 @@ async fn external_api_lists_and_gets_turn_views() {
 #[tokio::test]
 async fn external_api_lists_linked_topology_in_turn_id_order() {
     let state = test_state().await;
-    let service =
-        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
+    let service = EventIngestService::for_projection_tests(state.db())
+        .with_clients(crate::common::clients::clients());
     service
         .ingest_reported_event(event(
             "evt_topology_external_session",
@@ -509,7 +509,7 @@ async fn external_api_lists_linked_topology_in_turn_id_order() {
 #[tokio::test]
 async fn external_api_orders_turns_by_uuid_v7_id() {
     let state = test_state().await;
-    EventIngestService::new(state.db())
+    EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .ingest_reported_event(event(
             "evt_uuid_order_session",

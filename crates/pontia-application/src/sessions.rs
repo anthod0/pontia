@@ -1,3 +1,12 @@
+mod agent_bindings;
+mod observations;
+pub use agent_bindings::{
+    AgentBinding, AgentBindingService, AgentBindingSessionContext, UpsertAgentBindingRequest,
+};
+pub(crate) use agent_bindings::{
+    register_agent_binding_for_ready_event_in_tx, upsert_agent_binding_in_tx,
+};
+pub use observations::{NativeSessionIdentity, NativeSessionObservation, NativeSessionService};
 use std::{collections::BTreeMap, path::PathBuf};
 
 use serde::Deserialize;
@@ -11,7 +20,7 @@ mod models;
 pub use models::{SessionModel, SessionModels, SetSessionModelRequest};
 mod lifecycle;
 mod runtime_binding;
-pub(crate) use runtime_binding::runtime_binding_record;
+
 mod persistence;
 mod validation;
 
@@ -62,21 +71,30 @@ impl CreateSessionOutcome {
 pub struct SessionCommandService {
     pool: SqlitePool,
     event_ingest: crate::EventIngestService,
-    client_control: Option<crate::ClientControlService>,
+    queries: crate::ExternalQueryService,
+    clients: crate::clients::ClientExecutionService,
+    turns: crate::TurnCommandService,
+    inbox: std::sync::Arc<crate::InboxCommandService>,
     pontia_home: PathBuf,
 }
 
 impl SessionCommandService {
-    pub fn with_client_control(mut self, client_control: crate::ClientControlService) -> Self {
-        self.client_control = Some(client_control);
-        self
-    }
-
-    pub fn new(event_ingest: crate::EventIngestService, pontia_home: PathBuf) -> Self {
+    pub(crate) fn new(
+        pool: SqlitePool,
+        event_ingest: crate::EventIngestService,
+        queries: crate::ExternalQueryService,
+        clients: crate::clients::ClientExecutionService,
+        turns: crate::TurnCommandService,
+        inbox: std::sync::Arc<crate::InboxCommandService>,
+        pontia_home: PathBuf,
+    ) -> Self {
         Self {
-            pool: event_ingest.db(),
-            client_control: event_ingest.client_control(),
+            pool,
             event_ingest,
+            queries,
+            clients,
+            turns,
+            inbox,
             pontia_home,
         }
     }

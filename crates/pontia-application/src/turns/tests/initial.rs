@@ -1,5 +1,3 @@
-use crate::TurnCommandService;
-use crate::{ClientControlService, EventIngestService};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 
@@ -21,7 +19,10 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
     .unwrap();
     sqlx::query("INSERT INTO runtime_bindings (session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('sess_pi','pi_tui','rtinst_pi','confirmed','/unused/tmux','%1','{\"accept_task\":true}')").execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','test-channel','/unused','native_pi','{}')").execute(&pool).await.unwrap();
-    let control = ClientControlService::new(pool.clone(), root.path().into());
+    let state = crate::AppState::builder(pool.clone(), root.path().into())
+        .clients(crate::clients::testing::clients())
+        .build();
+    let control = state.client_control();
     let channel = crate::clients::testing::channel();
     control
         .attach(
@@ -33,14 +34,13 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
         )
         .await
         .unwrap();
-    let events = EventIngestService::new(pool.clone())
-        .with_clients(crate::clients::testing::clients())
-        .with_client_control(control);
-    let service = TurnCommandService::new(events.clone());
+    let events = state.event_ingest_service();
+    let service = state.turn_commands();
+    let scheduler = service.scheduler.clone();
     let dispatch = tokio::spawn(async move {
         service
             .dispatch_initial(
-                &crate::runtime::control_target::ControlTarget {
+                &crate::runtime::ControlTarget {
                     session_id: "sess_pi".into(),
                     runtime_instance_id: Some("rtinst_pi".into()),
                 },
@@ -75,13 +75,14 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
         .await
         .unwrap();
     assert_eq!(count, 0);
-    assert!(events.inbox_scheduler().awaiting_initial("sess_pi"));
-    crate::RuntimeObservationService::new(events.clone())
+    assert!(scheduler.awaiting_initial("sess_pi"));
+    state
+        .runtime_observer()
         .observe_session("sess_pi")
         .await
         .unwrap();
     assert!(
-        !events.inbox_scheduler().awaiting_initial("sess_pi"),
+        !scheduler.awaiting_initial("sess_pi"),
         "a confirmed process exit must release the initial delivery gate"
     );
 }

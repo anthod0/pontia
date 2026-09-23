@@ -4,7 +4,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use pontia_application::{AppState, CreateSessionRequest, ReportedFact, SessionCommandService};
+use pontia_application::{AppState, CreateSessionRequest, ReportedFact};
 use pontia_core::domain::EventType;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
@@ -25,7 +25,8 @@ async fn fixture() -> (tempfile::TempDir, AppState, String) {
         .build();
     let request: CreateSessionRequest =
         serde_json::from_value(json!({"client_type":"codex","workspace":root.path()})).unwrap();
-    let session = SessionCommandService::new(state.event_ingest_service(), root.path().into())
+    let session = state
+        .session_commands()
         .create_session(request)
         .await
         .unwrap()

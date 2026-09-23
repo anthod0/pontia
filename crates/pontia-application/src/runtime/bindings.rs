@@ -6,8 +6,8 @@ mod lineage;
 mod metadata;
 mod ownership;
 mod request;
-pub mod service;
-pub mod types;
+mod service;
+mod types;
 
 pub(crate) use capabilities::writable_capabilities;
 pub use service::RuntimeBindingUpsertService;

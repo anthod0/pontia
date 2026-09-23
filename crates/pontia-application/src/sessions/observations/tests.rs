@@ -1,4 +1,6 @@
 use super::*;
+use crate::inbox::InboxAssociations;
+use crate::turns::{NativeTurnObservation, NativeTurnService};
 use crate::{AppState, ReportedFact};
 struct Fixture {
     state: AppState,
@@ -32,7 +34,7 @@ impl Fixture {
             .clients(clients)
             .build();
         let events = state.event_ingest_service();
-        let service = NativeSessionService::new(events.clone());
+        let service = NativeSessionService::new(state.db(), events.clone());
         let session = service
             .observed_session("native-test", root.path().to_str().unwrap())
             .await
@@ -58,7 +60,7 @@ impl Fixture {
 #[tokio::test]
 async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
     let fixture = Fixture::new().await;
-    let inbox = crate::InboxCommandService::new(fixture.state.event_ingest_service());
+    let inbox = fixture.state.inbox_commands();
     for response_first in [true, false] {
         let id = if response_first {
             "response-first"
@@ -76,14 +78,14 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
             .await
             .unwrap();
         if response_first {
-            inbox
+            InboxAssociations::new(fixture.state.db())
                 .record_receipt(&fixture.session, id, &receipt)
                 .await
                 .unwrap();
             // Fact ingestion reserves its identity before committing the Turn projection.
             sqlx::query("INSERT INTO native_turn_bindings(session_id,client_turn_id,turn_id) VALUES (?,?,'reserved-turn')")
                 .bind(&fixture.session).bind(id).execute(&fixture.state.db()).await.unwrap();
-            inbox
+            InboxAssociations::new(fixture.state.db())
                 .record_receipt(&fixture.session, id, &receipt)
                 .await
                 .unwrap();
@@ -102,8 +104,7 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
                 .unwrap();
             assert_eq!(before, after, "a control reply cannot create a Turn");
         }
-        fixture
-            .service
+        NativeTurnService::new(fixture.state.db(), fixture.state.event_ingest_service())
             .observe_turn(
                 &fixture.session,
                 "runtime",
@@ -120,11 +121,11 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
             )
             .await
             .unwrap();
-        inbox
+        InboxAssociations::new(fixture.state.db())
             .record_receipt(&fixture.session, id, &receipt)
             .await
             .unwrap();
-        inbox
+        InboxAssociations::new(fixture.state.db())
             .record_receipt(&fixture.session, id, &receipt)
             .await
             .unwrap();
@@ -142,7 +143,7 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
     }
     sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES ('stale',?,'dispatching','after_idle','input','{}')")
         .bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
-    inbox
+    InboxAssociations::new(fixture.state.db())
         .record_receipt(
             &fixture.session,
             "stale",
@@ -205,10 +206,9 @@ async fn observed_native_identity_reuses_its_session_without_reprovisioning() {
         .unwrap()
         .unwrap();
     assert_eq!(binding.client_session_key, "thread");
-    let target =
-        crate::runtime::control_target::ControlTarget::resolve(&fixture.state.db(), &session, None)
-            .await
-            .unwrap();
+    let target = crate::runtime::ControlTarget::resolve(&fixture.state.db(), &session, None)
+        .await
+        .unwrap();
     assert_eq!(target.instance().unwrap(), "observed-runtime");
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE session_id != ?")
         .bind(&fixture.session)
@@ -351,12 +351,7 @@ async fn obsolete_ready_cannot_resume_an_exited_session() {
     assert!(
         fixture
             .service
-            .ready(
-                &fixture.session,
-                "obsolete",
-                fixture._root.path(),
-                json!({})
-            )
+            .ready(&fixture.session, "obsolete", json!({}))
             .await
             .is_err()
     );
@@ -390,7 +385,7 @@ async fn obsolete_ready_cannot_resume_an_exited_session() {
     );
     fixture
         .service
-        .ready(&fixture.session, "runtime", fixture._root.path(), json!({}))
+        .ready(&fixture.session, "runtime", json!({}))
         .await
         .unwrap();
     assert_eq!(
@@ -418,8 +413,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
         failure: None,
         origin: "snapshot".into(),
     };
-    fixture
-        .service
+    NativeTurnService::new(fixture.state.db(), fixture.state.event_ingest_service())
         .observe_turn(&fixture.session, "runtime", turn())
         .await
         .unwrap();
@@ -430,15 +424,14 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
         .execute(&fixture.state.db())
         .await
         .unwrap();
-    let inbox = InboxCommandService::new(fixture.state.event_ingest_service());
+    let inbox = fixture.state.inbox_commands();
     assert!(
-        fixture
-            .service
+        NativeTurnService::new(fixture.state.db(), fixture.state.event_ingest_service())
             .observe_turn(&fixture.session, "runtime", turn())
             .await
             .is_err()
     );
-    inbox
+    InboxAssociations::new(fixture.state.db())
         .record_receipt(
             &fixture.session,
             "pending",
@@ -450,7 +443,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
         .await
         .unwrap();
     // Exercise the write-time guard separately from observe_turn's early check.
-    inbox
+    InboxAssociations::new(fixture.state.db())
         .link_native_turn(&fixture.session, "native", Some("runtime"))
         .await
         .unwrap();
@@ -463,8 +456,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
             .turn_id
             .is_none()
     );
-    fixture
-        .service
+    NativeTurnService::new(fixture.state.db(), fixture.state.event_ingest_service())
         .observe_turn(&fixture.session, "replacement", turn())
         .await
         .unwrap();

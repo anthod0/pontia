@@ -11,8 +11,7 @@ use super::{
     validation::validate_handle,
 };
 use crate::{
-    ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType, get_workspace_record,
-    upsert_workspace,
+    PontiaEvent, PontiaEventSource, PontiaEventType, get_workspace_record, upsert_workspace,
 };
 
 enum SessionManagementAction {
@@ -53,17 +52,7 @@ impl SessionCommandService {
         &self,
         request: CreateSessionRequest,
     ) -> Result<CreateSessionOutcome> {
-        if self
-            .event_ingest
-            .clients()
-            .spec(&request.client_type)
-            .is_none()
-        {
-            return Err(pontia_core::error::Error::Domain(format!(
-                "unsupported client_type: {}",
-                request.client_type
-            )));
-        }
+        self.clients.for_client(&request.client_type)?;
 
         let handle = request.handle.as_deref();
         if let Some(handle) = handle {
@@ -109,11 +98,7 @@ impl SessionCommandService {
 
         let session_id = new_session_id().to_string();
         let initial_slot = if request.initial_task.is_some() {
-            Some(
-                crate::InboxCommandService::new(self.event_ingest.clone())
-                    .reserve_initial_input(&session_id)
-                    .await,
-            )
+            Some(self.inbox.reserve_initial_input(&session_id).await)
         } else {
             None
         };
@@ -138,11 +123,7 @@ impl SessionCommandService {
                 }),
             ))
             .await?;
-        let adapter = crate::clients::ClientAdapter::new(
-            &request.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?;
+        let adapter = self.clients.for_client(&request.client_type)?;
         if !adapter.prepares_on_input() {
             ingest
                 .ingest_pontia_event(PontiaEvent::new(
@@ -176,7 +157,7 @@ impl SessionCommandService {
             self.update_session_workspace(&session_id, workspace_record.as_ref())
                 .await?;
             if let Some(task) = request.initial_task {
-                crate::InboxCommandService::new(self.event_ingest.clone())
+                self.inbox
                     .submit_message(
                         &session_id,
                         crate::SubmitInboxMessageRequest {
@@ -189,7 +170,7 @@ impl SessionCommandService {
                     .await?;
             }
             return Ok(CreateSessionOutcome {
-                data: json!({"session":ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients()).get_session(&session_id).await?}),
+                data: json!({"session":self.queries.get_session(&session_id).await?}),
                 duplicate: false,
             });
         };
@@ -215,10 +196,7 @@ impl SessionCommandService {
             )
             .await?;
 
-        let mut turns = crate::TurnCommandService::new(self.event_ingest.clone());
-        if let Some(pi) = &self.client_control {
-            turns = turns.with_client_control(pi.clone());
-        }
+        let turns = self.turns.clone();
         let initial_turn = if let Some(task) = &request.initial_task {
             turns
                 .prepare_initial(&session_id, &task.input, &task.metadata)
@@ -226,8 +204,7 @@ impl SessionCommandService {
         } else {
             None
         };
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
             .get_session(&session_id)
             .await?
@@ -235,7 +212,7 @@ impl SessionCommandService {
         let initial_turn_id = initial_turn.as_ref().map(|turn| turn.turn_id.clone());
         let data = json!({ "session": session, "initial_turn": initial_turn });
         if let Some(task) = request.initial_task {
-            let target = crate::runtime::control_target::ControlTarget {
+            let target = crate::runtime::ControlTarget {
                 session_id: session_id.clone(),
                 runtime_instance_id: runtime.runtime_instance_id().map(str::to_string),
             };
@@ -297,8 +274,7 @@ impl SessionCommandService {
             return Err(Error::NotFound(format!("session {session_id} not found")));
         }
 
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
             .get_session(session_id)
             .await?
@@ -311,8 +287,7 @@ impl SessionCommandService {
         session_id: &str,
         request: UpdateSessionRequest,
     ) -> Result<Value> {
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let existing = query
             .get_session(session_id)
             .await?

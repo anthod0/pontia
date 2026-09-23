@@ -1,8 +1,7 @@
 use super::*;
 use futures_util::{SinkExt, StreamExt};
 use pontia_application::{
-    AppState, CreateSessionRequest, ExternalQueryService, SessionCommandService,
-    TurnCommandService, clients::ClientRegistry,
+    AppState, CreateSessionRequest, ExternalQueryService, clients::ClientRegistry,
 };
 use serde_json::json;
 use tokio::net::UnixListener;
@@ -138,8 +137,8 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
     let app = AppState::builder(pool, root.path().into())
         .clients(clients)
         .build();
-    let sessions = SessionCommandService::new(app.event_ingest_service(), root.path().into());
-    let turns = TurnCommandService::new(app.event_ingest_service());
+    let sessions = app.session_commands();
+    let turns = app.turn_commands();
     let query =
         ExternalQueryService::new(app.db()).with_clients(app.event_ingest_service().clients());
     let mut ids = Vec::new();

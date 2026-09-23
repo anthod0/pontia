@@ -1,4 +1,5 @@
 mod association;
+pub(crate) use association::InboxAssociations;
 mod scheduling;
 pub(crate) use scheduling::InboxScheduler;
 
@@ -43,20 +44,31 @@ pub struct InboxCommandOutcome {
 pub struct InboxCommandService {
     pool: SqlitePool,
     event_ingest: crate::EventIngestService,
-    client_control: Option<crate::ClientControlService>,
+    queries: ExternalQueryService,
+    clients: crate::clients::ClientExecutionService,
+    turns: TurnCommandService,
+    branches: BranchReplayService,
+    scheduler: InboxScheduler,
 }
 
 impl InboxCommandService {
-    pub fn with_client_control(mut self, client_control: crate::ClientControlService) -> Self {
-        self.client_control = Some(client_control);
-        self
-    }
-
-    pub fn new(event_ingest: crate::EventIngestService) -> Self {
+    pub(crate) fn new(
+        pool: SqlitePool,
+        event_ingest: crate::EventIngestService,
+        queries: ExternalQueryService,
+        clients: crate::clients::ClientExecutionService,
+        turns: TurnCommandService,
+        branches: BranchReplayService,
+        scheduler: InboxScheduler,
+    ) -> Self {
         Self {
-            pool: event_ingest.db(),
-            client_control: event_ingest.client_control(),
+            pool,
             event_ingest,
+            queries,
+            clients,
+            turns,
+            branches,
+            scheduler,
         }
     }
 
@@ -102,10 +114,9 @@ impl InboxCommandService {
             )));
         }
 
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         if request.branch_target_turn_id.is_some() {
@@ -119,8 +130,7 @@ impl InboxCommandService {
                     "session {session_id} does not support branch control"
                 )));
             }
-            BranchReplayService::new(self.pool.clone())
-                .with_clients(self.event_ingest.clients())
+            self.branches
                 .validate_submission(
                     session_id,
                     request
@@ -131,12 +141,10 @@ impl InboxCommandService {
                 .await?;
         }
         if request.delivery_policy == "steer"
-            && !crate::clients::ClientAdapter::new(
-                &session.client_type,
-                self.event_ingest.clone(),
-                self.client_control.clone(),
-            )?
-            .supports_steer()
+            && !self
+                .clients
+                .for_client(&session.client_type)?
+                .supports_steer()
         {
             return Err(Error::CapabilityUnavailable(
                 "This client does not support steer".into(),
@@ -200,10 +208,7 @@ impl InboxCommandService {
                     "session ".to_string() + session_id + " runtime does not support interrupt",
                 )
                 .await?;
-            } else if let Err(error) = TurnCommandService::new(self.event_ingest.clone())
-                .interrupt_current_turn(session_id)
-                .await
-            {
+            } else if let Err(error) = self.turns.interrupt_current_turn(session_id).await {
                 self.mark_failed(message_id, error.to_string()).await?;
             }
         }
@@ -221,9 +226,8 @@ impl InboxCommandService {
     }
 
     pub async fn list_messages(&self, session_id: &str) -> Result<Vec<InboxMessageView>> {
-        ExternalQueryService::new(self.pool.clone())
-            .with_clients(self.event_ingest.clients())
-            .get_session(session_id)
+        self.queries
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         let rows = SqliteInboxRepository::new(self.pool.clone())
@@ -248,10 +252,9 @@ impl InboxCommandService {
         session_id: &str,
         message_id: &str,
     ) -> Result<InboxCommandOutcome> {
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
@@ -289,10 +292,9 @@ impl InboxCommandService {
         session_id: &str,
         message_id: &str,
     ) -> Result<InboxCommandOutcome> {
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
+        let query = &self.queries;
         let session = query
-            .get_session(session_id)
+            .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
 
@@ -326,25 +328,16 @@ impl InboxCommandService {
     }
 
     pub async fn drain_inbox(&self, session_id: &str) -> Result<()> {
-        let lock = self.event_ingest.inbox_scheduler().session_lock(session_id);
+        let lock = self.scheduler.session_lock(session_id);
         let _guard = lock.lock().await;
-        if self
-            .event_ingest
-            .inbox_scheduler()
-            .awaiting_initial(session_id)
-        {
+        if self.scheduler.awaiting_initial(session_id) {
             return Ok(());
         }
-        let query =
-            ExternalQueryService::new(self.pool.clone()).with_clients(self.event_ingest.clients());
-        let Some(session) = query.get_session(session_id).await? else {
+        let query = &self.queries;
+        let Some(session) = query.get_session_control(session_id).await? else {
             return Ok(());
         };
-        let adapter = crate::clients::ClientAdapter::new(
-            &session.client_type,
-            self.event_ingest.clone(),
-            self.client_control.clone(),
-        )?;
+        let adapter = self.clients.for_client(&session.client_type)?;
         let active = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
             .await?;
@@ -392,14 +385,10 @@ impl InboxCommandService {
             return Ok(());
         }
 
-        let mut turns = TurnCommandService::new(self.event_ingest.clone());
-        if let Some(control) = &self.client_control {
-            turns = turns.with_client_control(control.clone());
-        }
+        let turns = &self.turns;
         let delivery = if branch_target_turn_id.is_some() {
-            BranchReplayService::new(self.pool.clone())
-                .with_clients(self.event_ingest.clients())
-                .dispatch(self.event_ingest.clone(), session_id, &message_id)
+            self.branches
+                .dispatch(&self.clients, session_id, &message_id)
                 .await
                 .map(|result| (None, result))
         } else {
@@ -413,7 +402,8 @@ impl InboxCommandService {
         };
         match delivery {
             Ok((turn, receipt)) => {
-                self.record_receipt(session_id, &message_id, &receipt)
+                InboxAssociations::new(self.pool.clone())
+                    .record_receipt(session_id, &message_id, &receipt)
                     .await?;
                 let turn_id = turn.as_ref().map(|turn| turn.turn_id.as_str());
                 inbox_repository

@@ -95,9 +95,8 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
             .await
             .is_err()
     );
-    EventIngestService::new(state.db())
-        .with_clients(crate::common::clients::clients())
-        .with_client_control(state.client_control())
+    state
+        .event_ingest_service()
         .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
             "evt_exit".into(),
             "sess_pi".into(),
@@ -158,7 +157,7 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
         .clients(crate::common::clients::clients())
         .external_api_token(Some("token".into()))
         .build();
-    EventIngestService::new(restarted.db())
+    EventIngestService::for_projection_tests(restarted.db())
         .with_clients(crate::common::clients::clients())
         .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
             "evt_ready".into(),
@@ -549,7 +548,7 @@ async fn shutdown_accepts_its_own_exit_but_not_a_replacement_instances_exit() {
         // Commit the exit before the shutdown caller can perform its post-reply check.
         // Keep the socket open here to deliver the native acknowledgement separately.
         bind(&state, "sess_control", runtime).await;
-        EventIngestService::new(state.db())
+        EventIngestService::for_projection_tests(state.db())
             .with_clients(crate::common::clients::clients())
             .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
                 "evt_shutdown".into(),

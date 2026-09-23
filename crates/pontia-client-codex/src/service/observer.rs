@@ -102,7 +102,7 @@ impl CodexObserver {
                         threads.insert(thread.clone(),session.clone());
                         let result: Result<()> = async {
                         let resumed_thread = if !subscribed.contains(&thread) {
-                            let target = pontia_application::runtime::control_target::ControlTarget::resolve(&self.service.pool, &session, None).await?;
+                            let target = pontia_application::runtime::ControlTarget::resolve(&self.service.pool, &session, None).await?;
                             let metadata = connection.call("thread/read",json!({"threadId":thread,"includeTurns":false})).await?;
                             self.service.bind(&session,&runtime,&metadata["thread"],target.runtime_instance_id.as_deref()).await?;
                             if self.service.check_archived(&session,&runtime,&thread).await? { return Ok(()); }
@@ -179,7 +179,8 @@ impl CodexObserver {
         let observation = self
             .service
             .observed_session(&self.root, runtime, &target.thread);
-        let session = pontia_application::native_sessions::NativeSessionService::new(
+        let session = pontia_application::sessions::NativeSessionService::new(
+            self.service.pool.clone(),
             self.service.event_ingest.clone(),
         )
         .resolve_observed_session("codex", thread_id, observation)

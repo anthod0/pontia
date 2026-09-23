@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use pontia_application::{AppState, ExternalQueryService, TaskCommandService};
+use pontia_application::AppState;
 
 use super::{
     authentication::authenticate,
@@ -40,7 +40,7 @@ pub async fn interrupt_task(
     Path(task_id): Path<String>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = TaskCommandService::new(state.event_ingest_service());
+    let service = state.task_commands();
     let operation = format!("interrupt_task:{task_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.interrupt_task(&task_id).await?.data)
@@ -55,7 +55,7 @@ pub async fn cancel_task(
     Path(task_id): Path<String>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
-    let service = TaskCommandService::new(state.event_ingest_service());
+    let service = state.task_commands();
     let operation = format!("cancel_task:{task_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.cancel_task(&task_id).await?.data)
@@ -69,7 +69,7 @@ pub async fn list_tasks(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     let tasks = service.list_tasks().await?;
     Ok(ok(json!({ "tasks": tasks })))
 }
@@ -80,7 +80,7 @@ pub async fn get_task(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     let task = service
         .get_task(&task_id)
         .await?
@@ -94,7 +94,7 @@ pub async fn list_task_events(
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     service
         .get_task(&task_id)
         .await?

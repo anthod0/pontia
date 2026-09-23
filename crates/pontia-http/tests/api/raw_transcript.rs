@@ -98,8 +98,8 @@ async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value
 }
 
 async fn seed_session_for_client(state: &AppState, session_id: &str, client_type: &str) {
-    let service =
-        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
+    let service = EventIngestService::for_projection_tests(state.db())
+        .with_clients(crate::common::clients::clients());
     service
         .ingest_reported_event(ReportedEvent::new(
             format!("evt_{session_id}_created"),
@@ -119,8 +119,8 @@ async fn seed_session(state: &AppState, session_id: &str) {
 }
 
 async fn precreate_turn_if_missing(state: &AppState, session_id: &str, turn_id: &str) {
-    let service =
-        EventIngestService::new(state.db()).with_clients(crate::common::clients::clients());
+    let service = EventIngestService::for_projection_tests(state.db())
+        .with_clients(crate::common::clients::clients());
     if service.get_turn(turn_id).await.unwrap().is_some() {
         return;
     }

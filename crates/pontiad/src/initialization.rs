@@ -32,8 +32,6 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     pontia_client_codex::CodexService::new(state.event_ingest_service())
         .reset_connections()
         .await?;
-    pontia_application::InboxCommandService::new(state.event_ingest_service())
-        .recover_deliveries()
-        .await?;
+    state.inbox_commands().recover_deliveries().await?;
     Ok(state)
 }

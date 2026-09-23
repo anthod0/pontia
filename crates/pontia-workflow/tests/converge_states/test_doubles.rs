@@ -201,8 +201,9 @@ where
     tokio::spawn(async move {
         let _keepalive = shutdown_tx;
         WorkflowCoordinator::with_services(
-            pontia_application::EventIngestService::new(pool)
-                .with_clients(crate::test_doubles::clients()),
+            &pontia_application::AppState::builder(pool, pontia_home.clone())
+                .clients(crate::test_doubles::clients())
+                .build(),
             sessions,
             exits,
             events,

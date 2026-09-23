@@ -83,7 +83,7 @@ impl EventReportNormalizer {
             fact.data = data.normalize_payload(fact.fact_type, fact.data)?;
         }
         let native_turn_id = if has_native_turn {
-            Some(crate::native_turns::native_turn_identity(&self.pool, &fact).await?)
+            Some(crate::turns::native_turn_identity(&self.pool, &fact).await?)
         } else {
             None
         };

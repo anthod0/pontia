@@ -10,15 +10,18 @@ async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
     let tmux_session = format!("pontia_manual_mark_{}", std::process::id());
-    let _guard = TmuxSessionGuard(tmux_session.clone());
+    let test_socket = _app.pontia_home().path().join("tmux.sock");
+    let _guard = TmuxSessionGuard(test_socket.clone());
     let status = Command::new("tmux")
+        .arg("-S")
+        .arg(&test_socket)
         .args(["new-session", "-d", "-s", &tmux_session, "sh"])
         .stderr(Stdio::null())
         .status()
         .expect("spawn tmux");
     assert!(status.success(), "tmux session should start");
-    let socket_path = tmux_display(&tmux_session, "#{socket_path}");
-    let pane_id = tmux_display(&tmux_session, "#{pane_id}");
+    let socket_path = tmux_display(&test_socket, &tmux_session, "#{socket_path}");
+    let pane_id = tmux_display(&test_socket, &tmux_session, "#{pane_id}");
 
     let (status, body) = post_upsert(
         state.clone(),
@@ -33,9 +36,12 @@ async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     let session_id = body["session"]["session_id"].as_str().expect("session_id");
-    assert_eq!(tmux_display(&pane_id, "#{@pontia_session_id}"), session_id);
     assert_eq!(
-        tmux_display(&pane_id, "#{@pontia_runtime_instance_id}"),
+        tmux_display(&test_socket, &pane_id, "#{@pontia_session_id}"),
+        session_id
+    );
+    assert_eq!(
+        tmux_display(&test_socket, &pane_id, "#{@pontia_runtime_instance_id}"),
         body["runtime"]["runtime_instance_id"].as_str().unwrap()
     );
 }
@@ -50,15 +56,18 @@ async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() 
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
     let tmux_session = format!("pontia_exit_unmark_{}", std::process::id());
-    let _guard = TmuxSessionGuard(tmux_session.clone());
+    let test_socket = _app.pontia_home().path().join("tmux.sock");
+    let _guard = TmuxSessionGuard(test_socket.clone());
     let status = Command::new("tmux")
+        .arg("-S")
+        .arg(&test_socket)
         .args(["new-session", "-d", "-s", &tmux_session, "sh"])
         .stderr(Stdio::null())
         .status()
         .expect("spawn tmux");
     assert!(status.success(), "tmux session should start");
-    let socket_path = tmux_display(&tmux_session, "#{socket_path}");
-    let pane_id = tmux_display(&tmux_session, "#{pane_id}");
+    let socket_path = tmux_display(&test_socket, &tmux_session, "#{socket_path}");
+    let pane_id = tmux_display(&test_socket, &tmux_session, "#{pane_id}");
 
     let (upsert_status, upsert) = post_upsert(
         state.clone(),
@@ -85,8 +94,14 @@ async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() 
     .await;
 
     assert_eq!(exit_status, StatusCode::OK, "{exit:?}");
-    assert_eq!(tmux_display(&pane_id, "#{@pontia_session_id}"), "");
-    assert_eq!(tmux_display(&pane_id, "#{@pontia_runtime_instance_id}"), "");
+    assert_eq!(
+        tmux_display(&test_socket, &pane_id, "#{@pontia_session_id}"),
+        ""
+    );
+    assert_eq!(
+        tmux_display(&test_socket, &pane_id, "#{@pontia_runtime_instance_id}"),
+        ""
+    );
 }
 
 #[tokio::test]
@@ -103,7 +118,11 @@ async fn terminate_manually_bound_tui_without_pane_binding_is_rejected() {
         state.clone(),
         upsert_body_with_tmux(
             &workspace,
-            "/tmp/tmux-1000/default",
+            _app.pontia_home()
+                .path()
+                .join("missing.sock")
+                .to_str()
+                .unwrap(),
             Some("%42"),
             Some("old-dev"),
         ),
@@ -139,8 +158,10 @@ async fn terminate_manually_bound_tui_without_pane_binding_is_rejected() {
     assert_eq!(exit_event_count, 0);
 }
 
-fn tmux_display(target: &str, format: &str) -> String {
+fn tmux_display(socket: &std::path::Path, target: &str, format: &str) -> String {
     let output = Command::new("tmux")
+        .arg("-S")
+        .arg(socket)
         .args(["display-message", "-p", "-t", target, format])
         .output()
         .expect("tmux display");
@@ -151,12 +172,14 @@ fn tmux_display(target: &str, format: &str) -> String {
         .to_string()
 }
 
-struct TmuxSessionGuard(String);
+struct TmuxSessionGuard(std::path::PathBuf);
 
 impl Drop for TmuxSessionGuard {
     fn drop(&mut self) {
         let _ = Command::new("tmux")
-            .args(["kill-session", "-t", &self.0])
+            .arg("-S")
+            .arg(&self.0)
+            .arg("kill-server")
             .stderr(Stdio::null())
             .status();
     }

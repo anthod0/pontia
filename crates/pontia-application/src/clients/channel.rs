@@ -1,6 +1,6 @@
 use super::ClientAdapter;
-use crate::{RuntimeReadinessService, runtime::control_target::ControlTarget};
-use pontia_core::{Error, Result};
+use crate::{RuntimeReadinessService, runtime::ControlTarget};
+use pontia_core::Result;
 
 impl ClientAdapter {
     pub(super) async fn channel_input(
@@ -9,30 +9,22 @@ impl ClientAdapter {
         input: &str,
         message: Option<&str>,
     ) -> Result<()> {
-        RuntimeReadinessService::new(self.events.db())
+        RuntimeReadinessService::new(self.pool.clone())
             .wait_until_ready(
                 &target.session_id,
                 self.spec.client_type,
                 target.instance()?,
             )
             .await?;
-        target.validate(&self.events.db()).await?;
+        target.validate(&self.pool.clone()).await?;
         self.control
-            .as_ref()
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Client control service is unavailable".into())
-            })?
             .submit(&target.session_id, target.instance()?, input, message)
             .await
     }
 
     pub(super) async fn channel_interrupt(&self, target: &ControlTarget) -> Result<()> {
-        target.validate(&self.events.db()).await?;
+        target.validate(&self.pool.clone()).await?;
         self.control
-            .as_ref()
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Client control service is unavailable".into())
-            })?
             .interrupt(&target.session_id, target.instance()?)
             .await
     }
@@ -48,19 +40,15 @@ impl ClientAdapter {
             );
         }
         let result = async {
-            RuntimeReadinessService::new(self.events.db())
+            RuntimeReadinessService::new(self.pool.clone())
                 .wait_until_ready(
                     &target.session_id,
                     self.spec.client_type,
                     target.instance()?,
                 )
                 .await?;
-            target.validate(&self.events.db()).await?;
+            target.validate(&self.pool.clone()).await?;
             self.control
-                .as_ref()
-                .ok_or_else(|| {
-                    Error::CapabilityUnavailable("Client control service is unavailable".into())
-                })?
                 .replay(&target.session_id, target.instance()?, message)
                 .await
         }
@@ -69,24 +57,5 @@ impl ClientAdapter {
             Ok(()) => crate::control::ControlResult::Sent(()),
             Err(error) => crate::control::ControlResult::from_result(Err(error)),
         }
-    }
-}
-
-impl ClientAdapter {
-    pub fn branch_target(
-        &self,
-        binding: pontia_storage_sqlite::models::agent_bindings::AgentBindingRow,
-        target: pontia_storage_sqlite::models::turns::TurnProjectionRow,
-        is_first_session_turn: bool,
-    ) -> Result<String> {
-        let clients = self.events.clients();
-        let data = clients.data(self.spec.client_type).ok_or_else(|| {
-            Error::CapabilityUnavailable("branch target source unavailable".into())
-        })?;
-        data.branch_target(super::BranchTargetRequest {
-            binding,
-            turn: target,
-            is_first_session_turn,
-        })
     }
 }

@@ -413,7 +413,7 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
-    EventIngestService::new(state.db())
+    EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .ingest_pontia_event(PontiaEvent::new(
             session_id.clone(),

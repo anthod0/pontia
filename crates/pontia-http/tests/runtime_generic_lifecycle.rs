@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_application::{AppState, RuntimeObservationService};
+use pontia_application::AppState;
 use pontia_http as http;
 use serde_json::{Value, json};
 use sqlx::Row;
@@ -183,7 +183,8 @@ async fn observe_missing_generic_runtime_projects_session_error() {
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
     scope.reset_runtime_registry();
 
-    RuntimeObservationService::new(state.event_ingest_service())
+    state
+        .runtime_observer()
         .observe_session(&session_id)
         .await
         .expect("observe runtime");
@@ -220,7 +221,8 @@ async fn observe_missing_generic_runtime_does_not_fail_a_terminal_branch_leaf() 
         .expect("set current branch leaf");
     scope.reset_runtime_registry();
 
-    RuntimeObservationService::new(state.event_ingest_service())
+    state
+        .runtime_observer()
         .observe_session(&session_id)
         .await
         .expect("observe runtime");
@@ -254,7 +256,8 @@ async fn observe_missing_generic_runtime_abandons_active_turn_without_forging_ag
     assert_eq!(scope.recorded_inputs().len(), 1);
     scope.reset_runtime_registry();
 
-    RuntimeObservationService::new(state.event_ingest_service())
+    state
+        .runtime_observer()
         .observe_session(&session_id)
         .await
         .expect("observe runtime");

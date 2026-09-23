@@ -8,8 +8,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use pontia_application::{
-    AppState, ExternalQueryService, RegisterWorkspaceRequest, RenameWorkspaceRequest,
-    WorkspaceBrowserService,
+    AppState, RegisterWorkspaceRequest, RenameWorkspaceRequest, WorkspaceBrowserService,
 };
 
 use super::{
@@ -35,7 +34,7 @@ pub async fn list_workspaces(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     let workspaces = service.list_workspaces().await?;
     Ok(ok(json!({ "workspaces": workspaces })))
 }
@@ -46,7 +45,7 @@ pub async fn get_workspace(
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let service = ExternalQueryService::new(state.db()).with_clients(state.clients());
+    let service = state.queries();
     let workspace = service
         .get_workspace(&workspace_id)
         .await?

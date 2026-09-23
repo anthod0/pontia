@@ -2,7 +2,8 @@ use super::{CodexService, string};
 use crate::runtime::{CodexRuntime, protocol::Connection};
 use pontia_application::{
     EventReportError, ReportedFact,
-    native_sessions::{NativeSessionService, NativeTurnObservation},
+    sessions::NativeSessionService,
+    turns::{NativeTurnObservation, NativeTurnService},
 };
 use pontia_core::domain::EventType;
 use pontia_core::{Error, Result};
@@ -51,7 +52,7 @@ impl CodexService {
                 "Codex thread is not ready to accept input".into(),
             ));
         }
-        NativeSessionService::new(self.event_ingest.clone()).ready(session, &runtime.instance_id, &self.root(session).await?, json!({"client_session_key":thread["id"],"launch_cwd":thread["cwd"],"client_session_file":thread["path"]})).await?;
+        NativeSessionService::new(self.pool.clone(), self.event_ingest.clone()).ready(session, &runtime.instance_id, json!({"client_session_key":thread["id"],"launch_cwd":thread["cwd"],"client_session_file":thread["path"]})).await?;
         Ok(())
     }
 
@@ -126,7 +127,7 @@ impl CodexService {
                     .rev()
                     .find(|item| item["type"] == "agentMessage" && item["phase"].is_null())
             });
-        NativeSessionService::new(self.event_ingest.clone())
+        NativeTurnService::new(self.pool.clone(), self.event_ingest.clone())
             .observe_turn(
                 session,
                 runtime_instance_id,
@@ -178,7 +179,7 @@ impl CodexService {
     }
 
     pub(super) async fn archived(&self, session: &str, runtime: &CodexRuntime) -> Result<()> {
-        let target = pontia_application::runtime::control_target::ControlTarget::resolve(
+        let target = pontia_application::runtime::ControlTarget::resolve(
             &self.pool,
             session,
             Some(&runtime.instance_id),
@@ -207,7 +208,7 @@ impl CodexService {
             let turns = self.turns(&connection, &binding.client_session_key).await?;
             self.reconcile_turns(session, runtime, &turns).await?;
         }
-        NativeSessionService::new(self.event_ingest.clone())
+        NativeSessionService::new(self.pool.clone(), self.event_ingest.clone())
             .exited(session, &runtime.instance_id, "thread_archived")
             .await?;
         self.connection_state(session, &runtime.instance_id, "archived")

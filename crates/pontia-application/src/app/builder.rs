@@ -73,11 +73,6 @@ impl AppStateBuilder {
         self
     }
 
-    pub(super) fn live_output(mut self, live_output: LiveOutputStore) -> Self {
-        self.live_output = live_output;
-        self
-    }
-
     pub fn git_refresh(mut self, git_refresh: GitRefreshCoordinator) -> Self {
         self.git_refresh = git_refresh;
         self
@@ -85,11 +80,6 @@ impl AppStateBuilder {
 
     pub fn idempotency(mut self, idempotency: IdempotencyCoordinator) -> Self {
         self.idempotency = idempotency;
-        self
-    }
-
-    pub(super) fn client_control(mut self, client_control: crate::ClientControlService) -> Self {
-        self.client_control = client_control;
         self
     }
 

@@ -9,7 +9,7 @@ use pontia_application::{
         ClientSessionDetails, NativeEventEvidence,
     },
     control::InputReceipt,
-    runtime::control_target::ControlTarget,
+    runtime::ControlTarget,
     sessions::SessionModel,
     turns::InputIntent,
 };

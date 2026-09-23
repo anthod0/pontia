@@ -2,9 +2,7 @@ use crate::client_contract::DispatchMode;
 use pontia_core::{Error, Result};
 
 use super::ClientAdapter;
-use crate::{
-    control::ControlResult, runtime::control_target::ControlTarget, sessions::SessionModel,
-};
+use crate::{control::ControlResult, runtime::ControlTarget, sessions::SessionModel};
 
 impl ClientAdapter {
     pub async fn list_models(&self, target: &ControlTarget) -> Result<Vec<SessionModel>> {
@@ -13,7 +11,7 @@ impl ClientAdapter {
         }
         match self.spec.adapter.dispatch {
             DispatchMode::Connected => {
-                self.channel_models()?
+                self.control
                     .list_models(&target.session_id, target.instance()?)
                     .await
             }
@@ -31,7 +29,7 @@ impl ClientAdapter {
                 }
                 match self.spec.adapter.dispatch {
                     DispatchMode::Connected => {
-                        self.channel_models()?
+                        self.control
                             .set_model(&target.session_id, target.instance()?, model)
                             .await
                     }
@@ -42,11 +40,5 @@ impl ClientAdapter {
             }
             .await,
         )
-    }
-
-    fn channel_models(&self) -> Result<&crate::ClientControlService> {
-        self.control.as_ref().ok_or_else(|| {
-            Error::CapabilityUnavailable("Client control service is unavailable".into())
-        })
     }
 }
