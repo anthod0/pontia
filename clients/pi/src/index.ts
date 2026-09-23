@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { startControlSocket, type ControlSocket, type ControlInput } from "./control-socket.js";
+import { connectPi, type PiConnection, type ControlInput } from "./control-socket.js";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
@@ -11,7 +11,7 @@ import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRunti
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
-import { bindSession, loadExistingSessionContext, piSessionDetailsFromHookContext, publishControlEndpoint, type PiSessionDetails } from "./runtime-binding.js";
+import { bindSession, loadExistingSessionContext, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
 import type { SessionContext } from "./session.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
@@ -38,7 +38,7 @@ export interface PontiaPiExtensionDependencies {
   loadManagedRuntime?: (env: EnvLike) => Promise<ManagedRuntimeIdentity | undefined>;
   isManagedPane?: (env: EnvLike) => Promise<boolean>;
   makeLiveOutputPublisher?: (context: TurnContext & { turnId: string }) => LiveOutputPublisherLike;
-  startControlSocket?: typeof startControlSocket;
+  connectPi?: typeof connectPi;
 }
 
 interface ActiveTurnState {
@@ -134,7 +134,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   let managedPaneConfirmed = false;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
-  let controlSocket: ControlSocket | undefined;
+  let controlSocket: PiConnection | undefined;
   let controlGeneration = 0;
   let piContext: ExtensionContext | undefined;
   const directInput = new AsyncLocalStorage<{
@@ -167,40 +167,29 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     if (socket) await socket.close().catch(controlError);
   }
 
-  async function openControlSocket(context: SessionContext): Promise<void> {
-    await closeControlSocket();
+  async function registrationConnection(): Promise<PiConnection> {
+    if (controlSocket) return controlSocket;
     const generation = controlGeneration;
-    let socket: ControlSocket | undefined;
-    try {
-      socket = await (dependencies.startControlSocket ?? startControlSocket)(context, currentEnv(), (error) => {
-        void controlError(error).catch(() => {});
-      }, (submission) => {
-        if (generation !== controlGeneration || reportingDisabled || boundSessionContext !== context) {
-          throw new Error("Pi control session is no longer current");
-        }
-        if (queuedControlInput) throw new Error("Pi already has pending input");
-        if (!piContext?.isIdle()) {
-          // Pontia drains the Inbox while handling our terminal event, before
-          // Pi finishes agent_end. Wait for Pi's settled hook to start this input.
-          if (!activeTurn?.ended) throw new Error("Pi is busy; input was not submitted");
-          queuedControlInput = submission;
-          return;
-        }
-        // Pi owns the asynchronous prompt execution. Its hooks retain this request's
-        // context without leaving pending metadata for unrelated terminal input.
-        sendControlInput(submission);
-      });
-      if (generation !== controlGeneration) {
-        await socket.close();
+    const socket = await (dependencies.connectPi ?? connectPi)(currentPontiaHome(), (error) => {
+      void controlError(error).catch(() => {});
+    }, (submission) => {
+      if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
+        throw new Error("Pi control session is no longer current");
+      }
+      if (queuedControlInput) throw new Error("Pi already has pending input");
+      if (!piContext?.isIdle()) {
+        if (!activeTurn?.ended) throw new Error("Pi is busy; input was not submitted");
+        queuedControlInput = submission;
         return;
       }
-      controlSocket = socket;
-      await publishControlEndpoint(context, socket.socketPath, fetchImpl);
-    } catch (error) {
-      if (controlSocket === socket) controlSocket = undefined;
-      await socket?.close().catch(controlError);
-      await controlError(error);
+      sendControlInput(submission);
+    });
+    if (generation !== controlGeneration) {
+      await socket.close();
+      throw new Error("Pi session changed during connection initialization");
     }
+    controlSocket = socket;
+    return socket;
   }
 
   async function confirmManagedPane(refresh = false): Promise<boolean> {
@@ -440,14 +429,15 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           });
           return;
         }
-        context = await bindSession(pontiaHome, env, fetchImpl, sessionDetails, { startKind: "fork", parentSessionId });
+        context = await bindSession(await registrationConnection(), env, sessionDetails, { startKind: "fork", parentSessionId });
         readyReported = false;
       } else {
-        const existingSession = await loadExistingSessionContext(pontiaHome, fetchImpl, sessionDetails);
+        const existingSession = await loadExistingSessionContext(await registrationConnection(), sessionDetails);
         if (
           existingSession
           && ["idle", "busy", "interrupted"].includes(existingSession.sessionState)
         ) {
+          await closeControlSocket();
           reportingDisabled = true;
           boundSessionContext = undefined;
           readyReported = false;
@@ -464,23 +454,28 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           return;
         }
         if (!existingSession && !await confirmManagedPane()) {
+          await closeControlSocket();
           boundSessionContext = undefined;
           readyReported = false;
           return;
         }
 
-        context = await bindSession(pontiaHome, env, fetchImpl, sessionDetails, {
+        context = await bindSession(await registrationConnection(), env, sessionDetails, {
           runtimeInstanceId: existingSession?.sessionState === "starting" ? existingSession.runtimeInstanceId : undefined,
         });
         if (reason === "resume" || reason === "new") readyReported = false;
       }
-      if (!context || !await confirmManagedPane(true)) return;
+      if (!context || !await confirmManagedPane(true)) {
+        await closeControlSocket();
+        return;
+      }
 
       boundSessionContext = context;
       piContext = ctx;
-      await openControlSocket(context);
+      controlSocket!.registered(context);
       readyReported = reportAccepted(await makeReporter(logFile).report(context, buildSessionReadyEvent(context)));
     } catch (error) {
+      await closeControlSocket();
       const logFile = currentHookLogFile();
       await logDiagnostic(logFile, {
         level: "error",
@@ -562,10 +557,10 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
             pendingPrompt = undefined;
             return;
           }
-          boundSessionContext = await bindSession(pontiaHome, currentEnv(), fetchImpl, sessionDetails);
+          boundSessionContext = await bindSession(await registrationConnection(), currentEnv(), sessionDetails);
           if (boundSessionContext && !readyReported) {
             piContext = ctx;
-            await openControlSocket(boundSessionContext);
+            controlSocket!.registered(boundSessionContext);
             readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
           }
         }
@@ -616,6 +611,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         ended: false,
       };
     } catch (error) {
+      if (!boundSessionContext) await closeControlSocket();
       pendingPrompt = undefined;
       activeTurn = undefined;
       const logFile = currentHookLogFile();

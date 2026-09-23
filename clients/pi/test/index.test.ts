@@ -1,6 +1,7 @@
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { type PiConnection } from "../src/control-socket.js";
 import { createPontiaPiExtension } from "../src/index.js";
 import { loadTurnContext, type TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
@@ -95,11 +96,10 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
   const fetchWithManagedBinding = suppliedFetch
     ? (async (url: string | URL | Request, init?: RequestInit) => {
         const requestUrl = String(url);
-        if (requestUrl.endsWith("/runtime-bindings/pi-control")) return new Response("{}", { status: 200 });
-        if (managedRuntime && requestUrl.includes("/internal/v1/agent-bindings/session-context?")) {
+        if (managedRuntime && requestUrl.startsWith("session.context:")) {
           return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
         }
-        if (managedRuntime && requestUrl.endsWith("/internal/v1/runtime-bindings/upsert") && !JSON.parse(String(init?.body ?? "{}")).start_kind) {
+        if (managedRuntime && requestUrl === "runtime.register" && !JSON.parse(String(init?.body ?? "{}")).start_kind) {
           paneManaged = true;
           return new Response(JSON.stringify({
             session: { session_id: managedRuntime.sessionId },
@@ -110,12 +110,24 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
           }), { status: 200 });
         }
         const response = await suppliedFetch(url as any, init as any);
-        if (requestUrl.endsWith("/internal/v1/runtime-bindings/upsert") && response.ok) paneManaged = true;
+        if (requestUrl === "runtime.register" && response.ok) paneManaged = true;
         return response;
       }) as typeof fetch
     : suppliedFetch;
+  const request: PiConnection["request"] = async (method, params) => {
+    const record = params as Record<string, any>;
+    const response = await fetchWithManagedBinding!(method === "session.context"
+      ? `session.context:${record.client_session_key}` : method,
+      method === "runtime.register" ? { body: JSON.stringify(record.binding) } : undefined);
+    if (method === "session.context" && response.status === 404) return { session_context: null };
+    const body = await response.json();
+    if (!response.ok) throw new Error(`RPC failed: ${response.status}`);
+    return method === "session.context" ? body.data : body;
+  };
+  const connection: PiConnection = { request, registered() {}, async close() {} };
+  const suppliedConnect = overrides.connectPi;
   createPontiaPiExtension(pi as any, {
-    startControlSocket: vi.fn(async () => ({ socketPath: "/unused/control.sock", close: async () => {} })),
+
     loadContext: vi.fn(async () => ({ ok: true as const, context, logFile: "hook.log" })),
     makeReporter: vi.fn(() => ({ report: vi.fn(async (_ctx: TurnContext, event: InternalEvent) => {
       reported.push(event);
@@ -131,6 +143,7 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
       close: vi.fn(async () => undefined),
     })),
     ...overrides,
+    connectPi: async (...args) => suppliedConnect ? { ...await suppliedConnect(...args), request } : connection,
     fetch: fetchWithManagedBinding,
     env,
   });
@@ -147,9 +160,9 @@ describe("pontia pi extension lifecycle", () => {
       env: { PONTIA_SESSION_ID: "sess_direct", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_direct" },
       fetch: vi.fn(async () => Response.json({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } })) as any,
       loadContext,
-      startControlSocket: async (_identity, _env, _onError, onSubmit) => {
+      connectPi: async (_home, _onError, onSubmit) => {
         submit = onSubmit;
-        return { socketPath: "/unused/control.sock", close: async () => {} };
+        return { request: async () => null, registered() {}, close: async () => {} };
       },
     });
     const ctx = { isIdle: () => idle, sessionManager: {
@@ -487,10 +500,10 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_fresh") {
+      if (url === "session.context:pi_session_fresh") {
         return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
       }
-      if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+      if (url === "runtime.register") {
         const body = JSON.parse(String(init?.body));
         expect(body).toMatchObject({
           client_session_key: "pi_session_fresh",
@@ -537,7 +550,7 @@ describe("pontia pi extension lifecycle", () => {
         if (url === "http://localhost/external/v1/workspaces") {
           return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
         }
-        if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_active") {
+        if (url === "session.context:pi_session_active") {
           return new Response(JSON.stringify({ data: { session_context: {
             session_id: "sess_active",
             session_state: sessionState,
@@ -566,7 +579,7 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_starting") {
+      if (url === "session.context:pi_session_starting") {
         return new Response(JSON.stringify({ data: { session_context: {
           session_id: "sess_starting",
           session_state: "starting",
@@ -575,7 +588,7 @@ describe("pontia pi extension lifecycle", () => {
           internal_event_url: "http://localhost/internal/v1/events",
         } } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+      if (url === "runtime.register") {
         return new Response(JSON.stringify({
           session: { session_id: "sess_starting" },
           runtime: {
@@ -606,7 +619,7 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_resumed") {
+      if (url === "session.context:pi_session_resumed") {
         return new Response(JSON.stringify({ data: { session_context: {
           session_id: "sess_existing",
           session_state: "exited",
@@ -616,7 +629,7 @@ describe("pontia pi extension lifecycle", () => {
           internal_event_url: "http://localhost/internal/v1/events",
         } } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+      if (url === "runtime.register") {
         expect(JSON.parse(String(init?.body))).toMatchObject({
           client_session_key: "pi_session_resumed",
           client_session_file: "/tmp/pi/resumed.jsonl",
@@ -667,10 +680,10 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_manual") {
+      if (url === "session.context:pi_session_manual") {
         return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
       }
-      if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+      if (url === "runtime.register") {
         return new Response(JSON.stringify({
           session: { session_id: "sess_manual" },
           runtime: { runtime_instance_id: "rtinst_manual", internal_event_url: "http://localhost/internal/v1/events" },
@@ -702,7 +715,7 @@ describe("pontia pi extension lifecycle", () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchImpl).not.toHaveBeenCalledWith("http://localhost/internal/v1/runtime-bindings/upsert", expect.anything());
+    expect(fetchImpl).not.toHaveBeenCalledWith("runtime.register", expect.anything());
     expect(reported).toEqual([]);
 
     await handlers.before_agent_start({ prompt: "first message", systemPrompt: "Base prompt" }, {});
@@ -781,7 +794,7 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://127.0.0.1:18080/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_discovered") {
+      if (url === "session.context:pi_session_discovered") {
         return new Response(JSON.stringify({ data: { session_context: {
           session_id: "sess_discovered",
           session_state: "exited",
@@ -790,7 +803,7 @@ describe("pontia pi extension lifecycle", () => {
           internal_event_url: "http://127.0.0.1:18080/internal/v1/events",
         } } }), { status: 200 });
       }
-      if (url === "http://127.0.0.1:18080/internal/v1/runtime-bindings/upsert") {
+      if (url === "runtime.register") {
         return new Response(JSON.stringify({
           session: { session_id: "sess_discovered" },
           runtime: { runtime_instance_id: "rtinst_discovered", internal_event_url: "http://127.0.0.1:18080/internal/v1/events" },
@@ -819,10 +832,10 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://127.0.0.1:18080/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_late_env") {
+      if (url === "session.context:pi_session_late_env") {
         return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
       }
-      if (url === "http://127.0.0.1:18080/internal/v1/runtime-bindings/upsert") {
+      if (url === "runtime.register") {
         return new Response(JSON.stringify({
           session: { session_id: "sess_late_env" },
           runtime: { runtime_instance_id: "rtinst_late_env", internal_event_url: "http://127.0.0.1:18080/internal/v1/events" },
@@ -934,7 +947,7 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      expect(url).toBe("http://localhost/internal/v1/runtime-bindings/upsert");
+      expect(url).toBe("runtime.register");
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
           client_session_key: "pi_child",
@@ -984,7 +997,7 @@ describe("pontia pi extension lifecycle", () => {
       if (url === "http://localhost/external/v1/workspaces") {
         return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/agent-bindings/session-context?client_type=pi&client_session_key=pi_session_resume") {
+      if (url === "session.context:pi_session_resume") {
         return new Response(JSON.stringify({ data: { session_context: {
           session_id: "sess_resume",
           session_state: "starting",
@@ -993,7 +1006,7 @@ describe("pontia pi extension lifecycle", () => {
           internal_event_url: "http://localhost/internal/v1/events",
         } } }), { status: 200 });
       }
-      if (url === "http://localhost/internal/v1/runtime-bindings/upsert") {
+      if (url === "runtime.register") {
         expect(JSON.parse(String(init?.body))).toMatchObject({
           client_session_key: "pi_session_resume",
           runtime_instance_id: "rtinst_resume",

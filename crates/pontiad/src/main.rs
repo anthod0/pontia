@@ -27,9 +27,12 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
     let app_state = application::initialize(&config).await?;
+    pontia_runtime::set_runtime_bind_addr(bound_addr);
+    let pi_listener = application::pi_ipc::PiIpcListener::bind(&config.pontia_home).await?;
+    let pi_task =
+        tokio::spawn(pi_listener.run(app_state.clone(), app_state.shutdown().subscribe()));
     let remote_task =
         remote.map(|remote| tokio::spawn(remote.run(app_state.shutdown().subscribe())));
-    pontia_runtime::set_runtime_bind_addr(bound_addr);
     tokio::spawn(
         application::codex::CodexObserver::new(
             app_state.event_ingest_service(),
@@ -78,6 +81,9 @@ async fn main() -> Result<()> {
 
     cleanup_shutdown.notify();
     pi_control.close().await;
+    pi_task
+        .await
+        .map_err(|error| pontia_core::Error::Domain(error.to_string()))??;
     inbox.stop_scheduling().await;
     if let Some(task) = remote_task {
         let _ = task.await;

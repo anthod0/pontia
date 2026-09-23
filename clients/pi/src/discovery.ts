@@ -7,7 +7,6 @@ const DEFAULT_BIND_ADDR = "127.0.0.1:8080";
 export interface PontiaConnection {
   baseUrl: string;
   internalEventUrl: string;
-  bindingUpsertUrl: string;
   externalApiUrl: string;
   externalApiToken?: string;
 }
@@ -56,7 +55,6 @@ function connectionFromBaseUrl(baseUrl: string, externalApiToken?: string): Pont
   return {
     baseUrl: normalized,
     internalEventUrl: `${normalized}/internal/v1/events`,
-    bindingUpsertUrl: `${normalized}/internal/v1/runtime-bindings/upsert`,
     externalApiUrl: `${normalized}/external/v1`,
     ...(externalApiToken ? { externalApiToken } : {}),
   };

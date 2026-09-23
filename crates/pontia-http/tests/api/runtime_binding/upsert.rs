@@ -412,9 +412,14 @@ async fn concurrent_first_upserts_for_one_pi_session_key_create_once_without_ove
         post_upsert(state.clone(), second_request)
     );
 
-    assert_eq!(first.0, StatusCode::OK, "{:?}", first.1);
-    assert_eq!(second.0, StatusCode::CONFLICT, "{:?}", second.1);
-    assert_eq!(second.1["error"]["code"], "state_conflict");
+    let (accepted, rejected) = if first.0 == StatusCode::OK {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    assert_eq!(accepted.0, StatusCode::OK, "{:?}", accepted.1);
+    assert_eq!(rejected.0, StatusCode::CONFLICT, "{:?}", rejected.1);
+    assert_eq!(rejected.1["error"]["code"], "state_conflict");
     let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
         .fetch_one(&state.db())
         .await

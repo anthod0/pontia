@@ -1,8 +1,6 @@
 use pontia_core::{Error, Result};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
-mod pi_control;
-
 #[derive(Debug, Clone)]
 pub struct RuntimeBindingUpsertRecord {
     pub session_id: String,

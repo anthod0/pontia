@@ -24,7 +24,6 @@ describe("resolvePontiaConnection", () => {
     expect(result).toEqual({
       baseUrl: "http://127.0.0.1:8089",
       internalEventUrl: "http://127.0.0.1:8089/internal/v1/events",
-      bindingUpsertUrl: "http://127.0.0.1:8089/internal/v1/runtime-bindings/upsert",
       externalApiUrl: "http://127.0.0.1:8089/external/v1",
       externalApiToken: "pontia-home-token",
     });
@@ -39,7 +38,6 @@ describe("resolvePontiaConnection", () => {
     expect(result).toEqual({
       baseUrl: "http://127.0.0.1:8080",
       internalEventUrl: "http://127.0.0.1:8080/internal/v1/events",
-      bindingUpsertUrl: "http://127.0.0.1:8080/internal/v1/runtime-bindings/upsert",
       externalApiUrl: "http://127.0.0.1:8080/external/v1",
       externalApiToken: "token",
     });
