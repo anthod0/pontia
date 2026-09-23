@@ -179,16 +179,6 @@ impl GenericRuntimeManager {
         agent_clients::accept_in_process_input(client_type, input)
     }
 
-    pub fn dispatch_tui_turn(
-        &self,
-        socket_path: &str,
-        pane_id: &str,
-        client_type: &str,
-        input: &AgentInput,
-    ) -> Result<()> {
-        tmux::dispatch_tui_turn(socket_path, pane_id, client_type, input)
-    }
-
     pub fn terminate_session(&self, runtime_handle: &str) -> Result<()> {
         if in_process::terminate_session(runtime_handle) {
             return Ok(());

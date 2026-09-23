@@ -13,10 +13,7 @@ use crate::{
 impl ClientAdapter {
     pub async fn await_initial_ready(&self, target: &ControlTarget) -> Result<()> {
         target.validate(&self.events.db()).await?;
-        if matches!(
-            self.spec.adapter.dispatch,
-            DispatchMode::PiControl | DispatchMode::TmuxPaste
-        ) {
+        if self.spec.adapter.dispatch == DispatchMode::PiControl {
             crate::RuntimeReadinessService::new(self.events.db())
                 .wait_until_ready(
                     &target.session_id,
@@ -42,12 +39,6 @@ impl ClientAdapter {
             return ControlResult::Unsupported("This client does not support steer".into());
         }
         let result = self.input_inner(target, input, metadata, intent).await;
-        if self.spec.adapter.dispatch == DispatchMode::TmuxPaste {
-            return match result {
-                Ok(receipt) => ControlResult::Sent(receipt),
-                Err(error) => ControlResult::from_result(Err(error)),
-            };
-        }
         ControlResult::from_result(result)
     }
 
@@ -78,20 +69,6 @@ impl ClientAdapter {
             DispatchMode::PiControl => {
                 self.pi_input(target, &input.input, metadata["inbox_message_id"].as_str())
                     .await?
-            }
-            DispatchMode::TmuxPaste => {
-                crate::RuntimeReadinessService::new(self.events.db())
-                    .wait_until_ready(
-                        &target.session_id,
-                        self.spec.client_type,
-                        target.instance()?,
-                    )
-                    .await?;
-                let (socket, pane) = target.tmux_pane(&self.events.db()).await?;
-                target.validate(&self.events.db()).await?;
-                GenericRuntimeManager
-                    .dispatch_tui_turn(&socket, &pane, self.spec.client_type, &input)
-                    .map_err(|error| Error::ControlUnknown(error.to_string()))?;
             }
             DispatchMode::InProcessRecorded => {
                 GenericRuntimeManager.submit_input(self.spec.client_type, input)?;

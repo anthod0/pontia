@@ -61,7 +61,6 @@ pub enum DispatchBehavior {
     PiControl,
     CodexProtocol,
     InProcessRecorded,
-    TmuxPaste,
     None,
 }
 
