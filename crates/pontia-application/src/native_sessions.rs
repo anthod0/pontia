@@ -59,16 +59,22 @@ impl NativeSessionService {
         &self,
         binding: UpsertAgentBindingRequest,
         instance: &str,
+        expected_instance: Option<&str>,
         capabilities: &crate::views::SessionCapabilities,
         details: Value,
     ) -> Result<()> {
         let session = binding.session_id.clone();
         let client = binding.client_type.clone();
-        crate::AgentBindingService::new(self.pool.clone())
-            .upsert_binding(binding)
-            .await?;
-        sqlx::query("UPDATE runtime_bindings SET runtime_instance_id=?, binding_state='confirmed', capabilities=?, adapter_details=json_set(adapter_details,?,json(?)) WHERE session_id=?")
-            .bind(instance).bind(serde_json::to_string(capabilities)?).bind(format!("$.{client}")).bind(details.to_string()).bind(session).execute(&self.pool).await?;
+        let mut tx = self.pool.begin().await?;
+        let updated = sqlx::query("UPDATE runtime_bindings SET runtime_instance_id=?, binding_state='confirmed', capabilities=?, adapter_details=json_set(adapter_details,?,json(?)) WHERE session_id=? AND runtime_instance_id IS ?")
+            .bind(instance).bind(serde_json::to_string(capabilities)?).bind(format!("$.{client}")).bind(details.to_string()).bind(&session).bind(expected_instance).execute(&mut *tx).await?;
+        if updated.rows_affected() != 1 {
+            return Err(Error::StateConflict(
+                "Runtime binding changed before confirmation".into(),
+            ));
+        }
+        crate::agent_bindings::upsert_agent_binding_in_tx(&mut tx, binding).await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -99,6 +105,7 @@ impl NativeSessionService {
                 metadata: json!({}),
             },
             &observation.instance_id,
+            None,
             &observation.capabilities,
             observation.details,
         )
@@ -134,9 +141,11 @@ impl NativeSessionService {
         root: &Path,
         data: Value,
     ) -> Result<()> {
+        crate::runtime::control_target::ControlTarget::resolve(&self.pool, session, Some(instance))
+            .await?;
         let needs_ready =
             crate::SessionCommandService::new(self.events.clone(), root.to_path_buf())
-                .observe_resumed_session(session)
+                .observe_resumed_session(session, instance)
                 .await?;
         let already: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='session.ready' AND json_extract(payload,'$.runtime_instance_id')=?").bind(session).bind(instance).fetch_one(&self.pool).await?;
         if already == 0 || needs_ready {
@@ -169,6 +178,8 @@ impl NativeSessionService {
         instance: &str,
         turn: NativeTurnObservation,
     ) -> Result<()> {
+        crate::runtime::control_target::ControlTarget::resolve(&self.pool, session, Some(instance))
+            .await?;
         let native = &turn.native_turn_id;
         let existing: Option<(String,String)> = sqlx::query_as("SELECT t.turn_id,t.state FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id WHERE b.session_id=? AND b.client_turn_id=?").bind(session).bind(native).fetch_optional(&self.pool).await?;
         if existing.as_ref().is_some_and(|(_, state)| {
@@ -187,7 +198,7 @@ impl NativeSessionService {
             self.report(session, instance, EventType::TurnStarted, json!({"native_turn_id":native,"input":{"summary":summary.map(|s| s.chars().take(200).collect::<String>())},"metadata":{"native_turn_id":native,"native_started_at":turn.started_at,"observation":turn.origin,"inbox_message_id":dispatch.map(|(id,_)|id)}})).await?;
         }
         InboxCommandService::new(self.events.clone())
-            .link_native_turn(session, native)
+            .link_native_turn(session, native, Some(instance))
             .await?;
         if let Some(kind) = turn.terminal? {
             if !matches!(

@@ -25,6 +25,18 @@ impl CodexObserver {
     }
 
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
+        let observation = self.run_until_shutdown(shutdown.clone());
+        tokio::select! {
+            biased;
+            _ = shutdown.wait_for(|stopping| *stopping) => {}
+            _ = observation => {}
+        }
+        if let Err(error) = self.service.reset_connections().await {
+            tracing::warn!(%error, "failed to mark Codex connections unavailable at shutdown");
+        }
+    }
+
+    async fn run_until_shutdown(&self, mut shutdown: watch::Receiver<bool>) {
         loop {
             tokio::select! {
                 _ = shutdown.changed() => break,
@@ -58,7 +70,6 @@ impl CodexObserver {
                 break;
             }
         }
-        CodexRuntime::shutdown(&self.root).await;
     }
 
     async fn observe(
@@ -91,11 +102,12 @@ impl CodexObserver {
                         threads.insert(thread.clone(),session.clone());
                         let result: Result<()> = async {
                         let resumed_thread = if !subscribed.contains(&thread) {
+                            let target = pontia_application::runtime::control_target::ControlTarget::resolve(&self.service.pool, &session, None).await?;
                             let metadata = connection.call("thread/read",json!({"threadId":thread,"includeTurns":false})).await?;
-                            self.service.bind(&session,&runtime,&metadata["thread"]).await?;
+                            self.service.bind(&session,&runtime,&metadata["thread"],target.runtime_instance_id.as_deref()).await?;
                             if self.service.check_archived(&session,&runtime,&thread).await? { return Ok(()); }
                             let resumed = connection.call("thread/resume",json!({"threadId":thread,"excludeTurns":true})).await?;
-                            self.service.bind(&session,&runtime,&resumed["thread"]).await?;
+                            self.service.bind(&session,&runtime,&resumed["thread"],Some(&runtime.instance_id)).await?;
                             self.service.model_fact(&session,&runtime.instance_id,&resumed).await?;
                             Some(resumed["thread"].clone())
                         } else { None };
@@ -163,6 +175,7 @@ impl CodexObserver {
             sqlx::query("UPDATE codex_tui_bindings SET connected=FALSE WHERE owner_session_id=? AND runtime_instance_id=? AND connection_id=?").bind(&target.owner_session_id).bind(&runtime.instance_id).bind(&target.connection_id).execute(&self.service.pool).await?;
             return Ok(());
         }
+        let _current = runtime.current_guard().await?;
         let observation = self
             .service
             .observed_session(&self.root, runtime, &target.thread);

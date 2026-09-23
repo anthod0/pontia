@@ -13,12 +13,14 @@ impl InboxCommandService {
         message: &str,
         receipt: &InputReceipt,
     ) -> Result<()> {
-        let Some(native) = &receipt.native_turn_id else {
+        let (Some(native), Some(_)) = (&receipt.native_turn_id, &receipt.runtime_instance_id)
+        else {
             return Ok(());
         };
         sqlx::query("UPDATE inbox_messages SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_turn_id',?) WHERE message_id=? AND session_id=? AND EXISTS (SELECT 1 FROM runtime_bindings WHERE session_id=? AND runtime_instance_id=?)")
             .bind(native).bind(message).bind(session).bind(session).bind(&receipt.runtime_instance_id).execute(&self.pool).await?;
-        self.link_native_turn(session, native).await
+        self.link_native_turn(session, native, receipt.runtime_instance_id.as_deref())
+            .await
     }
 
     pub(crate) async fn native_dispatch(
@@ -30,9 +32,14 @@ impl InboxCommandService {
             .bind(session).bind(native).fetch_optional(&self.pool).await?)
     }
 
-    pub(crate) async fn link_native_turn(&self, session: &str, native: &str) -> Result<()> {
-        sqlx::query("UPDATE inbox_messages SET turn_id=(SELECT t.turn_id FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id AND t.session_id=b.session_id WHERE b.session_id=? AND b.client_turn_id=?) WHERE session_id=? AND json_extract(metadata,'$.codex_turn_id')=? AND turn_id IS NULL")
-            .bind(session).bind(native).bind(session).bind(native).execute(&self.pool).await?;
+    pub(crate) async fn link_native_turn(
+        &self,
+        session: &str,
+        native: &str,
+        instance: Option<&str>,
+    ) -> Result<()> {
+        sqlx::query("UPDATE inbox_messages SET turn_id=(SELECT t.turn_id FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id AND t.session_id=b.session_id WHERE b.session_id=? AND b.client_turn_id=?) WHERE session_id=? AND json_extract(metadata,'$.codex_turn_id')=? AND turn_id IS NULL AND (? IS NULL OR EXISTS (SELECT 1 FROM runtime_bindings WHERE session_id=? AND runtime_instance_id=?))")
+            .bind(session).bind(native).bind(session).bind(native).bind(instance).bind(session).bind(instance).execute(&self.pool).await?;
         Ok(())
     }
 
@@ -63,7 +70,12 @@ impl InboxCommandService {
                 .get("native_turn_id")
                 .and_then(serde_json::Value::as_str)
             {
-                self.link_native_turn(&event.session_id, native).await?;
+                self.link_native_turn(
+                    &event.session_id,
+                    native,
+                    event.payload["runtime_instance_id"].as_str(),
+                )
+                .await?;
             }
         }
         if matches!(

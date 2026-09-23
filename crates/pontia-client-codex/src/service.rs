@@ -100,7 +100,9 @@ impl CodexService {
         session_id: &str,
         runtime: &CodexRuntime,
         thread: &Value,
+        expected_instance: Option<&str>,
     ) -> Result<()> {
+        let _current = runtime.current_guard().await?;
         let id = string(thread, "id")?;
         let cwd = thread["cwd"]
             .as_str()
@@ -120,6 +122,7 @@ impl CodexService {
                     metadata: json!({}),
                 },
                 &runtime.instance_id,
+                expected_instance,
                 &capabilities,
                 json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection":"reconciling"}),
             )
@@ -183,7 +186,13 @@ impl CodexService {
         };
         let thread = response["thread"].clone();
         target.validate(&self.pool).await?;
-        self.bind(session_id, &runtime, &thread).await?;
+        self.bind(
+            session_id,
+            &runtime,
+            &thread,
+            target.runtime_instance_id.as_deref(),
+        )
+        .await?;
         self.model_fact(session_id, &runtime.instance_id, &response)
             .await?;
         let thread_id = string(&thread, "id")?;
@@ -380,7 +389,13 @@ impl CodexService {
             .validate(&self.pool)
             .await
             .map_err(|error| Error::ControlUnknown(error.to_string()))?;
-        self.bind(session_id, &runtime, &result["thread"]).await?;
+        self.bind(
+            session_id,
+            &runtime,
+            &result["thread"],
+            target.runtime_instance_id.as_deref(),
+        )
+        .await?;
         self.model_fact(session_id, &runtime.instance_id, &result)
             .await?;
         let turns = self.turns(&connection, &binding.client_session_key).await?;

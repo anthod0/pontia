@@ -38,19 +38,26 @@ pub(super) async fn validate_turn_identity_in_tx(
 pub(super) async fn ensure_runtime_fence_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event: &DomainEvent,
+    native_turn_identity: bool,
 ) -> Result<()> {
+    let native_turn = native_turn_identity && event.event_type.is_turn_event();
     if !is_confirmed_runtime_source(event.source)
-        || !runtime_instance_id_required_for_event(event.event_type)
+        || !(runtime_instance_id_required_for_event(event.event_type) || native_turn)
     {
         return Ok(());
     }
     let expected_runtime_instance_id =
         SqliteRuntimeBindingRepository::runtime_instance_id_in_tx(tx, &event.session_id).await?;
     let Some(expected_runtime_instance_id) = expected_runtime_instance_id else {
-        if matches!(
-            event.event_type,
-            EventType::SessionReady | EventType::SessionError | EventType::SessionModelUpdated
-        ) {
+        if native_turn
+            || matches!(
+                event.event_type,
+                EventType::SessionReady
+                    | EventType::SessionResuming
+                    | EventType::SessionError
+                    | EventType::SessionModelUpdated
+            )
+        {
             return Err(Error::Domain(format!(
                 "{} from {} requires a confirmed Runtime binding for session {}",
                 event.event_type, event.source, event.session_id
@@ -204,6 +211,7 @@ fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {
     matches!(
         event_type,
         EventType::SessionReady
+            | EventType::SessionResuming
             | EventType::SessionModelUpdated
             | EventType::SessionExited
             | EventType::SessionError

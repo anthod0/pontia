@@ -33,7 +33,11 @@ impl SessionCommandService {
             .await
     }
 
-    pub(crate) async fn observe_resumed_session(&self, session_id: &str) -> Result<bool> {
+    pub(crate) async fn observe_resumed_session(
+        &self,
+        session_id: &str,
+        instance: &str,
+    ) -> Result<bool> {
         let session = ExternalQueryService::new(self.pool.clone())
             .with_clients(self.event_ingest.clients())
             .get_session(session_id)
@@ -41,13 +45,13 @@ impl SessionCommandService {
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         if session.state == "exited" {
             self.event_ingest
-                .ingest_pontia_event(PontiaEvent::new(
+                .ingest_runtime_observation_event(PontiaEvent::new(
                     session_id,
                     None,
                     PontiaEventSource::RuntimeManager,
                     session.client_type,
                     PontiaEventType::SessionResuming,
-                    json!({}),
+                    json!({"runtime_instance_id":instance}),
                 ))
                 .await?;
         }

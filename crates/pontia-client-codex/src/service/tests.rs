@@ -452,3 +452,44 @@ async fn concurrent_native_facts_create_one_turn_and_one_committed_notification(
         "exited"
     );
 }
+
+#[tokio::test]
+async fn generic_runtime_observation_does_not_mark_external_session_failed() {
+    let fixture = Fixture::new().await;
+    let events = fixture.state.event_ingest_service();
+    let before = events.list_events(&fixture.session).await.unwrap().len();
+    pontia_application::RuntimeObservationService::new(events.clone())
+        .observe_session(&fixture.session)
+        .await
+        .unwrap();
+    assert_eq!(
+        events
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .state
+            .to_string(),
+        "idle"
+    );
+    assert_eq!(
+        events.list_events(&fixture.session).await.unwrap().len(),
+        before
+    );
+}
+
+#[tokio::test]
+async fn observer_honors_shutdown_sent_before_it_starts() {
+    let fixture = Fixture::new().await;
+    let (_shutdown, receiver) = tokio::sync::watch::channel(true);
+    tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        super::CodexObserver::new(
+            fixture.state.event_ingest_service(),
+            fixture._root.path().into(),
+        )
+        .run(receiver),
+    )
+    .await
+    .unwrap();
+}

@@ -14,6 +14,7 @@ struct ServerState {
     turns: HashMap<String, Value>,
     archived: Vec<String>,
     publish_turns: bool,
+    stall_turn_reads: bool,
 }
 
 struct RuntimeGuard(Arc<CodexRuntime>);
@@ -35,6 +36,10 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
     let listener = UnixListener::bind(&socket).unwrap();
     let native = Arc::new(Mutex::new(ServerState::default()));
     let server_state = native.clone();
+    let read_started = Arc::new(tokio::sync::Notify::new());
+    let release_read = Arc::new(tokio::sync::Notify::new());
+    let server_read_started = read_started.clone();
+    let server_release_read = release_read.clone();
     let cwd = root.path().display().to_string();
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
@@ -61,6 +66,10 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
                     json!({"thread":state.threads.iter().find(|entry| entry["id"] == thread).unwrap(),"model":"test-model"})
                 }
                 "thread/turns/list" => {
+                    if state.stall_turn_reads {
+                        server_read_started.notify_one();
+                        server_release_read.notified().await;
+                    }
                     json!({"data":if state.publish_turns { state.turns.get(&thread).cloned().into_iter().collect::<Vec<_>>() } else { vec![] }, "nextCursor":null})
                 }
                 "turn/start" => {
@@ -81,13 +90,17 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
                 }
                 method => panic!("unexpected method: {method}"),
             };
-            wire.send(Message::Text(
-                json!({"id":request["id"],"result":result})
-                    .to_string()
-                    .into(),
-            ))
-            .await
-            .unwrap();
+            if wire
+                .send(Message::Text(
+                    json!({"id":request["id"],"result":result})
+                        .to_string()
+                        .into(),
+                ))
+                .await
+                .is_err()
+            {
+                break;
+            }
         }
     });
     let connection = Connection::connect(&socket).await.unwrap();
@@ -234,7 +247,50 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
         2,
         "resume retains native identity"
     );
+    native.lock().await.stall_turn_reads = true;
+    tokio::time::timeout(Duration::from_secs(5), read_started.notified())
+        .await
+        .unwrap();
     shutdown.send(true).unwrap();
-    observer.await.unwrap();
+    tokio::time::timeout(Duration::from_secs(1), observer)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        runtime.child.lock().await.try_wait().unwrap().is_none(),
+        "runtime cleanup follows observer completion"
+    );
+    let status: String = sqlx::query_scalar("SELECT json_extract(adapter_details,'$.codex.connection') FROM runtime_bindings WHERE session_id=?")
+        .bind(&ids[0]).fetch_one(&app.db()).await.unwrap();
+    assert_eq!(status, "unavailable");
+    release_read.notify_one();
+    CodexRuntime::shutdown(root.path()).await;
+    assert!(runtime.child.lock().await.try_wait().unwrap().is_some());
+    assert!(!registry().lock().await.contains_key(&runtime.root));
+    // A delayed response from the removed runtime cannot restore its binding.
+    let old_binding = pontia_application::AgentBindingService::new(app.db())
+        .binding_for_session(&ids[0])
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        crate::CodexService::new(app.event_ingest_service())
+            .bind(
+                &ids[0],
+                &runtime,
+                &json!({"id":"thread-0","cwd":root.path(),"path":"obsolete-rollout"}),
+                Some(&runtime.instance_id)
+            )
+            .await,
+        Err(Error::StateConflict(_))
+    ));
+    assert_eq!(
+        pontia_application::AgentBindingService::new(app.db())
+            .binding_for_session(&ids[0])
+            .await
+            .unwrap()
+            .unwrap(),
+        old_binding
+    );
     server.await.unwrap();
 }

@@ -178,6 +178,12 @@ impl CodexService {
     }
 
     pub(super) async fn archived(&self, session: &str, runtime: &CodexRuntime) -> Result<()> {
+        let target = pontia_application::runtime::control_target::ControlTarget::resolve(
+            &self.pool,
+            session,
+            Some(&runtime.instance_id),
+        )
+        .await?;
         if let Some(binding) = pontia_application::AgentBindingService::new(self.pool.clone())
             .binding_for_session(session)
             .await?
@@ -190,7 +196,13 @@ impl CodexService {
                     json!({"threadId":binding.client_session_key,"includeTurns":false}),
                 )
                 .await?;
-            self.bind(session, runtime, &snapshot["thread"]).await?;
+            self.bind(
+                session,
+                runtime,
+                &snapshot["thread"],
+                target.runtime_instance_id.as_deref(),
+            )
+            .await?;
             let connection = runtime.connection().await?;
             let turns = self.turns(&connection, &binding.client_session_key).await?;
             self.reconcile_turns(session, runtime, &turns).await?;

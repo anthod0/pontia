@@ -296,7 +296,14 @@ impl EventIngestService {
                 .await?;
             }
             if enforce_runtime_fence {
-                ensure_runtime_fence_in_tx(&mut tx, &event).await?;
+                ensure_runtime_fence_in_tx(
+                    &mut tx,
+                    &event,
+                    self.clients
+                        .spec(&event.client_type)
+                        .is_some_and(|spec| spec.adapter.native_turn_identity),
+                )
+                .await?;
             }
         }
         if let Some(event_id) =

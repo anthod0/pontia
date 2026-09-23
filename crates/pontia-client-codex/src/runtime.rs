@@ -21,6 +21,10 @@ fn registry() -> &'static Mutex<HashMap<PathBuf, Arc<CodexRuntime>>> {
     RUNTIMES.get_or_init(Default::default)
 }
 
+pub(crate) struct CurrentRuntimeGuard {
+    _registry: tokio::sync::MutexGuard<'static, HashMap<PathBuf, Arc<CodexRuntime>>>,
+}
+
 pub struct CodexRuntime {
     pub root: PathBuf,
     pub instance_id: String,
@@ -132,6 +136,22 @@ impl CodexRuntime {
             old.connection.lock().await.close().await;
         }
         Ok(runtime)
+    }
+
+    // Hold replacement/shutdown off until the binding transaction commits.
+    pub(crate) async fn current_guard(&self) -> Result<CurrentRuntimeGuard> {
+        let registry = registry().lock().await;
+        if !registry
+            .get(&self.root)
+            .is_some_and(|runtime| runtime.instance_id == self.instance_id)
+        {
+            return Err(Error::StateConflict(
+                "Codex runtime has been replaced".into(),
+            ));
+        }
+        Ok(CurrentRuntimeGuard {
+            _registry: registry,
+        })
     }
 
     pub async fn connection(&self) -> Result<Arc<Connection>> {

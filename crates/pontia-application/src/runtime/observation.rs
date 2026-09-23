@@ -170,7 +170,8 @@ impl RuntimeObservationService {
                     })
                     .await;
             }
-            RuntimeBehavior::InProcess | RuntimeBehavior::External => {
+            RuntimeBehavior::External => return Ok(()),
+            RuntimeBehavior::InProcess => {
                 let Some(runtime_target) = SqliteRuntimeBindingRepository::new(self.pool.clone())
                     .runtime_handle(session_id)
                     .await?
