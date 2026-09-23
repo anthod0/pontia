@@ -1,4 +1,5 @@
 //! Pi registration and reporting transport. Binding and lifecycle decisions remain in application services.
+mod live_output;
 mod reporting;
 
 use crate::{
@@ -151,6 +152,7 @@ pub async fn serve_connection(state: AppState, stream: UnixStream) {
                 | "runtime.register"
                 | "runtime.attach"
                 | "event.report"
+                | "liveOutput.publish"
                 | "turn.startFailure"
                 | "branch.resolve"
         ) {
@@ -219,6 +221,12 @@ async fn dispatch(
     request: &RpcRequest,
     registered: &mut Option<Attach>,
 ) -> Result<Value> {
+    if request.method == "liveOutput.publish" {
+        let identity = registered
+            .as_ref()
+            .ok_or_else(|| Error::StateConflict("Pi live output requires registration".into()))?;
+        return live_output::publish(state, identity, request.params.clone()).await;
+    }
     if request.method == "branch.resolve" {
         let identity = registered.as_ref().ok_or_else(|| {
             Error::StateConflict("Pi branch resolution requires registration".into())

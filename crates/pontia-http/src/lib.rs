@@ -65,7 +65,6 @@ pub fn router(state: impl Into<HttpState>) -> Router {
         .route("/dashboard/", get(dashboard::dashboard))
         .route("/dashboard/assets/{*path}", get(dashboard::dashboard_asset))
         .route("/dashboard/{*path}", get(dashboard::dashboard_path))
-        .route("/internal/v1/live-output", post(internal::post_live_output))
         .route("/internal/v1/workflows", post(internal::run_workflow))
         .route(
             "/internal/v1/workflow/submissions",

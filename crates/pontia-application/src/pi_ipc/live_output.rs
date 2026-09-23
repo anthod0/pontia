@@ -1,19 +1,16 @@
-use axum::{
-    Json,
-    extract::{State, rejection::JsonRejection},
-    http::StatusCode,
-};
-use pontia_application::{
+use crate::{
     AppState, LiveOutputBatch, LiveOutputClose, LiveOutputIdentity, LiveOutputItem,
     LiveOutputProducer, LiveOutputPublishOutcome, LiveOutputSnapshotReplacement, LiveOutputUpdate,
 };
 use serde::{Deserialize, Serialize};
 
-use super::response::ApiError;
+use super::Attach;
+use pontia_core::{Error, Result};
+use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-pub enum InternalLiveOutputRequest {
+enum LiveOutputRequest {
     Append {
         session_id: String,
         turn_id: String,
@@ -40,21 +37,40 @@ pub enum InternalLiveOutputRequest {
 }
 
 #[derive(Debug, Serialize)]
-pub struct InternalLiveOutputResponse {
+struct LiveOutputResponse {
     accepted: bool,
     duplicate: bool,
     resync_required: bool,
     accepted_sequence: u64,
 }
 
-pub async fn post_live_output(
-    State(state): State<AppState>,
-    request: Result<Json<InternalLiveOutputRequest>, JsonRejection>,
-) -> Result<(StatusCode, Json<InternalLiveOutputResponse>), ApiError> {
-    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
+pub(super) async fn publish(state: &AppState, identity: &Attach, params: Value) -> Result<Value> {
+    let request: LiveOutputRequest = serde_json::from_value(params)?;
+    let (session_id, runtime_instance_id) = match &request {
+        LiveOutputRequest::Append {
+            session_id,
+            runtime_instance_id,
+            ..
+        }
+        | LiveOutputRequest::Snapshot {
+            session_id,
+            runtime_instance_id,
+            ..
+        }
+        | LiveOutputRequest::StreamClosed {
+            session_id,
+            runtime_instance_id,
+            ..
+        } => (session_id, runtime_instance_id),
+    };
+    if session_id != &identity.session_id || runtime_instance_id != &identity.runtime_instance_id {
+        return Err(Error::StateConflict(
+            "Pi live output does not match its connection identity".into(),
+        ));
+    }
     let service = state.live_output();
     let outcome = match request {
-        InternalLiveOutputRequest::Append {
+        LiveOutputRequest::Append {
             session_id,
             turn_id,
             runtime_instance_id,
@@ -70,7 +86,7 @@ pub async fn post_live_output(
                 })
                 .await?
         }
-        InternalLiveOutputRequest::Snapshot {
+        LiveOutputRequest::Snapshot {
             session_id,
             turn_id,
             runtime_instance_id,
@@ -86,7 +102,7 @@ pub async fn post_live_output(
                 })
                 .await?
         }
-        InternalLiveOutputRequest::StreamClosed {
+        LiveOutputRequest::StreamClosed {
             session_id,
             turn_id,
             runtime_instance_id,
@@ -102,7 +118,7 @@ pub async fn post_live_output(
         }
     };
 
-    Ok(response_from_outcome(outcome))
+    Ok(serde_json::to_value(response_from_outcome(outcome))?)
 }
 
 fn producer(
@@ -121,30 +137,22 @@ fn producer(
     }
 }
 
-fn response_from_outcome(
-    outcome: LiveOutputPublishOutcome,
-) -> (StatusCode, Json<InternalLiveOutputResponse>) {
+fn response_from_outcome(outcome: LiveOutputPublishOutcome) -> LiveOutputResponse {
     match outcome {
         LiveOutputPublishOutcome::Accepted {
             accepted_sequence,
             duplicate,
-        } => (
-            StatusCode::OK,
-            Json(InternalLiveOutputResponse {
-                accepted: true,
-                duplicate,
-                resync_required: false,
-                accepted_sequence,
-            }),
-        ),
-        LiveOutputPublishOutcome::SnapshotRequired { accepted_sequence } => (
-            StatusCode::CONFLICT,
-            Json(InternalLiveOutputResponse {
-                accepted: false,
-                duplicate: false,
-                resync_required: true,
-                accepted_sequence,
-            }),
-        ),
+        } => LiveOutputResponse {
+            accepted: true,
+            duplicate,
+            resync_required: false,
+            accepted_sequence,
+        },
+        LiveOutputPublishOutcome::SnapshotRequired { accepted_sequence } => LiveOutputResponse {
+            accepted: false,
+            duplicate: false,
+            resync_required: true,
+            accepted_sequence,
+        },
     }
 }

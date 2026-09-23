@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
-import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
+import { RpcError, type PiConnection } from "./control-socket.js";
+import { asRecord, optionalString } from "./internal-api.js";
 
 const DEFAULT_BATCH_DELAY_MS = 75;
 const RETRY_DELAY_MS = 500;
@@ -46,14 +47,13 @@ interface LiveOutputResponse {
 }
 
 export interface LiveOutputPublisherOptions {
-  fetch?: typeof fetch;
+  connection: Pick<PiConnection, "request">;
   streamId?: string;
   batchDelayMs?: number;
 }
 
 export class LiveOutputPublisher implements LiveOutputPublisherLike {
-  private readonly fetchImpl: typeof fetch;
-  private readonly url: string;
+  private readonly connection: Pick<PiConnection, "request">;
   private readonly context: TurnContext & { turnId: string };
   private readonly streamId: string;
   private readonly batchDelayMs: number;
@@ -68,14 +68,11 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
   private closing = false;
   private disabled = false;
 
-  constructor(context: TurnContext & { turnId: string }, options: LiveOutputPublisherOptions = {}) {
+  constructor(context: TurnContext & { turnId: string }, options: LiveOutputPublisherOptions) {
     this.context = context;
-    this.fetchImpl = options.fetch ?? fetch;
+    this.connection = options.connection;
     this.streamId = options.streamId ?? `stream_${randomUUID()}`;
     this.batchDelayMs = options.batchDelayMs ?? DEFAULT_BATCH_DELAY_MS;
-    const url = new URL(context.internalEventUrl);
-    url.pathname = url.pathname.replace(/\/events\/?$/, "/live-output");
-    this.url = url.toString();
   }
 
   appendText(delta: string): void {
@@ -124,7 +121,7 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
     if (!synchronized || this.sequence === 0) return;
 
     const closeSequence = this.sequence + 1;
-    const response = await this.post({
+    const response = await this.publish({
       ...this.baseRequest(),
       type: "stream_closed",
       sequence: closeSequence,
@@ -182,13 +179,13 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
     if (this.sequence === 0) return true;
     const targetSequence = this.sequence;
     const response = this.needsSnapshot
-      ? await this.post({
+      ? await this.publish({
           ...this.baseRequest(),
           type: "snapshot",
           sequence: targetSequence,
           items: this.items,
         })
-      : await this.postAppend(targetSequence);
+      : await this.publishAppend(targetSequence);
 
     if (!response?.accepted) {
       this.needsSnapshot = true;
@@ -204,14 +201,14 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
     return !this.needsSnapshot;
   }
 
-  private async postAppend(targetSequence: number): Promise<LiveOutputResponse | undefined> {
+  private async publishAppend(targetSequence: number): Promise<LiveOutputResponse | undefined> {
     const updates = this.pending.filter((entry) => entry.sequence <= targetSequence);
     if (updates.length === 0) return {
       accepted: true,
       accepted_sequence: targetSequence,
       resync_required: false,
     };
-    return this.post({
+    return this.publish({
       ...this.baseRequest(),
       type: "append",
       first_sequence: updates[0].sequence,
@@ -228,15 +225,11 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
     };
   }
 
-  private async post(body: Record<string, unknown>): Promise<LiveOutputResponse | undefined> {
+  private async publish(body: Record<string, unknown>): Promise<LiveOutputResponse | undefined> {
     try {
-      const response = await this.fetchImpl(this.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(5_000),
-      });
-      const parsed = asRecord(await parseJsonResponse(response));
+      // Freeze the batch before a reconnect can delay its serialization.
+      const response = await this.connection.request("liveOutput.publish", structuredClone(body));
+      const parsed = asRecord(response);
       const acceptedSequence = parsed?.accepted_sequence;
       const accepted = parsed?.accepted;
       const resyncRequired = parsed?.resync_required;
@@ -247,11 +240,6 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
         typeof accepted !== "boolean" ||
         typeof resyncRequired !== "boolean"
       ) {
-        if (isPermanentRejection(response.status)) this.disabled = true;
-        return undefined;
-      }
-      if (!response.ok && !resyncRequired) {
-        if (isPermanentRejection(response.status)) this.disabled = true;
         return undefined;
       }
       return {
@@ -259,14 +247,11 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
         accepted_sequence: acceptedSequence,
         resync_required: resyncRequired,
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof RpcError && error.code !== -32603) this.disabled = true;
       return undefined;
     }
   }
-}
-
-function isPermanentRejection(status: number): boolean {
-  return status >= 400 && status < 500 && status !== 429;
 }
 
 function managedToolUseFor(toolCall: CompleteToolCall): ManagedToolUse | undefined {

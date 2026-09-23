@@ -106,3 +106,59 @@ test("a disconnected deferred registration can initialize on the next manual tur
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test("the default extension streams over its registered connection and closes the canonical turn stream", async () => {
+  const root = await tempDir("pl-");
+  const workspace = await realpath(root);
+  await writeFile(join(root, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
+  const handlers: Record<string, (event: any, context?: any) => Promise<void>> = {};
+  const calls: Array<{ method: string; params: any }> = [];
+  const connect = vi.fn(async () => ({
+    registered() {}, async close() {},
+    async request(method: string, params: object) {
+      calls.push({ method, params });
+      if (method === "session.context") return { session_context: null };
+      if (method === "runtime.register") return {
+        session: { session_id: "sess_live" },
+        runtime: { runtime_instance_id: "rt_live", internal_event_url: "unused" },
+      };
+      if (method === "liveOutput.publish") return {
+        accepted: true, accepted_sequence: (params as any).sequence, resync_required: false,
+      };
+      expect(method).toBe("event.report");
+      return { accepted: true, turn_id: "turn_canonical" };
+    },
+  }));
+  createPontiaPiExtension({ on(name: string, handler: any) { handlers[name] = handler; }, registerCommand() {} } as any, {
+    env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
+    fetch: async (url) => {
+      expect(String(url)).toContain("/external/v1/workspaces");
+      return Response.json({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } });
+    },
+    connectPi: connect,
+    isManagedPane: async () => true,
+    loadContext: async () => ({ ok: true, logFile: join(root, "hook.log"), context: {
+      sessionId: "sess_live", runtimeInstanceId: "rt_live", clientType: "pi", internalEventUrl: "unused",
+    } }),
+  });
+  const context = { mode: "tui", sessionManager: {
+    getSessionId: () => "native", getSessionFile: () => join(root, "pi.jsonl"), getCwd: () => workspace,
+  } };
+  try {
+    await handlers.session_start({ reason: "startup" }, context);
+    await handlers.agent_start({}, context);
+    await handlers.message_update({ assistantMessageEvent: { type: "text_delta", delta: "hello" } }, context);
+    await vi.waitFor(() => expect(calls.filter((call) => call.method === "liveOutput.publish")).toHaveLength(1));
+    await handlers.agent_end({ messages: [] }, context);
+    const liveCalls = calls.filter((call) => call.method === "liveOutput.publish");
+    expect(liveCalls.map((call) => call.params)).toEqual([
+      expect.objectContaining({ session_id: "sess_live", runtime_instance_id: "rt_live", turn_id: "turn_canonical",
+        type: "snapshot", sequence: 1, items: [{ kind: "assistant_text", item_id: "text_1", text: "hello" }] }),
+      expect.objectContaining({ type: "stream_closed", sequence: 2 }),
+    ]);
+    expect(calls.indexOf(liveCalls[0])).toBeLessThan(calls.findIndex((call) => call.params.event?.type === "turn.completed"));
+    expect(connect).toHaveBeenCalledOnce();
+  } finally {
+    await handlers.session_shutdown({ reason: "quit" }, context);
+  }
+});

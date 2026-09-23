@@ -118,19 +118,22 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   const currentHookLogFile = () => defaultHookLogFile(currentPontiaHome());
 
   const contextLoader = dependencies.loadContext ?? ((contextEnv, sessionContext) => loadTurnContext(contextEnv, { sessionContext }));
-  const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({
-    logFile,
-    connection: { request(method, params) {
+  const reportingConnection: Pick<PiConnection, "request"> = {
+    request(method, params) {
       if (!controlSocket) return Promise.reject(new Error("Pi connection is unavailable"));
       return controlSocket.request(method, params);
-    } },
+    },
+  };
+  const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({
+    logFile,
+    connection: reportingConnection,
   }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   const fetchImpl = dependencies.fetch ?? fetch;
   const loadManagedRuntime = dependencies.loadManagedRuntime ?? loadPontiaManagedRuntimeIdentity;
   const isManagedPane = dependencies.isManagedPane ?? isPontiaManagedTmuxPane;
   const makeLiveOutputPublisher = dependencies.makeLiveOutputPublisher
-    ?? ((context: TurnContext & { turnId: string }) => new LiveOutputPublisher(context, { fetch: fetchImpl }));
+    ?? ((context: TurnContext & { turnId: string }) => new LiveOutputPublisher(context, { connection: reportingConnection }));
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;

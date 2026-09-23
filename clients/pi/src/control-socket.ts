@@ -74,7 +74,7 @@ class RpcSocket {
 
   private encode(value: object): string {
     const encoded = JSON.stringify(value);
-    if (Buffer.byteLength(encoded) > MAX_RPC_FRAME_BYTES) throw new Error("Pi RPC frame exceeds size limit");
+    if (Buffer.byteLength(encoded) > MAX_RPC_FRAME_BYTES) throw new RpcError(-32602, "Pi RPC frame exceeds size limit");
     return `${encoded}\n`;
   }
 

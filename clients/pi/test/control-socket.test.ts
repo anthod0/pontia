@@ -3,6 +3,7 @@ import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
 import { onTestFinished, expect, test, vi } from "vitest";
 import { connectPi, piSocketPath, MAX_RPC_FRAME_BYTES, RpcError } from "../src/control-socket.js";
+import { LiveOutputPublisher } from "../src/live-output.js";
 import { EventReporter } from "../src/reporter.js";
 import { buildTurnStartedEvent } from "../src/events.js";
 import { tempDir } from "./temp-dir.js";
@@ -239,4 +240,73 @@ test("model control preserves uncertain outcomes across the RPC boundary", async
   onTestFinished(() => client.close());
   await client.request("begin", {});
   await vi.waitFor(() => expect(result?.error?.code).toBe(-32007));
+});
+
+test("live output recovers a lost acknowledgement after attaching and keeps control responsive", async () => {
+  const methods: string[] = [];
+  const publications: any[] = [];
+  let pingAnswered = false;
+  const root = await server((socket, message) => {
+    if (!message.method) {
+      expect(message).toEqual({ jsonrpc: "2.0", id: "daemon:ping", result: { pong: true } });
+      pingAnswered = true;
+      return;
+    }
+    methods.push(message.method);
+    if (message.method === "runtime.attach") {
+      reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" });
+      return;
+    }
+    expect(message.method).toBe("liveOutput.publish");
+    publications.push(message.params);
+    if (publications.length === 1) { socket.destroy(); return; }
+    if (publications.length === 2) {
+      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "daemon:ping", method: "ping" })}\n`);
+    }
+    reply(socket, message.id, {
+      accepted: true, accepted_sequence: message.params.sequence,
+      duplicate: false, resync_required: false,
+    });
+  });
+  const client = await connectPi(root, () => {}, () => {});
+  onTestFinished(() => client.close());
+  client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
+  const publisher = new LiveOutputPublisher({
+    sessionId: "s", runtimeInstanceId: "r", turnId: "t", clientType: "pi", internalEventUrl: "unused",
+  }, { connection: client });
+  onTestFinished(() => publisher.close());
+  publisher.appendText("hello");
+  await vi.waitFor(() => expect(publications).toHaveLength(1));
+  publisher.appendText(" world");
+  await vi.waitFor(() => expect(publications).toHaveLength(2), { timeout: 2_000 });
+  await vi.waitFor(() => expect(pingAnswered).toBe(true));
+  await publisher.close();
+  expect(methods).toEqual(["liveOutput.publish", "runtime.attach", "liveOutput.publish", "liveOutput.publish"]);
+  expect(publications).toEqual([
+    expect.objectContaining({ type: "snapshot", sequence: 1, items: [{ kind: "assistant_text", item_id: "text_1", text: "hello" }] }),
+    expect.objectContaining({ type: "snapshot", sequence: 2, items: [{ kind: "assistant_text", item_id: "text_1", text: "hello world" }] }),
+    expect.objectContaining({ type: "stream_closed", sequence: 3 }),
+  ]);
+});
+
+test("oversized live output stops retrying without closing the shared control connection", async () => {
+  const methods: string[] = [];
+  const root = await server((socket, message) => {
+    methods.push(message.method);
+    reply(socket, message.id, {});
+  });
+  const client = await connectPi(root, () => {}, () => {});
+  onTestFinished(() => client.close());
+  const request = vi.fn(client.request);
+  const publisher = new LiveOutputPublisher({
+    sessionId: "s", runtimeInstanceId: "r", turnId: "t", clientType: "pi", internalEventUrl: "unused",
+  }, { connection: { request } });
+  onTestFinished(() => publisher.close());
+  publisher.appendText("x".repeat(MAX_RPC_FRAME_BYTES));
+  await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+  publisher.appendText("more");
+  await publisher.close();
+  expect(request).toHaveBeenCalledOnce();
+  await expect(client.request("ping", {})).resolves.toEqual({});
+  expect(methods).toEqual(["ping"]);
 });
