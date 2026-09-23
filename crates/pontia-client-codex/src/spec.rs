@@ -4,8 +4,6 @@ use pontia_application::client_contract::{
     TerminateBehavior, TurnLifecycleBehavior,
 };
 
-pub const SUPPORTED_VERSION: &str = "0.155.1";
-
 pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     accept_task: true,
     report_turn_started: true,

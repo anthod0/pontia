@@ -34,11 +34,9 @@ pub fn identity(path: &Path) -> Result<String> {
     let mut line = String::new();
     reader.read_line(&mut line)?;
     let record: Value = serde_json::from_str(&line)?;
-    if record["type"] != "session_meta"
-        || record["payload"]["cli_version"] != super::SUPPORTED_VERSION
-    {
+    if record["type"] != "session_meta" {
         return Err(Error::CapabilityUnavailable(
-            "Unsupported Codex rollout format/version".into(),
+            "Unsupported Codex rollout format".into(),
         ));
     }
     record["payload"]["id"]
@@ -59,7 +57,7 @@ impl AgentBindingResolver for CodexRollout {
         Ok(ResolvedAgentBinding {
             id: request.id.clone(),
             client_type: "codex".into(),
-            format: "codex_rollout_0.155.1".into(),
+            format: "codex_rollout".into(),
             path,
             fingerprint: Some(thread),
         })

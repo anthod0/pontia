@@ -61,16 +61,6 @@ impl CodexRuntime {
             return Ok(runtime.clone());
         }
         let binary = std::env::var("PONTIA_CODEX_COMMAND").unwrap_or_else(|_| "codex".into());
-        let version = Command::new(&binary).arg("--version").output().await?;
-        if !version.status.success()
-            || String::from_utf8_lossy(&version.stdout).trim()
-                != format!("codex-cli {}", crate::SUPPORTED_VERSION)
-        {
-            return Err(Error::CapabilityUnavailable(format!(
-                "Codex {} is required; set PONTIA_CODEX_COMMAND to its executable",
-                crate::SUPPORTED_VERSION
-            )));
-        }
         let instance_id = new_runtime_instance_id().to_string();
         let socket_path = root
             .join("state/codex")

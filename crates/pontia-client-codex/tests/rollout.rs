@@ -10,7 +10,7 @@ fn fixture(records: &[Value]) -> (tempfile::TempDir, ResolvedAgentBinding) {
     writeln!(
         file,
         "{}",
-        json!({"type":"session_meta","payload":{"id":"thread-a","cli_version":"0.155.1"}})
+        json!({"type":"session_meta","payload":{"id":"thread-a","cli_version":"0.156.1"}})
     )
     .unwrap();
     for record in records {
