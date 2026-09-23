@@ -1,7 +1,7 @@
 use super::ClientAdapter;
 use crate::{RuntimeReadinessService, runtime::control_target::ControlTarget};
-use pontia_core::{Error, Result, ids::new_dispatch_id};
-use pontia_runtime::{AgentInput, GenericRuntimeManager};
+use pontia_core::{Error, Result};
+use pontia_runtime::GenericRuntimeManager;
 
 impl ClientAdapter {
     pub(super) async fn pi_input(
@@ -52,19 +52,14 @@ impl ClientAdapter {
                     target.instance()?,
                 )
                 .await?;
-            let (socket, pane) = target.tmux_pane(&self.events.db()).await?;
-            GenericRuntimeManager
-                .dispatch_tui_turn(
-                    &socket,
-                    &pane,
-                    self.spec.client_type,
-                    &AgentInput {
-                        session_id: target.session_id.clone(),
-                        dispatch_id: new_dispatch_id().to_string(),
-                        input: format!("/pontia-edit {message}"),
-                    },
-                )
-                .map_err(|error| Error::ControlUnknown(error.to_string()))
+            target.validate(&self.events.db()).await?;
+            self.pi
+                .as_ref()
+                .ok_or_else(|| {
+                    Error::CapabilityUnavailable("Pi control service is unavailable".into())
+                })?
+                .replay(&target.session_id, target.instance()?, message)
+                .await
         }
         .await;
         match result {

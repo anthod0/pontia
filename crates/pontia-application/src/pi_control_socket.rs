@@ -12,6 +12,7 @@ pub trait PiControlChannel: Send + Sync {
     fn list_models(&self) -> PiControlOperation<'_, Vec<crate::sessions::SessionModel>>;
     fn set_model<'a>(&'a self, model: &'a str) -> PiControlOperation<'a>;
     fn ping(&self) -> PiControlOperation<'_>;
+    fn replay<'a>(&'a self, inbox_message_id: &'a str) -> PiControlOperation<'a>;
     fn submit<'a>(
         &'a self,
         input: &'a str,
@@ -140,6 +141,18 @@ impl PiControlService {
     ) -> Result<()> {
         self.request(session_id, runtime_instance_id, |channel| async move {
             channel.submit(input, inbox_message_id).await
+        })
+        .await
+    }
+
+    pub async fn replay(
+        &self,
+        session_id: &str,
+        runtime_instance_id: &str,
+        inbox_message_id: &str,
+    ) -> Result<()> {
+        self.request(session_id, runtime_instance_id, |channel| async move {
+            channel.replay(inbox_message_id).await
         })
         .await
     }

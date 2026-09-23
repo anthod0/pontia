@@ -118,7 +118,8 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
     const record = params as Record<string, any>;
     const response = await fetchWithManagedBinding!(method === "session.context"
       ? `session.context:${record.client_session_key}` : method,
-      method === "runtime.register" ? { body: JSON.stringify(record.binding) } : undefined);
+      method === "runtime.register" ? { body: JSON.stringify(record.binding) }
+        : method === "branch.resolve" ? { body: JSON.stringify(params) } : undefined);
     if (method === "session.context" && response.status === 404) return { session_context: null };
     const body = await response.json();
     if (!response.ok) throw new Error(`RPC failed: ${response.status}`);
@@ -224,14 +225,10 @@ describe("pontia pi extension lifecycle", () => {
   test("pontia-edit resolves, navigates once without summarization, clears restored text, then submits replacement", async () => {
     const calls: string[] = [];
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
-      if (!_url.endsWith("/inbox/branch-replay/resolve")) {
+      if (_url !== "branch.resolve") {
         return Response.json({ data: { workspaces: [{ canonical_path: defaultPontiaHome, state: "active" }] } });
       }
       calls.push("resolve");
-      expect(init?.headers).toEqual({
-        Authorization: "Bearer token",
-        "Content-Type": "application/json",
-      });
       expect(JSON.parse(String(init?.body))).toEqual({
         inbox_message_id: "msg_replay",
         session_id: "sess_replay",
@@ -239,19 +236,22 @@ describe("pontia pi extension lifecycle", () => {
         client_type: "pi",
       });
       return new Response(JSON.stringify({
-        data: {
-          branch_replay: {
-            inbox_message_id: "msg_replay",
-            session_id: "sess_replay",
-            runtime_instance_id: "rtinst_replay",
-            client_type: "pi",
-            replacement_input: "replacement prompt",
-            target_entry_id: "native-user",
-          },
+        branch_replay: {
+          inbox_message_id: "msg_replay",
+          session_id: "sess_replay",
+          runtime_instance_id: "rtinst_replay",
+          client_type: "pi",
+          replacement_input: "replacement prompt",
+          target_entry_id: "native-user",
         },
       }), { status: 200 });
     });
+    let replay: ((message: string) => void) | undefined;
     const { handlers, reported, commands, sendUserMessage } = install({
+      connectPi: async (_home, _error, _submit, _models, onReplay) => {
+        replay = onReplay;
+        return { request: vi.fn(), registered() {}, async close() {} };
+      },
       env: {
         PONTIA_SESSION_ID: "sess_replay",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
@@ -265,7 +265,12 @@ describe("pontia pi extension lifecycle", () => {
     } });
     await handlers.session_start({ reason: "startup" }, ctx);
     let started: Promise<void> | undefined;
-    sendUserMessage.mockImplementation((input: string) => {
+    let command: Promise<void> | void = undefined;
+    sendUserMessage.mockImplementation((input: string, options?: { expandPromptTemplates?: boolean }) => {
+      if (options?.expandPromptTemplates) {
+        command = commands["pontia-edit"].handler(input.slice("/pontia-edit ".length), persistentTuiContext(commandContext));
+        return;
+      }
       calls.push("send");
       started = (async () => {
         await Promise.resolve();
@@ -282,18 +287,21 @@ describe("pontia pi extension lifecycle", () => {
       ui: { setEditorText: vi.fn(() => calls.push("clear")) },
     };
 
-    await commands["pontia-edit"].handler("msg_replay", persistentTuiContext(commandContext));
+    replay!("msg_replay");
+    await command;
 
     await started;
     expect(reported.find((event) => event.type === "turn.started")?.data)
       .toMatchObject({ input_summary: "replacement prompt", inbox_message_id: "msg_replay" });
-    expect(fetchImpl.mock.calls.some(([url]) => url === "http://localhost/internal/v1/inbox/branch-replay/resolve")).toBe(true);
+    expect(sendUserMessage).toHaveBeenCalledWith("/pontia-edit msg_replay", { expandPromptTemplates: true });
     expect(commandContext.waitForIdle).toHaveBeenCalledOnce();
     expect(commandContext.navigateTree).toHaveBeenCalledOnce();
     expect(commandContext.navigateTree).toHaveBeenCalledWith("native-user", { summarize: false });
     expect(commandContext.ui.setEditorText).toHaveBeenCalledWith("");
     expect(sendUserMessage).toHaveBeenCalledWith("replacement prompt");
     expect(calls).toEqual(["resolve", "idle", "navigate", "clear", "send"]);
+    await handlers.session_shutdown({ reason: "quit" }, ctx);
+    expect(() => replay!("msg_stale")).toThrow("no longer current");
   });
 
   test.each([
@@ -307,15 +315,13 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
       },
       fetch: vi.fn(async () => new Response(JSON.stringify({
-        data: {
-          branch_replay: {
-            inbox_message_id: "msg_replay",
-            session_id: "sess_replay",
-            runtime_instance_id: "rtinst_replay",
-            client_type: "pi",
-            replacement_input: "replacement prompt",
-            target_entry_id: "native-user",
-          },
+        branch_replay: {
+          inbox_message_id: "msg_replay",
+          session_id: "sess_replay",
+          runtime_instance_id: "rtinst_replay",
+          client_type: "pi",
+          replacement_input: "replacement prompt",
+          target_entry_id: "native-user",
         },
       }), { status: 200 })) as any,
       logDiagnostic,
@@ -363,15 +369,13 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
       },
       fetch: vi.fn(async () => new Response(JSON.stringify({
-        data: {
-          branch_replay: {
-            inbox_message_id: "msg_replay",
-            session_id: "sess_replay",
-            runtime_instance_id: "rtinst_replay",
-            client_type: "pi",
-            replacement_input: "replacement prompt",
-            target_entry_id: "native-user",
-          },
+        branch_replay: {
+          inbox_message_id: "msg_replay",
+          session_id: "sess_replay",
+          runtime_instance_id: "rtinst_replay",
+          client_type: "pi",
+          replacement_input: "replacement prompt",
+          target_entry_id: "native-user",
         },
       }), { status: 200 })) as any,
       logDiagnostic: submitDiagnostic,

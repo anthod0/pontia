@@ -152,6 +152,7 @@ pub async fn serve_connection(state: AppState, stream: UnixStream) {
                 | "runtime.attach"
                 | "event.report"
                 | "turn.startFailure"
+                | "branch.resolve"
         ) {
             if peer
                 .reply_error(request.id, -32601, "Unknown Pi RPC method")
@@ -218,6 +219,25 @@ async fn dispatch(
     request: &RpcRequest,
     registered: &mut Option<Attach>,
 ) -> Result<Value> {
+    if request.method == "branch.resolve" {
+        let identity = registered.as_ref().ok_or_else(|| {
+            Error::StateConflict("Pi branch resolution requires registration".into())
+        })?;
+        let query: crate::ResolveBranchReplayRequest =
+            serde_json::from_value(request.params.clone())?;
+        if query.session_id != identity.session_id
+            || query.runtime_instance_id != identity.runtime_instance_id
+            || query.client_type != "pi"
+        {
+            return Err(Error::StateConflict(
+                "Pi branch resolution does not match its connection identity".into(),
+            ));
+        }
+        let replay = crate::BranchReplayService::new(state.db())
+            .resolve_command(query)
+            .await?;
+        return Ok(json!({"branch_replay": replay}));
+    }
     if request.method == "turn.startFailure" {
         return reporting::start_failure(state, request.params.clone()).await;
     }
@@ -333,6 +353,9 @@ impl crate::PiControlChannel for PiChannel {
     fn ping(&self) -> crate::PiControlOperation<'_> {
         self.peer.ping()
     }
+    fn replay<'a>(&'a self, inbox_message_id: &'a str) -> crate::PiControlOperation<'a> {
+        self.peer.replay(inbox_message_id)
+    }
     fn submit<'a>(
         &'a self,
         input: &'a str,
@@ -348,6 +371,23 @@ impl crate::PiControlChannel for PiRpcPeer {
     }
     fn invalidate(&self) {
         self.close();
+    }
+    fn replay<'a>(&'a self, inbox_message_id: &'a str) -> crate::PiControlOperation<'a> {
+        Box::pin(async move {
+            if self
+                .call(
+                    "branch.replay",
+                    json!({"inbox_message_id": inbox_message_id}),
+                )
+                .await?
+                != json!({"accepted": true})
+            {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi branch replay acknowledgement".into(),
+                ));
+            }
+            Ok(())
+        })
     }
     fn list_models(&self) -> crate::PiControlOperation<'_, Vec<crate::sessions::SessionModel>> {
         Box::pin(async {

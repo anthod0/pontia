@@ -5,7 +5,7 @@ import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContext
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
-import { asRecord, optionalString, parseJsonResponse } from "./internal-api.js";
+import { asRecord, optionalString } from "./internal-api.js";
 import { completeToolCallFromMessageUpdate, LiveOutputPublisher, type LiveOutputPublisherLike } from "./live-output.js";
 import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity, type ManagedRuntimeIdentity } from "./managed-runtime.js";
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
@@ -233,6 +233,12 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         if (generation !== controlGeneration) throw new Error("Pi session changed during reconnect");
         await reportModel();
       },
+    }, (inboxMessageId) => {
+      if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
+        throw new Error("Pi control session is no longer current");
+      }
+      // Command dispatch supplies the native context required by navigateTree.
+      pi.sendUserMessage(`/pontia-edit ${inboxMessageId}`, { expandPromptTemplates: true });
     });
     if (generation !== controlGeneration) {
       await socket.close();
@@ -287,41 +293,18 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         return;
       }
       const loaded = { logFile };
-      const connection = await resolvePontiaConnection({ pontiaHome: currentPontiaHome() });
-      if (!connection?.externalApiToken) {
-        await logDiagnostic(loaded.logFile, {
-          level: "error",
-          code: "branch_replay_stale_context",
-          message: "pontia-edit requires an authenticated Pontia connection",
-        });
-        return;
-      }
-      const resolveUrl = commandContext.internalEventUrl.replace(
-        /\/events\/?$/,
-        "/inbox/branch-replay/resolve",
-      );
 
       let replacementInput: string;
       let targetEntryId: string;
       try {
-        const response = await fetchImpl(resolveUrl, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${connection.externalApiToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            inbox_message_id: inboxMessageId,
-            session_id: commandContext.sessionId,
-            runtime_instance_id: commandContext.runtimeInstanceId,
-            client_type: "pi",
-          }),
+        const connection = await registrationConnection();
+        const body = await connection.request("branch.resolve", {
+          inbox_message_id: inboxMessageId,
+          session_id: commandContext.sessionId,
+          runtime_instance_id: commandContext.runtimeInstanceId,
+          client_type: "pi",
         });
-        const body = await parseJsonResponse(response);
-        if (!response.ok) {
-          throw new Error(`${response.status} ${response.statusText}`);
-        }
-        const replay = asRecord(asRecord(asRecord(body)?.data)?.branch_replay);
+        const replay = asRecord(asRecord(body)?.branch_replay);
         replacementInput = optionalString(replay?.replacement_input) ?? "";
         targetEntryId = optionalString(replay?.target_entry_id) ?? "";
         if (

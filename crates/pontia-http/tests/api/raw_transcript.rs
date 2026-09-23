@@ -3,7 +3,6 @@ use std::{
     fs,
     io::Write,
     path::PathBuf,
-    process::{Command, Stdio},
     sync::{Arc, Mutex as StdMutex},
 };
 
@@ -92,29 +91,6 @@ async fn get_json(state: AppState, uri: &str) -> (StatusCode, Value) {
         .to_bytes();
     let json = serde_json::from_slice(&body).expect("json body");
     (status, json)
-}
-
-async fn post_internal_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Value) {
-    let response = http::router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(uri)
-                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body.to_string()))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    let status = response.status();
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .expect("body")
-        .to_bytes();
-    (status, serde_json::from_slice(&body).expect("json body"))
 }
 
 async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value) {

@@ -46,11 +46,13 @@ class RpcSocket {
   private socket: Socket;
   private onSubmit: (input: ControlInput) => void;
   private models?: ModelControl;
+  private onReplay?: (inboxMessageId: string) => void;
 
-  constructor(socket: Socket, onSubmit: (input: ControlInput) => void, models?: ModelControl) {
+  constructor(socket: Socket, onSubmit: (input: ControlInput) => void, models?: ModelControl, onReplay?: (inboxMessageId: string) => void) {
     this.socket = socket;
     this.onSubmit = onSubmit;
     this.models = models;
+    this.onReplay = onReplay;
     socket.on("data", (chunk: Buffer) => this.receive(chunk));
     socket.on("error", (error) => this.fail(error));
     socket.on("close", () => this.fail(new Error("Pi RPC connection closed; requests were not replayed")));
@@ -126,6 +128,16 @@ class RpcSocket {
       const params = message.params === undefined ? {} : message.params;
       if (!params || typeof params !== "object" || Array.isArray(params)) { error(-32602, "Expected named parameters"); return; }
       if (message.method === "ping") { respond({ result: { pong: true } }); return; }
+      if (message.method === "branch.replay" && this.onReplay) {
+        if (typeof params.inbox_message_id !== "string" || !/^msg_[^\s]+$/.test(params.inbox_message_id)) {
+          error(-32602, "branch.replay requires an Inbox Message identifier"); return;
+        }
+        try {
+          this.onReplay(params.inbox_message_id);
+          respond({ result: { accepted: true } });
+        } catch (failure) { error(-32006, failure instanceof Error ? failure.message : String(failure)); }
+        return;
+      }
       if (this.models && (message.method === "models.list" || message.method === "model.set")) {
         const models = this.models;
         if (message.method === "model.set" && (typeof params.model !== "string" || !params.model.trim())) {
@@ -175,6 +187,7 @@ export async function connectPi(
   onError: (error: Error) => void,
   onSubmit: (input: ControlInput) => void,
   models?: ModelControl,
+  onReplay?: (inboxMessageId: string) => void,
 ): Promise<PiConnection> {
   const path = piSocketPath(pontiaHome);
   let identity: ControlIdentity | undefined;
@@ -214,7 +227,7 @@ export async function connectPi(
       });
     } finally { connecting.delete(socket); }
     if (stopped) { socket.destroy(); throw new Error("Pi connection is closed"); }
-    const peer = new RpcSocket(socket, reportingOnly ? () => { throw new Error("Pi reporting connection cannot accept input"); } : onSubmit, reportingOnly ? undefined : models);
+    const peer = new RpcSocket(socket, reportingOnly ? () => { throw new Error("Pi reporting connection cannot accept input"); } : onSubmit, reportingOnly ? undefined : models, reportingOnly ? undefined : onReplay);
     peers.add(peer);
     socket.once("close", () => {
       peers.delete(peer);

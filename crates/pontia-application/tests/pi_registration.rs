@@ -188,6 +188,47 @@ fn fact(session: &str, runtime: &str, kind: &str, data: serde_json::Value) -> se
 }
 
 #[tokio::test]
+async fn branch_replay_lost_acknowledgement_is_unknown_and_not_replayed_after_attach() {
+    let (state, root) = state().await;
+    let (pi, mut requests) = client(&state);
+    let (session, runtime) = register(&pi, root.path()).await;
+    let control = state.pi_control();
+    let replay = control.replay(&session, &runtime, "msg_replay");
+    let disconnect = async {
+        let request = requests.recv().await.unwrap();
+        assert_eq!(request.method, "branch.replay");
+        assert_eq!(request.params, json!({"inbox_message_id": "msg_replay"}));
+        pi.close();
+    };
+    let (result, ()) = tokio::join!(replay, disconnect);
+    assert!(matches!(result, Err(pontia_core::Error::ControlUnknown(_))));
+    let (replacement, mut requests) = client(&state);
+    replacement
+        .call(
+            "runtime.attach",
+            json!({
+                "version": PROTOCOL_VERSION, "session_id": session,
+                "runtime_instance_id": runtime, "client_session_key": "native",
+            }),
+        )
+        .await
+        .unwrap();
+    let ping = control.ping(&session, &runtime);
+    let respond = async {
+        let request = requests.recv().await.unwrap();
+        assert_eq!(request.method, "ping");
+        replacement
+            .reply(request.id, json!({"pong": true}))
+            .await
+            .unwrap();
+    };
+    let (result, ()) = tokio::join!(ping, respond);
+    result.unwrap();
+    assert!(requests.try_recv().is_err());
+    replacement.close();
+}
+
+#[tokio::test]
 async fn reports_use_shared_fact_processing_and_acknowledge_exit_before_closing() {
     let (state, root) = state().await;
     let (pi, mut requests) = client(&state);

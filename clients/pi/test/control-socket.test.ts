@@ -36,6 +36,31 @@ async function server(handler: (socket: Socket, message: any) => void) {
 
 function reply(socket: Socket, id: unknown, result: unknown) { socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`); }
 
+test("branch replay can resolve over the same socket and rejects malformed message identifiers", async () => {
+  const replies: any[] = [];
+  const root = await server((socket, message) => {
+    if (!message.method) { replies.push(message); return; }
+    if (message.method === "begin") {
+      for (const [id, inbox_message_id] of [["valid", "msg_replay"], ["invalid", "msg_one extra"]]) {
+        socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, method: "branch.replay", params: { inbox_message_id } })}\n`);
+      }
+    }
+    reply(socket, message.id, message.method === "branch.resolve" ? { target_entry_id: "native-user" } : {});
+  });
+  let resolved: Promise<unknown> | undefined;
+  const replay = vi.fn((inboxMessageId: string) => {
+    resolved = client.request("branch.resolve", { inbox_message_id: inboxMessageId });
+  });
+  const client = await connectPi(root, () => {}, () => {}, undefined, replay);
+  onTestFinished(() => client.close());
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(replies).toHaveLength(2));
+  await expect(resolved).resolves.toEqual({ target_entry_id: "native-user" });
+  expect(replay).toHaveBeenCalledExactlyOnceWith("msg_replay");
+  expect(replies).toContainEqual({ jsonrpc: "2.0", id: "valid", result: { accepted: true } });
+  expect(replies.find((response) => response.id === "invalid").error.code).toBe(-32602);
+});
+
 test("dispatches daemon requests while a registration request is awaiting its reply", async () => {
   let registrationId: unknown;
   const root = await server((socket, message) => {
