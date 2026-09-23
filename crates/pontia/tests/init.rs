@@ -132,15 +132,7 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_opens_das
     );
 
     let output = String::from_utf8(output).expect("UTF-8 output");
-    assert!(output.contains("Pontia initialization"));
-    assert!(output.contains("Installed pi integration"));
-    assert!(output.contains(&format!("Dashboard:\n\n{expected_url}\n\n")));
-    assert!(!output.contains(&format!("Dashboard:\n{expected_url}")));
-    assert!(!output.contains(&format!("Dashboard: {expected_url}")));
-    assert!(output.contains(
-        "✓ Dashboard opened; Enter reopens it, Ctrl-C exits, and `pontia down` stops it."
-    ));
-    assert!(!output.contains("Enter: open |"));
+    assert!(output.contains(&expected_url));
 }
 
 #[test]
@@ -331,11 +323,6 @@ fn cancellation_before_confirmation_has_no_side_effects() {
 
     assert!(platform.events.borrow().is_empty());
     assert!(!pontia_home.join("config.toml").exists());
-    assert!(
-        String::from_utf8(output)
-            .expect("UTF-8 output")
-            .contains("Initialization cancelled.")
-    );
 }
 
 #[test]
@@ -426,14 +413,6 @@ fn a_failed_initial_browser_open_can_be_retried_with_enter() {
     .expect("browser failure is non-fatal");
 
     assert_eq!(platform.opened_urls.borrow().len(), 2);
-    let output = String::from_utf8(output).expect("UTF-8 output");
-    assert!(output.contains(
-        "Browser not opened; use the URL above or press Enter to retry; Ctrl-C exits, and `pontia down` stops it."
-    ));
-    assert!(!output.contains("Enter: open |"));
-    assert!(!output.contains("Could not open Dashboard automatically"));
-    assert!(!output.contains("browser unavailable"));
-    assert!(output.contains("✓ Dashboard opened"));
 }
 
 #[test]

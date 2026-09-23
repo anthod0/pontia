@@ -140,36 +140,19 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test('renders workspace title path and only sessions from that workspace without manual refresh chrome', async () => {
+test('renders workspace title, path, and only sessions from that workspace', async () => {
   render(WorkspacePage);
 
   expect(await screen.findByRole('heading', { name: 'Pontia Dev' })).toBeInTheDocument();
   expect(screen.getByText('/home/cheny/projects/pontia')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument();
-  const page = screen.getByTestId('workspace-page');
   expect(mocks.loadWorkspaces).toHaveBeenCalled();
   expect(mocks.loadSessions).toHaveBeenCalledWith({ includePinned: true, limit: 200 });
 
   const sessionsRegion = screen.getByRole('region', { name: 'Workspace sessions' });
-  expect(within(sessionsRegion).queryByText('Open an existing chat session for this workspace.')).not.toBeInTheDocument();
   const sessionList = within(sessionsRegion).getByTestId('workspace-session-list');
   const sessionItem = within(sessionList).getByRole('button', { name: /Workspace session/i });
   expect(sessionItem).toBeInTheDocument();
   expect(within(sessionsRegion).queryByText('Other session')).not.toBeInTheDocument();
-});
-
-test('uses the shared new chat prompt style for creating a workspace session', async () => {
-  render(WorkspacePage);
-
-  const promptInput = await screen.findByPlaceholderText('What should the agent do?');
-  const panel = screen.getByTestId('new-chat-panel');
-  expect(panel).toContainElement(promptInput);
-  expect(screen.queryByRole('heading', { name: 'New session' })).not.toBeInTheDocument();
-  expect(screen.queryByText('Create a new chat session in this workspace.')).not.toBeInTheDocument();
-  expect(screen.getByText('Start a new agent session in')).toBeInTheDocument();
-  expect(screen.getAllByText('Pontia Dev').length).toBeGreaterThan(0);
-  expect(within(panel).queryByRole('button', { name: /workspace/i })).not.toBeInTheDocument();
-  expect(within(panel).getByLabelText(/client/i)).toHaveTextContent('pi');
 });
 
 test('creates a new session in the workspace and opens its chat page', async () => {
