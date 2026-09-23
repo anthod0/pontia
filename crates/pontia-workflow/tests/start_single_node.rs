@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use pontia_application::CreateSessionRequest;
+use pontia_application::{CreateSessionRequest, EventIngestService, SessionCommandService};
 use pontia_storage_sqlite::{
     connect_sqlite,
     repositories::workflows::{
@@ -75,7 +75,9 @@ async fn start_launches_first_node_with_required_task_completion_instructions() 
     )
     .expect("write handoff input");
     let sessions = RecordingSessionCreator::default();
-    let scheduler = WorkflowScheduler::new(pool, sessions.clone(), pontia_home);
+    let exits =
+        SessionCommandService::new(EventIngestService::new(pool.clone()), pontia_home.clone());
+    let scheduler = WorkflowScheduler::with_services(pool, sessions.clone(), exits, pontia_home);
 
     let outcome = scheduler.start("wf_start").await.expect("start workflow");
 
@@ -188,9 +190,12 @@ async fn start_creates_the_workflow_handoff_directory() {
         })
         .await
         .expect("create node");
-    let scheduler = WorkflowScheduler::new(
+    let exits =
+        SessionCommandService::new(EventIngestService::new(pool.clone()), pontia_home.clone());
+    let scheduler = WorkflowScheduler::with_services(
         pool,
         RecordingSessionCreator::default(),
+        exits,
         pontia_home.clone(),
     );
 
@@ -241,7 +246,14 @@ async fn start_rejects_handoff_input_names_that_escape_the_handoff_directory() {
             .await
             .expect("create node");
         let sessions = RecordingSessionCreator::default();
-        let scheduler = WorkflowScheduler::new(pool.clone(), sessions.clone(), pontia_home.clone());
+        let exits =
+            SessionCommandService::new(EventIngestService::new(pool.clone()), pontia_home.clone());
+        let scheduler = WorkflowScheduler::with_services(
+            pool.clone(),
+            sessions.clone(),
+            exits,
+            pontia_home.clone(),
+        );
 
         let error = scheduler
             .start(&workflow_id)

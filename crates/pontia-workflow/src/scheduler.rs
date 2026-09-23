@@ -24,15 +24,9 @@ pub struct WorkflowScheduler<S, X> {
     pontia_home: PathBuf,
 }
 
-impl<S> WorkflowScheduler<S, SessionCommandService>
-where
-    S: SessionCreator,
-{
-    pub fn new(pool: SqlitePool, sessions: S, pontia_home: PathBuf) -> Self {
-        let exits = SessionCommandService::new(
-            pontia_application::EventIngestService::new(pool.clone()),
-            pontia_home.clone(),
-        );
+impl WorkflowScheduler<SessionCommandService, SessionCommandService> {
+    pub fn new(pool: SqlitePool, sessions: SessionCommandService, pontia_home: PathBuf) -> Self {
+        let exits = sessions.clone();
         Self::with_services(pool, sessions, exits, pontia_home)
     }
 }

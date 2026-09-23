@@ -174,7 +174,14 @@ async fn internal_workflow_submission_accepts_the_node_owned_output_file() {
         .expect("read handoff"),
         "Submitted through HTTP: 完成\n"
     );
-    let node = SqliteWorkflowRepository::new(app.db.clone())
+    let workflows = SqliteWorkflowRepository::new(app.db.clone());
+    let workflow = workflows
+        .get_workflow("wf_http_submit")
+        .await
+        .expect("load workflow")
+        .expect("workflow exists");
+    assert_eq!(workflow.state, "running");
+    let node = workflows
         .get_node("node_http_submit")
         .await
         .expect("load node")
