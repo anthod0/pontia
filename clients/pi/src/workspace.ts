@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import { resolvePontiaConnection } from "./discovery.js";
-import { asRecord, fetchJson, responseDataRecord } from "./internal-api.js";
+import type { PiConnection } from "./control-socket.js";
+import { asRecord } from "./values.js";
 
 async function canonicalPath(path: string): Promise<string> {
   try {
@@ -11,20 +11,12 @@ async function canonicalPath(path: string): Promise<string> {
   }
 }
 
-export async function resolveWorkspaceApi(pontiaHome: string, fetchImpl: typeof fetch): Promise<{ externalApiUrl: string; externalApiToken: string } | undefined> {
-  const discovered = await resolvePontiaConnection({ pontiaHome, fetch: fetchImpl });
-  if (!discovered?.externalApiToken) return undefined;
-  return { externalApiUrl: discovered.externalApiUrl, externalApiToken: discovered.externalApiToken };
-}
-
-export async function isActiveRegisteredWorkspace(pontiaHome: string, fetchImpl: typeof fetch, clientCwd: string | undefined): Promise<boolean | undefined> {
+export async function isActiveRegisteredWorkspace(connection: Pick<PiConnection, "request">, clientCwd: string | undefined): Promise<boolean> {
   if (!clientCwd) return false;
-  const api = await resolveWorkspaceApi(pontiaHome, fetchImpl);
-  if (!api) return undefined;
 
   const workspacePath = await canonicalPath(clientCwd);
-  const body = await fetchJson(fetchImpl, `${api.externalApiUrl}/workspaces`, api.externalApiToken);
-  const workspaces = responseDataRecord(body)?.workspaces;
+  const body = await connection.request("workspaces.list", {});
+  const workspaces = asRecord(body)?.workspaces;
   if (!Array.isArray(workspaces)) return false;
 
   return workspaces.some((workspace) => {

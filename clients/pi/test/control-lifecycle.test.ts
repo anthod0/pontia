@@ -1,4 +1,4 @@
-import { realpath, writeFile } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
@@ -9,7 +9,6 @@ import { tempDir } from "./temp-dir.js";
 test("session switches register a fresh connection and failed registration never reports ready", async () => {
   const root = await tempDir("pc-");
   const workspace = await realpath(root);
-  await writeFile(join(root, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
   const handlers: Record<string, (event: any, context?: any) => Promise<void>> = {};
   const events: InternalEvent[] = [];
   const registered: string[] = [];
@@ -18,7 +17,6 @@ test("session switches register a fresh connection and failed registration never
   const closes: Array<ReturnType<typeof vi.fn>> = [];
   createPontiaPiExtension({ on(name: string, handler: any) { handlers[name] = handler; }, registerCommand() {} } as any, {
     env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
-    fetch: vi.fn(async () => Response.json({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } })) as typeof fetch,
     connectPi: async (_home, _error, _submit, _models, _replay, lifecycle) => {
       controls.push(lifecycle!);
       expect(() => lifecycle!.interrupt()).toThrow();
@@ -30,10 +28,11 @@ test("session switches register a fresh connection and failed registration never
           events.push((params as any).event);
           return { accepted: true };
         }
+        if (method === "workspaces.list") return { workspaces: [{ canonical_path: workspace, state: "active" }] };
         if (method === "session.context") return { session_context: null };
         const id = (params as any).binding.client_session_key;
         if (id === "failed") throw new Error("Registration rejected");
-        return { session: { session_id: `sess_${id}` }, runtime: { runtime_instance_id: `rt_${id}`, internal_event_url: "http://localhost/internal/v1/events" } };
+        return { session: { session_id: `sess_${id}` }, runtime: { runtime_instance_id: `rt_${id}` } };
       } };
     },
     isManagedPane: async () => true,
@@ -67,7 +66,6 @@ test("a disconnected deferred registration can initialize on the next manual tur
   const root = await tempDir("pd-");
   const workspace = await realpath(root);
   await mkdir(join(root, "state/pi"), { recursive: true });
-  await writeFile(join(root, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
   let registrations = 0;
   let managed = false;
   const sockets = new Set<import("node:net").Socket>();
@@ -84,11 +82,12 @@ test("a disconnected deferred registration can initialize on the next manual tur
         const request = JSON.parse(buffered.slice(0, newline));
         buffered = buffered.slice(newline + 1);
         let result: unknown = { session_context: null };
+        if (request.method === "workspaces.list") result = { workspaces: [{ canonical_path: workspace, state: "active" }] };
         if (request.method === "runtime.register") {
           registrations += 1;
           if (registrations === 1) { socket.destroy(); return; }
           managed = true;
-          result = { session: { session_id: "sess_recovered" }, runtime: { runtime_instance_id: "rt_recovered", internal_event_url: "http://localhost/internal/v1/events" } };
+          result = { session: { session_id: "sess_recovered" }, runtime: { runtime_instance_id: "rt_recovered" } };
         }
         socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
       }
@@ -99,7 +98,6 @@ test("a disconnected deferred registration can initialize on the next manual tur
   const events: InternalEvent[] = [];
   createPontiaPiExtension({ on(name: string, handler: any) { handlers[name] = handler; }, registerCommand() {} } as any, {
     env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
-    fetch: vi.fn(async () => Response.json({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } })) as typeof fetch,
     isManagedPane: async () => managed,
     loadContext: async () => ({ ok: false, silent: true, reason: "unbound", logFile: join(root, "hook.log") }),
     makeReporter: () => ({ report: async (_context, event) => { events.push(event); return { accepted: true, turnId: "turn_recovered" }; } }),
@@ -125,17 +123,17 @@ test("a disconnected deferred registration can initialize on the next manual tur
 test("the default extension streams over its registered connection and closes the canonical turn stream", async () => {
   const root = await tempDir("pl-");
   const workspace = await realpath(root);
-  await writeFile(join(root, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
   const handlers: Record<string, (event: any, context?: any) => Promise<void>> = {};
   const calls: Array<{ method: string; params: any }> = [];
   const connect = vi.fn(async () => ({
     registered() {}, async close() {},
     async request(method: string, params: object) {
       calls.push({ method, params });
+      if (method === "workspaces.list") return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       if (method === "session.context") return { session_context: null };
       if (method === "runtime.register") return {
         session: { session_id: "sess_live" },
-        runtime: { runtime_instance_id: "rt_live", internal_event_url: "unused" },
+        runtime: { runtime_instance_id: "rt_live" },
       };
       if (method === "liveOutput.publish") return {
         accepted: true, accepted_sequence: (params as any).sequence, resync_required: false,
@@ -146,14 +144,10 @@ test("the default extension streams over its registered connection and closes th
   }));
   createPontiaPiExtension({ on(name: string, handler: any) { handlers[name] = handler; }, registerCommand() {} } as any, {
     env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
-    fetch: async (url) => {
-      expect(String(url)).toContain("/external/v1/workspaces");
-      return Response.json({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } });
-    },
     connectPi: connect,
     isManagedPane: async () => true,
     loadContext: async () => ({ ok: true, logFile: join(root, "hook.log"), context: {
-      sessionId: "sess_live", runtimeInstanceId: "rt_live", clientType: "pi", internalEventUrl: "unused",
+      sessionId: "sess_live", runtimeInstanceId: "rt_live", clientType: "pi",
     } }),
   });
   const context = { mode: "tui", sessionManager: {

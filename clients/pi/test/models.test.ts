@@ -1,4 +1,4 @@
-import { realpath, writeFile } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import type { ModelControl } from "../src/control-socket.js";
@@ -9,7 +9,6 @@ import { tempDir } from "./temp-dir.js";
 async function fixture(failInitialModelReport = false) {
   const root = await tempDir("pm-");
   const workspace = await realpath(root);
-  await writeFile(join(root, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
   const handlers: Record<string, (event: any, ctx?: any) => Promise<void>> = {};
   const events: InternalEvent[] = [];
   const controls: ModelControl[] = [];
@@ -34,7 +33,6 @@ async function fixture(failInitialModelReport = false) {
   });
   createPontiaPiExtension({ on(name: string, handler: any) { handlers[name] = handler; }, registerCommand() {}, setModel } as any, {
     env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
-    fetch: vi.fn(async () => Response.json({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } })) as typeof fetch,
     isManagedPane: async () => true,
     logDiagnostic: vi.fn(async () => {}),
     connectPi: async (_home, _error, _submit, models) => {
@@ -46,8 +44,9 @@ async function fixture(failInitialModelReport = false) {
           events.push(event);
           return { accepted: true };
         }
+        if (method === "workspaces.list") return { workspaces: [{ canonical_path: workspace, state: "active" }] };
         if (method === "session.context") return { session_context: null };
-        return { session: { session_id: "sess_models" }, runtime: { runtime_instance_id: "rt_models", internal_event_url: "unused" } };
+        return { session: { session_id: "sess_models" }, runtime: { runtime_instance_id: "rt_models" } };
       } };
     },
   });

@@ -464,3 +464,138 @@ async fn failure_reports_are_idempotent_after_a_lost_started_acknowledgement() {
     assert_eq!(count, 1);
     pi.close();
 }
+
+#[tokio::test]
+async fn rpc_queries_read_workspace_session_and_pinned_or_latest_profiles() {
+    use pontia_application::{AgentProfileService, UpsertExecutionProfileRequest};
+    let (state, root) = state().await;
+    let (pi, _requests) = client(&state);
+    assert_eq!(
+        pi.call("workspaces.list", json!({})).await.unwrap(),
+        json!({"workspaces": []})
+    );
+    let (session, _) = register(&pi, root.path()).await;
+    let workspaces = pi.call("workspaces.list", json!({})).await.unwrap();
+    assert_eq!(
+        workspaces["workspaces"][0]["canonical_path"],
+        root.path().canonicalize().unwrap().to_str().unwrap()
+    );
+    assert_eq!(workspaces["workspaces"][0]["state"], "active");
+    let service = AgentProfileService::new(state.db());
+    for version in ["1", "2"] {
+        let request: UpsertExecutionProfileRequest = serde_json::from_value(json!({
+            "profile_id": "reviewer", "version": version, "name": "Reviewer", "agent_kind": "executor",
+            "supported_client_types": ["pi"], "system_prompt_template": format!("Prompt {version}")
+        })).unwrap();
+        if version == "1" {
+            service.create_profile(request).await.unwrap();
+        } else {
+            service
+                .create_profile_version("reviewer", request)
+                .await
+                .unwrap();
+        }
+    }
+    sqlx::query("UPDATE sessions SET execution_profile_id='reviewer', execution_profile_version='1' WHERE session_id=?")
+        .bind(&session).execute(&state.db()).await.unwrap();
+    let result = pi
+        .call("session.get", json!({"session_id": session}))
+        .await
+        .unwrap();
+    assert_eq!(result["session"]["execution_profile_id"], "reviewer");
+    assert_eq!(result["session"]["execution_profile_version"], "1");
+    assert_eq!(
+        pi.call(
+            "profile.get",
+            json!({"profile_id":"reviewer", "version":"1"})
+        )
+        .await
+        .unwrap()["agent_profile"]["system_prompt_template"],
+        "Prompt 1"
+    );
+    assert_eq!(
+        pi.call("profile.get", json!({"profile_id":"reviewer"}))
+            .await
+            .unwrap()["agent_profile"]["system_prompt_template"],
+        "Prompt 2"
+    );
+    for (method, params) in [
+        ("session.get", json!({"session_id":"missing"})),
+        (
+            "profile.get",
+            json!({"profile_id":"reviewer", "version":"missing"}),
+        ),
+        ("profile.get", json!({"profile_id":"missing"})),
+        ("session.get", json!({})),
+        ("workspaces.list", json!({"unexpected": true})),
+    ] {
+        assert!(pi.call(method, params).await.is_err());
+    }
+    pi.close();
+}
+
+#[tokio::test]
+async fn turn_claim_requires_current_connection_identity_and_consumes_input_once() {
+    use pontia_storage_sqlite::repositories::runtime_bindings::{
+        PendingTurnContextRecord, SqliteRuntimeBindingRepository,
+    };
+    let (state, root) = state().await;
+    let (pi, _requests) = client(&state);
+    assert!(
+        pi.call(
+            "turn.claim",
+            json!({"session_id":"s","runtime_instance_id":"r","client_type":"pi"})
+        )
+        .await
+        .is_err()
+    );
+    let (session, runtime) = register(&pi, root.path()).await;
+    let params = json!({"session_id":session,"runtime_instance_id":runtime,"client_type":"pi"});
+    let payload = json!({"session_id":session,"runtime_instance_id":runtime,"client_type":"pi","input":"queued input","inbox_message_id":"msg_queued"});
+    let repository = SqliteRuntimeBindingRepository::new(state.db());
+    let pending = PendingTurnContextRecord {
+        session_id: session.clone(),
+        runtime_instance_id: runtime.clone(),
+        client_type: "pi".into(),
+        payload: payload.to_string(),
+    };
+    repository
+        .store_pending_turn_context(pending.clone())
+        .await
+        .unwrap();
+    for (field, value) in [
+        ("session_id", "foreign"),
+        ("runtime_instance_id", "stale"),
+        ("client_type", "codex"),
+    ] {
+        let mut invalid = params.clone();
+        invalid[field] = json!(value);
+        assert!(pi.call("turn.claim", invalid).await.is_err());
+    }
+    assert_eq!(
+        pi.call("turn.claim", params.clone()).await.unwrap(),
+        json!({"current_turn":payload})
+    );
+    assert_eq!(
+        pi.call("turn.claim", params.clone()).await.unwrap(),
+        json!({"current_turn":null})
+    );
+    repository
+        .store_pending_turn_context(pending)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='replacement' WHERE session_id=?")
+        .bind(&session)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    assert!(pi.call("turn.claim", params).await.is_err());
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pending_turn_contexts WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    assert_eq!(remaining, 1);
+    pi.close();
+}

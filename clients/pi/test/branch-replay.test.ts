@@ -1,4 +1,3 @@
-import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { expect, onTestFinished, test, vi } from "vitest";
@@ -7,7 +6,6 @@ import { tempDir } from "./temp-dir.js";
 
 test("RPC replay enters Pi's native command context and navigates the running session", async () => {
   const root = await tempDir("pontia-pi-branch-");
-  await writeFile(join(root, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "test"\n');
   const settingsManager = SettingsManager.inMemory();
   const sessionManager = SessionManager.create(root, join(root, "sessions"));
   const target = sessionManager.appendMessage({ role: "user", content: "original", timestamp: Date.now() });
@@ -23,7 +21,6 @@ test("RPC replay enters Pi's native command context and navigates the running se
       createPontiaPiExtension(pi, {
         env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
         isManagedPane: async () => true,
-        fetch: async () => Response.json({ data: { workspaces: [{ canonical_path: root, state: "active" }] } }),
         logDiagnostic: async (_path, entry) => { diagnostics(entry); },
         makeReporter: () => ({ report: async () => ({ accepted: true }) }),
         connectPi: async (_home, _error, _submit, _models, onReplay) => {
@@ -31,10 +28,11 @@ test("RPC replay enters Pi's native command context and navigates the running se
           return {
             registered() {}, async close() {},
             async request(method, params) {
+              if (method === "workspaces.list") return { workspaces: [{ canonical_path: root, state: "active" }] };
               if (method === "session.context") return { session_context: null };
               if (method === "runtime.register") return {
                 session: { session_id: "sess_native" },
-                runtime: { runtime_instance_id: "rt_native", internal_event_url: "http://localhost/internal/v1/events" },
+                runtime: { runtime_instance_id: "rt_native" },
               };
               expect(method).toBe("branch.resolve");
               expect(params).toEqual({

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
 import { RpcError, type PiConnection } from "./control-socket.js";
-import { asRecord, optionalString } from "./internal-api.js";
+import { asRecord, optionalString } from "./values.js";
 
 const DEFAULT_BATCH_DELAY_MS = 75;
 const RETRY_DELAY_MS = 500;

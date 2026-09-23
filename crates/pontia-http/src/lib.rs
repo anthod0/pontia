@@ -90,10 +90,6 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             "/internal/v1/agent-bindings/current-turn",
             get(internal::get_agent_binding_current_turn),
         )
-        .route(
-            "/internal/v1/sessions/{session_id}/current-turn/claim",
-            post(internal::claim_current_turn),
-        )
         .route("/external/v1/auth/validate", get(external::validate_auth))
         .route(
             "/external/v1/sessions",

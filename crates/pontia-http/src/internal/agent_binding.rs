@@ -1,10 +1,8 @@
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::JsonRejection},
+    extract::{Query, State},
 };
-use pontia_application::{
-    AgentBindingService, AppState, CurrentTurnClaimRequest, CurrentTurnClaimService,
-};
+use pontia_application::{AgentBindingService, AppState};
 use pontia_core::error::Error;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -42,18 +40,6 @@ pub async fn get_agent_binding_current_turn(
         .await?
         .ok_or_else(|| Error::NotFound("active turn for agent binding not found".to_string()))?;
 
-    Ok(Json(json!({ "data": { "current_turn": current_turn } })))
-}
-
-pub async fn claim_current_turn(
-    State(state): State<AppState>,
-    Path(session_id): Path<String>,
-    request: Result<Json<CurrentTurnClaimRequest>, JsonRejection>,
-) -> Result<Json<Value>, ApiError> {
-    let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let current_turn = CurrentTurnClaimService::new(state.db())
-        .claim(&session_id, request)
-        .await?;
     Ok(Json(json!({ "data": { "current_turn": current_turn } })))
 }
 

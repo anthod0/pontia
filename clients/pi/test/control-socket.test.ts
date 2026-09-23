@@ -150,7 +150,7 @@ test("lost acknowledgements retry only the failure notification over a fresh con
   onTestFinished(() => client.close());
   client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
   const reporter = new EventReporter({ connection: client, logFile: join(root, "hook.log") });
-  const context = { sessionId: "s", runtimeInstanceId: "r", clientType: "pi" as const, internalEventUrl: "unused" };
+  const context = { sessionId: "s", runtimeInstanceId: "r", clientType: "pi" as const };
   expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
   expect(methods.filter((method) => method !== "runtime.attach")).toEqual(["event.report", "turn.startFailure", "turn.startFailure"]);
   expect(submit).toHaveBeenCalledWith({ input: "next", inboxMessageId: undefined });
@@ -272,7 +272,7 @@ test("live output recovers a lost acknowledgement after attaching and keeps cont
   onTestFinished(() => client.close());
   client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
   const publisher = new LiveOutputPublisher({
-    sessionId: "s", runtimeInstanceId: "r", turnId: "t", clientType: "pi", internalEventUrl: "unused",
+    sessionId: "s", runtimeInstanceId: "r", turnId: "t", clientType: "pi",
   }, { connection: client });
   onTestFinished(() => publisher.close());
   publisher.appendText("hello");
@@ -299,7 +299,7 @@ test("oversized live output stops retrying without closing the shared control co
   onTestFinished(() => client.close());
   const request = vi.fn(client.request);
   const publisher = new LiveOutputPublisher({
-    sessionId: "s", runtimeInstanceId: "r", turnId: "t", clientType: "pi", internalEventUrl: "unused",
+    sessionId: "s", runtimeInstanceId: "r", turnId: "t", clientType: "pi",
   }, { connection: { request } });
   onTestFinished(() => publisher.close());
   publisher.appendText("x".repeat(MAX_RPC_FRAME_BYTES));

@@ -3,9 +3,9 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { connectPi, RpcError, type PiConnection, type ControlInput } from "./control-socket.js";
 import { defaultHookLogFile, loadTurnContext, type EnvLike, type LoadTurnContextResult, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
-import { pontiaHomeFromEnv, resolvePontiaConnection } from "./discovery.js";
+import { pontiaHomeFromEnv } from "./discovery.js";
 import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
-import { asRecord, optionalString } from "./internal-api.js";
+import { asRecord, optionalString } from "./values.js";
 import { completeToolCallFromMessageUpdate, LiveOutputPublisher, type LiveOutputPublisherLike } from "./live-output.js";
 import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity, type ManagedRuntimeIdentity } from "./managed-runtime.js";
 import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
@@ -34,7 +34,6 @@ export interface PontiaPiExtensionDependencies {
   loadContext?: (env: EnvLike, sessionContext?: SessionContext) => Promise<LoadTurnContextResult>;
   makeReporter?: (logFile: string) => ReporterLike;
   logDiagnostic?: (logFile: string, entry: DiagnosticEntry) => Promise<void>;
-  fetch?: typeof fetch;
   loadManagedRuntime?: (env: EnvLike) => Promise<ManagedRuntimeIdentity | undefined>;
   isManagedPane?: (env: EnvLike) => Promise<boolean>;
   makeLiveOutputPublisher?: (context: TurnContext & { turnId: string }) => LiveOutputPublisherLike;
@@ -117,8 +116,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   const currentEnv = () => ({ ...sourceEnv, PONTIA_HOME: currentPontiaHome() });
   const currentHookLogFile = () => defaultHookLogFile(currentPontiaHome());
 
-  const contextLoader = dependencies.loadContext ?? ((contextEnv, sessionContext) => loadTurnContext(contextEnv, { sessionContext }));
-  const reportingConnection: Pick<PiConnection, "request"> = {
+  const contextLoader = dependencies.loadContext ?? ((contextEnv, sessionContext) => loadTurnContext(contextEnv, { sessionContext, connection: rpcConnection }));
+  const rpcConnection: Pick<PiConnection, "request"> = {
     request(method, params) {
       if (!controlSocket) return Promise.reject(new Error("Pi connection is unavailable"));
       return controlSocket.request(method, params);
@@ -126,14 +125,13 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   };
   const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({
     logFile,
-    connection: reportingConnection,
+    connection: rpcConnection,
   }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
-  const fetchImpl = dependencies.fetch ?? fetch;
   const loadManagedRuntime = dependencies.loadManagedRuntime ?? loadPontiaManagedRuntimeIdentity;
   const isManagedPane = dependencies.isManagedPane ?? isPontiaManagedTmuxPane;
   const makeLiveOutputPublisher = dependencies.makeLiveOutputPublisher
-    ?? ((context: TurnContext & { turnId: string }) => new LiveOutputPublisher(context, { connection: reportingConnection }));
+    ?? ((context: TurnContext & { turnId: string }) => new LiveOutputPublisher(context, { connection: rpcConnection }));
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
@@ -276,13 +274,10 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     if (boundSessionContext) return boundSessionContext;
     const runtimeIdentity = await loadManagedRuntime(currentEnv());
     if (!runtimeIdentity) return undefined;
-    const connection = await resolvePontiaConnection({ pontiaHome: currentPontiaHome(), fetch: fetchImpl });
-    if (!connection?.internalEventUrl) return undefined;
     return {
       sessionId: runtimeIdentity.sessionId,
       runtimeInstanceId: runtimeIdentity.runtimeInstanceId,
       clientType: "pi",
-      internalEventUrl: connection.internalEventUrl,
     };
   }
 
@@ -418,8 +413,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const currentSystemPrompt = typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
     try {
       const profilePrompt = await loadProfileSystemPrompt(
-        currentPontiaHome(),
-        fetchImpl,
+        rpcConnection,
         boundSessionContext?.sessionId,
       );
       if (!profilePrompt) return { systemPrompt: currentSystemPrompt };
@@ -459,18 +453,16 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       deferredManualSessionDetails = sessionDetails;
       const logFile = currentHookLogFile();
       let context: SessionContext | undefined;
-      const pontiaHome = currentPontiaHome();
       const env = currentEnv();
 
-      const workspaceActive = await isActiveRegisteredWorkspace(pontiaHome, fetchImpl, sessionDetails.clientCwd);
-      if (workspaceActive !== true) {
+      const workspaceActive = await isActiveRegisteredWorkspace(await registrationConnection(), sessionDetails.clientCwd);
+      if (!workspaceActive) {
+        await closeControlSocket();
         reportingDisabled = true;
         await logDiagnostic(logFile, {
           level: "info",
-          code: workspaceActive === false ? "workspace_not_active" : "workspace_check_unavailable",
-          message: workspaceActive === false
-            ? "current pi workspace is not an active registered pontia workspace; pontia reporting disabled"
-            : "could not verify active registered pontia workspace; pontia reporting disabled",
+          code: "workspace_not_active",
+          message: "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
           details: { client_cwd: sessionDetails.clientCwd },
         });
         return;
@@ -478,6 +470,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
       if (reason === "fork") {
         if (!parentSessionId) {
+          await closeControlSocket();
           await logDiagnostic(logFile, {
             level: "error",
             code: "missing_fork_parent_session",
@@ -598,16 +591,14 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
             pendingPrompt = undefined;
             return;
           }
-          const pontiaHome = currentPontiaHome();
-          const workspaceActive = await isActiveRegisteredWorkspace(pontiaHome, fetchImpl, sessionDetails.clientCwd);
-          if (workspaceActive !== true) {
+          const workspaceActive = await isActiveRegisteredWorkspace(await registrationConnection(), sessionDetails.clientCwd);
+          if (!workspaceActive) {
+            await closeControlSocket();
             reportingDisabled = true;
             await logDiagnostic(logFile, {
               level: "info",
-              code: workspaceActive === false ? "workspace_not_active" : "workspace_check_unavailable",
-              message: workspaceActive === false
-                ? "current pi workspace is not an active registered pontia workspace; pontia reporting disabled"
-                : "could not verify active registered pontia workspace; pontia reporting disabled",
+              code: "workspace_not_active",
+              message: "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
               details: { client_cwd: sessionDetails.clientCwd },
             });
             activeTurn = undefined;
@@ -627,7 +618,6 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
             sessionId: boundSessionContext.sessionId,
             runtimeInstanceId: boundSessionContext.runtimeInstanceId,
             clientType: "pi",
-            internalEventUrl: boundSessionContext.internalEventUrl,
             input: pendingPrompt,
           };
         } else {

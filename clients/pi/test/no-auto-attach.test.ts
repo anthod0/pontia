@@ -19,7 +19,7 @@ function fakePi() {
 describe("pontia pi extension startup boundary", () => {
   test("does not register Pontia behavior with an invalid PONTIA_HOME", async () => {
     const { pi, handlers } = fakePi();
-    const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 500 }));
+    const connect = vi.fn(async () => { throw new Error("unexpected connection"); });
     const makeReporter = vi.fn(() => ({ report: vi.fn(async () => true) }));
     const loadContext = vi.fn(async (): Promise<LoadTurnContextResult> => ({
       ok: false,
@@ -30,7 +30,7 @@ describe("pontia pi extension startup boundary", () => {
 
     createPontiaPiExtension(pi as any, {
       env: { PONTIA_HOME: "", TMUX: "/tmp/tmux-1000/default,2071,502", TMUX_PANE: "%42" },
-      fetch: fetchImpl as any,
+      connectPi: connect,
       loadContext,
       makeReporter,
       logDiagnostic: vi.fn(async () => undefined),
@@ -38,7 +38,7 @@ describe("pontia pi extension startup boundary", () => {
 
     expect(handlers).toEqual({});
     expect(pi.registerCommand).not.toHaveBeenCalled();
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
     expect(makeReporter).not.toHaveBeenCalled();
   });
 });

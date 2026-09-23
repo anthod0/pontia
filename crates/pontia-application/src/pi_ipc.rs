@@ -1,5 +1,6 @@
 //! Pi registration and reporting transport. Binding and lifecycle decisions remain in application services.
 mod live_output;
+mod queries;
 mod reporting;
 
 use crate::{
@@ -148,7 +149,11 @@ pub async fn serve_connection(state: AppState, stream: UnixStream) {
         } // All Pi reports and registration require an acknowledged response.
         if !matches!(
             request.method.as_str(),
-            "session.context"
+            "session.get"
+                | "profile.get"
+                | "workspaces.list"
+                | "turn.claim"
+                | "session.context"
                 | "runtime.register"
                 | "runtime.attach"
                 | "event.report"
@@ -221,6 +226,12 @@ async fn dispatch(
     request: &RpcRequest,
     registered: &mut Option<Attach>,
 ) -> Result<Value> {
+    if matches!(
+        request.method.as_str(),
+        "session.get" | "profile.get" | "workspaces.list" | "turn.claim"
+    ) {
+        return queries::dispatch(state, request, registered.as_ref()).await;
+    }
     if request.method == "liveOutput.publish" {
         let identity = registered
             .as_ref()

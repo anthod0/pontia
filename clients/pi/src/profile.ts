@@ -1,29 +1,21 @@
-import { resolvePontiaConnection } from "./discovery.js";
-import { fetchJson, optionalString, responseDataRecord } from "./internal-api.js";
+import type { PiConnection } from "./control-socket.js";
+import { asRecord, optionalString } from "./values.js";
 
 export async function loadProfileSystemPrompt(
-  pontiaHome: string,
-  fetchImpl: typeof fetch,
+  connection: Pick<PiConnection, "request">,
   sessionId?: string,
 ): Promise<string | undefined> {
-  const connection = await resolvePontiaConnection({ pontiaHome, fetch: fetchImpl });
-  const baseUrl = connection?.externalApiUrl;
-  const token = connection?.externalApiToken;
-  if (!baseUrl || !token || !sessionId) return undefined;
-
-  const sessionBody = await fetchJson(fetchImpl, `${baseUrl}/sessions/${encodeURIComponent(sessionId)}`, token);
-  const session = responseDataRecord(sessionBody)?.session;
-  if (!session || typeof session !== "object" || Array.isArray(session)) return undefined;
-  const sessionRecord = session as Record<string, unknown>;
-  const profileId = optionalString(sessionRecord.execution_profile_id);
-  const profileVersion = optionalString(sessionRecord.execution_profile_version);
+  if (!sessionId) return undefined;
+  const sessionBody = await connection.request("session.get", { session_id: sessionId });
+  const session = asRecord(asRecord(sessionBody)?.session);
+  const profileId = optionalString(session?.execution_profile_id);
+  const profileVersion = optionalString(session?.execution_profile_version);
   if (!profileId) return undefined;
 
-  const profileUrl = profileVersion
-    ? `${baseUrl}/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(profileVersion)}`
-    : `${baseUrl}/agent-profiles/${encodeURIComponent(profileId)}`;
-  const profileBody = await fetchJson(fetchImpl, profileUrl, token);
-  const profile = responseDataRecord(profileBody)?.agent_profile;
-  if (!profile || typeof profile !== "object" || Array.isArray(profile)) return undefined;
-  return optionalString((profile as Record<string, unknown>).system_prompt_template);
+  const profileBody = await connection.request("profile.get", {
+    profile_id: profileId,
+    ...(profileVersion ? { version: profileVersion } : {}),
+  });
+  const profile = asRecord(asRecord(profileBody)?.agent_profile);
+  return optionalString(profile?.system_prompt_template);
 }

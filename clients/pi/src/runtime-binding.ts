@@ -1,6 +1,6 @@
 import type { EnvLike } from "./context.js";
 import { CONTROL_VERSION, type PiConnection } from "./control-socket.js";
-import { asRecord, optionalString } from "./internal-api.js";
+import { asRecord, optionalString } from "./values.js";
 import type { SessionContext } from "./session.js";
 
 export type PiSessionDetails = Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">;
@@ -64,14 +64,11 @@ export async function bindSession(
   const runtime = asRecord(record?.runtime);
   const sessionId = optionalString(session?.session_id);
   const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id);
-  const internalEventUrl = optionalString(runtime?.internal_event_url);
   if (!sessionId) throw new Error("runtime binding upsert response missing session.session_id");
   if (!resolvedRuntimeInstanceId) throw new Error("runtime binding upsert response missing runtime.runtime_instance_id");
-  if (!internalEventUrl) throw new Error("runtime binding upsert response missing runtime.internal_event_url");
   return {
     sessionId,
     clientType: "pi",
-    internalEventUrl,
     runtimeInstanceId: resolvedRuntimeInstanceId,
     ...sessionDetails,
   };
@@ -93,8 +90,7 @@ export async function loadExistingSessionContext(
   const sessionState = optionalString(record?.session_state);
   const clientType = optionalString(record?.client_type);
   const runtimeInstanceId = optionalString(record?.runtime_instance_id);
-  const internalEventUrl = optionalString(record?.internal_event_url);
-  if (!sessionId || !sessionState || clientType !== "pi" || !runtimeInstanceId || !internalEventUrl) {
+  if (!sessionId || !sessionState || clientType !== "pi" || !runtimeInstanceId) {
     throw new Error("agent binding session context lookup returned an invalid context");
   }
   return {
@@ -102,7 +98,6 @@ export async function loadExistingSessionContext(
     sessionState,
     clientType: "pi",
     runtimeInstanceId,
-    internalEventUrl,
     ...sessionDetails,
   };
 }

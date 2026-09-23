@@ -1,4 +1,4 @@
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { type PiConnection } from "../src/control-socket.js";
@@ -58,7 +58,6 @@ const context: TurnContext = {
   turnId: "turn_1",
   runtimeInstanceId: "rtinst_1",
   clientType: "pi",
-  internalEventUrl: "http://localhost/internal/v1/events",
 };
 
 let defaultPontiaHome: string;
@@ -69,14 +68,13 @@ async function tempDir() {
 
 beforeEach(async () => {
   defaultPontiaHome = await isolatedTempDir("pontia-pi-index-home-");
-  await writeFile(join(defaultPontiaHome, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
 });
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1]> = {}) {
+function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1]> & { request?: PiConnection["request"] } = {}) {
   const { pi, handlers, commands, sendUserMessage } = fakePi();
   const reported: InternalEvent[] = [];
   let turnSequence = 0;
@@ -91,39 +89,22 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
     : undefined;
   delete env.PONTIA_SESSION_ID;
   delete env.PONTIA_RUNTIME_INSTANCE_ID;
-  const suppliedFetch = overrides.fetch;
-  let paneManaged = managedRuntime !== undefined || suppliedFetch === undefined;
-  const fetchWithManagedBinding = suppliedFetch
-    ? (async (url: string | URL | Request, init?: RequestInit) => {
-        const requestUrl = String(url);
-        if (managedRuntime && requestUrl.startsWith("session.context:")) {
-          return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
-        }
-        if (managedRuntime && requestUrl === "runtime.register" && !JSON.parse(String(init?.body ?? "{}")).start_kind) {
-          paneManaged = true;
-          return new Response(JSON.stringify({
-            session: { session_id: managedRuntime.sessionId },
-            runtime: {
-              runtime_instance_id: managedRuntime.runtimeInstanceId,
-              internal_event_url: "http://localhost/internal/v1/events",
-            },
-          }), { status: 200 });
-        }
-        const response = await suppliedFetch(url as any, init as any);
-        if (requestUrl === "runtime.register" && response.ok) paneManaged = true;
-        return response;
-      }) as typeof fetch
-    : suppliedFetch;
+  const suppliedRequest = overrides.request;
+  let paneManaged = managedRuntime !== undefined || suppliedRequest === undefined;
   const request: PiConnection["request"] = async (method, params) => {
     const record = params as Record<string, any>;
-    const response = await fetchWithManagedBinding!(method === "session.context"
-      ? `session.context:${record.client_session_key}` : method,
-      method === "runtime.register" ? { body: JSON.stringify(record.binding) }
-        : method === "branch.resolve" ? { body: JSON.stringify(params) } : undefined);
-    if (method === "session.context" && response.status === 404) return { session_context: null };
-    const body = await response.json();
-    if (!response.ok) throw new Error(`RPC failed: ${response.status}`);
-    return method === "session.context" ? body.data : body;
+    if (managedRuntime && method === "session.context") return { session_context: null };
+    if (managedRuntime && method === "runtime.register" && !record.binding.start_kind) {
+      paneManaged = true;
+      return {
+        session: { session_id: managedRuntime.sessionId },
+        runtime: { runtime_instance_id: managedRuntime.runtimeInstanceId },
+      };
+    }
+    if (!suppliedRequest) throw new Error(`Unexpected RPC: ${method}`);
+    const result = await suppliedRequest(method, method === "runtime.register" ? record.binding : params);
+    if (method === "runtime.register") paneManaged = true;
+    return result;
   };
   const connection: PiConnection = { request, registered() {}, async close() {} };
   const suppliedConnect = overrides.connectPi;
@@ -145,7 +126,6 @@ function install(overrides: Partial<Parameters<typeof createPontiaPiExtension>[1
     })),
     ...overrides,
     connectPi: async (...args) => suppliedConnect ? { ...await suppliedConnect(...args), request } : connection,
-    fetch: fetchWithManagedBinding,
     env,
   });
   return { handlers, commands, sendUserMessage, reported, env };
@@ -159,7 +139,7 @@ describe("pontia pi extension lifecycle", () => {
     const loadContext = vi.fn(async () => ({ ok: false as const, silent: true, reason: "no pending input", logFile: "hook.log" }));
     const { handlers, reported, sendUserMessage } = install({
       env: { PONTIA_SESSION_ID: "sess_direct", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_direct" },
-      fetch: vi.fn(async () => Response.json({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } })) as any,
+      request: vi.fn(async () => ({ workspaces: [{ canonical_path: workspace, state: "active" }] })) as any,
       loadContext,
       connectPi: async (_home, _onError, onSubmit) => {
         submit = onSubmit;
@@ -224,18 +204,18 @@ describe("pontia pi extension lifecycle", () => {
 
   test("pontia-edit resolves, navigates once without summarization, clears restored text, then submits replacement", async () => {
     const calls: string[] = [];
-    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
-      if (_url !== "branch.resolve") {
-        return Response.json({ data: { workspaces: [{ canonical_path: defaultPontiaHome, state: "active" }] } });
+    const requestImpl = vi.fn(async (method: string, params?: any) => {
+      if (method !== "branch.resolve") {
+        return { workspaces: [{ canonical_path: defaultPontiaHome, state: "active" }] };
       }
       calls.push("resolve");
-      expect(JSON.parse(String(init?.body))).toEqual({
+      expect(params).toEqual({
         inbox_message_id: "msg_replay",
         session_id: "sess_replay",
         runtime_instance_id: "rtinst_replay",
         client_type: "pi",
       });
-      return new Response(JSON.stringify({
+      return {
         branch_replay: {
           inbox_message_id: "msg_replay",
           session_id: "sess_replay",
@@ -244,7 +224,7 @@ describe("pontia pi extension lifecycle", () => {
           replacement_input: "replacement prompt",
           target_entry_id: "native-user",
         },
-      }), { status: 200 });
+      };
     });
     let replay: ((message: string) => void) | undefined;
     const { handlers, reported, commands, sendUserMessage } = install({
@@ -256,7 +236,7 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_SESSION_ID: "sess_replay",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
       loadContext: vi.fn(async () => ({ ok: false as const, silent: true, reason: "no pending input", logFile: "hook.log" })),
     });
     const ctx = persistentTuiContext({ isIdle: () => true, sessionManager: {
@@ -314,7 +294,7 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_SESSION_ID: "sess_replay",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
       },
-      fetch: vi.fn(async () => new Response(JSON.stringify({
+      request: vi.fn(async () => ({
         branch_replay: {
           inbox_message_id: "msg_replay",
           session_id: "sess_replay",
@@ -323,7 +303,7 @@ describe("pontia pi extension lifecycle", () => {
           replacement_input: "replacement prompt",
           target_entry_id: "native-user",
         },
-      }), { status: 200 })) as any,
+      })) as any,
       logDiagnostic,
     });
     const navigateTree = navigationError
@@ -347,7 +327,7 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_SESSION_ID: "sess_replay",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
       },
-      fetch: vi.fn(async () => new Response("stale runtime", { status: 409, statusText: "Conflict" })) as any,
+      request: vi.fn(async () => Promise.reject(new Error("stale runtime"))) as any,
       logDiagnostic: resolveDiagnostic,
     });
     const resolveNavigation = vi.fn();
@@ -368,7 +348,7 @@ describe("pontia pi extension lifecycle", () => {
         PONTIA_SESSION_ID: "sess_replay",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
       },
-      fetch: vi.fn(async () => new Response(JSON.stringify({
+      request: vi.fn(async () => ({
         branch_replay: {
           inbox_message_id: "msg_replay",
           session_id: "sess_replay",
@@ -377,7 +357,7 @@ describe("pontia pi extension lifecycle", () => {
           replacement_input: "replacement prompt",
           target_entry_id: "native-user",
         },
-      }), { status: 200 })) as any,
+      })) as any,
       logDiagnostic: submitDiagnostic,
     });
     failedSubmit.sendUserMessage.mockImplementation(() => {
@@ -397,16 +377,16 @@ describe("pontia pi extension lifecycle", () => {
 
   test("session_start startup reports one-time agent client ready from runtime env", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
-      expect(url).toBe("http://localhost/external/v1/workspaces");
-      return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      expect(method).toBe("workspaces.list");
+      return { workspaces: [{ canonical_path: workspace, state: "active" }] };
     });
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_ready",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -437,15 +417,13 @@ describe("pontia pi extension lifecycle", () => {
     ["rpc mode", "rpc", "/tmp/pi/session.jsonl"],
     ["--no-session", "tui", undefined],
   ])("session_start ignores %s", async (_case, mode, sessionFile) => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      data: { workspaces: [{ canonical_path: "/workspace", state: "active" }] },
-    }), { status: 200 }));
+    const requestImpl = vi.fn(async () => ({ workspaces: [{ canonical_path: "/workspace", state: "active" }] }));
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_ignored",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_ignored",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -458,22 +436,22 @@ describe("pontia pi extension lifecycle", () => {
       },
     });
 
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(requestImpl).not.toHaveBeenCalled();
     expect(reported).toEqual([]);
   });
 
   test("session_start new reports agent client ready from runtime env", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
-      expect(url).toBe("http://localhost/external/v1/workspaces");
-      return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      expect(method).toBe("workspaces.list");
+      return { workspaces: [{ canonical_path: workspace, state: "active" }] };
     });
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_new",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_new",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "new" }, {
@@ -500,33 +478,32 @@ describe("pontia pi extension lifecycle", () => {
 
   test("stale tmux runtime markers do not identify a new native pi session", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === "http://localhost/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string, params?: any) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       }
-      if (url === "session.context:pi_session_fresh") {
-        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+      if (method === "session.context") {
+        return { session_context: null };
       }
-      if (url === "runtime.register") {
-        const body = JSON.parse(String(init?.body));
+      if (method === "runtime.register") {
+        const body = params;
         expect(body).toMatchObject({
           client_session_key: "pi_session_fresh",
           tmux: { socket_path: "/tmp/tmux-1000/default", pane_id: "%42" },
         });
         expect(body).not.toHaveProperty("session_id");
         expect(body).not.toHaveProperty("runtime_instance_id");
-        return new Response(JSON.stringify({
+        return {
           session: { session_id: "sess_fresh" },
           runtime: {
             runtime_instance_id: "rtinst_fresh",
-            internal_event_url: "http://localhost/internal/v1/events",
           },
-        }), { status: 200 });
+        };
       }
-      return new Response(`unexpected ${url}`, { status: 500 });
+      return Promise.reject(new Error(`unexpected ${method}`));
     });
     const { handlers, reported } = install({
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
       loadManagedRuntime: vi.fn(async () => ({ sessionId: "sess_stale", runtimeInstanceId: "rtinst_stale" })),
       isManagedPane: vi.fn(async () => true),
     });
@@ -550,66 +527,63 @@ describe("pontia pi extension lifecycle", () => {
     "a %s pontia session for the native key suppresses duplicate TUI binding",
     async (sessionState) => {
       const workspace = await realpath(await tempDir());
-      const fetchImpl = vi.fn(async (url: string) => {
-        if (url === "http://localhost/external/v1/workspaces") {
-          return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+      const requestImpl = vi.fn(async (method: string) => {
+        if (method === "workspaces.list") {
+          return { workspaces: [{ canonical_path: workspace, state: "active" }] };
         }
-        if (url === "session.context:pi_session_active") {
-          return new Response(JSON.stringify({ data: { session_context: {
+        if (method === "session.context") {
+          return { session_context: {
             session_id: "sess_active",
             session_state: sessionState,
             client_type: "pi",
             client_session_key: "pi_session_active",
             runtime_instance_id: "rtinst_active",
-            internal_event_url: "http://localhost/internal/v1/events",
-          } } }), { status: 200 });
+          } };
         }
-        return new Response(`unexpected ${url}`, { status: 500 });
+        return Promise.reject(new Error(`unexpected ${method}`));
       });
-      const { handlers, reported } = install({ fetch: fetchImpl as any });
+      const { handlers, reported } = install({ request: requestImpl as any });
 
       await handlers.session_start({ reason: "startup" }, {
         sessionManager: { getSessionId: () => "pi_session_active", getCwd: () => workspace },
       });
 
-      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(requestImpl).toHaveBeenCalledTimes(2);
       expect(reported).toEqual([]);
     },
   );
 
   test("a starting pontia session allows its native client to finish binding and report ready", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url === "http://localhost/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       }
-      if (url === "session.context:pi_session_starting") {
-        return new Response(JSON.stringify({ data: { session_context: {
+      if (method === "session.context") {
+        return { session_context: {
           session_id: "sess_starting",
           session_state: "starting",
           client_type: "pi",
           runtime_instance_id: "rtinst_starting",
-          internal_event_url: "http://localhost/internal/v1/events",
-        } } }), { status: 200 });
+        } };
       }
-      if (url === "runtime.register") {
-        return new Response(JSON.stringify({
+      if (method === "runtime.register") {
+        return {
           session: { session_id: "sess_starting" },
           runtime: {
             runtime_instance_id: "rtinst_bound",
-            internal_event_url: "http://localhost/internal/v1/events",
           },
-        }), { status: 200 });
+        };
       }
-      return new Response(`unexpected ${url}`, { status: 500 });
+      return Promise.reject(new Error(`unexpected ${method}`));
     });
-    const { handlers, reported } = install({ fetch: fetchImpl as any });
+    const { handlers, reported } = install({ request: requestImpl as any });
 
     await handlers.session_start({ reason: "startup" }, {
       sessionManager: { getSessionId: () => "pi_session_starting", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(requestImpl).toHaveBeenCalledTimes(3);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_starting",
@@ -619,42 +593,40 @@ describe("pontia pi extension lifecycle", () => {
 
   test("manual session_start startup immediately reattaches when client session already has a pontia binding", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === "http://localhost/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string, params?: any) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       }
-      if (url === "session.context:pi_session_resumed") {
-        return new Response(JSON.stringify({ data: { session_context: {
+      if (method === "session.context") {
+        return { session_context: {
           session_id: "sess_existing",
           session_state: "exited",
           client_type: "pi",
           client_session_key: "pi_session_resumed",
           runtime_instance_id: "rtinst_exited",
-          internal_event_url: "http://localhost/internal/v1/events",
-        } } }), { status: 200 });
+        } };
       }
-      if (url === "runtime.register") {
-        expect(JSON.parse(String(init?.body))).toMatchObject({
+      if (method === "runtime.register") {
+        expect(params).toMatchObject({
           client_session_key: "pi_session_resumed",
           client_session_file: "/tmp/pi/resumed.jsonl",
           tmux: { socket_path: "/tmp/tmux-1000/default", pane_id: "%42" },
         });
-        return new Response(JSON.stringify({
+        return {
           session: { session_id: "sess_existing" },
           runtime: {
             runtime_instance_id: "rtinst_reattached",
-            internal_event_url: "http://localhost/internal/v1/events",
           },
-        }), { status: 200 });
+        };
       }
-      return new Response(`unexpected ${url}`, { status: 500 });
+      return Promise.reject(new Error(`unexpected ${method}`));
     });
     const { handlers, reported } = install({
       env: {
         TMUX: "/tmp/tmux-1000/default,2071,502",
         TMUX_PANE: "%42",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -666,7 +638,7 @@ describe("pontia pi extension lifecycle", () => {
       },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(requestImpl).toHaveBeenCalledTimes(3);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_existing",
@@ -680,27 +652,27 @@ describe("pontia pi extension lifecycle", () => {
 
   test("manual new session is not persisted until its first prompt starts", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url === "http://localhost/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       }
-      if (url === "session.context:pi_session_manual") {
-        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+      if (method === "session.context") {
+        return { session_context: null };
       }
-      if (url === "runtime.register") {
-        return new Response(JSON.stringify({
+      if (method === "runtime.register") {
+        return {
           session: { session_id: "sess_manual" },
-          runtime: { runtime_instance_id: "rtinst_manual", internal_event_url: "http://localhost/internal/v1/events" },
-        }), { status: 200 });
+          runtime: { runtime_instance_id: "rtinst_manual" },
+        };
       }
-      return new Response("unexpected", { status: 500 });
+      return Promise.reject(new Error("unexpected"));
     });
     const { handlers, reported } = install({
       env: {
         TMUX: "/tmp/tmux-1000/default,2071,502",
         TMUX_PANE: "%42",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
       loadContext: vi.fn(async () => ({
         ok: false as const,
         reason: "current turn claim unavailable",
@@ -718,8 +690,8 @@ describe("pontia pi extension lifecycle", () => {
       },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchImpl).not.toHaveBeenCalledWith("runtime.register", expect.anything());
+    expect(requestImpl).toHaveBeenCalledTimes(2);
+    expect(requestImpl).not.toHaveBeenCalledWith("runtime.register", expect.anything());
     expect(reported).toEqual([]);
 
     await handlers.before_agent_start({ prompt: "first message", systemPrompt: "Base prompt" }, {});
@@ -741,17 +713,17 @@ describe("pontia pi extension lifecycle", () => {
 
   test("session_start skips manual binding when current workspace is not active", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url === "http://localhost/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [] };
       }
-      return new Response("unexpected", { status: 500 });
+      return Promise.reject(new Error("unexpected"));
     });
     const logDiagnostic = vi.fn(async () => undefined);
     const { handlers, reported } = install({
       env: {
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
       logDiagnostic,
     });
 
@@ -761,23 +733,23 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.before_agent_start({ prompt: "typed in tui", systemPrompt: "Base prompt" }, {});
     await handlers.agent_start({}, {});
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(requestImpl).toHaveBeenCalledTimes(1);
     expect(reported).toEqual([]);
     expect(logDiagnostic).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ code: "workspace_not_active" }));
   });
 
   test("session_start skips managed ready reporting when current workspace is not active", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
-      expect(url).toBe("http://localhost/external/v1/workspaces");
-      return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "deleted" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      expect(method).toBe("workspaces.list");
+      return { workspaces: [{ canonical_path: workspace, state: "deleted" }] };
     });
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_ready",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -787,41 +759,38 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("session_start discovers Pontia connection from PONTIA_HOME and confirms binding", async () => {
+  test("session_start confirms binding without HTTP configuration", async () => {
     const root = await tempDir();
     const workspace = await realpath(await tempDir());
-    const pontiaConfig = join(root, ".pontia", "config.toml");
     await mkdir(join(root, ".pontia"), { recursive: true });
-    await writeFile(pontiaConfig, 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "home-token"\n');
 
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       }
-      if (url === "session.context:pi_session_discovered") {
-        return new Response(JSON.stringify({ data: { session_context: {
+      if (method === "session.context") {
+        return { session_context: {
           session_id: "sess_discovered",
           session_state: "exited",
           client_type: "pi",
           runtime_instance_id: "rtinst_old",
-          internal_event_url: "http://127.0.0.1:18080/internal/v1/events",
-        } } }), { status: 200 });
+        } };
       }
-      if (url === "runtime.register") {
-        return new Response(JSON.stringify({
+      if (method === "runtime.register") {
+        return {
           session: { session_id: "sess_discovered" },
-          runtime: { runtime_instance_id: "rtinst_discovered", internal_event_url: "http://127.0.0.1:18080/internal/v1/events" },
-        }), { status: 200 });
+          runtime: { runtime_instance_id: "rtinst_discovered" },
+        };
       }
-      return new Response("unexpected", { status: 500 });
+      return Promise.reject(new Error("unexpected"));
     });
-    const { handlers, reported } = install({ env: { PONTIA_HOME: join(root, ".pontia") }, fetch: fetchImpl as any });
+    const { handlers, reported } = install({ env: { PONTIA_HOME: join(root, ".pontia") }, request: requestImpl as any });
 
     await handlers.session_start({ reason: "startup" }, {
       sessionManager: { getSessionId: () => "pi_session_discovered", getCwd: () => workspace },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(requestImpl).toHaveBeenCalledTimes(3);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
   });
 
@@ -830,26 +799,25 @@ describe("pontia pi extension lifecycle", () => {
     const workspace = await realpath(await tempDir());
     const stableHome = join(root, ".pontia-stable");
     await mkdir(stableHome, { recursive: true });
-    await writeFile(join(stableHome, "config.toml"), 'bind_addr = "127.0.0.1:18080"\nexternal_api_token = "stable-token"\n');
 
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url === "http://127.0.0.1:18080/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       }
-      if (url === "session.context:pi_session_late_env") {
-        return new Response(JSON.stringify({ error: { code: "not_found" } }), { status: 404 });
+      if (method === "session.context") {
+        return { session_context: null };
       }
-      if (url === "runtime.register") {
-        return new Response(JSON.stringify({
+      if (method === "runtime.register") {
+        return {
           session: { session_id: "sess_late_env" },
-          runtime: { runtime_instance_id: "rtinst_late_env", internal_event_url: "http://127.0.0.1:18080/internal/v1/events" },
-        }), { status: 200 });
+          runtime: { runtime_instance_id: "rtinst_late_env" },
+        };
       }
-      return new Response("unexpected", { status: 500 });
+      return Promise.reject(new Error("unexpected"));
     });
     const { handlers, reported, env } = install({
       env: { PONTIA_HOME: join(root, ".pontia") },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
       loadContext: vi.fn(async () => ({
         ok: false as const,
         reason: "current turn claim unavailable",
@@ -864,66 +832,58 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.before_agent_start({ prompt: "first message", systemPrompt: "Base prompt" }, {});
     await handlers.agent_start({}, { sessionManager });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(requestImpl).toHaveBeenCalledTimes(4);
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
     expect(reported[0]).toMatchObject({ session_id: "sess_late_env" });
   });
 
   test("agent_start does not claim a turn from tmux marker identity alone", async () => {
     const dir = await tempDir();
-    const fetchImpl = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          data: {
+    const requestImpl = vi.fn(async () =>
+      ({
             current_turn: {
               session_id: "sess_consumed",
               input: "from web",
               inbox_message_id: "msg_consumed",
               runtime_instance_id: "rtinst_consumed",
               client_type: "pi",
-              internal_event_url: "http://localhost/internal/v1/events",
             },
-          },
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
+          }),
     );
 
-    await writeFile(join(dir, "config.toml"), 'bind_addr = "localhost:80"\nexternal_api_token = "token"\n');
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_consumed",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_consumed",
         PONTIA_HOME: dir,
       },
-      fetch: fetchImpl as any,
-      loadContext: (env, sessionContext) => loadTurnContext(env, { fetch: fetchImpl as any, sessionContext }),
+      request: requestImpl as any,
+      loadContext: (env, sessionContext) => loadTurnContext(env, { connection: { request: requestImpl as any }, sessionContext }),
     });
 
     await handlers.agent_start({}, {});
 
     expect(reported).toEqual([]);
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(requestImpl).not.toHaveBeenCalled();
   });
 
   test("manual tui agent_start uses the bound session when current-turn context is absent", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url === "http://localhost/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       }
-      return new Response(JSON.stringify({
+      return {
         session: { session_id: "sess_bound" },
         runtime: {
           runtime_instance_id: "rtinst_bound",
-          internal_event_url: "http://localhost/internal/v1/events",
         },
-      }), { status: 200 });
+      };
     });
     const { handlers, reported } = install({
       env: {
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
       loadContext: vi.fn(async () => ({
         ok: false as const,
         reason: "current turn claim unavailable",
@@ -947,32 +907,31 @@ describe("pontia pi extension lifecycle", () => {
 
   test("session_start fork binds a new pontia session with parent lineage", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === "http://localhost/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string, params?: any) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       }
-      expect(url).toBe("runtime.register");
-      const body = JSON.parse(String(init?.body));
+      expect(method).toBe("runtime.register");
+      const body = params;
       expect(body).toMatchObject({
           client_session_key: "pi_child",
         start_kind: "fork",
         parent_session_id: "sess_parent",
       });
       expect(body).not.toHaveProperty("runtime_instance_id");
-      return new Response(JSON.stringify({
+      return {
         session: { session_id: "sess_child" },
         runtime: {
           runtime_instance_id: "rtinst_child",
-          internal_event_url: "http://localhost/internal/v1/events",
         },
-      }), { status: 200 });
+      };
     });
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_parent",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_parent",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
       loadContext: vi.fn(async () => ({
         ok: false as const,
         reason: "current turn claim unavailable",
@@ -997,38 +956,36 @@ describe("pontia pi extension lifecycle", () => {
 
   test("session_start resume immediately reattaches when switched client session has a pontia binding", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === "http://localhost/external/v1/workspaces") {
-        return new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string, params?: any) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
       }
-      if (url === "session.context:pi_session_resume") {
-        return new Response(JSON.stringify({ data: { session_context: {
+      if (method === "session.context") {
+        return { session_context: {
           session_id: "sess_resume",
           session_state: "starting",
           client_type: "pi",
           runtime_instance_id: "rtinst_resume",
-          internal_event_url: "http://localhost/internal/v1/events",
-        } } }), { status: 200 });
+        } };
       }
-      if (url === "runtime.register") {
-        expect(JSON.parse(String(init?.body))).toMatchObject({
+      if (method === "runtime.register") {
+        expect(params).toMatchObject({
           client_session_key: "pi_session_resume",
           runtime_instance_id: "rtinst_resume",
         });
-        return new Response(JSON.stringify({
+        return {
           session: { session_id: "sess_resume" },
           runtime: {
             runtime_instance_id: "rtinst_resume",
-            internal_event_url: "http://localhost/internal/v1/events",
           },
-        }), { status: 200 });
+        };
       }
-      return new Response(`unexpected ${url}`, { status: 500 });
+      return Promise.reject(new Error(`unexpected ${method}`));
     });
     const { handlers, reported } = install({
       env: {
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "resume" }, {
@@ -1040,17 +997,17 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("session_start does not report ready when binding confirmation is unavailable", async () => {
-    const fetchImpl = vi.fn(async () => new Response("unexpected", { status: 500 }));
+    const requestImpl = vi.fn(async () => Promise.reject(new Error("unexpected")));
     const { handlers, reported } = install({
       env: { PONTIA_SESSION_ID: "sess_partial" },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "startup" }, {
       sessionManager: { getSessionId: () => "pi_session_partial", getCwd: () => "/workspace" },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(requestImpl).toHaveBeenCalledTimes(1);
     expect(reported).toEqual([]);
   });
 
@@ -1094,13 +1051,13 @@ describe("pontia pi extension lifecycle", () => {
 
   test("session_shutdown quit reports session exited for managed runtime", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 }));
+    const requestImpl = vi.fn(async () => ({ workspaces: [{ canonical_path: workspace, state: "active" }] }));
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_exit",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -1117,13 +1074,13 @@ describe("pontia pi extension lifecycle", () => {
 
   test.each(["new", "resume", "fork"])("session_shutdown %s reports session exited for managed runtime", async (shutdownReason) => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 }));
+    const requestImpl = vi.fn(async () => ({ workspaces: [{ canonical_path: workspace, state: "active" }] }));
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_exit",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -1140,13 +1097,13 @@ describe("pontia pi extension lifecycle", () => {
 
   test("session_shutdown reload does not report session exited", async () => {
     const workspace = await realpath(await tempDir());
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { workspaces: [{ canonical_path: workspace, state: "active" }] } }), { status: 200 }));
+    const requestImpl = vi.fn(async () => ({ workspaces: [{ canonical_path: workspace, state: "active" }] }));
     const { handlers, reported } = install({
       env: {
         PONTIA_SESSION_ID: "sess_exit",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     await handlers.session_start({ reason: "startup" }, {
@@ -1158,46 +1115,53 @@ describe("pontia pi extension lifecycle", () => {
   });
 
   test("does not select an execution profile from tmux marker identity alone", async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.endsWith("/external/v1/sessions/sess_1")) {
-        return new Response(JSON.stringify({ data: { session: { execution_profile_id: "reviewer", execution_profile_version: "1" } } }), { status: 200 });
+    const requestImpl = vi.fn(async (method: string) => {
+      if (method === "session.get") {
+        return { session: { execution_profile_id: "reviewer", execution_profile_version: "1" } };
       }
-      if (url.endsWith("/external/v1/agent-profiles/reviewer/versions/1")) {
-        return new Response(JSON.stringify({ data: { agent_profile: { system_prompt_template: "Reviewer instructions" } } }), { status: 200 });
+      if (method === "profile.get") {
+        return { agent_profile: { system_prompt_template: "Reviewer instructions" } };
       }
-      return new Response("not found", { status: 404 });
+      return { session_context: null };
     });
     const { handlers } = install({
       env: {
         PONTIA_SESSION_ID: "sess_1",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
       },
-      fetch: fetchImpl as any,
+      request: requestImpl as any,
     });
 
     const result = await handlers.before_agent_start({ systemPrompt: "Base prompt" }, {});
 
     expect(result).toEqual({ systemPrompt: "Base prompt" });
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(requestImpl).not.toHaveBeenCalled();
   });
 
-  test("keeps original system prompt when profile has no system prompt", async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.endsWith("/external/v1/sessions/sess_1")) {
-        return new Response(JSON.stringify({ data: { session: { execution_profile_id: "default", execution_profile_version: "1" } } }), { status: 200 });
+  test.each(["Reviewer instructions", null, "error"])("uses the bound session profile prompt %s", async (prompt) => {
+    const workspace = await realpath(await tempDir());
+    const request = vi.fn(async (method: string, params: object) => {
+      if (method === "workspaces.list") return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+      if (method === "session.get") {
+        expect(params).toEqual({ session_id: "sess_profile" });
+        return { session: { execution_profile_id: "reviewer", execution_profile_version: "1" } };
       }
-      return new Response(JSON.stringify({ data: { agent_profile: { system_prompt_template: null } } }), { status: 200 });
+      expect(method).toBe("profile.get");
+      expect(params).toEqual({ profile_id: "reviewer", version: "1" });
+      if (prompt === "error") throw new Error("profile unavailable");
+      return { agent_profile: { system_prompt_template: prompt } };
     });
     const { handlers } = install({
-      env: {
-        PONTIA_SESSION_ID: "sess_1",
-      },
-      fetch: fetchImpl as any,
+      env: { PONTIA_SESSION_ID: "sess_profile", PONTIA_RUNTIME_INSTANCE_ID: "rt_profile" },
+      request,
     });
-
-    const result = await handlers.before_agent_start({ systemPrompt: "Base prompt" }, {});
-
-    expect(result).toEqual({ systemPrompt: "Base prompt" });
+    await handlers.session_start({ reason: "startup" }, {
+      sessionManager: { getSessionId: () => "native", getCwd: () => workspace },
+    });
+    expect(await handlers.before_agent_start({ systemPrompt: "Base prompt" }, {})).toEqual({
+      systemPrompt: prompt && prompt !== "error" ? `Base prompt\n\n${prompt}` : "Base prompt",
+    });
+    expect(request).toHaveBeenCalledWith("profile.get", { profile_id: "reviewer", version: "1" });
   });
 
   test("reports context usage when a hook event exposes valid usage", async () => {

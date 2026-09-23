@@ -8,7 +8,6 @@ const context: TurnContext & { turnId: string } = {
   turnId: "turn_1",
   runtimeInstanceId: "rtinst_1",
   clientType: "pi",
-  internalEventUrl: "http://localhost/internal/v1/events",
 };
 
 function accepted(sequence: number) {
