@@ -20,8 +20,25 @@ async fn daemon_peer_fixture() {
                 if request.get("id").is_none() {
                     continue;
                 }
+                if request["method"] == "thread/resume"
+                    && (request["params"]["threadId"] == "pending"
+                        || request["params"]["testHold"] == true)
+                {
+                    std::future::pending::<()>().await;
+                }
+                if request["method"] == "thread/resume"
+                    && request["params"]["threadId"] == "rejected"
+                {
+                    wire.send(Message::Text(json!({"id":request["id"],"error":{"code":-32600,"message":"thread unavailable"}}).to_string().into())).await.unwrap();
+                    continue;
+                }
                 let result = if request["method"] == "initialize" {
                     json!({"userAgent":"pontia/0.156.1","codexHome":root,"platformFamily":"unix","platformOs":"linux"})
+                } else if matches!(
+                    request["method"].as_str(),
+                    Some("thread/read" | "thread/resume")
+                ) {
+                    json!({"thread":{"id":request["params"]["threadId"],"cwd":root,"status":{"type":"idle"},"canAcceptDirectInput":true},"model":"test"})
                 } else {
                     json!({})
                 };
@@ -41,7 +58,7 @@ async fn daemon_peer_fixture() {
     }
 }
 
-async fn fixture(root: &Path) -> tokio::process::Child {
+pub(super) async fn fixture(root: &Path) -> tokio::process::Child {
     let child = Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
@@ -63,7 +80,7 @@ async fn fixture(root: &Path) -> tokio::process::Child {
     child
 }
 
-async fn connect(root: &Path) -> Result<Arc<CodexRuntime>> {
+pub(super) async fn connect(root: &Path) -> Result<Arc<CodexRuntime>> {
     CodexRuntime::connect(
         &mut *registry().lock().await,
         root.canonicalize().unwrap(),

@@ -21,6 +21,7 @@ async fn wait_turns(query: &ExternalQueryService, session: &str, count: usize) {
 #[ignore = "requires an externally running Codex 0.156.1 daemon and model access"]
 async fn external_daemon_two_clients_reconcile_and_survive_pontia_shutdown() {
     let root = tempfile::tempdir().unwrap();
+    let _tuis = super::tui::TuiCleanup(root.path().into());
     let runtime = CodexRuntime::ensure(root.path()).await.unwrap();
     let endpoint = runtime.socket_path.clone();
     let identity = runtime.instance_id.clone();
@@ -46,9 +47,6 @@ async fn external_daemon_two_clients_reconcile_and_survive_pontia_shutdown() {
         .await
         .unwrap();
     let session = created.session_id().unwrap().to_owned();
-    // Reserve UI ownership so this test can attach through the gateway itself.
-    sqlx::query("INSERT INTO codex_tui_bindings(owner_session_id,target_session_id,runtime_instance_id,connected,connection_id) VALUES(?,?,?,TRUE,'live')")
-        .bind(&session).bind(&session).bind(&identity).execute(&app.db()).await.unwrap();
     app.turn_commands()
         .create_and_dispatch_turn(
             &session,
@@ -70,7 +68,10 @@ async fn external_daemon_two_clients_reconcile_and_survive_pontia_shutdown() {
         crate::CodexObserver::new(app.event_ingest_service(), root.path().into()).run(receiver),
     );
     wait_turns(&query, &session, 1).await;
-    let gateway = runtime.gateway(&session).await.unwrap();
+    let gateway = runtime
+        .gateway(&format!("{session}_test_peer"))
+        .await
+        .unwrap();
     let tui = Connection::connect(Path::new(gateway.trim_start_matches("unix://")))
         .await
         .unwrap();

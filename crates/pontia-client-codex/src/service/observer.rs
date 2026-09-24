@@ -185,25 +185,9 @@ impl CodexObserver {
     }
 
     async fn target(&self, runtime: &CodexRuntime, target: TuiTarget) -> Result<()> {
-        let Some(thread_id) = target.thread["id"].as_str() else {
-            return Ok(());
-        };
-        if !target.connected {
-            sqlx::query("UPDATE codex_tui_bindings SET connected=FALSE WHERE owner_session_id=? AND runtime_instance_id=? AND connection_id=?").bind(&target.owner_session_id).bind(&runtime.instance_id).bind(&target.connection_id).execute(&self.service.pool).await?;
-            return Ok(());
-        }
-        let _current = runtime.current_guard().await?;
-        let observation = self
-            .service
-            .observed_session(&self.root, runtime, &target.thread);
-        let session = pontia_application::sessions::NativeSessionService::new(
-            self.service.pool.clone(),
-            self.service.event_ingest.clone(),
-        )
-        .resolve_observed_session("codex", thread_id, observation)
-        .await?;
-        sqlx::query("UPDATE codex_tui_bindings SET target_session_id=?,connected=TRUE,runtime_instance_id=?,connection_id=? WHERE owner_session_id=?")
-            .bind(&session).bind(&runtime.instance_id).bind(&target.connection_id).bind(&target.owner_session_id).execute(&self.service.pool).await?;
-        Ok(())
+        self.service
+            .record_tui_target(runtime, target)
+            .await
+            .map(|_| ())
     }
 }

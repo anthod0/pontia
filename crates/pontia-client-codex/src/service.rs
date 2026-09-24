@@ -3,6 +3,7 @@ mod models;
 mod observer;
 #[cfg(test)]
 mod tests;
+mod tui;
 
 use crate::runtime::CodexRuntime;
 use pontia_application::{
@@ -400,56 +401,6 @@ impl CodexService {
         self.event_ingest.control_available(session_id);
         self.open_tui_with_runtime(session_id, &runtime, &result["thread"])
             .await
-    }
-
-    pub async fn open_tui(&self, session_id: &str) -> Result<()> {
-        let runtime = self.runtime(session_id).await?;
-        let binding = AgentBindingService::new(self.pool.clone())
-            .binding_for_session(session_id)
-            .await?
-            .ok_or_else(|| {
-                Error::StateConflict("Send the first message before opening Codex TUI".into())
-            })?;
-        self.open_tui_with_runtime(
-            session_id,
-            &runtime,
-            &json!({"id":binding.client_session_key,"cwd":binding.launch_cwd}),
-        )
-        .await
-    }
-
-    async fn open_tui_with_runtime(
-        &self,
-        session_id: &str,
-        runtime: &Arc<CodexRuntime>,
-        thread: &Value,
-    ) -> Result<()> {
-        let owner: Option<String> = sqlx::query_scalar("SELECT owner_session_id FROM codex_tui_bindings WHERE target_session_id=? AND runtime_instance_id=? AND connected=TRUE LIMIT 1")
-            .bind(session_id).bind(&runtime.instance_id).fetch_optional(&self.pool).await?;
-        if owner.is_some() {
-            return Ok(());
-        }
-        // The original owner may now be displaying another thread. Never silently
-        // reuse that terminal as though it were still attached to this Session.
-        if runtime
-            .tui_targets
-            .lock()
-            .await
-            .get(session_id)
-            .is_some_and(|target| target.connected && target.thread["id"] != thread["id"])
-        {
-            return Err(Error::StateConflict("This TUI is displaying another Codex thread; use /resume in that TUI to switch back".into()));
-        }
-        let (socket, pane) = runtime
-            .open_tui(
-                session_id,
-                string(thread, "id")?,
-                Path::new(string(thread, "cwd")?),
-            )
-            .await?;
-        sqlx::query("INSERT INTO codex_tui_bindings(owner_session_id,target_session_id,runtime_instance_id,tmux_socket_path,tmux_pane_id) VALUES(?,?,?,?,?) ON CONFLICT(owner_session_id) DO UPDATE SET runtime_instance_id=excluded.runtime_instance_id,tmux_socket_path=excluded.tmux_socket_path,tmux_pane_id=excluded.tmux_pane_id")
-            .bind(session_id).bind(session_id).bind(&runtime.instance_id).bind(socket).bind(pane).execute(&self.pool).await?;
-        Ok(())
     }
 
     pub(super) async fn prepare_connection(&self, runtime: &CodexRuntime) -> Result<()> {

@@ -1,6 +1,7 @@
 mod daemon;
 mod gateway;
 pub mod protocol;
+mod tui;
 
 use pontia_core::{Error, Result};
 use protocol::Connection;
@@ -30,15 +31,19 @@ pub struct CodexRuntime {
     pub targets: broadcast::Sender<TuiTarget>,
     gateways: Mutex<HashMap<String, gateway::Gateway>>,
     operations: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    pub(crate) interfaces: Mutex<()>,
+    tui_command: String,
     pub tui_targets: Mutex<HashMap<String, TuiTarget>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TuiTarget {
     pub connection_id: String,
+    pub peer_identity: String,
     pub owner_session_id: String,
     pub thread: Value,
     pub connected: bool,
+    pub error: Option<String>,
 }
 
 impl CodexRuntime {
@@ -84,6 +89,8 @@ impl CodexRuntime {
             targets,
             gateways: Mutex::new(HashMap::new()),
             operations: Mutex::new(HashMap::new()),
+            interfaces: Mutex::new(()),
+            tui_command: std::env::var("PONTIA_CODEX_COMMAND").unwrap_or_else(|_| "codex".into()),
             tui_targets: Mutex::new(HashMap::new()),
         });
         if let Some(old) = registry.insert(root, runtime.clone()) {
@@ -143,19 +150,6 @@ impl CodexRuntime {
         self.gateway(owner).await.map(|_| ())
     }
 
-    async fn record_target(&self, target: TuiTarget) {
-        let mut targets = self.tui_targets.lock().await;
-        if !target.connected
-            && targets
-                .get(&target.owner_session_id)
-                .is_some_and(|current| current.connection_id != target.connection_id)
-        {
-            return;
-        }
-        targets.insert(target.owner_session_id.clone(), target.clone());
-        let _ = self.targets.send(target);
-    }
-
     pub async fn shutdown(root: &Path) {
         let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         if let Some(runtime) = registry().lock().await.remove(&root) {
@@ -165,35 +159,16 @@ impl CodexRuntime {
     }
 
     async fn close_gateways(&self) {
-        for (_, gateway) in self.gateways.lock().await.drain() {
+        let gateways: Vec<_> = self
+            .gateways
+            .lock()
+            .await
+            .drain()
+            .map(|(_, gateway)| gateway)
+            .collect();
+        for gateway in gateways {
             gateway.close().await;
         }
-    }
-
-    pub async fn open_tui(
-        self: &Arc<Self>,
-        owner: &str,
-        thread_id: &str,
-        cwd: &Path,
-    ) -> Result<(String, String)> {
-        let endpoint = self.gateway(owner).await?;
-        let name = format!("pontia_codex_{}", owner.replace('-', "_"));
-        if !pontia_runtime::is_alive(&name) {
-            let binary = std::env::var("PONTIA_CODEX_COMMAND").unwrap_or_else(|_| "codex".into());
-            let quote = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
-            let command = format!(
-                "{} resume --remote {} {}",
-                quote(&binary),
-                quote(&endpoint),
-                quote(thread_id)
-            );
-            if !pontia_runtime::spawn_tmux_session(&name, cwd, &command)?.success() {
-                return Err(Error::Domain("could not open Codex TUI".into()));
-            }
-        }
-        let pane = pontia_runtime::pane_binding(&name)
-            .ok_or_else(|| Error::Domain("Codex TUI pane is missing".into()))?;
-        Ok((pane.socket_path, pane.pane_id))
     }
 }
 

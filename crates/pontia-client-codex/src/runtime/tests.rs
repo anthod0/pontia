@@ -10,6 +10,8 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 mod lifecycle;
 mod live;
+mod native_tui;
+mod tui;
 
 #[derive(Default)]
 struct ServerState {
@@ -32,6 +34,7 @@ impl Drop for RuntimeGuard {
 #[tokio::test]
 async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separate() {
     let root = tempfile::tempdir().unwrap();
+    let _tuis = tui::TuiCleanup(root.path().into());
     let socket = root.path().join("native.sock");
     let listener = UnixListener::bind(&socket).unwrap();
     let native = Arc::new(Mutex::new(ServerState::default()));
@@ -42,67 +45,75 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
     let server_release_read = release_read.clone();
     let cwd = root.path().display().to_string();
     let server = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.unwrap();
-        let mut wire = accept_async(stream).await.unwrap();
-        while let Some(Ok(Message::Text(frame))) = wire.next().await {
-            let request: Value = serde_json::from_str(&frame).unwrap();
-            if request.get("id").is_none() {
-                continue;
-            }
-            let mut state = server_state.lock().await;
-            let thread = request["params"]["threadId"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string();
-            let result = match request["method"].as_str().unwrap() {
-                "initialize" => {
-                    json!({"userAgent":"pontia/0.156.1", "codexHome":cwd,"platformFamily":"unix","platformOs":"linux"})
-                }
-                "thread/start" => {
-                    let id = format!("thread-{}", state.threads.len());
-                    let thread = json!({"id":id,"cwd":cwd,"canAcceptDirectInput":true,"status":{"type":"idle"}});
-                    state.threads.push(thread.clone());
-                    json!({"thread":thread,"model":"test-model"})
-                }
-                "thread/read" | "thread/resume" => {
-                    json!({"thread":state.threads.iter().find(|entry| entry["id"] == thread).unwrap(),"model":"test-model"})
-                }
-                "thread/turns/list" => {
-                    if state.stall_turn_reads {
-                        server_read_started.notify_one();
-                        server_release_read.notified().await;
+        loop {
+            let (stream, _) = listener.accept().await.unwrap();
+            let server_state = server_state.clone();
+            let server_read_started = server_read_started.clone();
+            let server_release_read = server_release_read.clone();
+            let cwd = cwd.clone();
+            tokio::spawn(async move {
+                let mut wire = accept_async(stream).await.unwrap();
+                while let Some(Ok(Message::Text(frame))) = wire.next().await {
+                    let request: Value = serde_json::from_str(&frame).unwrap();
+                    if request.get("id").is_none() {
+                        continue;
                     }
-                    json!({"data":if state.publish_turns { state.turns.get(&thread).cloned().into_iter().collect::<Vec<_>>() } else { vec![] }, "nextCursor":null})
+                    let mut state = server_state.lock().await;
+                    let thread = request["params"]["threadId"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string();
+                    let result = match request["method"].as_str().unwrap() {
+                        "initialize" => {
+                            json!({"userAgent":"pontia/0.156.1", "codexHome":cwd,"platformFamily":"unix","platformOs":"linux"})
+                        }
+                        "thread/start" => {
+                            let id = format!("thread-{}", state.threads.len());
+                            let thread = json!({"id":id,"cwd":cwd,"canAcceptDirectInput":true,"status":{"type":"idle"}});
+                            state.threads.push(thread.clone());
+                            json!({"thread":thread,"model":"test-model"})
+                        }
+                        "thread/read" | "thread/resume" => {
+                            json!({"thread":state.threads.iter().find(|entry| entry["id"] == thread).unwrap(),"model":"test-model"})
+                        }
+                        "thread/turns/list" => {
+                            if state.stall_turn_reads {
+                                server_read_started.notify_one();
+                                server_release_read.notified().await;
+                            }
+                            json!({"data":if state.publish_turns { state.turns.get(&thread).cloned().into_iter().collect::<Vec<_>>() } else { vec![] }, "nextCursor":null})
+                        }
+                        "turn/start" => {
+                            let id = format!("turn-{thread}");
+                            state.turns.insert(thread, json!({"id":id,"status":"inProgress","items":[{"type":"userMessage","content":[{"text":request["params"]["input"][0]["text"]}]}]}));
+                            json!({"turn":{"id":id}})
+                        }
+                        "thread/archive" => {
+                            state.archived.push(thread);
+                            json!({})
+                        }
+                        "thread/unarchive" => {
+                            state.archived.retain(|id| id != &thread);
+                            json!({})
+                        }
+                        "thread/list" => {
+                            json!({"data":state.archived.iter().map(|id| json!({"id":id})).collect::<Vec<_>>(),"nextCursor":null})
+                        }
+                        method => panic!("unexpected method: {method}"),
+                    };
+                    if wire
+                        .send(Message::Text(
+                            json!({"id":request["id"],"result":result})
+                                .to_string()
+                                .into(),
+                        ))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
                 }
-                "turn/start" => {
-                    let id = format!("turn-{thread}");
-                    state.turns.insert(thread, json!({"id":id,"status":"inProgress","items":[{"type":"userMessage","content":[{"text":request["params"]["input"][0]["text"]}]}]}));
-                    json!({"turn":{"id":id}})
-                }
-                "thread/archive" => {
-                    state.archived.push(thread);
-                    json!({})
-                }
-                "thread/unarchive" => {
-                    state.archived.retain(|id| id != &thread);
-                    json!({})
-                }
-                "thread/list" => {
-                    json!({"data":state.archived.iter().map(|id| json!({"id":id})).collect::<Vec<_>>(),"nextCursor":null})
-                }
-                method => panic!("unexpected method: {method}"),
-            };
-            if wire
-                .send(Message::Text(
-                    json!({"id":request["id"],"result":result})
-                        .to_string()
-                        .into(),
-                ))
-                .await
-                .is_err()
-            {
-                break;
-            }
+            });
         }
     });
     let connection = Connection::connect(&socket).await.unwrap();
@@ -115,6 +126,8 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
         targets: broadcast::channel(128).0,
         gateways: Mutex::new(HashMap::new()),
         operations: Mutex::new(HashMap::new()),
+        interfaces: Mutex::new(()),
+        tui_command: tui::launcher(root.path()),
         tui_targets: Mutex::new(HashMap::new()),
     });
     let _runtime_guard = RuntimeGuard(runtime.clone());
@@ -148,9 +161,6 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
             query.get_session(&id).await.unwrap().unwrap().state,
             "created"
         );
-        // Existing interface ownership avoids launching a real native TUI in this test.
-        sqlx::query("INSERT INTO codex_tui_bindings(owner_session_id,target_session_id,runtime_instance_id,connected,connection_id) VALUES (?,?,?,TRUE,'ui')")
-            .bind(&id).bind(&id).bind(&runtime.instance_id).execute(&app.db()).await.unwrap();
         assert!(
             turns
                 .create_and_dispatch_turn(&id, input.into(), json!({}))
@@ -188,15 +198,12 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
     .unwrap();
     let second_turn = query.list_turns(&ids[1]).await.unwrap().remove(0);
     assert_eq!(second_turn.input.summary.as_deref(), Some("second"));
-    runtime
-        .targets
-        .send(TuiTarget {
-            connection_id: "ui".into(),
-            owner_session_id: ids[1].clone(),
-            thread: json!({"id":"thread-1"}),
-            connected: false,
-        })
-        .unwrap();
+    let gateway = runtime.gateway(&ids[1]).await.unwrap();
+    std::fs::write(
+        Path::new(gateway.trim_start_matches("unix://")).with_extension("command"),
+        "disconnect",
+    )
+    .unwrap();
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let connected: bool = sqlx::query_scalar(
@@ -289,5 +296,6 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
             .unwrap(),
         old_binding
     );
-    server.await.unwrap();
+    server.abort();
+    let _ = server.await;
 }

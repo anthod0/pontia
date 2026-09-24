@@ -140,6 +140,7 @@
   async function openSelectedTui(): Promise<void> {
     if (!selectedSessionId || actionBusy) return
     actionBusy = true
+    actionError = null
     try { await openCodexTui(selectedSessionId); await refreshCodex() }
     catch (error) { actionError = error instanceof Error ? error.message : String(error) }
     finally { actionBusy = false }
