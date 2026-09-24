@@ -3,8 +3,6 @@ use pontia_core::Result;
 use std::path::PathBuf;
 use tokio::net::UnixStream;
 
-pub(super) const SUPPORTED_VERSION: &str = "0.156.1";
-
 pub(super) struct Endpoint {
     pub socket: PathBuf,
     pub home: PathBuf,

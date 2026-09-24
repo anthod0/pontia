@@ -134,10 +134,68 @@ async fn native_rejection_is_distinct_from_an_unconfirmed_request() {
 }
 
 #[tokio::test]
-async fn unsupported_or_unidentified_daemons_never_receive_control_requests() {
+async fn daemon_version_metadata_does_not_gate_control() {
+    for user_agent in [
+        Some(json!("codex/0.155.1")),
+        Some(json!("codex/0.157.0")),
+        Some(json!("codex/dev build")),
+        Some(json!("custom-daemon")),
+        Some(json!("codex/")),
+        Some(json!(42)),
+        None,
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("socket");
+        let listener = UnixListener::bind(&path).unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut wire = accept_async(stream).await.unwrap();
+            let init: Value =
+                serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap())
+                    .unwrap();
+            let mut metadata =
+                json!({"codexHome":"/tmp","platformFamily":"unix","platformOs":"linux"});
+            if let Some(user_agent) = user_agent {
+                metadata["userAgent"] = user_agent;
+            }
+            wire.send(Message::Text(
+                json!({"id":init["id"],"result":metadata})
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .unwrap();
+            let initialized: Value =
+                serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap())
+                    .unwrap();
+            assert_eq!(initialized["method"], "initialized");
+            let request: Value =
+                serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap())
+                    .unwrap();
+            assert_eq!(request["method"], "thread/read");
+            wire.send(Message::Text(
+                json!({"id":request["id"],"result":{"thread":{"id":"thread-a"}}})
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .unwrap();
+        });
+        let connection = Connection::connect(&path).await.unwrap();
+        let result = connection
+            .call("thread/read", json!({"threadId":"thread-a"}))
+            .await
+            .unwrap();
+        assert_eq!(result["thread"]["id"], "thread-a");
+        server.await.unwrap();
+        connection.close().await;
+    }
+}
+
+#[tokio::test]
+async fn invalid_daemon_metadata_never_receives_control_requests() {
     for metadata in [
         json!({}),
-        json!({"userAgent":"codex/0.155.1","codexHome":"/tmp","platformFamily":"unix","platformOs":"linux"}),
         json!({"userAgent":"codex/0.156.1","codexHome":"relative","platformFamily":"unix","platformOs":"linux"}),
     ] {
         let root = tempfile::tempdir().unwrap();

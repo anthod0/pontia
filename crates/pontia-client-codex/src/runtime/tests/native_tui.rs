@@ -3,7 +3,7 @@ use super::*;
 
 // The caller supplies an externally started, isolated native daemon via CODEX_HOME.
 #[tokio::test]
-#[ignore = "requires an isolated Codex 0.156.1 daemon, credentials and model access"]
+#[ignore = "requires an isolated Codex daemon, credentials and model access"]
 async fn native_tui_restart_recovers_idle_busy_and_approval() {
     let root = tempfile::tempdir().unwrap();
     let _tuis = TuiCleanup(root.path().into());

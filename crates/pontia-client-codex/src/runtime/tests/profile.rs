@@ -236,7 +236,7 @@ async fn profile_instructions_survive_inputs_reconnects_and_tui_target_switches(
 // Requires a caller-owned daemon. Workspace/database/TUI cleanup is confined to
 // this temporary root; neither the daemon nor another native thread is stopped.
 #[tokio::test]
-#[ignore = "requires an externally running Codex 0.156.1 daemon and model access"]
+#[ignore = "requires an externally running Codex daemon and model access"]
 async fn native_profile_controls_dashboard_tui_and_resumed_thread() {
     let root = tempfile::tempdir().unwrap();
     let _tuis = tui::TuiCleanup(root.path().into());
@@ -357,7 +357,12 @@ async fn native_profile_controls_dashboard_tui_and_resumed_thread() {
     );
     eprintln!(
         "Native Profile evidence: daemon={}, thread={}, three matching replies, developer marker count={developer_markers}",
-        runtime.connection.server_version, binding.client_session_key
+        runtime
+            .connection
+            .server_version
+            .as_deref()
+            .unwrap_or("unknown"),
+        binding.client_session_key
     );
     CodexRuntime::shutdown(root.path()).await;
 }

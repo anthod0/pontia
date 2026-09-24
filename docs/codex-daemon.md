@@ -1,13 +1,13 @@
 # Codex daemon integration
 
-Pontia connects to an externally running Codex **0.156.1** daemon on Linux. Start it before using Codex Sessions:
+Pontia connects to an externally running Codex daemon on Linux. Start it before using Codex Sessions:
 
 ```sh
 codex app-server daemon start
 codex app-server daemon version
 ```
 
-Run Pontia as the same user, with the same `CODEX_HOME` as the daemon (default: `~/.codex`). The version check applies to the connected daemon, which can differ from the installed CLI. An unavailable or unsupported daemon leaves the control channel unavailable; existing Session and thread bindings remain intact.
+Run Pontia as the same user, with the same `CODEX_HOME` as the daemon (default: `~/.codex`). An unavailable or protocol-incompatible daemon leaves the control channel unavailable; existing Session and thread bindings remain intact.
 
 Pontia creates threads with legacy history because Codex 0.156.1 does not support the resume and history operations needed by this integration for paginated threads. Existing external threads must support those operations before Pontia can restore control.
 

@@ -1,4 +1,4 @@
-use super::daemon::{DaemonIdentity, SUPPORTED_VERSION};
+use super::daemon::DaemonIdentity;
 use futures_util::{SinkExt, StreamExt};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
@@ -45,7 +45,7 @@ pub struct Connection {
     outgoing: mpsc::Sender<Message>,
     task: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub identity: DaemonIdentity,
-    pub server_version: String,
+    pub server_version: Option<String>,
     pub codex_home: PathBuf,
     pending: Pending,
     next_id: AtomicU64,
@@ -96,13 +96,7 @@ impl Connection {
         let version = metadata["userAgent"]
             .as_str()
             .and_then(|agent| agent.split_once('/'))
-            .and_then(|(_, rest)| rest.split_whitespace().next())
-            .ok_or_else(|| protocol_error("daemon did not identify its version"))?;
-        if version != SUPPORTED_VERSION {
-            return Err(protocol_error(format!(
-                "unsupported daemon version {version}; verified version is {SUPPORTED_VERSION}"
-            )));
-        }
+            .and_then(|(_, rest)| rest.split_whitespace().next());
         let codex_home = metadata["codexHome"]
             .as_str()
             .map(PathBuf::from)
@@ -127,7 +121,7 @@ impl Connection {
             outgoing,
             task: Mutex::new(None),
             identity,
-            server_version: version.into(),
+            server_version: version.map(str::to_owned),
             codex_home,
             pending: pending.clone(),
             next_id: AtomicU64::new(1),

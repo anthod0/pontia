@@ -18,7 +18,7 @@ async fn wait_turns(query: &ExternalQueryService, session: &str, count: usize) {
 // Opt-in: uses an externally started daemon and its credentials. Creates only its
 // own thread, with a temporary workspace/database. Never starts or stops a daemon.
 #[tokio::test]
-#[ignore = "requires an externally running Codex 0.156.1 daemon and model access"]
+#[ignore = "requires an externally running Codex daemon and model access"]
 async fn external_daemon_two_clients_reconcile_and_survive_pontia_shutdown() {
     let root = tempfile::tempdir().unwrap();
     let _tuis = super::tui::TuiCleanup(root.path().into());

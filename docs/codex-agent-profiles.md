@@ -48,8 +48,6 @@ External threads imported through the TUI do not automatically acquire a
 Profile. Profile selection in New Chat and Codex Workflow support are outside
 this contract.
 
-The adapter targets Codex 0.156.1. The opt-in native acceptance test
+The opt-in native acceptance test
 `native_profile_controls_dashboard_tui_and_resumed_thread` requires an externally
-running daemon with model access. It checks a marker present only in the Profile,
-real TUI input, cold resume of the same thread, and native developer-message
-history. HTTP contract tests separately cover the Profile and Session APIs.
+running daemon with model access.
