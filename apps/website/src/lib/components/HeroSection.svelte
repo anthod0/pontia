@@ -8,9 +8,9 @@
 <section class="hero page-width" aria-labelledby="hero-title">
 	<div class="hero-copy">
 		<p class="eyebrow"><span class="status-dot"></span>A HOME FOR YOUR CODING AGENTS</p>
-		<h1 id="hero-title">Beyond the terminal.<br /><span>Still working.</span></h1>
+		<h1 id="hero-title">Keep work moving.<br /><span>Wherever you are.</span></h1>
 		<p class="hero-description">
-			Close the window. Not the session. Keep your coding agents running, and pick up in the terminal or the browser. Same agent. Same context.
+			Run agents on your machine. Start work, follow progress, and step in from wherever you are—without spending your day managing terminal sessions.
 		</p>
 		<div class="hero-actions">
 			<a class="button" href="#get-started">Get started<ArrowRightIcon size={17} /></a>

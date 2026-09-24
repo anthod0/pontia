@@ -67,11 +67,10 @@ h2 { font-size: 36px; font-weight: 500; line-height: 1.2; letter-spacing: -.035e
 .feature > p { font-size: 14px; line-height: 1.8; color: var(--muted-foreground); min-height: 100px; }
 .feature-detail { margin-top: 27px; display: flex; gap: 8px; align-items: center; min-height: 23px; font: 9px var(--font-mono); color: var(--muted-foreground); }
 .surface-tag { border: 1px solid var(--border); padding: 4px 7px; background: var(--surface); }
-.principle { display: flex; gap: 19px; align-items: center; padding: 24px; background: var(--surface); border: 1px solid var(--border); }
+.principle { display: flex; gap: 19px; align-items: center; margin-top: 64px; padding: 24px; background: var(--surface); border: 1px solid var(--border); }
 .principle-symbol { display: flex; color: var(--primary); flex-shrink: 0; }
 .principle p { font-size: 12px; line-height: 1.8; color: var(--muted-foreground); }
 .principle strong { color: var(--foreground); font-size: 14px; font-weight: 500; }
-.principle-label { margin-left: auto; padding-left: 18px; white-space: nowrap; font: 8px var(--font-mono); letter-spacing: .045em; color: var(--muted-foreground); }
 .getting-started { display: grid; grid-template-columns: 1fr 1fr; gap: 90px; padding-bottom: 88px; }
 .setup-description { margin-top: 15px; font-size: 14px; line-height: 1.7; color: var(--muted-foreground); }
 .setup-steps { list-style: none; padding: 0; margin: 31px 0 0; }
@@ -102,7 +101,6 @@ h2 { font-size: 36px; font-weight: 500; line-height: 1.2; letter-spacing: -.035e
 .terminal-command > span { color: #a89984; font-size: 10px; }
 .setup-terminal-footer { display: flex; align-items: center; gap: 8px; padding: 15px 20px; border-top: 1px solid #45433e; font-size: 9px; color: #bdae93; }
 .setup-terminal-footer .status-dot { background: #8ec07c; }
-.platform-note { font: 10px/1.9 var(--font-mono); color: var(--muted-foreground); margin-top: 16px; text-align: center; }
 .development-note { display: grid; grid-template-columns: 178px 1fr auto; align-items: start; gap: 24px; border-top: 1px solid var(--border); padding-block: 32px; }
 .development-label { display: flex; align-items: center; gap: 7px; font: 9px/22px var(--font-mono); letter-spacing: .04em; color: var(--muted-foreground); }
 .development-note h2 { font-size: 16px; letter-spacing: -.01em; line-height: 1.5; margin-bottom: 6px; }
@@ -118,7 +116,6 @@ h2 { font-size: 36px; font-weight: 500; line-height: 1.2; letter-spacing: -.035e
 @media (max-width: 1000px) {
 	.page-width { width: calc(100% - 64px); }
 	.getting-started { gap: 42px; }
-	.principle-label { display: none; }
 	.feature { padding-inline: 20px; }
 	.feature > p { min-height: 126px; }
 	.development-note { grid-template-columns: 150px 1fr; }
@@ -163,7 +160,7 @@ h2 { font-size: 36px; font-weight: 500; line-height: 1.2; letter-spacing: -.035e
 	.feature h3 { font-size: 20px; }
 	.feature > p { min-height: 0; font-size: 14px; }
 	.feature-detail { margin-top: 18px; font-size: 9px; }
-	.principle { padding: 18px; gap: 13px; align-items: flex-start; }
+	.principle { margin-top: 36px; padding: 18px; gap: 13px; align-items: flex-start; }
 	.principle-symbol { padding-top: 3px; }
 	.principle strong { font-size: 13px; }
 	.principle p { font-size: 12px; }

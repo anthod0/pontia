@@ -22,10 +22,10 @@
 </script>
 
 <svelte:head>
-	<title>Pontia — Beyond the terminal window.</title>
-	<meta name="description" content="Keep your coding agents working beyond a single terminal window. Pontia gives you persistent pi sessions and a web dashboard, without giving up the real agent TUI." />
-	<meta property="og:title" content="Pontia — Beyond the terminal window." />
-	<meta property="og:description" content="Beyond the terminal. Still working. Persistent sessions, a web dashboard, and the terminal you already know." />
+	<title>Pontia — Keep work moving. Wherever you are.</title>
+	<meta name="description" content="Run agents on your machine. Start work, follow progress, and step in from wherever you are—without spending your day managing terminal sessions." />
+	<meta property="og:title" content="Pontia — Keep work moving. Wherever you are." />
+	<meta property="og:description" content="Run agents on your machine. Start work, follow progress, and step in from wherever you are—without spending your day managing terminal sessions." />
 	<meta property="og:type" content="website" />
 	<meta name="twitter:card" content="summary" />
 </svelte:head>
@@ -44,47 +44,46 @@
 <main id="main">
 	<HeroSection {repository} />
 
+	<section class="principle page-width" aria-label="Local-first architecture">
+		<div class="principle-symbol" aria-hidden="true"><TerminalWindowIcon size={24} weight="light" /></div>
+		<p><strong>Your machine. Your tools. Your sessions.</strong><br />Your agents run on your machine, with your tools and your project files. Pontia gives you a browser dashboard to stay connected to their work.</p>
+	</section>
+
 	<section id="features" class="features page-width section-block" aria-labelledby="features-title">
 		<div class="section-intro">
-			<h2 id="features-title">Leave the window.<br />Keep the context.</h2>
-			<p>Your agent is more than a tab in your terminal.<br /> Give it a persistent place to work, and yourself<br class="desktop-break" /> a clearer view of what’s happening.</p>
+			<h2 id="features-title">Away from your desk.<br />Still in control.</h2>
+			<p>Keep your agents working, see where things stand,<br class="desktop-break" /> and send the next instruction without returning<br class="desktop-break" /> to your desk.</p>
 		</div>
 		<div class="feature-grid">
 			<article class="feature">
 				<div class="feature-top"><TerminalWindowIcon size={25} weight="light" /><span>01</span></div>
-				<h3>A session, not a window.</h3>
-				<p>Keep agent sessions running beyond your terminal window. Return to the conversation without starting from scratch.</p>
+				<h3>Work keeps going.</h3>
+				<p>Your agents keep running on your machine after you close the terminal. Come back to the same session when you’re ready.</p>
 				<div class="feature-detail"><span class="status-dot"></span>Persistent by design</div>
 			</article>
 			<article class="feature">
 				<div class="feature-top"><MonitorIcon size={25} weight="light" /><span>02</span></div>
-				<h3>Two surfaces. One agent.</h3>
-				<p>Work in the real pi TUI or continue in the web dashboard. Same session, same conversation. No parallel agent behind the scenes.</p>
+				<h3>Pick up from your browser.</h3>
+				<p>Read the conversation and send the next instruction from the web dashboard. Continue in your terminal whenever you want.</p>
 				<div class="feature-detail"><span class="surface-tag">Terminal</span><span>↔</span><span class="surface-tag">Web</span></div>
 			</article>
 			<article class="feature">
 				<div class="feature-top"><PlayPauseIcon size={25} weight="light" /><span>03</span></div>
-				<h3>Less guessing. More control.</h3>
-				<p>See your workspaces and sessions in one place. Follow the conversation, send the next instruction, or stop and resume when you need to.</p>
+				<h3>Your agents, in one place.</h3>
+				<p>See your workspaces and sessions together. Follow progress and move between tasks without juggling terminal windows.</p>
 				<div class="feature-detail"><span class="status-dot ochre"></span>Your work, in view</div>
 			</article>
 		</div>
 	</section>
 
-	<section class="principle page-width" aria-label="Local-first architecture">
-		<div class="principle-symbol" aria-hidden="true"><TerminalWindowIcon size={24} weight="light" /></div>
-		<p><strong>Your machine. Your tools. Your sessions.</strong><br />Pontia runs locally, around the real agent TUI. Not a replacement for your workflow. A way to keep it going.</p>
-		<span class="principle-label">NO CLOUD ACCOUNT REQUIRED</span>
-	</section>
-
 	<section id="get-started" class="getting-started page-width section-block" aria-labelledby="start-title">
 		<div class="setup-copy">
-			<h2 id="start-title">A small setup.<br />A longer-running session.</h2>
-			<p class="setup-description">Bring your terminal. We’ll keep the lights on.</p>
+			<h2 id="start-title">Start your first session.</h2>
+			<p class="setup-description">Install Pontia, connect pi, and open your dashboard.</p>
 			<ol class="setup-steps">
-				<li><span class="step-number">01</span><div><h3>Grab the binaries</h3><p>Download <code>pontia</code> and <code>pontiad</code> for your platform. Put both on your <code>PATH</code>.</p><a class="text-link" href={`${repository}/releases/latest`}>Download the latest release<ArrowUpRightIcon size={14} /></a></div></li>
-				<li><span class="step-number">02</span><div><h3>Bring pi and tmux</h3><p>Install <a href="https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent">pi CLI</a> and <a href="https://github.com/tmux/tmux/wiki/Installing">tmux</a> if you don’t already have them.</p></div></li>
-				<li><span class="step-number">03</span><div><h3>Make yourself at home</h3><p>Run <code>pontia init</code>. Follow the prompts to set up the pi integration, start the service, and open your dashboard.</p></div></li>
+				<li><span class="step-number">01</span><div><h3>Install Pontia</h3><p>Download <code>pontia</code> and <code>pontiad</code> for your platform. Put both on your <code>PATH</code>.</p><a class="text-link" href={`${repository}/releases/latest`}>Download the latest release<ArrowUpRightIcon size={14} /></a></div></li>
+				<li><span class="step-number">02</span><div><h3>Install pi and tmux</h3><p>Install <a href="https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent">pi CLI</a> and <a href="https://github.com/tmux/tmux/wiki/Installing">tmux</a> if you don’t already have them.</p></div></li>
+				<li><span class="step-number">03</span><div><h3>Run the setup</h3><p>Run <code>pontia init</code>. Follow the prompts to set up the pi integration, start the service, and open your dashboard.</p></div></li>
 			</ol>
 		</div>
 		<div class="setup-side">
@@ -102,7 +101,6 @@
 				</div>
 				<div class="setup-terminal-footer"><span class="status-dot"></span>Local by default. Ready when you are.</div>
 			</div>
-			<p class="platform-note">Linux with systemd & macOS.<br />No Rust, Cargo, or frontend build tools needed.</p>
 		</div>
 	</section>
 
@@ -115,6 +113,6 @@
 
 <footer class="site-footer page-width">
 	<a class="brand footer-brand" href="/" aria-label="Pontia home"><img src="/logo.svg" alt="" /><span>Pontia</span></a>
-	<p>Beyond the terminal window.</p>
+	<p>Keep work moving. Wherever you are.</p>
 	<nav aria-label="Footer navigation"><a href={repository}>GitHub<ArrowUpRightIcon size={12} /></a><a href={`${repository}#get-started`}>Documentation</a><a href={`${repository}/blob/main/LICENSE`}>Apache 2.0</a></nav>
 </footer>
