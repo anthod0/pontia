@@ -23,9 +23,9 @@ const MAX_CONSUMED_INBOX_MESSAGE_IDS = 500;
 export function beginInboxSubmission(
   sessionId: string,
   input: SubmitInboxMessageInput,
-  options: { showInChat?: boolean } = {},
+  options: { showInChat?: boolean; messageId?: string } = {},
 ): string {
-  const localId = `${sessionId}:${++submissionSequence}`;
+  const localId = options.messageId ?? `${sessionId}:${++submissionSequence}`;
   const submission: OptimisticInboxSubmission = {
     localId,
     sessionId,
@@ -59,7 +59,7 @@ export function confirmInboxSubmission(localId: string, message: InboxMessageVie
   })));
 }
 
-export function consumeInboxSubmission(messageId: string, sessionId?: string): void {
+export function consumeInboxSubmission(messageId: string): void {
   consumedInboxMessageIds.add(messageId);
   if (consumedInboxMessageIds.size > MAX_CONSUMED_INBOX_MESSAGE_IDS) {
     const oldestMessageId = consumedInboxMessageIds.values().next().value;
@@ -68,12 +68,8 @@ export function consumeInboxSubmission(messageId: string, sessionId?: string): v
   optimisticInboxSubmissions.update((submissions) => {
     const matchedIds = new Set(Object.values(submissions)
       .flat()
-      .filter((submission) => submission.acceptedMessage?.message_id === messageId)
+      .filter((submission) => submission.acceptedMessage?.message_id === messageId || submission.localId === messageId)
       .map((submission) => submission.localId));
-    if (!matchedIds.size && sessionId) {
-      const unresolved = (submissions[sessionId] ?? []).find((submission) => !submission.acceptedMessage);
-      if (unresolved) matchedIds.add(unresolved.localId);
-    }
     return matchedIds.size ? removeSubmissions(submissions, matchedIds) : submissions;
   });
 }

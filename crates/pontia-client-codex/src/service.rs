@@ -232,9 +232,10 @@ impl CodexService {
                 "turn/steer"
             }
             _ => {
-                return Err(Error::StateConflict(
-                    "Codex is busy; start input was not submitted".into(),
-                ));
+                return Err(Error::Conflict {
+                    code: "input_busy",
+                    message: "Codex is busy; start input was not submitted".into(),
+                });
             }
         };
         let execution_target = pontia_application::runtime::ControlTarget {

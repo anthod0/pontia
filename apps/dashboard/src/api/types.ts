@@ -5,7 +5,7 @@ export type TaskState = 'created' | 'routing' | 'needs_confirmation' | 'queued' 
 export type TurnState = 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'abandoned';
 export type TurnTopologyStatus = 'unknown' | 'root' | 'linked';
 export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now' | 'steer';
-export type InboxMessageState = 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed' | 'dismissed';
+export type InboxMessageState = 'resuming' | 'unknown' | 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed' | 'dismissed';
 export type WorkflowState = 'pending' | 'running' | 'paused' | 'replanning' | 'blocked' | 'idle' | 'completed' | 'failed';
 export type WorkflowAgentStatus = 'pending' | 'starting' | 'running' | 'paused' | 'idle' | 'exiting' | 'submitted' | 'failed' | 'unknown';
 
@@ -356,6 +356,9 @@ export interface InboxMessageView {
   metadata: JsonObject;
   branch_target_turn_id: string | null;
   turn_id: string | null;
+  steer_target_turn_id: string | null;
+  retry_of_message_id: string | null;
+  retried_by_message_id: string | null;
   superseded_by_message_id: string | null;
   failure_message: string | null;
   created_at: string;

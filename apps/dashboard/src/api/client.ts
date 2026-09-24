@@ -79,13 +79,14 @@ function delay(ms: number, signal?: AbortSignal | null): Promise<void> {
   });
 }
 
-async function fetchWithTransientNetworkRetry(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+async function fetchWithTransientNetworkRetry(input: RequestInfo | URL, init: RequestInit, onNetworkFailure?: () => void): Promise<Response> {
   let attempt = 0;
   while (true) {
     try {
       return await fetch(input, init);
     } catch (error) {
       if (!isTransientNetworkError(error) || attempt >= TRANSIENT_NETWORK_RETRY_DELAYS_MS.length) throw error;
+      onNetworkFailure?.();
       await delay(TRANSIENT_NETWORK_RETRY_DELAYS_MS[attempt], init.signal);
       attempt += 1;
     }
@@ -117,9 +118,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const bearer = get(token).trim();
   if (bearer) headers.set('Authorization', `Bearer ${bearer}`);
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
-  if (options.mutating || options.method && options.method !== 'GET') headers.set('Idempotency-Key', idempotencyKey());
+  if ((options.mutating || options.method && options.method !== 'GET') && !headers.has('Idempotency-Key')) headers.set('Idempotency-Key', idempotencyKey());
 
-  const fetchRequest = options.retryNetworkErrors === false ? fetch : fetchWithTransientNetworkRetry;
+  let afterNetworkFailure = false;
+  const fetchRequest = options.retryNetworkErrors === false ? fetch : (input: RequestInfo | URL, init: RequestInit) => fetchWithTransientNetworkRetry(input, init, () => { afterNetworkFailure = true; });
   const response = await fetchRequest(`${API_BASE}${path}`, {
     ...options,
     headers,
@@ -138,6 +140,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       envelope?.error?.message ?? response.statusText,
       envelope?.error?.code ?? 'request_failed',
       response.status,
+      afterNetworkFailure,
     );
   }
   if (!envelope || envelope.data === null) {
@@ -339,8 +342,16 @@ export async function listInboxMessages(sessionId: string): Promise<InboxMessage
   return (await request<{ inbox_messages: InboxMessageView[] }>(`/sessions/${sessionId}/inbox/messages`)).inbox_messages;
 }
 
-export async function submitInboxMessage(sessionId: string, input: SubmitInboxMessageInput): Promise<InboxMessageView> {
-  return (await request<{ inbox_message: InboxMessageView }>(`/sessions/${sessionId}/inbox/messages`, { method: 'POST', body: input, mutating: true })).inbox_message;
+export async function submitInboxMessage(sessionId: string, input: SubmitInboxMessageInput, messageId: string): Promise<InboxMessageView> {
+  return (await request<{ inbox_message: InboxMessageView }>(`/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}`, { method: 'PUT', body: input })).inbox_message;
+}
+
+export async function getInboxMessage(sessionId: string, messageId: string): Promise<InboxMessageView> {
+  return (await request<{ inbox_message: InboxMessageView }>(`/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}`)).inbox_message;
+}
+
+export async function retryInboxMessage(sessionId: string, originalId: string, messageId: string, allowUnknown: boolean): Promise<InboxMessageView> {
+  return (await request<{ inbox_message: InboxMessageView }>(`/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(originalId)}/retry`, { method: 'POST', body: { message_id: messageId, allow_unknown: allowUnknown } })).inbox_message;
 }
 
 export async function cancelInboxMessage(sessionId: string, messageId: string): Promise<InboxMessageView> {

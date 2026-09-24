@@ -12,6 +12,8 @@
   import * as Alert from '$lib/components/ui/alert/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import ChatRuler from '$lib/components/session-chat/ChatRuler.svelte'
+  import { SubmissionUnconfirmedError } from '../stores/inboxRecovery'
+  import { retryInboxMessage } from '../stores/sessions'
   import type { DashboardStreamEvent, InboxMessageView, SessionView, TurnView } from '../api/types'
   import type { ChatMessageRole, SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
@@ -316,20 +318,14 @@
   }
 
   async function retryFailedInboxMessage(message: InboxMessageView): Promise<void> {
-    if (!selectedSessionId || message.state !== 'failed') return
+    if (!selectedSessionId || !['failed', 'unknown'].includes(message.state)) return
+    if (message.state === 'unknown' && !window.confirm('Delivery may already have executed. Send again as a new input, accepting possible duplicate execution?')) return
     inboxActionMessageId = message.message_id
     actionError = null
     try {
-      await submitInboxMessage(selectedSessionId, {
-        input: message.input.summary,
-        delivery_policy: message.delivery_policy === 'steer' ? 'steer' : message.delivery_policy === 'interrupt_now' ? 'interrupt_now' : 'after_idle',
-        metadata: message.metadata,
-        ...(message.branch_target_turn_id
-          ? { branch_target_turn_id: message.branch_target_turn_id }
-          : {}),
-      }, { showInChat: false })
+      await retryInboxMessage(selectedSessionId, message, message.state === 'unknown')
     } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error)
+      actionError = error instanceof SubmissionUnconfirmedError ? null : error instanceof Error ? error.message : String(error)
     } finally {
       inboxActionMessageId = null
     }
@@ -381,7 +377,7 @@
       return true
     } catch (error) {
       branchActionError = error instanceof Error ? error.message : String(error)
-      return false
+      return error instanceof SubmissionUnconfirmedError
     } finally {
       branchActionSubmitting = false
     }
@@ -532,7 +528,7 @@
       const metadata = streamEvent.event.payload.metadata
       if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
         const inboxMessageId = (metadata as Record<string, unknown>).inbox_message_id
-        if (typeof inboxMessageId === 'string') consumeInboxSubmission(inboxMessageId, streamEvent.event.session_id)
+        if (typeof inboxMessageId === 'string') consumeInboxSubmission(inboxMessageId)
       }
       if (streamEvent.event.type === 'session.model_updated') {
         void loadSessionDetail(selectedSessionId, { showLoading: false })
@@ -805,8 +801,8 @@
       })
     } catch (error) {
       pendingPromptScrolls = pendingPromptScrolls.filter((request) => request !== scrollRequest)
-      if (!get(chatDraft).trim()) chatDraft.set(message)
-      actionError = error instanceof Error ? error.message : String(error)
+      if (!(error instanceof SubmissionUnconfirmedError) && !get(chatDraft).trim()) chatDraft.set(message)
+      actionError = error instanceof SubmissionUnconfirmedError ? null : error instanceof Error ? error.message : String(error)
     } finally {
       submitting = false
     }

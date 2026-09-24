@@ -38,7 +38,9 @@ pub use clients::ClientControlService;
 pub use control::ControlCommandOutcome;
 pub use git_status::{GitRefreshCoordinator, WorkspaceGitStatusService};
 pub use idempotency::{IdempotencyCoordinator, IdempotencyOutcome};
-pub use inbox::{InboxCommandOutcome, InboxCommandService, SubmitInboxMessageRequest};
+pub use inbox::{
+    InboxCommandOutcome, InboxCommandService, RetryInboxMessageRequest, SubmitInboxMessageRequest,
+};
 pub use ingestion::{
     EventIngestResult, EventIngestService, EventReportError, EventReportNormalizer,
     InternalEventValidationService, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,

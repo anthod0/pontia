@@ -10,7 +10,6 @@ use pontia_application::{AppState, SubmitInboxMessageRequest};
 
 use super::{
     authentication::authenticate,
-    idempotency::idempotent,
     response::{ApiError, ApiResponse, ok},
 };
 
@@ -22,37 +21,73 @@ pub async fn submit_inbox_message(
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = state.inbox_commands();
-    let operation = format!("submit_inbox_message:{session_id}");
-    let action_session_id = session_id.clone();
-    let outcome = idempotent(&state, &headers, operation, || async move {
-        Ok(service
-            .submit_message(&action_session_id, request)
-            .await?
-            .data)
-    })
-    .await?;
-    let status = if outcome.duplicate {
-        StatusCode::OK
-    } else {
-        StatusCode::CREATED
-    };
-    let data = if outcome.duplicate {
-        let message_id = outcome.data["inbox_message"]["message_id"]
-            .as_str()
-            .map(str::to_owned);
-        if let Some(message_id) = message_id {
-            let service = state.inbox_commands();
-            match service.get_message(&session_id, &message_id).await? {
-                Some(message) => json!({ "inbox_message": message }),
-                None => outcome.data,
+    let outcome = match headers.get("Idempotency-Key") {
+        Some(key) => {
+            let key = key
+                .to_str()
+                .map_err(|_| ApiError::invalid_request("Invalid Idempotency-Key"))?;
+            if key.is_empty() || key.len() > 256 {
+                return Err(ApiError::invalid_request("Invalid Idempotency-Key"));
             }
-        } else {
-            outcome.data
+            service
+                .submit_message_once(&format!("msg_{session_id}:{key}"), &session_id, request)
+                .await?
         }
-    } else {
-        outcome.data
+        None => service.submit_message(&session_id, request).await?,
     };
-    Ok((status, ok(data)).into_response())
+    Ok((
+        if outcome.duplicate {
+            StatusCode::OK
+        } else {
+            StatusCode::CREATED
+        },
+        ok(outcome.data),
+    )
+        .into_response())
+}
+
+pub async fn put_inbox_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((session_id, message_id)): Path<(String, String)>,
+    Json(request): Json<SubmitInboxMessageRequest>,
+) -> Result<Response, ApiError> {
+    authenticate(&state, &headers)?;
+    let outcome = state
+        .inbox_commands()
+        .submit_message_once(&message_id, &session_id, request)
+        .await?;
+    Ok((
+        if outcome.duplicate {
+            StatusCode::OK
+        } else {
+            StatusCode::CREATED
+        },
+        ok(outcome.data),
+    )
+        .into_response())
+}
+
+pub async fn retry_inbox_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((session_id, message_id)): Path<(String, String)>,
+    Json(request): Json<pontia_application::RetryInboxMessageRequest>,
+) -> Result<Response, ApiError> {
+    authenticate(&state, &headers)?;
+    let outcome = state
+        .inbox_commands()
+        .retry_message(&state.session_commands(), &session_id, &message_id, request)
+        .await?;
+    Ok((
+        if outcome.duplicate {
+            StatusCode::OK
+        } else {
+            StatusCode::CREATED
+        },
+        ok(outcome.data),
+    )
+        .into_response())
 }
 
 pub async fn list_inbox_messages(

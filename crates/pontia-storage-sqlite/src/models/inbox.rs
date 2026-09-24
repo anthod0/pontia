@@ -1,5 +1,6 @@
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct InboxMessageRow {
+    pub submission_payload: Option<String>,
     pub message_id: String,
     pub session_id: String,
     pub state: String,
@@ -7,6 +8,9 @@ pub struct InboxMessageRow {
     pub input_summary: String,
     pub metadata: String,
     pub branch_target_turn_id: Option<String>,
+    pub steer_target_turn_id: Option<String>,
+    pub retry_of_message_id: Option<String>,
+    pub retried_by_message_id: Option<String>,
     pub turn_id: Option<String>,
     pub superseded_by_message_id: Option<String>,
     pub failure_message: Option<String>,
@@ -18,6 +22,7 @@ pub struct InboxMessageRow {
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PendingInboxMessageRow {
+    pub steer_target_turn_id: Option<String>,
     pub delivery_policy: String,
     pub message_id: String,
     pub input_summary: String,

@@ -45,6 +45,7 @@ pub(crate) struct Channel {
     pub input: std::sync::Mutex<Vec<String>>,
     pub closed: AtomicBool,
     pub delayed: bool,
+    pub next_error: std::sync::Mutex<Option<pontia_core::Error>>,
     pub started: tokio::sync::Notify,
     pub finish: tokio::sync::Notify,
 }
@@ -57,6 +58,12 @@ impl ClientControlChannel for Channel {
     }
     fn submit<'a>(&'a self, input: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
         Box::pin(async move {
+            if let Some(error) = self.next_error.lock().unwrap().take() {
+                if matches!(error, pontia_core::Error::ControlUnknown(_)) {
+                    self.input.lock().unwrap().push(input.to_owned());
+                }
+                return Err(error);
+            }
             self.input.lock().unwrap().push(input.to_owned());
             if self.delayed {
                 self.started.notify_one();

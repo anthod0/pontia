@@ -112,9 +112,10 @@ export function sessionMetadataSummary(items: SessionMetadataItem[]): string {
 }
 
 export function visibleChatInboxMessages(messages: InboxMessageView[]): InboxMessageView[] {
-  const actionable = messages.filter((message) => message.state === 'pending' || message.state === 'failed').slice().reverse()
-  const dispatching = messages.filter((message) => message.state === 'dispatching').slice().reverse()
-  return [...dispatching, ...actionable]
+  return messages.filter((message) => !message.retried_by_message_id && (
+    ['pending', 'resuming', 'dispatching', 'failed', 'unknown'].includes(message.state)
+    || (message.state === 'dispatched' && !message.turn_id)
+  )).slice().reverse()
 }
 
 export function inboxBadgeVariant(message: InboxMessageView): 'default' | 'secondary' | 'destructive' | 'outline' {

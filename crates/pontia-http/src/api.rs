@@ -27,7 +27,7 @@ pub use events::{stream_session_events, stream_turn_events};
 pub use git_status::{get_workspace_git_status, refresh_workspace_git_status};
 pub use inbox::{
     cancel_inbox_message, dismiss_inbox_message, get_inbox_message, list_inbox_messages,
-    submit_inbox_message,
+    put_inbox_message, retry_inbox_message, submit_inbox_message,
 };
 pub use live_output::stream_live_output;
 pub use response::{ApiError, ApiResponse};

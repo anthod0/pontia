@@ -10,6 +10,7 @@ pub(crate) struct InboxScheduler(Arc<Mutex<State>>);
 #[derive(Default)]
 struct State {
     sessions: HashMap<String, Arc<AsyncMutex<()>>>,
+    commands: HashMap<String, Arc<AsyncMutex<()>>>,
     running: HashMap<String, bool>,
     stopped: bool,
     initial_inputs: HashSet<String>,
@@ -42,6 +43,16 @@ impl InboxScheduler {
             .expect("inbox scheduler lock")
             .initial_inputs
             .contains(session)
+    }
+
+    pub fn command_lock(&self, session: &str) -> Arc<AsyncMutex<()>> {
+        self.0
+            .lock()
+            .expect("inbox scheduler lock")
+            .commands
+            .entry(session.into())
+            .or_default()
+            .clone()
     }
 
     pub fn session_lock(&self, session: &str) -> Arc<AsyncMutex<()>> {
@@ -114,7 +125,9 @@ impl InboxCommandService {
     }
 
     pub async fn recover_deliveries(&self) -> pontia_core::Result<()> {
-        sqlx::query("UPDATE inbox_messages SET state='failed',failure_message='Delivery is uncertain after Pontia restarted; input was not retried',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state='dispatching'")
+        sqlx::query("UPDATE inbox_messages SET state='failed',failure_message='Session recovery was interrupted before input delivery; retry explicitly',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state='resuming'")
+            .execute(&self.pool).await?;
+        sqlx::query("UPDATE inbox_messages SET state=CASE WHEN turn_id IS NULL THEN 'unknown' ELSE 'dispatched' END,failure_message=CASE WHEN turn_id IS NULL THEN 'Delivery is uncertain after Pontia restarted; input was not retried' ELSE NULL END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state='dispatching'")
             .execute(&self.pool).await?;
         Ok(())
     }

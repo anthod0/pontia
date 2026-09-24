@@ -30,6 +30,9 @@ const acceptedInboxMessage = (overrides: Partial<InboxMessageView> = {}): InboxM
   metadata: { source: 'dashboard_chat' },
   branch_target_turn_id: null,
   turn_id: null,
+  steer_target_turn_id: null,
+  retry_of_message_id: null,
+  retried_by_message_id: null,
   superseded_by_message_id: null,
   failure_message: null,
   created_at: '2026-05-14T00:00:00Z',
@@ -77,9 +80,9 @@ test('does not restore a submission when its confirmed Turn arrives before the P
     input: 'follow up',
     delivery_policy: 'after_idle',
     metadata: { source: 'dashboard_chat' },
-  });
+  }, { messageId: 'message-raced' });
 
-  consumeInboxSubmission('message-raced', 'session-1');
+  consumeInboxSubmission('message-raced');
   expect(inboxSubmissionMessages('session-1', [], get(optimisticInboxSubmissions))).toEqual([]);
 
   confirmInboxSubmission(localId, acceptedInboxMessage({ message_id: 'message-raced' }));

@@ -1,3 +1,5 @@
+mod retry;
+pub use retry::RetryInboxMessageRequest;
 mod association;
 pub(crate) use association::InboxAssociations;
 mod scheduling;
@@ -10,7 +12,7 @@ use pontia_core::{
 use pontia_storage_sqlite::repositories::{
     inbox::SqliteInboxRepository, turns::SqliteTurnRepository,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 
@@ -19,7 +21,7 @@ use crate::{
     PontiaEventType, TurnCommandService, views::inbox::row_to_view,
 };
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct SubmitInboxMessageRequest {
     pub input: String,
     #[serde(default = "default_delivery_policy")]
@@ -99,6 +101,38 @@ impl InboxCommandService {
         session_id: &str,
         request: SubmitInboxMessageRequest,
     ) -> Result<InboxCommandOutcome> {
+        let lock = self.scheduler.command_lock(session_id);
+        let _guard = lock.lock().await;
+        self.enqueue_message(message_id, session_id, request, None, false)
+            .await
+    }
+
+    async fn enqueue_message(
+        &self,
+        message_id: &str,
+        session_id: &str,
+        request: SubmitInboxMessageRequest,
+        retry_of: Option<&str>,
+        resuming: bool,
+    ) -> Result<InboxCommandOutcome> {
+        if message_id.is_empty() || message_id.len() > 512 {
+            return Err(Error::Domain("Invalid Inbox submission identity".into()));
+        }
+        let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
+        let payload = serde_json::to_string(&request)?;
+        if let Some(existing) = inbox_repository.get_message(session_id, message_id).await? {
+            if existing.submission_payload.as_deref() != Some(&payload)
+                || existing.retry_of_message_id.as_deref() != retry_of
+            {
+                return Err(Error::StateConflict(
+                    "Submission identity was already used for different input".into(),
+                ));
+            }
+            return Ok(InboxCommandOutcome {
+                data: json!({"inbox_message":row_to_view(existing)?}),
+                duplicate: true,
+            });
+        }
         if request.input.trim().is_empty() {
             return Err(Error::Domain(
                 "inbox message input must not be blank".to_string(),
@@ -153,41 +187,34 @@ impl InboxCommandService {
 
         let metadata = serde_json::to_string(&request.metadata)?;
 
-        let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
-        if let Some(existing) = inbox_repository.get_message(session_id, message_id).await? {
-            return Ok(InboxCommandOutcome {
-                data: json!({ "inbox_message": row_to_view(existing)? }),
-                duplicate: true,
-            });
-        }
-        if request.delivery_policy == "interrupt_now" {
-            inbox_repository
-                .supersede_pending_interrupts(session_id, message_id)
-                .await?;
-        }
+        let active_turn = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
+            .await?;
+        let steer_target = if request.delivery_policy == "steer" {
+            active_turn.as_ref().map(|turn| turn.turn_id.as_str())
+        } else {
+            None
+        };
         let inserted = inbox_repository
-            .insert_message_once(
-                message_id,
-                session_id,
-                &request.delivery_policy,
-                &request.input,
-                &metadata,
-                request.branch_target_turn_id.as_deref(),
+            .enqueue(
+                pontia_storage_sqlite::repositories::inbox::NewInboxMessage {
+                    message_id,
+                    session_id,
+                    delivery_policy: &request.delivery_policy,
+                    input: &request.input,
+                    metadata: &metadata,
+                    branch_target: request.branch_target_turn_id.as_deref(),
+                    steer_target,
+                    submission_payload: &payload,
+                    retry_of,
+                    resuming,
+                },
             )
             .await?;
         if !inserted {
-            let existing = inbox_repository
-                .get_message(session_id, message_id)
-                .await?
-                .ok_or_else(|| {
-                    Error::StateConflict(format!(
-                        "inbox message identity {message_id} belongs to another Session"
-                    ))
-                })?;
-            return Ok(InboxCommandOutcome {
-                data: json!({ "inbox_message": row_to_view(existing)? }),
-                duplicate: true,
-            });
+            return Err(Error::StateConflict(
+                "Submission identity belongs to another Session".into(),
+            ));
         }
 
         self.audit(
@@ -201,7 +228,7 @@ impl InboxCommandService {
         let active_turn = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
             .await?;
-        if request.delivery_policy == "interrupt_now" && active_turn.is_some() {
+        if !resuming && request.delivery_policy == "interrupt_now" && active_turn.is_some() {
             if !session.capabilities.interrupt {
                 self.mark_failed(
                     message_id,
@@ -209,11 +236,17 @@ impl InboxCommandService {
                 )
                 .await?;
             } else if let Err(error) = self.turns.interrupt_current_turn(session_id).await {
-                self.mark_failed(message_id, error.to_string()).await?;
+                if matches!(error, Error::ControlUnknown(_)) {
+                    self.mark_unknown(message_id, &error.to_string()).await?;
+                } else {
+                    self.mark_failed(message_id, error.to_string()).await?;
+                }
             }
         }
 
-        self.drain_inbox(session_id).await?;
+        if !resuming {
+            self.drain_inbox(session_id).await?;
+        }
 
         let message = self
             .get_message(session_id, message_id)
@@ -351,21 +384,34 @@ impl InboxCommandService {
         if matches!(session.state.as_str(), "exited" | "error") {
             return Ok(());
         }
-        let intent = match active {
-            Some(turn) if row.delivery_policy == "steer" && adapter.supports_steer() => {
-                crate::turns::InputIntent::Steer {
-                    turn_id: turn.turn_id,
-                }
+        let intent = if row.delivery_policy == "steer" {
+            if active.as_ref().map(|turn| &turn.turn_id) != row.steer_target_turn_id.as_ref() {
+                self.mark_failed(
+                    &row.message_id,
+                    "Steer target Turn changed; input was not submitted".into(),
+                )
+                .await?;
+                self.notify_available(session_id);
+                return Ok(());
             }
-            Some(_) => return Ok(()),
-            None if matches!(session.state.as_str(), "idle" | "interrupted")
-                || (matches!(session.state.as_str(), "created" | "starting")
-                    && adapter.prepares_on_input()) =>
-            {
-                crate::turns::InputIntent::Start
+            match row.steer_target_turn_id {
+                Some(turn_id) => crate::turns::InputIntent::Steer { turn_id },
+                None => crate::turns::InputIntent::Start,
             }
-            None => return Ok(()),
+        } else {
+            if active.is_some() {
+                return Ok(());
+            }
+            crate::turns::InputIntent::Start
         };
+        if matches!(intent, crate::turns::InputIntent::Start)
+            && !matches!(session.state.as_str(), "idle" | "interrupted")
+            && !(matches!(session.state.as_str(), "created" | "starting")
+                && adapter.prepares_on_input())
+        {
+            return Ok(());
+        }
+        let delivery_policy = row.delivery_policy;
         let message_id = row.message_id;
         let input = row.input_summary;
         let branch_target_turn_id = row.branch_target_turn_id;
@@ -422,17 +468,61 @@ impl InboxCommandService {
                 .await?;
                 self.notify_available(session_id);
             }
+            Err(Error::Conflict {
+                code: "input_busy", ..
+            }) if delivery_policy != "steer" => {
+                inbox_repository.return_pending(&message_id).await?;
+            }
+            Err(Error::ControlUnknown(reason)) => {
+                self.mark_unknown(&message_id, &reason).await?;
+            }
             Err(error) => {
                 self.mark_failed(&message_id, error.to_string()).await?;
+                self.notify_available(session_id);
             }
         }
         Ok(())
     }
 
     async fn mark_failed(&self, message_id: &str, failure_message: String) -> Result<()> {
-        SqliteInboxRepository::new(self.pool.clone())
+        if SqliteInboxRepository::new(self.pool.clone())
             .mark_failed(message_id, &failure_message)
+            .await?
+            == 0
+        {
+            return Ok(());
+        }
+        self.audit_delivery(message_id, PontiaEventType::InboxMessageFailed)
             .await
+    }
+
+    async fn mark_unknown(&self, message_id: &str, reason: &str) -> Result<()> {
+        if SqliteInboxRepository::new(self.pool.clone())
+            .mark_unknown(message_id, reason)
+            .await?
+            == 0
+        {
+            return Ok(());
+        }
+        self.audit_delivery(message_id, PontiaEventType::InboxMessageDeliveryUnknown)
+            .await
+    }
+
+    async fn audit_delivery(&self, message_id: &str, event_type: PontiaEventType) -> Result<()> {
+        let (session_id, client_type, state): (String, String, String) = sqlx::query_as("SELECT m.session_id,s.client_type,m.state FROM inbox_messages m JOIN sessions s ON s.session_id=m.session_id WHERE m.message_id=?")
+            .bind(message_id).fetch_one(&self.pool).await?;
+        let event_type = if state == "dispatched" {
+            PontiaEventType::InboxMessageDispatched
+        } else {
+            event_type
+        };
+        self.audit(
+            &session_id,
+            &client_type,
+            event_type,
+            json!({"message_id":message_id,"state":state}),
+        )
+        .await
     }
 
     async fn audit(

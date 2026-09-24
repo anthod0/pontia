@@ -1,6 +1,24 @@
 use super::*;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
+fn queued_message<'a>(
+    message_id: &'a str,
+    session_id: &'a str,
+) -> pontia_storage_sqlite::repositories::inbox::NewInboxMessage<'a> {
+    pontia_storage_sqlite::repositories::inbox::NewInboxMessage {
+        message_id,
+        session_id,
+        delivery_policy: "after_idle",
+        input: "input",
+        metadata: "{}",
+        branch_target: None,
+        steer_target: None,
+        submission_payload: "{}",
+        retry_of: None,
+        resuming: false,
+    }
+}
+
 #[tokio::test]
 async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed() {
     let root = tempfile::tempdir().unwrap();
@@ -21,14 +39,7 @@ async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed(
         let repository = SqliteInboxRepository::new(pool.clone());
         for suffix in ["one", "two"] {
             repository
-                .insert_message(
-                    &format!("{client}-{suffix}"),
-                    client,
-                    "after_idle",
-                    "input",
-                    "{}",
-                    None,
-                )
+                .enqueue(queued_message(&format!("{client}-{suffix}"), client))
                 .await
                 .unwrap();
         }
@@ -59,7 +70,7 @@ async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed(
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(first.state, "failed");
+        assert_eq!(first.state, "unknown");
         assert!(first.failure_message.unwrap().contains("uncertain"));
         let repository = SqliteInboxRepository::new(pool.clone());
         assert_eq!(
@@ -74,6 +85,33 @@ async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed(
                 .mark_dispatching(&format!("{client}-two"))
                 .await
                 .unwrap(),
+            0,
+            "unresolved delivery must not be overtaken"
+        );
+        sqlx::query("INSERT INTO turns(turn_id,session_id,state) VALUES (?,?,'completed')")
+            .bind(format!("{client}-turn"))
+            .bind(client)
+            .execute(&pool)
+            .await
+            .unwrap();
+        repository
+            .link_started_turn(client, &format!("{client}-one"), &format!("{client}-turn"))
+            .await
+            .unwrap();
+        assert_eq!(
+            service
+                .get_message(client, &format!("{client}-one"))
+                .await
+                .unwrap()
+                .unwrap()
+                .state,
+            "dispatched"
+        );
+        assert_eq!(
+            repository
+                .mark_dispatching(&format!("{client}-two"))
+                .await
+                .unwrap(),
             1
         );
         repository
@@ -81,14 +119,7 @@ async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed(
             .await
             .unwrap();
         repository
-            .insert_message(
-                &format!("{client}-three"),
-                client,
-                "after_idle",
-                "input",
-                "{}",
-                None,
-            )
+            .enqueue(queued_message(&format!("{client}-three"), client))
             .await
             .unwrap();
         assert_eq!(
@@ -238,4 +269,285 @@ async fn token_override_preserves_initial_input_gate_and_event_wakeup() {
     .unwrap();
     assert_eq!(*channel.input.lock().unwrap(), ["queued"]);
     authenticated.inbox_commands().stop_scheduling().await;
+}
+
+async fn connected_inbox() -> (
+    tempfile::TempDir,
+    crate::AppState,
+    std::sync::Arc<crate::clients::testing::Channel>,
+) {
+    let root = tempfile::tempdir().unwrap();
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    let mut clients = crate::clients::testing::clients();
+    let mut registration = clients.get("test-channel").unwrap().clone();
+    registration.steer = true;
+    clients.register(registration);
+    let state = crate::AppState::builder(pool.clone(), root.path().into())
+        .clients(clients)
+        .build();
+    sqlx::query("INSERT INTO sessions(session_id,client_type,state) VALUES ('session','test-channel','idle')").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO runtime_bindings(session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('session','test_tui','runtime','confirmed','/unused/tmux','%1','{\"accept_task\":true}')").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','test-channel','/unused','native','{}')").execute(&pool).await.unwrap();
+    let channel = crate::clients::testing::channel();
+    state
+        .client_control()
+        .attach(
+            "test-channel",
+            "session",
+            "runtime",
+            "native",
+            channel.clone(),
+        )
+        .await
+        .unwrap();
+    state
+        .event_ingest_service()
+        .report_fact(crate::ReportedFact {
+            session_id: "session".into(),
+            turn_id: None,
+            fact_type: pontia_core::domain::EventType::SessionReady,
+            data: json!({"runtime_instance_id":"runtime"}),
+        })
+        .await
+        .unwrap();
+    state.inbox_commands().stop_scheduling().await;
+    (root, state, channel)
+}
+
+fn request(input: &str) -> SubmitInboxMessageRequest {
+    SubmitInboxMessageRequest {
+        input: input.into(),
+        delivery_policy: "after_idle".into(),
+        branch_target_turn_id: None,
+        metadata: json!({}),
+    }
+}
+
+#[tokio::test]
+async fn busy_rejection_preserves_fifo_and_cancelled_input_never_enters_client() {
+    let (_root, state, channel) = connected_inbox().await;
+    let inbox = state.inbox_commands();
+    inbox.scheduler.begin_initial("session");
+    for index in 0..13 {
+        // Reverse identifiers deliberately: arrival order must break timestamp ties.
+        inbox
+            .submit_message_once(
+                &format!("msg-{:02}", 13 - index),
+                "session",
+                request(&index.to_string()),
+            )
+            .await
+            .unwrap();
+    }
+    inbox.cancel_message("session", "msg-07").await.unwrap();
+    inbox.scheduler.finish_initial("session");
+    *channel.next_error.lock().unwrap() = Some(Error::Conflict {
+        code: "input_busy",
+        message: "became busy".into(),
+    });
+    inbox.drain_inbox("session").await.unwrap();
+    assert_eq!(
+        inbox
+            .get_message("session", "msg-13")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "pending"
+    );
+    assert!(channel.input.lock().unwrap().is_empty());
+    for index in (0..13).filter(|index| *index != 6) {
+        inbox.drain_inbox("session").await.unwrap();
+        assert_eq!(
+            channel.input.lock().unwrap().last(),
+            Some(&index.to_string())
+        );
+        let turn = format!("turn-{index}");
+        sqlx::query("INSERT INTO turns(turn_id,session_id,state) VALUES (?,'session','completed')")
+            .bind(&turn)
+            .execute(&state.db())
+            .await
+            .unwrap();
+        SqliteInboxRepository::new(state.db())
+            .link_started_turn("session", &format!("msg-{:02}", 13 - index), &turn)
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        *channel.input.lock().unwrap(),
+        (0..13)
+            .filter(|index| *index != 6)
+            .map(|index| index.to_string())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn unknown_delivery_requires_explicit_new_execution_and_retains_retry_lineage() {
+    let (_root, state, channel) = connected_inbox().await;
+    let inbox = state.inbox_commands();
+    *channel.next_error.lock().unwrap() = Some(Error::ControlUnknown("response lost".into()));
+    let first = inbox
+        .submit_message_once("first", "session", request("same text"))
+        .await
+        .unwrap();
+    assert_eq!(first.data["inbox_message"]["state"], "unknown");
+    inbox
+        .submit_message_once("first", "session", request("same text"))
+        .await
+        .unwrap();
+    inbox.drain_inbox("session").await.unwrap();
+    assert_eq!(channel.input.lock().unwrap().len(), 1);
+    assert!(
+        inbox
+            .retry_message(
+                &state.session_commands(),
+                "session",
+                "first",
+                RetryInboxMessageRequest {
+                    message_id: "retry".into(),
+                    allow_unknown: false
+                }
+            )
+            .await
+            .is_err()
+    );
+    inbox
+        .retry_message(
+            &state.session_commands(),
+            "session",
+            "first",
+            RetryInboxMessageRequest {
+                message_id: "retry".into(),
+                allow_unknown: true,
+            },
+        )
+        .await
+        .unwrap();
+    let repeated = inbox
+        .retry_message(
+            &state.session_commands(),
+            "session",
+            "first",
+            RetryInboxMessageRequest {
+                message_id: "double-click".into(),
+                allow_unknown: true,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(repeated.duplicate);
+    assert_eq!(channel.input.lock().unwrap().len(), 2);
+    let original = inbox
+        .get_message("session", "first")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(original.state, "unknown");
+    assert_eq!(original.retried_by_message_id.as_deref(), Some("retry"));
+    assert_eq!(
+        inbox
+            .get_message("session", "retry")
+            .await
+            .unwrap()
+            .unwrap()
+            .retry_of_message_id
+            .as_deref(),
+        Some("first")
+    );
+}
+
+#[tokio::test]
+async fn queued_steer_never_retargets_a_different_turn() {
+    let (_root, state, channel) = connected_inbox().await;
+    let inbox = state.inbox_commands();
+    sqlx::query(
+        "INSERT INTO turns(turn_id,session_id,state) VALUES ('original-turn','session','running')",
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    inbox.scheduler.begin_initial("session");
+    let mut input = request("steer original");
+    input.delivery_policy = "steer".into();
+    inbox
+        .submit_message_once("steer", "session", input)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE turns SET state='completed' WHERE turn_id='original-turn'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO turns(turn_id,session_id,state) VALUES ('next-turn','session','running')",
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    inbox.scheduler.finish_initial("session");
+    inbox.drain_inbox("session").await.unwrap();
+    let message = inbox
+        .get_message("session", "steer")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(message.state, "failed");
+    assert_eq!(
+        message.steer_target_turn_id.as_deref(),
+        Some("original-turn")
+    );
+    assert!(message.failure_message.unwrap().contains("changed"));
+    assert!(channel.input.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn failed_session_restore_is_diagnostic_and_repeated_retry_does_not_restart() {
+    let (_root, state, channel) = connected_inbox().await;
+    sqlx::query("UPDATE sessions SET state='exited' WHERE session_id='session'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('failure','session','failed','after_idle','recover')").execute(&state.db()).await.unwrap();
+    let inbox = state.inbox_commands();
+    let first = inbox
+        .retry_message(
+            &state.session_commands(),
+            "session",
+            "failure",
+            RetryInboxMessageRequest {
+                message_id: "restore".into(),
+                allow_unknown: false,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.data["inbox_message"]["state"], "failed");
+    assert!(
+        first.data["inbox_message"]["failure_message"]
+            .as_str()
+            .unwrap()
+            .contains("Session recovery failed")
+    );
+    let repeat = inbox
+        .retry_message(
+            &state.session_commands(),
+            "session",
+            "failure",
+            RetryInboxMessageRequest {
+                message_id: "another".into(),
+                allow_unknown: false,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(repeat.duplicate);
+    assert_eq!(repeat.data, first.data);
+    assert!(channel.input.lock().unwrap().is_empty());
+    let starts: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_type='session.resuming'")
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    assert_eq!(starts, 1);
 }

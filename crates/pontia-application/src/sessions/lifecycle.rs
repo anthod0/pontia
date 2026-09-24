@@ -77,6 +77,20 @@ impl SessionCommandService {
         })
     }
 
+    pub(crate) async fn resume_for_input(&self, session_id: &str) -> Result<()> {
+        self.resume_session(session_id, &self.pontia_home).await?;
+        let session = self
+            .queries
+            .get_session_control(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))?;
+        let target = crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
+        self.clients
+            .for_client(&session.client_type)?
+            .await_initial_ready(&target)
+            .await
+    }
+
     pub async fn resume_session(
         &self,
         session_id: &str,

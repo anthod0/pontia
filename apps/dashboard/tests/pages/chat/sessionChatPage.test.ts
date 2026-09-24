@@ -1335,21 +1335,23 @@ test('shows pending, failed, and dispatching messages above the composer without
 
   render(SessionChatPage);
 
-  expect(await screen.findByRole('heading', { name: '3 queued messages' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Inbox · 2 waiting · 1 failed · 0 unknown' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /open inbox/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('menuitem', { name: /inbox/i })).not.toBeInTheDocument();
   expect(screen.getByText('Sending now')).toBeInTheDocument();
   expect(screen.getByText('Fix the failing dashboard test')).toBeInTheDocument();
   expect(screen.getByText('Continue implementation')).toBeInTheDocument();
-  expect(screen.queryByText('Already sent')).not.toBeInTheDocument();
-  expect(screen.queryByText('failed')).not.toBeInTheDocument();
+  expect(screen.getByText('Already sent')).toBeVisible();
+  expect(screen.getByText('Accepted')).toBeVisible();
+  expect(screen.getByText('Failed')).toBeVisible();
+  expect(screen.getByText('runtime unavailable')).toBeVisible();
 
   const rows = screen.getAllByRole('listitem');
-  expect(rows[1]).toHaveAttribute('title', 'runtime unavailable');
   expect(rows.map((row) => row.textContent)).toEqual([
     expect.stringContaining('Sending now'),
     expect.stringContaining('Fix the failing dashboard test'),
     expect.stringContaining('Continue implementation'),
+    expect.stringContaining('Already sent'),
   ]);
   expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
   expect(within(rows[1]).queryByRole('button', { name: /cancel inbox message/i })).not.toBeInTheDocument();
@@ -1391,11 +1393,7 @@ test('supports cancelling pending inbox messages and retrying or removing failed
   expect(mocks.cancelInboxMessage).toHaveBeenCalledWith('session-2', 'message-pending');
 
   await userEvent.click(await screen.findByRole('button', { name: /retry inbox message fix the failing dashboard test/i }));
-  expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
-    input: 'Fix the failing dashboard test',
-    delivery_policy: 'interrupt_now',
-    metadata: { source: 'dashboard_chat', attempt: 1 },
-  });
+  expect(mocks.retryInboxMessage).toHaveBeenCalledWith('session-2', expect.objectContaining({ message_id: 'message-failed', delivery_policy: 'interrupt_now' }), false);
 
   await userEvent.click(await screen.findByRole('button', { name: /remove inbox message fix the failing dashboard test/i }));
   expect(mocks.dismissInboxMessage).toHaveBeenCalledWith('session-2', 'message-failed');
@@ -1426,16 +1424,11 @@ test('retries a failed branch delivery with its original target', async () => {
 
   render(SessionChatPage);
 
-  const failedMessage = await screen.findByText('Corrected historical input');
-  expect(failedMessage.closest('li')).toHaveAttribute('title', 'Pi navigation failed');
+  await screen.findByText('Corrected historical input');
+  expect(screen.getByText('Pi navigation failed')).toBeVisible();
   await userEvent.click(screen.getByRole('button', { name: /retry inbox message corrected historical input/i }));
 
-  expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
-    input: 'Corrected historical input',
-    delivery_policy: 'after_idle',
-    metadata: { source: 'dashboard_chat_branch_edit' },
-    branch_target_turn_id: 'turn-original',
-  });
+  expect(mocks.retryInboxMessage).toHaveBeenCalledWith('session-2', expect.objectContaining({ message_id: 'message-branch-failed', branch_target_turn_id: 'turn-original' }), false);
 });
 
 
@@ -1942,15 +1935,11 @@ test('does not scroll to the document bottom after retrying an inbox message', a
   render(SessionChatPage);
 
   await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
-  await screen.findByRole('heading', { name: '1 queued message' });
+  await screen.findByRole('heading', { name: 'Inbox · 0 waiting · 1 failed · 0 unknown' });
   scrollTo.mockClear();
   await user.click(await screen.findByRole('button', { name: /retry inbox message fix the failing dashboard test/i }));
 
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
-    input: 'fix the failing dashboard test',
-    delivery_policy: 'after_idle',
-    metadata: {},
-  }));
+  await waitFor(() => expect(mocks.retryInboxMessage).toHaveBeenCalledWith('session-2', expect.objectContaining({ state: 'failed' }), false));
   expect(scrollTo).not.toHaveBeenCalled();
   scrollTo.mockRestore();
 });

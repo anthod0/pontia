@@ -88,6 +88,8 @@ const mocks = vi.hoisted(() => {
     loadedSessions: [] as SessionView[],
     loadSessions: vi.fn(async () => mocks.loadedSessions),
     loadSessionDetail: vi.fn(async () => null),
+    retryInboxMessage: vi.fn(async () => undefined),
+    recoverInboxSubmission: vi.fn(async () => undefined),
     submitInboxMessage: vi.fn(),
     cancelInboxMessage: vi.fn(),
     dismissInboxMessage: vi.fn(),
@@ -153,6 +155,8 @@ vi.mock('../../../src/stores/sessions', () => ({
       throw error;
     }
   },
+  retryInboxMessage: mocks.retryInboxMessage,
+  recoverInboxSubmission: mocks.recoverInboxSubmission,
   cancelInboxMessage: mocks.cancelInboxMessage,
   dismissInboxMessage: mocks.dismissInboxMessage,
   resumeSession: mocks.resumeSession,
@@ -256,6 +260,9 @@ export const inboxMessage = (overrides: Partial<InboxMessageView> = {}): InboxMe
   metadata: {},
   branch_target_turn_id: null,
   turn_id: null,
+  steer_target_turn_id: null,
+  retry_of_message_id: null,
+  retried_by_message_id: null,
   superseded_by_message_id: null,
   failure_message: null,
   created_at: '2026-05-14T00:00:03Z',

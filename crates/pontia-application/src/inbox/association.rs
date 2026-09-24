@@ -50,6 +50,8 @@ impl InboxAssociations {
     ) -> Result<()> {
         sqlx::query("UPDATE inbox_messages SET turn_id=(SELECT t.turn_id FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id AND t.session_id=b.session_id WHERE b.session_id=? AND b.client_turn_id=?) WHERE session_id=? AND json_extract(metadata,'$.codex_turn_id')=? AND turn_id IS NULL AND (? IS NULL OR EXISTS (SELECT 1 FROM runtime_bindings WHERE session_id=? AND runtime_instance_id=?))")
             .bind(session).bind(native).bind(session).bind(native).bind(instance).bind(session).bind(instance).execute(&self.pool).await?;
+        sqlx::query("UPDATE inbox_messages SET state='dispatched',failure_message=NULL,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE session_id=? AND state='unknown' AND turn_id IS NOT NULL")
+            .bind(session).execute(&self.pool).await?;
         Ok(())
     }
 

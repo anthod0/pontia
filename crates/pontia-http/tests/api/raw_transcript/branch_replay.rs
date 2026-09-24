@@ -464,7 +464,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     .execute(&state.db())
     .await
     .unwrap();
-    let (failed_delivery_status, failed_delivery_body) = post_external_json(
+    let (blocked_delivery_status, blocked_delivery_body) = post_external_json(
         state.clone(),
         &inbox_uri,
         None,
@@ -474,16 +474,20 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         }),
     )
     .await;
-    assert_eq!(failed_delivery_status, StatusCode::CREATED);
+    assert_eq!(blocked_delivery_status, StatusCode::CREATED);
     assert_eq!(
-        failed_delivery_body["data"]["inbox_message"]["state"],
-        "failed"
+        blocked_delivery_body["data"]["inbox_message"]["state"],
+        "pending"
     );
-    assert!(
-        failed_delivery_body["data"]["inbox_message"]["failure_message"]
-            .as_str()
-            .unwrap()
-            .contains("no current Client connection")
+    let unknown = state
+        .inbox_commands()
+        .get_message(session_id, "msg_branch_root")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        unknown.state, "unknown",
+        "unconfirmed branch delivery cannot be overtaken or automatically replayed"
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM turns WHERE session_id = ?")

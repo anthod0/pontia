@@ -1,4 +1,7 @@
 import { get, writable } from 'svelte/store';
+import { ApiError } from '../api/errors';
+import { getInboxMessage, retryInboxMessage as apiRetryInboxMessage } from '../api/client';
+import { rememberSubmission, forgetSubmission, reconcileSubmissions, SubmissionUnconfirmedError, type UnconfirmedSubmission } from './inboxRecovery';
 import {
   archiveSession as apiArchiveSession,
   cancelInboxMessage as apiCancelInboxMessage,
@@ -93,6 +96,7 @@ export async function loadSessionDetail(sessionId: string, options: LoadOptions 
     ]);
     const detail = { session, turns, inboxMessages, events } satisfies SessionConsoleDetail;
     syncInboxSubmissions(inboxMessages);
+    reconcileSubmissions(inboxMessages);
     sessionDetail.set(detail);
     sessions.update((items) => items.map((item) => item.session_id === session.session_id ? session : item));
     return detail;
@@ -156,13 +160,16 @@ export async function submitInboxMessage(
   const currentSession = detailSession?.session_id === sessionId
     ? detailSession
     : get(sessions).find((session) => session.session_id === sessionId);
+  const submission = { messageId: `msg_${crypto.randomUUID()}`, sessionId, input };
   const localSubmissionId = beginInboxSubmission(sessionId, input, {
+    messageId: submission.messageId,
     showInChat: options.showInChat
       ?? (!input.branch_target_turn_id && currentSession?.state !== 'busy'),
   });
   let message: InboxMessageView;
   try {
-    message = await apiSubmitInboxMessage(sessionId, input);
+    rememberSubmission(submission);
+    message = await deliverSubmission(submission);
   } catch (error) {
     failInboxSubmission(localSubmissionId);
     throw error;
@@ -177,6 +184,49 @@ export async function submitInboxMessage(
   await loadSessions();
   await loadSessionDetail(sessionId);
   return message;
+}
+
+async function deliverSubmission(submission: UnconfirmedSubmission, recovering = false): Promise<InboxMessageView> {
+  let message: InboxMessageView;
+  try {
+    message = submission.retryOf
+      ? await apiRetryInboxMessage(submission.sessionId, submission.retryOf, submission.messageId, submission.allowUnknown ?? false)
+      : await apiSubmitInboxMessage(submission.sessionId, submission.input, submission.messageId);
+  } catch (error) {
+    if (!recovering && error instanceof ApiError && !error.afterNetworkFailure
+      && [400, 401, 403, 404, 409, 422].includes(error.status)
+      && !['invalid_json', 'missing_data'].includes(error.code)) {
+      forgetSubmission(submission.messageId);
+      throw error;
+    }
+    throw new SubmissionUnconfirmedError();
+  }
+  try { forgetSubmission(submission.messageId); }
+  catch { throw new SubmissionUnconfirmedError(); }
+  return message;
+}
+
+export async function recoverInboxSubmission(submission: UnconfirmedSubmission): Promise<void> {
+  try {
+    await getInboxMessage(submission.sessionId, submission.messageId);
+    forgetSubmission(submission.messageId);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 404) throw error;
+    await deliverSubmission(submission, true);
+  }
+  await loadSessions();
+  await loadSessionDetail(submission.sessionId);
+}
+
+export async function retryInboxMessage(sessionId: string, original: InboxMessageView, allowUnknown = false): Promise<void> {
+  const submission: UnconfirmedSubmission = {
+    messageId: `msg_${crypto.randomUUID()}`, sessionId,
+    input: { input: original.input.summary }, retryOf: original.message_id, allowUnknown,
+  };
+  rememberSubmission(submission);
+  await deliverSubmission(submission);
+  await loadSessions();
+  await loadSessionDetail(sessionId);
 }
 
 export async function cancelInboxMessage(sessionId: string, messageId: string): Promise<InboxMessageView> {

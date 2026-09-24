@@ -188,7 +188,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(continuation.data).not.toHaveProperty("inbox_message_id");
 
     idle = false;
-    expect(() => submit!({ input: "too early" })).toThrow("Pi is busy");
+    expect(() => submit!({ input: "too early" })).toThrow(expect.objectContaining({ code: -32010 }));
     await handlers.agent_end({ messages: [] }, ctx);
     submit!({ input: "next from inbox", inboxMessageId: "msg_next" });
     expect(sendUserMessage).toHaveBeenCalledTimes(1);

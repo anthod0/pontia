@@ -166,8 +166,12 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   function sendControlInput(submission: ControlInput): void {
     if (!boundSessionContext) throw new Error("Pi session is not bound");
-    directInput.run({ submission, sessionContext: boundSessionContext, consumed: false },
-      () => pi.sendUserMessage(submission.input));
+    try {
+      directInput.run({ submission, sessionContext: boundSessionContext, consumed: false },
+        () => pi.sendUserMessage(submission.input));
+    } catch (error) {
+      throw new RpcError(-32007, `Pi input delivery uncertain: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async function controlError(error: unknown): Promise<void> {
@@ -202,9 +206,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
         throw new Error("Pi control session is no longer current");
       }
-      if (queuedControlInput) throw new Error("Pi already has pending input");
+      if (queuedControlInput) throw new RpcError(-32010, "Pi already has pending input; input was not submitted");
       if (!piContext?.isIdle()) {
-        if (!activeTurn?.ended) throw new Error("Pi is busy; input was not submitted");
+        if (!activeTurn?.ended) throw new RpcError(-32010, "Pi is busy; input was not submitted");
         queuedControlInput = submission;
         return;
       }

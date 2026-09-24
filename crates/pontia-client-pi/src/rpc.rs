@@ -165,6 +165,12 @@ impl PiRpcPeer {
                 )
             })?;
             if let Some(error) = response.get("error") {
+                if error["code"] == -32010 {
+                    return Err(Error::Conflict {
+                        code: "input_busy",
+                        message: error["message"].as_str().unwrap().into(),
+                    });
+                }
                 if error["code"] == -32007 {
                     return Err(Error::ControlUnknown(
                         error["message"].as_str().unwrap().into(),

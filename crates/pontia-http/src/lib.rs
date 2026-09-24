@@ -243,7 +243,11 @@ pub fn router(state: impl Into<HttpState>) -> Router {
         )
         .route(
             "/api/v1/sessions/{session_id}/inbox/messages/{message_id}",
-            get(api::get_inbox_message),
+            get(api::get_inbox_message).put(api::put_inbox_message),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/inbox/messages/{message_id}/retry",
+            post(api::retry_inbox_message),
         )
         .route(
             "/api/v1/sessions/{session_id}/inbox/messages/{message_id}/cancel",

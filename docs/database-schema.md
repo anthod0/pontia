@@ -239,6 +239,9 @@ Each Turn belongs to one Session and uses an immutable, Pontia-generated `turn_<
 | `dispatched_at` | TEXT | |
 | `cancelled_at` | TEXT | |
 | `branch_target_turn_id` | TEXT | foreign key → `turns.turn_id` |
+| `submission_payload` | TEXT | Original request used to reject identity reuse with different content |
+| `steer_target_turn_id` | TEXT | foreign key → `turns.turn_id`; fixed at acceptance |
+| `retry_of_message_id` | TEXT | foreign key → `inbox_messages.message_id`; explicit retry lineage |
 
 **Indexes**
 
@@ -247,6 +250,9 @@ Each Turn belongs to one Session and uses an immutable, Pontia-generated `turn_<
 | `idx_inbox_messages_branch_target` | No | `branch_target_turn_id` |  |
 | `idx_inbox_messages_session_state` | No | `session_id`, `state`, `delivery_policy`, `created_at`, `message_id` |  |
 | `idx_inbox_messages_turn` | No | `turn_id` | `turn_id IS NOT NULL` |
+| `idx_inbox_messages_retry_of` | Yes | `retry_of_message_id` | `retry_of_message_id IS NOT NULL` |
+
+Inbox states distinguish `pending`, `resuming`, `dispatching`, `dispatched`, `failed`, and `unknown`, as well as cancelled, dismissed, and superseded records. `unknown` means delivery may have executed and is never automatically replayed. Retry creates a linked record; the original remains auditable.
 
 ## `execution_profiles`
 

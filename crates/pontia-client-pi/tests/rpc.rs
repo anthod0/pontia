@@ -160,3 +160,35 @@ async fn oversized_frames_are_rejected_and_cancellation_releases_pending_calls()
     let _ = task.await;
     assert!(peer.is_closed());
 }
+
+#[tokio::test]
+async fn busy_rejection_is_distinct_from_uncertain_delivery() {
+    for code in [-32010, -32007] {
+        let (left, right) = UnixStream::pair().unwrap();
+        let (peer, _) = PiRpcPeer::new(left);
+        let server = tokio::spawn(async move {
+            let mut pi = BufReader::new(right);
+            let mut line = String::new();
+            pi.read_line(&mut line).await.unwrap();
+            let request: Value = serde_json::from_str(&line).unwrap();
+            pi.get_mut().write_all(format!("{}\n", json!({"jsonrpc":"2.0","id":request["id"],"error":{"code":code,"message":"delivery diagnostic"}})).as_bytes()).await.unwrap();
+        });
+        let error = peer
+            .call("submit", json!({"input":"once"}))
+            .await
+            .unwrap_err();
+        if code == -32010 {
+            assert!(matches!(
+                error,
+                Error::Conflict {
+                    code: "input_busy",
+                    ..
+                }
+            ));
+        } else {
+            assert!(matches!(error, Error::ControlUnknown(_)));
+        }
+        server.await.unwrap();
+        peer.close();
+    }
+}

@@ -150,7 +150,7 @@ class RpcSocket {
         try {
           this.onReplay(params.inbox_message_id);
           respond({ result: { accepted: true } });
-        } catch (failure) { error(-32006, failure instanceof Error ? failure.message : String(failure)); }
+        } catch (failure) { error(failure instanceof RpcError ? failure.code : -32006, failure instanceof Error ? failure.message : String(failure)); }
         return;
       }
       if (this.models && (message.method === "models.list" || message.method === "model.set")) {
@@ -181,7 +181,7 @@ class RpcSocket {
       try {
         this.onSubmit({ input: params.input, inboxMessageId: params.inbox_message_id ?? undefined });
         respond({ result: { accepted: true } });
-      } catch (failure) { error(-32006, failure instanceof Error ? failure.message : String(failure)); }
+      } catch (failure) { error(failure instanceof RpcError ? failure.code : -32006, failure instanceof Error ? failure.message : String(failure)); }
       return;
     }
     if (Object.hasOwn(message, "result") === Object.hasOwn(message, "error")

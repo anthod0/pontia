@@ -38,6 +38,7 @@ pub enum PontiaEventType {
     InboxMessageCancelled,
     InboxMessageSuperseded,
     InboxMessageFailed,
+    InboxMessageDeliveryUnknown,
     InboxMessageDismissed,
 }
 
@@ -60,6 +61,7 @@ impl PontiaEventType {
         Self::InboxMessageCancelled,
         Self::InboxMessageSuperseded,
         Self::InboxMessageFailed,
+        Self::InboxMessageDeliveryUnknown,
         Self::InboxMessageDismissed,
     ];
 }
@@ -84,6 +86,7 @@ impl From<PontiaEventType> for EventType {
             PontiaEventType::InboxMessageCancelled => Self::InboxMessageCancelled,
             PontiaEventType::InboxMessageSuperseded => Self::InboxMessageSuperseded,
             PontiaEventType::InboxMessageFailed => Self::InboxMessageFailed,
+            PontiaEventType::InboxMessageDeliveryUnknown => Self::InboxMessageDeliveryUnknown,
             PontiaEventType::InboxMessageDismissed => Self::InboxMessageDismissed,
         }
     }

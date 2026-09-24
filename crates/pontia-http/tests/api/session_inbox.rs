@@ -614,3 +614,115 @@ async fn pending_inbox_message_cannot_be_dismissed() {
     assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
     assert_eq!(body["error"]["code"], "state_conflict");
 }
+
+#[tokio::test]
+async fn persistent_submission_survives_response_loss_and_new_application_state() {
+    let scope = GenericClientTestScope::new().await;
+    let root = tempfile::tempdir().unwrap();
+    let state = test_state().await;
+    let session = create_session(state.clone()).await;
+    let uri = format!("/api/v1/sessions/{session}/inbox/messages");
+    let first = post_json(
+        state.clone(),
+        &uri,
+        Some("lost-response"),
+        json!({"input":"same"}),
+    )
+    .await;
+    assert_eq!(first.0, StatusCode::CREATED);
+    state.inbox_commands().stop_scheduling().await;
+    let restarted = AppState::builder(state.db(), root.path().into())
+        .clients(crate::common::clients::clients())
+        .external_api_token(Some(TOKEN.into()))
+        .build();
+    let recovered = post_json(
+        restarted.clone(),
+        &uri,
+        Some("lost-response"),
+        json!({"input":"same"}),
+    )
+    .await;
+    assert_eq!(recovered.0, StatusCode::OK);
+    assert_eq!(first.1["data"], recovered.1["data"]);
+    assert_eq!(scope.recorded_inputs().len(), 1);
+    let changed = post_json(
+        restarted.clone(),
+        &uri,
+        Some("lost-response"),
+        json!({"input":"different"}),
+    )
+    .await;
+    assert_eq!(changed.0, StatusCode::CONFLICT);
+    let independent = post_json(
+        restarted.clone(),
+        &uri,
+        Some("new-operation"),
+        json!({"input":"same"}),
+    )
+    .await;
+    assert_eq!(independent.0, StatusCode::CREATED);
+    assert_ne!(
+        first.1["data"]["inbox_message"]["message_id"],
+        independent.1["data"]["inbox_message"]["message_id"]
+    );
+    assert_eq!(
+        restarted
+            .inbox_commands()
+            .list_messages(&session)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+    restarted.inbox_commands().stop_scheduling().await;
+}
+
+#[tokio::test]
+async fn retry_restores_exited_session_once_and_links_original_failure() {
+    let scope = GenericClientTestScope::new().await;
+    let state = test_state().await;
+    let session = create_session(state.clone()).await;
+    sqlx::query("UPDATE sessions SET state='exited' WHERE session_id=?")
+        .bind(&session)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,failure_message) VALUES ('failed',?,'failed','after_idle','recover me','rejected before input')").bind(&session).execute(&state.db()).await.unwrap();
+    let uri = format!("/api/v1/sessions/{session}/inbox/messages/failed/retry");
+    let first = post_json(state.clone(), &uri, None, json!({"message_id":"retry"})).await;
+    assert_eq!(first.0, StatusCode::CREATED, "{}", first.1);
+    assert_eq!(first.1["data"]["inbox_message"]["state"], "dispatched");
+    assert_eq!(
+        first.1["data"]["inbox_message"]["retry_of_message_id"],
+        "failed"
+    );
+    let again = post_json(
+        state.clone(),
+        &uri,
+        None,
+        json!({"message_id":"double-click"}),
+    )
+    .await;
+    assert_eq!(again.0, StatusCode::OK);
+    assert_eq!(again.1["data"], first.1["data"]);
+    assert_eq!(scope.recorded_inputs().len(), 1);
+    let count: i64 =
+        sqlx::query_scalar("SELECT restart_count FROM runtime_bindings WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(
+        state
+            .inbox_commands()
+            .get_message(&session, "failed")
+            .await
+            .unwrap()
+            .unwrap()
+            .retried_by_message_id
+            .as_deref(),
+        Some("retry")
+    );
+    state.inbox_commands().stop_scheduling().await;
+}

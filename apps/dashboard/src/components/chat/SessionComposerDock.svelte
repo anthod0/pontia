@@ -5,6 +5,7 @@
   import { modelPickerDisabledReason } from '$lib/modelControls'
   import MessageComposer from './MessageComposer.svelte'
   import QueuedMessages from './QueuedMessages.svelte'
+  import InboxSubmissionRecovery from './InboxSubmissionRecovery.svelte'
   import SessionMetadata from './SessionMetadata.svelte'
   import { type SessionMetadataItem } from './sessionMetadata'
   import type { ChatCommand } from '$lib/chatCommands'
@@ -77,6 +78,7 @@
 
 <div bind:clientHeight={height} data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-surface px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 md:left-[var(--sidebar-width)] md:px-8 transition-[left] duration-200 ease-linear group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]">
   <div class="mx-auto w-full max-w-[760px]">
+    <InboxSubmissionRecovery sessionId={session.session_id} />
     <QueuedMessages
       messages={queuedMessages}
       busyMessageId={inboxBusyMessageId}
