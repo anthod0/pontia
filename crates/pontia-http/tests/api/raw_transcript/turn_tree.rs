@@ -427,7 +427,8 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     assert_eq!(projected[3]["parent_turn_id"], "turn_pi_linear_1");
     assert_eq!(projected[4]["parent_turn_id"], "turn_pi_linear_4");
     assert_eq!(projected[5]["topology_status"], "root");
-    assert_eq!(projected[6]["topology_status"], "unknown");
+    assert_eq!(projected[6]["topology_status"], "linked");
+    assert_eq!(projected[6]["parent_turn_id"], "turn_pi_linear_6");
     assert_eq!(projected[6]["state"], "running");
 
     let (status, unknown_updates) = get_json(
@@ -435,8 +436,15 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         &format!("/api/v1/sessions/{session_id}/turns/tree/updates?from_turn_id=turn_pi_linear_5"),
     )
     .await;
-    assert_eq!(status, StatusCode::CONFLICT, "{unknown_updates:?}");
-    assert_eq!(unknown_updates["error"]["code"], "turn_topology_unknown");
+    assert_eq!(status, StatusCode::OK, "{unknown_updates:?}");
+    assert_eq!(
+        unknown_updates["data"]["groups"][0]["turn_id"],
+        "turn_pi_linear_6"
+    );
+    assert_eq!(
+        unknown_updates["data"]["groups"][1]["turn_id"],
+        "turn_pi_linear_malformed"
+    );
 
     for (selected_turn_id, expected_preview) in [
         ("turn_pi_linear_3", "question 3"),

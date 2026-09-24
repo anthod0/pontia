@@ -88,6 +88,19 @@ impl ProjectionState {
     pub fn apply(&mut self, event: &DomainEvent) -> crate::error::Result<()> {
         self.validate_event_shape(event)?;
 
+        if event.event_type == EventType::TurnTopologyRecovered {
+            if event.source != super::EventSource::SystemMonitor
+                || !matches!(
+                    event.topology,
+                    Some(TurnTopology::Root | TurnTopology::Linked { .. })
+                )
+            {
+                return Err(Error::Domain(
+                    "Topology recovery requires a Pontia-owned resolved association".into(),
+                ));
+            }
+            return self.apply_topology_to_existing_turn(event);
+        }
         if event.event_type == EventType::TurnTimelineBoundaryRecovered {
             return self.recover_timeline_boundary(event);
         }
@@ -137,7 +150,9 @@ impl ProjectionState {
                     .map(|session| session.state)
                     .unwrap_or(SessionState::Created),
             ),
-            EventType::SessionMessageUpdated | EventType::TurnTimelineBoundaryRecovered => Ok(()),
+            EventType::SessionMessageUpdated
+            | EventType::TurnTimelineBoundaryRecovered
+            | EventType::TurnTopologyRecovered => Ok(()),
             EventType::SessionModelUpdated => self.apply_model(event),
             EventType::SessionContextUsageUpdated => self.apply_context_usage(event),
             EventType::TurnCreated | EventType::TurnQueued => {
@@ -187,7 +202,12 @@ impl ProjectionState {
                 )));
             }
         }
-        if event.topology.is_some() && event.event_type != EventType::TurnStarted {
+        if event.topology.is_some()
+            && !matches!(
+                event.event_type,
+                EventType::TurnStarted | EventType::TurnTopologyRecovered
+            )
+        {
             return Err(Error::Domain(format!(
                 "event {} cannot carry Turn topology enrichment",
                 event.event_type

@@ -121,6 +121,25 @@ test('tree history follows backend groups and paginates without a duplicate boun
   });
 });
 
+test('recovered ancestry reopens pagination while retaining readable history', async () => {
+  mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage({
+    groups: [{ ...group('turn-2', 'recovered answer'), history_issue: 'topology_unknown' }],
+    next_from_turn_id: null,
+  }));
+  await loadSessionTimeline('sess-1', { topology: true });
+  expect(get(timelineState).status).toBe('ready');
+  expect(get(timelineState).groups[0].history_issue).toBe('topology_unknown');
+  mocks.getTurnTreeUpdates.mockResolvedValueOnce(updatesPage({
+    current_turn_id: 'turn-3', retain_through_turn_id: 'turn-2',
+    groups: [group('turn-2', 'recovered answer', 'turn-1'), group('turn-3', 'next answer', 'turn-2')],
+  }));
+  await refreshSessionTimeline('sess-1', 'turn-3');
+  expect(get(timelineState).groups.every((entry) => !entry.history_issue)).toBe(true);
+  expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual(['recovered answer', 'next answer']);
+  expect(get(timelineState).nextOlderTurnId).toBe('turn-1');
+  expect(get(timelineState).hasMore).toBe(true);
+});
+
 test('tree updates discard a divergent suffix after the LCA and append the replacement branch', async () => {
   mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage({
     groups: [
@@ -509,7 +528,7 @@ test.each([false, true])('pending older history preserves loaded pages and retri
 
 test.each([false, true])('pending tail refresh preserves restored history and retries its original anchor (tree=%s)', async (topology) => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const older = group('turn-1');
+  const older = group('turn-1', 'turn-1', 'turn-0');
   const active = group('turn-2', 'partial');
   const completed = group('turn-2', 'complete');
   mocks.getTurnTimeline.mockResolvedValueOnce(page({ items: [...older.items, ...active.items], next_turn_id: 'turn-0' }));

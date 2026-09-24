@@ -7,7 +7,7 @@ use crate::client_contract::raw_transcripts::{
 use pontia_core::{domain::TurnState, error::Error};
 use pontia_storage_sqlite::{models::turns::TurnRow, repositories::turns::SqliteTurnRepository};
 
-use super::{TurnTimelineGroup, TurnTimelineService, TurnTimelineServiceError};
+use super::{TurnHistoryIssue, TurnTimelineGroup, TurnTimelineService, TurnTimelineServiceError};
 use crate::{AgentBindingService, ExternalQueryService};
 
 impl TurnTimelineService {
@@ -17,9 +17,34 @@ impl TurnTimelineService {
         all_turns: &[TurnRow],
         selected: &[&TurnRow],
     ) -> Result<Vec<TurnTimelineGroup>, TurnTimelineServiceError> {
-        let items = self
-            .read_selected_turns(session_id, all_turns, selected)
-            .await?;
+        let mut readable = selected.to_vec();
+        let mut issues = HashMap::new();
+        let items = loop {
+            match self
+                .read_selected_turns(session_id, all_turns, &readable)
+                .await
+            {
+                Ok(items) => break items,
+                Err(error) => {
+                    let (turn_id, issue) = match &error {
+                        TurnTimelineServiceError::TurnUnavailable { turn_id }
+                        | TurnTimelineServiceError::NativeAssociationUnavailable { turn_id } => {
+                            (turn_id, TurnHistoryIssue::RangeUnavailable)
+                        }
+                        TurnTimelineServiceError::TimelineInvalid { turn_id } => {
+                            (turn_id, TurnHistoryIssue::RangeInvalid)
+                        }
+                        _ => return Err(error),
+                    };
+                    let Some(index) = readable.iter().position(|turn| turn.turn_id == *turn_id)
+                    else {
+                        return Err(error);
+                    };
+                    issues.insert(turn_id.clone(), issue);
+                    readable.remove(index);
+                }
+            }
+        };
         let mut items_by_turn: HashMap<String, Vec<TurnTimelineItem>> = HashMap::new();
         for item in items {
             items_by_turn
@@ -34,6 +59,9 @@ impl TurnTimelineService {
                 parent_turn_id: turn.parent_turn_id.clone(),
                 state: turn.state.clone(),
                 items: items_by_turn.remove(&turn.turn_id).unwrap_or_default(),
+                history_issue: issues.remove(&turn.turn_id).or_else(|| {
+                    (turn.topology_status == "unknown").then_some(TurnHistoryIssue::TopologyUnknown)
+                }),
             })
             .collect())
     }

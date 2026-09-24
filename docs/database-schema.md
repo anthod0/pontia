@@ -68,7 +68,9 @@ The following tables belong to the local control-plane database.
 | `events_preserve_turn_topology` | BEFORE UPDATE OF `turn_topology` | `turn_topology` is immutable. |
 | `turn_events_require_turn_identity` | BEFORE INSERT | `turn.*` events require a non-null `turn_id`. |
 | `turn_events_validate_linked_parent` | BEFORE INSERT | A linked parent must be an earlier Turn in the same Session. |
-| `turn_events_validate_topology` | BEFORE INSERT | `turn_topology` is allowed only on `turn.started`; it must be valid JSON with a valid status and matching parent shape. |
+| `turn_events_validate_topology` | BEFORE INSERT | `turn_topology` is allowed on `turn.started` and `turn.topology_recovered`, with valid JSON, status and parent shape. Recovery requires `system_monitor`, an existing Turn in the Session, and a resolved association. |
+
+`turn.timeline_boundary_recovered` and `turn.topology_recovered` record native-history associations without changing lifecycle facts. Historical events remain immutable; replay applies the recovery events to the same Turn.
 
 ## `sessions`
 

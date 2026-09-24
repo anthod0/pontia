@@ -414,6 +414,7 @@ export interface TurnTimelinePage {
 }
 
 export interface TurnTimelineGroup {
+  history_issue?: 'topology_unknown' | 'range_unavailable' | 'range_invalid';
   turn_id: string;
   parent_turn_id: string | null;
   state: TurnState | string;

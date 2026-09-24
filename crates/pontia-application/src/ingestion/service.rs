@@ -117,6 +117,27 @@ impl EventIngestService {
         Ok(())
     }
 
+    pub(crate) async fn recover_turn_topology(
+        &self,
+        binding: &crate::AgentBinding,
+        turn_id: &str,
+        topology: pontia_core::domain::TurnTopology,
+    ) -> Result<()> {
+        use pontia_core::domain::{EventSource, EventType};
+        let event = DomainEvent::new(
+            format!("topology-recovery:{}:{turn_id}", binding.id),
+            binding.session_id.clone(),
+            Some(turn_id.into()),
+            EventSource::SystemMonitor,
+            binding.client_type.clone(),
+            EventType::TurnTopologyRecovered,
+            serde_json::json!({"binding_id": binding.id}),
+        )
+        .with_topology(topology);
+        self.ingest_domain_event(event, None, false, None).await?;
+        Ok(())
+    }
+
     pub async fn ingest_pontia_event(&self, event: PontiaEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into_reported_event().into(), None, false, None)
             .await
@@ -255,6 +276,13 @@ impl EventIngestService {
             }
             commit::CommitOutcome::Committed { result, event } => {
                 self.effects.apply(&self.pool, &event).await?;
+                if event.event_type == pontia_core::domain::EventType::TurnStarted {
+                    Box::pin(
+                        crate::TurnTimelineService::new(self.clone())
+                            .try_recover_history(&event.session_id),
+                    )
+                    .await;
+                }
                 Ok(Some(result))
             }
         }

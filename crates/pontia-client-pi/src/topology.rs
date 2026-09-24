@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use pontia_application::client_contract::topology::{
     TopologyDiagnostic, TopologyResolution, TopologyResolveRequest, TopologyResolveResult,
@@ -9,22 +9,22 @@ use pontia_application::client_contract::topology::{
 
 use super::raw_transcripts::PiJsonlV2Cursor;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct PiTopologyEvidence {
-    entries: Vec<PiTopologyEntry>,
+pub(crate) struct PiTopologyEvidence {
+    pub(crate) entries: Vec<PiTopologyEntry>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct PiTopologyEntry {
-    id: String,
-    kind: PiTopologyEntryKind,
+pub(crate) struct PiTopologyEntry {
+    pub(crate) id: String,
+    pub(crate) kind: PiTopologyEntryKind,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum PiTopologyEntryKind {
+pub(crate) enum PiTopologyEntryKind {
     UserMessage,
     AssistantMessage,
     ToolResultMessage,
@@ -77,25 +77,32 @@ impl TurnTopologyResolver for PiTopologyResolver {
             };
         }
 
-        let mut candidates_by_anchor: HashMap<String, String> = HashMap::new();
+        let mut candidates_by_anchor: HashMap<String, Option<String>> = HashMap::new();
+        let mut unmatched = TopologyDiagnostic::ParentNotFound;
         for candidate in request.earlier_turns {
             let Some(tail_cursor) = candidate.tail_cursor else {
-                return unknown(TopologyDiagnostic::CandidateBoundaryMissing);
+                unmatched = TopologyDiagnostic::CandidateBoundaryMissing;
+                continue;
             };
             let Ok(cursor) = PiJsonlV2Cursor::decode(&tail_cursor, &request.binding_id) else {
-                return unknown(TopologyDiagnostic::CursorInvalid);
+                unmatched = TopologyDiagnostic::CursorInvalid;
+                continue;
             };
             let Some(anchor) = cursor.native_entry_anchor else {
-                return unknown(TopologyDiagnostic::CandidateBoundaryMissing);
+                unmatched = TopologyDiagnostic::CandidateBoundaryMissing;
+                continue;
             };
-            if candidates_by_anchor.contains_key(&anchor) {
-                return unknown(TopologyDiagnostic::EvidenceInvalid);
-            }
-            candidates_by_anchor.insert(anchor, candidate.turn_id);
+            candidates_by_anchor
+                .entry(anchor)
+                .and_modify(|owner| *owner = None)
+                .or_insert(Some(candidate.turn_id));
         }
 
         for entry in evidence.entries.iter().rev() {
-            if let Some(parent_turn_id) = candidates_by_anchor.get(&entry.id) {
+            if let Some(owner) = candidates_by_anchor.get(&entry.id) {
+                let Some(parent_turn_id) = owner else {
+                    return unknown(TopologyDiagnostic::EvidenceInvalid);
+                };
                 return TopologyResolveResult {
                     resolution: TopologyResolution::Linked {
                         parent_turn_id: parent_turn_id.clone(),
@@ -104,11 +111,11 @@ impl TurnTopologyResolver for PiTopologyResolver {
                 };
             }
             if entry.kind == PiTopologyEntryKind::UserMessage {
-                return unknown(TopologyDiagnostic::ParentNotFound);
+                return unknown(unmatched);
             }
         }
 
-        unknown(TopologyDiagnostic::ParentNotFound)
+        unknown(unmatched)
     }
 }
 

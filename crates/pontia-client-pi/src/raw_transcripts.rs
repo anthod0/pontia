@@ -1,4 +1,5 @@
 mod mapping;
+mod recovery;
 mod resolver;
 mod source;
 mod timeline;

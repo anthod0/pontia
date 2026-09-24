@@ -33,6 +33,11 @@ pub trait ClientData: Send + Sync {
     fn timeline(&self) -> TurnTimelineBackend;
     fn boundaries(&self) -> TimelineBoundaryBackend;
     fn topology(&self) -> Option<TurnTopologyBackend>;
+    fn history_recovery(
+        &self,
+    ) -> Option<Box<dyn super::history::TurnHistoryRecoverer + Send + Sync>> {
+        None
+    }
     fn branch_target(&self, request: BranchTargetRequest) -> Result<String>;
 }
 

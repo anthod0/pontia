@@ -156,11 +156,11 @@ impl TimelineBoundaryCapturer for PiTimelineAdapter {
     }
 }
 
-struct ParsedEntry {
-    value: Value,
-    parent_id: Option<String>,
-    start: usize,
-    end: usize,
+pub(super) struct ParsedEntry {
+    pub(super) value: Value,
+    pub(super) parent_id: Option<String>,
+    pub(super) start: usize,
+    pub(super) end: usize,
 }
 
 pub(super) struct PiNativeTurnEntry {
@@ -331,7 +331,7 @@ fn decode_range_cursor(
     })
 }
 
-fn parse_window(
+pub(super) fn parse_window(
     turn_id: &str,
     bytes: &[u8],
     base_offset: usize,

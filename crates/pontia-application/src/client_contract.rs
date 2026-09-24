@@ -1,5 +1,6 @@
 mod channel;
 mod data;
+pub mod history;
 mod session;
 pub use channel::{ClientControlChannel, ClientControlOperation};
 pub use data::{

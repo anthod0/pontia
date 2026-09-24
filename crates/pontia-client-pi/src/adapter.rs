@@ -68,6 +68,13 @@ impl ClientData for PiData {
             resolver: Box::new(crate::topology::PiTopologyResolver::new()),
         })
     }
+    fn history_recovery(
+        &self,
+    ) -> Option<
+        Box<dyn pontia_application::client_contract::history::TurnHistoryRecoverer + Send + Sync>,
+    > {
+        Some(Box::new(PiTimelineAdapter::new()))
+    }
     fn branch_target(&self, request: BranchTargetRequest) -> Result<String> {
         let binding = request.binding;
         let source = self

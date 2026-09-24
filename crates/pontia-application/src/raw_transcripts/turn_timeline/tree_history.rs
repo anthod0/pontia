@@ -27,6 +27,7 @@ impl TurnTimelineService {
             });
         };
 
+        self.try_recover_history(&session_id).await;
         let turns = SqliteTurnRepository::new(self.pool.clone())
             .list_turns(&session_id)
             .await?;

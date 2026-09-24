@@ -142,10 +142,7 @@ fn malformed_evidence_and_invalid_cursor_scope_are_safe_unknowns() {
             Some(json!({"entries": [
                 {"id": "assistant_1", "kind": "assistant_message"}
             ]})),
-            vec![
-                candidate("turn_1", 1, Some("assistant_1")),
-                candidate("turn_2", 2, None),
-            ],
+            vec![candidate("turn_2", 2, None)],
             TopologyDiagnostic::CandidateBoundaryMissing,
         ),
     ];
@@ -213,4 +210,40 @@ fn restored_pi_context_creates_siblings_without_changing_older_descendants() {
             parent_turn_id: "turn_4".to_string(),
         }
     );
+}
+
+#[test]
+fn missing_unrelated_boundary_does_not_poison_a_proven_parent() {
+    let result = resolve(
+        Some(json!({"entries": [
+            {"id": "user_2", "kind": "user_message"},
+            {"id": "answer_2", "kind": "assistant_message"}
+        ]})),
+        vec![
+            candidate("abandoned", 1, None),
+            candidate("turn_2", 2, Some("answer_2")),
+        ],
+    );
+    assert_eq!(
+        result.resolution,
+        TopologyResolution::Linked {
+            parent_turn_id: "turn_2".into()
+        }
+    );
+}
+
+#[test]
+fn missing_boundary_cannot_skip_an_unmatched_native_user() {
+    let result = resolve(
+        Some(json!({"entries": [
+            {"id": "answer_1", "kind": "assistant_message"},
+            {"id": "crash_user", "kind": "user_message"},
+            {"id": "tool_call", "kind": "assistant_message"}
+        ]})),
+        vec![
+            candidate("turn_1", 1, Some("answer_1")),
+            candidate("abandoned", 2, None),
+        ],
+    );
+    assert_eq!(result.resolution, TopologyResolution::Unknown);
 }

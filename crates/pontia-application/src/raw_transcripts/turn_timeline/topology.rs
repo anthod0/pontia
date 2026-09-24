@@ -19,9 +19,8 @@ pub(super) fn topology_parent<'a>(
         turn.topology_status.as_str(),
         turn.parent_turn_id.as_deref(),
     ) {
-        ("unknown", None) => Err(TurnTimelineServiceError::TopologyUnknown {
-            turn_id: turn.turn_id.clone(),
-        }),
+        // Stop at the unresolved association; the group carries an explicit issue.
+        ("unknown", None) => Ok(None),
         ("root", None) => Ok(None),
         ("linked", Some(parent_id))
             if by_id

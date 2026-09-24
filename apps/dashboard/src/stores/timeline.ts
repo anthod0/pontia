@@ -451,6 +451,8 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
         groups,
         items,
         latestTurnId: updates.current_turn_id,
+        nextOlderTurnId: groups[0]?.parent_turn_id ?? null,
+        hasMore: groups[0]?.parent_turn_id != null,
         loading: false,
         refreshing: false,
         refreshKind: null,

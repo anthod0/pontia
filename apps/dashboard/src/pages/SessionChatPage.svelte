@@ -886,6 +886,21 @@
               {#if $timelineState.status === 'pending'}
                 <p role="status" class="py-2 text-sm text-muted-foreground">Waiting for native history…</p>
               {/if}
+              {#each $timelineState.groups.filter((group) => group.history_issue) as group (group.turn_id)}
+                <Alert.Root class="my-3" role="status">
+                  <WarningCircleIcon class="size-4" />
+                  <Alert.Title>Some history could not be associated</Alert.Title>
+                  <Alert.Description>
+                    {#if group.history_issue === 'topology_unknown'}
+                      The earlier branch for this turn could not be confirmed. Showing the history that can be verified.
+                    {:else}
+                      The native history range for this turn could not be confirmed. Other verified turns remain available.
+                    {/if}
+                    <span class="block break-all text-xs">Turn: {group.turn_id}</span>
+                    The original conversation may still be available in the agent client.
+                  </Alert.Description>
+                </Alert.Root>
+              {/each}
               {#key selectedSessionId}
                 <SessionConversation
                   {messages}

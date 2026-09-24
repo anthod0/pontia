@@ -1,3 +1,5 @@
+#[path = "event_reporting/history.rs"]
+mod history;
 mod support;
 use std::time::Duration;
 

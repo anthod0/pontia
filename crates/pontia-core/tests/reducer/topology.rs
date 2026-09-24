@@ -166,3 +166,32 @@ fn topology_enrichment_only_applies_to_started_events_and_never_changes_lifecycl
     assert!(projection.apply(&missing).is_err());
     assert!(projection.turn("turn_missing").is_none());
 }
+#[test]
+fn recovered_topology_is_owned_by_pontia_and_cannot_rewrite_a_resolved_parent() {
+    use crate::fixture::event;
+    use pontia_core::domain::{EventSource, EventType, ProjectionState, TurnTopology};
+    let mut state = ProjectionState::default();
+    state
+        .apply(&event(EventType::SessionCreated, "session", None))
+        .unwrap();
+    state
+        .apply(&event(EventType::TurnStarted, "session", Some("turn1")))
+        .unwrap();
+    state
+        .apply(&event(EventType::SessionExited, "session", None))
+        .unwrap();
+    let before = state.turn("turn1").unwrap().clone();
+    let mut recovery = event(EventType::TurnTopologyRecovered, "session", Some("turn1"))
+        .with_topology(TurnTopology::Root);
+    assert!(state.apply(&recovery).is_err());
+    recovery.source = EventSource::SystemMonitor;
+    state.apply(&recovery).unwrap();
+    let mut expected = before;
+    expected.topology = TurnTopology::Root;
+    assert_eq!(state.turn("turn1"), Some(&expected));
+    state.apply(&recovery).unwrap();
+    recovery.topology = Some(TurnTopology::linked("other"));
+    assert!(state.apply(&recovery).is_err());
+    recovery.topology = Some(TurnTopology::Unknown);
+    assert!(state.apply(&recovery).is_err());
+}

@@ -5,6 +5,58 @@ const CHILD_A: &str = "turn_01900000-0000-7000-8000-000000000002";
 const FUTURE_A: &str = "turn_01900000-0000-7000-8000-000000000003";
 const ROOT_B: &str = "turn_01900000-0000-7000-8000-000000000004";
 
+#[tokio::test]
+async fn recovery_events_require_pontia_ownership_and_existing_resolved_associations() {
+    let (db, _root) = pool().await;
+    run_migrations(&db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO sessions (session_id,client_type,state) VALUES ('session','pi','exited')",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO turns (turn_id,session_id,state) VALUES (?,'session','abandoned')")
+        .bind(ROOT_A)
+        .execute(&db)
+        .await
+        .unwrap();
+    for (index, source, turn, topology, accepted) in [
+        (
+            0,
+            "agent_adapter",
+            ROOT_A,
+            Some(r#"{"status":"root"}"#),
+            false,
+        ),
+        (1, "system_monitor", ROOT_A, None, false),
+        (
+            2,
+            "system_monitor",
+            ROOT_A,
+            Some(r#"{"status":"unknown"}"#),
+            false,
+        ),
+        (
+            3,
+            "system_monitor",
+            CHILD_A,
+            Some(r#"{"status":"root"}"#),
+            false,
+        ),
+        (
+            4,
+            "system_monitor",
+            ROOT_A,
+            Some(r#"{"status":"root"}"#),
+            true,
+        ),
+    ] {
+        let result = sqlx::query("INSERT INTO events (event_id,session_id,turn_id,source,client_type,event_type,occurred_at,turn_topology) VALUES (?,'session',?,?,'pi','turn.topology_recovered','2026-09-24T00:00:00Z',?)")
+            .bind(format!("recovery-{index}")).bind(turn).bind(source).bind(topology).execute(&db).await;
+        assert_eq!(result.is_ok(), accepted, "case {index}: {result:?}");
+    }
+}
+
 async fn pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("turn_topology_migration.db");
