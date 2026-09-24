@@ -113,6 +113,12 @@ function chatSession(session_id: string, state: string, updated_at: string, pinn
   };
 }
 
+test('opens the archived sessions page from the sidebar', async () => {
+  render(AppSidebarHost);
+  await fireEvent.click(screen.getByRole('button', { name: 'Archived sessions' }));
+  expect(mocks.navigate).toHaveBeenCalledWith('/sessions/archived');
+});
+
 test('sidebar shows semantic status dots except for terminal sessions, and opens chat for the selected session', async () => {
   mocks.sessions.set([
     {

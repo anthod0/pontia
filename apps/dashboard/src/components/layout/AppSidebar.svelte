@@ -38,6 +38,7 @@
   const primaryItems: Item[] = [
     { label: 'New Chat', path: '/', icon: NotePencilIcon },
     { label: 'Workflows', path: '/workflows', icon: TreeStructureIcon },
+    { label: 'Archived sessions', path: '/sessions/archived', icon: ArchiveIcon },
   ]
 
   let currentPath = $state(normalizePath(window.location.pathname))

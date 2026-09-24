@@ -18,6 +18,7 @@ import {
   resumeSession as apiResumeSession,
   submitInboxMessage as apiSubmitInboxMessage,
   terminateSession as apiTerminateSession,
+  unarchiveSession as apiUnarchiveSession,
   unpinSession as apiUnpinSession,
   updateSession as apiUpdateSession,
 } from '../api/client';
@@ -82,6 +83,7 @@ type LoadOptions = {
   showLoading?: boolean;
   limit?: number;
   includePinned?: boolean;
+  throwOnError?: boolean;
 };
 
 export async function loadSessions(options: LoadOptions = {}): Promise<SessionView[]> {
@@ -98,6 +100,7 @@ export async function loadSessions(options: LoadOptions = {}): Promise<SessionVi
     return loaded;
   } catch (error) {
     if (request === listRequest) sessionsError.set(error instanceof Error ? error.message : String(error));
+    if (options.throwOnError) throw error;
     return [];
   } finally {
     if (request === listRequest) sessionsLoading.set(false);
@@ -191,11 +194,22 @@ export async function updateSessionTitle(sessionId: string, title: string | null
   return session;
 }
 
-async function refreshAfterSessionManagement(session: SessionView): Promise<SessionView> {
-  await loadSessions({ showLoading: false });
+function applySessionManagementResult(session: SessionView): void {
+  listRequest += 1;
+  sessionsLoading.set(false);
+  sessions.update((items) => {
+    const remaining = items.filter((item) => item.session_id !== session.session_id);
+    return session.archived_at ? remaining : [session, ...remaining];
+  });
   if (get(sessionDetail)?.session.session_id === session.session_id) {
     sessionDetail.update((detail) => detail ? { ...detail, session } : detail);
   }
+  if (detailRequest?.sessionId === session.session_id) detailRequest.dirty = true;
+}
+
+async function refreshAfterSessionManagement(session: SessionView): Promise<SessionView> {
+  applySessionManagementResult(session);
+  await loadSessions({ showLoading: false });
   return session;
 }
 
@@ -209,6 +223,13 @@ export async function unpinSession(sessionId: string): Promise<SessionView> {
 
 export async function archiveSession(sessionId: string): Promise<SessionView> {
   return refreshAfterSessionManagement(await apiArchiveSession(sessionId));
+}
+
+export async function unarchiveSession(sessionId: string): Promise<SessionView> {
+  const session = await apiUnarchiveSession(sessionId);
+  if (session.archived_at) throw new Error('The session is still archived. Refresh and try again.');
+  applySessionManagementResult(session);
+  return session;
 }
 
 export async function submitInboxMessage(

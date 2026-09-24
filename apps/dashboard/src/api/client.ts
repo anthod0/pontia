@@ -328,6 +328,10 @@ export async function archiveSession(sessionId: string): Promise<SessionView> {
   return (await request<{ session: SessionView }>(`/sessions/${encodeURIComponent(sessionId)}/archive`, { method: 'POST', mutating: true })).session;
 }
 
+export async function unarchiveSession(sessionId: string): Promise<SessionView> {
+  return (await request<{ session: SessionView }>(`/sessions/${encodeURIComponent(sessionId)}/unarchive`, { method: 'POST', mutating: true })).session;
+}
+
 export async function getSession(sessionId: string, options: ReadRequestOptions = {}): Promise<SessionView> {
   return (await boundedReadRequest<{ session: SessionView }>(`/sessions/${encodeURIComponent(sessionId)}`, options)).session;
 }
