@@ -46,7 +46,7 @@
 
 	<section id="features" class="features page-width section-block" aria-labelledby="features-title">
 		<div class="section-intro">
-			<div><p class="eyebrow section-eyebrow">01 / BUILT AROUND YOUR WORK</p><h2 id="features-title">Leave the window.<br />Keep the context.</h2></div>
+			<h2 id="features-title">Leave the window.<br />Keep the context.</h2>
 			<p>Your agent is more than a tab in your terminal.<br /> Give it a persistent place to work, and yourself<br class="desktop-break" /> a clearer view of what’s happening.</p>
 		</div>
 		<div class="feature-grid">
@@ -79,7 +79,6 @@
 
 	<section id="get-started" class="getting-started page-width section-block" aria-labelledby="start-title">
 		<div class="setup-copy">
-			<p class="eyebrow section-eyebrow">02 / UP AND RUNNING</p>
 			<h2 id="start-title">A small setup.<br />A longer-running session.</h2>
 			<p class="setup-description">Bring your terminal. We’ll keep the lights on.</p>
 			<ol class="setup-steps">
