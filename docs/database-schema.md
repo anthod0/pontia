@@ -54,6 +54,12 @@ The following tables belong to the local control-plane database.
 | `timeline_boundary` | TEXT | |
 | `turn_topology` | TEXT | |
 
+Codex `session.created` payloads carry an immutable `execution_profile_binding`
+snapshot when a Profile is selected: contract version, Profile ID/version, and
+static system prompt. This snapshot is committed atomically with the Session;
+subsequent Profile edits do not change it. Older events without the snapshot are
+not evidence of an effective Codex Profile binding.
+
 **Indexes**
 
 | Name | Unique | Columns | Condition |
@@ -348,6 +354,9 @@ Codex runtime bindings use `runtime_kind = 'codex_app_server'`. Their
 locates its Pontia state root. `adapter_details.codex` contains the native
 `thread_id`, Unix WebSocket `endpoint`, and control `connection` availability
 (`awaiting_input`, `reconciling`, `available`, `unavailable`, or `archived`).
+`adapter_details.codex_profile_thread` records the native thread whose creation
+accepted the Profile configuration. It survives control reconnection and must
+match the Agent binding before a profiled Session can resume.
 TUI process ownership is stored separately from execution runtime identity.
 
 ## `native_turn_bindings`

@@ -117,7 +117,7 @@ impl CodexObserver {
                             let metadata = connection.call("thread/read",json!({"threadId":thread,"includeTurns":false})).await?;
                             self.service.bind(&session,&runtime,&metadata["thread"],target.runtime_instance_id.as_deref()).await?;
                             if self.service.check_archived(&session,&runtime,&thread).await? { return Ok(()); }
-                            let resumed = connection.call("thread/resume",json!({"threadId":thread,"excludeTurns":true})).await?;
+                            let resumed = connection.call("thread/resume",self.service.resume_params(&session, &thread).await?).await?;
                             self.service.bind(&session,&runtime,&resumed["thread"],Some(&runtime.instance_id)).await?;
                             self.service.model_snapshot(&session,&runtime,&resumed).await?;
                             Some(resumed["thread"].clone())

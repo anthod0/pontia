@@ -16,6 +16,12 @@ pub(super) fn validate_request(
                 "unsupported client_type in supported_client_types: {client_type}"
             )));
         }
+        if client_type == "codex" {
+            super::binding::validate_codex_templates(
+                request.system_prompt_template.as_deref(),
+                request.turn_prompt_template.as_deref(),
+            )?;
+        }
     }
     if request.agent_kind != "executor" {
         return Err(Error::Domain(format!(

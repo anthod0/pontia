@@ -28,7 +28,7 @@ pub mod workspaces;
 
 pub use agent_events::AgentEventBroker;
 pub use agent_profiles::{
-    AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView,
+    AgentProfileCommandOutcome, AgentProfileService, CodexProfileBinding, ExecutionProfileView,
     UpsertExecutionProfileRequest,
 };
 pub use app::AppState;

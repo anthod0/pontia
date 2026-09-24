@@ -1,6 +1,7 @@
 mod events;
 mod models;
 mod observer;
+pub(crate) mod profile;
 #[cfg(test)]
 mod tests;
 mod tui;
@@ -161,12 +162,14 @@ impl CodexService {
             .binding_for_session(session_id)
             .await?;
         let new_thread = binding.is_none();
+        let profile = self.profiles().codex_binding(session_id).await?;
         let response = match binding {
             Some(binding) => {
                 connection
                     .call(
                         "thread/resume",
-                        json!({"threadId":binding.client_session_key,"excludeTurns":true}),
+                        self.resume_params(session_id, &binding.client_session_key)
+                            .await?,
                     )
                     .await?
             }
@@ -182,12 +185,9 @@ impl CodexService {
                     .map(|value| serde_json::from_str(&value))
                     .transpose()?
                     .unwrap_or_else(|| json!({}));
-                connection
-                    .call(
-                        "thread/start",
-                        json!({"cwd":cwd,"historyMode":"legacy","config":{"shell_environment_policy.set":environment}}),
-                    )
-                    .await?
+                let mut params = json!({"cwd":cwd,"historyMode":"legacy","config":{"shell_environment_policy.set":environment}});
+                profile::apply_profile(&mut params, profile.as_ref())?;
+                connection.call("thread/start", params).await?
             }
         };
         let thread = response["thread"].clone();
@@ -199,6 +199,11 @@ impl CodexService {
             target.runtime_instance_id.as_deref(),
         )
         .await?;
+        if new_thread && profile.is_some() {
+            self.profiles()
+                .confirm_codex_configuration(session_id, string(&thread, "id")?)
+                .await?;
+        }
         self.model_snapshot(session_id, &runtime, &response).await?;
         let thread_id = string(&thread, "id")?;
         // thread/start subscribes this connection. A resumed thread needs its actual turns,
@@ -369,18 +374,16 @@ impl CodexService {
             .await?
             .ok_or_else(|| Error::StateConflict("Codex thread binding is missing".into()))?;
         let connection = runtime.connection().await?;
+        let resume_params = self
+            .resume_params(session_id, &binding.client_session_key)
+            .await?;
         connection
             .call(
                 "thread/unarchive",
                 json!({"threadId":binding.client_session_key}),
             )
             .await?;
-        let result = connection
-            .call(
-                "thread/resume",
-                json!({"threadId":binding.client_session_key,"excludeTurns":true}),
-            )
-            .await?;
+        let result = connection.call("thread/resume", resume_params).await?;
         target
             .validate(&self.pool)
             .await
@@ -404,6 +407,7 @@ impl CodexService {
     }
 
     pub(super) async fn prepare_connection(&self, runtime: &CodexRuntime) -> Result<()> {
+        runtime.profile_service.get_or_init(|| self.profiles());
         let _current = runtime.current_guard().await?;
         sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','reconciling') WHERE runtime_kind='codex_app_server' AND json_extract(adapter_details,'$.codex.connection_id') IS NOT ?")
             .bind(&runtime.connection_id).execute(&self.pool).await?;

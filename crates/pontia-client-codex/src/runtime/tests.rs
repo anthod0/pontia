@@ -11,6 +11,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 mod lifecycle;
 mod live;
 mod native_tui;
+mod profile;
 mod tui;
 
 #[derive(Default)]
@@ -129,6 +130,7 @@ async fn shared_server_keeps_control_receipts_sessions_and_tui_lifetimes_separat
         interfaces: Mutex::new(()),
         tui_command: tui::launcher(root.path()),
         tui_targets: Mutex::new(HashMap::new()),
+        profile_service: OnceLock::new(),
     });
     let _runtime_guard = RuntimeGuard(runtime.clone());
     registry()

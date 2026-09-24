@@ -50,9 +50,23 @@ impl SessionCommandService {
 
     pub async fn create_session(
         &self,
-        request: CreateSessionRequest,
+        mut request: CreateSessionRequest,
     ) -> Result<CreateSessionOutcome> {
         self.clients.for_client(&request.client_type)?;
+
+        let profile = if request.client_type == "codex" {
+            crate::AgentProfileService::new(self.pool.clone())
+                .resolve_codex_profile(
+                    request.execution_profile_id.as_deref(),
+                    request.execution_profile_version.as_deref(),
+                )
+                .await?
+        } else {
+            None
+        };
+        if let Some(profile) = &profile {
+            request.execution_profile_version = Some(profile.version.clone());
+        }
 
         let handle = request.handle.as_deref();
         if let Some(handle) = handle {
@@ -119,6 +133,7 @@ impl SessionCommandService {
                     "description": request.description,
                     "execution_profile_id": request.execution_profile_id,
                     "execution_profile_version": request.execution_profile_version,
+                    "execution_profile_binding": profile,
                     "metadata": request.metadata,
                 }),
             ))

@@ -1,10 +1,13 @@
 use sqlx::SqlitePool;
 
+mod binding;
 mod commands;
 mod models;
 mod queries;
 mod rows;
 mod validation;
+
+pub use binding::CodexProfileBinding;
 
 pub use models::{AgentProfileCommandOutcome, ExecutionProfileView, UpsertExecutionProfileRequest};
 

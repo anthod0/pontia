@@ -205,6 +205,12 @@ export interface CodexTuiView {
 
 export interface SessionView {
   codex?: {
+    profile?: {
+      profile_id?: string;
+      version?: string;
+      status: 'configured' | 'awaiting_input' | 'unverified';
+      error?: string;
+    } | null;
     connection: 'awaiting_input' | 'available' | 'reconciling' | 'unavailable' | 'archived';
     thread_id?: string;
     tui?: CodexTuiView;

@@ -451,3 +451,108 @@ async fn missing_agent_profile_returns_not_found() {
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert_eq!(body["error"]["code"], "not_found");
 }
+
+#[tokio::test]
+async fn codex_profile_binding_pins_content_before_first_input_and_rejects_invalid_contracts() {
+    let app = TestApp::new().await;
+    let state = app.state.clone();
+    let mut profile = custom_profile_body("codex-reviewer", "1");
+    profile["supported_client_types"] = json!(["codex"]);
+    profile["turn_prompt_template"] = Value::Null;
+    profile["system_prompt_template"] = json!("Respond with the configured review marker.");
+    for (field, value) in [
+        ("turn_prompt_template", json!("Review {{input}}")),
+        ("turn_prompt_template", json!("")),
+        ("system_prompt_template", json!("{{input}}")),
+        ("system_prompt_template", json!("  ")),
+    ] {
+        let mut invalid = profile.clone();
+        invalid[field] = value;
+        let (status, response) =
+            post_json(state.clone(), "/api/v1/agent-profiles", invalid, None).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
+        assert!(response.to_string().contains(field));
+    }
+    let (status, response) = post_json(
+        state.clone(),
+        "/api/v1/agent-profiles",
+        profile.clone(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{response}");
+    let request = json!({"client_type":"codex","workspace":app.workspace().path(),"execution_profile_id":"codex-reviewer"});
+    for invalid in [
+        json!({"client_type":"codex","execution_profile_id":"missing"}),
+        json!({"client_type":"codex","execution_profile_version":"1"}),
+        json!({"client_type":"codex","execution_profile_id":"codex-reviewer","execution_profile_version":"missing"}),
+        json!({"client_type":"codex","execution_profile_id":"default"}),
+    ] {
+        let (status, response) = post_json(state.clone(), "/api/v1/sessions", invalid, None).await;
+        assert!(status.is_client_error(), "{response}");
+    }
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    assert_eq!(count, 0, "invalid bindings must not create Sessions");
+    let (status, created) = post_json(state.clone(), "/api/v1/sessions", request, None).await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let session = created["data"]["session"]["session_id"].as_str().unwrap();
+    assert_eq!(created["data"]["session"]["execution_profile_version"], "1");
+    assert_eq!(
+        created["data"]["session"]["codex"]["profile"]["status"],
+        "awaiting_input"
+    );
+    assert!(
+        pontia_application::AgentBindingService::new(state.db())
+            .binding_for_session(session)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let profiles = pontia_application::AgentProfileService::new(state.db());
+    let pinned = profiles.codex_binding(session).await.unwrap().unwrap();
+    profile["system_prompt_template"] = json!("Changed after binding");
+    let (status, response) = put_json(
+        state.clone(),
+        "/api/v1/agent-profiles/codex-reviewer/versions/1",
+        profile.clone(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    profile["version"] = json!("2");
+    let (status, response) = post_json(
+        state.clone(),
+        "/api/v1/agent-profiles/codex-reviewer/versions",
+        profile,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{response}");
+    assert_eq!(
+        profiles.codex_binding(session).await.unwrap().unwrap(),
+        pinned
+    );
+    let (status, response) =
+        delete_json(state.clone(), "/api/v1/agent-profiles/codex-reviewer", None).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(
+        profiles.codex_binding(session).await.unwrap().unwrap(),
+        pinned
+    );
+    let (status, response) = post_json(state.clone(), "/api/v1/sessions", json!({"client_type":"codex","execution_profile_id":"codex-reviewer","execution_profile_version":"1"}), None).await;
+    assert!(status.is_client_error(), "{response}");
+
+    // Model an existing, previously accepted binding without a content snapshot.
+    sqlx::query("UPDATE events SET payload=json_remove(payload,'$.execution_profile_binding') WHERE session_id=? AND event_type='session.created'")
+        .bind(session).execute(&state.db()).await.unwrap();
+    let (status, response) = get_json(state, &format!("/api/v1/sessions/{session}")).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(
+        response["data"]["session"]["codex"]["profile"]["status"],
+        "unverified"
+    );
+    assert!(profiles.codex_binding(session).await.is_err());
+}

@@ -34,6 +34,7 @@ pub struct CodexRuntime {
     pub(crate) interfaces: Mutex<()>,
     tui_command: String,
     pub tui_targets: Mutex<HashMap<String, TuiTarget>>,
+    pub(crate) profile_service: OnceLock<pontia_application::AgentProfileService>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -92,6 +93,7 @@ impl CodexRuntime {
             interfaces: Mutex::new(()),
             tui_command: std::env::var("PONTIA_CODEX_COMMAND").unwrap_or_else(|_| "codex".into()),
             tui_targets: Mutex::new(HashMap::new()),
+            profile_service: OnceLock::new(),
         });
         if let Some(old) = registry.insert(root, runtime.clone()) {
             old.close_gateways().await;

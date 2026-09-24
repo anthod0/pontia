@@ -205,6 +205,15 @@ async fn forward(
                 let Some(Ok(mut frame)) = frame else { break };
                 if let Message::Text(text) = &frame
                     && let Ok(mut request) = serde_json::from_str::<Value>(text)
+                    && let Some(profiles) = runtime.profile_service.get() {
+                    if let Err(error) = crate::service::profile::guard_tui_request(profiles, &mut request).await {
+                        client.send(Message::Text(serde_json::json!({"id":request["id"],"error":{"code":-32602,"message":error.to_string()}}).to_string().into())).await.map_err(protocol::protocol_error)?;
+                        continue;
+                    }
+                    frame = Message::Text(request.to_string().into());
+                }
+                if let Message::Text(text) = &frame
+                    && let Ok(mut request) = serde_json::from_str::<Value>(text)
                     && request["method"] == "thread/start"
                     && request["params"]["historyMode"].is_null() {
                     // 0.156.1 paginated history cannot resume or provide Turn snapshots.

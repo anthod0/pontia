@@ -28,6 +28,7 @@ impl CodexService {
         runtime: &Arc<CodexRuntime>,
         thread: &Value,
     ) -> Result<()> {
+        self.profiles().configured_codex_binding(session).await?;
         // Serialize owner selection as well as launch: different Sessions can refer to one TUI.
         let _interfaces = runtime.interfaces.lock().await;
         let thread_id = string(thread, "id")?;

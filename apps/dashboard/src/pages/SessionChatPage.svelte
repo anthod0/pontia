@@ -839,6 +839,12 @@
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       <span>Control: {selectedSession.codex.connection.replaceAll('_', ' ')}</span>
       <span>TUI: {selectedSession.codex.tui?.connected ? 'connected' : 'disconnected'}</span>
+      {#if selectedSession.codex.profile}
+        <span>Profile: {selectedSession.codex.profile.profile_id}{selectedSession.codex.profile.version ? `@${selectedSession.codex.profile.version}` : ''} ({selectedSession.codex.profile.status.replaceAll('_', ' ')})</span>
+        {#if selectedSession.codex.profile.error}
+          <span class="text-destructive" role="alert">{selectedSession.codex.profile.error}</span>
+        {/if}
+      {/if}
       <Button variant="outline" size="sm" disabled={!selectedSession.codex.thread_id || actionBusy || selectedSession.state === 'exited'} onclick={() => void openSelectedTui()}>Open TUI</Button>
       {#if selectedSession.codex.tui?.pane_id}
         <code class="min-w-0 break-all">tmux attach -t pontia_codex_{(selectedSession.codex.tui.owner_session_id ?? selectedSession.session_id).replaceAll('-', '_')}</code>
