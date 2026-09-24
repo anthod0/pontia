@@ -169,3 +169,14 @@ test('native errors and question answers remain inspectable without assistant te
   await user.click(screen.getByRole('button', { name: 'Show Questions and answers result' }));
   expect(screen.getByText(/Questions: Color.*Answers: Green/s)).toBeVisible();
 });
+
+test.each(['exec finished successfully', '{"count":9007199254740993,"count":2}\n'])('preserves the exact native tool result %j', async (content) => {
+  const user = userEvent.setup();
+  render(ThoughtSummary, { props: { steps: [
+    step({ kind: 'tool_result', title: 'exec', content }),
+  ] } });
+  await user.click(screen.getByRole('button', { name: 'Show agent work steps' }));
+  await user.click(screen.getByRole('button', { name: 'Show exec result' }));
+  const output = screen.getByText(content, { normalizer: (value) => value });
+  expect(output).toBeVisible();
+});

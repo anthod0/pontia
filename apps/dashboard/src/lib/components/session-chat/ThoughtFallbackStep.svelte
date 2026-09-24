@@ -14,7 +14,7 @@
 
   let { title, content, detailsLabel = 'parameters', error = false, connected = false }: Props = $props()
   let open = $state(false)
-  const parameters = $derived(formatParameters(title, content))
+  const displayedContent = $derived(detailsLabel === 'result' ? content : formatParameters(title, content))
 
   function formatParameters(toolName: string, preview: string): string {
     const value = preview.startsWith(`${toolName} `) ? preview.slice(toolName.length + 1) : preview
@@ -43,6 +43,6 @@
   {/if}
 
   <Collapsible.Content>
-    <pre class="mb-3 ml-9 max-w-[calc(100%_-_2.25rem)] overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-sm leading-5 text-muted-foreground">{parameters}</pre>
+    <pre class="mb-3 ml-9 max-w-[calc(100%_-_2.25rem)] overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-sm leading-5 text-muted-foreground">{displayedContent}</pre>
   </Collapsible.Content>
 </Collapsible.Root>

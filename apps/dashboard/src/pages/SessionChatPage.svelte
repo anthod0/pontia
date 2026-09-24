@@ -186,6 +186,7 @@
   $: branchActionInputs = eligibleBranchActionInputs(selectedSession, messages)
   $: branchActionMessageIds = Object.keys(branchActionInputs)
   $: timelineUnavailable = $timelineState.sessionId === selectedSessionId && Boolean($timelineState.error)
+    && !($timelineState.status === 'pending' && $timelineState.items.length > 0)
   $: rulerTurns = $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.turns : []
   $: rulerTreeMode = $timelineState.sessionId === selectedSessionId && $timelineState.mode === 'tree'
   $: rulerNavigableTurnIds = navigableRulerTurnIds(
@@ -882,6 +883,9 @@
                 </Empty.Content>
               </Empty.Root>
             {:else}
+              {#if $timelineState.status === 'pending'}
+                <p role="status" class="py-2 text-sm text-muted-foreground">Waiting for native history…</p>
+              {/if}
               {#key selectedSessionId}
                 <SessionConversation
                   {messages}

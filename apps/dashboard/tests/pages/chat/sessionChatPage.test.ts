@@ -127,6 +127,25 @@ async function triggerLatestBottomIntersection(isIntersecting: boolean): Promise
   TestIntersectionObserver.instances.at(-1)?.trigger(isIntersecting);
 }
 
+test('keeps loaded conversation visible while native history is pending', async () => {
+  prepareBranchChat([turn({ output: { summary: 'Already loaded answer' } })]);
+  render(SessionChatPage);
+  expect(await screen.findByText('Already loaded answer')).toBeVisible();
+
+  mocks.timelineState.set({
+    ...mocks.timelineState.get(),
+    status: 'pending',
+    refreshing: true,
+    refreshKind: 'history',
+    errorCode: 'timeline_pending',
+    error: 'History is still being written',
+  });
+
+  expect(await screen.findByText('Waiting for native history…')).toBeVisible();
+  expect(screen.getByText('Already loaded answer')).toBeVisible();
+  expect(screen.queryByText('Conversation history unavailable')).not.toBeInTheDocument();
+});
+
 test('replaces Send with Interrupt in the empty composer for a busy interruptible session', async () => {
   const busySession = session({ state: 'busy', current_turn_id: 'turn-1', capabilities: { interrupt: true, timeline: true } });
   mocks.loadedSessions = [busySession];

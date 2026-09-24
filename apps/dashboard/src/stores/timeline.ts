@@ -64,7 +64,9 @@ function emptyState(sessionId = ''): TimelineState {
 export const timelineState = writable<TimelineState>(emptyState());
 
 export function hasTimelineSnapshot(state: TimelineState, sessionId: string): boolean {
-  return state.sessionId === sessionId && (state.status === 'ready' || state.status === 'empty');
+  return state.sessionId === sessionId && (
+    state.status === 'ready' || state.status === 'empty' || (state.status === 'pending' && state.items.length > 0)
+  );
 }
 
 export async function restoreSessionTimeline(
@@ -220,22 +222,28 @@ function errorStatus(error: unknown): TimelineStatus {
   }
 }
 
-function applyTimelineError(sessionId: string, error: unknown): void {
+function isPendingHistory(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'timeline_pending';
+}
+
+function applyTimelineError(sessionId: string, error: unknown, retry: () => Promise<unknown>): void {
   const previous = get(timelineState);
   if (previous.sessionId !== sessionId) return;
   if (pendingRetry) clearTimeout(pendingRetry);
   pendingRetry = null;
-  if (error instanceof ApiError && error.code === 'timeline_pending') {
+  const pending = isPendingHistory(error);
+  if (pending) {
     pendingRetry = setTimeout(() => {
       pendingRetry = null;
       const current = get(timelineState);
       if (current.sessionId === sessionId && current.status === 'pending') {
-        void loadSessionTimeline(sessionId, { topology: previous.mode === 'tree' });
+        void retry();
       }
     }, 1000);
   }
   timelineState.update((state) => state.sessionId !== sessionId ? state : ({
-    ...emptyState(sessionId),
+    ...(pending ? state : emptyState(sessionId)),
+    loading: false,
     status: errorStatus(error),
     errorCode: error instanceof ApiError ? error.code : 'request_failed',
     error: errorMessage(error),
@@ -340,7 +348,7 @@ export async function loadSessionTimeline(
     await persistTimelineSnapshot(sessionId);
     return page;
   } catch (error) {
-    if (mode === 'more' && cachedHistoryCursorSessions.has(sessionId)) {
+    if (!isPendingHistory(error) && mode === 'more' && cachedHistoryCursorSessions.has(sessionId)) {
       if (isStaleCachedCursorError(error)) {
         cachedHistoryCursorSessions.delete(sessionId);
         cachedRefreshCursorSessions.delete(sessionId);
@@ -349,7 +357,7 @@ export async function loadSessionTimeline(
       retainCachedTimelineAfterError(sessionId);
       return null;
     }
-    applyTimelineError(sessionId, error);
+    applyTimelineError(sessionId, error, () => loadSessionTimeline(sessionId, { ...options, mode, topology }));
     return null;
   }
 }
@@ -404,7 +412,7 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
     await persistTimelineSnapshot(sessionId);
     return true;
   } catch (error) {
-    if (cachedRefreshCursorSessions.has(sessionId)) {
+    if (!isPendingHistory(error) && cachedRefreshCursorSessions.has(sessionId)) {
       if (isStaleCachedCursorError(error)) {
         cachedRefreshCursorSessions.delete(sessionId);
         cachedHistoryCursorSessions.delete(sessionId);
@@ -413,7 +421,7 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
       retainCachedTimelineAfterError(sessionId);
       return false;
     }
-    applyTimelineError(sessionId, error);
+    applyTimelineError(sessionId, error, () => refreshSessionTimelineUpdates(sessionId, latestTurnId));
     return false;
   }
 }
@@ -455,7 +463,7 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
     await persistTimelineSnapshot(sessionId);
     return true;
   } catch (error) {
-    if (cachedRefreshCursorSessions.has(sessionId)) {
+    if (!isPendingHistory(error) && cachedRefreshCursorSessions.has(sessionId)) {
       if (isStaleCachedCursorError(error)) {
         cachedRefreshCursorSessions.delete(sessionId);
         cachedHistoryCursorSessions.delete(sessionId);
@@ -464,7 +472,7 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
       retainCachedTimelineAfterError(sessionId);
       return false;
     }
-    applyTimelineError(sessionId, error);
+    applyTimelineError(sessionId, error, () => refreshSessionTreeUpdates(sessionId, latestTurnId));
     return false;
   }
 }
