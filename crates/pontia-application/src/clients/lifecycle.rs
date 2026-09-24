@@ -48,6 +48,7 @@ impl ClientAdapter {
                     restart_count: 0,
                     reuse_pane: None,
                     native_session_key: None,
+                    native_session_file: None,
                 })
                 .map(Some);
         }
@@ -107,10 +108,37 @@ impl ClientAdapter {
                     native_session_key: binding
                         .as_ref()
                         .map(|binding| binding.client_session_key.as_str()),
+                    native_session_file: binding
+                        .as_ref()
+                        .and_then(|binding| binding.client_session_file.as_deref())
+                        .map(Path::new),
                 })
                 .map(Some);
         }
         self.start_in_process(root, request, count).map(Some)
+    }
+
+    pub async fn validate_resume(&self, target: &ControlTarget) -> Result<()> {
+        target.validate(&self.pool).await?;
+        let binding = crate::AgentBindingService::new(self.pool.clone())
+            .binding_for_session(&target.session_id)
+            .await?;
+        self.validate_bound_session(binding.as_ref())
+    }
+
+    fn validate_bound_session(&self, binding: Option<&crate::AgentBinding>) -> Result<()> {
+        if let Some(binding) = binding
+            && let Some(launcher) = self
+                .registry
+                .get(self.spec.client_type)
+                .and_then(|entry| entry.launcher.as_ref())
+        {
+            launcher.validate_resume(
+                &binding.client_session_key,
+                binding.client_session_file.as_deref().map(Path::new),
+            )?;
+        }
+        Ok(())
     }
 
     pub async fn restart(
@@ -126,6 +154,10 @@ impl ClientAdapter {
             ));
         }
         target.validate(&self.pool.clone()).await?;
+        let binding = crate::AgentBindingService::new(self.pool.clone())
+            .binding_for_session(&target.session_id)
+            .await?;
+        self.validate_bound_session(binding.as_ref())?;
         match self.spec.adapter.terminate {
             TerminateBehavior::Connected => {
                 let (socket, pane) = target.tmux_pane(&self.pool.clone()).await?;
@@ -145,7 +177,13 @@ impl ClientAdapter {
                 runtime: request,
                 restart_count: count,
                 reuse_pane: None,
-                native_session_key: None,
+                native_session_key: binding
+                    .as_ref()
+                    .map(|binding| binding.client_session_key.as_str()),
+                native_session_file: binding
+                    .as_ref()
+                    .and_then(|binding| binding.client_session_file.as_deref())
+                    .map(Path::new),
             });
         }
         self.start_in_process(root, request, count)

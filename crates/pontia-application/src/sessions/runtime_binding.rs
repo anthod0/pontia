@@ -22,10 +22,8 @@ impl SessionCommandService {
         &self,
         session_id: &str,
         runtime: &RuntimeStartResult,
-        persisted_start_command: Option<String>,
     ) -> Result<()> {
-        let mut record = runtime_binding_record(session_id, runtime)?;
-        record.start_command = persisted_start_command;
+        let record = runtime_binding_record(session_id, runtime)?;
         let result = SqliteRuntimeBindingRepository::new(self.pool.clone())
             .upsert_binding_guarded(record)
             .await;

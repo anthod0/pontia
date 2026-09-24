@@ -47,8 +47,14 @@ pub struct ClientLaunchRequest<'a> {
     pub restart_count: i64,
     pub reuse_pane: Option<(&'a str, &'a str)>,
     pub native_session_key: Option<&'a str>,
+    pub native_session_file: Option<&'a Path>,
 }
 
 pub trait ClientLauncher: Send + Sync {
+    fn validate_resume(
+        &self,
+        native_session_key: &str,
+        native_session_file: Option<&Path>,
+    ) -> Result<()>;
     fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult>;
 }

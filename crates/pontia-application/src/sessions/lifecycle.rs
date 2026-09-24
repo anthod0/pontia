@@ -109,6 +109,7 @@ impl SessionCommandService {
         }
         let adapter = self.clients.for_client(&session.client_type)?;
         let target = crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
+        adapter.validate_resume(&target).await?;
         let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
         let ingest = self.event_ingest.clone();
         ingest
@@ -140,7 +141,7 @@ impl SessionCommandService {
                     workspace_name: runtime_workspace_name,
                     handle: session.handle.clone(),
                     role: session.role.clone(),
-                    start_command: persisted_start_command.clone(),
+                    start_command: persisted_start_command,
                     environment: self.workflow_runtime_environment(session_id).await?,
                 },
                 prior_restart_count + 1,
@@ -152,7 +153,7 @@ impl SessionCommandService {
                 duplicate: false,
             });
         };
-        self.upsert_resumed_runtime_binding(session_id, &runtime, persisted_start_command)
+        self.upsert_resumed_runtime_binding(session_id, &runtime)
             .await?;
         ingest
             .ingest_pontia_event(PontiaEvent::new(

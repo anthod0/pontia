@@ -590,6 +590,9 @@ describe("pontia pi extension lifecycle", () => {
     });
 
     expect(requestImpl).toHaveBeenCalledTimes(3);
+    expect(requestImpl).toHaveBeenCalledWith("runtime.register", expect.not.objectContaining({
+      start_command: expect.anything(),
+    }));
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_starting",

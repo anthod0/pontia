@@ -261,7 +261,7 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
 }
 
 #[tokio::test]
-async fn repeated_webui_resume_of_manually_bound_pi_tui_does_not_persist_session_id_argument() {
+async fn registration_and_repeated_resume_preserve_custom_command_and_native_file() {
     let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -269,12 +269,25 @@ async fn repeated_webui_resume_of_manually_bound_pi_tui_does_not_persist_session
         .canonicalize()
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
+    let session_file = std::path::Path::new(&workspace).join("custom session.jsonl");
+    std::fs::write(
+        &session_file,
+        "{\"type\":\"session\",\"id\":\"pi_session_123\"}\n",
+    )
+    .expect("native session");
+    let command = format!("true --session-dir '{workspace}'");
 
     let mut body = upsert_body(&workspace, Some("%42"));
-    body["start_command"] = json!("pi");
-    let (upsert_status, upsert) = post_upsert(state.clone(), body).await;
+    body["start_command"] = json!(command);
+    body["client_session_file"] = json!(session_file);
+    let (upsert_status, upsert) = post_upsert(state.clone(), body.clone()).await;
     assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
+    body.as_object_mut().unwrap().remove("start_command");
+    body["runtime_instance_id"] = upsert["runtime"]["runtime_instance_id"].clone();
+    let (confirmed_status, confirmed) = post_upsert(state.clone(), body).await;
+    assert_eq!(confirmed_status, StatusCode::OK, "{confirmed:?}");
+    assert_persisted_start_command(&state, session_id, &command).await;
 
     let first_resumed_runtime_instance_id = exit_and_resume(
         state.clone(),
@@ -284,7 +297,7 @@ async fn repeated_webui_resume_of_manually_bound_pi_tui_does_not_persist_session
             .expect("initial runtime instance id"),
     )
     .await;
-    assert_persisted_start_command(&state, session_id, "pi").await;
+    assert_persisted_start_command(&state, session_id, &command).await;
 
     exit_and_resume(
         state.clone(),
@@ -292,7 +305,89 @@ async fn repeated_webui_resume_of_manually_bound_pi_tui_does_not_persist_session
         &first_resumed_runtime_instance_id,
     )
     .await;
-    assert_persisted_start_command(&state, session_id, "pi").await;
+    assert_persisted_start_command(&state, session_id, &command).await;
+    let bound_file: String =
+        sqlx::query_scalar("SELECT client_session_file FROM agent_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&state.db())
+            .await
+            .expect("bound file");
+    assert_eq!(bound_file, session_file.to_str().unwrap());
+}
+
+#[tokio::test]
+async fn invalid_native_file_does_not_replace_runtime_or_change_resume_state() {
+    let (state, app) = test_state().await;
+    let workspace = app.temp_workspace();
+    let file = workspace.path().join("session.jsonl");
+    let mut body = upsert_body(workspace.path().to_str().unwrap(), Some("%42"));
+    body["client_session_file"] = json!(file);
+    body["start_command"] = json!("true");
+    let (status, registered) = post_upsert(state.clone(), body).await;
+    assert_eq!(status, StatusCode::OK, "{registered:?}");
+    let session_id = registered["session"]["session_id"].as_str().unwrap();
+    let runtime_id = registered["runtime"]["runtime_instance_id"]
+        .as_str()
+        .unwrap();
+
+    let (status, rejected) = request_json(
+        state.clone(),
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/restart"),
+        None,
+    )
+    .await;
+    assert_ne!(status, StatusCode::OK);
+    assert!(
+        rejected.to_string().contains("cannot resume Pi session"),
+        "{rejected:?}"
+    );
+    let current_runtime: String =
+        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    assert_eq!(current_runtime, runtime_id);
+
+    let (status, exit) = crate::common::reporting::report_fact(
+        state.clone(),
+        json!({
+            "session_id": session_id, "type": "session.exited",
+            "data": { "runtime_instance_id": runtime_id, "reason": "quit" }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{exit:?}");
+    for contents in [None, Some("{\"type\":\"session\",\"id\":\"different\"}\n")] {
+        if let Some(contents) = contents {
+            std::fs::write(&file, contents).unwrap();
+        }
+        let (status, _) = request_json(
+            state.clone(),
+            "POST",
+            &format!("/api/v1/sessions/{session_id}/resume"),
+            None,
+        )
+        .await;
+        assert_ne!(status, StatusCode::OK);
+        let session_state: String =
+            sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_one(&state.db())
+                .await
+                .unwrap();
+        assert_eq!(session_state, "exited");
+    }
+    std::fs::write(&file, "{\"type\":\"session\",\"id\":\"pi_session_123\"}\n").unwrap();
+    let (status, resumed) = request_json(
+        state.clone(),
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/resume"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{resumed:?}");
 }
 
 async fn exit_and_resume(state: AppState, session_id: &str, runtime_instance_id: &str) -> String {

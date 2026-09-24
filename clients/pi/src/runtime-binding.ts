@@ -51,7 +51,6 @@ export async function bindSession(
       client_session_dir: sessionDetails.clientSessionDir,
       client_cwd: sessionDetails.clientCwd,
       launch_cwd: sessionDetails.clientCwd,
-      start_command: "pi",
       ...(options.startKind ? { start_kind: options.startKind } : {}),
       ...(options.parentSessionId ? { parent_session_id: options.parentSessionId } : {}),
       ...(options.runtimeInstanceId ? { runtime_instance_id: options.runtimeInstanceId } : {}),
