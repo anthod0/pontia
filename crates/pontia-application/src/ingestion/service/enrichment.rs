@@ -131,6 +131,7 @@ pub(super) async fn enrich_timeline_boundary(
         false
     };
     let source = match backend.resolver.resolve(&AgentBindingResolveRequest {
+        client_session_key: binding.client_session_key.clone(),
         id: binding.id.clone(),
         session_id: binding.session_id.clone(),
         client_type: binding.client_type.clone(),

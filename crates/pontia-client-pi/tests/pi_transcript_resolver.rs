@@ -14,6 +14,7 @@ fn pi_resolver_uses_client_session_file_directly() {
 
     let source = PiAgentBindingResolver::new()
         .resolve(&AgentBindingResolveRequest {
+            client_session_key: "native-session".into(),
             id: "bind_1".to_string(),
             session_id: "sess_1".to_string(),
             client_type: "pi".to_string(),
@@ -31,6 +32,7 @@ fn pi_resolver_uses_client_session_file_directly() {
 fn pi_resolver_rejects_missing_client_session_file() {
     let error = PiAgentBindingResolver::new()
         .resolve(&AgentBindingResolveRequest {
+            client_session_key: "native-session".into(),
             id: "bind_1".to_string(),
             session_id: "sess_1".to_string(),
             client_type: "pi".to_string(),

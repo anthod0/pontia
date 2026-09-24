@@ -67,6 +67,8 @@ pub enum EventType {
     SessionContextUsageUpdated,
     #[serde(rename = "session.model_updated")]
     SessionModelUpdated,
+    #[serde(rename = "turn.timeline_boundary_recovered")]
+    TurnTimelineBoundaryRecovered,
     #[serde(rename = "turn.created")]
     TurnCreated,
     #[serde(rename = "turn.queued")]
@@ -107,7 +109,8 @@ impl EventType {
     pub fn is_turn_event(self) -> bool {
         matches!(
             self,
-            Self::TurnCreated
+            Self::TurnTimelineBoundaryRecovered
+                | Self::TurnCreated
                 | Self::TurnQueued
                 | Self::TurnStarted
                 | Self::TurnOutput
@@ -155,6 +158,7 @@ impl std::fmt::Display for EventType {
             Self::SessionMessageUpdated => "session.message_updated",
             Self::SessionModelUpdated => "session.model_updated",
             Self::SessionContextUsageUpdated => "session.context_usage_updated",
+            Self::TurnTimelineBoundaryRecovered => "turn.timeline_boundary_recovered",
             Self::TurnCreated => "turn.created",
             Self::TurnQueued => "turn.queued",
             Self::TurnStarted => "turn.started",
@@ -192,6 +196,7 @@ impl std::str::FromStr for EventType {
             "session.message_updated" => Ok(Self::SessionMessageUpdated),
             "session.model_updated" => Ok(Self::SessionModelUpdated),
             "session.context_usage_updated" => Ok(Self::SessionContextUsageUpdated),
+            "turn.timeline_boundary_recovered" => Ok(Self::TurnTimelineBoundaryRecovered),
             "turn.created" => Ok(Self::TurnCreated),
             "turn.queued" => Ok(Self::TurnQueued),
             "turn.started" => Ok(Self::TurnStarted),

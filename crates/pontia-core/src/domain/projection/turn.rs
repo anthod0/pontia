@@ -10,6 +10,37 @@ use crate::{
 };
 
 impl ProjectionState {
+    pub(super) fn recover_timeline_boundary(&mut self, event: &DomainEvent) -> Result<()> {
+        if event.source != super::super::EventSource::SystemMonitor {
+            return Err(Error::Domain(
+                "Timeline recovery must be Pontia-owned".into(),
+            ));
+        }
+        let turn = self
+            .turns
+            .get_mut(event.turn_id.as_deref().expect("validated turn_id"))
+            .filter(|turn| turn.session_id == event.session_id)
+            .ok_or_else(|| {
+                Error::Domain("Timeline recovery requires an existing Turn in the Session".into())
+            })?;
+        let (slot, cursor) = match &event.timeline_boundary {
+            Some(TimelineBoundary::Head { cursor }) => (&mut turn.head_cursor, cursor),
+            Some(TimelineBoundary::Tail { cursor }) => (&mut turn.tail_cursor, cursor),
+            None => {
+                return Err(Error::Domain(
+                    "Timeline recovery requires a boundary".into(),
+                ));
+            }
+        };
+        if slot.as_ref().is_some_and(|existing| existing != cursor) {
+            return Err(Error::StateConflict(
+                "Timeline boundary is already resolved".into(),
+            ));
+        }
+        *slot = Some(cursor.clone());
+        Ok(())
+    }
+
     pub(super) fn abandon_active_turn_for_terminal_session(
         &mut self,
         event: &DomainEvent,

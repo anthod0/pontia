@@ -42,8 +42,7 @@ pub async fn get_turn_timeline(
             "limit must be an integer from 1 through 100",
         ));
     }
-    let page = TurnTimelineService::new(state.db())
-        .with_clients(state.clients())
+    let page = TurnTimelineService::new(state.event_ingest_service())
         .page(session_id, direction, query.get("turn_id").cloned(), limit)
         .await
         .map_err(turn_timeline_service_error)?;
@@ -73,8 +72,7 @@ pub async fn get_turn_tree_history(
             "limit must be an integer from 1 through 100",
         ));
     }
-    let page = TurnTimelineService::new(state.db())
-        .with_clients(state.clients())
+    let page = TurnTimelineService::new(state.event_ingest_service())
         .tree_history(session_id, query.get("from_turn_id").cloned(), limit)
         .await
         .map_err(turn_timeline_service_error)?;
@@ -88,8 +86,7 @@ pub async fn get_turn_tree_updates(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     authenticate(&state, &headers)?;
-    let page = TurnTimelineService::new(state.db())
-        .with_clients(state.clients())
+    let page = TurnTimelineService::new(state.event_ingest_service())
         .tree_updates(session_id, query.get("from_turn_id").cloned())
         .await
         .map_err(turn_timeline_service_error)?;
@@ -122,6 +119,13 @@ fn turn_timeline_service_error(error: TurnTimelineServiceError) -> ApiError {
             "turn_timeline_unavailable",
             format!("Turn {turn_id} has no available timeline range"),
         ),
+        TurnTimelineServiceError::NativeAssociationUnavailable { turn_id } => ApiError::custom(
+            StatusCode::CONFLICT,
+            "timeline_native_association_unavailable",
+            format!(
+                "Turn {turn_id} has no stored native Turn association; its history cannot be recovered."
+            ),
+        ),
         TurnTimelineServiceError::TimelineInvalid { turn_id } => ApiError::custom(
             StatusCode::CONFLICT,
             "turn_timeline_invalid",
@@ -141,6 +145,16 @@ fn turn_timeline_service_error(error: TurnTimelineServiceError) -> ApiError {
             StatusCode::SERVICE_UNAVAILABLE,
             "timeline_source_unavailable",
             "timeline source is unavailable",
+        ),
+        TurnTimelineServiceError::Pending => ApiError::custom(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "timeline_pending",
+            "Native history is still being written. Retry shortly.",
+        ),
+        TurnTimelineServiceError::SourceIdentityMismatch => ApiError::custom(
+            StatusCode::CONFLICT,
+            "timeline_source_identity_mismatch",
+            "Native history belongs to a different session.",
         ),
         TurnTimelineServiceError::Inner(error) => ApiError::from(error),
     }

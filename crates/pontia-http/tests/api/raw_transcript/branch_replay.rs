@@ -188,7 +188,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     sqlx::query(
         r#"INSERT INTO runtime_bindings
            (session_id, runtime_kind, runtime_instance_id, binding_state, tmux_socket_path, tmux_pane_id, capabilities)
-           VALUES (?, 'pi_tui', ?, 'confirmed', '/unused/branch-resolve.sock', '%1', ?)"#,
+           VALUES (?, 'pi_tui', ?, 'confirmed', '/unused/branch-resolve.sock', '%1', ?) ON CONFLICT(session_id) DO UPDATE SET runtime_kind=excluded.runtime_kind, runtime_instance_id=excluded.runtime_instance_id, binding_state=excluded.binding_state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id, capabilities=excluded.capabilities"#,
     )
     .bind(session_id)
     .bind(runtime_instance_id)
@@ -578,7 +578,7 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
     sqlx::query(
         r#"INSERT INTO runtime_bindings
            (session_id, runtime_kind, runtime_instance_id, binding_state, tmux_socket_path, tmux_pane_id, capabilities)
-           VALUES (?, 'pi_tui', ?, 'confirmed', '/unused/branch-dispatch.sock', '%1', ?)"#,
+           VALUES (?, 'pi_tui', ?, 'confirmed', '/unused/branch-dispatch.sock', '%1', ?) ON CONFLICT(session_id) DO UPDATE SET runtime_kind=excluded.runtime_kind, runtime_instance_id=excluded.runtime_instance_id, binding_state=excluded.binding_state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id, capabilities=excluded.capabilities"#,
     )
     .bind(session_id)
     .bind(runtime_instance_id)

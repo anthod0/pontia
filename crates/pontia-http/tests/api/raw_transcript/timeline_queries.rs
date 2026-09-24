@@ -205,7 +205,11 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
             "timeline_source_unavailable",
         ),
     ] {
-        seed_session_for_client(&state, session_id, client_type).await;
+        if client_type == "pi" {
+            seed_session(&state, session_id).await;
+        } else {
+            seed_session_for_client(&state, session_id, client_type).await;
+        }
         AgentBindingService::new(state.db())
             .upsert_binding(UpsertAgentBindingRequest {
                 session_id: session_id.to_string(),

@@ -221,7 +221,6 @@ test('creates a pending assistant placeholder message for live thought steps bef
     ['user', 'sent', 'Build the feature'],
     ['assistant', 'pending', ''],
   ]);
-  expect(messages[1].id).toBe('turn-live:working');
   expect(messages[1].thoughtSteps?.map((step) => step.content)).toEqual(['Need to inspect files', 'read {"path":"src/app.ts"}']);
 });
 

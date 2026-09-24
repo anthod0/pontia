@@ -29,7 +29,7 @@
   let { steps, active = false, class: className }: Props = $props()
   let open = $state(false)
 
-  const visibleSteps = $derived(groupFileSteps(steps.filter((step) => step.kind !== 'tool_result')))
+  const visibleSteps = $derived(groupFileSteps(steps))
 
   function groupFileSteps(source: SessionChatThoughtStep[]): DisplayStep[] {
     const grouped: DisplayStep[] = []
@@ -94,7 +94,9 @@
           {:else if step.kind === 'file_group'}
             <ThoughtFileStep operation={step.operation} files={step.files} connected={hasConnectorAfter(index)} />
           {:else if step.kind === 'tool_call'}
-            <ThoughtFallbackStep title={step.title} input={step.content} connected={hasConnectorAfter(index)} />
+            <ThoughtFallbackStep title={step.title} content={step.content} connected={hasConnectorAfter(index)} />
+          {:else if step.kind === 'tool_result'}
+            <ThoughtFallbackStep title={step.title} content={step.content} detailsLabel="result" error={step.status === 'error'} connected={hasConnectorAfter(index)} />
           {:else}
             <div class="relative flex min-w-0 gap-3 py-1.5">
               <span

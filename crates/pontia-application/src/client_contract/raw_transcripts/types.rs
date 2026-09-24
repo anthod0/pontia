@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentBindingResolveRequest {
+    pub client_session_key: String,
     pub id: String,
     pub session_id: String,
     pub client_type: String,

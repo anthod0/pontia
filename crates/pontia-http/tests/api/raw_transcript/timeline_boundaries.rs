@@ -143,7 +143,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
         .await
         .unwrap();
     sqlx::query(
-        "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id) VALUES (?, 'pi_tui', 'rtinst_a')",
+        "UPDATE runtime_bindings SET runtime_kind='pi_tui',runtime_instance_id='rtinst_a' WHERE session_id=?",
     )
     .bind(session_id)
     .execute(&state.db())

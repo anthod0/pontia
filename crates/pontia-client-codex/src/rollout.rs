@@ -33,6 +33,9 @@ pub fn identity(path: &Path) -> Result<String> {
     );
     let mut line = String::new();
     reader.read_line(&mut line)?;
+    if !line.ends_with('\n') {
+        return Err(pending("Codex rollout header is not persisted yet"));
+    }
     let record: Value = serde_json::from_str(&line)?;
     if record["type"] != "session_meta" {
         return Err(Error::CapabilityUnavailable(
@@ -50,10 +53,21 @@ impl AgentBindingResolver for CodexRollout {
         "codex"
     }
     fn resolve(&self, request: &AgentBindingResolveRequest) -> Result<ResolvedAgentBinding> {
+        if request.client_type != "codex" {
+            return Err(Error::CapabilityUnavailable(
+                "Unsupported Codex binding client type".into(),
+            ));
+        }
         let path = request.client_session_file.clone().ok_or_else(|| {
             Error::CapabilityUnavailable("source_unavailable: Codex rollout path is missing".into())
         })?;
         let thread = identity(&path)?;
+        if thread != request.client_session_key {
+            return Err(Error::Conflict {
+                code: "timeline_source_identity_mismatch",
+                message: "Codex rollout does not match the bound thread".into(),
+            });
+        }
         Ok(ResolvedAgentBinding {
             id: request.id.clone(),
             client_type: "codex".into(),
@@ -75,9 +89,18 @@ impl TimelineBoundaryCapturer for CodexRollout {
         let turn = request
             .native_entry_anchor
             .ok_or_else(|| Error::Domain("Codex boundary requires native turn id".into()))?;
+        if identity(&request.source.path)?
+            != request.source.fingerprint.as_deref().unwrap_or_default()
+        {
+            return Err(Error::Conflict {
+                code: "timeline_source_identity_mismatch",
+                message: "Codex rollout identity changed before boundary capture".into(),
+            });
+        }
         let mut reader = BufReader::new(File::open(&request.source.path)?);
         let mut offset = 0;
         let mut head = None;
+        let mut terminal = false;
         let mut line = String::new();
         while reader.read_line(&mut line)? > 0 {
             if !line.ends_with('\n') {
@@ -87,6 +110,15 @@ impl TimelineBoundaryCapturer for CodexRollout {
             if native_turn(&record).as_deref() == Some(&turn) && head.is_none() {
                 head = Some(offset);
             }
+            if record["type"] == "event_msg"
+                && native_turn(&record).as_deref() == Some(&turn)
+                && matches!(
+                    record.pointer("/payload/type").and_then(Value::as_str),
+                    Some("task_complete" | "turn_aborted")
+                )
+            {
+                terminal = true;
+            }
             offset += line.len() as u64;
             line.clear();
         }
@@ -95,12 +127,15 @@ impl TimelineBoundaryCapturer for CodexRollout {
                 Some(offset) => offset,
                 None if request.allow_missing_native_entry_anchor => 0,
                 None => {
-                    return Err(Error::CapabilityUnavailable(
-                        "Codex native turn anchor is not persisted yet".into(),
-                    ));
+                    return Err(pending("Codex native turn anchor is not persisted yet"));
                 }
             },
-            TimelineBoundaryCaptureKind::Tail => offset,
+            TimelineBoundaryCaptureKind::Tail if head.is_some() && terminal => offset,
+            TimelineBoundaryCaptureKind::Tail => {
+                return Err(pending(
+                    "Codex native turn history is not fully persisted yet",
+                ));
+            }
         };
         Ok(CapturedTimelineBoundary {
             kind: request.kind,
@@ -142,6 +177,13 @@ impl TurnTimelineReader for CodexRollout {
         request: TurnTimelineReadRequest,
     ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
         let thread = identity(&request.source.path)?;
+        if request.source.fingerprint.as_deref() != Some(&thread) {
+            return Err(Error::Conflict {
+                code: "timeline_source_identity_mismatch",
+                message: "Codex rollout identity changed while reading".into(),
+            }
+            .into());
+        }
         let mut output = Vec::new();
         for range in request.ranges {
             let invalid = |message: &str| TurnTimelineReadError::InvalidRange {
@@ -209,7 +251,11 @@ impl TurnTimelineReader for CodexRollout {
                                 raw_kind: Some(kind.into()),
                                 role: "tool".into(),
                                 title: Some(kind.into()),
-                                status: payload["status"].as_str().map(str::to_string),
+                                status: if kind == "error" {
+                                    Some("error".into())
+                                } else {
+                                    payload["status"].as_str().map(str::to_string)
+                                },
                                 occurred_at: record["timestamp"].as_str().map(str::to_string),
                                 content_preview: payload.to_string(),
                                 managed_tool_use: None,
@@ -308,8 +354,12 @@ impl TurnTimelineReader for CodexRollout {
                     },
                 });
             }
-            if !found_anchor && tail.is_some() {
-                return Err(invalid("Codex native turn anchor cannot be restored"));
+            if !found_anchor {
+                return Err(if tail.is_some() {
+                    invalid("Codex native turn anchor cannot be restored")
+                } else {
+                    pending("Codex native turn anchor is not persisted yet").into()
+                });
             }
         }
         Ok(output)
@@ -324,6 +374,7 @@ fn native_detail(record: &Value) -> Option<(&str, &Value)> {
     match record["type"].as_str()? {
         "session_meta" | "turn_context" | "world_state" | "token_usage_record" => None,
         "event_msg" => match payload["type"].as_str()? {
+            "task_complete" if !payload["error"].is_null() => Some(("error", &payload["error"])),
             "task_started"
             | "task_complete"
             | "turn_aborted"
@@ -370,4 +421,11 @@ fn render_content(value: &Value) -> String {
                 .join("\n")
         })
         .unwrap_or_else(|| value.to_string())
+}
+
+fn pending(message: &str) -> Error {
+    Error::Conflict {
+        code: "timeline_pending",
+        message: message.into(),
+    }
 }

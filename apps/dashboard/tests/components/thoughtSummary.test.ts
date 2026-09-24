@@ -44,7 +44,9 @@ test('completed work expands inline from its summary heading', async () => {
   expect(screen.getByText('AGENTS.md')).not.toBeVisible();
   expect(screen.getByText('Custom tool')).toBeInTheDocument();
   expect(screen.getByText('secret input')).not.toBeVisible();
-  expect(screen.queryByText('File contents')).not.toBeInTheDocument();
+  expect(screen.getByText('File contents')).not.toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Show Read file result' }));
+  expect(screen.getByText('File contents')).toBeVisible();
 
   await user.click(screen.getByRole('button', { name: 'Show Custom tool parameters' }));
 
@@ -152,4 +154,18 @@ test('streaming updates and activity changes preserve the user disclosure state'
   await rerender({ steps: [step({ content: 'More thinking.' })] });
   expect(screen.getByRole('button', { name: 'Show agent work steps' })).toHaveAttribute('aria-expanded', 'false');
   expect(screen.getByText('More thinking.')).not.toBeVisible();
+});
+
+
+test('native errors and question answers remain inspectable without assistant text', async () => {
+  const user = userEvent.setup();
+  render(ThoughtSummary, { props: { steps: [
+    step({ id: 'error', kind: 'tool_result', title: 'Native error', status: 'error', content: 'workspace routing discovery failed' }),
+    step({ id: 'answers', kind: 'tool_result', title: 'Questions and answers', content: 'Questions: Color?\nAnswers: Green' }),
+  ] } });
+  await user.click(screen.getByRole('button', { name: 'Show agent work steps' }));
+  await user.click(screen.getByRole('button', { name: 'Show Native error result' }));
+  expect(screen.getByText('workspace routing discovery failed')).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Show Questions and answers result' }));
+  expect(screen.getByText(/Questions: Color.*Answers: Green/s)).toBeVisible();
 });

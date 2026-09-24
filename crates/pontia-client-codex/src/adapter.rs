@@ -46,8 +46,18 @@ impl ClientData for CodexData {
         }
         Ok(data)
     }
-    fn take_evidence(&self, _: &mut DomainEvent) -> NativeEventEvidence {
-        NativeEventEvidence::default()
+    fn take_evidence(&self, event: &mut DomainEvent) -> NativeEventEvidence {
+        NativeEventEvidence {
+            entry_anchor: event.payload["native_turn_id"].as_str().map(str::to_owned),
+            topology: None,
+        }
+    }
+    fn probe_timeline(
+        &self,
+        binding: &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
+    ) -> Option<Result<()>> {
+        use pontia_application::client_contract::raw_transcripts::AgentBindingResolver;
+        Some(CodexRollout.resolve(binding).map(|_| ()))
     }
     fn timeline(&self) -> TurnTimelineBackend {
         TurnTimelineBackend {

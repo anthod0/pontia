@@ -23,6 +23,13 @@ pub struct BranchTargetRequest {
 pub trait ClientData: Send + Sync {
     fn normalize_payload(&self, kind: EventType, data: Value) -> Result<Value>;
     fn take_evidence(&self, event: &mut DomainEvent) -> NativeEventEvidence;
+    /// Clients whose native history availability is instance-specific can verify it on demand.
+    fn probe_timeline(
+        &self,
+        _binding: &super::raw_transcripts::AgentBindingResolveRequest,
+    ) -> Option<Result<()>> {
+        None
+    }
     fn timeline(&self) -> TurnTimelineBackend;
     fn boundaries(&self) -> TimelineBoundaryBackend;
     fn topology(&self) -> Option<TurnTopologyBackend>;

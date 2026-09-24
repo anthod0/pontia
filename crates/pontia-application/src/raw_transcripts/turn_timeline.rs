@@ -1,4 +1,5 @@
 mod page;
+mod recovery;
 mod source;
 mod topology;
 mod tree_history;
@@ -6,7 +7,6 @@ mod tree_updates;
 
 use pontia_core::error::Error;
 use serde::Serialize;
-use sqlx::SqlitePool;
 
 use crate::client_contract::raw_transcripts::TurnTimelineItem;
 
@@ -54,10 +54,13 @@ pub enum TurnTimelineServiceError {
     TurnNotFound,
     CapabilityUnavailable,
     TurnUnavailable { turn_id: String },
+    NativeAssociationUnavailable { turn_id: String },
     TimelineInvalid { turn_id: String },
     TopologyUnknown { turn_id: String },
     TopologyInvalid { turn_id: String },
     SourceUnavailable,
+    Pending,
+    SourceIdentityMismatch,
     Inner(Error),
 }
 
@@ -70,19 +73,16 @@ impl From<Error> for TurnTimelineServiceError {
 #[derive(Clone)]
 pub struct TurnTimelineService {
     clients: crate::clients::ClientRegistry,
-    pub(super) pool: SqlitePool,
+    pub(super) pool: sqlx::SqlitePool,
+    events: crate::EventIngestService,
 }
 
 impl TurnTimelineService {
-    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
-        self.clients = clients;
-        self
-    }
-
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(events: crate::EventIngestService) -> Self {
         Self {
-            pool,
-            clients: Default::default(),
+            pool: events.db(),
+            clients: events.clients(),
+            events,
         }
     }
 }

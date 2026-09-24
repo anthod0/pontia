@@ -143,11 +143,11 @@ export function timelineItemsToChatMessages(
       });
     } else {
       messages.push({
-        id: `${turnId}:working`,
+        id: `${pendingThoughtSteps[0].id}:working`,
         turnId,
         role: 'assistant',
         content: '',
-        status: 'pending',
+        status: pendingThoughtSteps.some((step) => step.status === 'error') ? 'failed' : 'pending',
         createdAt: pendingThoughtSteps[0]?.occurredAt ?? '',
         thoughtSteps: pendingThoughtSteps,
       });

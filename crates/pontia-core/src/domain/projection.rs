@@ -88,6 +88,10 @@ impl ProjectionState {
     pub fn apply(&mut self, event: &DomainEvent) -> crate::error::Result<()> {
         self.validate_event_shape(event)?;
 
+        if event.event_type == EventType::TurnTimelineBoundaryRecovered {
+            return self.recover_timeline_boundary(event);
+        }
+
         if let Some(session) = self.sessions.get(&event.session_id)
             && session.state.is_terminal()
             && !(session.state == SessionState::Exited
@@ -133,7 +137,7 @@ impl ProjectionState {
                     .map(|session| session.state)
                     .unwrap_or(SessionState::Created),
             ),
-            EventType::SessionMessageUpdated => Ok(()),
+            EventType::SessionMessageUpdated | EventType::TurnTimelineBoundaryRecovered => Ok(()),
             EventType::SessionModelUpdated => self.apply_model(event),
             EventType::SessionContextUsageUpdated => self.apply_context_usage(event),
             EventType::TurnCreated | EventType::TurnQueued => {
@@ -165,7 +169,9 @@ impl ProjectionState {
             )));
         }
         match (&event.timeline_boundary, event.event_type) {
-            (None, _) | (Some(TimelineBoundary::Head { .. }), EventType::TurnStarted) => {}
+            (None, _)
+            | (Some(TimelineBoundary::Head { .. }), EventType::TurnStarted)
+            | (Some(_), EventType::TurnTimelineBoundaryRecovered) => {}
             (
                 Some(TimelineBoundary::Tail { .. }),
                 EventType::TurnCompleted

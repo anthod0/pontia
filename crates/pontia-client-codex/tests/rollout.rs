@@ -16,8 +16,22 @@ fn fixture(records: &[Value]) -> (tempfile::TempDir, ResolvedAgentBinding) {
     for record in records {
         writeln!(file, "{record}").unwrap();
     }
+    for turn in records
+        .iter()
+        .filter(|record| record["type"] == "turn_context")
+        .filter_map(|record| record["payload"]["turn_id"].as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+    {
+        writeln!(
+            file,
+            "{}",
+            json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":turn}})
+        )
+        .unwrap();
+    }
     let source = CodexRollout
         .resolve(&AgentBindingResolveRequest {
+            client_session_key: "thread-a".into(),
             id: "binding".into(),
             session_id: "session".into(),
             client_type: "codex".into(),
@@ -25,6 +39,19 @@ fn fixture(records: &[Value]) -> (tempfile::TempDir, ResolvedAgentBinding) {
         })
         .unwrap();
     (root, source)
+}
+
+fn finish(source: &ResolvedAgentBinding, turn: &str) {
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&source.path)
+        .unwrap();
+    writeln!(
+        file,
+        "{}",
+        json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":turn}})
+    )
+    .unwrap();
 }
 
 fn context(turn: &str) -> Value {
@@ -268,30 +295,73 @@ fn refuses_missing_completed_native_turn_instead_of_returning_empty_history() {
             })
             .is_err()
     );
-    let head = CodexRollout
-        .capture_source_origin_head(&source.id, Some("missing".into()))
-        .unwrap()
-        .cursor;
-    let tail = CodexRollout
-        .capture_boundary(TimelineBoundaryCaptureRequest {
-            source: source.clone(),
-            kind: TimelineBoundaryCaptureKind::Tail,
-            native_entry_anchor: Some("missing".into()),
-            allow_missing_native_entry_anchor: true,
-        })
-        .unwrap()
-        .cursor;
     assert!(
         CodexRollout
-            .read_turn_ranges(TurnTimelineReadRequest {
+            .capture_boundary(TimelineBoundaryCaptureRequest {
                 source,
-                ranges: vec![TurnTimelineRange {
-                    turn_id: "turn".into(),
-                    is_first_session_turn: true,
-                    head_cursor: head,
-                    tail_cursor: Some(tail)
-                }],
+                kind: TimelineBoundaryCaptureKind::Tail,
+                native_entry_anchor: Some("missing".into()),
+                allow_missing_native_entry_anchor: true,
             })
             .is_err()
     );
+}
+
+#[test]
+fn completion_capture_waits_for_the_native_terminal_record() {
+    let (root, source) = fixture(&[]);
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&source.path)
+        .unwrap();
+    writeln!(file, "{}", context("delayed")).unwrap();
+    let capture = || {
+        CodexRollout.capture_boundary(TimelineBoundaryCaptureRequest {
+            source: source.clone(),
+            kind: TimelineBoundaryCaptureKind::Tail,
+            native_entry_anchor: Some("delayed".into()),
+            allow_missing_native_entry_anchor: false,
+        })
+    };
+    assert!(matches!(
+        capture(),
+        Err(pontia_core::Error::Conflict {
+            code: "timeline_pending",
+            ..
+        })
+    ));
+    writeln!(
+        file,
+        "{}",
+        item(json!({"type":"message","role":"assistant","content":[{"text":"late final answer"}]}))
+    )
+    .unwrap();
+    assert!(capture().is_err());
+    finish(&source, "delayed");
+    assert_eq!(
+        read(source, "delayed")[0].item.content_preview,
+        "late final answer"
+    );
+    drop(root);
+}
+
+#[test]
+fn rejects_a_source_from_another_bound_thread() {
+    let (_root, source) = fixture(&[]);
+    let error = CodexRollout
+        .resolve(&AgentBindingResolveRequest {
+            id: source.id,
+            session_id: "session".into(),
+            client_type: "codex".into(),
+            client_session_key: "other-thread".into(),
+            client_session_file: Some(source.path),
+        })
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        pontia_core::Error::Conflict {
+            code: "timeline_source_identity_mismatch",
+            ..
+        }
+    ));
 }

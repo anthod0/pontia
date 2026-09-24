@@ -1,3 +1,5 @@
+mod history;
+
 use super::CodexService;
 use pontia_application::{AppState, CreateSessionRequest};
 use pontia_core::{Error, domain::EventType};

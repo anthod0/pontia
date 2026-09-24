@@ -225,6 +225,7 @@ export interface SessionView {
   pinned_at: string | null;
   archived_at: string | null;
   capabilities: SessionCapabilities;
+  timeline_unavailable_reason?: string | null;
   model: string | null;
   model_control_unavailable_reason?: string | null;
   context_usage: ContextUsageView | null;

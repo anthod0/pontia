@@ -821,7 +821,7 @@
       <span>TUI: {selectedSession.codex.tui?.connected ? 'connected' : 'disconnected'}</span>
       <Button variant="outline" size="sm" disabled={!selectedSession.codex.thread_id || actionBusy || selectedSession.state === 'exited'} onclick={() => void openSelectedTui()}>Open TUI</Button>
       {#if selectedSession.codex.tui?.pane_id}
-        <code>tmux attach -t pontia_codex_{(selectedSession.codex.tui.owner_session_id ?? selectedSession.session_id).replaceAll('-', '_')}</code>
+        <code class="min-w-0 break-all">tmux attach -t pontia_codex_{(selectedSession.codex.tui.owner_session_id ?? selectedSession.session_id).replaceAll('-', '_')}</code>
       {/if}
       {#if !selectedSession.capabilities.timeline}<span>Native history is currently unavailable.</span>{/if}
     </div>
@@ -874,9 +874,12 @@
             {#if !sessionSupportsTimeline(selectedSession) || timelineUnavailable}
               <Empty.Root data-timeline-status={$timelineState.status} class="min-h-80">
                 <Empty.Header>
-                  <Empty.Title>Conversation history unavailable</Empty.Title>
-                  <Empty.Description>{!sessionSupportsTimeline(selectedSession) ? 'Conversation history is unavailable for this session.' : $timelineState.error}</Empty.Description>
+                  <Empty.Title>{$timelineState.status === 'pending' ? 'Waiting for native history' : 'Conversation history unavailable'}</Empty.Title>
+                  <Empty.Description>{!sessionSupportsTimeline(selectedSession) ? selectedSession.timeline_unavailable_reason ?? 'Conversation history is unavailable for this session.' : $timelineState.error}</Empty.Description>
                 </Empty.Header>
+                <Empty.Content>
+                  <Button variant="outline" onclick={() => loadSelectedSession(selectedSessionId)}>Retry history</Button>
+                </Empty.Content>
               </Empty.Root>
             {:else}
               {#key selectedSessionId}

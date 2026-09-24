@@ -90,6 +90,33 @@ impl EventIngestService {
         self
     }
 
+    pub(crate) async fn recover_timeline_boundary(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        client_type: &str,
+        binding_id: &str,
+        boundary: pontia_core::domain::TimelineBoundary,
+    ) -> Result<()> {
+        use pontia_core::domain::{EventSource, EventType, TimelineBoundary};
+        let position = match &boundary {
+            TimelineBoundary::Head { .. } => "head",
+            TimelineBoundary::Tail { .. } => "tail",
+        };
+        let event = DomainEvent::new(
+            format!("timeline-recovery:{binding_id}:{turn_id}:{position}"),
+            session_id.into(),
+            Some(turn_id.into()),
+            EventSource::SystemMonitor,
+            client_type.into(),
+            EventType::TurnTimelineBoundaryRecovered,
+            serde_json::json!({"binding_id": binding_id}),
+        )
+        .with_timeline_boundary(boundary);
+        self.ingest_domain_event(event, None, false, None).await?;
+        Ok(())
+    }
+
     pub async fn ingest_pontia_event(&self, event: PontiaEvent) -> Result<EventIngestResult> {
         self.ingest_domain_event(event.into_reported_event().into(), None, false, None)
             .await

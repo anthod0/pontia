@@ -75,6 +75,7 @@ impl ClientData for PiData {
             .resolver
             .resolve(
                 &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest {
+                    client_session_key: binding.client_session_key.clone(),
                     id: binding.id,
                     session_id: binding.session_id.clone(),
                     client_type: binding.client_type,

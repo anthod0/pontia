@@ -6,13 +6,15 @@
 
   interface Props {
     title: string
-    input: string
+    content: string
+    detailsLabel?: 'parameters' | 'result'
+    error?: boolean
     connected?: boolean
   }
 
-  let { title, input, connected = false }: Props = $props()
+  let { title, content, detailsLabel = 'parameters', error = false, connected = false }: Props = $props()
   let open = $state(false)
-  const parameters = $derived(formatParameters(title, input))
+  const parameters = $derived(formatParameters(title, content))
 
   function formatParameters(toolName: string, preview: string): string {
     const value = preview.startsWith(`${toolName} `) ? preview.slice(toolName.length + 1) : preview
@@ -27,13 +29,13 @@
 <Collapsible.Root bind:open class="relative min-w-0">
   <Collapsible.Trigger
     class="group/fallback-step flex w-full min-w-0 gap-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    aria-label={open ? `Hide ${title} parameters` : `Show ${title} parameters`}
+    aria-label={open ? `Hide ${title} ${detailsLabel}` : `Show ${title} ${detailsLabel}`}
   >
     <span class="relative z-10 flex size-6 shrink-0 items-center justify-center bg-background text-muted-foreground">
       <WrenchIcon class="size-4 group-hover/fallback-step:hidden" aria-hidden="true" />
       <CaretRightIcon class={cn('hidden size-4 transition-transform group-hover/fallback-step:block', open && 'rotate-90')} aria-hidden="true" />
     </span>
-    <span class="min-w-0 flex-1 pt-0.5 text-sm font-medium leading-5 text-foreground/75">{title}</span>
+    <span class={cn("min-w-0 flex-1 break-words pt-0.5 text-sm font-medium leading-5", error ? "text-destructive" : "text-foreground/75")}>{title}{detailsLabel === 'result' ? ' · Result' : ''}</span>
   </Collapsible.Trigger>
 
   {#if connected}
@@ -41,6 +43,6 @@
   {/if}
 
   <Collapsible.Content>
-    <pre class="mb-3 ml-9 whitespace-pre-wrap break-words px-2 py-1 font-mono text-sm leading-5 text-muted-foreground">{parameters}</pre>
+    <pre class="mb-3 ml-9 max-w-[calc(100%_-_2.25rem)] overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-sm leading-5 text-muted-foreground">{parameters}</pre>
   </Collapsible.Content>
 </Collapsible.Root>

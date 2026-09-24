@@ -46,6 +46,28 @@ impl ExternalQueryService {
             .session_capabilities(&session.session_id, &session.client_type)
             .await?;
 
+        if let Some(data) = self.clients.data(&session.client_type)
+            && let Some(binding) = crate::AgentBindingService::new(self.pool.clone())
+                .binding_for_session(&session.session_id)
+                .await?
+            && let Some(result) = data.probe_timeline(
+                &crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
+                    id: binding.id,
+                    session_id: binding.session_id,
+                    client_type: binding.client_type,
+                    client_session_key: binding.client_session_key,
+                    client_session_file: binding.client_session_file.map(Into::into),
+                },
+            )
+        {
+            session.capabilities.timeline = result.is_ok();
+            session.timeline_unavailable_reason = result.err().map(|error| match error {
+                pontia_core::Error::Conflict { code: "timeline_source_identity_mismatch", .. } => "Native history belongs to a different session.".into(),
+                pontia_core::Error::CapabilityUnavailable(message) if message.contains("source_unavailable:") => "Native history is not available on disk yet. Retry when the source is available.".into(),
+                pontia_core::Error::Conflict { code: "timeline_pending", .. } => "Native history is still being written. Retry shortly.".into(),
+                _ => "The native history format is unsupported or invalid.".into(),
+            });
+        }
         session.lineage = self.session_lineage(&session.session_id).await?;
         if let Some(client) = self
             .clients

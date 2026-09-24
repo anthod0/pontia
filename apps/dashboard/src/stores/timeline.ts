@@ -15,6 +15,8 @@ export type TimelineStatus =
   | 'range_unavailable'
   | 'range_invalid'
   | 'source_unavailable'
+  | 'pending'
+  | 'source_identity_mismatch'
   | 'topology_unavailable'
   | 'error';
 
@@ -39,6 +41,7 @@ type LoadMode = 'rebuild' | 'more';
 const DEFAULT_HISTORY_LIMIT = 20;
 const FORWARD_LIMIT = 100;
 const TIMELINE_UPDATE_DEBOUNCE_MS = 100;
+let pendingRetry: ReturnType<typeof setTimeout> | null = null;
 
 function emptyState(sessionId = ''): TimelineState {
   return {
@@ -109,6 +112,8 @@ const cachedRefreshCursorSessions = new Set<string>();
 const cachedHistoryCursorSessions = new Set<string>();
 
 export function resetTimelineState(sessionId = ''): void {
+  if (pendingRetry) clearTimeout(pendingRetry);
+  pendingRetry = null;
   timelineState.set(emptyState(sessionId));
   if (sessionId) {
     cachedRefreshCursorSessions.delete(sessionId);
@@ -203,8 +208,11 @@ function errorStatus(error: unknown): TimelineStatus {
   switch (error.code) {
     case 'invalid_timeline_query': return 'query_error';
     case 'timeline_capability_unavailable': return 'capability_unavailable';
+    case 'timeline_native_association_unavailable':
     case 'turn_timeline_unavailable': return 'range_unavailable';
     case 'turn_timeline_invalid': return 'range_invalid';
+    case 'timeline_pending': return 'pending';
+    case 'timeline_source_identity_mismatch': return 'source_identity_mismatch';
     case 'timeline_source_unavailable': return 'source_unavailable';
     case 'turn_topology_unknown':
     case 'turn_topology_invalid': return 'topology_unavailable';
@@ -213,6 +221,19 @@ function errorStatus(error: unknown): TimelineStatus {
 }
 
 function applyTimelineError(sessionId: string, error: unknown): void {
+  const previous = get(timelineState);
+  if (previous.sessionId !== sessionId) return;
+  if (pendingRetry) clearTimeout(pendingRetry);
+  pendingRetry = null;
+  if (error instanceof ApiError && error.code === 'timeline_pending') {
+    pendingRetry = setTimeout(() => {
+      pendingRetry = null;
+      const current = get(timelineState);
+      if (current.sessionId === sessionId && current.status === 'pending') {
+        void loadSessionTimeline(sessionId, { topology: previous.mode === 'tree' });
+      }
+    }, 1000);
+  }
   timelineState.update((state) => state.sessionId !== sessionId ? state : ({
     ...emptyState(sessionId),
     status: errorStatus(error),

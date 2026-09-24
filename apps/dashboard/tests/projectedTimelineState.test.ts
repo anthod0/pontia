@@ -87,6 +87,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  resetTimelineState();
   cleanup();
 });
 
@@ -454,4 +455,38 @@ test('forward pagination commits no intermediate page when a later range fails',
     status: 'range_invalid',
     errorCode: 'turn_timeline_invalid',
   });
+});
+
+
+test('pending native history retries after disk persistence without switching sessions', async () => {
+  vi.useFakeTimers();
+  mocks.getTurnTimeline
+    .mockRejectedValueOnce(new ApiError('History is still being written', 'timeline_pending', 503))
+    .mockResolvedValueOnce(page({ items: [item('turn-2', 'final', 'persisted answer')], next_turn_id: null }));
+  await loadSessionTimeline('sess-1');
+  expect(get(timelineState).status).toBe('pending');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(get(timelineState)).toMatchObject({ status: 'ready', items: [expect.objectContaining({ content_preview: 'persisted answer' })] });
+  mocks.getTurnTimeline.mockRejectedValueOnce(new ApiError('Pending', 'timeline_pending', 503));
+  await loadSessionTimeline('sess-1');
+  resetTimelineState('sess-2');
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(get(timelineState)).toMatchObject({ sessionId: 'sess-2', status: 'idle', items: [] });
+  expect(mocks.getTurnTimeline).toHaveBeenCalledTimes(3);
+});
+
+
+test('multiple steers within one native Turn keep distinct tool groups renderable', async () => {
+  const nativeItems = [
+    { ...item('turn-1', 'call-1', 'first work'), kind: 'tool_call', title: 'first tool' },
+    { ...item('turn-1', 'steer-1', 'follow up one'), kind: 'user', role: 'user' },
+    { ...item('turn-1', 'call-2', 'second work'), kind: 'tool_call', title: 'second tool' },
+    { ...item('turn-1', 'steer-2', 'follow up two'), kind: 'user', role: 'user' },
+    item('turn-1', 'answer', 'final answer'),
+  ];
+  render(SessionConversation, { props: { messages: timelineItemsToChatMessages(nativeItems) } });
+  expect(screen.getByText('follow up one')).toBeInTheDocument();
+  expect(screen.getByText('follow up two')).toBeInTheDocument();
+  expect(screen.getByText('final answer')).toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: 'Show agent work steps' })).toHaveLength(2);
 });
