@@ -1,3 +1,19 @@
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow, serde::Serialize)]
+pub struct WorkflowRecoveryRow {
+    pub recovery_id: String,
+    pub workflow_id: String,
+    pub failure_event_id: String,
+    pub exit_event_id: String,
+    pub node_id: String,
+    pub session_id: String,
+    pub message_id: String,
+    pub state: String,
+    pub runtime_instance_id: Option<String>,
+    pub failure_message: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 pub struct WorkflowRow {
     pub workflow_id: String,

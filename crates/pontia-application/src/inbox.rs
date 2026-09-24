@@ -1,3 +1,4 @@
+mod preparation;
 mod retry;
 pub use retry::RetryInboxMessageRequest;
 mod association;
@@ -378,6 +379,13 @@ impl InboxCommandService {
         let Some(row) = inbox_repository.next_pending_message(session_id).await? else {
             return Ok(());
         };
+        if let Some(expected) = row.required_runtime_instance_id.as_deref()
+            && let Err(error) =
+                crate::runtime::ControlTarget::resolve(&self.pool, session_id, Some(expected)).await
+        {
+            self.mark_failed(&row.message_id, error.to_string()).await?;
+            return Ok(());
+        }
         if row.branch_target_turn_id.is_none() && !adapter.input_available(session_id).await? {
             return Ok(());
         }
@@ -439,7 +447,13 @@ impl InboxCommandService {
                 .map(|result| (None, result))
         } else {
             turns
-                .submit_input(session_id, input, metadata, intent)
+                .submit_input(
+                    session_id,
+                    input,
+                    metadata,
+                    intent,
+                    row.required_runtime_instance_id.as_deref(),
+                )
                 .await
         };
         let delivery = match delivery {

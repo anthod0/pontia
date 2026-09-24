@@ -230,6 +230,12 @@ export async function resumeWorkflow(workflowId: string): Promise<WorkflowDetail
   return (await request<{ workflow: WorkflowDetailView }>(`/workflows/${encodeURIComponent(workflowId)}/resume`, { method: 'POST', mutating: true })).workflow;
 }
 
+export async function retryWorkflow(workflowId: string, failureEventId: string): Promise<WorkflowDetailView> {
+  return (await request<{ workflow: WorkflowDetailView }>(`/workflows/${encodeURIComponent(workflowId)}/retry`, {
+    method: 'POST', mutating: true, body: { failure_event_id: failureEventId },
+  })).workflow;
+}
+
 export async function listSessions(options: ListSessionsOptions = {}): Promise<SessionView[]> {
   const query = new URLSearchParams();
   if (options.includeArchived) query.set('include_archived', 'true');

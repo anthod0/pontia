@@ -23,7 +23,7 @@ impl SqliteWorkflowRepository {
             r#"SELECT workflow_id, title, cwd, state, current_revision, failure_message, created_at,
                       updated_at, started_at, completed_at
                FROM workflows
-               WHERE state IN ('running', 'paused', 'replanning', 'blocked')
+               WHERE state IN ('running', 'paused', 'replanning', 'blocked', 'recovering')
                ORDER BY created_at, workflow_id"#,
         )
         .fetch_all(&self.pool)

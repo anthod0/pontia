@@ -21,6 +21,7 @@ where
         session_id: &str,
         terminal: AgentTerminal,
         runtime_instance_id: Option<String>,
+        cause_event_id: &str,
     ) -> Result<()> {
         match terminal {
             AgentTerminal::TurnCompleted => {
@@ -29,6 +30,7 @@ where
                         &workflow.workflow_id,
                         &node.node_id,
                         &Uuid::now_v7().to_string(),
+                        runtime_instance_id.as_deref(),
                     )
                     .await?;
             }
@@ -46,6 +48,8 @@ where
                         &node.node_id,
                         &Uuid::now_v7().to_string(),
                         &failure_message,
+                        cause_event_id,
+                        runtime_instance_id.as_deref(),
                     )
                     .await?;
                 if terminal != AgentTerminal::SessionExited {
@@ -85,9 +89,13 @@ where
         {
             return Ok(());
         }
+        let recovered_runtime = self
+            .repository
+            .recovered_node_runtime(&node.node_id)
+            .await?;
         let Some(event) = self
             .persisted_events
-            .latest_workflow_terminal_event(session_id, None, None)
+            .latest_workflow_terminal_event(session_id, recovered_runtime.as_deref(), None)
             .await?
         else {
             return Ok(());
@@ -110,8 +118,15 @@ where
         }
 
         if node.submitted_at.is_none() {
-            self.reconcile_unsubmitted(workflow, node, session_id, terminal, runtime_instance_id)
-                .await?;
+            self.reconcile_unsubmitted(
+                workflow,
+                node,
+                session_id,
+                terminal,
+                runtime_instance_id,
+                &event.event_id,
+            )
+            .await?;
             return Ok(());
         }
 

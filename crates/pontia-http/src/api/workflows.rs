@@ -137,6 +137,29 @@ pub async fn resume_workflow(
     control_workflow(state, headers, workflow_id, false).await
 }
 
+#[derive(Deserialize)]
+pub struct RetryWorkflowRequest {
+    failure_event_id: String,
+}
+
+pub async fn retry_workflow(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(workflow_id): Path<String>,
+    Json(request): Json<RetryWorkflowRequest>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    authenticate(&state, &headers)?;
+    let recovery = pontia_workflow::WorkflowRecoveryService::new(&state)
+        .retry(&workflow_id, &request.failure_event_id)
+        .await
+        .map_err(map_workflow_error)?;
+    let workflow = WorkflowQueryService::new(state.db())
+        .get_workflow(&workflow_id)
+        .await
+        .map_err(map_workflow_error)?;
+    Ok(ok(json!({"workflow": workflow, "recovery": recovery})))
+}
+
 async fn control_workflow(
     state: AppState,
     headers: HeaderMap,

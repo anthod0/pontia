@@ -1,5 +1,5 @@
 import { get, writable } from 'svelte/store';
-import { getWorkflow, listWorkflows, pauseWorkflow as apiPauseWorkflow, resumeWorkflow as apiResumeWorkflow } from '../api/client';
+import { getWorkflow, listWorkflows, pauseWorkflow as apiPauseWorkflow, resumeWorkflow as apiResumeWorkflow, retryWorkflow as apiRetryWorkflow } from '../api/client';
 import type { WorkflowDetailView, WorkflowListItemView } from '../api/types';
 
 type LoadOptions = { showLoading?: boolean };
@@ -81,6 +81,10 @@ export async function resumeWorkflow(workflowId: string): Promise<WorkflowDetail
     workflowDetailError.set(error instanceof Error ? error.message : String(error));
     throw error;
   }
+}
+
+export async function retryWorkflow(workflowId: string, failureEventId: string): Promise<void> {
+  applyWorkflowDetail(await apiRetryWorkflow(workflowId, failureEventId));
 }
 
 function applyWorkflowDetail(loaded: WorkflowDetailView): void {

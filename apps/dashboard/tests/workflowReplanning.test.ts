@@ -24,7 +24,7 @@ const patch = (id = 'p1', overrides: Partial<WorkflowPatchHistoryView> = {}): Wo
   requested_at: '2026-01-01T00:00:00Z', planning_at: '2026-01-01T00:01:00Z', resolved_at: null, ...overrides,
 });
 const snapshot = (overrides: Partial<WorkflowDetailView> = {}): WorkflowDetailView => ({
-  workflow_id: 'wf', title: 'Example', state: 'replanning', current_revision: 3, active_patch: patch(), failure_message: null, cwd: '/workspace', agent_submitted_count: 0, agent_total_count: 0, current_node_id: null, started_at: null, completed_at: null, created_at: '', updated_at: '', elapsed_ms: 0, nodes: [], ...overrides,
+  retry_failure_event_id: null, retry_unavailable_reason: null, recoveries: [], workflow_id: 'wf', title: 'Example', state: 'replanning', current_revision: 3, active_patch: patch(), failure_message: null, cwd: '/workspace', agent_submitted_count: 0, agent_total_count: 0, current_node_id: null, started_at: null, completed_at: null, created_at: '', updated_at: '', elapsed_ms: 0, nodes: [], ...overrides,
 });
 function visit(query = '') { window.history.replaceState({}, '', `/workflows/wf${query}`); window.dispatchEvent(new PopStateEvent('popstate')); }
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }

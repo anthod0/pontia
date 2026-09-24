@@ -6,7 +6,7 @@ export type TurnState = 'queued' | 'running' | 'completed' | 'failed' | 'interru
 export type TurnTopologyStatus = 'unknown' | 'root' | 'linked';
 export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now' | 'steer';
 export type InboxMessageState = 'resuming' | 'unknown' | 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed' | 'dismissed';
-export type WorkflowState = 'pending' | 'running' | 'paused' | 'replanning' | 'blocked' | 'idle' | 'completed' | 'failed';
+export type WorkflowState = 'pending' | 'running' | 'paused' | 'replanning' | 'blocked' | 'idle' | 'completed' | 'failed' | 'recovering';
 export type WorkflowAgentStatus = 'pending' | 'starting' | 'running' | 'paused' | 'idle' | 'exiting' | 'submitted' | 'failed' | 'unknown';
 
 export interface WorkflowListItemView {
@@ -94,6 +94,9 @@ export interface WorkflowDocumentView {
 }
 
 export interface WorkflowDetailView {
+  retry_failure_event_id: string | null;
+  retry_unavailable_reason: string | null;
+  recoveries: WorkflowRecovery[];
   workflow_id: string;
   title: string;
   state: WorkflowState;
@@ -110,6 +113,18 @@ export interface WorkflowDetailView {
   updated_at: string;
   elapsed_ms: number;
   nodes: WorkflowNodeView[];
+}
+
+export interface WorkflowRecovery {
+  original_failure_message: string | null;
+  recovery_id: string;
+  failure_event_id: string;
+  node_id: string;
+  session_id: string;
+  message_id: string;
+  state: 'requested' | 'preparing' | 'dispatching' | 'completed' | 'failed';
+  failure_message: string | null;
+  created_at: string;
 }
 
 export type ContextUsageCapability = 'unsupported' | 'estimated' | 'exact';

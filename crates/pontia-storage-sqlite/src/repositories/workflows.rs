@@ -9,6 +9,8 @@ mod patch_planning;
 mod patch_queries;
 mod patch_resolution;
 mod queries;
+mod recovery;
+pub use recovery::WorkflowRecoveryCandidate;
 mod reporting_failure;
 
 #[derive(Debug, Clone)]

@@ -63,6 +63,7 @@ pub struct WorkflowCoordinator<S, X, I, B> {
     agent_events: B,
     inbox: std::sync::Arc<InboxCommandService>,
     pontia_home: PathBuf,
+    recovery: crate::WorkflowRecoveryService,
 }
 
 impl<S> WorkflowCoordinator<S, SessionCommandService, TurnCommandService, AgentEventBroker>
@@ -136,6 +137,7 @@ where
             interruptions,
             agent_events,
             pontia_home,
+            recovery: crate::WorkflowRecoveryService::new(app),
         }
     }
 
@@ -148,6 +150,9 @@ where
         let mut interval = tokio::time::interval(RECONCILIATION_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+        if let Err(error) = self.repository.recover_interrupted_preparations().await {
+            tracing::error!(%error, "failed to reconcile interrupted Workflow recoveries");
+        }
         self.reconcile_all().await;
         loop {
             tokio::select! {
@@ -196,6 +201,9 @@ where
     }
 
     pub async fn reconcile(&self, workflow_id: &str) -> Result<()> {
+        if self.recovery.reconcile(workflow_id).await? {
+            return Ok(());
+        }
         let Some(workflow) = self.repository.get_workflow(workflow_id).await? else {
             return Ok(());
         };

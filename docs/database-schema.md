@@ -250,6 +250,7 @@ Each Turn belongs to one Session and uses an immutable, Pontia-generated `turn_<
 | `submission_payload` | TEXT | Original request used to reject identity reuse with different content |
 | `steer_target_turn_id` | TEXT | foreign key → `turns.turn_id`; fixed at acceptance |
 | `retry_of_message_id` | TEXT | foreign key → `inbox_messages.message_id`; explicit retry lineage |
+| `required_runtime_instance_id` | TEXT | Optional runtime constraint for a prepared input; retained while pending and checked when dispatching, including after restart |
 
 **Indexes**
 
@@ -507,6 +508,27 @@ the target does not change either Session's persistent Agent binding.
 | `idx_workflow_patches_one_active` | Yes | `workflow_id` | `state IN ('requested', 'planning')` |
 | `idx_workflow_patches_replanner_session` | Yes | `replanner_session_id` | `replanner_session_id IS NOT NULL` |
 | `idx_workflow_patches_workflow_requested` | No | `workflow_id`, `requested_at`, `patch_id` |  |
+
+## `workflow_recoveries`
+
+Explicit recovery of an unsubmitted Agent Node after a confirmed Pi Session exit. The Node and native Session binding are retained. `recovering` is a Workflow scheduling state; Agent execution still derives from Session facts.
+
+| Column | Type | Constraints / default |
+|---|---|---|
+| `recovery_id` | TEXT | primary key, NOT NULL |
+| `workflow_id` | TEXT | NOT NULL, foreign key → `workflows.workflow_id` |
+| `failure_event_id` | TEXT | NOT NULL, UNIQUE, foreign key → `workflow_events.event_id`; repeated requests for this failure return the same recovery |
+| `exit_event_id` | TEXT | NOT NULL, foreign key → `events.event_id`; original exit evidence |
+| `node_id` | TEXT | NOT NULL, foreign key → `workflow_nodes.node_id` |
+| `session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` |
+| `message_id` | TEXT | NOT NULL, UNIQUE; reserved Inbox identity, created during preparation |
+| `state` | TEXT | NOT NULL, check in `requested`, `preparing`, `dispatching`, `completed`, `failed` |
+| `runtime_instance_id` | TEXT | Confirmed runtime used for recovery; fences subsequent Node lifecycle observations and submissions |
+| `failure_message` | TEXT | Recovery failure diagnostics |
+| `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
+| `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
+
+`idx_workflow_recovery_active` uniquely indexes `workflow_id` where state is `requested`, `preparing`, or `dispatching`. Recovery completion means its input was delivered, not that the Node or Workflow completed. Workflow events retain the original failure and recovery association. Unsubmitted Handoff output is archived under `workflows/<workflow_id>/recoveries/<recovery_id>/` before restoring the Session.
 
 ## `workflow_events`
 

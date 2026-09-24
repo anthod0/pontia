@@ -1845,6 +1845,7 @@ name = "pontia-storage-sqlite"
 version = "0.2.1"
 dependencies = [
  "pontia-core",
+ "serde",
  "serde_json",
  "sqlx",
  "tempfile",

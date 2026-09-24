@@ -44,7 +44,7 @@ pub use workflows::{
     WorkflowSubmissionRequest, apply_workflow_patch, block_workflow_patch, get_workflow,
     get_workflow_context, get_workflow_document, get_workflow_revision, get_workflow_timeline,
     list_workflow_patches, list_workflows, pause_workflow, request_workflow_patch, resume_workflow,
-    run_workflow, submit_workflow_output,
+    retry_workflow, run_workflow, submit_workflow_output,
 };
 pub use workspaces::{
     delete_workspace, get_workspace, list_workspace_root_entries, list_workspace_roots,

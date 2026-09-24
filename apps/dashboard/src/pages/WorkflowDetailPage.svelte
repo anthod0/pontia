@@ -16,7 +16,7 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
-  import { workflowDetail, workflowDetailError, workflowDetailLoading, pauseWorkflow, refreshWorkflow, resumeWorkflow, selectedWorkflowId } from '../stores/workflows'
+  import { workflowDetail, workflowDetailError, workflowDetailLoading, pauseWorkflow, refreshWorkflow, resumeWorkflow, retryWorkflow, selectedWorkflowId } from '../stores/workflows'
   import { groupWorkflowPhases, selectedPhaseOrdinal } from './workflows/phases'
   import type { WorkflowAgentStatus, WorkflowDetailView } from '../api/types'
 
@@ -79,12 +79,13 @@
     return hours ? `${hours}h ${minutes}m ${rest}s` : `${minutes}m ${rest}s`
   }
 
-  async function runControl(action: 'pause' | 'resume'): Promise<void> {
+  async function runControl(action: 'pause' | 'resume' | 'retry'): Promise<void> {
     if (actionBusy) return
     actionBusy = true
     try {
       if (action === 'pause') await pauseWorkflow(routeWorkflowId)
-      else await resumeWorkflow(routeWorkflowId)
+      else if (action === 'resume') await resumeWorkflow(routeWorkflowId)
+      else if (snapshot?.retry_failure_event_id) await retryWorkflow(routeWorkflowId, snapshot.retry_failure_event_id)
     } catch (error) {
       await refreshWorkflow(routeWorkflowId, { showLoading: false })
       workflowDetailError.set(error instanceof Error ? error.message : String(error))
@@ -122,16 +123,36 @@
         <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('pause')}><PauseIcon class="size-4" /> Pause</Button>
       {:else if snapshot?.state === 'paused'}
         <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('resume')}><PlayIcon class="size-4" /> Resume</Button>
+      {:else if snapshot?.state === 'failed' && snapshot.retry_failure_event_id}
+        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('retry')}><PlayIcon class="size-4" /> Retry</Button>
       {/if}
     </div>
   </div>
 
   {#if $workflowDetailError}
     <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflow error</Alert.Title><Alert.Description>{$workflowDetailError}</Alert.Description></Alert.Root>
-    <Button variant="outline" onclick={() => void refreshWorkflow(routeWorkflowId)}>Retry workflow</Button>
+    <Button variant="outline" onclick={() => void refreshWorkflow(routeWorkflowId)}>Reload workflow</Button>
+  {/if}
+
+  {#if snapshot?.retry_unavailable_reason}
+    <p class="text-sm text-muted-foreground">{snapshot.retry_unavailable_reason}</p>
+  {:else if snapshot?.state === 'failed' && snapshot.retry_failure_event_id}
+    <p class="text-sm text-muted-foreground">Retry continues the same conversation. Completed agents stay complete; unsubmitted output is archived and must be submitted again. Existing workspace changes are retained.</p>
+  {/if}
+  {#if snapshot && snapshot.recoveries.length > 0}
+    <Card.Root class="p-4 space-y-3">
+      <h3 class="font-semibold">Recovery history</h3>
+      {#each snapshot.recoveries as recovery (recovery.recovery_id)}
+        <div class="text-sm space-y-1">
+          <p>{recovery.created_at} · {recovery.state === 'completed' ? 'Recovery input delivered' : recovery.state}</p>
+          {#if recovery.original_failure_message}<p class="text-muted-foreground">Original failure: {recovery.original_failure_message}</p>{/if}
+          {#if recovery.failure_message}<p class="text-destructive">{recovery.failure_message}</p>{/if}
+        </div>
+      {/each}
+    </Card.Root>
   {/if}
   {#if snapshot?.failure_message}
-    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflow failed</Alert.Title><Alert.Description>{snapshot.failure_message}</Alert.Description></Alert.Root>
+    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>{snapshot.state === 'recovering' ? 'Recovering from failure' : 'Workflow failed'}</Alert.Title><Alert.Description>{snapshot.failure_message}</Alert.Description></Alert.Root>
   {/if}
 
   <div class="space-y-3">

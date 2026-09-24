@@ -112,3 +112,53 @@ async fn external_workflow_controls_reject_invalid_source_states() {
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["error"]["code"], "state_conflict");
 }
+
+#[tokio::test]
+async fn workflow_retry_is_authenticated_and_persistently_deduplicated_by_failure() {
+    let app = TestApp::new().await;
+    let repo = seed_running_workflow(&app).await;
+    sqlx::query("INSERT INTO sessions(session_id,client_type,state) VALUES ('failed-session','pi','exited')").execute(&app.db).await.unwrap();
+    sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key) VALUES ('binding','failed-session','pi','/workspace','native')").execute(&app.db).await.unwrap();
+    repo.bind_node_session("node_control", "failed-session")
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO events(event_id,session_id,source,client_type,event_type,occurred_at,payload) VALUES ('exit','failed-session','runtime_manager','pi','session.exited','2026-09-24T00:00:00Z','{\"runtime_instance_id\":\"old\"}')").execute(&app.db).await.unwrap();
+    repo.fail_unsubmitted_workflow_node(
+        "wf_control",
+        "node_control",
+        "failure",
+        "Agent Client reported session.exited before Agent Node node_control Submission",
+        "exit",
+        Some("old"),
+    )
+    .await
+    .unwrap();
+    for (token, status) in [
+        ("wrong", StatusCode::UNAUTHORIZED),
+        ("test-token", StatusCode::OK),
+        ("test-token", StatusCode::OK),
+    ] {
+        let response = http::router(app.state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows/wf_control/retry")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"failure_event_id":"failure"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), status);
+    }
+    assert_eq!(repo.list_recoveries("wf_control").await.unwrap().len(), 1);
+    assert_eq!(
+        repo.get_workflow("wf_control")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "recovering"
+    );
+}

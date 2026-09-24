@@ -8,6 +8,8 @@ mod error;
 mod patch;
 mod ports;
 mod query;
+mod recovery;
+pub use recovery::WorkflowRecoveryService;
 mod scheduler;
 mod types;
 mod validation;

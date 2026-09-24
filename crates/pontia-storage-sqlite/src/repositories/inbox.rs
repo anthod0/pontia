@@ -112,7 +112,7 @@ impl SqliteInboxRepository {
         session_id: &str,
     ) -> Result<Option<PendingInboxMessageRow>> {
         Ok(sqlx::query_as::<_, PendingInboxMessageRow>(
-            r#"SELECT message_id, input_summary, metadata, branch_target_turn_id, delivery_policy, steer_target_turn_id
+            r#"SELECT message_id, input_summary, metadata, branch_target_turn_id, delivery_policy, steer_target_turn_id, required_runtime_instance_id
                FROM inbox_messages
                WHERE session_id = ? AND state = 'pending'
                ORDER BY CASE delivery_policy WHEN 'interrupt_now' THEN 0 WHEN 'steer' THEN 1 ELSE 2 END,

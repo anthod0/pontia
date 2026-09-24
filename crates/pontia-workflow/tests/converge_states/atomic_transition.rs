@@ -38,6 +38,7 @@ async fn submission_and_terminal_transition_have_one_atomic_winner() {
                         &terminal_workflow_id,
                         &terminal_node_id,
                         &format!("evt_idle_{index}"),
+                        Some("runtime_session_root"),
                     )
                     .await
             }

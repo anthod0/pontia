@@ -43,6 +43,16 @@ pub struct WorkflowDetailView {
     pub updated_at: String,
     pub elapsed_ms: u64,
     pub nodes: Vec<WorkflowNodeView>,
+    pub retry_failure_event_id: Option<String>,
+    pub retry_unavailable_reason: Option<String>,
+    pub recoveries: Vec<WorkflowRecoveryView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowRecoveryView {
+    #[serde(flatten)]
+    pub recovery: pontia_storage_sqlite::models::workflows::WorkflowRecoveryRow,
+    pub original_failure_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -166,7 +176,35 @@ impl WorkflowQueryService {
             .iter()
             .filter(|node| node.submitted_at.is_some())
             .count();
+        let candidate = self.workflows.recovery_candidate(workflow_id).await?;
+        let recovery_rows = self.workflows.list_recoveries(workflow_id).await?;
+        let events = if recovery_rows.is_empty() {
+            Vec::new()
+        } else {
+            self.workflows.list_events(workflow_id).await?
+        };
+        let recoveries = recovery_rows
+            .into_iter()
+            .map(|recovery| {
+                let original_failure_message = events
+                    .iter()
+                    .find(|event| event.event_id == recovery.failure_event_id)
+                    .and_then(|event| {
+                        serde_json::from_str::<serde_json::Value>(&event.payload).ok()
+                    })
+                    .and_then(|payload| payload["failure_message"].as_str().map(str::to_string));
+                WorkflowRecoveryView {
+                    recovery,
+                    original_failure_message,
+                }
+            })
+            .collect();
+        let retry_unavailable_reason = (workflow.state == "failed" && candidate.is_none()).then(||
+            "Retry supports an unsubmitted Pi node after a confirmed Session exit. Its native binding must exist, and pending or uncertain input must be resolved first. Other failure causes require intervention.".to_string());
         Ok(Some(WorkflowDetailView {
+            retry_failure_event_id: candidate.map(|candidate| candidate.failure_event_id),
+            retry_unavailable_reason,
+            recoveries,
             workflow_id: workflow.workflow_id.clone(),
             title: workflow.title.clone(),
             state: workflow.state.clone(),

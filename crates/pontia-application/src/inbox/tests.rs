@@ -20,6 +20,169 @@ fn queued_message<'a>(
 }
 
 #[tokio::test]
+async fn prepared_input_is_held_until_release_and_concurrent_release_delivers_once() {
+    let (_root, state, channel) = connected_inbox().await;
+    let inbox = state.inbox_commands();
+    let sessions = state.session_commands();
+    let a = inbox
+        .prepare_message_once(
+            &sessions,
+            "prepared",
+            "session",
+            request("continue existing work"),
+        )
+        .await
+        .unwrap();
+    let b = inbox
+        .prepare_message_once(
+            &sessions,
+            "prepared",
+            "session",
+            request("continue existing work"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(a.data["inbox_message"]["state"], "resuming");
+    assert!(b.duplicate);
+    inbox.drain_inbox("session").await.unwrap();
+    assert!(channel.input.lock().unwrap().is_empty());
+    let (a, b) = tokio::join!(
+        inbox.release_prepared_message("session", "prepared", "runtime"),
+        inbox.release_prepared_message("session", "prepared", "runtime")
+    );
+    a.unwrap();
+    b.unwrap();
+    assert_eq!(
+        *channel.input.lock().unwrap(),
+        vec!["continue existing work"]
+    );
+}
+
+#[tokio::test]
+async fn prepared_input_after_restart_or_unknown_delivery_is_never_replayed() {
+    for interrupted in [true, false] {
+        let (_root, state, channel) = connected_inbox().await;
+        let inbox = state.inbox_commands();
+        inbox
+            .prepare_message_once(
+                &state.session_commands(),
+                "prepared",
+                "session",
+                request("recover"),
+            )
+            .await
+            .unwrap();
+        if interrupted {
+            inbox.recover_deliveries().await.unwrap();
+        } else {
+            *channel.next_error.lock().unwrap() =
+                Some(Error::ControlUnknown("lost receipt".into()));
+        }
+        inbox
+            .release_prepared_message("session", "prepared", "runtime")
+            .await
+            .unwrap();
+        inbox
+            .release_prepared_message("session", "prepared", "runtime")
+            .await
+            .unwrap();
+        let message = inbox
+            .get_message("session", "prepared")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            message.state,
+            if interrupted { "failed" } else { "unknown" }
+        );
+        assert_eq!(
+            channel.input.lock().unwrap().len(),
+            usize::from(!interrupted)
+        );
+    }
+}
+
+#[tokio::test]
+async fn pending_prepared_input_cannot_follow_a_replacement_runtime_after_restart() {
+    let (root, state, old_channel) = connected_inbox().await;
+    let inbox = state.inbox_commands();
+    inbox
+        .prepare_message_once(
+            &state.session_commands(),
+            "prepared",
+            "session",
+            request("recover"),
+        )
+        .await
+        .unwrap();
+    *old_channel.next_error.lock().unwrap() = Some(Error::Conflict {
+        code: "input_busy",
+        message: "became busy".into(),
+    });
+    inbox
+        .release_prepared_message("session", "prepared", "runtime")
+        .await
+        .unwrap();
+    assert_eq!(
+        inbox
+            .get_message("session", "prepared")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "pending"
+    );
+
+    sqlx::query(
+        "UPDATE runtime_bindings SET runtime_instance_id='replacement' WHERE session_id='session'",
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    let restarted = crate::AppState::builder(state.db(), root.path().into())
+        .clients(crate::clients::testing::clients())
+        .build();
+    let replacement = crate::clients::testing::channel();
+    restarted
+        .client_control()
+        .attach(
+            "test-channel",
+            "session",
+            "replacement",
+            "native",
+            replacement.clone(),
+        )
+        .await
+        .unwrap();
+    let recovered_inbox = restarted.inbox_commands();
+    recovered_inbox.recover_deliveries().await.unwrap();
+    recovered_inbox.resume_pending().await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let message = recovered_inbox
+                .get_message("session", "prepared")
+                .await
+                .unwrap()
+                .unwrap();
+            if message.state == "failed" {
+                assert!(message.failure_message.unwrap().contains("runtime"));
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(old_channel.input.lock().unwrap().is_empty());
+    assert!(replacement.input.lock().unwrap().is_empty());
+    recovered_inbox
+        .release_prepared_message("session", "prepared", "runtime")
+        .await
+        .unwrap();
+    assert!(replacement.input.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn recovery_preserves_uncertainty_and_only_unsent_messages_can_be_claimed() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite(&format!(

@@ -137,6 +137,10 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             post(api::resume_workflow),
         )
         .route(
+            "/api/v1/workflows/{workflow_id}/retry",
+            post(api::retry_workflow),
+        )
+        .route(
             "/api/v1/workspaces",
             get(api::list_workspaces).post(api::register_workspace),
         )

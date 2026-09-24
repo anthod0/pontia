@@ -44,7 +44,7 @@ impl TurnCommandService {
         metadata: Value,
     ) -> Result<Option<TurnView>> {
         let (turn, result) = self
-            .submit_input(session_id, input, metadata, InputIntent::Start)
+            .submit_input(session_id, input, metadata, InputIntent::Start, None)
             .await?;
         result.into_result()?;
         Ok(turn)
@@ -56,6 +56,7 @@ impl TurnCommandService {
         input: String,
         metadata: Value,
         intent: InputIntent,
+        required_runtime_instance_id: Option<&str>,
     ) -> Result<(Option<TurnView>, ControlResult<InputReceipt>)> {
         if input.trim().is_empty() {
             return Err(Error::Domain("input must not be blank".into()));
@@ -116,7 +117,8 @@ impl TurnCommandService {
                 "session {session_id} runtime cannot accept tasks"
             )));
         }
-        let target = ControlTarget::resolve(&self.pool, session_id, None).await?;
+        let target =
+            ControlTarget::resolve(&self.pool, session_id, required_runtime_instance_id).await?;
         let turn_id = self
             .prepare_initial(session_id, &input, &metadata)
             .await?

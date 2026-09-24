@@ -160,6 +160,11 @@ impl SqliteWorkflowRepository {
                WHERE node_id = ?
                  AND submitted_at IS NULL
                  AND NOT EXISTS (
+                     SELECT 1 FROM workflow_recoveries r WHERE r.node_id=workflow_nodes.node_id AND r.runtime_instance_id IS NOT NULL
+                     AND r.rowid=(SELECT MAX(rowid) FROM workflow_recoveries WHERE node_id=r.node_id AND runtime_instance_id IS NOT NULL)
+                     AND r.runtime_instance_id<>?
+                 )
+                 AND NOT EXISTS (
                      SELECT 1 FROM sessions
                      WHERE sessions.session_id = workflow_nodes.session_id
                        AND sessions.state = 'error'
@@ -175,6 +180,7 @@ impl SqliteWorkflowRepository {
         )
         .bind(runtime_instance_id)
         .bind(node_id)
+        .bind(runtime_instance_id)
         .execute(&mut *tx)
         .await?;
         if result.rows_affected() != 1 {
