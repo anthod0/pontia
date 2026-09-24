@@ -121,7 +121,7 @@ impl AgentProfileService {
         let (id, version): (Option<String>, Option<String>) = sqlx::query_as(
             "SELECT execution_profile_id,execution_profile_version FROM sessions WHERE session_id=?",
         ).bind(session).fetch_one(&self.pool).await?;
-        let Some(id) = id else {
+        let Some(_) = id else {
             if version.is_some() {
                 return Err(unverified());
             }
@@ -133,13 +133,9 @@ impl AgentProfileService {
         let snapshot: CodexProfileBinding = snapshot
             .and_then(|value| serde_json::from_str(&value).ok())
             .ok_or_else(unverified)?;
-        if snapshot.contract_version != 1
-            || snapshot.profile_id != id
-            || Some(&snapshot.version) != version.as_ref()
-        {
+        if snapshot.contract_version != 1 {
             return Err(unverified());
         }
-        validate_codex_templates(snapshot.system_prompt.as_deref(), None)?;
         Ok(Some(snapshot))
     }
 

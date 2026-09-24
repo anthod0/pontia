@@ -1,7 +1,5 @@
 use crate::{Result, validation::validate_handoff_file_name};
-use pontia_application::{
-    AppState, InboxCommandService, SessionCommandService, SubmitInboxMessageRequest,
-};
+use pontia_application::{AppState, InboxCommandService, SessionCommandService};
 use pontia_storage_sqlite::{
     models::workflows::WorkflowRecoveryRow, repositories::workflows::SqliteWorkflowRepository,
 };
@@ -170,10 +168,16 @@ impl WorkflowRecoveryService {
             output.display(),
             node.instructions
         );
-        let outcome=self.inbox.prepare_message_once(&self.sessions,&row.message_id,&row.session_id,SubmitInboxMessageRequest {
-            input,delivery_policy:"after_idle".into(),branch_target_turn_id:None,
-            metadata:json!({"source":"workflow_recovery","workflow_id":row.workflow_id,"recovery_id":row.recovery_id}),
-        }).await?;
+        let outcome = self
+            .inbox
+            .prepare_message_once(
+                &self.sessions,
+                &row.message_id,
+                &row.session_id,
+                input,
+                json!({"source":"workflow_recovery","workflow_id":row.workflow_id,"recovery_id":row.recovery_id}),
+            )
+            .await?;
         if outcome.data["inbox_message"]["state"] != "resuming" {
             return Err(pontia_core::Error::Domain(
                 outcome.data["inbox_message"]["failure_message"]

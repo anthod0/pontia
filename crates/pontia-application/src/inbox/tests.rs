@@ -28,7 +28,8 @@ async fn prepared_input_is_held_until_release_and_concurrent_release_delivers_on
             &sessions,
             "prepared",
             "session",
-            request("continue existing work"),
+            "continue existing work".into(),
+            json!({"source": "recovery"}),
         )
         .await
         .unwrap();
@@ -37,11 +38,13 @@ async fn prepared_input_is_held_until_release_and_concurrent_release_delivers_on
             &sessions,
             "prepared",
             "session",
-            request("continue existing work"),
+            "continue existing work".into(),
+            json!({"source": "recovery"}),
         )
         .await
         .unwrap();
     assert_eq!(a.data["inbox_message"]["state"], "resuming");
+    assert_eq!(a.data["inbox_message"]["metadata"]["source"], "recovery");
     assert!(b.duplicate);
     inbox.drain_inbox("session").await.unwrap();
     assert!(channel.input.lock().unwrap().is_empty());
@@ -67,7 +70,8 @@ async fn prepared_input_after_restart_or_unknown_delivery_is_never_replayed() {
                 &state.session_commands(),
                 "prepared",
                 "session",
-                request("recover"),
+                "recover".into(),
+                json!({}),
             )
             .await
             .unwrap();
@@ -110,7 +114,8 @@ async fn pending_prepared_input_cannot_follow_a_replacement_runtime_after_restar
             &state.session_commands(),
             "prepared",
             "session",
-            request("recover"),
+            "recover".into(),
+            json!({}),
         )
         .await
         .unwrap();

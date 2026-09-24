@@ -21,13 +21,15 @@ impl InboxCommandService {
         sessions: &SessionCommandService,
         message_id: &str,
         session_id: &str,
-        request: SubmitInboxMessageRequest,
+        input: String,
+        metadata: Value,
     ) -> Result<InboxCommandOutcome> {
-        if request.delivery_policy != "after_idle" || request.branch_target_turn_id.is_some() {
-            return Err(Error::Domain(
-                "Prepared input requires after_idle delivery without a branch target".into(),
-            ));
-        }
+        let request = SubmitInboxMessageRequest {
+            input,
+            delivery_policy: "after_idle".into(),
+            branch_target_turn_id: None,
+            metadata,
+        };
         let lock = self.scheduler.command_lock(session_id);
         let _guard = lock.lock().await;
         let outcome = self
