@@ -11,7 +11,6 @@ pub struct NewInboxMessage<'a> {
     pub metadata: &'a str,
     pub branch_target: Option<&'a str>,
     pub steer_target: Option<&'a str>,
-    pub submission_payload: &'a str,
     pub retry_of: Option<&'a str>,
     pub resuming: bool,
 }
@@ -29,13 +28,13 @@ impl SqliteInboxRepository {
     pub async fn enqueue(&self, message: NewInboxMessage<'_>) -> Result<bool> {
         let mut tx = self.pool.begin().await?;
         let inserted = sqlx::query(
-            "INSERT INTO inbox_messages (message_id,session_id,state,delivery_policy,input_summary,metadata,branch_target_turn_id,steer_target_turn_id,submission_payload,retry_of_message_id) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(message_id) DO NOTHING"
+            "INSERT INTO inbox_messages (message_id,session_id,state,delivery_policy,input_summary,metadata,branch_target_turn_id,steer_target_turn_id,retry_of_message_id) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(message_id) DO NOTHING"
         )
         .bind(message.message_id).bind(message.session_id)
         .bind(if message.resuming { "resuming" } else { "pending" })
         .bind(message.delivery_policy).bind(message.input).bind(message.metadata)
         .bind(message.branch_target).bind(message.steer_target)
-        .bind(message.submission_payload).bind(message.retry_of)
+        .bind(message.retry_of)
         .execute(&mut *tx).await?.rows_affected() == 1;
         if inserted && message.delivery_policy == "interrupt_now" {
             sqlx::query("UPDATE inbox_messages SET state='superseded',superseded_by_message_id=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE session_id=? AND delivery_policy='interrupt_now' AND state='pending' AND message_id<>?")
@@ -188,14 +187,14 @@ impl SqliteInboxRepository {
 }
 
 const SELECT_INBOX_MESSAGE_SQL_WITH_SESSION: &str = r#"SELECT message_id, session_id, state, delivery_policy, input_summary, metadata, branch_target_turn_id,
-          submission_payload, steer_target_turn_id, retry_of_message_id,
+          steer_target_turn_id, retry_of_message_id,
           (SELECT retry.message_id FROM inbox_messages retry WHERE retry.retry_of_message_id=inbox_messages.message_id) AS retried_by_message_id,
           turn_id, superseded_by_message_id, failure_message, created_at, updated_at,
           dispatched_at, cancelled_at
    FROM inbox_messages WHERE session_id = ? ORDER BY rowid"#;
 
 const SELECT_INBOX_MESSAGE_SQL_WITH_SESSION_AND_MESSAGE: &str = r#"SELECT message_id, session_id, state, delivery_policy, input_summary, metadata, branch_target_turn_id,
-          submission_payload, steer_target_turn_id, retry_of_message_id,
+          steer_target_turn_id, retry_of_message_id,
           (SELECT retry.message_id FROM inbox_messages retry WHERE retry.retry_of_message_id=inbox_messages.message_id) AS retried_by_message_id,
           turn_id, superseded_by_message_id, failure_message, created_at, updated_at,
           dispatched_at, cancelled_at
@@ -220,7 +219,6 @@ mod tests {
             metadata: "{}",
             branch_target: target,
             steer_target: None,
-            submission_payload: "{}",
             retry_of: None,
             resuming: false,
         }

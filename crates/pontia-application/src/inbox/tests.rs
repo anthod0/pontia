@@ -13,7 +13,6 @@ fn queued_message<'a>(
         metadata: "{}",
         branch_target: None,
         steer_target: None,
-        submission_payload: "{}",
         retry_of: None,
         resuming: false,
     }
@@ -713,4 +712,94 @@ async fn failed_session_restore_is_diagnostic_and_repeated_retry_does_not_restar
             .await
             .unwrap();
     assert_eq!(starts, 1);
+}
+
+#[tokio::test]
+async fn duplicate_submission_preserves_native_receipt_and_original_contents() {
+    let (_root, state, channel) = connected_inbox().await;
+    let inbox = state.inbox_commands();
+    let mut original = request("first input");
+    original.metadata = json!(["caller metadata"]);
+    inbox
+        .submit_message_once("message", "session", original.clone())
+        .await
+        .unwrap();
+    InboxAssociations::new(state.db())
+        .record_receipt(
+            "session",
+            "message",
+            &crate::control::InputReceipt {
+                native_turn_id: Some("native-turn".into()),
+                runtime_instance_id: Some("runtime".into()),
+            },
+        )
+        .await
+        .unwrap();
+    let current = inbox
+        .get_message("session", "message")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(current.metadata, json!({"codex_turn_id":"native-turn"}));
+    for repeated in [
+        original,
+        SubmitInboxMessageRequest {
+            input: "changed input".into(),
+            delivery_policy: "interrupt_now".into(),
+            branch_target_turn_id: Some("different-target".into()),
+            metadata: json!({"changed":true}),
+        },
+    ] {
+        let duplicate = inbox
+            .submit_message_once("message", "session", repeated)
+            .await
+            .unwrap();
+        assert!(duplicate.duplicate);
+        assert_eq!(duplicate.data["inbox_message"], json!(current));
+    }
+    assert_eq!(*channel.input.lock().unwrap(), ["first input"]);
+    assert_eq!(inbox.list_messages("session").await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn submission_identity_still_enforces_session_and_retry_associations() {
+    let (_root, state, channel) = connected_inbox().await;
+    let inbox = state.inbox_commands();
+    inbox
+        .submit_message_once("message", "session", request("input"))
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO sessions(session_id,client_type,state) VALUES ('other','test-channel','idle')",
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    let cross_session = inbox
+        .submit_message_once("message", "other", request("input"))
+        .await
+        .unwrap_err();
+    assert!(matches!(cross_session, Error::StateConflict(_)));
+    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('failed','session','failed','after_idle','input')")
+        .execute(&state.db()).await.unwrap();
+    let unrelated_retry = inbox
+        .retry_message(
+            &state.session_commands(),
+            "session",
+            "failed",
+            RetryInboxMessageRequest {
+                message_id: "message".into(),
+                allow_unknown: false,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(unrelated_retry, Error::StateConflict(_)));
+    let failed = inbox
+        .get_message("session", "failed")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(failed.retried_by_message_id.is_none());
+    assert_eq!(*channel.input.lock().unwrap(), ["input"]);
 }

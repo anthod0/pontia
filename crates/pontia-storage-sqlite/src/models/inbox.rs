@@ -1,6 +1,5 @@
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct InboxMessageRow {
-    pub submission_payload: Option<String>,
     pub message_id: String,
     pub session_id: String,
     pub state: String,

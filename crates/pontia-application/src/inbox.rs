@@ -85,7 +85,8 @@ impl InboxCommandService {
     }
 
     /// Queues a message under a caller-owned stable identity. Repeating that
-    /// identity for the same Session does not enqueue a second message.
+    /// identity for the same Session returns the current record; the repeated
+    /// request does not replace its contents or enqueue a second message.
     pub async fn submit_message_once(
         &self,
         message_id: &str,
@@ -120,13 +121,10 @@ impl InboxCommandService {
             return Err(Error::Domain("Invalid Inbox submission identity".into()));
         }
         let inbox_repository = SqliteInboxRepository::new(self.pool.clone());
-        let payload = serde_json::to_string(&request)?;
         if let Some(existing) = inbox_repository.get_message(session_id, message_id).await? {
-            if existing.submission_payload.as_deref() != Some(&payload)
-                || existing.retry_of_message_id.as_deref() != retry_of
-            {
+            if existing.retry_of_message_id.as_deref() != retry_of {
                 return Err(Error::StateConflict(
-                    "Submission identity was already used for different input".into(),
+                    "Submission identity was already used for a different Retry association".into(),
                 ));
             }
             return Ok(InboxCommandOutcome {
@@ -206,7 +204,6 @@ impl InboxCommandService {
                     metadata: &metadata,
                     branch_target: request.branch_target_turn_id.as_deref(),
                     steer_target,
-                    submission_payload: &payload,
                     retry_of,
                     resuming,
                 },

@@ -616,10 +616,18 @@ async fn pending_inbox_message_cannot_be_dismissed() {
 }
 
 #[tokio::test]
-async fn persistent_submission_survives_response_loss_and_new_application_state() {
+async fn persistent_submission_survives_response_loss_and_database_reopen() {
     let scope = GenericClientTestScope::new().await;
     let root = tempfile::tempdir().unwrap();
-    let state = test_state().await;
+    let database_url = format!("sqlite://{}", root.path().join("inbox.db").display());
+    let pool = pontia_storage_sqlite::connect_sqlite(&database_url)
+        .await
+        .unwrap();
+    pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+    let state = AppState::builder(pool, root.path().into())
+        .clients(crate::common::clients::clients())
+        .external_api_token(Some(TOKEN.into()))
+        .build();
     let session = create_session(state.clone()).await;
     let uri = format!("/api/v1/sessions/{session}/inbox/messages");
     let first = post_json(
@@ -631,7 +639,11 @@ async fn persistent_submission_survives_response_loss_and_new_application_state(
     .await;
     assert_eq!(first.0, StatusCode::CREATED);
     state.inbox_commands().stop_scheduling().await;
-    let restarted = AppState::builder(state.db(), root.path().into())
+    state.db().close().await;
+    let reopened = pontia_storage_sqlite::connect_sqlite(&database_url)
+        .await
+        .unwrap();
+    let restarted = AppState::builder(reopened, root.path().into())
         .clients(crate::common::clients::clients())
         .external_api_token(Some(TOKEN.into()))
         .build();
@@ -652,7 +664,36 @@ async fn persistent_submission_survives_response_loss_and_new_application_state(
         json!({"input":"different"}),
     )
     .await;
-    assert_eq!(changed.0, StatusCode::CONFLICT);
+    assert_eq!(changed.0, StatusCode::OK);
+    assert_eq!(changed.1["data"], recovered.1["data"]);
+    assert_eq!(scope.recorded_inputs().len(), 1);
+    let message_id = first.1["data"]["inbox_message"]["message_id"]
+        .as_str()
+        .unwrap();
+    let response = http::router(restarted.clone())
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("{uri}/{message_id}"))
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "input":"changed again",
+                        "delivery_policy":"interrupt_now",
+                        "branch_target_turn_id":"different-target",
+                        "metadata":["different metadata"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let repeated_put = response_json(response).await;
+    assert_eq!(repeated_put.0, StatusCode::OK);
+    assert_eq!(repeated_put.1["data"], recovered.1["data"]);
+    assert_eq!(scope.recorded_inputs().len(), 1);
     let independent = post_json(
         restarted.clone(),
         &uri,
