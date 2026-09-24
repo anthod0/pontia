@@ -12,15 +12,19 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
+let listRequest = 0;
+
 export async function loadAgentProfiles(includeArchived = false, options: ReadRequestOptions = {}): Promise<void> {
+  const request = ++listRequest;
   agentProfilesLoading.set(true);
   agentProfilesError.set(null);
   try {
-    agentProfiles.set(await listAgentProfiles(includeArchived, options));
+    const loaded = await listAgentProfiles(includeArchived, options);
+    if (request === listRequest) agentProfiles.set(loaded);
   } catch (error) {
-    if (!isAbortError(error)) agentProfilesError.set(error instanceof Error ? error.message : String(error));
+    if (request === listRequest && !isAbortError(error)) agentProfilesError.set(error instanceof Error ? error.message : String(error));
   } finally {
-    agentProfilesLoading.set(false);
+    if (request === listRequest) agentProfilesLoading.set(false);
   }
 }
 

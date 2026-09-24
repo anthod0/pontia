@@ -32,8 +32,10 @@ const mocks = vi.hoisted(() => {
     navigate: vi.fn(),
     sessions: readableStore([]),
     sessionsLoading: readableStore(false),
+    sessionsError: readableStore(null),
     workspaces: readableStore([]),
     workspacesLoading: readableStore(false),
+    workspacesError: readableStore(null),
     token: readableStore('test-token'),
     sseStatus: readableStore('open'),
     lastConnectionError: readableStore(null),
@@ -44,6 +46,7 @@ vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate }));
 vi.mock('../src/stores/sessions', () => ({
   sessions: mocks.sessions,
   sessionsLoading: mocks.sessionsLoading,
+  sessionsError: mocks.sessionsError,
   updateSessionTitle: vi.fn(async () => undefined),
   pinSession: vi.fn(async () => undefined),
   unpinSession: vi.fn(async () => undefined),
@@ -52,6 +55,7 @@ vi.mock('../src/stores/sessions', () => ({
 vi.mock('../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
+  workspacesError: mocks.workspacesError,
 }));
 vi.mock('../src/stores/auth', () => ({ token: mocks.token }));
 vi.mock('../src/stores/connection', () => ({

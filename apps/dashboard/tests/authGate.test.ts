@@ -27,6 +27,7 @@ vi.mock('../src/stores/agentProfiles', () => ({
 vi.mock('../src/stores/sessions', () => ({
   sessions: writable([]),
   sessionsLoading: writable(false),
+  sessionsError: writable(null),
   loadSessions: mocks.loadSessions,
 }));
 vi.mock('../src/stores/tasks', () => ({

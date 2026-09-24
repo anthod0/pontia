@@ -81,10 +81,16 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
       if (batch.agentProfiles) refreshes.push(options.loadAgentProfiles());
       if (batch.sessions) refreshes.push(options.loadSessions());
       if (batch.workflows) refreshes.push(options.loadWorkflows());
-      for (const taskId of batch.taskIds) refreshes.push(options.refreshTask(taskId));
-      for (const sessionId of batch.sessionIds) refreshes.push(options.refreshSession(sessionId));
-      for (const workflowId of batch.workflowIds) refreshes.push(options.refreshWorkflow(workflowId));
-      await Promise.all(refreshes);
+      for (const taskId of batch.taskIds) {
+        if (taskId === options.getSelectedTaskId()) refreshes.push(options.refreshTask(taskId));
+      }
+      for (const sessionId of batch.sessionIds) {
+        if (sessionId === options.getSelectedSessionId()) refreshes.push(options.refreshSession(sessionId));
+      }
+      for (const workflowId of batch.workflowIds) {
+        if (workflowId === options.getSelectedWorkflowId()) refreshes.push(options.refreshWorkflow(workflowId));
+      }
+      await Promise.allSettled(refreshes);
     } finally {
       flushing = false;
       if (hasPending(pending)) schedule();
@@ -117,7 +123,6 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
   function reset(): void {
     clearTimer();
     pending = emptyPending();
-    flushing = false;
   }
 
   return { handleEvent, flushNow, reset };

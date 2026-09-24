@@ -43,9 +43,10 @@ test('passes AbortSignal through settings-related read requests', async () => {
   await listAgentProfiles(false, { signal: controller.signal });
 
   expect(fetchMock).toHaveBeenCalledTimes(4);
-  for (const [, init] of fetchMock.mock.calls) {
-    expect((init as RequestInit).signal).toBe(controller.signal);
-  }
+  const signals = fetchMock.mock.calls.map(([, init]) => (init as RequestInit).signal);
+  expect(signals.every((signal) => signal && !signal.aborted)).toBe(true);
+  controller.abort();
+  expect(signals.every((signal) => signal?.aborted)).toBe(true);
 });
 
 test('serializes session list limit and pinned inclusion query options', async () => {

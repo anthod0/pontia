@@ -31,19 +31,24 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
+let workspaceListRequest = 0;
+
 export async function loadWorkspaces(options: ReadRequestOptions = {}): Promise<void> {
+  const request = ++workspaceListRequest;
   workspacesLoading.set(true);
   workspacesError.set(null);
   try {
-    workspaces.set(await listWorkspaces(options));
+    const loaded = await listWorkspaces(options);
+    if (request !== workspaceListRequest) return;
+    workspaces.set(loaded);
     workspacesInitialized.set(true);
   } catch (error) {
-    if (!isAbortError(error)) {
+    if (request === workspaceListRequest && !isAbortError(error)) {
       workspacesError.set(error instanceof Error ? error.message : String(error));
       workspacesInitialized.set(true);
     }
   } finally {
-    workspacesLoading.set(false);
+    if (request === workspaceListRequest) workspacesLoading.set(false);
   }
 }
 

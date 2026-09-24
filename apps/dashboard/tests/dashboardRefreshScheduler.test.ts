@@ -72,3 +72,16 @@ test('ignores high-frequency transcript message updates for projection refreshes
   await refreshes.flushNow();
   expect(calls).toEqual([]);
 });
+
+test('discards detail refreshes queued for a route that is no longer selected', async () => {
+  const calls: string[] = [];
+  const selection = { sessionId: 'session-1', taskId: 'task-1', workflowId: 'wf-1', workflowSessionIds: ['session-1'] };
+  const refreshes = scheduler(calls, selection);
+  refreshes.handleEvent(sessionEvent());
+  refreshes.handleEvent(taskEvent('task-1'));
+  selection.sessionId = 'session-2';
+  selection.taskId = 'task-2';
+  selection.workflowId = 'wf-2';
+  await refreshes.flushNow();
+  expect(calls.sort()).toEqual(['tasks', 'workflows']);
+});

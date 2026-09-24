@@ -57,6 +57,9 @@
     resumeSession,
     sessionDetail,
     sessionDetailLoading,
+    sessionDetailError,
+    sessionDetailErrorKind,
+    selectSession,
     sessions,
     submitInboxMessage,
     updateSessionTitle,
@@ -142,19 +145,21 @@
     finally { actionBusy = false }
   }
 
-  onMount(async () => {
+  onMount(() => {
     codexPoll = setInterval(() => void refreshCodex(), 2000)
     selectedSessionId = requestedSessionIdFromLocation()
+    selectSession(selectedSessionId || null)
     autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
     initialChatScrollPending = Boolean(selectedSessionId)
-    await Promise.all([loadSessions(), loadWorkspaces()])
-    if (selectedSessionId) await loadSelectedSession(selectedSessionId)
-    if (destroyed) return
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
+    void Promise.all([loadSessions(), loadWorkspaces()])
+    if (selectedSessionId) void loadSelectedSession(selectedSessionId)
   })
 
   onDestroy(() => {
     destroyed = true
+    selectSession(null)
+    resetTimelineState()
     if (codexPoll) clearInterval(codexPoll)
     unsubscribeDashboardEvents?.()
     closeLiveOutputStream?.()
@@ -162,7 +167,16 @@
     if (scrollDownButtonHideTimer) clearTimeout(scrollDownButtonHideTimer)
   })
 
-  $: selectedSession = selectedSessionId ? ($sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : $sessions.find((session) => session.session_id === selectedSessionId) ?? null) : null
+  $: selectedSession = selectedSessionId ? ($sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : ($sessionDetailError ? null : $sessions.find((session) => session.session_id === selectedSessionId) ?? null)) : null
+  $: liveOutputKey = selectedSession ? `${selectedSession.session_id}:${selectedSession.capabilities.stream_output === true}` : ''
+  let activeLiveOutputKey = ''
+  $: if (!destroyed && liveOutputKey !== activeLiveOutputKey) {
+    activeLiveOutputKey = liveOutputKey
+    startSelectedLiveOutput(selectedSession)
+  }
+  $: if ($timelineState.sessionId === selectedSessionId && !$timelineState.loading && $timelineState.status !== 'idle') {
+    historyObserverEnabled = true
+  }
   $: selectedSessionGitStatus = selectedSession ? $workspaceGitStatuses[selectedSession.workspace_id ?? ''] : undefined
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, $workspaces, selectedSessionGitStatus, $workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
@@ -583,6 +597,8 @@
     closeLiveOutputStream = null
     liveOutputOverlays = {}
     selectedSessionId = nextSessionId
+    selectSession(selectedSessionId || null)
+    resetTimelineState(selectedSessionId)
     pendingPromptScrolls = []
     actionError = null
     branchActionError = null
@@ -605,13 +621,13 @@
     initialChatScrollPending = true
     try {
       await loadSessionDetail(sessionId)
+      if (destroyed || selectedSessionId !== sessionId) return
       const loadedSession = currentSelectedSession()
-      if (loadedSession && !sessionSupportsTimeline(loadedSession)) {
+      if (!loadedSession || !sessionSupportsTimeline(loadedSession)) {
         initialChatScrollPending = false
         resetTimelineState(sessionId)
         return
       }
-      startSelectedLiveOutput(loadedSession)
 
       let currentTimeline = get(timelineState)
       const latestTurnId = latestProjectedTurnId()
@@ -622,6 +638,7 @@
       if (!hasLoadedTimeline) {
         resetTimelineState(sessionId)
         await restoreSessionTimeline(sessionId, { topology })
+        if (destroyed || selectedSessionId !== sessionId) return
         currentTimeline = get(timelineState)
         hasLoadedTimeline = hasTimelineSnapshot(currentTimeline, sessionId)
           && currentTimeline.mode === expectedMode
@@ -632,6 +649,7 @@
         latestTurnId,
         ...(topology ? { topology: true } : {}),
       })
+      if (destroyed || selectedSessionId !== sessionId) return
       await scrollChatToBottomAfterLayout()
       if (!destroyed && selectedSessionId === sessionId) {
         initialChatScrollPending = false
@@ -827,6 +845,13 @@
       {#if !selectedSession.capabilities.timeline}<span>Native history is currently unavailable.</span>{/if}
     </div>
   {/if}
+  {#if $sessionDetailError && selectedSession}
+    <Alert.Root variant="destructive" role="alert" class="mx-auto w-full max-w-[760px]">
+      <WarningCircleIcon class="size-4" />
+      <Alert.Title>Session refresh failed</Alert.Title>
+      <Alert.Description>{$sessionDetailError} Showing the last loaded snapshot.</Alert.Description>
+    </Alert.Root>
+  {/if}
   {#if actionError}
     <Alert.Root variant="destructive" role="alert" class="mx-auto w-full max-w-[760px]">
       <WarningCircleIcon class="size-4" />
@@ -838,6 +863,14 @@
     <div class="relative flex min-w-0 flex-col rounded-none bg-transparent">
       {#if $sessionDetailLoading && !selectedSession}
         <div class="space-y-4 p-6"><Skeleton class="h-10 w-1/3" /><Skeleton class="h-80 w-full" /></div>
+      {:else if !selectedSession && $sessionDetailErrorKind !== 'not_found'}
+        <Empty.Root class="h-full">
+          <Empty.Header>
+            <Empty.Title>{$sessionDetailErrorKind === 'authentication' ? 'Authentication required' : $sessionDetailErrorKind === 'network' ? 'Unable to connect' : 'Unable to load session'}</Empty.Title>
+            <Empty.Description>{$sessionDetailError ?? 'Loading session…'} The dashboard will reload the snapshot when the connection recovers.</Empty.Description>
+          </Empty.Header>
+          <Empty.Content><Button onclick={() => void loadSelectedSession(selectedSessionId)} disabled={$sessionDetailLoading}>Retry</Button></Empty.Content>
+        </Empty.Root>
       {:else if !selectedSession}
         <Empty.Root class="h-full">
           <Empty.Header>

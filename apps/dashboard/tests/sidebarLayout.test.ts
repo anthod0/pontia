@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
     stopEventStream: vi.fn(),
     sessions: writableStore([]),
     sessionsLoading: writableStore(false),
+    sessionsError: writableStore<string | null>(null),
     loadSessions: vi.fn(async () => []),
     updateSessionTitle: vi.fn(async () => undefined),
     pinSession: vi.fn(async () => undefined),
@@ -38,6 +39,7 @@ const mocks = vi.hoisted(() => {
     terminateSession: vi.fn(async () => undefined),
     workspaces: writableStore([]),
     workspacesLoading: writableStore(false),
+    workspacesError: writableStore<string | null>(null),
     workspacesInitialized: writableStore(true),
   };
 });
@@ -50,6 +52,7 @@ vi.mock('../src/services/eventStream', () => ({
 vi.mock('../src/stores/sessions', () => ({
   sessions: mocks.sessions,
   sessionsLoading: mocks.sessionsLoading,
+  sessionsError: mocks.sessionsError,
   loadSessions: mocks.loadSessions,
   updateSessionTitle: mocks.updateSessionTitle,
   pinSession: mocks.pinSession,
@@ -60,6 +63,7 @@ vi.mock('../src/stores/sessions', () => ({
 vi.mock('../src/stores/workspaces', () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
+  workspacesError: mocks.workspacesError,
   workspacesInitialized: mocks.workspacesInitialized,
 }));
 
@@ -67,8 +71,10 @@ beforeEach(() => {
   window.history.pushState({}, '', '/dashboard');
   mocks.sessions.set([]);
   mocks.sessionsLoading.set(false);
+  mocks.sessionsError.set(null);
   mocks.workspaces.set([]);
   mocks.workspacesLoading.set(false);
+  mocks.workspacesError.set(null);
   mocks.workspacesInitialized.set(true);
   vi.clearAllMocks();
   Object.defineProperty(window, 'matchMedia', {
@@ -889,4 +895,15 @@ test('settings shell section switcher uses router navigation instead of a docume
   await fireEvent.click(screen.getByRole('link', { name: /^workspaces$/i }));
 
   expect(mocks.navigate).toHaveBeenCalledWith('/settings/workspaces');
+});
+
+test('shows a sidebar loading failure instead of claiming there are no sessions', async () => {
+  mocks.sessionsError.set('Failed to fetch');
+  render(AppSidebarHost);
+  expect(screen.getByRole('alert')).toHaveTextContent('Sidebar refresh failed');
+  expect(screen.queryByText('No active sessions')).not.toBeInTheDocument();
+  expect(screen.queryByText('No recent workspaces')).not.toBeInTheDocument();
+  mocks.sessionsError.set(null);
+  await tick();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

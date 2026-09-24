@@ -569,3 +569,53 @@ test('multiple steers within one native Turn keep distinct tool groups renderabl
   expect(screen.getByText('final answer')).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: 'Show agent work steps' })).toHaveLength(2);
 });
+
+test.each([
+  ['linear', 'success'], ['linear', 'failure'], ['tree', 'success'], ['tree', 'failure'],
+])('ignores an old %s history %s after leaving and returning to the same Session', async (mode, outcome) => {
+  const topology = mode === 'tree';
+  const read = topology ? mocks.getTurnTreeHistory : mocks.getTurnTimeline;
+  let finish!: (value: unknown) => void;
+  let fail!: (error: Error) => void;
+  read.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+  const old = loadSessionTimeline('sess-1', { topology });
+  resetTimelineState('sess-2');
+  resetTimelineState('sess-1');
+  read.mockResolvedValueOnce(topology
+    ? historyPage({ groups: [group('turn-new', 'recovered')], next_from_turn_id: null })
+    : page({ items: [item('turn-new', 'new', 'recovered')], next_turn_id: null }));
+  await loadSessionTimeline('sess-1', { topology });
+  if (outcome === 'success') finish(topology ? historyPage() : page());
+  else fail(new ApiError('Source unavailable', 'timeline_source_unavailable', 503));
+  await old;
+  expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual(['recovered']);
+  expect(get(timelineState).latestTurnId).toBe('turn-new');
+  expect(get(timelineState).error).toBeNull();
+});
+
+test.each([
+  ['linear', 'success'], ['linear', 'failure'], ['tree', 'success'], ['tree', 'failure'],
+])('ignores an old %s update %s after leaving and returning to the same Session', async (mode, outcome) => {
+  const topology = mode === 'tree';
+  const history = topology ? mocks.getTurnTreeHistory : mocks.getTurnTimeline;
+  history.mockResolvedValueOnce(topology ? historyPage() : page());
+  await loadSessionTimeline('sess-1', { topology });
+  const updates = topology ? mocks.getTurnTreeUpdates : mocks.getTurnTimeline;
+  let finish!: (value: unknown) => void;
+  let fail!: (error: Error) => void;
+  updates.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+  const old = refreshSessionTimeline('sess-1');
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  resetTimelineState('sess-2');
+  resetTimelineState('sess-1');
+  history.mockResolvedValueOnce(topology
+    ? historyPage({ groups: [group('turn-new', 'recovered')], next_from_turn_id: null })
+    : page({ items: [item('turn-new', 'new', 'recovered')], next_turn_id: null }));
+  await loadSessionTimeline('sess-1', { topology });
+  if (outcome === 'success') finish(topology ? updatesPage() : page());
+  else fail(new ApiError('Pending history', 'timeline_pending', 503));
+  await old;
+  expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual(['recovered']);
+  expect(get(timelineState).latestTurnId).toBe('turn-new');
+  expect(get(timelineState).error).toBeNull();
+});

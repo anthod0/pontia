@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => {
     sessionDetail,
     sessionDetailLoading: writableStore(false),
     sessionDetailError: writableStore<string | null>(null),
+    sessionDetailErrorKind: writableStore<string | null>(null),
     loadedSessions: [] as SessionView[],
     loadSessions: vi.fn(async () => mocks.loadedSessions),
     loadSessionDetail: vi.fn(async (sessionId: string) => {
@@ -89,6 +90,8 @@ vi.mock('../../src/stores/sessions', () => ({
   sessionDetail: mocks.sessionDetail,
   sessionDetailLoading: mocks.sessionDetailLoading,
   sessionDetailError: mocks.sessionDetailError,
+  sessionDetailErrorKind: mocks.sessionDetailErrorKind,
+  selectSession: vi.fn(),
   loadSessions: mocks.loadSessions,
   loadSessionDetail: mocks.loadSessionDetail,
   submitInboxMessage: mocks.submitInboxMessage,
@@ -153,6 +156,7 @@ beforeEach(() => {
   mocks.sessionDetail.set(null);
   mocks.sessionsError.set(null);
   mocks.sessionDetailError.set(null);
+  mocks.sessionDetailErrorKind.set(null);
   mocks.sessionDetailLoading.set(false);
   mocks.chatDraft.set('');
   vi.clearAllMocks();

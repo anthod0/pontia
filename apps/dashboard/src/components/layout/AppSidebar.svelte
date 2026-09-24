@@ -16,8 +16,8 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Kbd from '$lib/components/ui/kbd/index.js'
   import { cn } from '$lib/utils.js'
-  import { archiveSession, pinSession, sessions, sessionsLoading, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
-  import { workspaces, workspacesInitialized, workspacesLoading } from '../../stores/workspaces'
+  import { archiveSession, pinSession, sessions, sessionsError, sessionsLoading, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
+  import { workspaces, workspacesError, workspacesInitialized, workspacesLoading } from '../../stores/workspaces'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
   import { workspaceTitle } from '../chat/sessionMetadata'
@@ -331,6 +331,9 @@
     </Sidebar.Group>
 
     <div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden">
+      {#if $sessionsError || $workspacesError}
+        <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {$sessionsError ?? $workspacesError}</p>
+      {/if}
       <Sidebar.Group>
         <Sidebar.GroupLabel>Recent Workspaces</Sidebar.GroupLabel>
       <Sidebar.GroupContent>
@@ -380,7 +383,7 @@
                 {/if}
               </li>
             {/each}
-          {:else}
+          {:else if !$sessionsError && !$workspacesError}
             <Sidebar.MenuItem>
               <div class="px-2 py-1 text-xs text-sidebar-foreground/60">No recent workspaces</div>
             </Sidebar.MenuItem>
@@ -411,7 +414,7 @@
               {#each recentSessions as session}
                 {@render sessionMenuItem(session, `recent:${session.session_id}`)}
               {/each}
-            {:else}
+            {:else if !$sessionsError}
               <Sidebar.MenuItem>
                 <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No active sessions</div>
               </Sidebar.MenuItem>

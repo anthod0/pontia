@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import {
   cancelTask as apiCancelTask,
   getTask,
@@ -21,15 +21,20 @@ export const taskEvents = writable<TaskEventView[]>([]);
 export const taskLoading = writable(false);
 export const taskError = writable<string | null>(null);
 
+let listRequest = 0;
+let detailRequest = 0;
+
 export async function loadTasks(): Promise<void> {
+  const request = ++listRequest;
   tasksLoading.set(true);
   tasksError.set(null);
   try {
-    tasks.set(await listTasks());
+    const loaded = await listTasks();
+    if (request === listRequest) tasks.set(loaded);
   } catch (error) {
-    tasksError.set(error instanceof Error ? error.message : String(error));
+    if (request === listRequest) tasksError.set(error instanceof Error ? error.message : String(error));
   } finally {
-    tasksLoading.set(false);
+    if (request === listRequest) tasksLoading.set(false);
   }
 }
 
@@ -39,16 +44,19 @@ export async function selectTask(taskId: string): Promise<void> {
 }
 
 export async function refreshTask(taskId: string): Promise<void> {
+  const request = ++detailRequest;
+  const isCurrent = () => request === detailRequest && (!get(selectedTaskId) || get(selectedTaskId) === taskId);
   taskLoading.set(true);
   taskError.set(null);
   try {
     const [taskView, events] = await Promise.all([getTask(taskId), listTaskEvents(taskId)]);
+    if (!isCurrent()) return;
     task.set(taskView);
     taskEvents.set(events);
   } catch (error) {
-    taskError.set(error instanceof Error ? error.message : String(error));
+    if (isCurrent()) taskError.set(error instanceof Error ? error.message : String(error));
   } finally {
-    taskLoading.set(false);
+    if (isCurrent()) taskLoading.set(false);
   }
 }
 

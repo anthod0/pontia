@@ -137,14 +137,14 @@ test('coalesces near-simultaneous browser recovery signals into one replacement 
   expect(signals.filter((signal) => !signal.aborted)).toHaveLength(1);
 });
 
-test('does not refresh the dashboard snapshot when an SSE connection opens', async () => {
+test('refreshes the dashboard snapshot when the first SSE connection opens', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ start() {} }), { status: 200 })));
   token.set('secret-token');
 
   startEventStream();
 
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-  expect(refreshDashboardSnapshotMock).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(refreshDashboardSnapshotMock).toHaveBeenCalledWith({ reason: 'sse_open' }));
 });
 
 test.each([409, 410])('falls back once to a dashboard snapshot when cursor replay is rejected with %s', async (status) => {

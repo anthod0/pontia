@@ -50,6 +50,31 @@ export const sessionsError = writable<string | null>(null);
 export const sessionDetail = writable<SessionConsoleDetail | null>(null);
 export const sessionDetailLoading = writable(false);
 export const sessionDetailError = writable<string | null>(null);
+export type SessionDetailErrorKind = 'not_found' | 'authentication' | 'network' | 'request';
+export const sessionDetailErrorKind = writable<SessionDetailErrorKind | null>(null);
+export const selectedSessionId = writable<string | null>(null);
+
+let selectionGeneration = 0;
+let detailRequest: {
+  sessionId: string;
+  generation: number;
+  controller: AbortController;
+  dirty: boolean;
+  promise: Promise<SessionConsoleDetail | null>;
+} | null = null;
+let listRequest = 0;
+
+export function selectSession(sessionId: string | null): void {
+  if (get(selectedSessionId) === sessionId) return;
+  selectionGeneration += 1;
+  detailRequest?.controller.abort();
+  detailRequest = null;
+  selectedSessionId.set(sessionId);
+  if (get(sessionDetail)?.session.session_id !== sessionId) sessionDetail.set(null);
+  sessionDetailError.set(null);
+  sessionDetailErrorKind.set(null);
+  sessionDetailLoading.set(false);
+}
 
 const defaultSessionListLimit = 50;
 
@@ -60,6 +85,7 @@ type LoadOptions = {
 };
 
 export async function loadSessions(options: LoadOptions = {}): Promise<SessionView[]> {
+  const request = ++listRequest;
   const showLoading = options.showLoading ?? true;
   if (showLoading) sessionsLoading.set(true);
   sessionsError.set(null);
@@ -68,45 +94,79 @@ export async function loadSessions(options: LoadOptions = {}): Promise<SessionVi
       limit: options.limit ?? defaultSessionListLimit,
       includePinned: options.includePinned ?? true,
     });
-    sessions.set(loaded);
+    if (request === listRequest) sessions.set(loaded);
     return loaded;
   } catch (error) {
-    sessions.set([]);
-    sessionsError.set(error instanceof Error ? error.message : String(error));
+    if (request === listRequest) sessionsError.set(error instanceof Error ? error.message : String(error));
     return [];
   } finally {
-    if (showLoading) sessionsLoading.set(false);
+    if (request === listRequest) sessionsLoading.set(false);
   }
 }
 
-export async function loadSessionDetail(sessionId: string, options: LoadOptions = {}): Promise<SessionConsoleDetail | null> {
-  if (!sessionId) {
-    sessionDetail.set(null);
-    return null;
+export function loadSessionDetail(sessionId: string, options: LoadOptions = {}): Promise<SessionConsoleDetail | null> {
+  const selected = get(selectedSessionId);
+  if (!sessionId || (selected && selected !== sessionId)) return Promise.resolve(null);
+  if (detailRequest?.sessionId === sessionId && detailRequest.generation === selectionGeneration) {
+    detailRequest.dirty = true;
+    return detailRequest.promise;
   }
-  const showLoading = options.showLoading ?? true;
-  if (showLoading) sessionDetailLoading.set(true);
-  sessionDetailError.set(null);
-  try {
-    const [session, turns, inboxMessages, events] = await Promise.all([
-      getSession(sessionId),
-      listTurns(sessionId),
-      listInboxMessages(sessionId),
-      listEvents(sessionId),
-    ]);
-    const detail = { session, turns, inboxMessages, events } satisfies SessionConsoleDetail;
-    syncInboxSubmissions(inboxMessages);
-    reconcileSubmissions(inboxMessages);
-    sessionDetail.set(detail);
-    sessions.update((items) => items.map((item) => item.session_id === session.session_id ? session : item));
+
+  detailRequest?.controller.abort();
+  const request = {
+    sessionId,
+    generation: selectionGeneration,
+    controller: new AbortController(),
+    dirty: false,
+    promise: Promise.resolve<SessionConsoleDetail | null>(null),
+  };
+  detailRequest = request;
+  const isCurrent = () => detailRequest === request && request.generation === selectionGeneration;
+  if (options.showLoading !== false || !get(sessionDetail)) sessionDetailLoading.set(true);
+
+  request.promise = (async () => {
+    let detail: SessionConsoleDetail | null = null;
+    do {
+      request.dirty = false;
+      let sessionLoaded = false;
+      const readOptions = { signal: request.controller.signal };
+      try {
+        const session = await getSession(sessionId, readOptions);
+        if (!isCurrent()) return null;
+        sessionLoaded = true;
+        const [turns, inboxMessages, events] = await Promise.all([
+          listTurns(sessionId, readOptions),
+          listInboxMessages(sessionId, readOptions),
+          listEvents(sessionId, readOptions),
+        ]);
+        if (!isCurrent()) return null;
+        detail = { session, turns, inboxMessages, events };
+        syncInboxSubmissions(inboxMessages);
+        reconcileSubmissions(inboxMessages);
+        sessionDetail.set(detail);
+        sessionDetailError.set(null);
+        sessionDetailErrorKind.set(null);
+        sessions.update((items) => items.map((item) => item.session_id === sessionId ? session : item));
+      } catch (error) {
+        if (!isCurrent()) return null;
+        detail = null;
+        const kind: SessionDetailErrorKind = error instanceof ApiError
+          ? error.status === 404 && !sessionLoaded ? 'not_found'
+            : [401, 403].includes(error.status) ? 'authentication' : 'request'
+          : error instanceof TypeError || error instanceof DOMException ? 'network' : 'request';
+        if (kind === 'not_found' || kind === 'authentication') sessionDetail.set(null);
+        sessionDetailErrorKind.set(kind);
+        sessionDetailError.set(error instanceof Error ? error.message : String(error));
+      }
+    } while (request.dirty && isCurrent());
     return detail;
-  } catch (error) {
-    if (showLoading) sessionDetail.set(null);
-    sessionDetailError.set(error instanceof Error ? error.message : String(error));
-    return null;
-  } finally {
-    if (showLoading) sessionDetailLoading.set(false);
-  }
+  })().finally(() => {
+    if (isCurrent()) {
+      detailRequest = null;
+      sessionDetailLoading.set(false);
+    }
+  });
+  return request.promise;
 }
 
 export async function createSession(input: CreateSessionInput): Promise<CreateSessionResult> {

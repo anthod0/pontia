@@ -159,7 +159,7 @@ function boundedReadRequest<T>(path: string, options: ReadRequestOptions): Promi
 
 export async function listAgentProfiles(includeArchived = false, options: ReadRequestOptions = {}): Promise<AgentProfileView[]> {
   const query = includeArchived ? '?include_archived=true' : '';
-  return (await request<{ agent_profiles: AgentProfileView[] }>(`/agent-profiles${query}`, options)).agent_profiles;
+  return (await boundedReadRequest<{ agent_profiles: AgentProfileView[] }>(`/agent-profiles${query}`, options)).agent_profiles;
 }
 
 export async function getAgentProfile(profileId: string): Promise<AgentProfileView> {
@@ -202,7 +202,7 @@ export type ListSessionsOptions = {
 };
 
 export async function listWorkflows(limit = 50, options: ReadRequestOptions = {}): Promise<WorkflowListItemView[]> {
-  return (await request<{ workflows: WorkflowListItemView[] }>(`/workflows?limit=${limit}`, options)).workflows;
+  return (await boundedReadRequest<{ workflows: WorkflowListItemView[] }>(`/workflows?limit=${limit}`, options)).workflows;
 }
 
 export async function getWorkflow(workflowId: string, options: ReadRequestOptions = {}): Promise<WorkflowDetailView> {
@@ -236,11 +236,11 @@ export async function listSessions(options: ListSessionsOptions = {}): Promise<S
   if (options.limit !== undefined) query.set('limit', String(options.limit));
   if (options.includePinned) query.set('include_pinned', 'true');
   const queryString = query.toString() ? `?${query.toString()}` : '';
-  return (await request<{ sessions: SessionView[] }>(`/sessions${queryString}`)).sessions;
+  return (await boundedReadRequest<{ sessions: SessionView[] }>(`/sessions${queryString}`, {})).sessions;
 }
 
 export async function listWorkspaces(options: ReadRequestOptions = {}): Promise<WorkspaceView[]> {
-  return (await request<{ workspaces: WorkspaceView[] }>('/workspaces', options)).workspaces;
+  return (await boundedReadRequest<{ workspaces: WorkspaceView[] }>('/workspaces', options)).workspaces;
 }
 
 export async function getWorkspace(workspaceId: string): Promise<WorkspaceView> {
@@ -289,15 +289,15 @@ export async function listWorkspaceFilePickerEntries(
 }
 
 export async function listTasks(): Promise<TaskView[]> {
-  return (await request<{ tasks: TaskView[] }>('/tasks')).tasks;
+  return (await boundedReadRequest<{ tasks: TaskView[] }>('/tasks', {})).tasks;
 }
 
 export async function getTask(taskId: string): Promise<TaskView> {
-  return (await request<{ task: TaskView }>(`/tasks/${taskId}`)).task;
+  return (await boundedReadRequest<{ task: TaskView }>(`/tasks/${taskId}`, {})).task;
 }
 
 export async function listTaskEvents(taskId: string): Promise<TaskEventView[]> {
-  return (await request<{ events: TaskEventView[] }>(`/tasks/${taskId}/events`)).events;
+  return (await boundedReadRequest<{ events: TaskEventView[] }>(`/tasks/${taskId}/events`, {})).events;
 }
 
 export async function interruptTask(taskId: string): Promise<TaskView> {
@@ -334,12 +334,12 @@ export async function getSession(sessionId: string, options: ReadRequestOptions 
 
 // GET /sessions/:id/turns is read-only turn history. WebUI dispatch must use
 // submitInboxMessage(); reported Agent facts remain authoritative for turn lifecycle.
-export async function listTurns(sessionId: string): Promise<TurnView[]> {
-  return (await request<{ turns: TurnView[] }>(`/sessions/${sessionId}/turns`)).turns;
+export async function listTurns(sessionId: string, options: ReadRequestOptions = {}): Promise<TurnView[]> {
+  return (await boundedReadRequest<{ turns: TurnView[] }>(`/sessions/${encodeURIComponent(sessionId)}/turns`, options)).turns;
 }
 
-export async function listInboxMessages(sessionId: string): Promise<InboxMessageView[]> {
-  return (await request<{ inbox_messages: InboxMessageView[] }>(`/sessions/${sessionId}/inbox/messages`)).inbox_messages;
+export async function listInboxMessages(sessionId: string, options: ReadRequestOptions = {}): Promise<InboxMessageView[]> {
+  return (await boundedReadRequest<{ inbox_messages: InboxMessageView[] }>(`/sessions/${encodeURIComponent(sessionId)}/inbox/messages`, options)).inbox_messages;
 }
 
 export async function submitInboxMessage(sessionId: string, input: SubmitInboxMessageInput, messageId: string): Promise<InboxMessageView> {
@@ -362,8 +362,8 @@ export async function dismissInboxMessage(sessionId: string, messageId: string):
   return (await request<{ inbox_message: InboxMessageView }>(`/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}/dismiss`, { method: 'POST', mutating: true })).inbox_message;
 }
 
-export async function listEvents(sessionId: string): Promise<EventView[]> {
-  return (await request<{ events: EventView[] }>(`/sessions/${sessionId}/events`)).events;
+export async function listEvents(sessionId: string, options: ReadRequestOptions = {}): Promise<EventView[]> {
+  return (await boundedReadRequest<{ events: EventView[] }>(`/sessions/${encodeURIComponent(sessionId)}/events`, options)).events;
 }
 
 export async function getTurnTimeline(
@@ -373,7 +373,7 @@ export async function getTurnTimeline(
   const params = new URLSearchParams({ direction: options.direction });
   if (options.turnId) params.set('turn_id', options.turnId);
   if (options.limit !== undefined) params.set('limit', String(options.limit));
-  return request<TurnTimelinePage>(
+  return boundedReadRequest<TurnTimelinePage>(
     `/sessions/${encodeURIComponent(sessionId)}/turns/timeline?${params.toString()}`,
     { signal: options.signal },
   );
@@ -387,7 +387,7 @@ export async function getTurnTreeHistory(
   if (options.fromTurnId) params.set('from_turn_id', options.fromTurnId);
   if (options.limit !== undefined) params.set('limit', String(options.limit));
   const query = params.size ? `?${params.toString()}` : '';
-  return request<TurnTreeHistoryPage>(
+  return boundedReadRequest<TurnTreeHistoryPage>(
     `/sessions/${encodeURIComponent(sessionId)}/turns/tree/history${query}`,
     { signal: options.signal },
   );
@@ -400,7 +400,7 @@ export async function getTurnTreeUpdates(
   const params = new URLSearchParams();
   if (options.fromTurnId) params.set('from_turn_id', options.fromTurnId);
   const query = params.size ? `?${params.toString()}` : '';
-  return request<TurnTreeUpdatesPage>(
+  return boundedReadRequest<TurnTreeUpdatesPage>(
     `/sessions/${encodeURIComponent(sessionId)}/turns/tree/updates${query}`,
     { signal: options.signal },
   );

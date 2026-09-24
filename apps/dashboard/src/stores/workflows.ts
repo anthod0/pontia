@@ -13,20 +13,22 @@ export const workflowDetailError = writable<string | null>(null);
 export const selectedWorkflowId = writable<string | null>(null);
 export const selectedWorkflowHistorySessionIds = writable<string[]>([]);
 
+let listRequest = 0;
+
 export async function loadWorkflows(options: LoadOptions = {}): Promise<WorkflowListItemView[]> {
+  const request = ++listRequest;
   const showLoading = options.showLoading ?? true;
   if (showLoading) workflowsLoading.set(true);
   workflowsError.set(null);
   try {
     const loaded = await listWorkflows();
-    workflows.set(loaded);
+    if (request === listRequest) workflows.set(loaded);
     return loaded;
   } catch (error) {
-    workflowsError.set(error instanceof Error ? error.message : String(error));
-    if (showLoading) workflows.set([]);
+    if (request === listRequest) workflowsError.set(error instanceof Error ? error.message : String(error));
     return [];
   } finally {
-    if (showLoading) workflowsLoading.set(false);
+    if (request === listRequest) workflowsLoading.set(false);
   }
 }
 

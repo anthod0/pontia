@@ -75,6 +75,7 @@ const mocks = vi.hoisted(() => {
     sessionDetail,
     sessionDetailLoading,
     sessionDetailError,
+    sessionDetailErrorKind: writableStore<string | null>(null),
     workspaces,
     workspacesLoading,
     workspacesError,
@@ -131,6 +132,8 @@ vi.mock('../../../src/stores/sessions', () => ({
   sessionDetail: mocks.sessionDetail,
   sessionDetailLoading: mocks.sessionDetailLoading,
   sessionDetailError: mocks.sessionDetailError,
+  sessionDetailErrorKind: mocks.sessionDetailErrorKind,
+  selectSession: vi.fn(),
   loadSessions: mocks.loadSessions,
   loadSessionDetail: mocks.loadSessionDetail,
   submitInboxMessage: async (
@@ -331,6 +334,7 @@ beforeEach(() => {
   mocks.sessionDetail.set(null);
   mocks.sessionDetailLoading.set(false);
   mocks.sessionDetailError.set(null);
+  mocks.sessionDetailErrorKind.set(null);
   mocks.workspaces.set([workspace()]);
   mocks.workspacesLoading.set(false);
   mocks.workspacesError.set(null);

@@ -42,6 +42,7 @@ const DEFAULT_HISTORY_LIMIT = 20;
 const FORWARD_LIMIT = 100;
 const TIMELINE_UPDATE_DEBOUNCE_MS = 100;
 let pendingRetry: ReturnType<typeof setTimeout> | null = null;
+let timelineGeneration = 0;
 
 function emptyState(sessionId = ''): TimelineState {
   return {
@@ -73,7 +74,9 @@ export async function restoreSessionTimeline(
   sessionId: string,
   options: { topology: boolean },
 ): Promise<boolean> {
+  const generation = timelineGeneration;
   const snapshot = await readCachedTimeline(sessionId);
+  if (generation !== timelineGeneration) return false;
   const expectedMode = options.topology ? 'tree' : 'linear';
   const current = get(timelineState);
   if ((current.sessionId && current.sessionId !== sessionId) || !snapshot || snapshot.mode !== expectedMode) return false;
@@ -114,6 +117,7 @@ const cachedRefreshCursorSessions = new Set<string>();
 const cachedHistoryCursorSessions = new Set<string>();
 
 export function resetTimelineState(sessionId = ''): void {
+  timelineGeneration += 1;
   if (pendingRetry) clearTimeout(pendingRetry);
   pendingRetry = null;
   timelineState.set(emptyState(sessionId));
@@ -124,11 +128,7 @@ export function resetTimelineState(sessionId = ''): void {
     cachedRefreshCursorSessions.clear();
     cachedHistoryCursorSessions.clear();
   }
-  if (sessionId) {
-    clearTimelineUpdateQueue(sessionId);
-  } else {
-    for (const queuedSessionId of timelineUpdateQueues.keys()) clearTimelineUpdateQueue(queuedSessionId);
-  }
+  for (const queuedSessionId of timelineUpdateQueues.keys()) clearTimelineUpdateQueue(queuedSessionId);
 }
 
 function uniqueTimelineItems(items: TurnTimelineItem[]): TurnTimelineItem[] {
@@ -266,6 +266,8 @@ export async function loadSessionTimeline(
   }
   const current = get(timelineState);
   const sameSession = current.sessionId === sessionId;
+  if (!sameSession) timelineGeneration += 1;
+  const generation = timelineGeneration;
   const topology = options.topology ?? (sameSession && current.mode === 'tree');
   const turnId = mode === 'more' && sameSession ? current.nextOlderTurnId : null;
   if (mode === 'more' && !turnId) return null;
@@ -291,6 +293,7 @@ export async function loadSessionTimeline(
         ...(turnId ? { fromTurnId: turnId } : {}),
         limit: options.limit ?? DEFAULT_HISTORY_LIMIT,
       });
+      if (generation !== timelineGeneration) return null;
       timelineState.update((state) => {
         if (state.sessionId !== sessionId) return state;
         const groups = mode === 'more'
@@ -322,6 +325,7 @@ export async function loadSessionTimeline(
       ...(turnId ? { turnId } : {}),
       limit: options.limit ?? DEFAULT_HISTORY_LIMIT,
     });
+    if (generation !== timelineGeneration) return null;
     timelineState.update((state) => {
       if (state.sessionId !== sessionId) return state;
       const items = mode === 'more'
@@ -348,6 +352,7 @@ export async function loadSessionTimeline(
     await persistTimelineSnapshot(sessionId);
     return page;
   } catch (error) {
+    if (generation !== timelineGeneration) return null;
     if (!isPendingHistory(error) && mode === 'more' && cachedHistoryCursorSessions.has(sessionId)) {
       if (isStaleCachedCursorError(error)) {
         cachedHistoryCursorSessions.delete(sessionId);
@@ -362,12 +367,12 @@ export async function loadSessionTimeline(
   }
 }
 
-async function loadForwardPages(sessionId: string, initialTurnId: string): Promise<TurnTimelineItem[]> {
+async function loadForwardPages(sessionId: string, initialTurnId: string, generation: number): Promise<TurnTimelineItem[]> {
   const items: TurnTimelineItem[] = [];
   const seenAnchors = new Set<string>();
   let turnId: string | null = initialTurnId;
 
-  while (turnId) {
+  while (turnId && generation === timelineGeneration) {
     if (seenAnchors.has(turnId)) throw new Error('Turn timeline pagination returned a repeated anchor');
     seenAnchors.add(turnId);
     const page = await getTurnTimeline(sessionId, {
@@ -383,6 +388,7 @@ async function loadForwardPages(sessionId: string, initialTurnId: string): Promi
 }
 
 async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: string): Promise<boolean> {
+  const generation = timelineGeneration;
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
     refreshing: true,
@@ -392,7 +398,8 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
   }));
 
   try {
-    const updates = await loadForwardPages(sessionId, latestTurnId);
+    const updates = await loadForwardPages(sessionId, latestTurnId, generation);
+    if (generation !== timelineGeneration) return false;
     timelineState.update((state) => {
       if (state.sessionId !== sessionId) return state;
       const items = replaceReturnedTurnGroups(state.items, updates);
@@ -412,6 +419,7 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
     await persistTimelineSnapshot(sessionId);
     return true;
   } catch (error) {
+    if (generation !== timelineGeneration) return false;
     if (!isPendingHistory(error) && cachedRefreshCursorSessions.has(sessionId)) {
       if (isStaleCachedCursorError(error)) {
         cachedRefreshCursorSessions.delete(sessionId);
@@ -427,6 +435,7 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
 }
 
 async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string): Promise<boolean> {
+  const generation = timelineGeneration;
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
     mode: 'tree',
@@ -438,6 +447,7 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
 
   try {
     const updates = await getTurnTreeUpdates(sessionId, { fromTurnId: latestTurnId });
+    if (generation !== timelineGeneration) return false;
     timelineState.update((state) => {
       if (state.sessionId !== sessionId) return state;
       const groups = applyTreeUpdates(
@@ -465,6 +475,7 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
     await persistTimelineSnapshot(sessionId);
     return true;
   } catch (error) {
+    if (generation !== timelineGeneration) return false;
     if (!isPendingHistory(error) && cachedRefreshCursorSessions.has(sessionId)) {
       if (isStaleCachedCursorError(error)) {
         cachedRefreshCursorSessions.delete(sessionId);
