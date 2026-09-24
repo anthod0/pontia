@@ -45,7 +45,12 @@ impl ServiceManager for FakeManager {
         user_home.join("service-definition")
     }
 
-    fn render_definition(&self, pontiad: &Path, pontia_home: &Path) -> Result<String, String> {
+    fn render_definition(
+        &self,
+        pontiad: &Path,
+        pontia_home: &Path,
+        _previous_definition: Option<&str>,
+    ) -> Result<String, String> {
         Ok(format!("{}|{}", pontiad.display(), pontia_home.display()))
     }
 

@@ -356,6 +356,25 @@ fn launchd_down_is_idempotent_when_service_is_not_loaded() {
 }
 
 #[test]
+fn systemd_sets_and_preserves_codex_home() {
+    let runner = FakeRunner::default();
+    let configured = SystemdManager::with_codex_home(&runner, Path::new("/srv/codex home"));
+    let definition = configured
+        .render_definition(Path::new("/opt/pontiad"), Path::new("/srv/pontia"), None)
+        .expect("render configured CODEX_HOME");
+    assert!(definition.contains("Environment=\"CODEX_HOME=/srv/codex home\""));
+
+    let preserved = SystemdManager::new(&runner)
+        .render_definition(
+            Path::new("/opt/pontiad"),
+            Path::new("/srv/pontia"),
+            Some(&definition),
+        )
+        .expect("preserve configured CODEX_HOME");
+    assert_eq!(preserved, definition);
+}
+
+#[test]
 fn managers_extract_persisted_home_from_their_rendered_definition() {
     let runner = FakeRunner::default();
     let systemd = SystemdManager::new(&runner);
@@ -363,6 +382,7 @@ fn managers_extract_persisted_home_from_their_rendered_definition() {
         .render_definition(
             Path::new("/opt/pontiad"),
             Path::new("/home/a/Pontia % home"),
+            None,
         )
         .unwrap();
     assert_eq!(
@@ -375,6 +395,7 @@ fn managers_extract_persisted_home_from_their_rendered_definition() {
         .render_definition(
             Path::new("/opt/pontiad"),
             Path::new("/Users/a/Pontia & home"),
+            None,
         )
         .unwrap();
     assert_eq!(

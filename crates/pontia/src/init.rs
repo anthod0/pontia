@@ -12,13 +12,32 @@ use dialoguer::{MultiSelect, console::Term};
 use pontia_config::{AppConfig, WorkspaceRootConfig};
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
+use crate::codex::CodexSetup;
+
 static TEMP_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AgentSelection {
+    pub pi: bool,
+    pub codex: bool,
+}
+
 pub trait InitPlatform {
+    fn inspect_codex(
+        &self,
+        vars: &HashMap<String, String>,
+        user_home: &Path,
+    ) -> Result<CodexSetup, String>;
     fn preflight(&self, install_pi: bool) -> Result<(), String>;
     fn fill_random(&self, bytes: &mut [u8]) -> Result<(), String>;
     fn install_pi(&self) -> Result<(), String>;
-    fn start_service(&self, config: &AppConfig, config_changed: bool) -> Result<(), String>;
+    fn initialize_codex(&self, setup: &CodexSetup) -> Result<(), String>;
+    fn start_service(
+        &self,
+        config: &AppConfig,
+        config_changed: bool,
+        codex_home: Option<&Path>,
+    ) -> Result<(), String>;
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String>;
     fn open_browser(&self, url: &str) -> Result<(), String>;
 }
@@ -58,7 +77,7 @@ where
     R: BufRead,
     W: Write,
     P: InitPlatform,
-    S: FnOnce(&mut R, &mut W) -> Result<bool, String>,
+    S: FnOnce(&mut R, &mut W) -> Result<AgentSelection, String>,
 {
     let persistent_vars = persistent_vars(vars);
     let existing = load_persistent_config(&persistent_vars)?;
@@ -80,7 +99,11 @@ where
     };
 
     writeln!(output, "Pontia initialization\n").map_err(io_error)?;
-    let install_pi = select_agents(input, output)?;
+    let agents = select_agents(input, output)?;
+    let codex = agents
+        .codex
+        .then(|| platform.inspect_codex(vars, &user_home))
+        .transpose()?;
 
     writeln!(output, "\nWorkspace Browser roots:").map_err(io_error)?;
     for root in &initial_roots {
@@ -120,9 +143,18 @@ where
     writeln!(
         output,
         "  pi integration: {}",
-        if install_pi { "install" } else { "skip" }
+        if agents.pi { "install" } else { "skip" }
     )
     .map_err(io_error)?;
+    if let Some(codex) = &codex {
+        writeln!(output, "  Codex integration: register autostart").map_err(io_error)?;
+        writeln!(output, "  Codex executable: {}", codex.executable.display()).map_err(io_error)?;
+        writeln!(output, "  CODEX_HOME: {}", codex.home.display()).map_err(io_error)?;
+        writeln!(output, "  Codex service: {}", codex.service_path.display()).map_err(io_error)?;
+        writeln!(output, "  user linger: enable for {}", codex.username).map_err(io_error)?;
+    } else {
+        writeln!(output, "  Codex integration: skip").map_err(io_error)?;
+    }
     writeln!(output, "  Workspace Browser roots: {}", roots.len()).map_err(io_error)?;
     writeln!(
         output,
@@ -148,10 +180,18 @@ where
         answer => return Err(format!("expected yes or no, got {answer:?}")),
     }
 
-    platform.preflight(install_pi)?;
-    if install_pi {
+    platform.preflight(agents.pi)?;
+    if agents.pi {
         platform.install_pi()?;
         writeln!(output, "✓ Installed pi integration").map_err(io_error)?;
+    }
+    if let Some(codex) = &codex {
+        platform.initialize_codex(codex)?;
+        writeln!(
+            output,
+            "✓ Configured Codex autostart and control connection"
+        )
+        .map_err(io_error)?;
     }
 
     let config_path = existing.pontia_home.join("config.toml");
@@ -166,7 +206,11 @@ where
     writeln!(output, "✓ Wrote {}", config_path.display()).map_err(io_error)?;
 
     let config = load_persistent_config(&persistent_vars)?;
-    platform.start_service(&config, config_changed)?;
+    platform.start_service(
+        &config,
+        config_changed,
+        codex.as_ref().map(|setup| setup.home.as_path()),
+    )?;
     writeln!(output, "✓ Started Pontia service").map_err(io_error)?;
 
     let dashboard_addr = local_addr(config.bind_addr);
@@ -208,32 +252,60 @@ fn write_browser_result<W: Write>(output: &mut W, opened: bool) -> Result<(), St
 fn line_agent_selection<R: BufRead, W: Write>(
     input: &mut R,
     output: &mut W,
-) -> Result<bool, String> {
-    writeln!(output, "Select Agent Clients:\n  [x] pi").map_err(io_error)?;
+) -> Result<AgentSelection, String> {
+    writeln!(output, "Select Agent Clients:\n  [x] pi\n  [ ] codex").map_err(io_error)?;
     write!(
         output,
-        "Press Enter to install all, or type 'none' to skip: "
+        "Press Enter to keep the defaults, or type a comma-separated selection ('pi', 'codex', or 'none'): "
     )
     .map_err(io_error)?;
-    match read_answer(input, output)?.trim() {
-        "" | "pi" => Ok(true),
-        "none" => Ok(false),
-        other => Err(format!("unsupported Agent Client selection: {other}")),
+    let answer = read_answer(input, output)?;
+    let answer = answer.trim();
+    if answer.is_empty() || answer == "pi" {
+        return Ok(AgentSelection {
+            pi: true,
+            codex: false,
+        });
     }
+    if answer == "none" {
+        return Ok(AgentSelection {
+            pi: false,
+            codex: false,
+        });
+    }
+    let selected = answer
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .collect::<HashSet<_>>();
+    if selected.is_empty()
+        || selected
+            .iter()
+            .any(|value| !matches!(*value, "pi" | "codex"))
+    {
+        return Err(format!("unsupported Agent Client selection: {answer}"));
+    }
+    Ok(AgentSelection {
+        pi: selected.contains("pi"),
+        codex: selected.contains("codex"),
+    })
 }
 
 fn interactive_agent_selection<R: BufRead, W: Write>(
     _input: &mut R,
     output: &mut W,
-) -> Result<bool, String> {
+) -> Result<AgentSelection, String> {
     output.flush().map_err(io_error)?;
     let selected = MultiSelect::new()
         .with_prompt("Select Agent Clients (Space to toggle, Enter to confirm)")
-        .item("pi")
-        .defaults(&[true])
+        .items(["pi", "codex"])
+        .defaults(&[true, false])
         .interact_on(&Term::stdout())
         .map_err(|error| format!("Agent Client selection failed: {error}"))?;
-    Ok(selected.contains(&0))
+    Ok(AgentSelection {
+        pi: selected.contains(&0),
+        codex: selected.contains(&1),
+    })
 }
 
 fn load_persistent_config(vars: &HashMap<String, String>) -> Result<AppConfig, String> {

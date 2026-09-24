@@ -57,7 +57,12 @@ pub trait DefinitionStore {
 
 pub trait ServiceManager {
     fn definition_path(&self, user_home: &Path) -> PathBuf;
-    fn render_definition(&self, pontiad: &Path, pontia_home: &Path) -> Result<String, String>;
+    fn render_definition(
+        &self,
+        pontiad: &Path,
+        pontia_home: &Path,
+        previous_definition: Option<&str>,
+    ) -> Result<String, String>;
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String>;
     fn status(&self) -> Result<ServiceStatus, String>;
     fn failure_diagnostic(&self) -> Result<String, String>;
@@ -110,9 +115,12 @@ where
     ) -> Result<(), String> {
         let previous = self.manager.status()?;
         let path = self.manager.definition_path(user_home);
-        let rendered = self
-            .manager
-            .render_definition(pontiad, &config.pontia_home)?;
+        let previous_definition = self.definitions.read(&path)?;
+        let rendered = self.manager.render_definition(
+            pontiad,
+            &config.pontia_home,
+            previous_definition.as_deref(),
+        )?;
         let definition_changed = self.definitions.install(&path, &rendered)?;
         let restart_running = previous.run_state == RunState::Running
             && (definition_changed || options.restart_running);

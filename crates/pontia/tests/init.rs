@@ -7,7 +7,10 @@ use std::{
     path::Path,
 };
 
-use pontia::init::{InitPlatform, run};
+use pontia::{
+    codex::CodexSetup,
+    init::{InitPlatform, run},
+};
 use pontia_config::AppConfig;
 
 struct FakePlatform {
@@ -31,6 +34,20 @@ impl Default for FakePlatform {
 }
 
 impl InitPlatform for FakePlatform {
+    fn inspect_codex(
+        &self,
+        _vars: &HashMap<String, String>,
+        user_home: &Path,
+    ) -> Result<CodexSetup, String> {
+        self.events.borrow_mut().push("inspect-codex".to_string());
+        Ok(CodexSetup {
+            executable: Path::new("/opt/codex/bin/codex").to_path_buf(),
+            home: user_home.join(".codex"),
+            username: "alice".to_string(),
+            service_path: user_home.join(".config/systemd/user/pontia-codex.service"),
+        })
+    }
+
     fn preflight(&self, install_pi: bool) -> Result<(), String> {
         self.events
             .borrow_mut()
@@ -51,10 +68,25 @@ impl InitPlatform for FakePlatform {
         }
     }
 
-    fn start_service(&self, config: &AppConfig, config_changed: bool) -> Result<(), String> {
+    fn initialize_codex(&self, setup: &CodexSetup) -> Result<(), String> {
+        self.events
+            .borrow_mut()
+            .push(format!("initialize-codex:{}", setup.home.display()));
+        Ok(())
+    }
+
+    fn start_service(
+        &self,
+        config: &AppConfig,
+        config_changed: bool,
+        codex_home: Option<&Path>,
+    ) -> Result<(), String> {
         self.events.borrow_mut().push(format!(
-            "start:{}:{config_changed}",
-            config.pontia_home.display()
+            "start:{}:{config_changed}:{}",
+            config.pontia_home.display(),
+            codex_home
+                .map(|home| home.display().to_string())
+                .unwrap_or_else(|| "-".to_string())
         ));
         Ok(())
     }
@@ -121,7 +153,7 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_opens_das
         [
             "preflight:true",
             "install-pi",
-            &format!("start:{}:true", pontia_home.display()),
+            &format!("start:{}:true:-", pontia_home.display()),
             "dashboard-ready:127.0.0.1:8080",
         ]
     );
@@ -133,6 +165,78 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_opens_das
 
     let output = String::from_utf8(output).expect("UTF-8 output");
     assert!(output.contains(&expected_url));
+}
+
+#[test]
+fn selecting_codex_configures_it_before_starting_pontia_with_the_same_home() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let user_home = dir.path().join("home");
+    let pontia_home = dir.path().join("pontia");
+    fs::create_dir(&user_home).expect("create home");
+    let platform = FakePlatform::default();
+    let mut input = Cursor::new(b"codex\n\n\n".to_vec());
+    let mut output = Vec::new();
+
+    run(
+        &mut input,
+        &mut output,
+        &vars(&user_home, &pontia_home),
+        &platform,
+    )
+    .expect("initialize Codex integration");
+
+    let codex_home = user_home.join(".codex");
+    assert_eq!(
+        platform.events.borrow().as_slice(),
+        [
+            "inspect-codex",
+            "preflight:false",
+            &format!("initialize-codex:{}", codex_home.display()),
+            &format!(
+                "start:{}:true:{}",
+                pontia_home.display(),
+                codex_home.display()
+            ),
+            "dashboard-ready:127.0.0.1:8080",
+        ]
+    );
+    let output = String::from_utf8(output).expect("UTF-8 output");
+    assert!(output.contains("Codex integration: register autostart"));
+    assert!(output.contains(&codex_home.display().to_string()));
+    assert!(
+        !platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event == "install-pi")
+    );
+}
+
+#[test]
+fn pi_and_codex_can_be_selected_together() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let user_home = dir.path().join("home");
+    let pontia_home = dir.path().join("pontia");
+    fs::create_dir(&user_home).expect("create home");
+    let platform = FakePlatform::default();
+    let mut input = Cursor::new(b"pi,codex\n\n\n".to_vec());
+    let mut output = Vec::new();
+
+    run(
+        &mut input,
+        &mut output,
+        &vars(&user_home, &pontia_home),
+        &platform,
+    )
+    .expect("initialize both integrations");
+
+    let events = platform.events.borrow();
+    assert!(events.iter().any(|event| event == "install-pi"));
+    assert!(
+        events
+            .iter()
+            .any(|event| event.starts_with("initialize-codex:"))
+    );
 }
 
 #[test]
@@ -166,7 +270,7 @@ fn rerunning_preserves_the_token_comments_and_unknown_config_without_requesting_
             platform
                 .events
                 .borrow()
-                .contains(&format!("start:{}:false", pontia_home.display()))
+                .contains(&format!("start:{}:false:-", pontia_home.display()))
         );
         platform.events.borrow_mut().clear();
     }

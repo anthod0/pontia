@@ -1682,6 +1682,7 @@ dependencies = [
  "clap",
  "dialoguer",
  "getrandom 0.3.4",
+ "pontia-client-codex",
  "pontia-config",
  "reqwest",
  "serde",

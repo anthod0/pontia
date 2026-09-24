@@ -12,6 +12,7 @@ use std::{
 
 use clap::{Parser, Subcommand};
 use pontia::{
+    codex::{self, CodexDaemonProbe, CodexSetup},
     init::{self, InitPlatform},
     lifecycle::{EnabledState, Lifecycle, LifecycleStatus, RunState, ServiceManager, UpOptions},
     manager::ProcessCommandRunner,
@@ -171,7 +172,34 @@ fn start_with_lifecycle<M: ServiceManager>(
 
 struct RealInitPlatform;
 
+struct RealCodexDaemonProbe;
+
+impl CodexDaemonProbe for RealCodexDaemonProbe {
+    fn probe(&self, codex_home: &Path) -> Result<(), String> {
+        let codex_home = codex_home.to_path_buf();
+        std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|error| format!("failed to create Codex probe runtime: {error}"))?;
+            runtime
+                .block_on(pontia_client_codex::runtime::probe_daemon(&codex_home))
+                .map_err(|error| error.to_string())
+        })
+        .join()
+        .map_err(|_| "Codex protocol probe panicked".to_string())?
+    }
+}
+
 impl InitPlatform for RealInitPlatform {
+    fn inspect_codex(
+        &self,
+        vars: &HashMap<String, String>,
+        user_home: &Path,
+    ) -> Result<CodexSetup, String> {
+        codex::inspect(vars, user_home, &ProcessCommandRunner)
+    }
+
     fn preflight(&self, install_pi: bool) -> Result<(), String> {
         service_manager_preflight()?;
         sibling_pontiad()?;
@@ -206,9 +234,19 @@ impl InitPlatform for RealInitPlatform {
         }
     }
 
-    fn start_service(&self, config: &AppConfig, config_changed: bool) -> Result<(), String> {
+    fn initialize_codex(&self, setup: &CodexSetup) -> Result<(), String> {
+        let runner = ProcessCommandRunner;
+        codex::initialize(setup, &runner, &FileDefinitionStore, &RealCodexDaemonProbe)
+    }
+
+    fn start_service(
+        &self,
+        config: &AppConfig,
+        config_changed: bool,
+        codex_home: Option<&Path>,
+    ) -> Result<(), String> {
         service_manager_preflight()?;
-        start_init_service(config, config_changed)
+        start_init_service(config, config_changed, codex_home)
     }
 
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String> {
@@ -238,13 +276,28 @@ fn start_init_with_manager<M: ServiceManager>(
 }
 
 #[cfg(target_os = "linux")]
-fn start_init_service(config: &AppConfig, config_changed: bool) -> Result<(), String> {
+fn start_init_service(
+    config: &AppConfig,
+    config_changed: bool,
+    codex_home: Option<&Path>,
+) -> Result<(), String> {
     let runner = ProcessCommandRunner;
-    start_init_with_manager(&SystemdManager::new(&runner), config, config_changed)
+    match codex_home {
+        Some(home) => start_init_with_manager(
+            &SystemdManager::with_codex_home(&runner, home),
+            config,
+            config_changed,
+        ),
+        None => start_init_with_manager(&SystemdManager::new(&runner), config, config_changed),
+    }
 }
 
 #[cfg(target_os = "macos")]
-fn start_init_service(config: &AppConfig, config_changed: bool) -> Result<(), String> {
+fn start_init_service(
+    config: &AppConfig,
+    config_changed: bool,
+    _codex_home: Option<&Path>,
+) -> Result<(), String> {
     let runner = ProcessCommandRunner;
     start_init_with_manager(
         &LaunchdManager::new(&runner, current_uid(&runner)?),
@@ -254,7 +307,11 @@ fn start_init_service(config: &AppConfig, config_changed: bool) -> Result<(), St
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn start_init_service(_config: &AppConfig, _config_changed: bool) -> Result<(), String> {
+fn start_init_service(
+    _config: &AppConfig,
+    _config_changed: bool,
+    _codex_home: Option<&Path>,
+) -> Result<(), String> {
     Err("automatic lifecycle management is unavailable".to_string())
 }
 

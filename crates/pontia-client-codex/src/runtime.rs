@@ -47,6 +47,26 @@ pub struct TuiTarget {
     pub error: Option<String>,
 }
 
+pub async fn probe_daemon(codex_home: &Path) -> Result<()> {
+    let home = codex_home
+        .canonicalize()
+        .map_err(protocol::protocol_error)?;
+    let connection =
+        Connection::connect(&home.join("app-server-control/app-server-control.sock")).await?;
+    let reported_home = connection
+        .codex_home
+        .canonicalize()
+        .map_err(protocol::protocol_error)?;
+    if reported_home != home {
+        connection.close().await;
+        return Err(protocol::protocol_error(
+            "daemon Codex home does not match the selected environment",
+        ));
+    }
+    connection.close().await;
+    Ok(())
+}
+
 impl CodexRuntime {
     pub async fn ensure(root: &Path) -> Result<Arc<Self>> {
         let root = root.canonicalize()?;

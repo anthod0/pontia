@@ -1,13 +1,16 @@
 # Codex daemon integration
 
-Pontia connects to an externally running Codex daemon on Linux. Start it before using Codex Sessions:
+Pontia connects to Codex's shared native daemon on Linux. During `pontia init`, select Codex to register and enable `pontia-codex.service`, enable user linger, start the daemon through the native command, and verify a real control-protocol connection.
+
+Initialization uses the Codex executable found on `PATH` and `${CODEX_HOME:-$HOME/.codex}`. The same absolute `CODEX_HOME` is written to both the Codex startup service and `pontia.service`. It does not run `codex login`, modify Codex configuration or credentials, or send a model request.
+
+The startup service runs:
 
 ```sh
 codex app-server daemon start
-codex app-server daemon version
 ```
 
-Run Pontia as the same user, with the same `CODEX_HOME` as the daemon (default: `~/.codex`). An unavailable or protocol-incompatible daemon leaves the control channel unavailable; existing Session and thread bindings remain intact.
+The command is idempotent and reuses an already-running shared daemon. `pontia down` stops only Pontia; it does not stop the Codex daemon or disable `pontia-codex.service`.
 
 Pontia creates threads with legacy history because Codex 0.156.1 does not support the resume and history operations needed by this integration for paginated threads. Existing external threads must support those operations before Pontia can restore control.
 

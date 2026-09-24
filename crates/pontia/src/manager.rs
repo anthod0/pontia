@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    definition::{LAUNCHD_LABEL, SYSTEMD_SERVICE_NAME, render_launchd, render_systemd},
+    definition::{LAUNCHD_LABEL, SYSTEMD_SERVICE_NAME, render_launchd, render_systemd_with_codex},
     lifecycle::{EnabledState, RunState, ServiceManager, ServiceStatus},
 };
 
@@ -17,6 +17,21 @@ pub struct CommandOutput {
 
 pub trait CommandRunner {
     fn run(&self, program: &str, args: &[String]) -> Result<CommandOutput, String>;
+
+    fn run_with_env(
+        &self,
+        program: &str,
+        args: &[String],
+        environment: &[(String, String)],
+    ) -> Result<CommandOutput, String> {
+        if environment.is_empty() {
+            self.run(program, args)
+        } else {
+            Err(format!(
+                "command runner does not support an explicit environment for {program}"
+            ))
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -24,27 +39,56 @@ pub struct ProcessCommandRunner;
 
 impl CommandRunner for ProcessCommandRunner {
     fn run(&self, program: &str, args: &[String]) -> Result<CommandOutput, String> {
-        let output = Command::new(program)
-            .args(args)
-            .output()
-            .map_err(|error| format!("failed to execute {program}: {error}"))?;
-        Ok(CommandOutput {
-            code: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8(output.stdout)
-                .map_err(|_| format!("{program} stdout is not valid UTF-8"))?,
-            stderr: String::from_utf8(output.stderr)
-                .map_err(|_| format!("{program} stderr is not valid UTF-8"))?,
-        })
+        run_process(program, args, &[])
     }
+
+    fn run_with_env(
+        &self,
+        program: &str,
+        args: &[String],
+        environment: &[(String, String)],
+    ) -> Result<CommandOutput, String> {
+        run_process(program, args, environment)
+    }
+}
+
+fn run_process(
+    program: &str,
+    args: &[String],
+    environment: &[(String, String)],
+) -> Result<CommandOutput, String> {
+    let output = Command::new(program)
+        .args(args)
+        .envs(environment.iter().map(|(key, value)| (key, value)))
+        .output()
+        .map_err(|error| format!("failed to execute {program}: {error}"))?;
+    Ok(CommandOutput {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(output.stdout)
+            .map_err(|_| format!("{program} stdout is not valid UTF-8"))?,
+        stderr: String::from_utf8(output.stderr)
+            .map_err(|_| format!("{program} stderr is not valid UTF-8"))?,
+    })
 }
 
 pub struct SystemdManager<'a, R> {
     runner: &'a R,
+    codex_home: Option<PathBuf>,
 }
 
 impl<'a, R: CommandRunner> SystemdManager<'a, R> {
     pub fn new(runner: &'a R) -> Self {
-        Self { runner }
+        Self {
+            runner,
+            codex_home: None,
+        }
+    }
+
+    pub fn with_codex_home(runner: &'a R, codex_home: &Path) -> Self {
+        Self {
+            runner,
+            codex_home: Some(codex_home.to_path_buf()),
+        }
     }
 
     fn systemctl(&self, args: &[&str]) -> Result<CommandOutput, String> {
@@ -72,8 +116,20 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
         user_home.join(".config/systemd/user/pontia.service")
     }
 
-    fn render_definition(&self, pontiad: &Path, pontia_home: &Path) -> Result<String, String> {
-        render_systemd(pontiad, pontia_home)
+    fn render_definition(
+        &self,
+        pontiad: &Path,
+        pontia_home: &Path,
+        previous_definition: Option<&str>,
+    ) -> Result<String, String> {
+        let preserved_codex_home = match self.codex_home.as_deref() {
+            Some(home) => Some(home.to_path_buf()),
+            None => previous_definition
+                .map(parse_systemd_codex_home)
+                .transpose()?
+                .flatten(),
+        };
+        render_systemd_with_codex(pontiad, pontia_home, preserved_codex_home.as_deref())
     }
 
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String> {
@@ -193,7 +249,12 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
         user_home.join("Library/LaunchAgents/dev.pontia.pontiad.plist")
     }
 
-    fn render_definition(&self, pontiad: &Path, pontia_home: &Path) -> Result<String, String> {
+    fn render_definition(
+        &self,
+        pontiad: &Path,
+        pontia_home: &Path,
+        _previous_definition: Option<&str>,
+    ) -> Result<String, String> {
         render_launchd(pontiad, pontia_home)
     }
 
@@ -361,20 +422,33 @@ fn is_missing(output: &CommandOutput) -> bool {
 }
 
 fn parse_systemd_home(definition: &str) -> Result<PathBuf, String> {
-    let prefix = "Environment=\"PONTIA_HOME=";
-    let values = definition
-        .lines()
-        .filter_map(|line| {
-            line.strip_prefix(prefix)
-                .and_then(|line| line.strip_suffix('"'))
-        })
-        .collect::<Vec<_>>();
+    let values = systemd_environment_values(definition, "PONTIA_HOME");
     if values.len() != 1 {
         return Err(
             "pontia.service must contain exactly one PONTIA_HOME environment value".to_string(),
         );
     }
     Ok(PathBuf::from(systemd_unescape(values[0])?))
+}
+
+fn parse_systemd_codex_home(definition: &str) -> Result<Option<PathBuf>, String> {
+    let values = systemd_environment_values(definition, "CODEX_HOME");
+    match values.as_slice() {
+        [] => Ok(None),
+        [value] => Ok(Some(PathBuf::from(systemd_unescape(value)?))),
+        _ => Err("pontia.service contains multiple CODEX_HOME environment values".to_string()),
+    }
+}
+
+fn systemd_environment_values<'a>(definition: &'a str, name: &str) -> Vec<&'a str> {
+    let prefix = format!("Environment=\"{name}=");
+    definition
+        .lines()
+        .filter_map(|line| {
+            line.strip_prefix(&prefix)
+                .and_then(|line| line.strip_suffix('"'))
+        })
+        .collect()
 }
 
 fn systemd_unescape(value: &str) -> Result<String, String> {
