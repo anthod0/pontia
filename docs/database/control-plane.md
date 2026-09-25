@@ -1,27 +1,4 @@
-# Current SQLite database tables
-
-## Edge database
-
-The edge service uses its own SQLite file, separate from the local control-plane database.
-Device public keys are provisioned separately from device connections. Admission requires
-an already registered device ID and proof of possession of its corresponding private key
-by signing the current connection's nonce challenge. Device connection status is ephemeral.
-User-to-device ownership and access authorization belong to the central service, not edge.
-
-### `devices`
-
-| Column | Type | Constraints / default |
-|---|---|---|
-| `device_id` | TEXT | primary key, NOT NULL; UUID |
-| `public_key` | BLOB | NOT NULL, UNIQUE; 32-byte Ed25519 public key |
-| `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
-
-Tunnel protocol v3 carries the device ID and nonce signature in the WSS authentication
-message. Every connection, including reconnects, reads the currently registered public
-key. Changing a registration does not terminate an already authenticated connection.
-Registration and public-key rotation are outside the connection API.
-
-The following tables belong to the local control-plane database.
+# Local control-plane SQLite database
 
 ## `events`
 
@@ -39,12 +16,6 @@ The following tables belong to the local control-plane database.
 | `timeline_boundary` | TEXT | |
 | `turn_topology` | TEXT | |
 
-Codex `session.created` payloads carry an immutable `execution_profile_binding`
-snapshot when a Profile is selected: contract version, Profile ID/version, and
-static system prompt. This snapshot is committed atomically with the Session;
-subsequent Profile edits do not change it. Older events without the snapshot are
-not evidence of an effective Codex Profile binding.
-
 **Indexes**
 
 | Name | Unique | Columns | Condition |
@@ -60,8 +31,6 @@ not evidence of an effective Codex Profile binding.
 | `turn_events_require_turn_identity` | BEFORE INSERT | `turn.*` events require a non-null `turn_id`. |
 | `turn_events_validate_linked_parent` | BEFORE INSERT | A linked parent must be an earlier Turn in the same Session. |
 | `turn_events_validate_topology` | BEFORE INSERT | `turn_topology` is allowed on `turn.started` and `turn.topology_recovered`, with valid JSON, status and parent shape. Recovery requires `system_monitor`, an existing Turn in the Session, and a resolved association. |
-
-`turn.timeline_boundary_recovered` and `turn.topology_recovered` record native-history associations without changing lifecycle facts. Historical events remain immutable; replay applies the recovery events to the same Turn.
 
 ## `sessions`
 
@@ -92,13 +61,11 @@ not evidence of an effective Codex Profile binding.
 |---|---|---|---|
 | `idx_sessions_execution_profile` | No | `workspace_id`, `execution_profile_id`, `execution_profile_version`, `state`, `updated_at`, `session_id` |  |
 | `idx_sessions_management_list` | No | `archived_at`, `pinned_at`, `updated_at`, `session_id` |  |
-| `idx_sessions_workflow_replanner_creation_token` | Yes | `json_extract(metadata, '$.workflow_replanner_creation_token')` | token is not NULL |
+| `idx_sessions_workflow_replanner_creation_token` | Yes | `json_extract(metadata, '$.workflow_replanner_creation_token')` | `json_extract(metadata, '$.workflow_replanner_creation_token') IS NOT NULL` |
 | `idx_sessions_workspace` | No | `workspace_id`, `state`, `updated_at`, `session_id` |  |
 | `idx_sessions_workspace_handle` | Yes | `workspace_id`, `handle` | `handle IS NOT NULL AND state NOT IN ('exited', 'error')` |
 
 ## `turns`
-
-Each Turn belongs to one Session and uses an immutable, Pontia-generated `turn_<UUID v7>` primary key (`turn_id`) for ordering and pagination within that Session.
 
 | Column | Type | Constraints / default |
 |---|---|---|
@@ -232,9 +199,9 @@ Each Turn belongs to one Session and uses an immutable, Pontia-generated `turn_<
 | `dispatched_at` | TEXT | |
 | `cancelled_at` | TEXT | |
 | `branch_target_turn_id` | TEXT | foreign key → `turns.turn_id` |
-| `steer_target_turn_id` | TEXT | foreign key → `turns.turn_id`; fixed at acceptance |
-| `retry_of_message_id` | TEXT | foreign key → `inbox_messages.message_id`; explicit retry lineage |
-| `required_runtime_instance_id` | TEXT | Optional runtime constraint for a prepared input; retained while pending and checked when dispatching, including after restart |
+| `steer_target_turn_id` | TEXT | foreign key → `turns.turn_id` |
+| `retry_of_message_id` | TEXT | foreign key → `inbox_messages.message_id` |
+| `required_runtime_instance_id` | TEXT | |
 
 **Indexes**
 
@@ -244,10 +211,6 @@ Each Turn belongs to one Session and uses an immutable, Pontia-generated `turn_<
 | `idx_inbox_messages_session_state` | No | `session_id`, `state`, `delivery_policy`, `created_at`, `message_id` |  |
 | `idx_inbox_messages_turn` | No | `turn_id` | `turn_id IS NOT NULL` |
 | `idx_inbox_messages_retry_of` | Yes | `retry_of_message_id` | `retry_of_message_id IS NOT NULL` |
-
-Submission identity is the message ID. Repeating an ID within its Session returns the current record, preserving the first submission’s contents. Distinct IDs accept identical content independently.
-
-Inbox states distinguish `pending`, `resuming`, `dispatching`, `dispatched`, `failed`, and `unknown`, as well as cancelled, dismissed, and superseded records. `unknown` means delivery may have executed and is never automatically replayed. Retry creates a linked record; the original remains auditable.
 
 ## `execution_profiles`
 
@@ -297,7 +260,7 @@ Inbox states distinguish `pending`, `resuming`, `dispatching`, `dispatched`, `fa
 | `discovered` | BOOLEAN | NOT NULL, default `FALSE` |
 | `client_session_file` | TEXT | |
 
-Table constraint: unique constraint `UNIQUE(session_id, client_type, client_session_key)`.
+Table constraint: `UNIQUE(session_id, client_type, client_session_key)`.
 
 **Indexes**
 
@@ -326,7 +289,7 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 | `tmux_pane_id` | TEXT | |
 | `process_fingerprint` | TEXT | CHECK `process_fingerprint IS NULL OR json_valid(process_fingerprint)` |
 | `capabilities` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(capabilities)` |
-| `diagnostics` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(diagnostics)`; migration 0020 removes the obsolete `claude_hook_log` key from existing rows |
+| `diagnostics` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(diagnostics)` |
 | `adapter_details` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(adapter_details)` |
 | `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 
@@ -336,27 +299,15 @@ Table constraint: unique constraint `UNIQUE(session_id, client_type, client_sess
 |---|---|---|---|
 | `idx_runtime_bindings_tmux_unconfirmed` | No | `tmux_socket_path`, `tmux_pane_id`, `binding_state` |  |
 
-Codex runtime bindings use `runtime_kind = 'codex_app_server'`. Their
-`runtime_instance_id` identifies the shared managed server, and `runtime_handle`
-locates its Pontia state root. `adapter_details.codex` contains the native
-`thread_id`, Unix WebSocket `endpoint`, and control `connection` availability
-(`awaiting_input`, `reconciling`, `available`, `unavailable`, or `archived`).
-`adapter_details.codex_profile_thread` records the native thread whose creation
-accepted the Profile configuration. It survives control reconnection and must
-match the Agent binding before a profiled Session can resume.
-TUI process ownership is stored separately from execution runtime identity.
-
 ## `native_turn_bindings`
 
 | Column | Type | Constraints |
 |---|---|---|
 | `session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` ON DELETE CASCADE |
 | `client_turn_id` | TEXT | NOT NULL |
-| `turn_id` | TEXT | NOT NULL, UNIQUE; Pontia-generated Turn identity |
+| `turn_id` | TEXT | NOT NULL, UNIQUE |
 
-Primary key: (`session_id`, `client_turn_id`). Identity is allocated before the
-first normalized native fact is ingested, so `turn_id` has no foreign key to the
-Turn projection. Retries and recovery reuse this identity.
+Primary key: (`session_id`, `client_turn_id`).
 
 ## `codex_tui_bindings`
 
@@ -366,13 +317,9 @@ Turn projection. Retries and recovery reuse this identity.
 | `target_session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` ON DELETE CASCADE |
 | `runtime_instance_id` | TEXT | NOT NULL |
 | `connected` | BOOLEAN | NOT NULL, default FALSE |
-| `connection_id` | TEXT | Fences disconnects from superseded TUI connections |
+| `connection_id` | TEXT | |
 | `tmux_socket_path` | TEXT | |
 | `tmux_pane_id` | TEXT | |
-
-The owner identifies a reattachable TUI gateway. The target follows successful
-user-thread start, resume and fork responses on that TUI connection. Changing
-the target does not change either Session's persistent Agent binding.
 
 ## `session_lineage`
 
@@ -408,7 +355,7 @@ the target does not change either Session's persistent Agent binding.
 | `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 | `started_at` | TEXT | |
 | `completed_at` | TEXT | |
-| `activating_node_id` | TEXT | foreign key → `workflow_nodes.node_id`; transient database gate preventing pause from racing node dispatch |
+| `activating_node_id` | TEXT | foreign key → `workflow_nodes.node_id` |
 | `active_patch_id` | TEXT | foreign key → `workflow_patches.patch_id` |
 | `active_replanner_session_id` | TEXT | foreign key → `sessions.session_id` |
 
@@ -469,7 +416,7 @@ the target does not change either Session's persistent Agent binding.
 | `replanner_runtime_instance_id` | TEXT | |
 | `base_revision` | INTEGER | NOT NULL, check `base_revision >= 1` |
 | `result_revision` | INTEGER | check `result_revision IS NULL OR result_revision >= base_revision` |
-| `state` | TEXT | NOT NULL, one of `requested`, `planning`, `applied`, `rejected`, `blocked` |
+| `state` | TEXT | NOT NULL, CHECK `state IN ('requested', 'planning', 'applied', 'rejected', 'blocked')` |
 | `request_document_ref` | TEXT | NOT NULL |
 | `request_size_bytes` | INTEGER | NOT NULL, check `request_size_bytes >= 0` |
 | `decision_document_ref` | TEXT | |
@@ -477,10 +424,10 @@ the target does not change either Session's persistent Agent binding.
 | `blocked_draft_ref` | TEXT | |
 | `interruption_attempted_at` | TEXT | |
 | `interruption_requested_at` | TEXT | |
-| `replanning_unlocked_at` | TEXT | set only after the recorded requester Turn interruption is confirmed by a persisted Agent Client fact |
+| `replanning_unlocked_at` | TEXT | |
 | `continuation_message_id` | TEXT | |
 | `continuation_queued_at` | TEXT | |
-| `replanner_exit_requested_at` | TEXT | durable claim for graceful exit after a Re-planner Turn terminal fact |
+| `replanner_exit_requested_at` | TEXT | |
 | `requested_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 | `planning_at` | TEXT | |
 | `resolved_at` | TEXT | |
@@ -497,24 +444,26 @@ the target does not change either Session's persistent Agent binding.
 
 ## `workflow_recoveries`
 
-Explicit recovery of an unsubmitted Agent Node after a confirmed Pi Session exit. The Node and native Session binding are retained. `recovering` is a Workflow scheduling state; Agent execution still derives from Session facts.
-
 | Column | Type | Constraints / default |
 |---|---|---|
 | `recovery_id` | TEXT | primary key, NOT NULL |
 | `workflow_id` | TEXT | NOT NULL, foreign key → `workflows.workflow_id` |
-| `failure_event_id` | TEXT | NOT NULL, UNIQUE, foreign key → `workflow_events.event_id`; repeated requests for this failure return the same recovery |
-| `exit_event_id` | TEXT | NOT NULL, foreign key → `events.event_id`; original exit evidence |
+| `failure_event_id` | TEXT | NOT NULL, UNIQUE, foreign key → `workflow_events.event_id` |
+| `exit_event_id` | TEXT | NOT NULL, foreign key → `events.event_id` |
 | `node_id` | TEXT | NOT NULL, foreign key → `workflow_nodes.node_id` |
 | `session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` |
-| `message_id` | TEXT | NOT NULL, UNIQUE; reserved Inbox identity, created during preparation |
-| `state` | TEXT | NOT NULL, check in `requested`, `preparing`, `dispatching`, `completed`, `failed` |
-| `runtime_instance_id` | TEXT | Confirmed runtime used for recovery; fences subsequent Node lifecycle observations and submissions |
-| `failure_message` | TEXT | Recovery failure diagnostics |
+| `message_id` | TEXT | NOT NULL, UNIQUE |
+| `state` | TEXT | NOT NULL, CHECK `state IN ('requested', 'preparing', 'dispatching', 'completed', 'failed')` |
+| `runtime_instance_id` | TEXT | |
+| `failure_message` | TEXT | |
 | `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 | `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 
-`idx_workflow_recovery_active` uniquely indexes `workflow_id` where state is `requested`, `preparing`, or `dispatching`. Recovery completion means its input was delivered, not that the Node or Workflow completed. Workflow events retain the original failure and recovery association. Unsubmitted Handoff output is archived under `workflows/<workflow_id>/recoveries/<recovery_id>/` before restoring the Session.
+**Indexes**
+
+| Name | Unique | Columns | Condition |
+|---|---|---|---|
+| `idx_workflow_recovery_active` | Yes | `workflow_id` | `state IN ('requested', 'preparing', 'dispatching')` |
 
 ## `workflow_events`
 
@@ -527,7 +476,7 @@ Explicit recovery of an unsubmitted Agent Node after a confirmed Pi Session exit
 | `payload` | TEXT | NOT NULL, default `'{}'` |
 | `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 
-Table constraint: unique constraint `UNIQUE(workflow_id, sequence)`.
+Table constraint: `UNIQUE(workflow_id, sequence)`.
 
 **Indexes**
 

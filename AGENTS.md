@@ -38,4 +38,8 @@ Destination: `$HOME/worktrees/pontia/<name>`.
 ## Agent documentation
 
 - Do not modify any README file unless the user explicitly requests it.
-- Database definitions: [`docs/database-schema.md`](docs/database-schema.md). When adding a migration, update this document in the same change.
+- Database definitions
+  - `docs/database/control-plane.md` for `crates/pontia-storage-sqlite/migrations/`
+  - `docs/database/edge.md` for `crates/pontia-edge/migrations/`
+  - When adding a migration, update the corresponding database document in the same change. 
+  - Database documents are final SQL schema snapshots, not descriptions of code behavior, workflows, or architecture.
