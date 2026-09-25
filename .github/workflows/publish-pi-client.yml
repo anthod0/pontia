@@ -63,16 +63,15 @@ jobs:
           node-version: '24'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: '11.23.0'
-          run_install: false
+          bun-version: "1.4.0"
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
       - name: Typecheck
-        run: pnpm run typecheck
+        run: bun run typecheck
       - name: Test
-        run: pnpm run test
+        run: bun run test
       - name: Install npm with Trusted Publishing support
         # OIDC requires npm >= 11.5.1; do not rely on the runner's bundled npm.
         run: npm install --global npm@11

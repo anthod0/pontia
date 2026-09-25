@@ -46,5 +46,9 @@
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.86.1 <1"
-  }
+  },
+  "trustedDependencies": [
+    "esbuild",
+    "koffi"
+  ]
 }

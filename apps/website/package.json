@@ -8,8 +8,8 @@
 		"dev": "vite dev --host",
 		"build": "vite build",
 		"preview": "wrangler dev --port 4173",
-		"deploy": "pnpm run build && wrangler deploy --env=",
-		"deploy:staging": "pnpm run build && wrangler deploy --env staging",
+		"deploy": "bun run build && wrangler deploy --env=",
+		"deploy:staging": "bun run build && wrangler deploy --env staging",
 		"cf-typegen": "wrangler types",
 		"prepare": "(svelte-kit sync && wrangler types) || echo ''",
 		"check": "svelte-kit sync && wrangler types && svelte-check --tsconfig ./tsconfig.json",
@@ -33,5 +33,10 @@
 		"@fontsource/ibm-plex-mono": "^5.3.0",
 		"@fontsource/ibm-plex-sans": "^5.3.0",
 		"phosphor-svelte": "^3.1.0"
-	}
+	},
+	"trustedDependencies": [
+		"@tailwindcss/oxide",
+		"esbuild",
+		"workerd"
+	]
 }

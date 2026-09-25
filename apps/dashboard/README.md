@@ -7,7 +7,7 @@ View and control your coding-agent sessions from the web. For installation and s
 From the repository root:
 
 ```bash
-pnpm --dir=apps/dashboard install
+bun install --cwd apps/dashboard
 just dev
 ```
 
@@ -29,7 +29,7 @@ just dev-dashboard
 ## Build and serve through pontia
 
 ```bash
-pnpm --dir=apps/dashboard run build
+bun run --cwd apps/dashboard build
 PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist just dev-backend
 ```
 

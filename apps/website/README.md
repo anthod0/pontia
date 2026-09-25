@@ -7,16 +7,16 @@ The public website at [pontia.dev](https://pontia.dev), deployed to Cloudflare W
 From the repository root:
 
 ```sh
-pnpm --dir apps/website install
-pnpm --dir apps/website dev
+bun install --cwd apps/website
+bun run --cwd apps/website dev
 ```
 
 ## Verification
 
 ```sh
-pnpm --dir apps/website check
-pnpm --dir apps/website build
-pnpm --dir apps/website preview
+bun run --cwd apps/website check
+bun run --cwd apps/website build
+bun run --cwd apps/website preview
 ```
 
 ## Cloudflare deployment
@@ -24,8 +24,8 @@ pnpm --dir apps/website preview
 For a local manual deployment, authenticate Wrangler outside the repository and deploy:
 
 ```sh
-pnpm --dir apps/website exec wrangler login
-pnpm --dir apps/website deploy
+bun x --cwd apps/website wrangler login
+bun run --cwd apps/website deploy
 ```
 
 For CI, configure these in the deployment provider's secret store, never in repository files:

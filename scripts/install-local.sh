@@ -25,7 +25,7 @@ validate_root() {
 validate_root PREFIX "$PREFIX"
 validate_root PONTIA_HOME "$PONTIA_HOME"
 
-for command in cargo install pnpm pi; do
+for command in cargo install bun pi; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 1
@@ -35,10 +35,10 @@ done
 cd "$REPO_ROOT"
 
 echo "Installing Dashboard dependencies..."
-pnpm --dir apps/dashboard install --frozen-lockfile
+bun install --cwd apps/dashboard --frozen-lockfile
 
 echo "Building Dashboard..."
-pnpm --dir apps/dashboard run build
+bun run --cwd apps/dashboard build
 
 echo "Building release binaries..."
 SQLX_OFFLINE=true cargo build --release -p pontia -p pontiad

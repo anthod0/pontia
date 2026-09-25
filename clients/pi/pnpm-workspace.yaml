@@ -1,7 +1,0 @@
-allowBuilds:
-  # Vitest/Vite's platform binary and Pi clipboard's native FFI module.
-  esbuild: true
-  koffi: true
-  # Neither script produces runtime artifacts: a no-op and a version warning.
-  '@google/genai': false
-  protobufjs: false

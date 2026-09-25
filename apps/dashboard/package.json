@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "packageManager": "pnpm@11.13.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -54,5 +53,9 @@
     "shiki": "^4.4.3",
     "svelte-sonner": "^1.1.1",
     "tailwind-merge": "^3.6.0"
-  }
+  },
+  "trustedDependencies": [
+    "@tailwindcss/oxide",
+    "esbuild"
+  ]
 }

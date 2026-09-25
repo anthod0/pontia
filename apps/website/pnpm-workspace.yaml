@@ -1,3 +1,0 @@
-allowBuilds:
-  workerd: true
-  esbuild: true

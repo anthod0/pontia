@@ -61,7 +61,7 @@ cargo run -p pontiad &
 backend_pid=$!
 
 echo "Starting dashboard Vite dev server..."
-pnpm --dir apps/dashboard run dev &
+bun run --cwd apps/dashboard dev &
 frontend_pid=$!
 
 cat <<'EOF'

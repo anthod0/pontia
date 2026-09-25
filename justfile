@@ -8,10 +8,10 @@ dev-backend:
     SQLX_OFFLINE=true PONTIA_EXTERNAL_API_TOKEN=${PONTIA_EXTERNAL_API_TOKEN:-dev-token} cargo run -p pontiad
 
 dev-dashboard:
-    pnpm --dir=apps/dashboard run dev
+    bun run --cwd apps/dashboard dev
 
 dev-website:
-    pnpm --dir=apps/website run dev
+    bun run --cwd apps/website dev
 
 install-local:
     ./scripts/install-local.sh
@@ -38,16 +38,16 @@ test:
     SQLX_OFFLINE=true cargo test --workspace
 
 dashboard-check:
-    pnpm --dir=apps/dashboard run check
+    bun run --cwd apps/dashboard check
 
 dashboard-test:
-    pnpm --dir=apps/dashboard run test
+    bun run --cwd apps/dashboard test
 
 pi-client-test:
-    pnpm --dir=clients/pi run test
-    pnpm --dir=clients/pi run typecheck
+    bun run --cwd clients/pi test
+    bun run --cwd clients/pi typecheck
 
 website-check:
-    pnpm --dir=apps/website run check
+    bun run --cwd apps/website check
 
 check: fmt-check sqlx-check clippy test dashboard-check dashboard-test pi-client-test website-check

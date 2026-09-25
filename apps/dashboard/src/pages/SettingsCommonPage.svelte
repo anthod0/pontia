@@ -109,7 +109,7 @@
       <Card.Description>Use the SvelteKit static SPA build as the configured dashboard source.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-2 text-sm text-muted-foreground">
-      <p>Build this app with <code class="rounded-none bg-muted px-1 py-0.5">pnpm --dir=apps/dashboard run build</code>.</p>
+      <p>Build this app with <code class="rounded-none bg-muted px-1 py-0.5">bun run --cwd apps/dashboard build</code>.</p>
       <p>Serve it with <code class="rounded-none bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> or <code class="rounded-none bg-muted px-1 py-0.5">PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
     </Card.Content>
   </Card.Root>
