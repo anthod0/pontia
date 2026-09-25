@@ -73,6 +73,7 @@ jobs:
           export WRANGLER_OUTPUT_FILE_PATH="$output_file"
 
           pnpm exec wrangler versions upload \
+            --env staging \
             --preview-alias "$preview_alias" \
             --tag "$SHA" \
             --message "$REF_NAME@$SHA"
