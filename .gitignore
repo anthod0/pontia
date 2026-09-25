@@ -12,20 +12,12 @@ apps/web/dist/
 *.db-wal
 .pontia
 .pi
-TODO.md
-MILESTONE.md
 archive/
 tmp/
 /specs
-/docs/agents
-/.scratch
 
 /.agents/
 /.cursor/
 /.codex/
 
 /.out-of-scope/
-/docs/adr
-/CONTEXT.md
-/CONTEXT-MAP.md
-/AGENTS.local.md

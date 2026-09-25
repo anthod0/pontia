@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Scheme 2: linked Git worktree, reflinked local resources, shared private docs.
+# Scheme 2: linked Git worktree, reflinked local resources.
+# Private docs live in the sibling pontia-docs repository (`../pontia-docs` from the primary checkout).
+# Worktrees resolve the same relative path via $HOME/worktrees/pontia/pontia-docs.
 set -euo pipefail
 
 usage() { echo "Usage: $0 <name> [base-revision]" >&2; }
@@ -30,6 +32,16 @@ if git -C "$calling_checkout" show-ref --verify --quiet "refs/heads/$branch"; th
 fi
 mkdir -p -- "$workspace_parent"
 [[ $(stat -c %d "$source_checkout") == $(stat -c %d "$workspace_parent") ]] || fail "source and destination must be on the same filesystem"
+docs_repo=$(dirname -- "$source_checkout")/pontia-docs
+docs_link=$workspace_parent/pontia-docs
+if [[ -d $docs_repo ]]; then
+  if [[ -L $docs_link || -e $docs_link ]]; then
+    [[ -L $docs_link && $(realpath -- "$docs_link") == $(realpath -- "$docs_repo") ]] \
+      || fail "pontia-docs link is missing or points elsewhere: $docs_link"
+  else
+    ln -s -- "$docs_repo" "$docs_link"
+  fi
+fi
 # Probe before creating a branch. Never silently fall back to ordinary copies.
 probe=$(mktemp "$workspace_parent/.cow-probe.XXXXXX")
 if ! cp --reflink=always -- "$source_checkout/AGENTS.md" "$probe"; then
@@ -48,8 +60,7 @@ copy_paths=(
 )
 # Each shared path is authoritative in the primary checkout; missing paths are skipped.
 shared_paths=(
-  .scratch docs/agents docs/adr specs
-  AGENTS.local.md CONTEXT.md CONTEXT-MAP.md TODO.md MILESTONE.md
+  specs
 )
 
 git -C "$calling_checkout" worktree add -b "$branch" "$destination" "$base" >&2
