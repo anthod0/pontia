@@ -1,0 +1,96 @@
+name: Website preview
+
+on:
+  push:
+    paths:
+      - apps/website/**
+      - .github/workflows/website-preview.yml
+  workflow_dispatch:
+
+concurrency:
+  group: website-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    name: Upload Worker preview
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/website
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.23.0"
+          run_install: false
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check
+        run: pnpm run check
+      - name: Build
+        run: pnpm run build
+      - name: Upload Worker version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+            echo "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set as repository secrets" >&2
+            exit 1
+          fi
+
+          if [[ "$REF_NAME" == "main" ]]; then
+            preview_alias=staging
+          else
+            preview_alias="$(
+              printf '%s' "$REF_NAME" \
+                | tr '[:upper:]' '[:lower:]' \
+                | tr -c 'a-z0-9' '-' \
+                | sed -E 's/-+/-/g; s/^-+//; s/-+$//'
+            )"
+            preview_alias="${preview_alias:0:47}"
+            preview_alias="${preview_alias%-}"
+            if [[ ! "$preview_alias" =~ ^[a-z]([a-z0-9-]*[a-z0-9])?$ ]]; then
+              preview_alias="preview-${SHA:0:8}"
+            fi
+          fi
+
+          output_file="$RUNNER_TEMP/wrangler-version-upload.json"
+          export WRANGLER_OUTPUT_FILE_PATH="$output_file"
+
+          pnpm exec wrangler versions upload \
+            --preview-alias "$preview_alias" \
+            --tag "$SHA" \
+            --message "$REF_NAME@$SHA"
+
+          preview_url="$(jq -er 'select(.type == "version-upload") | .preview_url // empty' "$output_file")"
+          preview_alias_url="$(jq -er 'select(.type == "version-upload") | .preview_alias_url // empty' "$output_file")"
+          version_id="$(jq -er 'select(.type == "version-upload") | .version_id // empty' "$output_file")"
+
+          {
+            echo "## Website preview"
+            echo
+            echo "- Worker version: \`$version_id\`"
+            if [[ -n "$preview_alias_url" ]]; then
+              echo "- Staging URL: $preview_alias_url"
+            fi
+            if [[ -n "$preview_url" ]]; then
+              echo "- Version URL: $preview_url"
+            fi
+            echo
+            echo "This upload does not change production traffic on pontia.dev."
+          } >> "$GITHUB_STEP_SUMMARY"
