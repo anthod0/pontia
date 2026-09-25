@@ -10,7 +10,6 @@ use axum_server::tls_rustls::RustlsConfig;
 use pontia_edge::{ConnectionLimits, DeviceRegistry, Edge};
 use pontia_tunnel::DeviceIdentity;
 use rustls::{ServerConfig, pki_types::PrivatePkcs8KeyDer};
-use sha2::{Digest, Sha256};
 
 struct ChildGuard(Child);
 
@@ -41,13 +40,6 @@ async fn pontiad_loads_remote_config_authenticates_and_disconnects_on_sigterm() 
         .execute(&records)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO access_keys (key_id, secret_hash, device_id) VALUES (?, ?, ?)")
-        .bind("fixture-key")
-        .bind(Sha256::digest(b"fixture-remote-key").as_slice())
-        .bind(identity.device_id().to_string())
-        .execute(&records)
-        .await
-        .unwrap();
     let edge = Edge::new(devices, ConnectionLimits::default());
     let rcgen::CertifiedKey { cert, signing_key } =
         rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
@@ -72,7 +64,7 @@ async fn pontiad_loads_remote_config_authenticates_and_disconnects_on_sigterm() 
             .serve(edge.router().into_make_service()),
     );
     std::fs::write(device_home.join("config.toml"), format!(
-        "bind_addr = '127.0.0.1:0'\n[dashboard]\nsource = ''\n[remote]\nedge_url = 'wss://127.0.0.1:{port}/tunnel'\naccess_key = 'fixture-remote-key'\nca_certificate = '{}'\n", ca_path.display()
+        "bind_addr = '127.0.0.1:0'\n[dashboard]\nsource = ''\n[remote]\nedge_url = 'wss://127.0.0.1:{port}/tunnel'\nca_certificate = '{}'\n", ca_path.display()
     )).unwrap();
     let log_path = root.path().join("pontiad.log");
     let log = std::fs::File::create(&log_path).unwrap();

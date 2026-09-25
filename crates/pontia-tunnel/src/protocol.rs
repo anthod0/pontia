@@ -5,31 +5,17 @@ use uuid::Uuid;
 
 use crate::{Error, Result};
 
-pub const VERSION: u16 = 2;
+pub const VERSION: u16 = 3;
 pub const MAX_MESSAGE_BYTES: usize = 4096;
-pub const MAX_ACCESS_KEY_BYTES: usize = 512;
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Message {
-    Challenge {
-        version: u16,
-        nonce: [u8; 32],
-    },
-    Authenticate {
-        device_id: Uuid,
-        access_key: String,
-        signature: String,
-    },
-    Authenticated {
-        device_id: Uuid,
-    },
-    Ping {
-        nonce: [u8; 32],
-    },
-    Pong {
-        nonce: [u8; 32],
-    },
+    Challenge { version: u16, nonce: [u8; 32] },
+    Authenticate { device_id: Uuid, signature: String },
+    Authenticated { device_id: Uuid },
+    Ping { nonce: [u8; 32] },
+    Pong { nonce: [u8; 32] },
 }
 
 pub fn nonce() -> Result<[u8; 32]> {
@@ -40,7 +26,7 @@ pub fn nonce() -> Result<[u8; 32]> {
 
 // Fixed-width fields and a versioned domain separator make the signed identity unambiguous.
 pub fn signing_payload(device_id: Uuid, nonce: &[u8; 32]) -> Vec<u8> {
-    let mut bytes = b"pontia/tunnel/device-auth/v2\0".to_vec();
+    let mut bytes = b"pontia/tunnel/device-auth/v3\0".to_vec();
     bytes.extend_from_slice(device_id.as_bytes());
     bytes.extend_from_slice(nonce);
     bytes

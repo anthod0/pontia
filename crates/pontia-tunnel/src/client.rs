@@ -26,22 +26,11 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(45);
 pub struct RemoteClient {
     url: Url,
     identity: DeviceIdentity,
-    access_key: String,
     connector: Connector,
 }
 
 impl RemoteClient {
-    pub fn new(
-        url: &str,
-        identity: DeviceIdentity,
-        access_key: String,
-        ca_certificate: Option<&Path>,
-    ) -> Result<Self> {
-        if access_key.trim().is_empty() || access_key.len() > protocol::MAX_ACCESS_KEY_BYTES {
-            return Err(Error::Protocol(
-                "remote access key must be non-empty and at most 512 bytes",
-            ));
-        }
+    pub fn new(url: &str, identity: DeviceIdentity, ca_certificate: Option<&Path>) -> Result<Self> {
         let url = Url::parse(url).map_err(|_| Error::Protocol("invalid edge URL"))?;
         if url.scheme() != "wss"
             || url.host_str().is_none()
@@ -75,7 +64,6 @@ impl RemoteClient {
         Ok(Self {
             url,
             identity,
-            access_key,
             connector: Connector::Rustls(Arc::new(tls)),
         })
     }
@@ -132,11 +120,7 @@ impl RemoteClient {
                     "expected supported authentication challenge",
                 ));
             };
-            send(
-                &mut socket,
-                self.identity.authenticate(&nonce, &self.access_key),
-            )
-            .await?;
+            send(&mut socket, self.identity.authenticate(&nonce)).await?;
             let Message::Authenticated { device_id } = receive(&mut socket).await? else {
                 return Err(Error::Protocol("expected authentication confirmation"));
             };

@@ -12,7 +12,6 @@ clap = { version = "4", features = ["derive"] }
 pontia-tunnel.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde_json.workspace = true
-sha2 = "0.10"
 sqlx.workspace = true
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1"

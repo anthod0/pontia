@@ -3,10 +3,10 @@
 ## Edge database
 
 The edge service uses its own SQLite file, separate from the local control-plane database.
-Device registrations and access-key associations are provisioned separately from device
-connections. Admission only reads these records: a key must already identify the claimed
-device, which must also prove possession of its registered private key. Device connection
-status is ephemeral.
+Device public keys are provisioned separately from device connections. Admission requires
+an already registered device ID and proof of possession of its corresponding private key
+by signing the current connection's nonce challenge. Device connection status is ephemeral.
+User-to-device ownership and access authorization belong to the central service, not edge.
 
 ### `devices`
 
@@ -16,25 +16,10 @@ status is ephemeral.
 | `public_key` | BLOB | NOT NULL, UNIQUE; 32-byte Ed25519 public key |
 | `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 
-### `access_keys`
-
-| Column | Type | Constraints / default |
-|---|---|---|
-| `key_id` | TEXT | primary key, NOT NULL, non-blank; stable across secret changes |
-| `secret_hash` | BLOB | NOT NULL, UNIQUE; 32-byte SHA-256 digest of the exact UTF-8 access key |
-| `device_id` | TEXT | nullable foreign key to `devices.device_id` |
-| `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
-
-Access keys are opaque, high-entropy secrets, not user-chosen passwords. Provisioners must
-use cryptographically random keys with at least 256 bits of entropy; the wire value is at
-most 512 UTF-8 bytes. An unassociated key grants no device access. Each key identifies at
-most one device; multiple keys may identify the same device.
-
-The device supplies the secret in `config.toml` under `[remote].access_key`, alongside
-`edge_url`. Tunnel protocol v2 carries it in the WSS authentication message with the
-device ID and nonce signature. Every connection, including reconnects, checks the current
-association. Changing admission records does not terminate an already authenticated
-connection. Key provisioning and association management are outside the connection API.
+Tunnel protocol v3 carries the device ID and nonce signature in the WSS authentication
+message. Every connection, including reconnects, reads the currently registered public
+key. Changing a registration does not terminate an already authenticated connection.
+Registration and public-key rotation are outside the connection API.
 
 The following tables belong to the local control-plane database.
 

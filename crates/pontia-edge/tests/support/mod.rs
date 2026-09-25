@@ -1,7 +1,5 @@
 pub mod records;
 
-pub const ACCESS_KEY: &str = "fixture-device-access-key";
-
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use axum_server::{Handle, tls_rustls::RustlsConfig};
@@ -106,15 +104,8 @@ impl TestEdge {
         .0
     }
 
-    pub async fn seed_association(&self, identity: &DeviceIdentity) {
+    pub async fn seed_device(&self, identity: &DeviceIdentity) {
         records::device(&self.records, identity).await;
-        records::access_key(
-            &self.records,
-            "fixture-key",
-            ACCESS_KEY,
-            Some(identity.device_id()),
-        )
-        .await;
     }
 
     pub async fn authenticate(&self, identity: &DeviceIdentity) -> Socket {
@@ -122,7 +113,7 @@ impl TestEdge {
         let Message::Challenge { nonce, .. } = receive(&mut socket).await else {
             panic!()
         };
-        send(&mut socket, identity.authenticate(&nonce, ACCESS_KEY)).await;
+        send(&mut socket, identity.authenticate(&nonce)).await;
         assert!(
             matches!(receive(&mut socket).await, Message::Authenticated { device_id } if device_id == identity.device_id())
         );

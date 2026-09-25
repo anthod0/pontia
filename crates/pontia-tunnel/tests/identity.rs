@@ -16,7 +16,7 @@ fn identity_survives_reload_and_signatures_bind_nonce_and_device() {
         device_id,
         signature,
         ..
-    } = loaded.authenticate(&nonce, "fixture-key")
+    } = loaded.authenticate(&nonce)
     else {
         panic!()
     };
@@ -84,33 +84,8 @@ fn client_requires_wss_without_url_credentials_or_extra_routes() {
         "wss://example.com/tunnel#fragment",
     ] {
         assert!(
-            RemoteClient::new(
-                url,
-                DeviceIdentity::generate().unwrap(),
-                "fixture-key".to_owned(),
-                None
-            )
-            .is_err(),
+            RemoteClient::new(url, DeviceIdentity::generate().unwrap(), None).is_err(),
             "{url}"
-        );
-    }
-}
-
-#[test]
-fn client_rejects_missing_or_oversized_access_keys() {
-    for key in [
-        String::new(),
-        " ".to_owned(),
-        "k".repeat(protocol::MAX_ACCESS_KEY_BYTES + 1),
-    ] {
-        assert!(
-            RemoteClient::new(
-                "wss://edge.example/tunnel",
-                DeviceIdentity::generate().unwrap(),
-                key,
-                None,
-            )
-            .is_err()
         );
     }
 }

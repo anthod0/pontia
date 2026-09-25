@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
             &config.pontia_home.join("state/device-identity.json"),
         )?;
         info!(device_id = %identity.device_id(), public_key = ?identity.public_key(), "remote device identity");
-        pontia_tunnel::RemoteClient::new(&remote.edge_url, identity, remote.access_key.clone(), remote.ca_certificate.as_deref())
+        pontia_tunnel::RemoteClient::new(&remote.edge_url, identity, remote.ca_certificate.as_deref())
     }).transpose().map_err(|error| pontia_core::error::Error::InvalidConfig {
         key: "remote",
         message: error.to_string(),
