@@ -1,0 +1,12 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "pontia-website-staging",
+			"database_id": "f6b7ddb3-0d81-4677-a5f0-8344074e7856",
+			"migrations_dir": "migrations",
+			"migrations_pattern": "migrations/*/migration.sql",
+		},
+	],
+}

@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   preview:
-    name: Upload Worker preview
+    name: Deploy Worker preview
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -41,8 +41,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bunx wrangler d1 migrations apply DB --remote --env staging
-      - name: Upload Worker version
+        run: bunx wrangler d1 migrations apply DB --remote --config wrangler.preview-migrations.jsonc
+      - name: Deploy Worker preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -57,44 +57,41 @@ jobs:
           fi
 
           if [[ "$REF_NAME" == "main" ]]; then
-            preview_alias=staging
+            preview_name=staging
           else
-            preview_alias="$(
+            preview_name="$(
               printf '%s' "$REF_NAME" \
                 | tr '[:upper:]' '[:lower:]' \
                 | tr -c 'a-z0-9' '-' \
                 | sed -E 's/-+/-/g; s/^-+//; s/-+$//'
             )"
-            preview_alias="${preview_alias:0:47}"
-            preview_alias="${preview_alias%-}"
-            if [[ ! "$preview_alias" =~ ^[a-z]([a-z0-9-]*[a-z0-9])?$ ]]; then
-              preview_alias="preview-${SHA:0:8}"
+            preview_name="${preview_name:0:47}"
+            preview_name="${preview_name%-}"
+            if [[ ! "$preview_name" =~ ^[a-z]([a-z0-9-]*[a-z0-9])?$ ]]; then
+              preview_name="preview-${SHA:0:8}"
             fi
           fi
 
-          output_file="$RUNNER_TEMP/wrangler-version-upload.json"
-          export WRANGLER_OUTPUT_FILE_PATH="$output_file"
+          output_file="$RUNNER_TEMP/wrangler-preview.json"
 
-          bunx wrangler versions upload \
-            --env staging \
-            --preview-alias "$preview_alias" \
+          bunx wrangler preview \
+            --name "$preview_name" \
+            --var "AUTH_ORIGIN:https://${preview_name}-pontia-website.ocherry6622.workers.dev" \
             --tag "$SHA" \
-            --message "$REF_NAME@$SHA"
+            --message "$REF_NAME@$SHA" \
+            --json > "$output_file"
 
-          preview_url="$(jq -er 'select(.type == "version-upload") | .preview_url // empty' "$output_file")"
-          preview_alias_url="$(jq -er 'select(.type == "version-upload") | .preview_alias_url // empty' "$output_file")"
-          version_id="$(jq -er 'select(.type == "version-upload") | .version_id // empty' "$output_file")"
+          preview_url="$(jq -er '.preview.urls[0]' "$output_file")"
+          deployment_url="$(jq -er '.deployment.urls[0]' "$output_file")"
+          deployment_id="$(jq -er '.deployment.id' "$output_file")"
 
           {
             echo "## Website preview"
             echo
-            echo "- Worker version: \`$version_id\`"
-            if [[ -n "$preview_alias_url" ]]; then
-              echo "- Staging URL: $preview_alias_url"
-            fi
-            if [[ -n "$preview_url" ]]; then
-              echo "- Version URL: $preview_url"
-            fi
+            echo "- Preview: \`$preview_name\`"
+            echo "- Deployment: \`$deployment_id\`"
+            echo "- Preview URL: $preview_url"
+            echo "- Deployment URL: $deployment_url"
             echo
-            echo "This upload does not change production traffic on pontia.dev."
+            echo "This preview does not change production traffic on pontia.dev."
           } >> "$GITHUB_STEP_SUMMARY"

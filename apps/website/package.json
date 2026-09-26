@@ -9,7 +9,7 @@
 		"build": "vite build",
 		"preview": "bun run db:migrate && wrangler dev --port 4173",
 		"deploy": "bun run build && wrangler d1 migrations apply DB --remote --env= && wrangler deploy --env=",
-		"deploy:staging": "bun run build && wrangler d1 migrations apply DB --remote --env staging && wrangler deploy --env staging",
+		"deploy:staging": "bun run build && wrangler d1 migrations apply DB --remote --config wrangler.preview-migrations.jsonc && wrangler preview --name staging",
 		"cf-typegen": "wrangler types",
 		"prepare": "(svelte-kit sync && wrangler types) || echo ''",
 		"check": "svelte-kit sync && wrangler types && svelte-check --tsconfig ./tsconfig.json",
