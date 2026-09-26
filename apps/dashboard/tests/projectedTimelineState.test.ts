@@ -286,6 +286,19 @@ test('a persisted timeline resumes incremental refresh and older pagination with
   ]);
 });
 
+test('restores a cached timeline when topology is not known yet', async () => {
+  mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage({ next_from_turn_id: null }));
+  await loadSessionTimeline('sess-1', { topology: true });
+  resetTimelineState();
+
+  await expect(restoreSessionTimeline('sess-1')).resolves.toBe(true);
+  expect(get(timelineState)).toMatchObject({
+    sessionId: 'sess-1',
+    mode: 'tree',
+    status: 'ready',
+  });
+});
+
 test('a stale persisted refresh cursor falls back to rebuilding the timeline', async () => {
   mocks.getTurnTimeline
     .mockResolvedValueOnce(page({ items: [item('turn-stale', 'item-stale', 'cached')], next_turn_id: null }))

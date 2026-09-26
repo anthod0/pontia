@@ -72,14 +72,14 @@ export function hasTimelineSnapshot(state: TimelineState, sessionId: string): bo
 
 export async function restoreSessionTimeline(
   sessionId: string,
-  options: { topology: boolean },
+  options: { topology?: boolean } = {},
 ): Promise<boolean> {
   const generation = timelineGeneration;
   const snapshot = await readCachedTimeline(sessionId);
   if (generation !== timelineGeneration) return false;
-  const expectedMode = options.topology ? 'tree' : 'linear';
   const current = get(timelineState);
-  if ((current.sessionId && current.sessionId !== sessionId) || !snapshot || snapshot.mode !== expectedMode) return false;
+  const expectedMode = options.topology === undefined ? null : options.topology ? 'tree' : 'linear';
+  if ((current.sessionId && current.sessionId !== sessionId) || !snapshot || (expectedMode !== null && snapshot.mode !== expectedMode)) return false;
 
   timelineState.set({
     sessionId,

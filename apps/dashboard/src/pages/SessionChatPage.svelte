@@ -106,6 +106,8 @@
   let promptScrollScheduled = false
   let historyObserverEnabled = false
   let initialChatScrollPending = false
+  let transcriptResolving = false
+  let selectedSessionLoadGeneration = 0
   let destroyed = false
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
@@ -151,7 +153,6 @@
     selectedSessionId = requestedSessionIdFromLocation()
     selectSession(selectedSessionId || null)
     autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
-    initialChatScrollPending = Boolean(selectedSessionId)
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
     void Promise.all([loadSessions(), loadWorkspaces()])
     if (selectedSessionId) void loadSelectedSession(selectedSessionId)
@@ -617,47 +618,125 @@
     return session?.capabilities.timeline === true
   }
 
-  async function loadSelectedSession(sessionId: string): Promise<void> {
-    historyObserverEnabled = false
+  function timelineMode(topology: boolean): 'linear' | 'tree' {
+    return topology ? 'tree' : 'linear'
+  }
+
+  function timelineMatches(sessionId: string, topology: boolean | null): boolean {
+    const state = get(timelineState)
+    if (!hasTimelineSnapshot(state, sessionId) || state.mode === null) return false
+    return topology === null || state.mode === timelineMode(topology)
+  }
+
+  function sessionLoadIsCurrent(sessionId: string, generation: number): boolean {
+    return !destroyed && selectedSessionId === sessionId && selectedSessionLoadGeneration === generation
+  }
+
+  async function rebuildTimeline(sessionId: string, generation: number, topology: boolean): Promise<void> {
+    if (!sessionLoadIsCurrent(sessionId, generation)) return
     initialChatScrollPending = true
-    try {
+    resetTimelineState(sessionId)
+    await loadSessionTimeline(sessionId, {
+      mode: 'rebuild',
+      latestTurnId: latestProjectedTurnId(),
+      ...(topology ? { topology: true } : {}),
+    })
+    if (!sessionLoadIsCurrent(sessionId, generation)) return
+    await scrollChatToBottomAfterLayout()
+    if (!sessionLoadIsCurrent(sessionId, generation)) return
+    initialChatScrollPending = false
+    historyObserverEnabled = true
+  }
+
+  async function revealCachedTimeline(
+    sessionId: string,
+    generation: number,
+    detailPromise: Promise<unknown>,
+  ): Promise<void> {
+    const cached = get(timelineState)
+    initialChatScrollPending = false
+    transcriptResolving = false
+    void scrollChatToBottomAfterLayout()
+    void refreshSessionTimeline(sessionId, cached.latestTurnId)
+    await detailPromise
+    if (!sessionLoadIsCurrent(sessionId, generation)) return
+    const loadedSession = currentSelectedSession()
+    if (!loadedSession || !sessionSupportsTimeline(loadedSession)) {
+      resetTimelineState(sessionId)
+      return
+    }
+    const expectedMode = timelineMode(loadedSession.capabilities.topology === true)
+    if (get(timelineState).sessionId === sessionId && get(timelineState).mode === expectedMode) {
+      historyObserverEnabled = true
+      return
+    }
+    await rebuildTimeline(sessionId, generation, expectedMode === 'tree')
+  }
+
+  async function loadSelectedSession(sessionId: string): Promise<void> {
+    const generation = ++selectedSessionLoadGeneration
+    historyObserverEnabled = false
+    const knownSession = currentSelectedSession()
+    if (knownSession && !sessionSupportsTimeline(knownSession)) {
+      initialChatScrollPending = false
+      transcriptResolving = false
+      resetTimelineState(sessionId)
       await loadSessionDetail(sessionId)
-      if (destroyed || selectedSessionId !== sessionId) return
+      return
+    }
+
+    const knownTopology = knownSession ? knownSession.capabilities.topology === true : null
+    const detailPromise = loadSessionDetail(sessionId)
+    try {
+      let hasLoadedTimeline = timelineMatches(sessionId, knownTopology)
+      if (!hasLoadedTimeline) {
+        transcriptResolving = true
+        initialChatScrollPending = false
+        const current = get(timelineState)
+        if (current.sessionId && current.sessionId !== sessionId) resetTimelineState(sessionId)
+        const restored = await restoreSessionTimeline(
+          sessionId,
+          knownTopology === null ? {} : { topology: knownTopology },
+        )
+        if (!sessionLoadIsCurrent(sessionId, generation)) {
+          void detailPromise.catch(() => undefined)
+          return
+        }
+        transcriptResolving = false
+        hasLoadedTimeline = restored && timelineMatches(sessionId, knownTopology)
+      }
+
+      if (hasLoadedTimeline) {
+        await revealCachedTimeline(sessionId, generation, detailPromise)
+        return
+      }
+
+      initialChatScrollPending = true
+      await detailPromise
+      if (!sessionLoadIsCurrent(sessionId, generation)) return
       const loadedSession = currentSelectedSession()
       if (!loadedSession || !sessionSupportsTimeline(loadedSession)) {
         initialChatScrollPending = false
         resetTimelineState(sessionId)
         return
       }
-
-      let currentTimeline = get(timelineState)
-      const latestTurnId = latestProjectedTurnId()
-      const topology = loadedSession?.capabilities.topology === true
-      const expectedMode = topology ? 'tree' : 'linear'
-      let hasLoadedTimeline = hasTimelineSnapshot(currentTimeline, sessionId)
-        && currentTimeline.mode === expectedMode
-      if (!hasLoadedTimeline) {
-        resetTimelineState(sessionId)
-        await restoreSessionTimeline(sessionId, { topology })
-        if (destroyed || selectedSessionId !== sessionId) return
-        currentTimeline = get(timelineState)
-        hasLoadedTimeline = hasTimelineSnapshot(currentTimeline, sessionId)
-          && currentTimeline.mode === expectedMode
-      }
-      if (hasLoadedTimeline) void refreshSessionTimeline(sessionId, currentTimeline.latestTurnId ?? latestTurnId)
-      else await loadSessionTimeline(sessionId, {
+      await loadSessionTimeline(sessionId, {
         mode: 'rebuild',
-        latestTurnId,
-        ...(topology ? { topology: true } : {}),
+        latestTurnId: latestProjectedTurnId(),
+        ...(loadedSession.capabilities.topology === true ? { topology: true } : {}),
       })
-      if (destroyed || selectedSessionId !== sessionId) return
+      if (!sessionLoadIsCurrent(sessionId, generation)) return
       await scrollChatToBottomAfterLayout()
-      if (!destroyed && selectedSessionId === sessionId) {
-        initialChatScrollPending = false
-        historyObserverEnabled = true
-      }
+      if (!sessionLoadIsCurrent(sessionId, generation)) return
+      initialChatScrollPending = false
+      historyObserverEnabled = true
     } catch (error) {
-      if (!destroyed && selectedSessionId === sessionId) initialChatScrollPending = false
+      if (sessionLoadIsCurrent(sessionId, generation)) {
+        transcriptResolving = false
+        initialChatScrollPending = false
+      } else {
+        void detailPromise.catch(() => undefined)
+      }
       throw error
     }
   }
@@ -888,8 +967,8 @@
         </Empty.Root>
       {:else}
         <div
-          data-chat-initial-scroll-pending={initialChatScrollPending ? 'true' : 'false'}
-          class={initialChatScrollPending ? 'relative min-h-80' : 'relative'}
+          data-chat-initial-scroll-pending={initialChatScrollPending || transcriptResolving ? 'true' : 'false'}
+          class={initialChatScrollPending || transcriptResolving ? 'relative min-h-80' : 'relative'}
         >
           {#if initialChatScrollPending}
             <div
@@ -911,7 +990,7 @@
               </div>
             </div>
           {/if}
-          <div class={initialChatScrollPending ? 'opacity-0' : ''}>
+          <div class={initialChatScrollPending || transcriptResolving ? 'opacity-0' : ''}>
             {#if !sessionSupportsTimeline(selectedSession) || timelineUnavailable}
               <Empty.Root data-timeline-status={$timelineState.status} class="min-h-80">
                 <Empty.Header>
@@ -946,7 +1025,7 @@
                   {messages}
                   sessionState={selectedSession.state}
                   activeTurnId={selectedSession.current_turn_id}
-                  loading={(initialChatScrollPending || $sessionDetailLoading || $timelineState.loading) && !messages.length}
+                  loading={(initialChatScrollPending || transcriptResolving || $sessionDetailLoading || $timelineState.loading) && !messages.length}
                   hasMoreHistory={$timelineState.hasMore}
                   historyLoading={$timelineState.refreshKind === 'history'}
                   {historyObserverEnabled}
@@ -1018,7 +1097,7 @@
   </div>
 </section>
 
-{#if selectedSession && !initialChatScrollPending && rulerTurns.length}
+{#if selectedSession && !initialChatScrollPending && !transcriptResolving && rulerTurns.length}
   <ChatRuler
     turns={rulerTurns}
     treeMode={rulerTreeMode}

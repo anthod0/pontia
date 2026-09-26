@@ -799,27 +799,27 @@ test('shows workspace git status in the selected chat composer summary', async (
 
 
 test('does not show the empty conversation state while the selected chat is initializing', async () => {
-  let resolveSessions: (() => void) | null = null;
+  let resolveRestore: ((restored: boolean) => void) | null = null;
   const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
   window.history.pushState({}, '', '/dashboard/chat/session-2');
   mocks.pathParams = { sessionId: 'session-2' };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.loadSessions.mockImplementationOnce(async () => {
-    await new Promise<void>((resolve) => (resolveSessions = resolve));
-    return [selected];
-  });
+  mocks.restoreSessionTimeline.mockImplementation(() => new Promise((resolve) => {
+    resolveRestore = resolve;
+  }));
+  mocks.loadSessionTimeline.mockImplementation(() => new Promise(() => undefined));
 
-  try {
-    render(SessionChatPage);
+  render(SessionChatPage);
 
-    await screen.findByPlaceholderText('Continue the thread…');
-    expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
-    expect(document.querySelector('[data-chat-conversation-skeleton]')).toBeInTheDocument();
-  } finally {
-    resolveSessions?.();
-  }
+  await screen.findByPlaceholderText('Continue the thread…');
+  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-chat-conversation-skeleton]')).not.toBeInTheDocument();
+
+  resolveRestore?.(false);
+  await waitFor(() => expect(document.querySelector('[data-chat-conversation-skeleton]')).toBeInTheDocument());
+  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
 });
 
 
@@ -983,6 +983,10 @@ test('restores a cached selected chat and refreshes it without rebuilding histor
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [turn({ turn_id: 'turn-latest', session_id: 'session-cached' })], inboxMessages: [], events: [] });
   let resolveRefresh: (() => void) | null = null;
+  let resolveDetail: (() => void) | null = null;
+  mocks.loadSessionDetail.mockImplementation(() => new Promise((resolve) => {
+    resolveDetail = () => resolve(null);
+  }));
   mocks.refreshSessionTimeline.mockImplementation(() => new Promise<void>((resolve) => {
     resolveRefresh = resolve;
   }));
@@ -1004,8 +1008,67 @@ test('restores a cached selected chat and refreshes it without rebuilding histor
   await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-cached', 'turn-latest'));
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-cached', expect.objectContaining({ mode: 'rebuild' }));
   expect(await screen.findByText('hello')).toBeInTheDocument();
-  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="true"]')).not.toBeInTheDocument());
+  expect(document.querySelector('[data-chat-conversation-skeleton]')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-chat-initial-scroll-pending="true"]')).not.toBeInTheDocument();
+  resolveDetail?.();
   resolveRefresh?.();
+});
+
+test('rebuilds a restored chat when session detail topology disagrees with the cache', async () => {
+  const listed = session({
+    session_id: 'session-cached',
+    state: 'idle',
+    capabilities: { timeline: true, topology: false },
+  });
+  const detailed = session({
+    session_id: 'session-cached',
+    state: 'idle',
+    capabilities: { timeline: true, topology: true },
+  });
+  window.history.pushState({}, '', '/dashboard/chat/session-cached');
+  mocks.pathParams = { sessionId: 'session-cached' };
+  mocks.loadedSessions = [listed];
+  mocks.sessions.set([listed]);
+  mocks.sessionDetail.set({ session: listed, turns: [turn({ session_id: 'session-cached' })], inboxMessages: [], events: [] });
+  let resolveDetail: (() => void) | null = null;
+  let resolveTimeline: (() => void) | null = null;
+  mocks.loadSessionDetail.mockImplementation(() => new Promise((resolve) => {
+    resolveDetail = () => {
+      mocks.sessionDetail.set({
+        session: detailed,
+        turns: [turn({ session_id: 'session-cached' })],
+        inboxMessages: [],
+        events: [],
+      });
+      resolve(null);
+    };
+  }));
+  mocks.restoreSessionTimeline.mockImplementation(async (sessionId: string) => {
+    mocks.timelineState.set(timelineStateValue({
+      sessionId,
+      mode: 'linear',
+      items: timelineItemsFromTurns([turn({ session_id: sessionId })]),
+      latestTurnId: 'turn-1',
+      status: 'ready',
+    }));
+    return true;
+  });
+  mocks.loadSessionTimeline.mockImplementation(() => new Promise(() => {
+    resolveTimeline = () => undefined;
+  }));
+
+  render(SessionChatPage);
+
+  expect(await screen.findByText('hello')).toBeInTheDocument();
+  expect(document.querySelector('[data-chat-conversation-skeleton]')).not.toBeInTheDocument();
+  resolveDetail?.();
+  await waitFor(() => expect(document.querySelector('[data-chat-conversation-skeleton]')).toBeInTheDocument());
+  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-cached', {
+    mode: 'rebuild',
+    latestTurnId: 'turn-1',
+    topology: true,
+  }));
+  resolveTimeline?.();
 });
 
 test('does not refresh an already-loaded selected chat when the window regains focus', async () => {
