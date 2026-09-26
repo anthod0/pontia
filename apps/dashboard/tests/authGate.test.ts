@@ -28,6 +28,8 @@ vi.mock('../src/stores/sessions', () => ({
   sessions: writable([]),
   sessionsLoading: writable(false),
   sessionsError: writable(null),
+  sessionDetail: writable(null),
+  sessionDetailError: writable(null),
   loadSessions: mocks.loadSessions,
 }));
 vi.mock('../src/stores/tasks', () => ({

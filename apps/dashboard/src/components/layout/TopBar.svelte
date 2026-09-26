@@ -6,7 +6,9 @@
   import WifiMediumIcon from 'phosphor-svelte/lib/WifiMediumIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
+  import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { lastConnectionError, sseStatus } from '../../stores/connection'
+  import { sessionDetail, sessionDetailError, sessions } from '../../stores/sessions'
 
   let currentPath = $state(window.location.pathname)
 
@@ -27,6 +29,11 @@
   }
 
   const sseTitle = $derived($lastConnectionError ? `SSE ${$sseStatus}: ${$lastConnectionError}` : `SSE ${$sseStatus}`)
+  const sessionId = $derived(currentPath.startsWith('/dashboard/chat/') ? decodeURIComponent(currentPath.split('/')[3] ?? '') : '')
+  const session = $derived(sessionId
+    ? ($sessionDetail?.session.session_id === sessionId ? $sessionDetail.session : ($sessionDetailError ? null : $sessions.find((item) => item.session_id === sessionId) ?? null))
+    : null)
+  const title = $derived(session ? sessionChatTitle(session) : '')
 </script>
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
@@ -41,7 +48,10 @@
       <QuestionIcon class="size-4" />
     </Button>
   {/if}
-  <span class="ml-auto inline-flex items-center" aria-label={sseTitle} title={sseTitle}>
+  {#if title}
+    <h1 class="mx-3 min-w-0 truncate text-base font-normal text-heading" title={title}>{title}</h1>
+  {/if}
+  <span class="ml-auto inline-flex shrink-0 items-center" aria-label={sseTitle} title={sseTitle}>
     {#if $sseStatus === 'open'}
       <WifiHighIcon class="size-4 text-aqua" />
     {:else if $sseStatus === 'connecting' || $sseStatus === 'reconnecting'}

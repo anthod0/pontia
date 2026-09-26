@@ -9,6 +9,7 @@ import * as api from '../../../src/api/client';
 
 const NewChatPage = (await import('../../../src/pages/NewChatPage.svelte')).default;
 const SessionChatPage = (await import('../../../src/pages/SessionChatPage.svelte')).default;
+const TopBarHost = (await import('../../components/layout/TopBarHost.svelte')).default;
 
 test('continues following the original Codex TUI after a second thread switch', async () => {
   const selected = session({ session_id: 'session-b', client_type: 'codex', codex: { connection: 'available', thread_id: 'native-b' } });
@@ -1514,7 +1515,7 @@ test('retries a failed branch delivery with its original target', async () => {
 });
 
 
-test('loads and renders an existing chat session with metadata and workspace name above the prompt input with its title', async () => {
+test('renders an existing session title in the top bar and metadata above the prompt input', async () => {
   const selected = session({
     session_id: 'session-2',
     client_type: 'pi',
@@ -1534,11 +1535,12 @@ test('loads and renders an existing chat session with metadata and workspace nam
   mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
   mocks.workspaces.set([workspace({ workspace_id: 'workspace-1', name: 'pontia', canonical_path: '/repo/pontia', display_path: '~/repo/pontia' })]);
 
+  render(TopBarHost);
   render(SessionChatPage);
 
   await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2'));
   expect(await screen.findByText('hi there')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: /second · reviewer/i })).toBeInTheDocument();
+  expect(within(screen.getByRole('banner')).getByRole('heading', { name: /second · reviewer/i })).toBeInTheDocument();
   expect(screen.queryByText('Description: Review dashboard changes')).not.toBeInTheDocument();
   const sessionDetailsButton = screen.getByRole('button', { name: /Session details: pontia · pi · coder@1 · second/i });
   await userEvent.click(sessionDetailsButton);

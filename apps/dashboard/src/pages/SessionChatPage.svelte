@@ -18,7 +18,6 @@
   import type { ChatMessageRole, SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
     canSendSessionMessage,
-    sessionChatTitle,
     timelineItemsToChatMessages,
   } from '$lib/session-chat/sessionChat'
   import type { LiveOutputEvent, LiveOutputOverlays } from '$lib/session-chat/liveOutput'
@@ -911,9 +910,6 @@
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
-  {#if selectedSession}
-    <h1 class="truncate pt-1 text-base font-normal text-heading" title={sessionChatTitle(selectedSession)}>{sessionChatTitle(selectedSession)}</h1>
-  {/if}
   {#if selectedSession?.codex}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       <span>Control: {selectedSession.codex.connection.replaceAll('_', ' ')}</span>
