@@ -41,7 +41,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bunx wrangler d1 migrations apply DB --remote --config wrangler.preview-migrations.jsonc
+        run: bunx wrangler d1 migrations apply DB --remote --config wrangler.preview-migrations.toml
       - name: Deploy Worker preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -78,7 +78,6 @@ jobs:
           # --json still writes progress logs to stdout before the object.
           bunx wrangler preview \
             --name "$preview_name" \
-            --var "AUTH_ORIGIN:https://${preview_name}-pontia-website.ocherry6622.workers.dev" \
             --tag "$SHA" \
             --message "$REF_NAME@$SHA" \
             --json | tee "$log_file"
