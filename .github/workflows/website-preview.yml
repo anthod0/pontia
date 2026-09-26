@@ -72,14 +72,27 @@ jobs:
             fi
           fi
 
+          log_file="$RUNNER_TEMP/wrangler-preview.log"
           output_file="$RUNNER_TEMP/wrangler-preview.json"
 
+          # --json still writes progress logs to stdout before the object.
           bunx wrangler preview \
             --name "$preview_name" \
             --var "AUTH_ORIGIN:https://${preview_name}-pontia-website.ocherry6622.workers.dev" \
             --tag "$SHA" \
             --message "$REF_NAME@$SHA" \
-            --json > "$output_file"
+            --json | tee "$log_file"
+
+          # JSON.stringify(value, null, 2): only the root braces are unindented.
+          awk '
+            $0 == "{" { capture = 1 }
+            capture { print }
+            capture && $0 == "}" { exit }
+          ' "$log_file" > "$output_file"
+          if [[ ! -s "$output_file" ]]; then
+            echo "wrangler preview did not emit JSON" >&2
+            exit 1
+          fi
 
           preview_url="$(jq -er '.preview.urls[0]' "$output_file")"
           deployment_url="$(jq -er '.deployment.urls[0]' "$output_file")"
