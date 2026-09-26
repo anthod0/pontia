@@ -8,8 +8,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (pathname.startsWith('/api/') || privatePages.includes(pathname)) {
 		response.headers.set('cache-control', 'private, no-store');
 	}
-	if (pathname.startsWith('/api/auth/') || privatePages.includes(pathname)) {
-		response.headers.set('referrer-policy', 'no-referrer');
-	}
 	return response;
 };
