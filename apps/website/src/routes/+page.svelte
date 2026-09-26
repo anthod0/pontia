@@ -37,7 +37,7 @@
 	<nav aria-label="Primary navigation">
 		<a class="nav-link" href="#features">Why Pontia</a>
 		<a class="nav-link source-link" href={repository}>GitHub<ArrowUpRightIcon size={13} /></a>
-		<a class="button button-small" href="#get-started">Get started<ArrowRightIcon size={14} /></a>
+		<a class="button button-small" href="/login">Sign in<ArrowRightIcon size={14} /></a>
 	</nav>
 </header>
 

@@ -14,7 +14,9 @@
 		{
 			"binding": "DB",
 			"database_name": "pontia-website",
-			"database_id": "851d7dbe-fe88-4ee8-afdf-f5dc6a42b9f7"
+			"database_id": "851d7dbe-fe88-4ee8-afdf-f5dc6a42b9f7",
+			"migrations_dir": "migrations",
+			"migrations_pattern": "migrations/*/migration.sql"
 		}
 	],
 	"env": {
@@ -24,7 +26,9 @@
 				{
 					"binding": "DB",
 					"database_name": "pontia-website-staging",
-					"database_id": "f6b7ddb3-0d81-4677-a5f0-8344074e7856"
+					"database_id": "f6b7ddb3-0d81-4677-a5f0-8344074e7856",
+					"migrations_dir": "migrations",
+					"migrations_pattern": "migrations/*/migration.sql"
 				}
 			]
 		}

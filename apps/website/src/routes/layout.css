@@ -5,6 +5,19 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: white;
+	--color-muted: var(--muted);
+	--color-border: var(--border);
+	--color-ring: var(--primary);
+	--color-destructive: #9d3229;
+	--color-secondary: var(--muted);
+	--color-secondary-foreground: var(--foreground);
+}
+
 :root {
 	color-scheme: light;
 	--font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;

@@ -5,15 +5,18 @@
 	"license": "Apache-2.0",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev --host",
+		"dev": "bun run db:migrate && vite dev --host",
 		"build": "vite build",
-		"preview": "wrangler dev --port 4173",
-		"deploy": "bun run build && wrangler deploy --env=",
-		"deploy:staging": "bun run build && wrangler deploy --env staging",
+		"preview": "bun run db:migrate && wrangler dev --port 4173",
+		"deploy": "bun run build && wrangler d1 migrations apply DB --remote --env= && wrangler deploy --env=",
+		"deploy:staging": "bun run build && wrangler d1 migrations apply DB --remote --env staging && wrangler deploy --env staging",
 		"cf-typegen": "wrangler types",
 		"prepare": "(svelte-kit sync && wrangler types) || echo ''",
 		"check": "svelte-kit sync && wrangler types && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && wrangler types && svelte-check --tsconfig ./tsconfig.json --watch"
+		"check:watch": "svelte-kit sync && wrangler types && svelte-check --tsconfig ./tsconfig.json --watch",
+		"db:generate": "drizzle-kit generate",
+		"db:migrate": "wrangler d1 migrations apply DB --local",
+		"test": "bun test tests"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-cloudflare": "^7.2.9",
@@ -21,9 +24,17 @@
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/typography": "^0.5.19",
 		"@tailwindcss/vite": "^4.3.0",
+		"@types/bun": "1.4.2",
 		"@types/node": "^26.6.2",
+		"cn": "^0.3.0",
+		"drizzle-kit": "1.0.0-rc.4",
+		"miniflare": "5.20260918.0-alpha",
+		"prettier": "3.9.8",
+		"prettier-plugin-svelte": "4.1.1",
+		"shadcn-svelte": "^1.7.0",
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
+		"tailwind-variants": "^3.3.1",
 		"tailwindcss": "^4.3.0",
 		"typescript": "^6.0.3",
 		"vite": "^8.0.16",
@@ -32,7 +43,10 @@
 	"dependencies": {
 		"@fontsource/ibm-plex-mono": "^5.3.0",
 		"@fontsource/ibm-plex-sans": "^5.3.0",
-		"phosphor-svelte": "^3.1.0"
+		"drizzle-orm": "1.0.0-rc.4",
+		"jose": "6.2.12",
+		"phosphor-svelte": "^3.1.0",
+		"uuid": "14.0.2"
 	},
 	"trustedDependencies": [
 		"@tailwindcss/oxide",
