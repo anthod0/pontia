@@ -2,7 +2,7 @@ import { fail, redirect, type RequestEvent } from '@sveltejs/kit';
 import {
 	decideDeviceAuthorization,
 	displayUserCode,
-	normalizeUserCode,
+	parseUserCode,
 	recordUserCodeAttempt
 } from '$lib/server/auth/device';
 import { currentLogin, environment } from '$lib/server/auth/http';
@@ -19,7 +19,7 @@ async function browserLogin(event: RequestEvent) {
 
 export const load: PageServerLoad = async (event) => {
 	const user = await browserLogin(event);
-	const normalized = normalizeUserCode(
+	const normalized = parseUserCode(
 		event.url.searchParams.get('user_code') ?? ''
 	);
 	return {

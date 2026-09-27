@@ -7,6 +7,7 @@
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
+	let userCode = $derived(data.userCode);
 	const returnTo = $derived(
 		`/device${data.userCode ? `?user_code=${encodeURIComponent(data.userCode)}` : ''}`
 	);
@@ -19,6 +20,20 @@
 					? 'This code is invalid, expired, or has already been used.'
 					: null
 	);
+
+	function formatUserCode(value: string) {
+		const normalized = value
+			.toUpperCase()
+			.replace(/[^BCDFGHJKLMNPQRSTVWXZ]/g, '')
+			.slice(0, 8);
+		return normalized.length > 4
+			? `${normalized.slice(0, 4)}-${normalized.slice(4)}`
+			: normalized;
+	}
+
+	function updateUserCode(event: Event) {
+		userCode = formatUserCode((event.currentTarget as HTMLInputElement).value);
+	}
 </script>
 
 <svelte:head
@@ -56,34 +71,34 @@
 			</form>
 		</div>
 	{:else}
-		<p>Compare the code below with the code shown in your terminal.</p>
-		<form method="GET" class="code-entry">
-			<label for="user_code">User code</label>
+		<p>Compare this code with the code shown in your terminal.</p>
+		<form method="POST" class="code-entry">
 			<Input
 				id="user_code"
 				name="user_code"
+				aria-label="User code"
 				class="user-code-input"
-				value={data.userCode}
+				value={userCode}
+				oninput={updateUserCode}
 				placeholder="XXXX-XXXX"
 				autocomplete="one-time-code"
+				autocapitalize="characters"
+				maxlength={9}
+				pattern="[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}"
 				required
 			/>
-			<Button type="submit" class="button button-secondary">Check code</Button>
-		</form>
-		{#if data.userCode}
-			<p class="device-code">{data.userCode}</p>
 			{#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
 			<div class="decisions">
-				<form method="POST" action="?/approve">
-					<input type="hidden" name="user_code" value={data.userCode} />
-					<Button type="submit" class="button">Approve</Button>
-				</form>
-				<form method="POST" action="?/deny">
-					<input type="hidden" name="user_code" value={data.userCode} />
-					<Button type="submit" class="button button-secondary">Deny</Button>
-				</form>
+				<Button type="submit" formaction="?/approve" class="button"
+					>Approve</Button
+				>
+				<Button
+					type="submit"
+					formaction="?/deny"
+					class="button button-secondary">Deny</Button
+				>
 			</div>
-		{/if}
+		</form>
 	{/if}
 </AuthLayout>
 
@@ -93,19 +108,14 @@
 	.decisions {
 		margin-top: 28px;
 	}
-	.code-entry label {
-		display: block;
-		margin-bottom: 8px;
-		font-size: 12px;
-		font-weight: 500;
-	}
 	.code-entry :global(.user-code-input) {
 		width: 100%;
-		padding: 13px;
+		padding: 22px;
 		border: 1px solid var(--border);
 		background: var(--background);
-		font: 20px var(--font-mono);
+		font: 24px var(--font-mono);
 		letter-spacing: 0.12em;
+		text-align: center;
 		text-transform: uppercase;
 	}
 	.device-code {
@@ -121,8 +131,5 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 12px;
-	}
-	.decisions form {
-		margin-top: 0;
 	}
 </style>

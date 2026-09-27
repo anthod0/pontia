@@ -70,10 +70,10 @@ async fn login(client: &Client, origin: &Url, home: &Path) -> Result<(), String>
         .json()
         .await
         .map_err(|_| "the login service returned an invalid authorization response".to_string())?;
-    validate_authorization(&authorization, origin)?;
+    let verification_url = validate_authorization(&authorization, origin)?;
 
     println!("Open this address on a device with a browser:");
-    println!("{}", authorization.verification_uri);
+    println!("{verification_url}");
     println!();
     println!("Enter this code:");
     println!("{}", authorization.user_code);
@@ -125,8 +125,8 @@ async fn login(client: &Client, origin: &Url, home: &Path) -> Result<(), String>
     }
 }
 
-fn validate_authorization(response: &AuthorizationResponse, origin: &Url) -> Result<(), String> {
-    let verification = Url::parse(&response.verification_uri)
+fn validate_authorization(response: &AuthorizationResponse, origin: &Url) -> Result<Url, String> {
+    let mut verification = Url::parse(&response.verification_uri)
         .map_err(|_| "the login service returned an invalid verification address".to_string())?;
     if verification.origin() != origin.origin()
         || response.expires_in == 0
@@ -138,7 +138,10 @@ fn validate_authorization(response: &AuthorizationResponse, origin: &Url) -> Res
     {
         return Err("the login service returned an invalid authorization response".to_string());
     }
-    Ok(())
+    verification
+        .query_pairs_mut()
+        .append_pair("user_code", &response.user_code);
+    Ok(verification)
 }
 
 fn valid_device_code(value: &str) -> bool {
@@ -224,4 +227,28 @@ fn write_credential(path: &Path, token: &str) -> Result<(), String> {
         .map_err(|error| format!("failed to serialize login credential: {error}"))?;
     contents.push(b'\n');
     private_file::atomic_write(path, &contents)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verification_url_includes_the_user_code() {
+        let origin = Url::parse("https://pontia.dev").unwrap();
+        let authorization = AuthorizationResponse {
+            device_code: "a".repeat(43),
+            user_code: "BCDF-GHJK".to_string(),
+            verification_uri: "https://pontia.dev/device".to_string(),
+            expires_in: 300,
+            interval: 5,
+        };
+
+        let verification = validate_authorization(&authorization, &origin).unwrap();
+
+        assert_eq!(
+            verification.as_str(),
+            "https://pontia.dev/device?user_code=BCDF-GHJK"
+        );
+    }
 }

@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import {
 	beginDeviceAuthorization,
 	decideDeviceAuthorization,
-	normalizeUserCode,
+	parseUserCode,
 	pollDeviceAuthorization,
 	recordAuthorizationAttempt,
 	recordPollAttempt,
@@ -59,7 +59,7 @@ test('device authorization is rate limited, approved once, and stores only crede
 	expect(
 		await decideDeviceAuthorization(
 			database.db,
-			authorization.user_code.toLowerCase(),
+			authorization.user_code,
 			await userId(),
 			'approved',
 			new Date(now.getTime() + 1000)
@@ -148,9 +148,11 @@ test('denied and expired requests cannot be approved or exchanged', async () => 
 	).toEqual({ status: 'expired_token' });
 });
 
-test('user code normalization and authenticated attempt limiting reject enumeration', async () => {
-	expect(normalizeUserCode(' bcdf-ghjk ')).toBe('BCDFGHJK');
-	expect(normalizeUserCode('AAAA-AAAA')).toBeNull();
+test('user code validation and authenticated attempt limiting reject enumeration', async () => {
+	expect(parseUserCode('BCDF-GHJK')).toBe('BCDFGHJK');
+	expect(parseUserCode('bcdf-ghjk')).toBeNull();
+	expect(parseUserCode('BCDFGHJK')).toBeNull();
+	expect(parseUserCode('AAAA-AAAA')).toBeNull();
 	let userCodeAttemptsAllowed = true;
 	for (let attempt = 0; attempt < 10; attempt++)
 		userCodeAttemptsAllowed &&= await recordUserCodeAttempt(

@@ -50,11 +50,11 @@ function createUserCode() {
 	return code;
 }
 
-export function normalizeUserCode(value: string) {
-	const normalized = value.replace(/[\s-]/g, '').toUpperCase();
-	return normalized.length === 8 &&
-		[...normalized].every((character) => USER_CODE_ALPHABET.includes(character))
-		? normalized
+export function parseUserCode(value: string) {
+	return /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/.test(
+		value
+	)
+		? value.replace('-', '')
 		: null;
 }
 
@@ -169,7 +169,7 @@ export async function decideDeviceAuthorization(
 	decision: 'approved' | 'denied',
 	now = new Date()
 ) {
-	const normalized = normalizeUserCode(userCode);
+	const normalized = parseUserCode(userCode);
 	if (!normalized) return false;
 	const updated = await db
 		.update(deviceAuthorizations)
