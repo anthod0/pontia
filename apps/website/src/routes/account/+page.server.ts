@@ -6,7 +6,6 @@ import { accounts } from '$lib/server/db/schema';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-	event.setHeaders({ 'cache-control': 'private, no-store' });
 	const user = await currentLogin(event);
 	if (!user) redirect(303, '/login');
 	const linked = await database(environment(event).DB)

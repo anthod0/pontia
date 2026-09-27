@@ -11,10 +11,7 @@ export const POST: RequestHandler = async (event) => {
 	origin(event);
 	const db = database(environment(event).DB);
 	if (!(await recordPollAttempt(db, event.getClientAddress())))
-		return json(
-			{ error: 'slow_down' },
-			{ headers: { 'cache-control': 'private, no-store' } }
-		);
+		return json({ error: 'slow_down' });
 	let deviceCode = '';
 	try {
 		const body = (await event.request.json()) as Record<string, unknown>;
@@ -27,5 +24,5 @@ export const POST: RequestHandler = async (event) => {
 		result.status === 'authorized'
 			? { access_token: result.token, token_type: 'Bearer' }
 			: { error: result.status };
-	return json(body, { headers: { 'cache-control': 'private, no-store' } });
+	return json(body);
 };
