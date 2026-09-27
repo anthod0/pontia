@@ -1,5 +1,4 @@
 <script lang="ts">
-	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
@@ -37,7 +36,6 @@
 	<nav aria-label="Primary navigation">
 		<a class="nav-link" href="#features">Why Pontia</a>
 		<a class="nav-link source-link" href={repository}>GitHub<ArrowUpRightIcon size={13} /></a>
-		<a class="button button-small" href="/login">Sign in<ArrowRightIcon size={14} /></a>
 	</nav>
 </header>
 
