@@ -84,7 +84,7 @@
 				autocomplete="one-time-code"
 				autocapitalize="characters"
 				maxlength={9}
-				pattern="[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}"
+				pattern={'[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}'}
 				required
 			/>
 			{#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
