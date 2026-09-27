@@ -62,11 +62,55 @@ export const authSessions = sqliteTable(
 		accountId: text('account_id').references(() => accounts.id, {
 			onDelete: 'set null'
 		}),
-		expiresAt: text('expires_at').notNull(),
+		kind: text({ enum: ['browser', 'cli'] })
+			.notNull()
+			.default('browser'),
+		tokenHash: text('token_hash'),
+		expiresAt: text('expires_at'),
 		createdAt: text('created_at').notNull().default(timestamp)
 	},
 	(table) => [
 		primaryKey({ columns: [table.id] }),
 		index('idx_auth_sessions_user_id').on(table.userId)
 	]
+);
+
+export const deviceAuthorizations = sqliteTable(
+	'device_authorizations',
+	{
+		id: text().notNull(),
+		deviceCodeHash: text('device_code_hash').notNull(),
+		userCode: text('user_code').notNull(),
+		status: text({
+			enum: ['pending', 'approved', 'denied', 'consumed']
+		}).notNull(),
+		userId: text('user_id').references(() => users.id, {
+			onDelete: 'cascade'
+		}),
+		expiresAt: text('expires_at').notNull(),
+		lastPolledAt: text('last_polled_at'),
+		createdAt: text('created_at').notNull().default(timestamp)
+	},
+	(table) => [
+		primaryKey({ columns: [table.id] }),
+		uniqueIndex('idx_device_authorizations_device_code').on(
+			table.deviceCodeHash
+		),
+		uniqueIndex('idx_device_authorizations_user_code').on(table.userCode),
+		index('idx_device_authorizations_expires_at').on(table.expiresAt),
+		check(
+			'device_authorizations_status_check',
+			sql`${table.status} IN ('pending', 'approved', 'denied', 'consumed')`
+		)
+	]
+);
+
+export const deviceRateLimits = sqliteTable(
+	'device_rate_limits',
+	{
+		key: text().notNull(),
+		windowStartedAt: text('window_started_at').notNull(),
+		attemptCount: integer('attempt_count').notNull()
+	},
+	(table) => [primaryKey({ columns: [table.key] })]
 );

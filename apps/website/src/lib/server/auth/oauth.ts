@@ -11,7 +11,8 @@ export interface OAuthConfig {
 }
 
 type Intent =
-	{ kind: 'login' } | { kind: 'bind'; loginId: string; userId: string };
+	| { kind: 'login'; returnTo?: string }
+	| { kind: 'bind'; loginId: string; userId: string };
 interface OAuthState {
 	provider: Provider;
 	state: string;
@@ -110,6 +111,9 @@ export async function readOAuth(
 			!/^[A-Za-z0-9_-]{43}$/.test(payload.verifier) ||
 			!intent ||
 			(intent.kind !== 'login' && intent.kind !== 'bind') ||
+			(intent.kind === 'login' &&
+				intent.returnTo !== undefined &&
+				typeof intent.returnTo !== 'string') ||
 			(intent.kind === 'bind' &&
 				(typeof intent.loginId !== 'string' ||
 					typeof intent.userId !== 'string'))

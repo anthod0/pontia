@@ -91,6 +91,7 @@ export async function activeLogin(
 		.where(
 			and(
 				eq(authSessions.id, id),
+				eq(authSessions.kind, 'browser'),
 				gt(authSessions.expiresAt, now.toISOString()),
 				userId === undefined ? undefined : eq(authSessions.userId, userId)
 			)
@@ -131,6 +132,7 @@ export async function bindAccount(
 					and(
 						eq(authSessions.id, loginId),
 						eq(authSessions.userId, userId),
+						eq(authSessions.kind, 'browser'),
 						gt(authSessions.expiresAt, now.toISOString())
 					)
 				)
@@ -147,5 +149,11 @@ export async function bindAccount(
 export async function logout(db: Database, id: string, userId: string) {
 	await db
 		.delete(authSessions)
-		.where(and(eq(authSessions.id, id), eq(authSessions.userId, userId)));
+		.where(
+			and(
+				eq(authSessions.id, id),
+				eq(authSessions.userId, userId),
+				eq(authSessions.kind, 'browser')
+			)
+		);
 }

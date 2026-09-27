@@ -515,6 +515,21 @@ fn workflow_patch_block_posts_managed_identity() {
 }
 
 #[test]
+fn login_rejects_plaintext_http_without_writing_a_credential() {
+    let dir = temp_dir("login-http");
+    let output = pontia()
+        .arg("login")
+        .env("PONTIA_HOME", dir.path())
+        .env("PONTIA_AUTH_ORIGIN", "http://127.0.0.1:12345")
+        .output()
+        .expect("run login");
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("must use HTTPS"));
+    assert!(!dir.path().join("auth.json").exists());
+}
+
+#[test]
 fn workflow_submit_rejects_a_pane_without_pontia_identity() {
     let dir = temp_dir("unmanaged-pane");
     let bin_dir = dir.path().join("bin");

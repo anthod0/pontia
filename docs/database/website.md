@@ -18,10 +18,31 @@ CREATE TABLE `auth_sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
 	`account_id` text,
-	`expires_at` text NOT NULL,
+	`kind` text DEFAULT 'browser' NOT NULL,
+	`token_hash` text,
+	`expires_at` text,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	CONSTRAINT `fk_auth_sessions_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
 	CONSTRAINT `fk_auth_sessions_account_id_accounts_id_fk` FOREIGN KEY (`account_id`) REFERENCES `accounts`(`id`) ON DELETE SET NULL
+);
+
+CREATE TABLE `device_authorizations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`device_code_hash` text NOT NULL,
+	`user_code` text NOT NULL,
+	`status` text NOT NULL,
+	`user_id` text,
+	`expires_at` text NOT NULL,
+	`last_polled_at` text,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	CONSTRAINT `fk_device_authorizations_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+	CONSTRAINT "device_authorizations_status_check" CHECK("status" IN ('pending', 'approved', 'denied', 'consumed'))
+);
+
+CREATE TABLE `device_rate_limits` (
+	`key` text PRIMARY KEY NOT NULL,
+	`window_started_at` text NOT NULL,
+	`attempt_count` integer NOT NULL
 );
 
 CREATE TABLE `users` (
@@ -34,4 +55,7 @@ CREATE TABLE `users` (
 CREATE UNIQUE INDEX `idx_accounts_provider_subject` ON `accounts` (`provider`,`provider_subject`);
 CREATE UNIQUE INDEX `idx_accounts_user_provider` ON `accounts` (`user_id`,`provider`);
 CREATE INDEX `idx_auth_sessions_user_id` ON `auth_sessions` (`user_id`);
+CREATE UNIQUE INDEX `idx_device_authorizations_device_code` ON `device_authorizations` (`device_code_hash`);
+CREATE UNIQUE INDEX `idx_device_authorizations_user_code` ON `device_authorizations` (`user_code`);
+CREATE INDEX `idx_device_authorizations_expires_at` ON `device_authorizations` (`expires_at`);
 ```

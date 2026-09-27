@@ -30,11 +30,26 @@ function provider(event: RequestEvent): Provider {
 	return event.params.provider;
 }
 
-function origin(event: RequestEvent) {
-	const configured = new URL(environment(event).AUTH_ORIGIN).origin;
+export function origin(event: RequestEvent) {
+	const configuredUrl = new URL(environment(event).AUTH_ORIGIN);
+	if (configuredUrl.protocol !== 'https:')
+		error(503, 'Authentication requires HTTPS');
+	const configured = configuredUrl.origin;
 	if (event.url.origin !== configured)
 		error(400, 'Use the configured website address to sign in');
 	return configured;
+}
+
+function deviceReturnPath(event: RequestEvent) {
+	const value = event.url.searchParams.get('return_to');
+	if (!value) return undefined;
+	const destination = new URL(value, origin(event));
+	if (
+		destination.origin !== origin(event) ||
+		destination.pathname !== '/device'
+	)
+		error(400, 'Invalid sign-in destination');
+	return `${destination.pathname}${destination.search}`;
 }
 
 function sameOriginPost(event: RequestEvent) {
@@ -67,7 +82,7 @@ export async function startLogin(event: RequestEvent) {
 		environment(event),
 		selected,
 		`${origin(event)}/api/auth/${selected}/callback`,
-		{ kind: 'login' }
+		{ kind: 'login', returnTo: deviceReturnPath(event) }
 	);
 	event.cookies.set(OAUTH_COOKIE, result.cookie, {
 		...cookieOptions,
@@ -140,12 +155,13 @@ export async function callback(event: RequestEvent) {
 				...cookieOptions,
 				expires: credential.expiresAt
 			});
+			destination = oauth.intent.returnTo ?? '/account';
 		}
 	} catch (cause) {
 		if (!(cause instanceof AuthError)) throw cause;
 		redirect(303, `${destination}?error=${cause.code}`);
 	}
-	redirect(303, '/account');
+	redirect(303, destination);
 }
 
 export async function endLogin(event: RequestEvent) {

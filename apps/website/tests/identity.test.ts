@@ -122,7 +122,7 @@ test('binding rejects accounts owned by others and revoked, expired, or mismatch
 		'invalid_credentials'
 	);
 	await expect(
-		bindAccount(db, other, id, original.userId, new Date(original.expiresAt))
+		bindAccount(db, other, id, original.userId, new Date(original.expiresAt!))
 	).rejects.toThrow('invalid_credentials');
 	await logout(db, id, original.userId);
 	await expect(

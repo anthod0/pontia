@@ -87,7 +87,7 @@ export async function issueLogin(
 	userId?: string
 ) {
 	const login = await activeLogin(db, id, userId, now);
-	if (!login) throw new AuthError('invalid_credentials');
+	if (!login || !login.expiresAt) throw new AuthError('invalid_credentials');
 	const iat = Math.floor(now.getTime() / 1000);
 	const exp = Math.min(
 		iat + 3600,

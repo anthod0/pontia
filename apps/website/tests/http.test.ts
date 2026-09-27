@@ -149,6 +149,31 @@ test('HTTP login, linking and logout persist identity and set and clear protecte
 	).rejects.toThrow();
 });
 
+test('device login returns to the confirmation page after provider authentication', async () => {
+	providerResponses();
+	const client = browser();
+	const returnTo = '/device?user_code=BCDF-GHJK';
+	const authUrl = new URL(
+		await location(
+			startLogin(
+				client.event(
+					`/api/auth/google/login?return_to=${encodeURIComponent(returnTo)}`
+				)
+			)
+		)
+	);
+	expect(
+		await location(
+			callback(
+				client.event(
+					`/api/auth/google/callback?code=code&state=${authUrl.searchParams.get('state')}`,
+					'GET'
+				)
+			)
+		)
+	).toBe(returnTo);
+});
+
 test('HTTP endpoints reject cross-origin actions and tampered callback state before provider access', async () => {
 	const client = browser();
 	for (const [path, handler] of [

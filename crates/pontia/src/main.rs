@@ -1,3 +1,4 @@
+mod login;
 mod workflow;
 
 use std::{
@@ -40,6 +41,8 @@ struct Cli {
 enum Command {
     /// Configure Pontia interactively and start its per-user service
     Init,
+    /// Sign in to the Pontia website from a headless terminal
+    Login,
     /// Install and start the per-user Pontia service
     Up,
     /// Stop and disable the per-user Pontia service
@@ -73,6 +76,11 @@ async fn main() -> ExitCode {
 async fn execute(command: Command) -> Result<bool, String> {
     match command {
         Command::Init => run_init(),
+        Command::Login => {
+            let vars: HashMap<String, String> = env::vars().collect();
+            login::run(&vars).await?;
+            Ok(true)
+        }
         Command::Workflow(command) => {
             let config = AppConfig::from_env().map_err(|error| error.to_string())?;
             workflow::run(command, &config).await?;

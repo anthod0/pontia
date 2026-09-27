@@ -1,10 +1,9 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs::{self, File, OpenOptions},
+    fs,
     io::{self, BufRead, ErrorKind, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicUsize, Ordering},
 };
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -12,9 +11,7 @@ use dialoguer::{MultiSelect, console::Term};
 use pontia_config::{AppConfig, WorkspaceRootConfig};
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
-use crate::codex::CodexSetup;
-
-static TEMP_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
+use crate::{codex::CodexSetup, private_file};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AgentSelection {
@@ -480,62 +477,8 @@ fn write_config(
     }
     let updated = document.to_string();
     let changed = updated != original;
-    atomic_write_private(path, updated.as_bytes())?;
+    private_file::atomic_write(path, updated.as_bytes())?;
     Ok(changed)
-}
-
-fn atomic_write_private(path: &Path, contents: &[u8]) -> Result<(), String> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("configuration path has no parent: {}", path.display()))?;
-    fs::create_dir_all(parent)
-        .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
-
-    for _ in 0..32 {
-        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let temp_path = parent.join(format!(
-            ".pontia-config-{}-{sequence}.tmp",
-            std::process::id()
-        ));
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        match options.open(&temp_path) {
-            Ok(mut file) => {
-                let result = (|| -> std::io::Result<()> {
-                    file.write_all(contents)?;
-                    file.sync_all()?;
-                    drop(file);
-                    fs::rename(&temp_path, path)?;
-                    File::open(parent)?.sync_all()?;
-                    Ok(())
-                })();
-                if let Err(error) = result {
-                    let _ = fs::remove_file(&temp_path);
-                    return Err(format!(
-                        "failed to atomically write {}: {error}",
-                        path.display()
-                    ));
-                }
-                return Ok(());
-            }
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
-            Err(error) => {
-                return Err(format!(
-                    "failed to create a staging file for {}: {error}",
-                    path.display()
-                ));
-            }
-        }
-    }
-    Err(format!(
-        "failed to create a staging file for {}: too many name collisions",
-        path.display()
-    ))
 }
 
 fn local_addr(addr: SocketAddr) -> SocketAddr {
