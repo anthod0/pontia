@@ -156,14 +156,14 @@ pub async fn interrupt_session(
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
-pub async fn terminate_session(
+pub async fn exit_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
     authenticate(&state, &headers)?;
     let service = state.session_commands();
-    let operation = format!("terminate_session:{session_id}");
+    let operation = format!("exit_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.terminate_session(&session_id).await?.data)
     })

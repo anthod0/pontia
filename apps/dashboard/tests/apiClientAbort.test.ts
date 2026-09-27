@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { setSessionModel, getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus } from '../src/api/client';
+import { setSessionModel, getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus, terminateSession } from '../src/api/client';
 import { token } from '../src/stores/auth';
 
 beforeEach(() => {
@@ -56,6 +56,18 @@ test('serializes session list limit and pinned inclusion query options', async (
   await listSessions({ limit: 50, includePinned: true });
 
   expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions?limit=50&include_pinned=true', expect.any(Object));
+});
+
+test('requests session exit through the lifecycle command endpoint', async () => {
+  const fetchMock = vi.fn(async () => jsonResponse({}));
+  vi.stubGlobal('fetch', fetchMock);
+
+  await terminateSession('session/1');
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/v1/sessions/session%2F1/exit',
+    expect.objectContaining({ method: 'POST' }),
+  );
 });
 
 test('loads projected Turn timeline ranges without exposing client-native cursors', async () => {

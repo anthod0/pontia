@@ -55,11 +55,11 @@ pub(super) async fn get_session_context_by_client_session(
     (status, json!({"data":value}))
 }
 
-pub(super) async fn delete_session(state: AppState, session_id: &str) -> (StatusCode, Value) {
+pub(super) async fn exit_session(state: AppState, session_id: &str) -> (StatusCode, Value) {
     request_json(
         state,
-        "DELETE",
-        &format!("/api/v1/sessions/{session_id}"),
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/exit"),
         None,
     )
     .await

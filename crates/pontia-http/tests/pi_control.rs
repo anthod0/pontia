@@ -424,7 +424,7 @@ async fn pi_interrupt_and_shutdown_use_rpc_and_wait_for_client_lifecycle_facts()
     let (client, mut requests) = attach(&state, "sess_models", "rt_models").await;
     for (method, resource, rpc_method) in [
         ("POST", "interrupt", "interrupt"),
-        ("DELETE", "", "shutdown"),
+        ("POST", "exit", "shutdown"),
     ] {
         let task = {
             let state = state.clone();
@@ -487,7 +487,7 @@ async fn pi_interrupt_and_shutdown_use_rpc_and_wait_for_client_lifecycle_facts()
     );
     assert!(requests.try_recv().is_err());
     state.client_control().close().await;
-    for (method, resource) in [("POST", "interrupt"), ("DELETE", "")] {
+    for (method, resource) in [("POST", "interrupt"), ("POST", "exit")] {
         let (status, body) = control_request(&state, method, resource, Value::Null).await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
         assert_eq!(body["error"]["code"], "capability_unavailable");

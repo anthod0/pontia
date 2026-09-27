@@ -55,7 +55,11 @@ async fn request(
         .await
         .expect("body")
         .to_bytes();
-    let json = serde_json::from_slice(&body).expect("json body");
+    let json = if body.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&body).expect("json body")
+    };
     (status, json)
 }
 
@@ -170,30 +174,39 @@ async fn interrupt_specified_turn_returns_capability_unavailable_for_generic_run
 }
 
 #[tokio::test]
-async fn terminate_session_requests_runtime_shutdown_without_fabricating_exit_and_is_idempotent() {
+async fn exit_session_requests_runtime_shutdown_without_fabricating_exit_and_is_idempotent() {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let first = request(
         state.clone(),
-        "DELETE",
-        &format!("/api/v1/sessions/{session_id}"),
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/exit"),
         Some(TOKEN),
-        Some("terminate-once"),
+        Some("exit-once"),
         None,
     )
     .await;
     let second = request(
         state.clone(),
-        "DELETE",
-        &format!("/api/v1/sessions/{session_id}"),
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/exit"),
         Some(TOKEN),
-        Some("terminate-once"),
+        Some("exit-once"),
         None,
     )
     .await;
     let third = request(
+        state.clone(),
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/exit"),
+        Some(TOKEN),
+        None,
+        None,
+    )
+    .await;
+    let removed_delete_route = request(
         state.clone(),
         "DELETE",
         &format!("/api/v1/sessions/{session_id}"),
@@ -206,6 +219,7 @@ async fn terminate_session_requests_runtime_shutdown_without_fabricating_exit_an
     assert_eq!(first.0, StatusCode::OK);
     assert_eq!(second.0, StatusCode::OK);
     assert_eq!(third.0, StatusCode::OK);
+    assert_eq!(removed_delete_route.0, StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(second.1["data"], first.1["data"]);
     assert_eq!(first.1["data"]["session"]["state"], "idle");
     assert_eq!(third.1["data"]["session"]["state"], "idle");
@@ -363,8 +377,8 @@ async fn resume_exited_session_runs_resume_cycle_and_is_idempotent() {
     let session_id = create_session(state.clone()).await;
     let terminate = request(
         state.clone(),
-        "DELETE",
-        &format!("/api/v1/sessions/{session_id}"),
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/exit"),
         Some(TOKEN),
         None,
         None,
@@ -488,8 +502,8 @@ async fn restart_rejects_terminal_session() {
     let session_id = create_session(state.clone()).await;
     let terminate = request(
         state.clone(),
-        "DELETE",
-        &format!("/api/v1/sessions/{session_id}"),
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/exit"),
         Some(TOKEN),
         None,
         None,

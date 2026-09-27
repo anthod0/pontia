@@ -181,9 +181,11 @@ pub fn router(state: impl Into<HttpState>) -> Router {
         .route("/api/v1/tasks/{task_id}/cancel", post(api::cancel_task))
         .route(
             "/api/v1/sessions/{session_id}",
-            get(api::get_session)
-                .patch(api::update_session)
-                .delete(api::terminate_session),
+            get(api::get_session).patch(api::update_session),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/exit",
+            post(api::exit_session),
         )
         .route(
             "/api/v1/sessions/{session_id}/models",

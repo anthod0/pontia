@@ -1,4 +1,4 @@
-use super::{StatusCode, delete_session, json, post_upsert, test_state, upsert_body_with_tmux};
+use super::{StatusCode, exit_session, json, post_upsert, test_state, upsert_body_with_tmux};
 use std::process::{Command, Stdio};
 #[tokio::test]
 async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
@@ -139,7 +139,7 @@ async fn terminate_manually_bound_tui_without_pane_binding_is_rejected() {
     .await
     .expect("remove pane binding");
 
-    let (terminate_status, terminate) = delete_session(state.clone(), session_id).await;
+    let (terminate_status, terminate) = exit_session(state.clone(), session_id).await;
 
     assert_eq!(
         terminate_status,

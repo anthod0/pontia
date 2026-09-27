@@ -164,8 +164,8 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
 
     let (status, body) = request(
         state.clone(),
-        "DELETE",
-        &format!("/api/v1/sessions/{session_id}"),
+        "POST",
+        &format!("/api/v1/sessions/{session_id}/exit"),
         None,
     )
     .await;
