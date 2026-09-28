@@ -14,7 +14,11 @@ export function hasTmuxPaneEnvironment(env: EnvLike = process.env): boolean {
   return Boolean(socketPath && env.TMUX_PANE?.trim());
 }
 
-async function paneOption(socketPath: string, paneId: string, option: string): Promise<string | undefined> {
+async function paneOption(
+  socketPath: string,
+  paneId: string,
+  option: string,
+): Promise<string | undefined> {
   try {
     const { stdout } = await execFileAsync("tmux", [
       "-S",

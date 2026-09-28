@@ -1,8 +1,12 @@
-import { render, screen, within } from '@testing-library/svelte';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, test, vi } from 'vitest';
-import WorkspacesPage from '../src/pages/WorkspacesPage.svelte';
-import type { WorkspaceDirectoryListingView, WorkspaceRootView, WorkspaceView } from '../src/api/types';
+import { render, screen, within } from "@testing-library/svelte";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, expect, test, vi } from "vitest";
+import WorkspacesPage from "../src/pages/WorkspacesPage.svelte";
+import type {
+  WorkspaceDirectoryListingView,
+  WorkspaceRootView,
+  WorkspaceView,
+} from "../src/api/types";
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -46,8 +50,8 @@ const mocks = vi.hoisted(() => {
       workspaceRoots.set(mocks.roots);
       return mocks.roots;
     }),
-    browseWorkspaceRoot: vi.fn(async (_rootId: string, path = '') => {
-      if (path === 'missing-workspace') throw new Error('directory not found');
+    browseWorkspaceRoot: vi.fn(async (_rootId: string, path = "") => {
+      if (path === "missing-workspace") throw new Error("directory not found");
       return mocks.listing;
     }),
     loadWorkspaceGitStatus: vi.fn(async () => undefined),
@@ -58,7 +62,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('../src/stores/workspaces', () => ({
+vi.mock("../src/stores/workspaces", () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
   workspacesError: mocks.workspacesError,
@@ -76,29 +80,31 @@ vi.mock('../src/stores/workspaces', () => ({
 }));
 
 const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
-  workspace_id: 'workspace-1',
-  name: 'pontia',
-  canonical_path: '/repo/pontia',
-  display_path: '/repo/pontia',
-  state: 'active',
+  workspace_id: "workspace-1",
+  name: "pontia",
+  canonical_path: "/repo/pontia",
+  display_path: "/repo/pontia",
+  state: "active",
   metadata: {},
-  created_at: '2026-05-14T00:00:00Z',
-  updated_at: '2026-05-14T00:00:00Z',
+  created_at: "2026-05-14T00:00:00Z",
+  updated_at: "2026-05-14T00:00:00Z",
   last_used_at: null,
   ...overrides,
 });
 
 beforeEach(() => {
-  mocks.roots = [{ root_id: 'root-1', label: 'Projects', canonical_path: '/repo', state: 'active' }];
+  mocks.roots = [
+    { root_id: "root-1", label: "Projects", canonical_path: "/repo", state: "active" },
+  ];
   mocks.listing = {
-    root_id: 'root-1',
-    path: '',
-    canonical_path: '/repo',
+    root_id: "root-1",
+    path: "",
+    canonical_path: "/repo",
     parent_path: null,
     entries: [
-      { name: 'pontia', path: 'pontia', kind: 'directory', is_workspace: true },
-      { name: 'sandbox', path: 'sandbox', kind: 'directory', is_workspace: false },
-      { name: '.scratch', path: '.scratch', kind: 'directory', is_workspace: false },
+      { name: "pontia", path: "pontia", kind: "directory", is_workspace: true },
+      { name: "sandbox", path: "sandbox", kind: "directory", is_workspace: false },
+      { name: ".scratch", path: ".scratch", kind: "directory", is_workspace: false },
     ],
     warnings: [],
   };
@@ -111,182 +117,232 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test('renders a single root browser with active workspace controls in the directory list', async () => {
+test("renders a single root browser with active workspace controls in the directory list", async () => {
   const { container } = render(WorkspacesPage);
 
-  expect(await screen.findByText('Browser')).toBeInTheDocument();
-  expect(screen.queryByText('Root browser')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Active workspaces' })).toBeInTheDocument();
-  expect(screen.queryByRole('dialog', { name: 'Active workspaces' })).not.toBeInTheDocument();
-  expect(screen.queryByTestId('active-workspaces-list')).not.toBeInTheDocument();
+  expect(await screen.findByText("Browser")).toBeInTheDocument();
+  expect(screen.queryByText("Root browser")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Active workspaces" })).toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Active workspaces" })).not.toBeInTheDocument();
+  expect(screen.queryByTestId("active-workspaces-list")).not.toBeInTheDocument();
 
-  const browserCard = screen.getByText('Browser').closest('[data-slot="card"]');
-  expect(browserCard).toHaveClass('mx-auto', 'max-w-5xl');
+  const browserCard = screen.getByText("Browser").closest('[data-slot="card"]');
+  expect(browserCard).toHaveClass("mx-auto", "max-w-5xl");
 
-  const table = await screen.findByRole('table');
-  expect(within(table).getAllByRole('button', { name: /Open directory/ })[0]).toHaveAccessibleName('Open directory pontia');
-  const pontiaRow = within(table).getByRole('row', { name: /pontia/i });
-  const deactivateButton = within(pontiaRow).getByRole('button', { name: 'Deactivate pontia' });
+  const table = await screen.findByRole("table");
+  expect(within(table).getAllByRole("button", { name: /Open directory/ })[0]).toHaveAccessibleName(
+    "Open directory pontia",
+  );
+  const pontiaRow = within(table).getByRole("row", { name: /pontia/i });
+  const deactivateButton = within(pontiaRow).getByRole("button", { name: "Deactivate pontia" });
   expect(deactivateButton).toBeInTheDocument();
-  expect(deactivateButton).toHaveTextContent('Deactivate');
-  expect(deactivateButton.querySelector('svg')).not.toBeInTheDocument();
-  expect(within(pontiaRow).getByRole('button', { name: 'Rename pontia' })).toBeInTheDocument();
-  expect(within(pontiaRow).queryByRole('button', { name: 'Delete pontia' })).not.toBeInTheDocument();
-  expect(container.querySelector('.workspace-folder-preview')).not.toBeInTheDocument();
+  expect(deactivateButton).toHaveTextContent("Deactivate");
+  expect(deactivateButton.querySelector("svg")).not.toBeInTheDocument();
+  expect(within(pontiaRow).getByRole("button", { name: "Rename pontia" })).toBeInTheDocument();
+  expect(
+    within(pontiaRow).queryByRole("button", { name: "Delete pontia" }),
+  ).not.toBeInTheDocument();
+  expect(container.querySelector(".workspace-folder-preview")).not.toBeInTheDocument();
   expect(mocks.loadWorkspaceGitStatus).not.toHaveBeenCalled();
-  expect(screen.queryByRole('button', { name: /refresh git status/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /refresh git status/i })).not.toBeInTheDocument();
 });
 
-test('lists active workspaces across roots in a dismissible dialog', async () => {
+test("lists active workspaces across roots in a dismissible dialog", async () => {
   const user = userEvent.setup();
   mocks.workspaces.set([
     workspace(),
-    workspace({ workspace_id: 'other', name: 'Other project', canonical_path: '/elsewhere/project' }),
-    workspace({ workspace_id: 'inactive', name: 'Inactive project', state: 'deleted' }),
+    workspace({
+      workspace_id: "other",
+      name: "Other project",
+      canonical_path: "/elsewhere/project",
+    }),
+    workspace({ workspace_id: "inactive", name: "Inactive project", state: "deleted" }),
   ]);
   render(WorkspacesPage);
 
-  await user.click(screen.getByRole('button', { name: 'Active workspaces' }));
-  const dialog = screen.getByRole('dialog', { name: 'Active workspaces' });
-  expect(within(dialog).getAllByRole('listitem')).toHaveLength(2);
-  expect(within(dialog).getByText('pontia')).toBeInTheDocument();
-  expect(within(dialog).getByText('/repo/pontia')).toBeInTheDocument();
-  expect(within(dialog).getByText('Other project')).toBeInTheDocument();
-  expect(within(dialog).getByText('/elsewhere/project')).toBeInTheDocument();
-  expect(within(dialog).queryByText('Inactive project')).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Active workspaces" }));
+  const dialog = screen.getByRole("dialog", { name: "Active workspaces" });
+  expect(within(dialog).getAllByRole("listitem")).toHaveLength(2);
+  expect(within(dialog).getByText("pontia")).toBeInTheDocument();
+  expect(within(dialog).getByText("/repo/pontia")).toBeInTheDocument();
+  expect(within(dialog).getByText("Other project")).toBeInTheDocument();
+  expect(within(dialog).getByText("/elsewhere/project")).toBeInTheDocument();
+  expect(within(dialog).queryByText("Inactive project")).not.toBeInTheDocument();
 
-  await user.click(within(dialog).getAllByRole('button', { name: 'Close', exact: true })[0]);
-  expect(screen.queryByRole('dialog', { name: 'Active workspaces' })).not.toBeInTheDocument();
+  await user.click(within(dialog).getAllByRole("button", { name: "Close", exact: true })[0]);
+  expect(screen.queryByRole("dialog", { name: "Active workspaces" })).not.toBeInTheDocument();
 });
 
-test('shows an empty active workspace list', async () => {
+test("shows an empty active workspace list", async () => {
   const user = userEvent.setup();
   mocks.workspaces.set([]);
   render(WorkspacesPage);
 
-  await user.click(screen.getByRole('button', { name: 'Active workspaces' }));
-  expect(within(screen.getByRole('dialog', { name: 'Active workspaces' })).getByText('No active workspaces.')).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Active workspaces" }));
+  expect(
+    within(screen.getByRole("dialog", { name: "Active workspaces" })).getByText(
+      "No active workspaces.",
+    ),
+  ).toBeInTheDocument();
 });
 
-test('renders a compact directory/action table and opens directories through the folder-name button', async () => {
+test("renders a compact directory/action table and opens directories through the folder-name button", async () => {
   const user = userEvent.setup();
   render(WorkspacesPage);
 
-  const table = await screen.findByRole('table');
-  expect(within(table).getByRole('columnheader', { name: 'Directory' })).toBeInTheDocument();
-  expect(within(table).getByRole('columnheader', { name: 'Action' })).toBeInTheDocument();
-  expect(within(table).queryByRole('columnheader', { name: 'Kind' })).not.toBeInTheDocument();
-  expect(within(table).queryByRole('columnheader', { name: 'Workspace' })).not.toBeInTheDocument();
+  const table = await screen.findByRole("table");
+  expect(within(table).getByRole("columnheader", { name: "Directory" })).toBeInTheDocument();
+  expect(within(table).getByRole("columnheader", { name: "Action" })).toBeInTheDocument();
+  expect(within(table).queryByRole("columnheader", { name: "Kind" })).not.toBeInTheDocument();
+  expect(within(table).queryByRole("columnheader", { name: "Workspace" })).not.toBeInTheDocument();
 
-  expect(within(table).getByRole('button', { name: 'Enter directory sandbox' })).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Enter directory sandbox' }));
-  expect(mocks.browseWorkspaceRoot).toHaveBeenLastCalledWith('root-1', 'sandbox', {});
+  expect(
+    within(table).getByRole("button", { name: "Enter directory sandbox" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Enter directory sandbox" }));
+  expect(mocks.browseWorkspaceRoot).toHaveBeenLastCalledWith("root-1", "sandbox", {});
 });
 
-test('hides dot-directories by default and allows showing them', async () => {
+test("hides dot-directories by default and allows showing them", async () => {
   const user = userEvent.setup();
   render(WorkspacesPage);
 
-  await screen.findByRole('table');
-  const showHiddenButton = screen.getByRole('button', { name: 'Show hidden' });
-  expect(showHiddenButton).toHaveAttribute('aria-pressed', 'false');
-  expect(screen.queryByRole('button', { name: 'Open directory .scratch' })).not.toBeInTheDocument();
+  await screen.findByRole("table");
+  const showHiddenButton = screen.getByRole("button", { name: "Show hidden" });
+  expect(showHiddenButton).toHaveAttribute("aria-pressed", "false");
+  expect(screen.queryByRole("button", { name: "Open directory .scratch" })).not.toBeInTheDocument();
 
   await user.click(showHiddenButton);
 
-  expect(showHiddenButton).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('button', { name: 'Open directory .scratch' })).toBeInTheDocument();
+  expect(showHiddenButton).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Open directory .scratch" })).toBeInTheDocument();
 });
 
-test('shows outside-root active workspace banner and revokes workspaces from the dialog', async () => {
+test("shows outside-root active workspace banner and revokes workspaces from the dialog", async () => {
   const user = userEvent.setup();
-  mocks.roots = [{ root_id: 'root-1', label: 'Projects', canonical_path: '/repo/project', state: 'available' }];
+  mocks.roots = [
+    { root_id: "root-1", label: "Projects", canonical_path: "/repo/project", state: "available" },
+  ];
   mocks.workspaceRoots.set(mocks.roots);
   mocks.workspaces.set([
-    workspace({ workspace_id: 'inside', name: 'inside', canonical_path: '/repo/project/app', display_path: '/repo/project/app' }),
-    workspace({ workspace_id: 'outside', name: 'outside', canonical_path: '/repo/project-other/app', display_path: '/repo/project-other/app' }),
+    workspace({
+      workspace_id: "inside",
+      name: "inside",
+      canonical_path: "/repo/project/app",
+      display_path: "/repo/project/app",
+    }),
+    workspace({
+      workspace_id: "outside",
+      name: "outside",
+      canonical_path: "/repo/project-other/app",
+      display_path: "/repo/project-other/app",
+    }),
   ]);
 
   render(WorkspacesPage);
 
-  expect(await screen.findByText('1 unavailable active workspace')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Review' }));
+  expect(await screen.findByText("1 unavailable active workspace")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Review" }));
 
-  const dialog = screen.getByRole('dialog', { name: 'Unavailable active workspaces' });
-  expect(within(dialog).getByText('/repo/project-other/app')).toBeInTheDocument();
-  expect(within(dialog).queryByText('/repo/project/app')).not.toBeInTheDocument();
+  const dialog = screen.getByRole("dialog", { name: "Unavailable active workspaces" });
+  expect(within(dialog).getByText("/repo/project-other/app")).toBeInTheDocument();
+  expect(within(dialog).queryByText("/repo/project/app")).not.toBeInTheDocument();
 
-  await user.click(within(dialog).getByRole('button', { name: 'Revoke outside' }));
+  await user.click(within(dialog).getByRole("button", { name: "Revoke outside" }));
 
-  expect(mocks.deleteWorkspace).toHaveBeenCalledWith('outside');
+  expect(mocks.deleteWorkspace).toHaveBeenCalledWith("outside");
 });
 
-test('shows unavailable active workspaces when the workspace directory is missing under a configured root', async () => {
+test("shows unavailable active workspaces when the workspace directory is missing under a configured root", async () => {
   const user = userEvent.setup();
-  mocks.roots = [{ root_id: 'root-1', label: 'Projects', canonical_path: '/repo/project', state: 'available' }];
+  mocks.roots = [
+    { root_id: "root-1", label: "Projects", canonical_path: "/repo/project", state: "available" },
+  ];
   mocks.workspaceRoots.set(mocks.roots);
   mocks.workspaces.set([
-    workspace({ workspace_id: 'missing', name: 'missing-workspace', canonical_path: '/repo/project/missing-workspace', display_path: '/repo/project/missing-workspace' }),
+    workspace({
+      workspace_id: "missing",
+      name: "missing-workspace",
+      canonical_path: "/repo/project/missing-workspace",
+      display_path: "/repo/project/missing-workspace",
+    }),
   ]);
 
   render(WorkspacesPage);
 
-  expect(await screen.findByText('1 unavailable active workspace')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Review' }));
+  expect(await screen.findByText("1 unavailable active workspace")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Review" }));
 
-  const dialog = screen.getByRole('dialog', { name: 'Unavailable active workspaces' });
-  expect(within(dialog).getByText('/repo/project/missing-workspace')).toBeInTheDocument();
-  expect(within(dialog).getByText('Missing directory')).toBeInTheDocument();
+  const dialog = screen.getByRole("dialog", { name: "Unavailable active workspaces" });
+  expect(within(dialog).getByText("/repo/project/missing-workspace")).toBeInTheDocument();
+  expect(within(dialog).getByText("Missing directory")).toBeInTheDocument();
 
-  await user.click(within(dialog).getByRole('button', { name: 'Revoke missing-workspace' }));
+  await user.click(within(dialog).getByRole("button", { name: "Revoke missing-workspace" }));
 
-  expect(mocks.deleteWorkspace).toHaveBeenCalledWith('missing');
+  expect(mocks.deleteWorkspace).toHaveBeenCalledWith("missing");
 });
 
-test('uses path-boundary checks when classifying outside-root workspaces', async () => {
-  mocks.roots = [{ root_id: 'root-1', label: 'Projects', canonical_path: '/repo/project', state: 'available' }];
+test("uses path-boundary checks when classifying outside-root workspaces", async () => {
+  mocks.roots = [
+    { root_id: "root-1", label: "Projects", canonical_path: "/repo/project", state: "available" },
+  ];
   mocks.workspaceRoots.set(mocks.roots);
   mocks.workspaces.set([
-    workspace({ workspace_id: 'nearby', name: 'nearby', canonical_path: '/repo/project-old', display_path: '/repo/project-old' }),
+    workspace({
+      workspace_id: "nearby",
+      name: "nearby",
+      canonical_path: "/repo/project-old",
+      display_path: "/repo/project-old",
+    }),
   ]);
 
   render(WorkspacesPage);
 
-  expect(await screen.findByText('1 unavailable active workspace')).toBeInTheDocument();
+  expect(await screen.findByText("1 unavailable active workspace")).toBeInTheDocument();
 });
 
-test('toggles workspace active state directly and keeps rename dialog for editing names', async () => {
+test("toggles workspace active state directly and keeps rename dialog for editing names", async () => {
   const user = userEvent.setup();
-  const confirmSpy = vi.spyOn(window, 'confirm');
+  const confirmSpy = vi.spyOn(window, "confirm");
   render(WorkspacesPage);
 
-  const activateButton = await screen.findByRole('button', { name: 'Activate sandbox' });
-  expect(activateButton).toHaveTextContent('Activate');
+  const activateButton = await screen.findByRole("button", { name: "Activate sandbox" });
+  expect(activateButton).toHaveTextContent("Activate");
   await user.click(activateButton);
 
-  expect(mocks.registerWorkspace).toHaveBeenCalledWith({ root_id: 'root-1', path: 'sandbox', name: 'sandbox' });
-  expect(screen.queryByRole('heading', { name: 'Confirm workspace registration' })).not.toBeInTheDocument();
+  expect(mocks.registerWorkspace).toHaveBeenCalledWith({
+    root_id: "root-1",
+    path: "sandbox",
+    name: "sandbox",
+  });
+  expect(
+    screen.queryByRole("heading", { name: "Confirm workspace registration" }),
+  ).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: 'Deactivate pontia' }));
+  await user.click(screen.getByRole("button", { name: "Deactivate pontia" }));
 
   expect(confirmSpy).not.toHaveBeenCalled();
-  expect(mocks.deleteWorkspace).toHaveBeenCalledWith('workspace-1');
+  expect(mocks.deleteWorkspace).toHaveBeenCalledWith("workspace-1");
 
-  await user.click(screen.getByRole('button', { name: 'Rename pontia' }));
+  await user.click(screen.getByRole("button", { name: "Rename pontia" }));
 
-  expect(screen.getByRole('dialog', { name: 'Confirm workspace rename' })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Confirm workspace rename' })).toBeInTheDocument();
-  expect(screen.getByLabelText('Display name')).toHaveValue('pontia');
+  expect(screen.getByRole("dialog", { name: "Confirm workspace rename" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Confirm workspace rename" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Display name")).toHaveValue("pontia");
 
   confirmSpy.mockRestore();
 });
 
-test('aborts initial settings workspace requests when the page unmounts', async () => {
+test("aborts initial settings workspace requests when the page unmounts", async () => {
   const { unmount } = render(WorkspacesPage);
 
   await vi.waitFor(() => expect(mocks.loadWorkspaces).toHaveBeenCalled());
-  const workspaceOptions = mocks.loadWorkspaces.mock.calls[0][0] as { signal?: AbortSignal } | undefined;
-  const rootsOptions = mocks.loadWorkspaceRoots.mock.calls[0][0] as { signal?: AbortSignal } | undefined;
+  const workspaceOptions = mocks.loadWorkspaces.mock.calls[0][0] as
+    | { signal?: AbortSignal }
+    | undefined;
+  const rootsOptions = mocks.loadWorkspaceRoots.mock.calls[0][0] as
+    | { signal?: AbortSignal }
+    | undefined;
 
   expect(workspaceOptions?.signal).toBeInstanceOf(AbortSignal);
   expect(rootsOptions?.signal).toBe(workspaceOptions?.signal);

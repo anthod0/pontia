@@ -1,31 +1,69 @@
-import { inboxMessage, mocks, session, timelineItemsFromTurns, timelineStateValue, turn, workspace } from './fixtures';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
-import userEvent from '@testing-library/user-event';
-import { expect, test, vi } from 'vitest';
-import type { CreateSessionResult, SessionView, TurnView } from '../../../src/api/types';
-import { optimisticInitialMessages, rememberOptimisticMessage } from '../../../src/stores/optimisticChat';
-import { optimisticInboxSubmissions } from '../../../src/stores/optimisticInbox';
-import * as api from '../../../src/api/client';
+import {
+  inboxMessage,
+  mocks,
+  session,
+  timelineItemsFromTurns,
+  timelineStateValue,
+  turn,
+  workspace,
+} from "./fixtures";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+import userEvent from "@testing-library/user-event";
+import { expect, test, vi } from "vitest";
+import type { CreateSessionResult, SessionView, TurnView } from "../../../src/api/types";
+import {
+  optimisticInitialMessages,
+  rememberOptimisticMessage,
+} from "../../../src/stores/optimisticChat";
+import { optimisticInboxSubmissions } from "../../../src/stores/optimisticInbox";
+import * as api from "../../../src/api/client";
 
-const NewChatPage = (await import('../../../src/pages/NewChatPage.svelte')).default;
-const SessionChatPage = (await import('../../../src/pages/SessionChatPage.svelte')).default;
-const TopBarHost = (await import('../../components/layout/TopBarHost.svelte')).default;
+const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
+const SessionChatPage = (await import("../../../src/pages/SessionChatPage.svelte")).default;
+const TopBarHost = (await import("../../components/layout/TopBarHost.svelte")).default;
 
-test('continues following the original Codex TUI after a second thread switch', async () => {
-  const selected = session({ session_id: 'session-b', client_type: 'codex', codex: { connection: 'available', thread_id: 'native-b' } });
-  window.history.pushState({}, '', '/dashboard/chat/session-b?tui=session-a');
-  mocks.pathParams = { sessionId: 'session-b' };
+test("continues following the original Codex TUI after a second thread switch", async () => {
+  const selected = session({
+    session_id: "session-b",
+    client_type: "codex",
+    codex: { connection: "available", thread_id: "native-b" },
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-b?tui=session-a");
+  mocks.pathParams = { sessionId: "session-b" };
   mocks.sessions.set([selected]);
   mocks.loadedSessions = [selected];
   const detail = { session: selected, turns: [], inboxMessages: [], events: [] };
   mocks.sessionDetail.set(detail);
   mocks.loadSessionDetail.mockResolvedValue(detail);
-  const owner = session({ session_id: 'session-a', client_type: 'codex', codex: { connection: 'available', owned_tui: { owner_session_id: 'session-a', target_session_id: 'session-c', connected: true, socket_path: '/tmp/test.sock', pane_id: '%1' }, tui: { owner_session_id: 'session-d', target_session_id: 'session-a', connected: true, socket_path: '/tmp/test.sock', pane_id: '%2' } } });
-  const lookup = vi.spyOn(api, 'getSession').mockResolvedValue(owner);
+  const owner = session({
+    session_id: "session-a",
+    client_type: "codex",
+    codex: {
+      connection: "available",
+      owned_tui: {
+        owner_session_id: "session-a",
+        target_session_id: "session-c",
+        connected: true,
+        socket_path: "/tmp/test.sock",
+        pane_id: "%1",
+      },
+      tui: {
+        owner_session_id: "session-d",
+        target_session_id: "session-a",
+        connected: true,
+        socket_path: "/tmp/test.sock",
+        pane_id: "%2",
+      },
+    },
+  });
+  const lookup = vi.spyOn(api, "getSession").mockResolvedValue(owner);
   try {
     render(SessionChatPage);
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-c', { tui: 'session-a' }), { timeout: 4000 });
-    expect(lookup).toHaveBeenCalledWith('session-a');
+    await waitFor(
+      () => expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-c", { tui: "session-a" }),
+      { timeout: 4000 },
+    );
+    expect(lookup).toHaveBeenCalledWith("session-a");
   } finally {
     lookup.mockRestore();
   }
@@ -35,7 +73,7 @@ class TestIntersectionObserver implements IntersectionObserver {
   static instances: TestIntersectionObserver[] = [];
 
   readonly root: Element | Document | null = null;
-  readonly rootMargin = '0px';
+  readonly rootMargin = "0px";
   readonly thresholds = [0.01];
   observedElement: Element | null = null;
 
@@ -51,41 +89,56 @@ class TestIntersectionObserver implements IntersectionObserver {
 
   disconnect(): void {}
 
-  takeRecords(): IntersectionObserverEntry[] { return []; }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
 
   trigger(isIntersecting: boolean): void {
     if (!this.observedElement) return;
-    this.callback([{ isIntersecting, target: this.observedElement } as IntersectionObserverEntry], this);
+    this.callback(
+      [{ isIntersecting, target: this.observedElement } as IntersectionObserverEntry],
+      this,
+    );
   }
 }
 
 function installIntersectionObserverMock(): void {
   TestIntersectionObserver.instances = [];
-  Object.defineProperty(window, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
-  Object.defineProperty(globalThis, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
+  Object.defineProperty(window, "IntersectionObserver", {
+    configurable: true,
+    writable: true,
+    value: TestIntersectionObserver,
+  });
+  Object.defineProperty(globalThis, "IntersectionObserver", {
+    configurable: true,
+    writable: true,
+    value: TestIntersectionObserver,
+  });
 }
 
 function observedHistorySentinels(): Element[] {
   return TestIntersectionObserver.instances
     .map((instance) => instance.observedElement)
-    .filter((element): element is Element => Boolean(element?.hasAttribute('data-chat-history-top-sentinel')));
+    .filter((element): element is Element =>
+      Boolean(element?.hasAttribute("data-chat-history-top-sentinel")),
+    );
 }
 
-test('focuses the composer and refreshes git only on the first entry, then refreshes git on manual focus', async () => {
-  const selected = session({ session_id: 'session-2', workspace_id: 'workspace-1' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("focuses the composer and refreshes git only on the first entry, then refreshes git on manual focus", async () => {
+  const selected = session({ session_id: "session-2", workspace_id: "workspace-1" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
 
   const firstPage = render(SessionChatPage);
 
-  const composer = await screen.findByPlaceholderText('Continue the thread…');
+  const composer = await screen.findByPlaceholderText("Continue the thread…");
   await waitFor(() => expect(composer).toHaveFocus());
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1);
-  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1');
+  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1");
 
   composer.blur();
   composer.focus();
@@ -94,7 +147,7 @@ test('focuses the composer and refreshes git only on the first entry, then refre
   firstPage.unmount();
   mocks.refreshWorkspaceGitStatus.mockClear();
   render(SessionChatPage);
-  const revisitedComposer = await screen.findByPlaceholderText('Continue the thread…');
+  const revisitedComposer = await screen.findByPlaceholderText("Continue the thread…");
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   expect(revisitedComposer).not.toHaveFocus();
   expect(mocks.refreshWorkspaceGitStatus).not.toHaveBeenCalled();
@@ -105,18 +158,18 @@ function prepareBranchChat(
   sessionOverrides: Partial<SessionView> = {},
 ): SessionView {
   const selected = session({
-    session_id: 'session-branch',
-    state: 'idle',
+    session_id: "session-branch",
+    state: "idle",
     capabilities: { accept_task: true, timeline: true, topology: true, branch_control: true },
     ...sessionOverrides,
   });
-  window.history.pushState({}, '', '/dashboard/chat/session-branch');
-  mocks.pathParams = { sessionId: 'session-branch' };
+  window.history.pushState({}, "", "/dashboard/chat/session-branch");
+  mocks.pathParams = { sessionId: "session-branch" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({
     session: selected,
-    turns: turns.map((item) => ({ ...item, session_id: 'session-branch' })),
+    turns: turns.map((item) => ({ ...item, session_id: "session-branch" })),
     inboxMessages: [],
     events: [],
   });
@@ -128,299 +181,361 @@ async function triggerLatestBottomIntersection(isIntersecting: boolean): Promise
   TestIntersectionObserver.instances.at(-1)?.trigger(isIntersecting);
 }
 
-test('keeps loaded conversation visible while native history is pending', async () => {
-  prepareBranchChat([turn({ output: { summary: 'Already loaded answer' } })]);
+test("keeps loaded conversation visible while native history is pending", async () => {
+  prepareBranchChat([turn({ output: { summary: "Already loaded answer" } })]);
   render(SessionChatPage);
-  expect(await screen.findByText('Already loaded answer')).toBeVisible();
+  expect(await screen.findByText("Already loaded answer")).toBeVisible();
 
   mocks.timelineState.set({
     ...mocks.timelineState.get(),
-    status: 'pending',
+    status: "pending",
     refreshing: true,
-    refreshKind: 'history',
-    errorCode: 'timeline_pending',
-    error: 'History is still being written',
+    refreshKind: "history",
+    errorCode: "timeline_pending",
+    error: "History is still being written",
   });
 
-  expect(await screen.findByText('Waiting for native history…')).toBeVisible();
-  expect(screen.getByText('Already loaded answer')).toBeVisible();
-  expect(screen.queryByText('Conversation history unavailable')).not.toBeInTheDocument();
+  expect(await screen.findByText("Waiting for native history…")).toBeVisible();
+  expect(screen.getByText("Already loaded answer")).toBeVisible();
+  expect(screen.queryByText("Conversation history unavailable")).not.toBeInTheDocument();
 });
 
-test('replaces Send with Interrupt in the empty composer for a busy interruptible session', async () => {
-  const busySession = session({ state: 'busy', current_turn_id: 'turn-1', capabilities: { interrupt: true, timeline: true } });
+test("replaces Send with Interrupt in the empty composer for a busy interruptible session", async () => {
+  const busySession = session({
+    state: "busy",
+    current_turn_id: "turn-1",
+    capabilities: { interrupt: true, timeline: true },
+  });
   mocks.loadedSessions = [busySession];
   mocks.sessions.set([busySession]);
-  mocks.sessionDetail.set({ session: busySession, turns: [turn({ state: 'running', output: null, completed_at: null })], inboxMessages: [], events: [] });
-  mocks.pathParams = { sessionId: 'session-1' };
-  window.history.pushState({}, '', '/dashboard/chat/session-1');
+  mocks.sessionDetail.set({
+    session: busySession,
+    turns: [turn({ state: "running", output: null, completed_at: null })],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.pathParams = { sessionId: "session-1" };
+  window.history.pushState({}, "", "/dashboard/chat/session-1");
 
   render(SessionChatPage);
 
-  const agentStatus = await screen.findByLabelText('Agent status: Agent working');
-  expect(within(agentStatus).queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
+  const agentStatus = await screen.findByLabelText("Agent status: Agent working");
+  expect(
+    within(agentStatus).queryByRole("button", { name: /interrupt agent/i }),
+  ).not.toBeInTheDocument();
   const composer = document.querySelector('[data-chat-composer-dock="fixed"]');
   expect(composer).toBeInTheDocument();
-  const interruptButton = within(composer as HTMLElement).getByRole('button', { name: /interrupt agent/i });
-  expect(within(composer as HTMLElement).queryByRole('button', { name: /^send$/i })).not.toBeInTheDocument();
+  const interruptButton = within(composer as HTMLElement).getByRole("button", {
+    name: /interrupt agent/i,
+  });
+  expect(
+    within(composer as HTMLElement).queryByRole("button", { name: /^send$/i }),
+  ).not.toBeInTheDocument();
 
   await fireEvent.click(interruptButton);
-  await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith('session-1'));
+  await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith("session-1"));
 });
 
 test.each([
-  ['idle session', { state: 'idle', capabilities: { interrupt: true, timeline: true } }],
-  ['runtime without interrupt capability', { state: 'busy', capabilities: { interrupt: false, timeline: true } }],
-] as const)('keeps Send for an empty composer when the %s is not interruptible', async (_label, overrides) => {
-  const selected = session(overrides);
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.pathParams = { sessionId: 'session-1' };
-  window.history.pushState({}, '', '/dashboard/chat/session-1');
+  ["idle session", { state: "idle", capabilities: { interrupt: true, timeline: true } }],
+  [
+    "runtime without interrupt capability",
+    { state: "busy", capabilities: { interrupt: false, timeline: true } },
+  ],
+] as const)(
+  "keeps Send for an empty composer when the %s is not interruptible",
+  async (_label, overrides) => {
+    const selected = session(overrides);
+    mocks.loadedSessions = [selected];
+    mocks.sessions.set([selected]);
+    mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+    mocks.pathParams = { sessionId: "session-1" };
+    window.history.pushState({}, "", "/dashboard/chat/session-1");
 
-  render(SessionChatPage);
+    render(SessionChatPage);
 
-  await screen.findByPlaceholderText('Continue the thread…');
-  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /^send$/i })).toBeInTheDocument();
-});
+    await screen.findByPlaceholderText("Continue the thread…");
+    expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^send$/i })).toBeInTheDocument();
+  },
+);
 
-test('keeps Send and queues inbox input while an interruptible session is busy', async () => {
+test("keeps Send and queues inbox input while an interruptible session is busy", async () => {
   const busySession = session({
-    state: 'busy',
-    current_turn_id: 'turn-1',
+    state: "busy",
+    current_turn_id: "turn-1",
     capabilities: { accept_task: true, interrupt: true, timeline: true },
   });
   mocks.loadedSessions = [busySession];
   mocks.sessions.set([busySession]);
-  mocks.sessionDetail.set({ session: busySession, turns: [turn({ state: 'running', output: null, completed_at: null })], inboxMessages: [], events: [] });
-  mocks.pathParams = { sessionId: 'session-1' };
-  window.history.pushState({}, '', '/dashboard/chat/session-1');
+  mocks.sessionDetail.set({
+    session: busySession,
+    turns: [turn({ state: "running", output: null, completed_at: null })],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.pathParams = { sessionId: "session-1" };
+  window.history.pushState({}, "", "/dashboard/chat/session-1");
 
   render(SessionChatPage);
 
-  const input = await screen.findByPlaceholderText('Continue the thread…');
-  await userEvent.type(input, 'Queue this follow-up');
+  const input = await screen.findByPlaceholderText("Continue the thread…");
+  await userEvent.type(input, "Queue this follow-up");
 
-  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: /^send$/i }));
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-1', {
-    input: 'Queue this follow-up',
-    delivery_policy: 'after_idle',
-    metadata: { source: 'dashboard_chat' },
-  }));
+  expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /^send$/i }));
+  await waitFor(() =>
+    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-1", {
+      input: "Queue this follow-up",
+      delivery_policy: "after_idle",
+      metadata: { source: "dashboard_chat" },
+    }),
+  );
   expect(mocks.interruptSession).not.toHaveBeenCalled();
-  expect(screen.queryByText('Queue this follow-up')).not.toBeInTheDocument();
+  expect(screen.queryByText("Queue this follow-up")).not.toBeInTheDocument();
 
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   for (const listener of mocks.dashboardEventListeners) {
     listener({
-      kind: 'session_event',
-      id: 'event-queued-turn-started',
-      occurred_at: '2026-05-14T00:01:00Z',
+      kind: "session_event",
+      id: "event-queued-turn-started",
+      occurred_at: "2026-05-14T00:01:00Z",
       event: {
-        event_id: 'event-queued-turn-started',
-        session_id: 'session-1',
-        turn_id: 'turn-2',
-        source: 'client',
-        type: 'turn.started',
-        time: '2026-05-14T00:01:00Z',
-        payload: { metadata: { inbox_message_id: 'message-queued' } },
+        event_id: "event-queued-turn-started",
+        session_id: "session-1",
+        turn_id: "turn-2",
+        source: "client",
+        type: "turn.started",
+        time: "2026-05-14T00:01:00Z",
+        payload: { metadata: { inbox_message_id: "message-queued" } },
       },
     });
   }
 
-  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-1', 'turn-2'));
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-1',
-    items: timelineItemsFromTurns([
-      turn({ state: 'completed' }),
-      turn({
-        turn_id: 'turn-2',
-        input: { summary: 'Queue this follow-up' },
-        state: 'running',
-        output: null,
-        completed_at: null,
-        created_at: '2026-05-14T00:01:00Z',
-      }),
-    ]),
-    latestTurnId: 'turn-2',
-    status: 'ready',
-  }));
-  expect(await screen.findByText('Queue this follow-up')).toBeInTheDocument();
+  await waitFor(() =>
+    expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith("session-1", "turn-2"),
+  );
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-1",
+      items: timelineItemsFromTurns([
+        turn({ state: "completed" }),
+        turn({
+          turn_id: "turn-2",
+          input: { summary: "Queue this follow-up" },
+          state: "running",
+          output: null,
+          completed_at: null,
+          created_at: "2026-05-14T00:01:00Z",
+        }),
+      ]),
+      latestTurnId: "turn-2",
+      status: "ready",
+    }),
+  );
+  expect(await screen.findByText("Queue this follow-up")).toBeInTheDocument();
 });
 
-
-test('selects tree timeline loading when the Session advertises timeline and topology', async () => {
+test("selects tree timeline loading when the Session advertises timeline and topology", async () => {
   const selected = session({
-    session_id: 'session-tree',
-    current_turn_id: 'turn-5',
+    session_id: "session-tree",
+    current_turn_id: "turn-5",
     capabilities: { timeline: true, topology: true },
   });
-  window.history.pushState({}, '', '/dashboard/chat/session-tree');
-  mocks.pathParams = { sessionId: 'session-tree' };
+  window.history.pushState({}, "", "/dashboard/chat/session-tree");
+  mocks.pathParams = { sessionId: "session-tree" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({
     session: selected,
-    turns: [turn({ turn_id: 'turn-5', session_id: 'session-tree' })],
+    turns: [turn({ turn_id: "turn-5", session_id: "session-tree" })],
     inboxMessages: [],
     events: [],
   });
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-tree', {
-    mode: 'rebuild',
-    latestTurnId: 'turn-5',
-    topology: true,
-  }));
+  await waitFor(() =>
+    expect(mocks.loadSessionTimeline).toHaveBeenCalledWith("session-tree", {
+      mode: "rebuild",
+      latestTurnId: "turn-5",
+      topology: true,
+    }),
+  );
 });
 
-test('shows icon-only Edit and Copy controls outside eligible user message bubbles', async () => {
+test("shows icon-only Edit and Copy controls outside eligible user message bubbles", async () => {
   const user = userEvent.setup();
   const writeText = vi.fn().mockResolvedValue(undefined);
-  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   const originalTurn = turn({
-    turn_id: 'turn-original',
-    input: { summary: 'Inspect the original implementation.' },
-    output: { summary: 'The original implementation is ready.' },
+    turn_id: "turn-original",
+    input: { summary: "Inspect the original implementation." },
+    output: { summary: "The original implementation is ready." },
   });
-  prepareBranchChat([originalTurn], { current_turn_id: 'turn-original' });
-  rememberOptimisticMessage('session-branch', 'Optimistic follow-up');
+  prepareBranchChat([originalTurn], { current_turn_id: "turn-original" });
+  rememberOptimisticMessage("session-branch", "Optimistic follow-up");
   optimisticInitialMessages.update((messages) => ({
     ...messages,
-    'session-branch': [
-      ...(messages['session-branch'] ?? []),
+    "session-branch": [
+      ...(messages["session-branch"] ?? []),
       {
-        id: 'failed-placeholder:user',
-        turnId: 'failed-placeholder',
-        role: 'user',
-        content: 'Failed follow-up',
-        status: 'failed',
-        createdAt: '2026-05-14T00:02:00Z',
+        id: "failed-placeholder:user",
+        turnId: "failed-placeholder",
+        role: "user",
+        content: "Failed follow-up",
+        status: "failed",
+        createdAt: "2026-05-14T00:02:00Z",
       },
     ],
   }));
 
   render(SessionChatPage);
 
-  const editButton = await screen.findByRole('button', { name: 'Edit message: Inspect the original implementation.' });
-  const copyButton = screen.getByRole('button', { name: 'Copy user message: Inspect the original implementation.' });
-  const messageActions = editButton.closest('[data-user-message-actions]');
+  const editButton = await screen.findByRole("button", {
+    name: "Edit message: Inspect the original implementation.",
+  });
+  const copyButton = screen.getByRole("button", {
+    name: "Copy user message: Inspect the original implementation.",
+  });
+  const messageActions = editButton.closest("[data-user-message-actions]");
   const messageBubble = messageActions?.previousElementSibling;
-  expect(screen.getAllByRole('button', { name: /^Edit message:/ })).toHaveLength(1);
-  expect(editButton).toHaveTextContent('');
-  expect(copyButton).toHaveTextContent('');
-  expect(messageBubble).toHaveTextContent('Inspect the original implementation.');
+  expect(screen.getAllByRole("button", { name: /^Edit message:/ })).toHaveLength(1);
+  expect(editButton).toHaveTextContent("");
+  expect(copyButton).toHaveTextContent("");
+  expect(messageBubble).toHaveTextContent("Inspect the original implementation.");
   expect(messageBubble).not.toContainElement(editButton);
-  expect(screen.queryByRole('button', { name: /^Resend message:/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^Resend message:/ })).not.toBeInTheDocument();
   await user.click(copyButton);
-  await waitFor(() => expect(writeText).toHaveBeenCalledWith('Inspect the original implementation.'));
-  expect(screen.getByRole('button', { name: 'User message copied: Inspect the original implementation.' })).toBeInTheDocument();
-  expect(screen.getByText('Optimistic follow-up')).toBeInTheDocument();
-  expect(screen.getByText('Failed follow-up')).toBeInTheDocument();
+  await waitFor(() =>
+    expect(writeText).toHaveBeenCalledWith("Inspect the original implementation."),
+  );
+  expect(
+    screen.getByRole("button", {
+      name: "User message copied: Inspect the original implementation.",
+    }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Optimistic follow-up")).toBeInTheDocument();
+  expect(screen.getByText("Failed follow-up")).toBeInTheDocument();
 
   await user.click(editButton);
 
-  const editor = screen.getByRole('textbox', { name: 'Edit historical message' });
-  expect(editor).toHaveValue('Inspect the original implementation.');
-  expect(editor).not.toHaveAttribute('rows');
+  const editor = screen.getByRole("textbox", { name: "Edit historical message" });
+  expect(editor).toHaveValue("Inspect the original implementation.");
+  expect(editor).not.toHaveAttribute("rows");
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
-  await fireEvent.keyDown(screen.getByRole('textbox', { name: 'Edit historical message' }), { key: 'Escape' });
-  expect(screen.queryByRole('textbox', { name: 'Edit historical message' })).not.toBeInTheDocument();
+  await fireEvent.keyDown(screen.getByRole("textbox", { name: "Edit historical message" }), {
+    key: "Escape",
+  });
+  expect(
+    screen.queryByRole("textbox", { name: "Edit historical message" }),
+  ).not.toBeInTheDocument();
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
-  await user.click(screen.getByRole('button', { name: 'Edit message: Inspect the original implementation.' }));
-  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await user.click(
+    screen.getByRole("button", { name: "Edit message: Inspect the original implementation." }),
+  );
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-  expect(screen.queryByRole('textbox', { name: 'Edit historical message' })).not.toBeInTheDocument();
-  expect(screen.getByText('Inspect the original implementation.')).toBeInTheDocument();
+  expect(
+    screen.queryByRole("textbox", { name: "Edit historical message" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("Inspect the original implementation.")).toBeInTheDocument();
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 });
 
-test('offers branch actions only on the primary user message represented by a projected Turn', async () => {
-  const completeHistoricalInput = '  Primary user input with the complete historical text  ';
-  prepareBranchChat([turn({
-    turn_id: 'turn-original',
-    input: { summary: 'Primary user input with the complete…' },
-    output: { summary: 'Assistant output' },
-  })]);
+test("offers branch actions only on the primary user message represented by a projected Turn", async () => {
+  const completeHistoricalInput = "  Primary user input with the complete historical text  ";
+  prepareBranchChat([
+    turn({
+      turn_id: "turn-original",
+      input: { summary: "Primary user input with the complete…" },
+      output: { summary: "Assistant output" },
+    }),
+  ]);
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set(timelineStateValue({
-      sessionId,
-      mode: 'tree',
-      status: 'ready',
-      latestTurnId: 'turn-original',
-      items: [
-        {
-          item_id: 'turn-original:user-primary',
-          kind: 'user',
-          role: 'user',
-          title: null,
-          status: null,
-          occurred_at: '2026-05-14T00:00:00Z',
-          content_preview: completeHistoricalInput,
-          turn_id: 'turn-original',
-        },
-        {
-          item_id: 'turn-original:user-secondary',
-          kind: 'user',
-          role: 'user',
-          title: null,
-          status: null,
-          occurred_at: '2026-05-14T00:00:01Z',
-          content_preview: 'Secondary user activity',
-          turn_id: 'turn-original',
-        },
-        {
-          item_id: 'turn-original:assistant',
-          kind: 'assistant',
-          role: 'assistant',
-          title: null,
-          status: null,
-          occurred_at: '2026-05-14T00:00:02Z',
-          content_preview: 'Assistant output',
-          turn_id: 'turn-original',
-        },
-      ],
-    }));
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId,
+        mode: "tree",
+        status: "ready",
+        latestTurnId: "turn-original",
+        items: [
+          {
+            item_id: "turn-original:user-primary",
+            kind: "user",
+            role: "user",
+            title: null,
+            status: null,
+            occurred_at: "2026-05-14T00:00:00Z",
+            content_preview: completeHistoricalInput,
+            turn_id: "turn-original",
+          },
+          {
+            item_id: "turn-original:user-secondary",
+            kind: "user",
+            role: "user",
+            title: null,
+            status: null,
+            occurred_at: "2026-05-14T00:00:01Z",
+            content_preview: "Secondary user activity",
+            turn_id: "turn-original",
+          },
+          {
+            item_id: "turn-original:assistant",
+            kind: "assistant",
+            role: "assistant",
+            title: null,
+            status: null,
+            occurred_at: "2026-05-14T00:00:02Z",
+            content_preview: "Assistant output",
+            turn_id: "turn-original",
+          },
+        ],
+      }),
+    );
     return null;
   });
 
   render(SessionChatPage);
 
-  const editButton = await screen.findByRole('button', { name: /Edit message: Primary user input with the complete historical text/ });
-  expect(screen.queryByRole('button', { name: 'Edit message: Secondary user activity' })).not.toBeInTheDocument();
-  expect(screen.getAllByRole('button', { name: /^Edit message:/ })).toHaveLength(1);
+  const editButton = await screen.findByRole("button", {
+    name: /Edit message: Primary user input with the complete historical text/,
+  });
+  expect(
+    screen.queryByRole("button", { name: "Edit message: Secondary user activity" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: /^Edit message:/ })).toHaveLength(1);
 
   await userEvent.click(editButton);
-  expect(screen.getByRole('textbox', { name: 'Edit historical message' }))
-    .toHaveValue(completeHistoricalInput);
-  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-  expect(screen.getByRole('button', { name: /^Copy user message: Primary user input/ })).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Edit historical message" })).toHaveValue(
+    completeHistoricalInput,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(
+    screen.getByRole("button", { name: /^Copy user message: Primary user input/ }),
+  ).toBeInTheDocument();
 });
 
-test('edits completed history while busy and interrupts only when the edit is saved', async () => {
+test("edits completed history while busy and interrupts only when the edit is saved", async () => {
   const user = userEvent.setup();
   const completedTurn = turn({
-    turn_id: 'turn-completed',
-    input: { summary: 'Completed historical input' },
+    turn_id: "turn-completed",
+    input: { summary: "Completed historical input" },
   });
   const activeTurn = turn({
-    turn_id: 'turn-active',
-    parent_turn_id: 'turn-completed',
-    state: 'running',
-    input: { summary: 'Active input' },
+    turn_id: "turn-active",
+    parent_turn_id: "turn-completed",
+    state: "running",
+    input: { summary: "Active input" },
     output: null,
     completed_at: null,
-    created_at: '2026-05-14T00:01:00Z',
+    created_at: "2026-05-14T00:01:00Z",
   });
   const busySession = prepareBranchChat([completedTurn, activeTurn], {
-    state: 'busy',
-    current_turn_id: 'turn-active',
+    state: "busy",
+    current_turn_id: "turn-active",
     capabilities: {
       accept_task: true,
       interrupt: true,
@@ -432,347 +547,428 @@ test('edits completed history while busy and interrupts only when the edit is sa
 
   render(SessionChatPage);
 
-  await user.click(await screen.findByRole('button', { name: 'Edit message: Completed historical input' }));
-  expect(screen.queryByRole('button', { name: 'Edit message: Active input' })).not.toBeInTheDocument();
+  await user.click(
+    await screen.findByRole("button", { name: "Edit message: Completed historical input" }),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Edit message: Active input" }),
+  ).not.toBeInTheDocument();
   expect(mocks.interruptSession).not.toHaveBeenCalled();
 
-  await user.click(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith('session-branch'));
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith("session-branch"));
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
-  const interruptedSession = { ...busySession, state: 'interrupted', current_turn_id: null };
+  const interruptedSession = { ...busySession, state: "interrupted", current_turn_id: null };
   mocks.sessions.set([interruptedSession]);
   mocks.sessionDetail.set({
     session: interruptedSession,
     turns: [
-      { ...completedTurn, session_id: 'session-branch' },
-      { ...activeTurn, session_id: 'session-branch', state: 'interrupted', completed_at: '2026-05-14T00:01:02Z' },
+      { ...completedTurn, session_id: "session-branch" },
+      {
+        ...activeTurn,
+        session_id: "session-branch",
+        state: "interrupted",
+        completed_at: "2026-05-14T00:01:02Z",
+      },
     ],
     inboxMessages: [],
     events: [],
   });
 
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-branch', {
-    input: 'Completed historical input',
-    delivery_policy: 'after_idle',
-    metadata: { source: 'dashboard_chat_branch_edit' },
-    branch_target_turn_id: 'turn-completed',
-  }));
-  expect(mocks.interruptSession.mock.invocationCallOrder[0])
-    .toBeLessThan(mocks.submitInboxMessage.mock.invocationCallOrder[0]);
+  await waitFor(() =>
+    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-branch", {
+      input: "Completed historical input",
+      delivery_policy: "after_idle",
+      metadata: { source: "dashboard_chat_branch_edit" },
+      branch_target_turn_id: "turn-completed",
+    }),
+  );
+  expect(mocks.interruptSession.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.submitInboxMessage.mock.invocationCallOrder[0],
+  );
 });
 
-test('keeps a busy edit open when interrupting the active Turn fails', async () => {
+test("keeps a busy edit open when interrupting the active Turn fails", async () => {
   const user = userEvent.setup();
-  prepareBranchChat([
-    turn({ turn_id: 'turn-completed', input: { summary: 'Completed historical input' } }),
-    turn({
-      turn_id: 'turn-active',
-      parent_turn_id: 'turn-completed',
-      state: 'running',
-      input: { summary: 'Active input' },
-      output: null,
-      completed_at: null,
-      created_at: '2026-05-14T00:01:00Z',
-    }),
-  ], {
-    state: 'busy',
-    current_turn_id: 'turn-active',
-    capabilities: {
-      accept_task: true,
-      interrupt: true,
-      timeline: true,
-      topology: true,
-      branch_control: true,
+  prepareBranchChat(
+    [
+      turn({ turn_id: "turn-completed", input: { summary: "Completed historical input" } }),
+      turn({
+        turn_id: "turn-active",
+        parent_turn_id: "turn-completed",
+        state: "running",
+        input: { summary: "Active input" },
+        output: null,
+        completed_at: null,
+        created_at: "2026-05-14T00:01:00Z",
+      }),
+    ],
+    {
+      state: "busy",
+      current_turn_id: "turn-active",
+      capabilities: {
+        accept_task: true,
+        interrupt: true,
+        timeline: true,
+        topology: true,
+        branch_control: true,
+      },
     },
-  });
-  mocks.interruptSession.mockRejectedValue(new Error('Interrupt failed'));
+  );
+  mocks.interruptSession.mockRejectedValue(new Error("Interrupt failed"));
 
   render(SessionChatPage);
 
-  await user.click(await screen.findByRole('button', { name: 'Edit message: Completed historical input' }));
-  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await user.click(
+    await screen.findByRole("button", { name: "Edit message: Completed historical input" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Save" }));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('Interrupt failed');
+  expect(await screen.findByRole("alert")).toHaveTextContent("Interrupt failed");
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
-  expect(screen.getByRole('textbox', { name: 'Edit historical message' }))
-    .toHaveValue('Completed historical input');
+  expect(screen.getByRole("textbox", { name: "Edit historical message" })).toHaveValue(
+    "Completed historical input",
+  );
 });
 
 test.each([
   {
-    name: 'branch control is unsupported',
-    sessionOverrides: { capabilities: { accept_task: true, timeline: true, topology: true, branch_control: false } },
+    name: "branch control is unsupported",
+    sessionOverrides: {
+      capabilities: { accept_task: true, timeline: true, topology: true, branch_control: false },
+    },
     turnOverrides: {},
   },
   {
-    name: 'the Session is busy',
-    sessionOverrides: { state: 'busy', current_turn_id: 'turn-original' },
-    turnOverrides: { state: 'running', completed_at: null },
+    name: "the Session is busy",
+    sessionOverrides: { state: "busy", current_turn_id: "turn-original" },
+    turnOverrides: { state: "running", completed_at: null },
   },
   {
-    name: 'the projected Turn is active',
+    name: "the projected Turn is active",
     sessionOverrides: {},
-    turnOverrides: { state: 'running', completed_at: null },
+    turnOverrides: { state: "running", completed_at: null },
   },
   {
-    name: 'the projected user message failed',
+    name: "the projected user message failed",
     sessionOverrides: {},
-    turnOverrides: { failure: { message: 'Input was rejected' }, input: null },
+    turnOverrides: { failure: { message: "Input was rejected" }, input: null },
   },
-])('does not expose branch actions when $name', async ({ sessionOverrides, turnOverrides }) => {
-  prepareBranchChat([
-    turn({
-      turn_id: 'turn-original',
-      input: { summary: 'Historical input' },
-      output: { summary: 'Historical output' },
-      ...turnOverrides,
-    }),
-  ], sessionOverrides);
+])("does not expose branch actions when $name", async ({ sessionOverrides, turnOverrides }) => {
+  prepareBranchChat(
+    [
+      turn({
+        turn_id: "turn-original",
+        input: { summary: "Historical input" },
+        output: { summary: "Historical output" },
+        ...turnOverrides,
+      }),
+    ],
+    sessionOverrides,
+  );
 
   render(SessionChatPage);
 
-  await screen.findByText(turnOverrides.input === null ? 'No input was reported.' : 'Historical input');
-  expect(screen.queryByRole('button', { name: /^Edit message:/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /^Resend message:/ })).not.toBeInTheDocument();
+  await screen.findByText(
+    turnOverrides.input === null ? "No input was reported." : "Historical input",
+  );
+  expect(screen.queryByRole("button", { name: /^Edit message:/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^Resend message:/ })).not.toBeInTheDocument();
 });
 
-test('submits Edit with Enter and keeps Shift+Enter for newlines', async () => {
+test("submits Edit with Enter and keeps Shift+Enter for newlines", async () => {
   const user = userEvent.setup();
   const originalTurn = turn({
-    turn_id: 'turn-original',
-    input: { summary: 'Original question' },
-    output: { summary: 'Original answer' },
+    turn_id: "turn-original",
+    input: { summary: "Original question" },
+    output: { summary: "Original answer" },
   });
   const suffixTurn = turn({
-    turn_id: 'turn-suffix',
-    parent_turn_id: 'turn-original',
-    input: { summary: 'Current suffix question' },
-    output: { summary: 'Current suffix answer' },
-    created_at: '2026-05-14T00:01:00Z',
-    started_at: '2026-05-14T00:01:01Z',
-    completed_at: '2026-05-14T00:01:02Z',
+    turn_id: "turn-suffix",
+    parent_turn_id: "turn-original",
+    input: { summary: "Current suffix question" },
+    output: { summary: "Current suffix answer" },
+    created_at: "2026-05-14T00:01:00Z",
+    started_at: "2026-05-14T00:01:01Z",
+    completed_at: "2026-05-14T00:01:02Z",
   });
   prepareBranchChat([originalTurn, suffixTurn]);
-  mocks.submitInboxMessage.mockResolvedValue(inboxMessage({
-    message_id: 'message-edit',
-    session_id: 'session-branch',
-    input: { summary: 'Corrected question' },
-    branch_target_turn_id: 'turn-original',
-  }));
+  mocks.submitInboxMessage.mockResolvedValue(
+    inboxMessage({
+      message_id: "message-edit",
+      session_id: "session-branch",
+      input: { summary: "Corrected question" },
+      branch_target_turn_id: "turn-original",
+    }),
+  );
 
   render(SessionChatPage);
 
-  await user.click(await screen.findByRole('button', { name: 'Edit message: Original question' }));
-  const editor = screen.getByRole('textbox', { name: 'Edit historical message' });
+  await user.click(await screen.findByRole("button", { name: "Edit message: Original question" }));
+  const editor = screen.getByRole("textbox", { name: "Edit historical message" });
   await user.clear(editor);
-  await user.type(editor, 'Corrected question');
+  await user.type(editor, "Corrected question");
 
-  const shiftEnterResult = await fireEvent.keyDown(editor, { key: 'Enter', shiftKey: true });
+  const shiftEnterResult = await fireEvent.keyDown(editor, { key: "Enter", shiftKey: true });
   const submittedAfterShiftEnter = mocks.submitInboxMessage.mock.calls.length;
-  const plainEnterResult = await fireEvent.keyDown(editor, { key: 'Enter' });
+  const plainEnterResult = await fireEvent.keyDown(editor, { key: "Enter" });
 
   expect(shiftEnterResult).toBe(true);
   expect(submittedAfterShiftEnter).toBe(0);
   expect(plainEnterResult).toBe(false);
 
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-branch', {
-    input: 'Corrected question',
-    delivery_policy: 'after_idle',
-    metadata: { source: 'dashboard_chat_branch_edit' },
-    branch_target_turn_id: 'turn-original',
-  }));
-  expect(screen.queryByRole('textbox', { name: 'Edit historical message' })).not.toBeInTheDocument();
-  expect(screen.getByText('Original question')).toBeInTheDocument();
-  expect(screen.getByText('Current suffix question')).toBeInTheDocument();
-  expect(screen.queryByText('Corrected question')).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-branch", {
+      input: "Corrected question",
+      delivery_policy: "after_idle",
+      metadata: { source: "dashboard_chat_branch_edit" },
+      branch_target_turn_id: "turn-original",
+    }),
+  );
+  expect(
+    screen.queryByRole("textbox", { name: "Edit historical message" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("Original question")).toBeInTheDocument();
+  expect(screen.getByText("Current suffix question")).toBeInTheDocument();
+  expect(screen.queryByText("Corrected question")).not.toBeInTheDocument();
 });
 
-test('rejects a blank edit locally and disables competing branch actions while submitting', async () => {
+test("rejects a blank edit locally and disables competing branch actions while submitting", async () => {
   const user = userEvent.setup();
-  const originalTurn = turn({ turn_id: 'turn-original', input: { summary: 'Original question' } });
+  const originalTurn = turn({ turn_id: "turn-original", input: { summary: "Original question" } });
   const otherTurn = turn({
-    turn_id: 'turn-other',
-    parent_turn_id: 'turn-original',
-    input: { summary: 'Other question' },
-    created_at: '2026-05-14T00:01:00Z',
+    turn_id: "turn-other",
+    parent_turn_id: "turn-original",
+    input: { summary: "Other question" },
+    created_at: "2026-05-14T00:01:00Z",
   });
   prepareBranchChat([originalTurn, otherTurn]);
   let resolveSubmission: (() => void) | null = null;
-  mocks.submitInboxMessage.mockImplementation(() => new Promise((resolve) => {
-    resolveSubmission = () => resolve(inboxMessage({
-      session_id: 'session-branch',
-      input: { summary: 'Original question' },
-      branch_target_turn_id: 'turn-original',
-    }));
-  }));
+  mocks.submitInboxMessage.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveSubmission = () =>
+          resolve(
+            inboxMessage({
+              session_id: "session-branch",
+              input: { summary: "Original question" },
+              branch_target_turn_id: "turn-original",
+            }),
+          );
+      }),
+  );
 
   render(SessionChatPage);
 
-  await user.click(await screen.findByRole('button', { name: 'Edit message: Original question' }));
-  const editor = screen.getByRole('textbox', { name: 'Edit historical message' });
+  await user.click(await screen.findByRole("button", { name: "Edit message: Original question" }));
+  const editor = screen.getByRole("textbox", { name: "Edit historical message" });
   await user.clear(editor);
-  await user.type(editor, '   ');
-  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-  await fireEvent.keyDown(editor, { key: 'Enter' });
+  await user.type(editor, "   ");
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  await fireEvent.keyDown(editor, { key: "Enter" });
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
   await user.clear(editor);
-  await user.type(editor, 'Corrected question');
-  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await user.type(editor, "Corrected question");
+  await user.click(screen.getByRole("button", { name: "Save" }));
 
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(1));
   expect(editor).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Edit message: Other question' })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Edit message: Other question" })).toBeDisabled();
   resolveSubmission?.();
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Edit message: Original question' })).toBeEnabled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Edit message: Original question" })).toBeEnabled(),
+  );
 });
 
-test('presents branch submission errors and keeps editing available for correction', async () => {
+test("presents branch submission errors and keeps editing available for correction", async () => {
   const user = userEvent.setup();
-  prepareBranchChat([turn({ turn_id: 'turn-original', input: { summary: 'Original question' } })]);
-  mocks.submitInboxMessage.mockRejectedValue(new Error('Target Turn can no longer be resolved'));
+  prepareBranchChat([turn({ turn_id: "turn-original", input: { summary: "Original question" } })]);
+  mocks.submitInboxMessage.mockRejectedValue(new Error("Target Turn can no longer be resolved"));
 
   render(SessionChatPage);
 
-  await user.click(await screen.findByRole('button', { name: 'Edit message: Original question' }));
-  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await user.click(await screen.findByRole("button", { name: "Edit message: Original question" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('Target Turn can no longer be resolved');
-  expect(screen.getByRole('textbox', { name: 'Edit historical message' })).toHaveValue('Original question');
-  expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Target Turn can no longer be resolved",
+  );
+  expect(screen.getByRole("textbox", { name: "Edit historical message" })).toHaveValue(
+    "Original question",
+  );
+  expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
 });
 
-test('keeps the divergent suffix until a projected tree update replaces it', async () => {
+test("keeps the divergent suffix until a projected tree update replaces it", async () => {
   const user = userEvent.setup();
-  const rootTurn = turn({ turn_id: 'turn-root', input: { summary: 'Root question' }, output: { summary: 'Root answer' } });
+  const rootTurn = turn({
+    turn_id: "turn-root",
+    input: { summary: "Root question" },
+    output: { summary: "Root answer" },
+  });
   const originalTurn = turn({
-    turn_id: 'turn-original',
-    parent_turn_id: 'turn-root',
-    input: { summary: 'Original middle question' },
-    output: { summary: 'Original middle answer' },
-    created_at: '2026-05-14T00:01:00Z',
+    turn_id: "turn-original",
+    parent_turn_id: "turn-root",
+    input: { summary: "Original middle question" },
+    output: { summary: "Original middle answer" },
+    created_at: "2026-05-14T00:01:00Z",
   });
   const oldSuffix = turn({
-    turn_id: 'turn-old-suffix',
-    parent_turn_id: 'turn-original',
-    input: { summary: 'Abandoned suffix question' },
-    output: { summary: 'Abandoned suffix answer' },
-    created_at: '2026-05-14T00:02:00Z',
+    turn_id: "turn-old-suffix",
+    parent_turn_id: "turn-original",
+    input: { summary: "Abandoned suffix question" },
+    output: { summary: "Abandoned suffix answer" },
+    created_at: "2026-05-14T00:02:00Z",
   });
   prepareBranchChat([rootTurn, originalTurn, oldSuffix]);
-  mocks.submitInboxMessage.mockResolvedValue(inboxMessage({
-    session_id: 'session-branch',
-    input: { summary: 'Replacement middle question' },
-    branch_target_turn_id: 'turn-original',
-  }));
+  mocks.submitInboxMessage.mockResolvedValue(
+    inboxMessage({
+      session_id: "session-branch",
+      input: { summary: "Replacement middle question" },
+      branch_target_turn_id: "turn-original",
+    }),
+  );
 
   render(SessionChatPage);
 
-  await user.click(await screen.findByRole('button', { name: 'Edit message: Original middle question' }));
-  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await user.click(
+    await screen.findByRole("button", { name: "Edit message: Original middle question" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
-  expect(screen.getByText('Abandoned suffix question')).toBeInTheDocument();
+  expect(screen.getByText("Abandoned suffix question")).toBeInTheDocument();
 
   const replacementTurn = turn({
-    turn_id: 'turn-replacement',
-    session_id: 'session-branch',
-    parent_turn_id: 'turn-root',
-    input: { summary: 'Replacement middle question' },
-    output: { summary: 'Replacement middle answer' },
-    created_at: '2026-05-14T00:03:00Z',
+    turn_id: "turn-replacement",
+    session_id: "session-branch",
+    parent_turn_id: "turn-root",
+    input: { summary: "Replacement middle question" },
+    output: { summary: "Replacement middle answer" },
+    created_at: "2026-05-14T00:03:00Z",
   });
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-branch',
-    mode: 'tree',
-    groups: [],
-    items: timelineItemsFromTurns([rootTurn, replacementTurn]),
-    latestTurnId: 'turn-replacement',
-    status: 'ready',
-  }));
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-branch",
+      mode: "tree",
+      groups: [],
+      items: timelineItemsFromTurns([rootTurn, replacementTurn]),
+      latestTurnId: "turn-replacement",
+      status: "ready",
+    }),
+  );
 
-  expect(await screen.findByText('Replacement middle question')).toBeInTheDocument();
-  expect(screen.queryByText('Abandoned suffix question')).not.toBeInTheDocument();
+  expect(await screen.findByText("Replacement middle question")).toBeInTheDocument();
+  expect(screen.queryByText("Abandoned suffix question")).not.toBeInTheDocument();
 });
 
-
-test('shows the initial prompt immediately after starting a chat while timeline is empty', async () => {
+test("shows the initial prompt immediately after starting a chat while timeline is empty", async () => {
   const user = userEvent.setup();
-  const created = session({ session_id: 'session-new', state: 'busy', current_turn_id: 'turn-new' });
+  const created = session({
+    session_id: "session-new",
+    state: "busy",
+    current_turn_id: "turn-new",
+  });
   const initialTurn = turn({
-    turn_id: 'turn-new',
-    session_id: 'session-new',
-    state: 'running',
-    input: { summary: 'hi' },
+    turn_id: "turn-new",
+    session_id: "session-new",
+    state: "running",
+    input: { summary: "hi" },
     output: null,
     completed_at: null,
   });
   mocks.createSession.mockImplementation(async () => {
     mocks.sessions.set([created]);
-    mocks.sessionDetail.set({ session: created, turns: [initialTurn], inboxMessages: [], events: [] });
+    mocks.sessionDetail.set({
+      session: created,
+      turns: [initialTurn],
+      inboxMessages: [],
+      events: [],
+    });
     return { session: created, initial_turn: initialTurn } satisfies CreateSessionResult;
   });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set(timelineStateValue({ sessionId, status: 'empty' }));
+    mocks.timelineState.set(timelineStateValue({ sessionId, status: "empty" }));
     return null;
   });
   render(NewChatPage);
 
-  await user.type(screen.getByPlaceholderText('What should the agent do?'), 'hi');
-  await fireEvent.click(screen.getByRole('button', { name: /start session/i }));
+  await user.type(screen.getByPlaceholderText("What should the agent do?"), "hi");
+  await fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 
-  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new'));
+  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-new"));
 
   cleanup();
-  window.history.pushState({}, '', '/dashboard/chat/session-new');
-  mocks.pathParams = { sessionId: 'session-new' };
+  window.history.pushState({}, "", "/dashboard/chat/session-new");
+  mocks.pathParams = { sessionId: "session-new" };
   render(SessionChatPage);
 
-  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
+  expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
 });
 
-
-test('does not substitute projected Turn summaries while timeline history is still loading', async () => {
-  const selected = session({ session_id: 'session-tui', state: 'busy', current_turn_id: 'turn-tui' });
+test("does not substitute projected Turn summaries while timeline history is still loading", async () => {
+  const selected = session({
+    session_id: "session-tui",
+    state: "busy",
+    current_turn_id: "turn-tui",
+  });
   const activeTurn = turn({
-    turn_id: 'turn-tui',
-    session_id: 'session-tui',
-    state: 'running',
-    input: { summary: 'typed in tui' },
+    turn_id: "turn-tui",
+    session_id: "session-tui",
+    state: "running",
+    input: { summary: "typed in tui" },
     output: null,
     completed_at: null,
   });
-  window.history.pushState({}, '', '/dashboard/chat/session-tui');
-  mocks.pathParams = { sessionId: 'session-tui' };
+  window.history.pushState({}, "", "/dashboard/chat/session-tui");
+  mocks.pathParams = { sessionId: "session-tui" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [activeTurn], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [activeTurn],
+    inboxMessages: [],
+    events: [],
+  });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set(timelineStateValue({ sessionId, loading: true, status: 'loading' }));
+    mocks.timelineState.set(timelineStateValue({ sessionId, loading: true, status: "loading" }));
     return null;
   });
 
   render(SessionChatPage);
 
-  expect(await screen.findByText('Loading conversation…')).toBeInTheDocument();
-  expect(screen.queryByText('typed in tui')).not.toBeInTheDocument();
+  expect(await screen.findByText("Loading conversation…")).toBeInTheDocument();
+  expect(screen.queryByText("typed in tui")).not.toBeInTheDocument();
 });
 
-
-test('shows workspace git status in the selected chat composer summary', async () => {
-  const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1', workspace: '/repo/pontia', handle: null });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("shows workspace git status in the selected chat composer summary", async () => {
+  const selected = session({
+    session_id: "session-2",
+    state: "idle",
+    workspace_id: "workspace-1",
+    workspace: "/repo/pontia",
+    handle: null,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.workspaces.set([workspace({ workspace_id: 'workspace-1', name: 'project', canonical_path: '/repo/pontia', display_path: '~/repo/pontia' })]);
+  mocks.workspaces.set([
+    workspace({
+      workspace_id: "workspace-1",
+      name: "project",
+      canonical_path: "/repo/pontia",
+      display_path: "~/repo/pontia",
+    }),
+  ]);
   mocks.workspaceGitStatuses.set({
-    'workspace-1': {
-      workspace_id: 'workspace-1',
-      repo_root: '/repo/pontia',
-      branch: 'main',
-      upstream: 'origin/main',
+    "workspace-1": {
+      workspace_id: "workspace-1",
+      repo_root: "/repo/pontia",
+      branch: "main",
+      upstream: "origin/main",
       ahead: 1,
       behind: 2,
       staged_count: 3,
@@ -780,88 +976,129 @@ test('shows workspace git status in the selected chat composer summary', async (
       untracked_count: 5,
       conflicted_count: 6,
       clean: false,
-      state: 'observed',
+      state: "observed",
       failure: null,
-      observed_at: '2026-05-14T01:30:00Z',
-      updated_at: '2026-05-14T01:30:00Z',
+      observed_at: "2026-05-14T01:30:00Z",
+      updated_at: "2026-05-14T01:30:00Z",
     },
   });
 
   render(SessionChatPage);
 
-  const composer = await screen.findByPlaceholderText('Continue the thread…');
+  const composer = await screen.findByPlaceholderText("Continue the thread…");
   composer.focus();
-  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith('workspace-1'));
-  const sessionDetailsButton = await screen.findByRole('button', { name: 'Session details: project · pi · main · dirty' });
-  for (const value of ['project', 'main', '↑1', '↓2', '+3', '~4', '?5', '!6', 'pi']) {
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1"));
+  const sessionDetailsButton = await screen.findByRole("button", {
+    name: "Session details: project · pi · main · dirty",
+  });
+  for (const value of ["project", "main", "↑1", "↓2", "+3", "~4", "?5", "!6", "pi"]) {
     expect(within(sessionDetailsButton).getByText(value)).toBeInTheDocument();
   }
 });
 
-
-test('does not show the empty conversation state while the selected chat is initializing', async () => {
+test("does not show the empty conversation state while the selected chat is initializing", async () => {
   let resolveRestore: ((restored: boolean) => void) | null = null;
-  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const selected = session({
+    session_id: "session-2",
+    state: "idle",
+    capabilities: { timeline: true },
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.restoreSessionTimeline.mockImplementation(() => new Promise((resolve) => {
-    resolveRestore = resolve;
-  }));
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.restoreSessionTimeline.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveRestore = resolve;
+      }),
+  );
   mocks.loadSessionTimeline.mockImplementation(() => new Promise(() => undefined));
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText('Continue the thread…');
-  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
-  expect(document.querySelector('[data-chat-conversation-skeleton]')).not.toBeInTheDocument();
+  await screen.findByPlaceholderText("Continue the thread…");
+  expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
+  expect(document.querySelector("[data-chat-conversation-skeleton]")).not.toBeInTheDocument();
 
   resolveRestore?.(false);
-  await waitFor(() => expect(document.querySelector('[data-chat-conversation-skeleton]')).toBeInTheDocument());
-  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(document.querySelector("[data-chat-conversation-skeleton]")).toBeInTheDocument(),
+  );
+  expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
 });
 
-
-test('keeps the selected chat transcript hidden until the initial bottom scroll settles', async () => {
+test("keeps the selected chat transcript hidden until the initial bottom scroll settles", async () => {
   let resolveTimeline: (() => void) | null = null;
-  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const selected = session({
+    session_id: "session-2",
+    state: "idle",
+    capabilities: { timeline: true },
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
     await new Promise<void>((resolve) => (resolveTimeline = resolve));
-    mocks.timelineState.set(timelineStateValue({
-      sessionId,
-      items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
-      latestTurnId: 'turn-1',
-      status: 'ready',
-    }));
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId,
+        items: timelineItemsFromTurns([turn({ session_id: "session-2" })]),
+        latestTurnId: "turn-1",
+        status: "ready",
+      }),
+    );
     return null;
   });
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild', latestTurnId: 'turn-1' }));
+  await waitFor(() =>
+    expect(mocks.loadSessionTimeline).toHaveBeenCalledWith("session-2", {
+      mode: "rebuild",
+      latestTurnId: "turn-1",
+    }),
+  );
   expect(document.querySelector('[data-chat-initial-scroll-pending="true"]')).toBeInTheDocument();
 
   resolveTimeline?.();
-  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="true"]')).not.toBeInTheDocument());
+  await waitFor(() =>
+    expect(
+      document.querySelector('[data-chat-initial-scroll-pending="true"]'),
+    ).not.toBeInTheDocument(),
+  );
 });
 
-
-test('scrolls to the document bottom after entering a selected chat', async () => {
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("scrolls to the document bottom after entering a selected chat", async () => {
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "idle" });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 4096,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
 
   render(SessionChatPage);
 
@@ -869,31 +1106,41 @@ test('scrolls to the document bottom after entering a selected chat', async () =
   scrollTo.mockRestore();
 });
 
-
-test('scrolls to the settled document bottom when switching chats through SPA navigation', async () => {
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const originalScrollHeight = Object.getOwnPropertyDescriptor(document.documentElement, 'scrollHeight')
-    ?? Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
-  const firstSession = session({ session_id: 'session-1', state: 'idle' });
-  const secondSession = session({ session_id: 'session-2', state: 'idle' });
+test("scrolls to the settled document bottom when switching chats through SPA navigation", async () => {
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const originalScrollHeight =
+    Object.getOwnPropertyDescriptor(document.documentElement, "scrollHeight") ??
+    Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+  const firstSession = session({ session_id: "session-1", state: "idle" });
+  const secondSession = session({ session_id: "session-2", state: "idle" });
   let layoutPasses = 0;
 
   try {
-    Object.defineProperty(document.documentElement, 'scrollHeight', {
+    Object.defineProperty(document.documentElement, "scrollHeight", {
       configurable: true,
       get: () => {
         layoutPasses += 1;
         return layoutPasses < 2 ? 2048 : 4096;
       },
     });
-    window.history.pushState({}, '', '/dashboard/chat/session-1');
-    mocks.pathParams = { sessionId: 'session-1' };
+    window.history.pushState({}, "", "/dashboard/chat/session-1");
+    mocks.pathParams = { sessionId: "session-1" };
     mocks.loadedSessions = [firstSession, secondSession];
     mocks.sessions.set([firstSession, secondSession]);
-    mocks.sessionDetail.set({ session: firstSession, turns: [turn({ session_id: 'session-1' })], inboxMessages: [], events: [] });
+    mocks.sessionDetail.set({
+      session: firstSession,
+      turns: [turn({ session_id: "session-1" })],
+      inboxMessages: [],
+      events: [],
+    });
     mocks.loadSessionDetail.mockImplementation(async (sessionId: string) => {
-      const selected = sessionId === 'session-2' ? secondSession : firstSession;
-      mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: sessionId })], inboxMessages: [], events: [] });
+      const selected = sessionId === "session-2" ? secondSession : firstSession;
+      mocks.sessionDetail.set({
+        session: selected,
+        turns: [turn({ session_id: sessionId })],
+        inboxMessages: [],
+        events: [],
+      });
       return null;
     });
 
@@ -902,200 +1149,283 @@ test('scrolls to the settled document bottom when switching chats through SPA na
     scrollTo.mockClear();
 
     layoutPasses = 0;
-    window.history.pushState({}, '', '/dashboard/chat/session-2');
-    mocks.pathParams = { sessionId: 'session-2' };
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.history.pushState({}, "", "/dashboard/chat/session-2");
+    mocks.pathParams = { sessionId: "session-2" };
+    window.dispatchEvent(new PopStateEvent("popstate"));
 
     await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
   } finally {
     scrollTo.mockRestore();
     mocks.loadSessionDetail.mockImplementation(async () => null);
-    if (originalScrollHeight) Object.defineProperty(document.documentElement, 'scrollHeight', originalScrollHeight);
+    if (originalScrollHeight)
+      Object.defineProperty(document.documentElement, "scrollHeight", originalScrollHeight);
     else delete (document.documentElement as HTMLElement & { scrollHeight?: number }).scrollHeight;
   }
 });
 
-
-test('does not load earlier chat history before the initial selected chat scroll settles', async () => {
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("does not load earlier chat history before the initial selected chat scroll settles", async () => {
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "idle" });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 4096,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2',
-    items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
-    nextOlderTurnId: 'turn-older',
-    latestTurnId: 'turn-1',
-    hasMore: true,
-    status: 'ready',
-  }));
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([turn({ session_id: "session-2" })]),
+      nextOlderTurnId: "turn-older",
+      latestTurnId: "turn-1",
+      hasMore: true,
+      status: "ready",
+    }),
+  );
 
   render(SessionChatPage);
 
   await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 40 });
-  window.dispatchEvent(new Event('scroll'));
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 40 });
+  window.dispatchEvent(new Event("scroll"));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'more' });
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith("session-2", { mode: "more" });
   scrollTo.mockRestore();
 });
 
-
-test('loads earlier chat history only after pulling beyond the top history sentinel', async () => {
+test("loads earlier chat history only after pulling beyond the top history sentinel", async () => {
   installIntersectionObserverMock();
-  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const selected = session({
+    session_id: "session-2",
+    state: "idle",
+    capabilities: { timeline: true },
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2',
-    items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
-    nextOlderTurnId: 'turn-older',
-    latestTurnId: 'turn-1',
-    hasMore: true,
-    status: 'ready',
-  }));
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([turn({ session_id: "session-2" })]),
+      nextOlderTurnId: "turn-older",
+      latestTurnId: "turn-1",
+      hasMore: true,
+      status: "ready",
+    }),
+  );
 
   render(SessionChatPage);
 
-  expect(screen.queryByRole('button', { name: /load earlier messages/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /load earlier messages/i })).not.toBeInTheDocument();
 
   await waitFor(() => expect(observedHistorySentinels()).toHaveLength(1));
-  TestIntersectionObserver.instances.find((instance) => instance.observedElement?.hasAttribute('data-chat-history-top-sentinel'))?.trigger(true);
-  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'more' });
+  TestIntersectionObserver.instances
+    .find((instance) => instance.observedElement?.hasAttribute("data-chat-history-top-sentinel"))
+    ?.trigger(true);
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith("session-2", { mode: "more" });
 
-  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -120 }));
+  window.dispatchEvent(new WheelEvent("wheel", { deltaY: -120 }));
 
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'more' }));
+  await waitFor(() =>
+    expect(mocks.loadSessionTimeline).toHaveBeenCalledWith("session-2", { mode: "more" }),
+  );
 });
 
-
-test('restores a cached selected chat and refreshes it without rebuilding history', async () => {
-  const selected = session({ session_id: 'session-cached', state: 'running' });
-  window.history.pushState({}, '', '/dashboard/chat/session-cached');
-  mocks.pathParams = { sessionId: 'session-cached' };
+test("restores a cached selected chat and refreshes it without rebuilding history", async () => {
+  const selected = session({ session_id: "session-cached", state: "running" });
+  window.history.pushState({}, "", "/dashboard/chat/session-cached");
+  mocks.pathParams = { sessionId: "session-cached" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ turn_id: 'turn-latest', session_id: 'session-cached' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ turn_id: "turn-latest", session_id: "session-cached" })],
+    inboxMessages: [],
+    events: [],
+  });
   let resolveRefresh: (() => void) | null = null;
   let resolveDetail: (() => void) | null = null;
-  mocks.loadSessionDetail.mockImplementation(() => new Promise((resolve) => {
-    resolveDetail = () => resolve(null);
-  }));
-  mocks.refreshSessionTimeline.mockImplementation(() => new Promise<void>((resolve) => {
-    resolveRefresh = resolve;
-  }));
+  mocks.loadSessionDetail.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveDetail = () => resolve(null);
+      }),
+  );
+  mocks.refreshSessionTimeline.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveRefresh = resolve;
+      }),
+  );
   mocks.restoreSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set(timelineStateValue({
-      sessionId,
-      items: timelineItemsFromTurns([turn({ turn_id: 'turn-latest', session_id: sessionId })]),
-      nextOlderTurnId: 'turn-older',
-      latestTurnId: 'turn-latest',
-      hasMore: true,
-      status: 'ready',
-    }));
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId,
+        items: timelineItemsFromTurns([turn({ turn_id: "turn-latest", session_id: sessionId })]),
+        nextOlderTurnId: "turn-older",
+        latestTurnId: "turn-latest",
+        hasMore: true,
+        status: "ready",
+      }),
+    );
     return true;
   });
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.restoreSessionTimeline).toHaveBeenCalledWith('session-cached', { topology: false }));
-  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-cached', 'turn-latest'));
-  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-cached', expect.objectContaining({ mode: 'rebuild' }));
-  expect(await screen.findByText('hello')).toBeInTheDocument();
-  expect(document.querySelector('[data-chat-conversation-skeleton]')).not.toBeInTheDocument();
-  expect(document.querySelector('[data-chat-initial-scroll-pending="true"]')).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(mocks.restoreSessionTimeline).toHaveBeenCalledWith("session-cached", {
+      topology: false,
+    }),
+  );
+  await waitFor(() =>
+    expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith("session-cached", "turn-latest"),
+  );
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith(
+    "session-cached",
+    expect.objectContaining({ mode: "rebuild" }),
+  );
+  expect(await screen.findByText("hello")).toBeInTheDocument();
+  expect(document.querySelector("[data-chat-conversation-skeleton]")).not.toBeInTheDocument();
+  expect(
+    document.querySelector('[data-chat-initial-scroll-pending="true"]'),
+  ).not.toBeInTheDocument();
   resolveDetail?.();
   resolveRefresh?.();
 });
 
-test('rebuilds a restored chat when session detail topology disagrees with the cache', async () => {
+test("rebuilds a restored chat when session detail topology disagrees with the cache", async () => {
   const listed = session({
-    session_id: 'session-cached',
-    state: 'idle',
+    session_id: "session-cached",
+    state: "idle",
     capabilities: { timeline: true, topology: false },
   });
   const detailed = session({
-    session_id: 'session-cached',
-    state: 'idle',
+    session_id: "session-cached",
+    state: "idle",
     capabilities: { timeline: true, topology: true },
   });
-  window.history.pushState({}, '', '/dashboard/chat/session-cached');
-  mocks.pathParams = { sessionId: 'session-cached' };
+  window.history.pushState({}, "", "/dashboard/chat/session-cached");
+  mocks.pathParams = { sessionId: "session-cached" };
   mocks.loadedSessions = [listed];
   mocks.sessions.set([listed]);
-  mocks.sessionDetail.set({ session: listed, turns: [turn({ session_id: 'session-cached' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: listed,
+    turns: [turn({ session_id: "session-cached" })],
+    inboxMessages: [],
+    events: [],
+  });
   let resolveDetail: (() => void) | null = null;
   let resolveTimeline: (() => void) | null = null;
-  mocks.loadSessionDetail.mockImplementation(() => new Promise((resolve) => {
-    resolveDetail = () => {
-      mocks.sessionDetail.set({
-        session: detailed,
-        turns: [turn({ session_id: 'session-cached' })],
-        inboxMessages: [],
-        events: [],
-      });
-      resolve(null);
-    };
-  }));
+  mocks.loadSessionDetail.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveDetail = () => {
+          mocks.sessionDetail.set({
+            session: detailed,
+            turns: [turn({ session_id: "session-cached" })],
+            inboxMessages: [],
+            events: [],
+          });
+          resolve(null);
+        };
+      }),
+  );
   mocks.restoreSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set(timelineStateValue({
-      sessionId,
-      mode: 'linear',
-      items: timelineItemsFromTurns([turn({ session_id: sessionId })]),
-      latestTurnId: 'turn-1',
-      status: 'ready',
-    }));
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId,
+        mode: "linear",
+        items: timelineItemsFromTurns([turn({ session_id: sessionId })]),
+        latestTurnId: "turn-1",
+        status: "ready",
+      }),
+    );
     return true;
   });
-  mocks.loadSessionTimeline.mockImplementation(() => new Promise(() => {
-    resolveTimeline = () => undefined;
-  }));
+  mocks.loadSessionTimeline.mockImplementation(
+    () =>
+      new Promise(() => {
+        resolveTimeline = () => undefined;
+      }),
+  );
 
   render(SessionChatPage);
 
-  expect(await screen.findByText('hello')).toBeInTheDocument();
-  expect(document.querySelector('[data-chat-conversation-skeleton]')).not.toBeInTheDocument();
+  expect(await screen.findByText("hello")).toBeInTheDocument();
+  expect(document.querySelector("[data-chat-conversation-skeleton]")).not.toBeInTheDocument();
   resolveDetail?.();
-  await waitFor(() => expect(document.querySelector('[data-chat-conversation-skeleton]')).toBeInTheDocument());
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-cached', {
-    mode: 'rebuild',
-    latestTurnId: 'turn-1',
-    topology: true,
-  }));
+  await waitFor(() =>
+    expect(document.querySelector("[data-chat-conversation-skeleton]")).toBeInTheDocument(),
+  );
+  await waitFor(() =>
+    expect(mocks.loadSessionTimeline).toHaveBeenCalledWith("session-cached", {
+      mode: "rebuild",
+      latestTurnId: "turn-1",
+      topology: true,
+    }),
+  );
   resolveTimeline?.();
 });
 
-test('does not refresh an already-loaded selected chat when the window regains focus', async () => {
-  const selected = session({ session_id: 'session-2', state: 'running' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("does not refresh an already-loaded selected chat when the window regains focus", async () => {
+  const selected = session({ session_id: "session-2", state: "running" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2',
-    items: timelineItemsFromTurns([
-      turn({ turn_id: 'turn-older', session_id: 'session-2', input: { summary: 'older question' }, output: { summary: 'older answer' } }),
-      turn({ turn_id: 'turn-latest', session_id: 'session-2', input: { summary: 'latest question' }, output: { summary: 'latest answer' } }),
-    ]),
-    nextOlderTurnId: 'turn-older',
-    latestTurnId: 'turn-latest',
-    hasMore: true,
-    status: 'ready',
-  }));
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([
+        turn({
+          turn_id: "turn-older",
+          session_id: "session-2",
+          input: { summary: "older question" },
+          output: { summary: "older answer" },
+        }),
+        turn({
+          turn_id: "turn-latest",
+          session_id: "session-2",
+          input: { summary: "latest question" },
+          output: { summary: "latest answer" },
+        }),
+      ]),
+      nextOlderTurnId: "turn-older",
+      latestTurnId: "turn-latest",
+      hasMore: true,
+      status: "ready",
+    }),
+  );
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-latest'));
-  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith('session-2', { mode: 'rebuild' });
-  expect(mocks.resetTimelineState).not.toHaveBeenCalledWith('session-2');
+  await waitFor(() =>
+    expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith("session-2", "turn-latest"),
+  );
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith("session-2", { mode: "rebuild" });
+  expect(mocks.resetTimelineState).not.toHaveBeenCalledWith("session-2");
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   mocks.loadSessionDetail.mockClear();
   mocks.loadSessionTimeline.mockClear();
@@ -1103,16 +1433,28 @@ test('does not refresh an already-loaded selected chat when the window regains f
   await new Promise((resolve) => setTimeout(resolve, 0));
   mocks.loadSessionTimeline.mockClear();
   mocks.refreshSessionTimeline.mockClear();
-  mocks.timelineState.set(timelineStateValue({
-    ...mocks.timelineState.get(),
-    sessionId: 'session-2',
-    items: timelineItemsFromTurns([
-      turn({ turn_id: 'turn-older', session_id: 'session-2', input: { summary: 'older question' }, output: { summary: 'older answer' } }),
-      turn({ turn_id: 'turn-latest', session_id: 'session-2', input: { summary: 'latest question' }, output: { summary: 'latest answer' } }),
-    ]),
-  }));
+  mocks.timelineState.set(
+    timelineStateValue({
+      ...mocks.timelineState.get(),
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([
+        turn({
+          turn_id: "turn-older",
+          session_id: "session-2",
+          input: { summary: "older question" },
+          output: { summary: "older answer" },
+        }),
+        turn({
+          turn_id: "turn-latest",
+          session_id: "session-2",
+          input: { summary: "latest question" },
+          output: { summary: "latest answer" },
+        }),
+      ]),
+    }),
+  );
 
-  window.dispatchEvent(new Event('focus'));
+  window.dispatchEvent(new Event("focus"));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   expect(mocks.loadSessionDetail).not.toHaveBeenCalled();
@@ -1120,11 +1462,10 @@ test('does not refresh an already-loaded selected chat when the window regains f
   expect(mocks.refreshSessionTimeline).not.toHaveBeenCalled();
 });
 
-
-test('does not refresh git status for selected-session idle events', async () => {
-  const selected = session({ session_id: 'session-2', state: 'idle', workspace_id: 'workspace-1' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("does not refresh git status for selected-session idle events", async () => {
+  const selected = session({ session_id: "session-2", state: "idle", workspace_id: "workspace-1" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
@@ -1136,64 +1477,73 @@ test('does not refresh git status for selected-session idle events', async () =>
   mocks.refreshSessionTimeline.mockClear();
 
   const idleEvent = (eventId: string, type: string, turnId: string | null = null) => ({
-    kind: 'session_event' as const,
+    kind: "session_event" as const,
     id: eventId,
-    occurred_at: '2026-05-14T00:00:00Z',
+    occurred_at: "2026-05-14T00:00:00Z",
     event: {
       event_id: eventId,
-      session_id: 'session-2',
+      session_id: "session-2",
       turn_id: turnId,
-      source: 'runtime',
+      source: "runtime",
       type,
-      time: '2026-05-14T00:00:00Z',
+      time: "2026-05-14T00:00:00Z",
       payload: {},
     },
   });
 
   for (const listener of mocks.dashboardEventListeners) {
-    listener(idleEvent('evt-ready', 'session.ready'));
-    listener(idleEvent('evt-completed', 'turn.completed', 'turn-1'));
-    listener(idleEvent('evt-failed', 'turn.failed'));
+    listener(idleEvent("evt-ready", "session.ready"));
+    listener(idleEvent("evt-completed", "turn.completed", "turn-1"));
+    listener(idleEvent("evt-failed", "turn.failed"));
   }
 
-  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1'));
+  await waitFor(() =>
+    expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith("session-2", "turn-1"),
+  );
   expect(mocks.refreshWorkspaceGitStatus).not.toHaveBeenCalled();
 });
 
-
-test('does not toast transient network errors from automatic chat refreshes', async () => {
-  const selected = session({ session_id: 'session-2', state: 'running' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("does not toast transient network errors from automatic chat refreshes", async () => {
+  const selected = session({ session_id: "session-2", state: "running" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2',
-    items: timelineItemsFromTurns([turn({ session_id: 'session-2' })]),
-    latestTurnId: 'turn-1',
-    status: 'ready',
-  }));
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([turn({ session_id: "session-2" })]),
+      latestTurnId: "turn-1",
+      status: "ready",
+    }),
+  );
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith('session-2', 'turn-1'));
+  await waitFor(() =>
+    expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith("session-2", "turn-1"),
+  );
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
   mocks.toastError.mockClear();
 
-  mocks.sessionDetailError.set('Failed to fetch');
-  mocks.timelineState.set({ ...mocks.timelineState.get(), error: 'net::ERR_NETWORK_CHANGED' });
-  mocks.sessionsError.set('NetworkError when attempting to fetch resource.');
+  mocks.sessionDetailError.set("Failed to fetch");
+  mocks.timelineState.set({ ...mocks.timelineState.get(), error: "net::ERR_NETWORK_CHANGED" });
+  mocks.sessionsError.set("NetworkError when attempting to fetch resource.");
 
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(mocks.toastError).not.toHaveBeenCalled();
 });
 
-
-test('mobile composer resize button opens a fullscreen follow-up composer sharing the current input', async () => {
+test("mobile composer resize button opens a fullscreen follow-up composer sharing the current input", async () => {
   const originalMatchMedia = window.matchMedia;
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: query.includes('max-width'),
+    matches: query.includes("max-width"),
     media: query,
     onchange: null,
     addListener: vi.fn(),
@@ -1203,9 +1553,9 @@ test('mobile composer resize button opens a fullscreen follow-up composer sharin
     dispatchEvent: vi.fn(),
   }));
   const user = userEvent.setup();
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
@@ -1214,85 +1564,88 @@ test('mobile composer resize button opens a fullscreen follow-up composer sharin
   try {
     render(SessionChatPage);
 
-    const composerInput = await screen.findByPlaceholderText('Continue the thread…');
-    await user.type(composerInput, 'mobile draft');
-    await fireEvent.click(screen.getByRole('button', { name: 'Expand message composer' }));
+    const composerInput = await screen.findByPlaceholderText("Continue the thread…");
+    await user.type(composerInput, "mobile draft");
+    await fireEvent.click(screen.getByRole("button", { name: "Expand message composer" }));
 
-    const fullscreenComposer = screen.getByRole('dialog', { name: 'Expanded message composer' });
-    const fullscreenInput = within(fullscreenComposer).getByPlaceholderText('Continue the thread…');
-    expect(fullscreenInput).toHaveTextContent('mobile draft');
+    const fullscreenComposer = screen.getByRole("dialog", { name: "Expanded message composer" });
+    const fullscreenInput = within(fullscreenComposer).getByPlaceholderText("Continue the thread…");
+    expect(fullscreenInput).toHaveTextContent("mobile draft");
 
-    await user.type(fullscreenInput, ' plus more');
-    await fireEvent.click(within(fullscreenComposer).getByRole('button', { name: /send/i }));
+    await user.type(fullscreenInput, " plus more");
+    await fireEvent.click(within(fullscreenComposer).getByRole("button", { name: /send/i }));
 
-    await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
-      input: 'mobile draft plus more',
-      delivery_policy: 'after_idle',
-      metadata: { source: 'dashboard_chat' },
-    }));
+    await waitFor(() =>
+      expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
+        input: "mobile draft plus more",
+        delivery_policy: "after_idle",
+        metadata: { source: "dashboard_chat" },
+      }),
+    );
   } finally {
     window.matchMedia = originalMatchMedia;
   }
 });
 
-
-test('shows idle thought summary trigger above the final assistant response', async () => {
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("shows idle thought summary trigger above the final assistant response", async () => {
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2',
-    items: [
-      {
-        item_id: 'turn-1:user',
-        kind: 'user',
-        raw_kind: 'user',
-        role: 'user',
-        title: null,
-        status: null,
-        occurred_at: '2026-05-14T00:00:00Z',
-        content_preview: 'hello',
-        turn_id: 'turn-1',
-      },
-      {
-        item_id: 'turn-1:thinking',
-        kind: 'thinking',
-        raw_kind: 'thinking',
-        role: 'assistant',
-        title: null,
-        status: null,
-        occurred_at: '2026-05-14T00:00:01Z',
-        content_preview: 'I should inspect the code.',
-        turn_id: 'turn-1',
-      },
-      {
-        item_id: 'turn-1:tool',
-        kind: 'tool_call',
-        raw_kind: 'tool_call',
-        role: 'tool',
-        title: 'read',
-        status: 'started',
-        occurred_at: '2026-05-14T00:00:02Z',
-        content_preview: 'read {"path":"src/app.ts"}',
-        turn_id: 'turn-1',
-      },
-      {
-        item_id: 'turn-1:assistant',
-        kind: 'assistant',
-        raw_kind: 'text',
-        role: 'assistant',
-        title: null,
-        status: null,
-        occurred_at: '2026-05-14T00:00:03Z',
-        content_preview: 'Final answer',
-        turn_id: 'turn-1',
-      },
-    ],
-    latestTurnId: 'turn-1',
-    status: 'ready',
-  }));
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: [
+        {
+          item_id: "turn-1:user",
+          kind: "user",
+          raw_kind: "user",
+          role: "user",
+          title: null,
+          status: null,
+          occurred_at: "2026-05-14T00:00:00Z",
+          content_preview: "hello",
+          turn_id: "turn-1",
+        },
+        {
+          item_id: "turn-1:thinking",
+          kind: "thinking",
+          raw_kind: "thinking",
+          role: "assistant",
+          title: null,
+          status: null,
+          occurred_at: "2026-05-14T00:00:01Z",
+          content_preview: "I should inspect the code.",
+          turn_id: "turn-1",
+        },
+        {
+          item_id: "turn-1:tool",
+          kind: "tool_call",
+          raw_kind: "tool_call",
+          role: "tool",
+          title: "read",
+          status: "started",
+          occurred_at: "2026-05-14T00:00:02Z",
+          content_preview: 'read {"path":"src/app.ts"}',
+          turn_id: "turn-1",
+        },
+        {
+          item_id: "turn-1:assistant",
+          kind: "assistant",
+          raw_kind: "text",
+          role: "assistant",
+          title: null,
+          status: null,
+          occurred_at: "2026-05-14T00:00:03Z",
+          content_preview: "Final answer",
+          turn_id: "turn-1",
+        },
+      ],
+      latestTurnId: "turn-1",
+      status: "ready",
+    }),
+  );
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   const timelineSnapshot = mocks.timelineState.get();
   mocks.loadSessionTimeline.mockImplementationOnce(async () => {
@@ -1302,79 +1655,85 @@ test('shows idle thought summary trigger above the final assistant response', as
 
   render(SessionChatPage);
 
-  expect(await screen.findByText('Final answer')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /show agent work steps/i })).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.getByText('I should inspect the code.')).not.toBeVisible();
-  expect(screen.queryByText('started')).not.toBeInTheDocument();
-  expect(screen.queryByLabelText('started')).not.toBeInTheDocument();
+  expect(await screen.findByText("Final answer")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /show agent work steps/i })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  expect(screen.getByText("I should inspect the code.")).not.toBeVisible();
+  expect(screen.queryByText("started")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("started")).not.toBeInTheDocument();
 });
 
-
-test('renders assistant output as markdown while leaving user prompts as plain text', async () => {
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("renders assistant output as markdown while leaving user prompts as plain text", async () => {
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({
     session: selected,
-    turns: [turn({
-      session_id: 'session-2',
-      input: { summary: '**literal prompt**' },
-      output: { summary: '**bold output**\n\n- first item' },
-    })],
+    turns: [
+      turn({
+        session_id: "session-2",
+        input: { summary: "**literal prompt**" },
+        output: { summary: "**bold output**\n\n- first item" },
+      }),
+    ],
     inboxMessages: [],
     events: [],
-      });
+  });
 
   const { container } = render(SessionChatPage);
 
-  expect(await screen.findByText('**literal prompt**')).toBeInTheDocument();
-  expect(container.querySelector('strong')?.textContent).toBe('bold output');
-  expect(container.querySelector('li')?.textContent).toBe('first item');
+  expect(await screen.findByText("**literal prompt**")).toBeInTheDocument();
+  expect(container.querySelector("strong")?.textContent).toBe("bold output");
+  expect(container.querySelector("li")?.textContent).toBe("first item");
 });
 
-
-test('highlights fenced code blocks in assistant markdown and copies their text', async () => {
+test("highlights fenced code blocks in assistant markdown and copies their text", async () => {
   const writeText = vi.fn(async () => undefined);
-  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({
     session: selected,
-    turns: [turn({
-      session_id: 'session-2',
-      output: { summary: '```ts\nconst answer: number = 42;\n```' },
-    })],
+    turns: [
+      turn({
+        session_id: "session-2",
+        output: { summary: "```ts\nconst answer: number = 42;\n```" },
+      }),
+    ],
     inboxMessages: [],
     events: [],
-      });
+  });
 
   const { container } = render(SessionChatPage);
 
   expect(await screen.findByText(/answer/)).toBeInTheDocument();
-  expect(container.querySelector('pre.shiki')).toBeInTheDocument();
-  expect(container.querySelector('pre.shiki span[style*="color:"]')?.textContent).toContain('const');
-  const copyCodeButton = await screen.findByRole('button', { name: /copy code block/i });
-  const pre = container.querySelector('pre');
-  const codeBlockHeader = container.querySelector('[data-code-block-header]');
-  expect(codeBlockHeader).toHaveTextContent('ts');
+  expect(container.querySelector("pre.shiki")).toBeInTheDocument();
+  expect(container.querySelector('pre.shiki span[style*="color:"]')?.textContent).toContain(
+    "const",
+  );
+  const copyCodeButton = await screen.findByRole("button", { name: /copy code block/i });
+  const pre = container.querySelector("pre");
+  const codeBlockHeader = container.querySelector("[data-code-block-header]");
+  expect(codeBlockHeader).toHaveTextContent("ts");
 
   expect(navigator.clipboard?.writeText).toBe(writeText);
-  expect(copyCodeButton.querySelector('svg')).toBeInTheDocument();
+  expect(copyCodeButton.querySelector("svg")).toBeInTheDocument();
   await fireEvent.click(copyCodeButton);
-  await waitFor(() => expect(writeText).toHaveBeenCalledWith('const answer: number = 42;'));
-  expect(await screen.findByRole('button', { name: /code block copied/i })).toBeInTheDocument();
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith("const answer: number = 42;"));
+  expect(await screen.findByRole("button", { name: /code block copied/i })).toBeInTheDocument();
 });
 
-
-test('shows pending, failed, and dispatching messages above the composer without inbox controls', async () => {
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("shows pending, failed, and dispatching messages above the composer without inbox controls", async () => {
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({
@@ -1382,70 +1741,75 @@ test('shows pending, failed, and dispatching messages above the composer without
     turns: [],
     inboxMessages: [
       inboxMessage({
-        message_id: 'message-dispatched',
-        session_id: 'session-2',
-        state: 'dispatched',
-        input: { summary: 'Already sent' },
+        message_id: "message-dispatched",
+        session_id: "session-2",
+        state: "dispatched",
+        input: { summary: "Already sent" },
       }),
       inboxMessage({
-        message_id: 'message-pending-old',
-        session_id: 'session-2',
-        state: 'pending',
-        input: { summary: 'Continue implementation' },
-        updated_at: '2026-05-14T00:00:04Z',
+        message_id: "message-pending-old",
+        session_id: "session-2",
+        state: "pending",
+        input: { summary: "Continue implementation" },
+        updated_at: "2026-05-14T00:00:04Z",
       }),
       inboxMessage({
-        message_id: 'message-failed',
-        session_id: 'session-2',
-        state: 'failed',
-        input: { summary: 'Fix the failing dashboard test' },
-        metadata: { source: 'dashboard_chat', attempt: 1 },
-        delivery_policy: 'interrupt_now',
-        turn_id: 'turn-2',
-        failure_message: 'runtime unavailable',
-        updated_at: '2026-05-14T00:00:05Z',
+        message_id: "message-failed",
+        session_id: "session-2",
+        state: "failed",
+        input: { summary: "Fix the failing dashboard test" },
+        metadata: { source: "dashboard_chat", attempt: 1 },
+        delivery_policy: "interrupt_now",
+        turn_id: "turn-2",
+        failure_message: "runtime unavailable",
+        updated_at: "2026-05-14T00:00:05Z",
       }),
       inboxMessage({
-        message_id: 'message-dispatching',
-        session_id: 'session-2',
-        state: 'dispatching',
-        input: { summary: 'Sending now' },
-        updated_at: '2026-05-14T00:00:06Z',
+        message_id: "message-dispatching",
+        session_id: "session-2",
+        state: "dispatching",
+        input: { summary: "Sending now" },
+        updated_at: "2026-05-14T00:00:06Z",
       }),
     ],
     events: [],
-      });
+  });
 
   render(SessionChatPage);
 
-  expect(await screen.findByRole('heading', { name: 'Inbox · 2 waiting · 1 failed · 0 unknown' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /open inbox/i })).not.toBeInTheDocument();
-  expect(screen.queryByRole('menuitem', { name: /inbox/i })).not.toBeInTheDocument();
-  expect(screen.getByText('Sending now')).toBeInTheDocument();
-  expect(screen.getByText('Fix the failing dashboard test')).toBeInTheDocument();
-  expect(screen.getByText('Continue implementation')).toBeInTheDocument();
-  expect(screen.getByText('Already sent')).toBeVisible();
-  expect(screen.getByText('Accepted')).toBeVisible();
-  expect(screen.getByText('Failed')).toBeVisible();
-  expect(screen.getByText('runtime unavailable')).toBeVisible();
+  expect(
+    await screen.findByRole("heading", { name: "Inbox · 2 waiting · 1 failed · 0 unknown" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /open inbox/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: /inbox/i })).not.toBeInTheDocument();
+  expect(screen.getByText("Sending now")).toBeInTheDocument();
+  expect(screen.getByText("Fix the failing dashboard test")).toBeInTheDocument();
+  expect(screen.getByText("Continue implementation")).toBeInTheDocument();
+  expect(screen.getByText("Already sent")).toBeVisible();
+  expect(screen.getByText("Accepted")).toBeVisible();
+  expect(screen.getByText("Failed")).toBeVisible();
+  expect(screen.getByText("runtime unavailable")).toBeVisible();
 
-  const rows = screen.getAllByRole('listitem');
+  const rows = screen.getAllByRole("listitem");
   expect(rows.map((row) => row.textContent)).toEqual([
-    expect.stringContaining('Sending now'),
-    expect.stringContaining('Fix the failing dashboard test'),
-    expect.stringContaining('Continue implementation'),
-    expect.stringContaining('Already sent'),
+    expect.stringContaining("Sending now"),
+    expect.stringContaining("Fix the failing dashboard test"),
+    expect.stringContaining("Continue implementation"),
+    expect.stringContaining("Already sent"),
   ]);
-  expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument();
-  expect(within(rows[1]).queryByRole('button', { name: /cancel inbox message/i })).not.toBeInTheDocument();
-  expect(within(rows[2]).getByRole('button', { name: /cancel inbox message/i })).toBeInTheDocument();
+  expect(within(rows[0]).queryByRole("button")).not.toBeInTheDocument();
+  expect(
+    within(rows[1]).queryByRole("button", { name: /cancel inbox message/i }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(rows[2]).getByRole("button", { name: /cancel inbox message/i }),
+  ).toBeInTheDocument();
 });
 
-
-test('supports cancelling pending inbox messages and retrying or removing failed inbox messages', async () => {
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("supports cancelling pending inbox messages and retrying or removing failed inbox messages", async () => {
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({
@@ -1453,53 +1817,18 @@ test('supports cancelling pending inbox messages and retrying or removing failed
     turns: [],
     inboxMessages: [
       inboxMessage({
-        message_id: 'message-pending',
-        session_id: 'session-2',
-        state: 'pending',
-        input: { summary: 'Continue implementation' },
+        message_id: "message-pending",
+        session_id: "session-2",
+        state: "pending",
+        input: { summary: "Continue implementation" },
       }),
       inboxMessage({
-        message_id: 'message-failed',
-        session_id: 'session-2',
-        state: 'failed',
-        input: { summary: 'Fix the failing dashboard test' },
-        metadata: { source: 'dashboard_chat', attempt: 1 },
-        delivery_policy: 'interrupt_now',
-      }),
-    ],
-    events: [],
-      });
-
-  render(SessionChatPage);
-
-  await userEvent.click(await screen.findByRole('button', { name: /cancel inbox message continue implementation/i }));
-  expect(mocks.cancelInboxMessage).toHaveBeenCalledWith('session-2', 'message-pending');
-
-  await userEvent.click(await screen.findByRole('button', { name: /retry inbox message fix the failing dashboard test/i }));
-  expect(mocks.retryInboxMessage).toHaveBeenCalledWith('session-2', expect.objectContaining({ message_id: 'message-failed', delivery_policy: 'interrupt_now' }), false);
-
-  await userEvent.click(await screen.findByRole('button', { name: /remove inbox message fix the failing dashboard test/i }));
-  expect(mocks.dismissInboxMessage).toHaveBeenCalledWith('session-2', 'message-failed');
-});
-
-test('retries a failed branch delivery with its original target', async () => {
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({
-    session: selected,
-    turns: [],
-    inboxMessages: [
-      inboxMessage({
-        message_id: 'message-branch-failed',
-        session_id: 'session-2',
-        state: 'failed',
-        input: { summary: 'Corrected historical input' },
-        metadata: { source: 'dashboard_chat_branch_edit' },
-        branch_target_turn_id: 'turn-original',
-        failure_message: 'Pi navigation failed',
+        message_id: "message-failed",
+        session_id: "session-2",
+        state: "failed",
+        input: { summary: "Fix the failing dashboard test" },
+        metadata: { source: "dashboard_chat", attempt: 1 },
+        delivery_policy: "interrupt_now",
       }),
     ],
     events: [],
@@ -1507,65 +1836,139 @@ test('retries a failed branch delivery with its original target', async () => {
 
   render(SessionChatPage);
 
-  await screen.findByText('Corrected historical input');
-  expect(screen.getByText('Pi navigation failed')).toBeVisible();
-  await userEvent.click(screen.getByRole('button', { name: /retry inbox message corrected historical input/i }));
+  await userEvent.click(
+    await screen.findByRole("button", { name: /cancel inbox message continue implementation/i }),
+  );
+  expect(mocks.cancelInboxMessage).toHaveBeenCalledWith("session-2", "message-pending");
 
-  expect(mocks.retryInboxMessage).toHaveBeenCalledWith('session-2', expect.objectContaining({ message_id: 'message-branch-failed', branch_target_turn_id: 'turn-original' }), false);
+  await userEvent.click(
+    await screen.findByRole("button", {
+      name: /retry inbox message fix the failing dashboard test/i,
+    }),
+  );
+  expect(mocks.retryInboxMessage).toHaveBeenCalledWith(
+    "session-2",
+    expect.objectContaining({ message_id: "message-failed", delivery_policy: "interrupt_now" }),
+    false,
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", {
+      name: /remove inbox message fix the failing dashboard test/i,
+    }),
+  );
+  expect(mocks.dismissInboxMessage).toHaveBeenCalledWith("session-2", "message-failed");
 });
 
+test("retries a failed branch delivery with its original target", async () => {
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [],
+    inboxMessages: [
+      inboxMessage({
+        message_id: "message-branch-failed",
+        session_id: "session-2",
+        state: "failed",
+        input: { summary: "Corrected historical input" },
+        metadata: { source: "dashboard_chat_branch_edit" },
+        branch_target_turn_id: "turn-original",
+        failure_message: "Pi navigation failed",
+      }),
+    ],
+    events: [],
+  });
 
-test('renders an existing session title in the top bar and metadata above the prompt input', async () => {
+  render(SessionChatPage);
+
+  await screen.findByText("Corrected historical input");
+  expect(screen.getByText("Pi navigation failed")).toBeVisible();
+  await userEvent.click(
+    screen.getByRole("button", { name: /retry inbox message corrected historical input/i }),
+  );
+
+  expect(mocks.retryInboxMessage).toHaveBeenCalledWith(
+    "session-2",
+    expect.objectContaining({
+      message_id: "message-branch-failed",
+      branch_target_turn_id: "turn-original",
+    }),
+    false,
+  );
+});
+
+test("renders an existing session title in the top bar and metadata above the prompt input", async () => {
   const selected = session({
-    session_id: 'session-2',
-    client_type: 'pi',
-    handle: 'second',
-    role: 'reviewer',
-    description: 'Review dashboard changes',
-    execution_profile_id: 'coder',
-    execution_profile_version: '1',
-    state: 'busy',
-    workspace_id: 'workspace-1',
-    workspace: '~/repo/pontia',
+    session_id: "session-2",
+    client_type: "pi",
+    handle: "second",
+    role: "reviewer",
+    description: "Review dashboard changes",
+    execution_profile_id: "coder",
+    execution_profile_version: "1",
+    state: "busy",
+    workspace_id: "workspace-1",
+    workspace: "~/repo/pontia",
   });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
-  mocks.workspaces.set([workspace({ workspace_id: 'workspace-1', name: 'pontia', canonical_path: '/repo/pontia', display_path: '~/repo/pontia' })]);
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.workspaces.set([
+    workspace({
+      workspace_id: "workspace-1",
+      name: "pontia",
+      canonical_path: "/repo/pontia",
+      display_path: "~/repo/pontia",
+    }),
+  ]);
 
   render(TopBarHost);
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-2'));
-  expect(await screen.findByText('hi there')).toBeInTheDocument();
-  expect(within(screen.getByRole('banner')).getByRole('heading', { name: /second · reviewer/i })).toBeInTheDocument();
-  expect(screen.queryByText('Description: Review dashboard changes')).not.toBeInTheDocument();
-  const sessionDetailsButton = screen.getByRole('button', { name: /Session details: pontia · pi · coder@1 · second/i });
+  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith("session-2"));
+  expect(await screen.findByText("hi there")).toBeInTheDocument();
+  expect(
+    within(screen.getByRole("banner")).getByRole("heading", { name: /second · reviewer/i }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Description: Review dashboard changes")).not.toBeInTheDocument();
+  const sessionDetailsButton = screen.getByRole("button", {
+    name: /Session details: pontia · pi · coder@1 · second/i,
+  });
   await userEvent.click(sessionDetailsButton);
-  const clientBadge = screen.getAllByLabelText('Client: pi')[0];
-  const profileBadge = screen.getAllByLabelText('Profile: coder@1')[0];
+  const clientBadge = screen.getAllByLabelText("Client: pi")[0];
+  const profileBadge = screen.getAllByLabelText("Profile: coder@1")[0];
   expect(clientBadge).toBeInTheDocument();
   expect(profileBadge).toBeInTheDocument();
-  expect(screen.getAllByLabelText('Handle: second')[0]).toBeInTheDocument();
-  expect(screen.queryByText('Client: pi')).not.toBeInTheDocument();
-  expect(screen.queryByText('Profile: coder@1')).not.toBeInTheDocument();
-  expect(screen.queryByText('Handle: second')).not.toBeInTheDocument();
-  expect(screen.queryByText('Workspace: workspace-1')).not.toBeInTheDocument();
-  expect(screen.queryByLabelText('Session state: busy')).not.toBeInTheDocument();
-  const workspaceBadge = screen.getAllByLabelText('Workspace: /repo/pontia')[0];
-  expect(workspaceBadge).toHaveTextContent('/repo/pontia');
-  const followUpInput = screen.getByPlaceholderText('Continue the thread…');
-  expect(screen.queryByText('State: busy')).not.toBeInTheDocument();
-  expect(sessionDetailsButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getAllByLabelText("Handle: second")[0]).toBeInTheDocument();
+  expect(screen.queryByText("Client: pi")).not.toBeInTheDocument();
+  expect(screen.queryByText("Profile: coder@1")).not.toBeInTheDocument();
+  expect(screen.queryByText("Handle: second")).not.toBeInTheDocument();
+  expect(screen.queryByText("Workspace: workspace-1")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Session state: busy")).not.toBeInTheDocument();
+  const workspaceBadge = screen.getAllByLabelText("Workspace: /repo/pontia")[0];
+  expect(workspaceBadge).toHaveTextContent("/repo/pontia");
+  const followUpInput = screen.getByPlaceholderText("Continue the thread…");
+  expect(screen.queryByText("State: busy")).not.toBeInTheDocument();
+  expect(
+    sessionDetailsButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 });
 
-
-test('shows supported context usage in chat session metadata while hiding unsupported usage', async () => {
+test("shows supported context usage in chat session metadata while hiding unsupported usage", async () => {
   const withUsage = session({
-    session_id: 'session-usage',
-    capabilities: { context_usage: 'estimated' },
+    session_id: "session-usage",
+    capabilities: { context_usage: "estimated" },
     context_usage: {
       used_tokens: 42000,
       max_tokens: 128000,
@@ -1574,113 +1977,132 @@ test('shows supported context usage in chat session metadata while hiding unsupp
       input_tokens: null,
       output_tokens: null,
       cache_tokens: null,
-      confidence: 'estimated',
-      observed_at: '2026-06-13T00:00:00Z',
+      confidence: "estimated",
+      observed_at: "2026-06-13T00:00:00Z",
     },
-    model: 'example-model',
+    model: "example-model",
   });
-  window.history.pushState({}, '', '/dashboard/chat/session-usage');
-  mocks.pathParams = { sessionId: 'session-usage' };
+  window.history.pushState({}, "", "/dashboard/chat/session-usage");
+  mocks.pathParams = { sessionId: "session-usage" };
   mocks.loadedSessions = [withUsage];
   mocks.sessions.set([withUsage]);
   mocks.sessionDetail.set({ session: withUsage, turns: [], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
-  const contextBadge = await screen.findByRole('button', { name: /Session details: .*33% · 42k \/ 128k/i });
+  const contextBadge = await screen.findByRole("button", {
+    name: /Session details: .*33% · 42k \/ 128k/i,
+  });
   expect(contextBadge).toBeInTheDocument();
-  expect(within(contextBadge).getByText('example-model')).toBeInTheDocument();
-  expect(screen.getAllByText('33% · 42k / 128k')[0]).toBeInTheDocument();
-  expect(screen.queryByText('Context 33% · 42k / 128k')).not.toBeInTheDocument();
+  expect(within(contextBadge).getByText("example-model")).toBeInTheDocument();
+  expect(screen.getAllByText("33% · 42k / 128k")[0]).toBeInTheDocument();
+  expect(screen.queryByText("Context 33% · 42k / 128k")).not.toBeInTheDocument();
 
   cleanup();
-  const unsupported = session({ session_id: 'session-unsupported', capabilities: { context_usage: 'unsupported' }, context_usage: null });
-  window.history.pushState({}, '', '/dashboard/chat/session-unsupported');
-  mocks.pathParams = { sessionId: 'session-unsupported' };
+  const unsupported = session({
+    session_id: "session-unsupported",
+    capabilities: { context_usage: "unsupported" },
+    context_usage: null,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-unsupported");
+  mocks.pathParams = { sessionId: "session-unsupported" };
   mocks.loadedSessions = [unsupported];
   mocks.sessions.set([unsupported]);
   mocks.sessionDetail.set({ session: unsupported, turns: [], inboxMessages: [], events: [] });
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText('Continue the thread…');
+  await screen.findByPlaceholderText("Continue the thread…");
   expect(screen.queryByText(/context/i)).not.toBeInTheDocument();
-  expect(screen.queryByText('example-model')).not.toBeInTheDocument();
+  expect(screen.queryByText("example-model")).not.toBeInTheDocument();
 });
 
-
-test('shows delivery loading on the submit button instead of below the optimistic message', async () => {
+test("shows delivery loading on the submit button instead of below the optimistic message", async () => {
   const user = userEvent.setup();
-  const selected = session({ session_id: 'session-optimistic', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-optimistic');
-  mocks.pathParams = { sessionId: 'session-optimistic' };
+  const selected = session({ session_id: "session-optimistic", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-optimistic");
+  mocks.pathParams = { sessionId: "session-optimistic" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   let resolveSubmission: (() => void) | null = null;
-  mocks.submitInboxMessage.mockImplementation(() => new Promise((resolve) => {
-    resolveSubmission = () => resolve(inboxMessage({
-      message_id: 'message-optimistic',
-      session_id: 'session-optimistic',
-      input: { summary: 'slow network message' },
-    }));
-  }));
+  mocks.submitInboxMessage.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveSubmission = () =>
+          resolve(
+            inboxMessage({
+              message_id: "message-optimistic",
+              session_id: "session-optimistic",
+              input: { summary: "slow network message" },
+            }),
+          );
+      }),
+  );
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
-  await user.type(followUpInput, 'slow network message');
-  await user.click(screen.getByRole('button', { name: /send/i }));
+  const followUpInput = await screen.findByPlaceholderText("Continue the thread…");
+  await user.type(followUpInput, "slow network message");
+  await user.click(screen.getByRole("button", { name: /send/i }));
 
-  const optimisticMessage = await screen.findByText('slow network message');
+  const optimisticMessage = await screen.findByText("slow network message");
   expect(optimisticMessage.closest('[data-role="user"]')).toBeInTheDocument();
-  expect(screen.queryByLabelText('Message delivery pending')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Sending message' })).toHaveAttribute('aria-busy', 'true');
+  expect(screen.queryByLabelText("Message delivery pending")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Sending message" })).toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
 
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   for (const listener of mocks.dashboardEventListeners) {
     listener({
-      kind: 'session_event',
-      id: 'event-turn-started',
-      occurred_at: '2026-05-14T00:00:00Z',
+      kind: "session_event",
+      id: "event-turn-started",
+      occurred_at: "2026-05-14T00:00:00Z",
       event: {
-        event_id: 'event-turn-started',
-        session_id: 'session-optimistic',
-        turn_id: 'turn-optimistic',
-        source: 'client',
-        type: 'turn.started',
-        time: '2026-05-14T00:00:00Z',
-        payload: { metadata: { inbox_message_id: 'message-optimistic' } },
+        event_id: "event-turn-started",
+        session_id: "session-optimistic",
+        turn_id: "turn-optimistic",
+        source: "client",
+        type: "turn.started",
+        time: "2026-05-14T00:00:00Z",
+        payload: { metadata: { inbox_message_id: "message-optimistic" } },
       },
     });
   }
 
-  mocks.timelineState.set(timelineStateValue({
-    ...mocks.timelineState.get(),
-    sessionId: 'session-optimistic',
-    items: timelineItemsFromTurns([turn({
-      turn_id: 'turn-optimistic',
-      session_id: 'session-optimistic',
-      input: { summary: 'slow network message' },
-      output: null,
-      state: 'running',
-      completed_at: null,
-    })]),
-  }));
+  mocks.timelineState.set(
+    timelineStateValue({
+      ...mocks.timelineState.get(),
+      sessionId: "session-optimistic",
+      items: timelineItemsFromTurns([
+        turn({
+          turn_id: "turn-optimistic",
+          session_id: "session-optimistic",
+          input: { summary: "slow network message" },
+          output: null,
+          state: "running",
+          completed_at: null,
+        }),
+      ]),
+    }),
+  );
 
-  expect(screen.getByRole('button', { name: 'Sending message' })).toBeInTheDocument();
-  await waitFor(() => expect(screen.getAllByText('slow network message')).toHaveLength(1));
+  expect(screen.getByRole("button", { name: "Sending message" })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getAllByText("slow network message")).toHaveLength(1));
   resolveSubmission?.();
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Sending message' })).not.toBeInTheDocument());
-  expect(screen.getAllByText('slow network message')).toHaveLength(1);
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: "Sending message" })).not.toBeInTheDocument(),
+  );
+  expect(screen.getAllByText("slow network message")).toHaveLength(1);
 });
 
-
-test('follow-up composer submits with Enter while preserving modified Enter for newlines', async () => {
+test("follow-up composer submits with Enter while preserving modified Enter for newlines", async () => {
   const user = userEvent.setup();
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
@@ -1688,54 +2110,72 @@ test('follow-up composer submits with Enter while preserving modified Enter for 
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
-  expect(screen.queryByText('Enter to send · Shift+Enter / Ctrl+Enter for newline')).not.toBeInTheDocument();
+  const followUpInput = await screen.findByPlaceholderText("Continue the thread…");
+  expect(
+    screen.queryByText("Enter to send · Shift+Enter / Ctrl+Enter for newline"),
+  ).not.toBeInTheDocument();
 
-  await user.type(followUpInput, 'continue this session');
-  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', shiftKey: true })).toBe(false);
-  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter', ctrlKey: true })).toBe(false);
-  expect(followUpInput.querySelectorAll('br:not(.ProseMirror-trailingBreak)')).toHaveLength(2);
+  await user.type(followUpInput, "continue this session");
+  expect(await fireEvent.keyDown(followUpInput, { key: "Enter", shiftKey: true })).toBe(false);
+  expect(await fireEvent.keyDown(followUpInput, { key: "Enter", ctrlKey: true })).toBe(false);
+  expect(followUpInput.querySelectorAll("br:not(.ProseMirror-trailingBreak)")).toHaveLength(2);
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
-  expect(await fireEvent.keyDown(followUpInput, { key: 'Enter' })).toBe(false);
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
-    input: 'continue this session',
-    delivery_policy: 'after_idle',
-    metadata: { source: 'dashboard_chat' },
-  }));
+  expect(await fireEvent.keyDown(followUpInput, { key: "Enter" })).toBe(false);
+  await waitFor(() =>
+    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
+      input: "continue this session",
+      delivery_policy: "after_idle",
+      metadata: { source: "dashboard_chat" },
+    }),
+  );
 });
 
-
-test('enables history intersection loading only after initial timeline load and bottom scroll', async () => {
+test("enables history intersection loading only after initial timeline load and bottom scroll", async () => {
   installIntersectionObserverMock();
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "idle" });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 2400,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
   let resolveTimeline: () => void = () => {};
   const timelineLoaded = new Promise<void>((resolve) => {
     resolveTimeline = resolve;
   });
   mocks.loadSessionTimeline.mockImplementationOnce(async (sessionId: string) => {
     await timelineLoaded;
-    mocks.timelineState.set(timelineStateValue({
-      sessionId,
-      items: timelineItemsFromTurns([turn({ session_id: sessionId })]),
-      nextOlderTurnId: 'turn-older',
-      latestTurnId: 'turn-1',
-      hasMore: true,
-      status: 'ready',
-    }));
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId,
+        items: timelineItemsFromTurns([turn({ session_id: sessionId })]),
+        nextOlderTurnId: "turn-older",
+        latestTurnId: "turn-1",
+        hasMore: true,
+        status: "ready",
+      }),
+    );
     return null;
   });
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-2', { mode: 'rebuild', latestTurnId: 'turn-1' }));
+  await waitFor(() =>
+    expect(mocks.loadSessionTimeline).toHaveBeenCalledWith("session-2", {
+      mode: "rebuild",
+      latestTurnId: "turn-1",
+    }),
+  );
   expect(observedHistorySentinels()).toHaveLength(0);
 
   resolveTimeline();
@@ -1745,216 +2185,339 @@ test('enables history intersection loading only after initial timeline load and 
   scrollTo.mockRestore();
 });
 
-
-test('shows a floating scroll-down button away from the bottom and scrolls down when clicked', async () => {
+test("shows a floating scroll-down button away from the bottom and scrolls down when clicked", async () => {
   installIntersectionObserverMock();
   const user = userEvent.setup();
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "idle" });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 2400,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
 
   render(SessionChatPage);
 
-  await screen.findByText('hi there');
+  await screen.findByText("hi there");
   scrollTo.mockClear();
   await triggerLatestBottomIntersection(false);
-  const scrollDownButton = await screen.findByRole('button', { name: /scroll to bottom/i });
+  const scrollDownButton = await screen.findByRole("button", { name: /scroll to bottom/i });
   await user.click(scrollDownButton);
 
   expect(scrollTo).toHaveBeenCalledWith({ top: 2400 });
-  await waitFor(() => expect(screen.queryByRole('button', { name: /scroll to bottom/i })).not.toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: /scroll to bottom/i })).not.toBeInTheDocument(),
+  );
   scrollTo.mockRestore();
 });
 
-
-test('shows the floating scroll-down button after switching sessions when the document is away from the bottom', async () => {
+test("shows the floating scroll-down button after switching sessions when the document is away from the bottom", async () => {
   installIntersectionObserverMock();
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  const other = session({ session_id: 'session-3', state: 'idle' });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const selected = session({ session_id: "session-2", state: "idle" });
+  const other = session({ session_id: "session-3", state: "idle" });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 2400,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected, other];
   mocks.sessions.set([selected, other]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
 
   render(SessionChatPage);
 
-  await screen.findByText('hi there');
+  await screen.findByText("hi there");
   await triggerLatestBottomIntersection(true);
-  expect(screen.queryByRole('button', { name: /scroll to bottom/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /scroll to bottom/i })).not.toBeInTheDocument();
 
-  mocks.pathParams = { sessionId: 'session-3' };
-  window.history.pushState({}, '', '/dashboard/chat/session-3');
-  mocks.sessionDetail.set({ session: other, turns: [turn({ session_id: 'session-3' })], inboxMessages: [], events: [] });
-  window.dispatchEvent(new PopStateEvent('popstate'));
-  await waitFor(() => expect(mocks.loadSessionTimeline).toHaveBeenCalledWith('session-3', { mode: 'rebuild', latestTurnId: 'turn-1' }));
+  mocks.pathParams = { sessionId: "session-3" };
+  window.history.pushState({}, "", "/dashboard/chat/session-3");
+  mocks.sessionDetail.set({
+    session: other,
+    turns: [turn({ session_id: "session-3" })],
+    inboxMessages: [],
+    events: [],
+  });
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await waitFor(() =>
+    expect(mocks.loadSessionTimeline).toHaveBeenCalledWith("session-3", {
+      mode: "rebuild",
+      latestTurnId: "turn-1",
+    }),
+  );
   await triggerLatestBottomIntersection(false);
 
-  expect(await screen.findByRole('button', { name: /scroll to bottom/i })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: /scroll to bottom/i })).toBeInTheDocument();
 });
 
-
-test('hides the floating scroll-down button at the bottom', async () => {
+test("hides the floating scroll-down button at the bottom", async () => {
   installIntersectionObserverMock();
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2400 });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const selected = session({ session_id: "session-2", state: "idle" });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 2400,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
 
   render(SessionChatPage);
 
-  await screen.findByText('hi there');
+  await screen.findByText("hi there");
   await triggerLatestBottomIntersection(true);
-  expect(screen.queryByRole('button', { name: /scroll to bottom/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /scroll to bottom/i })).not.toBeInTheDocument();
 });
 
-
-test('scrolls once when the submitted user message mounts, not again on acceptance or transcript updates', async () => {
+test("scrolls once when the submitted user message mounts, not again on acceptance or transcript updates", async () => {
   const user = userEvent.setup();
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "idle" });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 4096,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   let accept!: (message: ReturnType<typeof inboxMessage>) => void;
-  mocks.submitInboxMessage.mockImplementationOnce(() => new Promise((resolve) => { accept = resolve; }));
+  mocks.submitInboxMessage.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        accept = resolve;
+      }),
+  );
 
   render(SessionChatPage);
-  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="false"]')).toBeInTheDocument());
-  const followUpInput = screen.getByPlaceholderText('Continue the thread…');
-  await user.type(followUpInput, 'continue this session');
+  await waitFor(() =>
+    expect(
+      document.querySelector('[data-chat-initial-scroll-pending="false"]'),
+    ).toBeInTheDocument(),
+  );
+  const followUpInput = screen.getByPlaceholderText("Continue the thread…");
+  await user.type(followUpInput, "continue this session");
   scrollTo.mockClear();
   scrollTo.mockImplementation(() => {
-    expect(screen.getByText('continue this session').closest('[data-chat-role="user"]')).toBeInTheDocument();
+    expect(
+      screen.getByText("continue this session").closest('[data-chat-role="user"]'),
+    ).toBeInTheDocument();
   });
-  await user.click(screen.getByRole('button', { name: /send/i }));
+  await user.click(screen.getByRole("button", { name: /send/i }));
 
   await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
   expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
-  accept(inboxMessage({ session_id: 'session-2', turn_id: 'turn-2', input: { summary: 'continue this session' } }));
-  await waitFor(() => expect(screen.getByRole('button', { name: /^send$/i })).not.toHaveAttribute('aria-busy', 'true'));
+  accept(
+    inboxMessage({
+      session_id: "session-2",
+      turn_id: "turn-2",
+      input: { summary: "continue this session" },
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: /^send$/i })).not.toHaveAttribute(
+      "aria-busy",
+      "true",
+    ),
+  );
   expect(scrollTo).toHaveBeenCalledTimes(1);
 
-  const submittedTurn = turn({ session_id: 'session-2', turn_id: 'turn-2', input: { summary: 'continue this session' } });
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2', items: timelineItemsFromTurns([submittedTurn]), latestTurnId: 'turn-2', status: 'ready',
-  }));
-  await waitFor(() => expect(document.querySelector('[data-chat-message-id="turn-2:user"]')).toBeInTheDocument());
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2', items: timelineItemsFromTurns([{ ...submittedTurn, output: { summary: 'Updated reply.' } }]), latestTurnId: 'turn-2', status: 'ready',
-  }));
-  await screen.findByText('Updated reply.');
+  const submittedTurn = turn({
+    session_id: "session-2",
+    turn_id: "turn-2",
+    input: { summary: "continue this session" },
+  });
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([submittedTurn]),
+      latestTurnId: "turn-2",
+      status: "ready",
+    }),
+  );
+  await waitFor(() =>
+    expect(document.querySelector('[data-chat-message-id="turn-2:user"]')).toBeInTheDocument(),
+  );
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([{ ...submittedTurn, output: { summary: "Updated reply." } }]),
+      latestTurnId: "turn-2",
+      status: "ready",
+    }),
+  );
+  await screen.findByText("Updated reply.");
   await new Promise(requestAnimationFrame);
   expect(scrollTo).toHaveBeenCalledTimes(1);
   scrollTo.mockRestore();
 });
 
-
-test('scrolls once for each queued submission, not on unrelated assistant updates', async () => {
+test("scrolls once for each queued submission, not on unrelated assistant updates", async () => {
   const user = userEvent.setup();
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'busy' });
-  const existingTurn = turn({ session_id: 'session-2', input: { summary: 'continue this session' } });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "busy" });
+  const existingTurn = turn({
+    session_id: "session-2",
+    input: { summary: "continue this session" },
+  });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 4096,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [existingTurn], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [existingTurn],
+    inboxMessages: [],
+    events: [],
+  });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
   render(SessionChatPage);
-  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="false"]')).toBeInTheDocument());
-  const followUpInput = screen.getByPlaceholderText('Continue the thread…');
-  await user.type(followUpInput, 'continue this session');
+  await waitFor(() =>
+    expect(
+      document.querySelector('[data-chat-initial-scroll-pending="false"]'),
+    ).toBeInTheDocument(),
+  );
+  const followUpInput = screen.getByPlaceholderText("Continue the thread…");
+  await user.type(followUpInput, "continue this session");
   scrollTo.mockClear();
-  await user.click(screen.getByRole('button', { name: /send/i }));
+  await user.click(screen.getByRole("button", { name: /send/i }));
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
-  expect(screen.getAllByText('continue this session')).toHaveLength(1);
-  await user.type(followUpInput, 'another queued question');
-  await user.click(screen.getByRole('button', { name: /send/i }));
+  expect(screen.getAllByText("continue this session")).toHaveLength(1);
+  await user.type(followUpInput, "another queued question");
+  await user.click(screen.getByRole("button", { name: /send/i }));
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(2));
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2',
-    items: timelineItemsFromTurns([{ ...existingTurn, output: { summary: 'Still working.' } }])
-      .map((item) => item.kind === 'user' ? { ...item, item_id: 'native-user-id' } : item),
-    latestTurnId: existingTurn.turn_id, status: 'ready',
-  }));
-  await screen.findByText('Still working.');
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([
+        { ...existingTurn, output: { summary: "Still working." } },
+      ]).map((item) => (item.kind === "user" ? { ...item, item_id: "native-user-id" } : item)),
+      latestTurnId: existingTurn.turn_id,
+      status: "ready",
+    }),
+  );
+  await screen.findByText("Still working.");
   await new Promise(requestAnimationFrame);
   expect(scrollTo).not.toHaveBeenCalled();
 
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2',
-    items: timelineItemsFromTurns([existingTurn, turn({ turn_id: 'turn-2', input: { summary: 'continue this session' }, created_at: '2026-05-14T00:01:00Z' })]),
-    latestTurnId: 'turn-2', status: 'ready',
-  }));
-  await waitFor(() => expect(screen.getAllByText('continue this session')).toHaveLength(2));
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([
+        existingTurn,
+        turn({
+          turn_id: "turn-2",
+          input: { summary: "continue this session" },
+          created_at: "2026-05-14T00:01:00Z",
+        }),
+      ]),
+      latestTurnId: "turn-2",
+      status: "ready",
+    }),
+  );
+  await waitFor(() => expect(screen.getAllByText("continue this session")).toHaveLength(2));
   await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
   expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
-  mocks.timelineState.set(timelineStateValue({
-    sessionId: 'session-2',
-    items: timelineItemsFromTurns([
-      existingTurn,
-      turn({ turn_id: 'turn-2', input: { summary: 'continue this session' }, created_at: '2026-05-14T00:01:00Z' }),
-      turn({ turn_id: 'turn-3', input: { summary: 'another queued question' }, created_at: '2026-05-14T00:02:00Z' }),
-    ]),
-    latestTurnId: 'turn-3', status: 'ready',
-  }));
-  await screen.findByText('another queued question');
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([
+        existingTurn,
+        turn({
+          turn_id: "turn-2",
+          input: { summary: "continue this session" },
+          created_at: "2026-05-14T00:01:00Z",
+        }),
+        turn({
+          turn_id: "turn-3",
+          input: { summary: "another queued question" },
+          created_at: "2026-05-14T00:02:00Z",
+        }),
+      ]),
+      latestTurnId: "turn-3",
+      status: "ready",
+    }),
+  );
+  await screen.findByText("another queued question");
   await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(2));
   scrollTo.mockRestore();
 });
 
-test('waits for the native user message if the optimistic message disappears before the scroll frame', async () => {
+test("waits for the native user message if the optimistic message disappears before the scroll frame", async () => {
   const user = userEvent.setup();
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
   render(SessionChatPage);
-  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="false"]')).toBeInTheDocument());
-  await user.type(screen.getByPlaceholderText('Continue the thread…'), 'A new prompt');
+  await waitFor(() =>
+    expect(
+      document.querySelector('[data-chat-initial-scroll-pending="false"]'),
+    ).toBeInTheDocument(),
+  );
+  await user.type(screen.getByPlaceholderText("Continue the thread…"), "A new prompt");
   scrollTo.mockClear();
 
   const frames: FrameRequestCallback[] = [];
-  const animationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-    frames.push(callback);
-    return frames.length;
-  });
+  const animationFrame = vi
+    .spyOn(window, "requestAnimationFrame")
+    .mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
   try {
-    await user.click(screen.getByRole('button', { name: /^send$/i }));
-    await screen.findByText('A new prompt');
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+    await screen.findByText("A new prompt");
     await waitFor(() => expect(frames.length).toBeGreaterThan(0));
     optimisticInboxSubmissions.set({});
-    await waitFor(() => expect(screen.queryByText('A new prompt')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("A new prompt")).not.toBeInTheDocument());
     animationFrame.mockRestore();
     for (const frame of frames) frame(performance.now());
     await new Promise(requestAnimationFrame);
     expect(scrollTo).not.toHaveBeenCalled();
 
-    mocks.timelineState.set(timelineStateValue({
-      sessionId: 'session-2',
-      items: timelineItemsFromTurns([turn({ turn_id: 'turn-new', input: { summary: 'A new prompt' } })]),
-      latestTurnId: 'turn-new', status: 'ready',
-    }));
-    await screen.findByText('A new prompt');
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId: "session-2",
+        items: timelineItemsFromTurns([
+          turn({ turn_id: "turn-new", input: { summary: "A new prompt" } }),
+        ]),
+        latestTurnId: "turn-new",
+        status: "ready",
+      }),
+    );
+    await screen.findByText("A new prompt");
     await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
   } finally {
     animationFrame.mockRestore();
@@ -1962,43 +2525,50 @@ test('waits for the native user message if the optimistic message disappears bef
   }
 });
 
-
-test('does not consume a submit scroll until the unavailable conversation mounts again', async () => {
+test("does not consume a submit scroll until the unavailable conversation mounts again", async () => {
   const user = userEvent.setup();
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
   render(SessionChatPage);
-  await waitFor(() => expect(document.querySelector('[data-chat-initial-scroll-pending="false"]')).toBeInTheDocument());
-  mocks.timelineState.set(timelineStateValue({ sessionId: 'session-2', error: 'Timeline unavailable' }));
-  await screen.findByText('Conversation history unavailable');
-  await user.type(screen.getByPlaceholderText('Continue the thread…'), 'Prompt during an outage');
+  await waitFor(() =>
+    expect(
+      document.querySelector('[data-chat-initial-scroll-pending="false"]'),
+    ).toBeInTheDocument(),
+  );
+  mocks.timelineState.set(
+    timelineStateValue({ sessionId: "session-2", error: "Timeline unavailable" }),
+  );
+  await screen.findByText("Conversation history unavailable");
+  await user.type(screen.getByPlaceholderText("Continue the thread…"), "Prompt during an outage");
   scrollTo.mockClear();
-  await user.click(screen.getByRole('button', { name: /^send$/i }));
+  await user.click(screen.getByRole("button", { name: /^send$/i }));
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
   await new Promise(requestAnimationFrame);
-  expect(screen.queryByText('Prompt during an outage')).not.toBeInTheDocument();
+  expect(screen.queryByText("Prompt during an outage")).not.toBeInTheDocument();
   expect(scrollTo).not.toHaveBeenCalled();
 
-  mocks.timelineState.set(timelineStateValue({ sessionId: 'session-2', status: 'empty' }));
-  await screen.findByText('Prompt during an outage');
+  mocks.timelineState.set(timelineStateValue({ sessionId: "session-2", status: "empty" }));
+  await screen.findByText("Prompt during an outage");
   await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
   scrollTo.mockRestore();
 });
 
-
-test('does not scroll to the document bottom after retrying an inbox message', async () => {
+test("does not scroll to the document bottom after retrying an inbox message", async () => {
   const user = userEvent.setup();
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "idle" });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 4096,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({
@@ -2006,106 +2576,139 @@ test('does not scroll to the document bottom after retrying an inbox message', a
     turns: [],
     inboxMessages: [
       inboxMessage({
-        message_id: 'message-failed',
-        session_id: 'session-2',
-        state: 'failed',
-        input: { summary: 'fix the failing dashboard test' },
+        message_id: "message-failed",
+        session_id: "session-2",
+        state: "failed",
+        input: { summary: "fix the failing dashboard test" },
       }),
     ],
     events: [],
-      });
+  });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
 
   render(SessionChatPage);
 
   await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
-  await screen.findByRole('heading', { name: 'Inbox · 0 waiting · 1 failed · 0 unknown' });
+  await screen.findByRole("heading", { name: "Inbox · 0 waiting · 1 failed · 0 unknown" });
   scrollTo.mockClear();
-  await user.click(await screen.findByRole('button', { name: /retry inbox message fix the failing dashboard test/i }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: /retry inbox message fix the failing dashboard test/i,
+    }),
+  );
 
-  await waitFor(() => expect(mocks.retryInboxMessage).toHaveBeenCalledWith('session-2', expect.objectContaining({ state: 'failed' }), false));
+  await waitFor(() =>
+    expect(mocks.retryInboxMessage).toHaveBeenCalledWith(
+      "session-2",
+      expect.objectContaining({ state: "failed" }),
+      false,
+    ),
+  );
   expect(scrollTo).not.toHaveBeenCalled();
   scrollTo.mockRestore();
 });
 
-
-test('does not toast passive chat errors', async () => {
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("does not toast passive chat errors", async () => {
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.sessionDetailError.set('Could not load session detail');
+  mocks.sessionDetailError.set("Could not load session detail");
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText('Continue the thread…');
+  await screen.findByPlaceholderText("Continue the thread…");
   expect(mocks.toastError).not.toHaveBeenCalled();
 });
 
-test('renders an explicit degraded state instead of projected or partial history when timeline loading fails', async () => {
-  const selected = session({ session_id: 'session-2', state: 'idle', capabilities: { timeline: true } });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("renders an explicit degraded state instead of projected or partial history when timeline loading fails", async () => {
+  const selected = session({
+    session_id: "session-2",
+    state: "idle",
+    capabilities: { timeline: true },
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [turn({ session_id: 'session-2' })], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [turn({ session_id: "session-2" })],
+    inboxMessages: [],
+    events: [],
+  });
   mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set(timelineStateValue({
-      sessionId,
-      items: [],
-      nextOlderTurnId: null,
-      latestTurnId: 'turn-1',
-      hasMore: false,
-      loading: false,
-      refreshing: false,
-      refreshKind: null,
-      status: 'range_invalid',
-      errorCode: 'turn_timeline_invalid',
-      error: 'Turn turn-1 has an invalid timeline range',
-    }));
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId,
+        items: [],
+        nextOlderTurnId: null,
+        latestTurnId: "turn-1",
+        hasMore: false,
+        loading: false,
+        refreshing: false,
+        refreshKind: null,
+        status: "range_invalid",
+        errorCode: "turn_timeline_invalid",
+        error: "Turn turn-1 has an invalid timeline range",
+      }),
+    );
     return null;
   });
 
   render(SessionChatPage);
 
-  expect(await screen.findByText('Conversation history unavailable')).toBeInTheDocument();
-  expect(screen.getByText('Turn turn-1 has an invalid timeline range')).toBeInTheDocument();
+  expect(await screen.findByText("Conversation history unavailable")).toBeInTheDocument();
+  expect(screen.getByText("Turn turn-1 has an invalid timeline range")).toBeInTheDocument();
   expect(mocks.toastError).not.toHaveBeenCalled();
-  expect(screen.queryByText('hi there')).not.toBeInTheDocument();
+  expect(screen.queryByText("hi there")).not.toBeInTheDocument();
   expect(document.querySelector('[data-timeline-status="range_invalid"]')).toBeInTheDocument();
 });
 
-
-test('uses selected session detail state for bottom interrupted status when the session list is stale', async () => {
-  const staleListSession = session({ session_id: 'session-2', state: 'busy', current_turn_id: 'turn-1' });
-  const interruptedDetailSession = session({ session_id: 'session-2', state: 'interrupted', current_turn_id: null });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+test("uses selected session detail state for bottom interrupted status when the session list is stale", async () => {
+  const staleListSession = session({
+    session_id: "session-2",
+    state: "busy",
+    current_turn_id: "turn-1",
+  });
+  const interruptedDetailSession = session({
+    session_id: "session-2",
+    state: "interrupted",
+    current_turn_id: null,
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [staleListSession];
   mocks.sessions.set([staleListSession]);
   mocks.sessionDetail.set({
     session: interruptedDetailSession,
-    turns: [turn({ session_id: 'session-2', state: 'interrupted', output: null, completed_at: '2026-05-14T00:00:03Z' })],
+    turns: [
+      turn({
+        session_id: "session-2",
+        state: "interrupted",
+        output: null,
+        completed_at: "2026-05-14T00:00:03Z",
+      }),
+    ],
     inboxMessages: [],
     events: [],
-      });
+  });
 
   render(SessionChatPage);
 
-  expect(await screen.findByText('session interrupted')).toBeInTheDocument();
-  expect(screen.queryByText('Agent working')).not.toBeInTheDocument();
+  expect(await screen.findByText("session interrupted")).toBeInTheDocument();
+  expect(screen.queryByText("Agent working")).not.toBeInTheDocument();
 });
 
-
-test('hides exit on exited sessions and waits for idle after automatic resume before sending a message', async () => {
+test("hides exit on exited sessions and waits for idle after automatic resume before sending a message", async () => {
   const user = userEvent.setup();
-  const selected = session({ session_id: 'session-2', state: 'exited' });
-  const starting = session({ session_id: 'session-2', state: 'starting' });
-  const idle = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const selected = session({ session_id: "session-2", state: "exited" });
+  const starting = session({ session_id: "session-2", state: "starting" });
+  const idle = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
@@ -2117,169 +2720,250 @@ test('hides exit on exited sessions and waits for idle after automatic resume be
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText('Continue the thread…');
+  const followUpInput = await screen.findByPlaceholderText("Continue the thread…");
   expect(followUpInput).not.toBeDisabled();
-  expect(screen.queryByRole('button', { name: /exit session/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /exit session/i })).not.toBeInTheDocument();
 
-  await user.type(followUpInput, 'continue this session');
-  await user.click(screen.getByRole('button', { name: /send/i }));
+  await user.type(followUpInput, "continue this session");
+  await user.click(screen.getByRole("button", { name: /send/i }));
 
-  await waitFor(() => expect(mocks.resumeSession).toHaveBeenCalledWith('session-2'));
-  expect(followUpInput).toHaveTextContent('continue this session');
-  expect(followUpInput).toHaveAttribute('contenteditable', 'false');
-  expect(screen.getByRole('button', { name: /send/i })).toBeDisabled();
+  await waitFor(() => expect(mocks.resumeSession).toHaveBeenCalledWith("session-2"));
+  expect(followUpInput).toHaveTextContent("continue this session");
+  expect(followUpInput).toHaveAttribute("contenteditable", "false");
+  expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
   await Promise.resolve();
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
   mocks.sessions.set([idle]);
   mocks.sessionDetail.set({ session: idle, turns: [], inboxMessages: [], events: [] });
 
-  await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledWith('session-2', {
-    input: 'continue this session',
-    delivery_policy: 'after_idle',
-    metadata: { source: 'dashboard_chat' },
-  }));
-  expect(mocks.resumeSession.mock.invocationCallOrder[0]).toBeLessThan(mocks.submitInboxMessage.mock.invocationCallOrder[0]);
+  await waitFor(() =>
+    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
+      input: "continue this session",
+      delivery_policy: "after_idle",
+      metadata: { source: "dashboard_chat" },
+    }),
+  );
+  expect(mocks.resumeSession.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.submitInboxMessage.mock.invocationCallOrder[0],
+  );
 });
 
-
-test('scrolls to a message selected from the conversation ruler', async () => {
+test("scrolls to a message selected from the conversation ruler", async () => {
   const user = userEvent.setup();
   const scrollIntoView = vi.fn();
-  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
     configurable: true,
     writable: true,
     value: scrollIntoView,
   });
-  const selected = session({ session_id: 'session-2', state: 'idle' });
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  mocks.pathParams = { sessionId: 'session-2' };
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({
     session: selected,
-    turns: [turn({ session_id: 'session-2', input: { summary: 'Jump target' } })],
+    turns: [turn({ session_id: "session-2", input: { summary: "Jump target" } })],
     inboxMessages: [],
     events: [],
   });
 
   render(SessionChatPage);
 
-  await user.click(await screen.findByRole('button', { name: 'User message: Jump target' }));
-  expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+  await user.click(await screen.findByRole("button", { name: "User message: Jump target" }));
+  expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
 });
 
-test('renders ordered live output over the active Turn transcript while preserving its user message', async () => {
-  const runningTurn = turn({ turn_id: 'turn-live', session_id: 'session-live', state: 'running', completed_at: null, output: { summary: 'transcript partial' } });
+test("renders ordered live output over the active Turn transcript while preserving its user message", async () => {
+  const runningTurn = turn({
+    turn_id: "turn-live",
+    session_id: "session-live",
+    state: "running",
+    completed_at: null,
+    output: { summary: "transcript partial" },
+  });
   const selected = session({
-    session_id: 'session-live',
-    state: 'busy',
+    session_id: "session-live",
+    state: "busy",
     current_turn_id: runningTurn.turn_id,
     capabilities: { accept_task: true, timeline: true, stream_output: true },
   });
-  window.history.pushState({}, '', '/dashboard/chat/session-live');
+  window.history.pushState({}, "", "/dashboard/chat/session-live");
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [runningTurn], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [runningTurn],
+    inboxMessages: [],
+    events: [],
+  });
 
   render(SessionChatPage);
-  await waitFor(() => expect(mocks.liveOutputListeners.has('session-live')).toBe(true));
-  const live = mocks.liveOutputListeners.get('session-live')!;
+  await waitFor(() => expect(mocks.liveOutputListeners.has("session-live")).toBe(true));
+  const live = mocks.liveOutputListeners.get("session-live")!;
   live.onEvent({
-    type: 'snapshot', session_id: 'session-live', turn_id: 'turn-live', stream_id: 'stream-live', sequence: 1,
-    items: [{ kind: 'assistant_text', item_id: 'text-1', text: 'Hello' }],
+    type: "snapshot",
+    session_id: "session-live",
+    turn_id: "turn-live",
+    stream_id: "stream-live",
+    sequence: 1,
+    items: [{ kind: "assistant_text", item_id: "text-1", text: "Hello" }],
   });
   live.onEvent({
-    type: 'updates', session_id: 'session-live', turn_id: 'turn-live', stream_id: 'stream-live', first_sequence: 2,
+    type: "updates",
+    session_id: "session-live",
+    turn_id: "turn-live",
+    stream_id: "stream-live",
+    first_sequence: 2,
     updates: [
-      { type: 'tool_call', item_id: 'tool-1', call_id: 'call-1', tool_name: 'read', arguments: { path: 'README.md' }, managed_tool_use: { tool_name: 'read', input: { type: 'read', path: 'README.md' } } },
-      { type: 'assistant_text_delta', item_id: 'text-2', delta: 'Done' },
-      { type: 'tool_call', item_id: 'tool-2', call_id: 'call-2', tool_name: 'bash', arguments: { command: 'pnpm test' }, managed_tool_use: { tool_name: 'bash', input: { type: 'bash', command: 'pnpm test' } } },
+      {
+        type: "tool_call",
+        item_id: "tool-1",
+        call_id: "call-1",
+        tool_name: "read",
+        arguments: { path: "README.md" },
+        managed_tool_use: { tool_name: "read", input: { type: "read", path: "README.md" } },
+      },
+      { type: "assistant_text_delta", item_id: "text-2", delta: "Done" },
+      {
+        type: "tool_call",
+        item_id: "tool-2",
+        call_id: "call-2",
+        tool_name: "bash",
+        arguments: { command: "pnpm test" },
+        managed_tool_use: { tool_name: "bash", input: { type: "bash", command: "pnpm test" } },
+      },
     ],
   });
 
-  await waitFor(() => expect(screen.getByText('Hello')).toBeInTheDocument());
-  expect(screen.getByText('hello')).toBeInTheDocument();
-  expect(screen.getByText('Done')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /show agent work steps/i })).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.getByText('Read 1 file')).toBeInTheDocument();
-  expect(screen.getByText('Run command')).toBeInTheDocument();
-  expect(screen.queryByText('transcript partial')).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText("Hello")).toBeInTheDocument());
+  expect(screen.getByText("hello")).toBeInTheDocument();
+  expect(screen.getByText("Done")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /show agent work steps/i })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  expect(screen.getByText("Read 1 file")).toBeInTheDocument();
+  expect(screen.getByText("Run command")).toBeInTheDocument();
+  expect(screen.queryByText("transcript partial")).not.toBeInTheDocument();
 });
 
-test('retains terminal live output after a failed timeline refresh and removes it after successful convergence', async () => {
-  const runningTurn = turn({ turn_id: 'turn-live', session_id: 'session-live', state: 'running', completed_at: null, output: null });
+test("retains terminal live output after a failed timeline refresh and removes it after successful convergence", async () => {
+  const runningTurn = turn({
+    turn_id: "turn-live",
+    session_id: "session-live",
+    state: "running",
+    completed_at: null,
+    output: null,
+  });
   const selected = session({
-    session_id: 'session-live',
-    state: 'busy',
+    session_id: "session-live",
+    state: "busy",
     current_turn_id: runningTurn.turn_id,
     capabilities: { accept_task: true, timeline: true, stream_output: true },
   });
-  window.history.pushState({}, '', '/dashboard/chat/session-live');
+  window.history.pushState({}, "", "/dashboard/chat/session-live");
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [runningTurn], inboxMessages: [], events: [] });
+  mocks.sessionDetail.set({
+    session: selected,
+    turns: [runningTurn],
+    inboxMessages: [],
+    events: [],
+  });
 
   render(SessionChatPage);
-  await waitFor(() => expect(mocks.liveOutputListeners.has('session-live')).toBe(true));
+  await waitFor(() => expect(mocks.liveOutputListeners.has("session-live")).toBe(true));
   await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
-  mocks.liveOutputListeners.get('session-live')!.onEvent({
-    type: 'snapshot', session_id: 'session-live', turn_id: 'turn-live', stream_id: 'stream-live', sequence: 1,
-    items: [{ kind: 'assistant_text', item_id: 'text-1', text: 'Temporary answer' }],
+  mocks.liveOutputListeners.get("session-live")!.onEvent({
+    type: "snapshot",
+    session_id: "session-live",
+    turn_id: "turn-live",
+    stream_id: "stream-live",
+    sequence: 1,
+    items: [{ kind: "assistant_text", item_id: "text-1", text: "Temporary answer" }],
   });
-  await waitFor(() => expect(screen.getByText('Temporary answer')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText("Temporary answer")).toBeInTheDocument());
 
   mocks.refreshSessionTimeline.mockResolvedValueOnce(false);
-  for (const listener of mocks.dashboardEventListeners) listener({
-    kind: 'session_event',
-    event: { session_id: 'session-live', turn_id: 'turn-live', type: 'turn.completed', payload: {} },
-  });
+  for (const listener of mocks.dashboardEventListeners)
+    listener({
+      kind: "session_event",
+      event: {
+        session_id: "session-live",
+        turn_id: "turn-live",
+        type: "turn.completed",
+        payload: {},
+      },
+    });
   await waitFor(() => expect(mocks.refreshSessionTimeline).toHaveBeenCalled());
-  expect(screen.getByText('Temporary answer')).toBeInTheDocument();
+  expect(screen.getByText("Temporary answer")).toBeInTheDocument();
 
   mocks.sessionDetail.set({
-    session: { ...selected, state: 'idle', current_turn_id: 'turn-live' },
-    turns: [{ ...runningTurn, state: 'completed', completed_at: '2026-05-14T00:00:03Z' }],
+    session: { ...selected, state: "idle", current_turn_id: "turn-live" },
+    turns: [{ ...runningTurn, state: "completed", completed_at: "2026-05-14T00:00:03Z" }],
     inboxMessages: [],
     events: [],
   });
   mocks.refreshSessionTimeline.mockImplementationOnce(async () => {
-    mocks.timelineState.set(timelineStateValue({
-      sessionId: 'session-live',
-      status: 'ready',
-      latestTurnId: 'turn-live',
-      items: timelineItemsFromTurns([{ ...runningTurn, state: 'completed', output: { summary: 'Final answer' }, completed_at: '2026-05-14T00:00:03Z' }]),
-    }));
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId: "session-live",
+        status: "ready",
+        latestTurnId: "turn-live",
+        items: timelineItemsFromTurns([
+          {
+            ...runningTurn,
+            state: "completed",
+            output: { summary: "Final answer" },
+            completed_at: "2026-05-14T00:00:03Z",
+          },
+        ]),
+      }),
+    );
     return true;
   });
-  for (const listener of mocks.dashboardEventListeners) listener({
-    kind: 'session_event',
-    event: { session_id: 'session-live', turn_id: 'turn-live', type: 'turn.completed', payload: {} },
-  });
+  for (const listener of mocks.dashboardEventListeners)
+    listener({
+      kind: "session_event",
+      event: {
+        session_id: "session-live",
+        turn_id: "turn-live",
+        type: "turn.completed",
+        payload: {},
+      },
+    });
 
-  await waitFor(() => expect(screen.getByText('Final answer')).toBeInTheDocument());
-  expect(screen.queryByText('Temporary answer')).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText("Final answer")).toBeInTheDocument());
+  expect(screen.queryByText("Temporary answer")).not.toBeInTheDocument();
 });
 
-test('closes the old live output stream when navigating to another Session', async () => {
-  const first = session({ session_id: 'session-1', capabilities: { timeline: true, stream_output: true } });
-  const second = session({ session_id: 'session-2', capabilities: { timeline: true, stream_output: true } });
-  window.history.pushState({}, '', '/dashboard/chat/session-1');
+test("closes the old live output stream when navigating to another Session", async () => {
+  const first = session({
+    session_id: "session-1",
+    capabilities: { timeline: true, stream_output: true },
+  });
+  const second = session({
+    session_id: "session-2",
+    capabilities: { timeline: true, stream_output: true },
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-1");
   mocks.loadedSessions = [first, second];
   mocks.sessions.set([first, second]);
   mocks.sessionDetail.set({ session: first, turns: [], inboxMessages: [], events: [] });
   mocks.loadSessionDetail.mockImplementation(async (sessionId: string) => {
-    const selected = sessionId === 'session-1' ? first : second;
+    const selected = sessionId === "session-1" ? first : second;
     mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
     return null;
   });
 
   render(SessionChatPage);
-  await waitFor(() => expect(mocks.liveOutputListeners.has('session-1')).toBe(true));
-  window.history.pushState({}, '', '/dashboard/chat/session-2');
-  window.dispatchEvent(new PopStateEvent('popstate'));
+  await waitFor(() => expect(mocks.liveOutputListeners.has("session-1")).toBe(true));
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
 
-  await waitFor(() => expect(mocks.liveOutputListeners.has('session-2')).toBe(true));
-  expect(mocks.liveOutputListeners.has('session-1')).toBe(false);
+  await waitFor(() => expect(mocks.liveOutputListeners.has("session-2")).toBe(true));
+  expect(mocks.liveOutputListeners.has("session-1")).toBe(false);
 });

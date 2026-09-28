@@ -4,7 +4,17 @@ import type { SessionContext } from "./session.js";
 const MAX_TURN_INPUT_CHARS = 200;
 const MAX_TURN_OUTPUT_CHARS = 200;
 
-export type InternalEventType = "session.ready" | "session.exited" | "session.model_updated" | "session.message_updated" | "session.context_usage_updated" | "turn.started" | "turn.output" | "turn.completed" | "turn.failed" | "turn.interrupted";
+export type InternalEventType =
+  | "session.ready"
+  | "session.exited"
+  | "session.model_updated"
+  | "session.message_updated"
+  | "session.context_usage_updated"
+  | "turn.started"
+  | "turn.output"
+  | "turn.completed"
+  | "turn.failed"
+  | "turn.interrupted";
 
 export interface ContextUsagePayload {
   used_tokens: number | null;
@@ -58,11 +68,18 @@ export interface InternalEvent {
 
 type ActiveTurnContext = TurnContext & { turnId: string };
 
-function turnFact(context: ActiveTurnContext, type: InternalEventType, data: Record<string, unknown>): InternalEvent {
+function turnFact(
+  context: ActiveTurnContext,
+  type: InternalEventType,
+  data: Record<string, unknown>,
+): InternalEvent {
   return { session_id: context.sessionId, turn_id: context.turnId, type, data };
 }
 
-export function buildSessionMessageUpdatedEvent(context: TurnContext, reason: SessionMessageUpdatedReason): InternalEvent {
+export function buildSessionMessageUpdatedEvent(
+  context: TurnContext,
+  reason: SessionMessageUpdatedReason,
+): InternalEvent {
   return {
     session_id: context.sessionId,
     type: "session.message_updated",
@@ -70,7 +87,11 @@ export function buildSessionMessageUpdatedEvent(context: TurnContext, reason: Se
   };
 }
 
-export function buildSessionContextUsageUpdatedEvent(context: TurnContext, usage: ContextUsagePayload, model?: string | null): InternalEvent {
+export function buildSessionContextUsageUpdatedEvent(
+  context: TurnContext,
+  usage: ContextUsagePayload,
+  model?: string | null,
+): InternalEvent {
   const contextUsage: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(usage)) {
     if (value !== null) contextUsage[key] = value;
@@ -111,11 +132,23 @@ function modelNameFromRecord(record: Record<string, unknown>): string | null | u
   const model = record.model;
   if (!model || typeof model !== "object" || Array.isArray(model)) return null;
   const modelRecord = model as Record<string, unknown>;
-  return optionalNullableString(modelRecord.id) ?? optionalNullableString(modelRecord.modelId) ?? optionalNullableString(modelRecord.name);
+  return (
+    optionalNullableString(modelRecord.id) ??
+    optionalNullableString(modelRecord.modelId) ??
+    optionalNullableString(modelRecord.name)
+  );
 }
 
 function hasObservedUsageValue(usage: ContextUsagePayload): boolean {
-  return usage.used_tokens !== null || usage.max_tokens !== null || usage.remaining_tokens !== null || usage.usage_ratio !== null || usage.input_tokens !== null || usage.output_tokens !== null || usage.cache_tokens !== null;
+  return (
+    usage.used_tokens !== null ||
+    usage.max_tokens !== null ||
+    usage.remaining_tokens !== null ||
+    usage.usage_ratio !== null ||
+    usage.input_tokens !== null ||
+    usage.output_tokens !== null ||
+    usage.cache_tokens !== null
+  );
 }
 
 function contextUsageFromPontiaShape(raw: unknown): ContextUsagePayload | undefined {
@@ -188,7 +221,10 @@ function contextUsageFromPiMessage(message: unknown): ContextUsageObservation | 
     usage_ratio: null,
     input_tokens,
     output_tokens,
-    cache_tokens: cache_read_tokens === null && cache_write_tokens === null ? null : (cache_read_tokens ?? 0) + (cache_write_tokens ?? 0),
+    cache_tokens:
+      cache_read_tokens === null && cache_write_tokens === null
+        ? null
+        : (cache_read_tokens ?? 0) + (cache_write_tokens ?? 0),
     confidence: "estimated",
   };
   return hasObservedUsageValue(context_usage) ? { context_usage, model } : undefined;
@@ -210,17 +246,28 @@ export function contextUsageFromPiContext(ctx: unknown): ContextUsageObservation
   const usage = rawUsage as Record<string, unknown>;
   const used_tokens = optionalNonNegativeInteger(usage.tokens);
   const max_tokens = optionalNonNegativeInteger(usage.contextWindow);
-  const percent = usage.percent == null ? null : typeof usage.percent === "number" && usage.percent >= 0 && usage.percent <= 100 ? usage.percent : undefined;
+  const percent =
+    usage.percent == null
+      ? null
+      : typeof usage.percent === "number" && usage.percent >= 0 && usage.percent <= 100
+        ? usage.percent
+        : undefined;
   const model = modelNameFromRecord(record);
 
-  if (used_tokens === undefined || max_tokens === undefined || percent === undefined || model === undefined) {
+  if (
+    used_tokens === undefined ||
+    max_tokens === undefined ||
+    percent === undefined ||
+    model === undefined
+  ) {
     return undefined;
   }
 
   const context_usage: ContextUsagePayload = {
     used_tokens,
     max_tokens,
-    remaining_tokens: used_tokens !== null && max_tokens !== null ? Math.max(0, max_tokens - used_tokens) : null,
+    remaining_tokens:
+      used_tokens !== null && max_tokens !== null ? Math.max(0, max_tokens - used_tokens) : null,
     usage_ratio: percent === null ? null : percent / 100,
     input_tokens: null,
     output_tokens: null,
@@ -238,24 +285,42 @@ export function contextUsageFromPiEvent(event: unknown): ContextUsageObservation
   return contextUsageFromPiMessage(record.message);
 }
 
-function mergeContextUsageObservations(primary: ContextUsageObservation | undefined, secondary: ContextUsageObservation | undefined): ContextUsageObservation | undefined {
+function mergeContextUsageObservations(
+  primary: ContextUsageObservation | undefined,
+  secondary: ContextUsageObservation | undefined,
+): ContextUsageObservation | undefined {
   if (!primary) return secondary;
   if (!secondary) return primary;
   const context_usage: ContextUsagePayload = {
     used_tokens: secondary.context_usage.used_tokens ?? primary.context_usage.used_tokens,
     max_tokens: secondary.context_usage.max_tokens ?? primary.context_usage.max_tokens,
-    remaining_tokens: secondary.context_usage.remaining_tokens ?? primary.context_usage.remaining_tokens,
+    remaining_tokens:
+      secondary.context_usage.remaining_tokens ?? primary.context_usage.remaining_tokens,
     usage_ratio: secondary.context_usage.usage_ratio ?? primary.context_usage.usage_ratio,
     input_tokens: primary.context_usage.input_tokens ?? secondary.context_usage.input_tokens,
     output_tokens: primary.context_usage.output_tokens ?? secondary.context_usage.output_tokens,
     cache_tokens: primary.context_usage.cache_tokens ?? secondary.context_usage.cache_tokens,
-    confidence: primary.context_usage.confidence === "exact" || secondary.context_usage.confidence === "exact" ? "exact" : primary.context_usage.confidence === "estimated" || secondary.context_usage.confidence === "estimated" ? "estimated" : "unknown",
+    confidence:
+      primary.context_usage.confidence === "exact" || secondary.context_usage.confidence === "exact"
+        ? "exact"
+        : primary.context_usage.confidence === "estimated" ||
+            secondary.context_usage.confidence === "estimated"
+          ? "estimated"
+          : "unknown",
   };
-  return hasObservedUsageValue(context_usage) ? { context_usage, model: primary.model ?? secondary.model } : undefined;
+  return hasObservedUsageValue(context_usage)
+    ? { context_usage, model: primary.model ?? secondary.model }
+    : undefined;
 }
 
-export function contextUsageFromPiHook(event: unknown, ctx?: unknown): ContextUsageObservation | undefined {
-  return mergeContextUsageObservations(contextUsageFromPiEvent(event), contextUsageFromPiContext(ctx));
+export function contextUsageFromPiHook(
+  event: unknown,
+  ctx?: unknown,
+): ContextUsageObservation | undefined {
+  return mergeContextUsageObservations(
+    contextUsageFromPiEvent(event),
+    contextUsageFromPiContext(ctx),
+  );
 }
 
 export function buildTurnStartedEvent(
@@ -265,7 +330,10 @@ export function buildTurnStartedEvent(
 ): InternalEvent {
   const data: Record<string, unknown> = {
     runtime_instance_id: context.runtimeInstanceId,
-    input_summary: context.input === undefined ? undefined : Array.from(context.input).slice(0, MAX_TURN_INPUT_CHARS).join(""),
+    input_summary:
+      context.input === undefined
+        ? undefined
+        : Array.from(context.input).slice(0, MAX_TURN_INPUT_CHARS).join(""),
     previous_leaf_id: previousLeafId,
   };
   if (context.inboxMessageId) data.inbox_message_id = context.inboxMessageId;
@@ -279,20 +347,30 @@ export function buildTurnOutputEvent(context: ActiveTurnContext, output: string)
   });
 }
 
-export function buildTurnCompletedEvent(context: ActiveTurnContext, terminalLeafId: string | null = null): InternalEvent {
+export function buildTurnCompletedEvent(
+  context: ActiveTurnContext,
+  terminalLeafId: string | null = null,
+): InternalEvent {
   return turnFact(context, "turn.completed", {
     terminal_leaf_id: terminalLeafId,
   });
 }
 
-export function buildTurnFailedEvent(context: ActiveTurnContext, message: string, terminalLeafId: string | null = null): InternalEvent {
+export function buildTurnFailedEvent(
+  context: ActiveTurnContext,
+  message: string,
+  terminalLeafId: string | null = null,
+): InternalEvent {
   return turnFact(context, "turn.failed", {
     failure_message: message,
     terminal_leaf_id: terminalLeafId,
   });
 }
 
-export function buildTurnInterruptedEvent(context: ActiveTurnContext, terminalLeafId: string | null = null): InternalEvent {
+export function buildTurnInterruptedEvent(
+  context: ActiveTurnContext,
+  terminalLeafId: string | null = null,
+): InternalEvent {
   return turnFact(context, "turn.interrupted", {
     terminal_leaf_id: terminalLeafId,
   });

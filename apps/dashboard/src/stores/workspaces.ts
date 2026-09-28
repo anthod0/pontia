@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable } from "svelte/store";
 import {
   listWorkspaceRootEntries,
   deleteWorkspace as apiDeleteWorkspace,
@@ -9,7 +9,7 @@ import {
   registerWorkspace as apiRegisterWorkspace,
   renameWorkspace as apiRenameWorkspace,
   type ReadRequestOptions,
-} from '../api/client';
+} from "../api/client";
 import type {
   RegisterWorkspaceInput,
   RenameWorkspaceInput,
@@ -17,7 +17,7 @@ import type {
   WorkspaceGitStatusView,
   WorkspaceRootView,
   WorkspaceView,
-} from '../api/types';
+} from "../api/types";
 
 export const workspaces = writable<WorkspaceView[]>([]);
 export const workspacesLoading = writable(false);
@@ -28,7 +28,7 @@ export const workspaceGitStatuses = writable<Record<string, WorkspaceGitStatusVi
 export const workspaceGitStatusErrors = writable<Record<string, string>>({});
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 let workspaceListRequest = 0;
@@ -52,13 +52,19 @@ export async function loadWorkspaces(options: ReadRequestOptions = {}): Promise<
   }
 }
 
-export async function loadWorkspaceRoots(options: ReadRequestOptions = {}): Promise<WorkspaceRootView[]> {
+export async function loadWorkspaceRoots(
+  options: ReadRequestOptions = {},
+): Promise<WorkspaceRootView[]> {
   const roots = await listWorkspaceRoots(options);
   workspaceRoots.set(roots);
   return roots;
 }
 
-export async function browseWorkspaceRoot(rootId: string, path = '', options: ReadRequestOptions = {}): Promise<WorkspaceDirectoryListingView> {
+export async function browseWorkspaceRoot(
+  rootId: string,
+  path = "",
+  options: ReadRequestOptions = {},
+): Promise<WorkspaceDirectoryListingView> {
   return listWorkspaceRootEntries(rootId, path, options);
 }
 
@@ -78,7 +84,10 @@ function setGitStatusError(workspaceId: string, error: unknown): void {
   }));
 }
 
-export async function loadWorkspaceGitStatus(workspaceId: string, options: ReadRequestOptions = {}): Promise<void> {
+export async function loadWorkspaceGitStatus(
+  workspaceId: string,
+  options: ReadRequestOptions = {},
+): Promise<void> {
   try {
     setGitStatus(await getWorkspaceGitStatus(workspaceId, options));
   } catch (error) {
@@ -100,7 +109,10 @@ export async function registerWorkspace(input: RegisterWorkspaceInput): Promise<
   return workspace;
 }
 
-export async function renameWorkspace(workspaceId: string, input: RenameWorkspaceInput): Promise<WorkspaceView> {
+export async function renameWorkspace(
+  workspaceId: string,
+  input: RenameWorkspaceInput,
+): Promise<WorkspaceView> {
   const workspace = await apiRenameWorkspace(workspaceId, input);
   await loadWorkspaces();
   return workspace;

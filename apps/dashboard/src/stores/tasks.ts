@@ -1,15 +1,12 @@
-import { get, writable } from 'svelte/store';
+import { get, writable } from "svelte/store";
 import {
   cancelTask as apiCancelTask,
   getTask,
   interruptTask as apiInterruptTask,
   listTaskEvents,
   listTasks,
-} from '../api/client';
-import type {
-  TaskEventView,
-  TaskView,
-} from '../api/types';
+} from "../api/client";
+import type { TaskEventView, TaskView } from "../api/types";
 
 export const tasks = writable<TaskView[]>([]);
 export const tasksLoading = writable(false);
@@ -32,7 +29,8 @@ export async function loadTasks(): Promise<void> {
     const loaded = await listTasks();
     if (request === listRequest) tasks.set(loaded);
   } catch (error) {
-    if (request === listRequest) tasksError.set(error instanceof Error ? error.message : String(error));
+    if (request === listRequest)
+      tasksError.set(error instanceof Error ? error.message : String(error));
   } finally {
     if (request === listRequest) tasksLoading.set(false);
   }
@@ -45,7 +43,8 @@ export async function selectTask(taskId: string): Promise<void> {
 
 export async function refreshTask(taskId: string): Promise<void> {
   const request = ++detailRequest;
-  const isCurrent = () => request === detailRequest && (!get(selectedTaskId) || get(selectedTaskId) === taskId);
+  const isCurrent = () =>
+    request === detailRequest && (!get(selectedTaskId) || get(selectedTaskId) === taskId);
   taskLoading.set(true);
   taskError.set(null);
   try {

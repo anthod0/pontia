@@ -18,9 +18,15 @@ install-local:
 
 fmt:
     cargo fmt
+    bun run --cwd apps/dashboard fmt
+    bun run --cwd apps/website fmt
+    bun run --cwd clients/pi fmt
 
 fmt-check:
     cargo fmt --check
+    bun run --cwd apps/dashboard fmt:check
+    bun run --cwd apps/website fmt:check
+    bun run --cwd clients/pi fmt:check
 
 sqlx-prepare:
     ./scripts/sqlx-prepare.sh

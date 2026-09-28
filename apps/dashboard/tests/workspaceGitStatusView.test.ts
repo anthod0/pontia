@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/svelte';
-import type { Writable } from 'svelte/store';
-import { expect, test, vi } from 'vitest';
-import WorkspacesPage from '../src/pages/WorkspacesPage.svelte';
-import type { WorkspaceView } from '../src/api/types';
+import { render, screen } from "@testing-library/svelte";
+import type { Writable } from "svelte/store";
+import { expect, test, vi } from "vitest";
+import WorkspacesPage from "../src/pages/WorkspacesPage.svelte";
+import type { WorkspaceView } from "../src/api/types";
 
 function writableStore<T>(initial: T): Writable<T> {
   let value = initial;
@@ -41,28 +41,28 @@ const mocks = vi.hoisted(() => ({
   refreshWorkspaceGitStatus: vi.fn(async () => undefined),
 }));
 
-vi.mock('../src/stores/workspaces', () => mocks);
+vi.mock("../src/stores/workspaces", () => mocks);
 
 const workspace = (): WorkspaceView => ({
-  workspace_id: 'workspace-1',
-  canonical_path: '/repo/app',
-  display_path: '/repo/app',
-  name: 'App',
-  state: 'active',
+  workspace_id: "workspace-1",
+  canonical_path: "/repo/app",
+  display_path: "/repo/app",
+  name: "App",
+  state: "active",
   metadata: {},
-  created_at: '2026-01-01T00:00:00.000Z',
-  updated_at: '2026-01-01T00:00:00.000Z',
+  created_at: "2026-01-01T00:00:00.000Z",
+  updated_at: "2026-01-01T00:00:00.000Z",
   last_used_at: null,
 });
 
-test('does not show workspace git status summary outside chat pages', () => {
+test("does not show workspace git status summary outside chat pages", () => {
   mocks.workspaces.set([workspace()]);
   mocks.workspaceGitStatuses.set({
-    'workspace-1': {
-      workspace_id: 'workspace-1',
-      state: 'observed',
-      repo_root: '/repo/app',
-      branch: 'main',
+    "workspace-1": {
+      workspace_id: "workspace-1",
+      state: "observed",
+      repo_root: "/repo/app",
+      branch: "main",
       upstream: null,
       ahead: 0,
       behind: 1,
@@ -72,19 +72,19 @@ test('does not show workspace git status summary outside chat pages', () => {
       conflicted_count: 0,
       clean: false,
       failure: null,
-      observed_at: '2026-01-01T00:00:00.000Z',
-      updated_at: '2026-01-01T00:00:00.000Z',
+      observed_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
     },
   });
 
   render(WorkspacesPage);
 
-  expect(screen.queryByTestId('active-workspaces-list')).not.toBeInTheDocument();
-  expect(screen.queryByText('main')).not.toBeInTheDocument();
-  expect(screen.queryByText('dirty')).not.toBeInTheDocument();
-  expect(screen.queryByText('↓1')).not.toBeInTheDocument();
-  expect(screen.queryByText('+1')).not.toBeInTheDocument();
-  expect(screen.queryByText('~2')).not.toBeInTheDocument();
-  expect(screen.queryByText('?3')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /refresh git status/i })).not.toBeInTheDocument();
+  expect(screen.queryByTestId("active-workspaces-list")).not.toBeInTheDocument();
+  expect(screen.queryByText("main")).not.toBeInTheDocument();
+  expect(screen.queryByText("dirty")).not.toBeInTheDocument();
+  expect(screen.queryByText("↓1")).not.toBeInTheDocument();
+  expect(screen.queryByText("+1")).not.toBeInTheDocument();
+  expect(screen.queryByText("~2")).not.toBeInTheDocument();
+  expect(screen.queryByText("?3")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /refresh git status/i })).not.toBeInTheDocument();
 });

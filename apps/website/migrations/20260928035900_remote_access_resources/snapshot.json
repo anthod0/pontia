@@ -2,9 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "fd89e443-2418-47a5-9002-14ff6ef2065f",
-  "prevIds": [
-    "5c602c93-5b87-4eeb-9178-5bb43cd8951f"
-  ],
+  "prevIds": ["5c602c93-5b87-4eeb-9178-5bb43cd8951f"],
   "ddl": [
     {
       "name": "accounts",
@@ -455,13 +453,9 @@
       "table": "users"
     },
     {
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "tableTo": "users",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -470,13 +464,9 @@
       "table": "accounts"
     },
     {
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "tableTo": "users",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -485,13 +475,9 @@
       "table": "auth_sessions"
     },
     {
-      "columns": [
-        "account_id"
-      ],
+      "columns": ["account_id"],
       "tableTo": "accounts",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "nameExplicit": false,
@@ -500,13 +486,9 @@
       "table": "auth_sessions"
     },
     {
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "tableTo": "users",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -515,13 +497,9 @@
       "table": "device_authorizations"
     },
     {
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "tableTo": "users",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -530,13 +508,9 @@
       "table": "devices"
     },
     {
-      "columns": [
-        "edge_id"
-      ],
+      "columns": ["edge_id"],
       "tableTo": "edges",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "RESTRICT",
       "nameExplicit": false,
@@ -545,63 +519,49 @@
       "table": "devices"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "accounts_pk",
       "entityType": "pks",
       "table": "accounts"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "auth_sessions_pk",
       "entityType": "pks",
       "table": "auth_sessions"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "device_authorizations_pk",
       "entityType": "pks",
       "table": "device_authorizations"
     },
     {
-      "columns": [
-        "key"
-      ],
+      "columns": ["key"],
       "nameExplicit": false,
       "name": "device_rate_limits_pk",
       "entityType": "pks",
       "table": "device_rate_limits"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "devices_pk",
       "entityType": "pks",
       "table": "devices"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "edges_pk",
       "entityType": "pks",
       "table": "edges"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "users_pk",
       "entityType": "pks",

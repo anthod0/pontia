@@ -22,18 +22,26 @@ export class EventReporter {
     this.logFile = options.logFile;
   }
 
-  async report(context: { runtimeInstanceId: string }, event: InternalEvent): Promise<EventReportResult> {
+  async report(
+    context: { runtimeInstanceId: string },
+    event: InternalEvent,
+  ): Promise<EventReportResult> {
     try {
       const body = await this.connection.request("event.report", {
         runtime_instance_id: context.runtimeInstanceId,
         event,
       });
-      const record = body && typeof body === "object" ? body as Record<string, unknown> : undefined;
-      if (event.type === "turn.started" && (record?.accepted !== true || typeof record?.turn_id !== "string" || !record.turn_id)) {
+      const record =
+        body && typeof body === "object" ? (body as Record<string, unknown>) : undefined;
+      if (
+        event.type === "turn.started" &&
+        (record?.accepted !== true || typeof record?.turn_id !== "string" || !record.turn_id)
+      ) {
         await this.reportStartFailure(event, "missing_turn_id");
         return { accepted: false };
       }
-      if (record?.accepted !== true) throw new Error("Pi event RPC returned an invalid acknowledgement");
+      if (record?.accepted !== true)
+        throw new Error("Pi event RPC returned an invalid acknowledgement");
       return {
         accepted: true,
         eventId: typeof record.event_id === "string" ? record.event_id : undefined,
@@ -44,9 +52,15 @@ export class EventReporter {
         level: "error",
         code: "pi_event_report_failed",
         message: `Pi event RPC failed for ${event.type}`,
-        details: { event_type: event.type, error: error instanceof Error ? error.message : String(error) },
+        details: {
+          event_type: event.type,
+          error: error instanceof Error ? error.message : String(error),
+        },
       });
-      await this.reportStartFailure(event, error instanceof RpcError ? "event_rejected" : "transport_failed");
+      await this.reportStartFailure(
+        event,
+        error instanceof RpcError ? "event_rejected" : "transport_failed",
+      );
       return { accepted: false };
     }
   }
@@ -61,9 +75,11 @@ export class EventReporter {
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
       try {
-        const result = await this.connection.request("turn.startFailure", {
-          session_id: event.session_id, runtime_instance_id: event.data.runtime_instance_id, reason,
-        }) as { accepted?: unknown } | null;
+        const result = (await this.connection.request("turn.startFailure", {
+          session_id: event.session_id,
+          runtime_instance_id: event.data.runtime_instance_id,
+          reason,
+        })) as { accepted?: unknown } | null;
         if (result?.accepted === true) return;
       } catch (error) {
         if (error instanceof RpcError && error.code !== -32603) break;

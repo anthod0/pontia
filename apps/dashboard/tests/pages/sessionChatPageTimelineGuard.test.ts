@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/svelte';
-import { beforeEach, expect, test, vi } from 'vitest';
-import SessionChatPage from '../../src/pages/SessionChatPage.svelte';
-import type { SessionConsoleDetail } from '../../src/stores/sessions';
-import type { DashboardStreamEvent, SessionView } from '../../src/api/types';
+import { render, screen, waitFor } from "@testing-library/svelte";
+import { beforeEach, expect, test, vi } from "vitest";
+import SessionChatPage from "../../src/pages/SessionChatPage.svelte";
+import type { SessionConsoleDetail } from "../../src/stores/sessions";
+import type { DashboardStreamEvent, SessionView } from "../../src/api/types";
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -40,8 +40,10 @@ const mocks = vi.hoisted(() => {
     loadedSessions: [] as SessionView[],
     loadSessions: vi.fn(async () => mocks.loadedSessions),
     loadSessionDetail: vi.fn(async (sessionId: string) => {
-      const selected = mocks.loadedSessions.find((session) => session.session_id === sessionId) ?? null;
-      if (selected) mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+      const selected =
+        mocks.loadedSessions.find((session) => session.session_id === sessionId) ?? null;
+      if (selected)
+        mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
       return null;
     }),
     submitInboxMessage: vi.fn(),
@@ -52,7 +54,7 @@ const mocks = vi.hoisted(() => {
     resumeSession: vi.fn(),
     terminateSession: vi.fn(),
     updateSessionTitle: vi.fn(),
-    chatDraft: writableStore(''),
+    chatDraft: writableStore(""),
     optimisticInitialMessages: writableStore({}),
     workspaces: writableStore([]),
     workspacesError: writableStore<string | null>(null),
@@ -61,7 +63,7 @@ const mocks = vi.hoisted(() => {
     loadWorkspaces: vi.fn(async () => []),
     refreshWorkspaceGitStatus: vi.fn(async () => undefined),
     timelineState: writableStore({
-      sessionId: '',
+      sessionId: "",
       mode: null,
       groups: [],
       items: [],
@@ -71,20 +73,22 @@ const mocks = vi.hoisted(() => {
       loading: false,
       refreshing: false,
       refreshKind: null,
-      status: 'idle',
+      status: "idle",
       errorCode: null,
       error: null,
     }),
     loadSessionTimeline: vi.fn(async () => null),
     resetTimelineState: vi.fn(),
     refreshSessionTimeline: vi.fn(async () => undefined),
-    subscribeDashboardEvents: vi.fn((_listener: (event: DashboardStreamEvent) => void) => () => undefined),
+    subscribeDashboardEvents: vi.fn(
+      (_listener: (event: DashboardStreamEvent) => void) => () => undefined,
+    ),
   };
 });
 
-vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate }));
-vi.mock('svelte-sonner', () => ({ toast: { error: vi.fn() } }));
-vi.mock('../../src/stores/sessions', () => ({
+vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
+vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("../../src/stores/sessions", () => ({
   sessions: mocks.sessions,
   sessionsError: mocks.sessionsError,
   sessionDetail: mocks.sessionDetail,
@@ -103,13 +107,16 @@ vi.mock('../../src/stores/sessions', () => ({
   terminateSession: mocks.terminateSession,
   updateSessionTitle: mocks.updateSessionTitle,
 }));
-vi.mock('../../src/stores/chatDraft', () => ({ chatDraft: mocks.chatDraft, clearChatDraft: vi.fn() }));
-vi.mock('../../src/stores/optimisticChat', () => ({
+vi.mock("../../src/stores/chatDraft", () => ({
+  chatDraft: mocks.chatDraft,
+  clearChatDraft: vi.fn(),
+}));
+vi.mock("../../src/stores/optimisticChat", () => ({
   optimisticInitialMessages: mocks.optimisticInitialMessages,
   chatMessagesWithOptimistic: (_sessionId: string, loadedMessages: unknown[]) => loadedMessages,
   reconcileOptimisticMessages: vi.fn(),
 }));
-vi.mock('../../src/stores/workspaces', () => ({
+vi.mock("../../src/stores/workspaces", () => ({
   workspaces: mocks.workspaces,
   workspacesError: mocks.workspacesError,
   workspaceGitStatuses: mocks.workspaceGitStatuses,
@@ -117,40 +124,42 @@ vi.mock('../../src/stores/workspaces', () => ({
   loadWorkspaces: mocks.loadWorkspaces,
   refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
 }));
-vi.mock('../../src/stores/timeline', () => ({
+vi.mock("../../src/stores/timeline", () => ({
   timelineState: mocks.timelineState,
   loadSessionTimeline: mocks.loadSessionTimeline,
   resetTimelineState: mocks.resetTimelineState,
   refreshSessionTimeline: mocks.refreshSessionTimeline,
   hasTimelineSnapshot: () => false,
 }));
-vi.mock('../../src/services/eventStream', () => ({ subscribeDashboardEvents: mocks.subscribeDashboardEvents }));
+vi.mock("../../src/services/eventStream", () => ({
+  subscribeDashboardEvents: mocks.subscribeDashboardEvents,
+}));
 
 const session = (overrides: Partial<SessionView> = {}): SessionView => ({
-  session_id: 'session-1',
-  client_type: 'generic',
-  handle: 'generic-session',
+  session_id: "session-1",
+  client_type: "generic",
+  handle: "generic-session",
   role: null,
   description: null,
   execution_profile_id: null,
   execution_profile_version: null,
-  state: 'idle',
+  state: "idle",
   current_turn_id: null,
-  workspace_id: 'workspace-1',
+  workspace_id: "workspace-1",
   workspace: null,
-  capabilities: { timeline: false, context_usage: 'unsupported' },
+  capabilities: { timeline: false, context_usage: "unsupported" },
   model: null,
   context_usage: null,
-  created_at: '2026-05-14T00:00:00Z',
-  updated_at: '2026-05-14T00:00:00Z',
+  created_at: "2026-05-14T00:00:00Z",
+  updated_at: "2026-05-14T00:00:00Z",
   metadata: {},
   ...overrides,
 });
 
 beforeEach(() => {
-  window.history.pushState({}, '', '/dashboard/chat/session-1');
+  window.history.pushState({}, "", "/dashboard/chat/session-1");
   const selected = session();
-  mocks.pathParams = { sessionId: 'session-1' };
+  mocks.pathParams = { sessionId: "session-1" };
   mocks.loadedSessions = [selected];
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set(null);
@@ -158,21 +167,21 @@ beforeEach(() => {
   mocks.sessionDetailError.set(null);
   mocks.sessionDetailErrorKind.set(null);
   mocks.sessionDetailLoading.set(false);
-  mocks.chatDraft.set('');
+  mocks.chatDraft.set("");
   vi.clearAllMocks();
 });
 
-test('chat keeps clients without timeline support on the page with history unavailable', async () => {
+test("chat keeps clients without timeline support on the page with history unavailable", async () => {
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-1'));
-  expect(await screen.findByText('Conversation history unavailable')).toBeInTheDocument();
+  await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith("session-1"));
+  expect(await screen.findByText("Conversation history unavailable")).toBeInTheDocument();
   expect(mocks.navigate).not.toHaveBeenCalled();
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
 });
 
-test.each(['session.ready', 'turn.started', 'turn.completed', 'session.message_updated'])(
-  '%s refreshes session details without requesting unsupported history',
+test.each(["session.ready", "turn.started", "turn.completed", "session.message_updated"])(
+  "%s refreshes session details without requesting unsupported history",
   async (type) => {
     render(SessionChatPage);
     await waitFor(() => expect(mocks.subscribeDashboardEvents).toHaveBeenCalled());
@@ -180,21 +189,23 @@ test.each(['session.ready', 'turn.started', 'turn.completed', 'session.message_u
 
     const listener = mocks.subscribeDashboardEvents.mock.calls[0][0];
     listener({
-      kind: 'session_event',
-      id: 'event-1',
-      occurred_at: '2026-05-14T00:00:00Z',
+      kind: "session_event",
+      id: "event-1",
+      occurred_at: "2026-05-14T00:00:00Z",
       event: {
-        event_id: 'event-1',
-        session_id: 'session-1',
-        turn_id: 'turn-1',
-        source: 'runtime',
+        event_id: "event-1",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        source: "runtime",
         type,
-        time: '2026-05-14T00:00:00Z',
+        time: "2026-05-14T00:00:00Z",
         payload: {},
       },
     });
 
-    await waitFor(() => expect(mocks.loadSessionDetail).toHaveBeenCalledWith('session-1', { showLoading: false }));
+    await waitFor(() =>
+      expect(mocks.loadSessionDetail).toHaveBeenCalledWith("session-1", { showLoading: false }),
+    );
     expect(mocks.refreshSessionTimeline).not.toHaveBeenCalled();
   },
 );

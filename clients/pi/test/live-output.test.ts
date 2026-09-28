@@ -30,9 +30,8 @@ describe("LiveOutputPublisher", () => {
     const request = vi.fn(async (method: string, body: any) => {
       expect(method).toBe("liveOutput.publish");
       bodies.push(body);
-      const sequence = body.type === "append"
-        ? body.first_sequence + body.updates.length - 1
-        : body.sequence;
+      const sequence =
+        body.type === "append" ? body.first_sequence + body.updates.length - 1 : body.sequence;
       return accepted(sequence);
     });
     const publisher = new LiveOutputPublisher(context, {
@@ -91,12 +90,36 @@ describe("LiveOutputPublisher", () => {
       batchDelayMs: 75,
     });
 
-    publisher.appendToolCall({ callId: "read_1", toolName: "read", arguments: { path: "src/app.ts", start_line: 4 } });
-    publisher.appendToolCall({ callId: "edit_1", toolName: "edit", arguments: { path: "src/app.ts", edits: [{ oldText: "a", newText: "b" }] } });
-    publisher.appendToolCall({ callId: "write_1", toolName: "write", arguments: { path: "out.txt", content: "done" } });
-    publisher.appendToolCall({ callId: "bash_1", toolName: "bash", arguments: { command: "pnpm test", timeout: 30 } });
-    publisher.appendToolCall({ callId: "custom_1", toolName: "custom", arguments: { value: true } });
-    publisher.appendToolCall({ callId: "edit_2", toolName: "edit", arguments: { path: "broken.ts" } });
+    publisher.appendToolCall({
+      callId: "read_1",
+      toolName: "read",
+      arguments: { path: "src/app.ts", start_line: 4 },
+    });
+    publisher.appendToolCall({
+      callId: "edit_1",
+      toolName: "edit",
+      arguments: { path: "src/app.ts", edits: [{ oldText: "a", newText: "b" }] },
+    });
+    publisher.appendToolCall({
+      callId: "write_1",
+      toolName: "write",
+      arguments: { path: "out.txt", content: "done" },
+    });
+    publisher.appendToolCall({
+      callId: "bash_1",
+      toolName: "bash",
+      arguments: { command: "pnpm test", timeout: 30 },
+    });
+    publisher.appendToolCall({
+      callId: "custom_1",
+      toolName: "custom",
+      arguments: { value: true },
+    });
+    publisher.appendToolCall({
+      callId: "edit_2",
+      toolName: "edit",
+      arguments: { path: "broken.ts" },
+    });
     await vi.advanceTimersByTimeAsync(75);
 
     expect(bodies[0].items.map((item: any) => item.managed_tool_use)).toEqual([
@@ -116,9 +139,8 @@ describe("LiveOutputPublisher", () => {
       expect(method).toBe("liveOutput.publish");
       bodies.push(body);
       if (bodies.length === 1) throw new RpcError(-32603, "temporarily unavailable");
-      const sequence = body.type === "append"
-        ? body.first_sequence + body.updates.length - 1
-        : body.sequence;
+      const sequence =
+        body.type === "append" ? body.first_sequence + body.updates.length - 1 : body.sequence;
       return accepted(sequence);
     });
     const publisher = new LiveOutputPublisher(context, {
@@ -153,7 +175,8 @@ describe("LiveOutputPublisher", () => {
     const bodies: any[] = [];
     const request = vi.fn(async (_method: string, body: any) => {
       bodies.push(body);
-      if (bodies.length === 2) return { accepted: false, accepted_sequence: 0, resync_required: true };
+      if (bodies.length === 2)
+        return { accepted: false, accepted_sequence: 0, resync_required: true };
       return accepted(body.sequence);
     });
     const publisher = new LiveOutputPublisher(context, { connection: { request } });
@@ -163,31 +186,44 @@ describe("LiveOutputPublisher", () => {
     await vi.advanceTimersByTimeAsync(75);
     await publisher.close();
 
-    expect(bodies.map((body) => body.type)).toEqual(["snapshot", "append", "snapshot", "stream_closed"]);
+    expect(bodies.map((body) => body.type)).toEqual([
+      "snapshot",
+      "append",
+      "snapshot",
+      "stream_closed",
+    ]);
     expect(bodies[2]).toMatchObject({ sequence: 2, items: [{ text: "hello world" }] });
     expect(bodies[3]).toMatchObject({ sequence: 3 });
     await vi.advanceTimersByTimeAsync(1_000);
     expect(bodies).toHaveLength(4);
   });
 
-  test.each([-32601, -32602, -32004, -32009])("stops publishing after permanent RPC rejection %s", async (code) => {
-    vi.useFakeTimers();
-    const request = vi.fn(async () => { throw new RpcError(code, "rejected"); });
-    const publisher = new LiveOutputPublisher(context, { connection: { request } });
-    publisher.appendText("hello");
-    await vi.advanceTimersByTimeAsync(75);
-    publisher.appendText(" world");
-    await vi.advanceTimersByTimeAsync(1_000);
-    await publisher.close();
-    expect(request).toHaveBeenCalledTimes(1);
-  });
+  test.each([-32601, -32602, -32004, -32009])(
+    "stops publishing after permanent RPC rejection %s",
+    async (code) => {
+      vi.useFakeTimers();
+      const request = vi.fn(async () => {
+        throw new RpcError(code, "rejected");
+      });
+      const publisher = new LiveOutputPublisher(context, { connection: { request } });
+      publisher.appendText("hello");
+      await vi.advanceTimersByTimeAsync(75);
+      publisher.appendText(" world");
+      await vi.advanceTimersByTimeAsync(1_000);
+      await publisher.close();
+      expect(request).toHaveBeenCalledTimes(1);
+    },
+  );
 
   test("keeps a snapshot consistent while its request waits for reconnect", async () => {
     vi.useFakeTimers();
     let acknowledge: (() => void) | undefined;
     const bodies: any[] = [];
     const request = vi.fn(async (_method: string, body: any) => {
-      if (bodies.length === 0) await new Promise<void>((resolve) => { acknowledge = resolve; });
+      if (bodies.length === 0)
+        await new Promise<void>((resolve) => {
+          acknowledge = resolve;
+        });
       bodies.push(body);
       return accepted(body.sequence ?? body.first_sequence + body.updates.length - 1);
     });
@@ -203,22 +239,26 @@ describe("LiveOutputPublisher", () => {
   });
 
   test("extracts only complete Pi tool calls", () => {
-    expect(completeToolCallFromMessageUpdate({
-      assistantMessageEvent: {
-        type: "toolcall_delta",
-        delta: "{\"path\":",
-      },
-    })).toBeUndefined();
-    expect(completeToolCallFromMessageUpdate({
-      assistantMessageEvent: {
-        type: "toolcall_end",
-        toolCall: {
-          id: "call_1",
-          name: "read",
-          arguments: { path: "README.md" },
+    expect(
+      completeToolCallFromMessageUpdate({
+        assistantMessageEvent: {
+          type: "toolcall_delta",
+          delta: '{"path":',
         },
-      },
-    })).toEqual({
+      }),
+    ).toBeUndefined();
+    expect(
+      completeToolCallFromMessageUpdate({
+        assistantMessageEvent: {
+          type: "toolcall_end",
+          toolCall: {
+            id: "call_1",
+            name: "read",
+            arguments: { path: "README.md" },
+          },
+        },
+      }),
+    ).toEqual({
       callId: "call_1",
       toolName: "read",
       arguments: { path: "README.md" },

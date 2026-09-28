@@ -1,20 +1,23 @@
-import { writable } from 'svelte/store';
-import { listAgentProfiles, type ReadRequestOptions } from '../api/client';
-import type { AgentProfileView } from '../api/types';
+import { writable } from "svelte/store";
+import { listAgentProfiles, type ReadRequestOptions } from "../api/client";
+import type { AgentProfileView } from "../api/types";
 
-const FALLBACK_CLIENT_TYPES = ['pi', 'codex'];
+const FALLBACK_CLIENT_TYPES = ["pi", "codex"];
 
 export const agentProfiles = writable<AgentProfileView[]>([]);
 export const agentProfilesLoading = writable(false);
 export const agentProfilesError = writable<string | null>(null);
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 let listRequest = 0;
 
-export async function loadAgentProfiles(includeArchived = false, options: ReadRequestOptions = {}): Promise<void> {
+export async function loadAgentProfiles(
+  includeArchived = false,
+  options: ReadRequestOptions = {},
+): Promise<void> {
   const request = ++listRequest;
   agentProfilesLoading.set(true);
   agentProfilesError.set(null);
@@ -22,26 +25,33 @@ export async function loadAgentProfiles(includeArchived = false, options: ReadRe
     const loaded = await listAgentProfiles(includeArchived, options);
     if (request === listRequest) agentProfiles.set(loaded);
   } catch (error) {
-    if (request === listRequest && !isAbortError(error)) agentProfilesError.set(error instanceof Error ? error.message : String(error));
+    if (request === listRequest && !isAbortError(error))
+      agentProfilesError.set(error instanceof Error ? error.message : String(error));
   } finally {
     if (request === listRequest) agentProfilesLoading.set(false);
   }
 }
 
 export function clientTypeOptionsForProfile(profile: AgentProfileView | null): string[] {
-  const profileOptions = profile?.supported_client_types.filter((client) => client !== 'generic') ?? [];
+  const profileOptions =
+    profile?.supported_client_types.filter((client) => client !== "generic") ?? [];
   return profileOptions.length ? profileOptions : FALLBACK_CLIENT_TYPES;
 }
 
-export function selectClientTypeForProfile(currentClientType: string, profile: AgentProfileView | null): string {
+export function selectClientTypeForProfile(
+  currentClientType: string,
+  profile: AgentProfileView | null,
+): string {
   const options = clientTypeOptionsForProfile(profile);
-  return options.includes(currentClientType) ? currentClientType : options[0] ?? currentClientType;
+  return options.includes(currentClientType)
+    ? currentClientType
+    : (options[0] ?? currentClientType);
 }
 
 export function defaultHandleForProfile(profile: AgentProfileView | null): string {
   const prefix = profile?.handle_prefix?.trim();
-  if (!prefix) return '';
-  return prefix.startsWith('@') ? prefix : `@${prefix}`;
+  if (!prefix) return "";
+  return prefix.startsWith("@") ? prefix : `@${prefix}`;
 }
 
 export function sessionProfileFields(profile: AgentProfileView | null): {

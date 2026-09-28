@@ -11,7 +11,10 @@ async function canonicalPath(path: string): Promise<string> {
   }
 }
 
-export async function isActiveRegisteredWorkspace(connection: Pick<PiConnection, "request">, clientCwd: string | undefined): Promise<boolean> {
+export async function isActiveRegisteredWorkspace(
+  connection: Pick<PiConnection, "request">,
+  clientCwd: string | undefined,
+): Promise<boolean> {
   if (!clientCwd) return false;
 
   const workspacePath = await canonicalPath(clientCwd);

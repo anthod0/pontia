@@ -1,18 +1,32 @@
-import type { ManagedToolUse, TurnView } from '../../api/types';
+import type { ManagedToolUse, TurnView } from "../../api/types";
 import {
   managedToolUseContent,
   managedToolUseTitle,
   type SessionChatMessage,
   type SessionChatThoughtStep,
-} from './sessionChat';
+} from "./sessionChat";
 
 export type LiveOutputItem =
-  | { kind: 'assistant_text'; item_id: string; text: string }
-  | { kind: 'tool_call'; item_id: string; call_id: string; tool_name: string; arguments: unknown; managed_tool_use?: ManagedToolUse };
+  | { kind: "assistant_text"; item_id: string; text: string }
+  | {
+      kind: "tool_call";
+      item_id: string;
+      call_id: string;
+      tool_name: string;
+      arguments: unknown;
+      managed_tool_use?: ManagedToolUse;
+    };
 
 export type LiveOutputUpdate =
-  | { type: 'assistant_text_delta'; item_id: string; delta: string }
-  | { type: 'tool_call'; item_id: string; call_id: string; tool_name: string; arguments: unknown; managed_tool_use?: ManagedToolUse };
+  | { type: "assistant_text_delta"; item_id: string; delta: string }
+  | {
+      type: "tool_call";
+      item_id: string;
+      call_id: string;
+      tool_name: string;
+      arguments: unknown;
+      managed_tool_use?: ManagedToolUse;
+    };
 
 interface LiveOutputIdentity {
   session_id: string;
@@ -21,9 +35,13 @@ interface LiveOutputIdentity {
 }
 
 export type LiveOutputEvent =
-  | ({ type: 'snapshot'; sequence: number; items: LiveOutputItem[] } & LiveOutputIdentity)
-  | ({ type: 'updates'; first_sequence: number; updates: LiveOutputUpdate[] } & LiveOutputIdentity)
-  | ({ type: 'closed'; sequence: number; reason: 'producer_closed' | 'invalidated' | 'expired' } & LiveOutputIdentity);
+  | ({ type: "snapshot"; sequence: number; items: LiveOutputItem[] } & LiveOutputIdentity)
+  | ({ type: "updates"; first_sequence: number; updates: LiveOutputUpdate[] } & LiveOutputIdentity)
+  | ({
+      type: "closed";
+      sequence: number;
+      reason: "producer_closed" | "invalidated" | "expired";
+    } & LiveOutputIdentity);
 
 export interface LiveOutputOverlay extends LiveOutputIdentity {
   sequence: number;
@@ -41,7 +59,7 @@ export function applyLiveOutputEvent(
 ): LiveOutputOverlays {
   if (event.session_id !== expectedSessionId) return overlays;
 
-  if (event.type === 'snapshot') {
+  if (event.type === "snapshot") {
     return {
       ...overlays,
       [event.turn_id]: {
@@ -58,9 +76,9 @@ export function applyLiveOutputEvent(
 
   const current = overlays[event.turn_id];
   if (!current || current.stream_id !== event.stream_id) return overlays;
-  if (event.type === 'closed') {
+  if (event.type === "closed") {
     if (event.sequence < current.sequence) return overlays;
-    if (event.reason === 'expired') return removeLiveOutputOverlay(overlays, event.turn_id);
+    if (event.reason === "expired") return removeLiveOutputOverlay(overlays, event.turn_id);
     return { ...overlays, [event.turn_id]: { ...current, closed: true } };
   }
   if (current.awaitingSnapshot || event.first_sequence !== current.sequence + 1) {
@@ -80,13 +98,18 @@ export function applyLiveOutputEvent(
 }
 
 export function markLiveOutputDisconnected(overlays: LiveOutputOverlays): LiveOutputOverlays {
-  return Object.fromEntries(Object.entries(overlays).map(([turnId, overlay]) => [
-    turnId,
-    { ...overlay, awaitingSnapshot: true },
-  ]));
+  return Object.fromEntries(
+    Object.entries(overlays).map(([turnId, overlay]) => [
+      turnId,
+      { ...overlay, awaitingSnapshot: true },
+    ]),
+  );
 }
 
-export function removeLiveOutputOverlay(overlays: LiveOutputOverlays, turnId: string): LiveOutputOverlays {
+export function removeLiveOutputOverlay(
+  overlays: LiveOutputOverlays,
+  turnId: string,
+): LiveOutputOverlays {
   if (!overlays[turnId]) return overlays;
   const next = { ...overlays };
   delete next[turnId];
@@ -107,11 +130,17 @@ export function mergeLiveOutputMessages(
     if (!turn) continue;
 
     const transcriptForTurn = messages.filter((message) => message.turnId === overlay.turn_id);
-    const activeOnCurrentBranch = overlay.turn_id === activeTurnId
-      && (turn.state === 'queued' || turn.state === 'running');
-    if ((!activeOnCurrentBranch && !transcriptForTurn.length) || (overlay.awaitingSnapshot && !overlay.closed)) continue;
-    const userMessages = transcriptForTurn.filter((message) => message.role === 'user');
-    messages = messages.filter((message) => message.turnId !== overlay.turn_id || message.role === 'user');
+    const activeOnCurrentBranch =
+      overlay.turn_id === activeTurnId && (turn.state === "queued" || turn.state === "running");
+    if (
+      (!activeOnCurrentBranch && !transcriptForTurn.length) ||
+      (overlay.awaitingSnapshot && !overlay.closed)
+    )
+      continue;
+    const userMessages = transcriptForTurn.filter((message) => message.role === "user");
+    messages = messages.filter(
+      (message) => message.turnId !== overlay.turn_id || message.role === "user",
+    );
     if (!userMessages.length) {
       const input = turn.input?.summary?.trim();
       if (input) {
@@ -119,9 +148,9 @@ export function mergeLiveOutputMessages(
         const userMessage: SessionChatMessage = {
           id: `${turn.turn_id}:user`,
           turnId: turn.turn_id,
-          role: 'user',
+          role: "user",
           content: input,
-          status: 'sent',
+          status: "sent",
           createdAt: turn.created_at,
         };
         if (insertionIndex < 0) messages.push(userMessage);
@@ -130,7 +159,10 @@ export function mergeLiveOutputMessages(
     }
 
     const liveMessages = liveItemsToMessages(overlay);
-    const lastTurnMessage = messages.reduce((last, message, index) => message.turnId === overlay.turn_id ? index : last, -1);
+    const lastTurnMessage = messages.reduce(
+      (last, message, index) => (message.turnId === overlay.turn_id ? index : last),
+      -1,
+    );
     messages.splice(lastTurnMessage + 1, 0, ...liveMessages);
   }
 
@@ -141,49 +173,58 @@ function liveItemsToMessages(overlay: LiveOutputOverlay): SessionChatMessage[] {
   if (!overlay.items.length) return [];
 
   const content = overlay.items
-    .filter((item): item is Extract<LiveOutputItem, { kind: 'assistant_text' }> => item.kind === 'assistant_text')
+    .filter(
+      (item): item is Extract<LiveOutputItem, { kind: "assistant_text" }> =>
+        item.kind === "assistant_text",
+    )
     .map((item) => item.text)
-    .join('\n\n');
+    .join("\n\n");
   const thoughtSteps = overlay.items
-    .filter((item): item is Extract<LiveOutputItem, { kind: 'tool_call' }> => item.kind === 'tool_call')
+    .filter(
+      (item): item is Extract<LiveOutputItem, { kind: "tool_call" }> => item.kind === "tool_call",
+    )
     .map((item): SessionChatThoughtStep => ({
       id: `live:${overlay.stream_id}:${item.item_id}`,
-      kind: 'tool_call',
+      kind: "tool_call",
       title: item.managed_tool_use ? managedToolUseTitle(item.managed_tool_use) : item.tool_name,
-      status: 'started',
-      content: item.managed_tool_use ? managedToolUseContent(item.managed_tool_use) : formatArguments(item.arguments),
+      status: "started",
+      content: item.managed_tool_use
+        ? managedToolUseContent(item.managed_tool_use)
+        : formatArguments(item.arguments),
       occurredAt: null,
       ...(item.managed_tool_use ? { managedToolUse: item.managed_tool_use } : {}),
     }));
 
-  return [{
-    id: `live:${overlay.stream_id}:assistant`,
-    turnId: overlay.turn_id,
-    role: 'assistant',
-    content,
-    status: 'pending',
-    createdAt: '',
-    ...(thoughtSteps.length ? { thoughtSteps } : {}),
-  }];
+  return [
+    {
+      id: `live:${overlay.stream_id}:assistant`,
+      turnId: overlay.turn_id,
+      role: "assistant",
+      content,
+      status: "pending",
+      createdAt: "",
+      ...(thoughtSteps.length ? { thoughtSteps } : {}),
+    },
+  ];
 }
 
 function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): void {
-  if (update.type === 'assistant_text_delta') {
+  if (update.type === "assistant_text_delta") {
     const last = items.at(-1);
-    if (last?.kind === 'assistant_text' && last.item_id === update.item_id) {
+    if (last?.kind === "assistant_text" && last.item_id === update.item_id) {
       last.text += update.delta;
     } else if (!items.some((item) => item.item_id === update.item_id)) {
-      items.push({ kind: 'assistant_text', item_id: update.item_id, text: update.delta });
+      items.push({ kind: "assistant_text", item_id: update.item_id, text: update.delta });
     }
     return;
   }
   if (!items.some((item) => item.item_id === update.item_id)) {
-    items.push({ kind: 'tool_call', ...update });
+    items.push({ kind: "tool_call", ...update });
   }
 }
 
 function cloneItem(item: LiveOutputItem): LiveOutputItem {
-  return item.kind === 'assistant_text'
+  return item.kind === "assistant_text"
     ? { ...item }
     : {
         ...item,
@@ -193,7 +234,7 @@ function cloneItem(item: LiveOutputItem): LiveOutputItem {
 }
 
 function cloneJson<T>(value: T): T {
-  if (typeof structuredClone === 'function') return structuredClone(value);
+  if (typeof structuredClone === "function") return structuredClone(value);
   return JSON.parse(JSON.stringify(value)) as T;
 }
 

@@ -1,28 +1,33 @@
-import { get, writable } from 'svelte/store';
-import { getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates } from '../api/client';
-import { ApiError } from '../api/errors';
-import type { TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage, TurnTreeHistoryPage } from '../api/types';
-import { readCachedTimeline, writeCachedTimeline } from '../lib/session-chat/timelineCache';
+import { get, writable } from "svelte/store";
+import { getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates } from "../api/client";
+import { ApiError } from "../api/errors";
+import type {
+  TurnTimelineGroup,
+  TurnTimelineItem,
+  TurnTimelinePage,
+  TurnTreeHistoryPage,
+} from "../api/types";
+import { readCachedTimeline, writeCachedTimeline } from "../lib/session-chat/timelineCache";
 
-export type TimelineRefreshKind = 'history' | 'tail' | null;
+export type TimelineRefreshKind = "history" | "tail" | null;
 export type TimelineStatus =
-  | 'idle'
-  | 'loading'
-  | 'ready'
-  | 'empty'
-  | 'query_error'
-  | 'capability_unavailable'
-  | 'range_unavailable'
-  | 'range_invalid'
-  | 'source_unavailable'
-  | 'pending'
-  | 'source_identity_mismatch'
-  | 'topology_unavailable'
-  | 'error';
+  | "idle"
+  | "loading"
+  | "ready"
+  | "empty"
+  | "query_error"
+  | "capability_unavailable"
+  | "range_unavailable"
+  | "range_invalid"
+  | "source_unavailable"
+  | "pending"
+  | "source_identity_mismatch"
+  | "topology_unavailable"
+  | "error";
 
 export interface TimelineState {
   sessionId: string;
-  mode: 'linear' | 'tree' | null;
+  mode: "linear" | "tree" | null;
   groups: TurnTimelineGroup[];
   items: TurnTimelineItem[];
   nextOlderTurnId: string | null;
@@ -36,7 +41,7 @@ export interface TimelineState {
   error: string | null;
 }
 
-type LoadMode = 'rebuild' | 'more';
+type LoadMode = "rebuild" | "more";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const FORWARD_LIMIT = 100;
@@ -44,7 +49,7 @@ const TIMELINE_UPDATE_DEBOUNCE_MS = 100;
 let pendingRetry: ReturnType<typeof setTimeout> | null = null;
 let timelineGeneration = 0;
 
-function emptyState(sessionId = ''): TimelineState {
+function emptyState(sessionId = ""): TimelineState {
   return {
     sessionId,
     mode: null,
@@ -56,7 +61,7 @@ function emptyState(sessionId = ''): TimelineState {
     loading: false,
     refreshing: false,
     refreshKind: null,
-    status: 'idle',
+    status: "idle",
     errorCode: null,
     error: null,
   };
@@ -65,8 +70,11 @@ function emptyState(sessionId = ''): TimelineState {
 export const timelineState = writable<TimelineState>(emptyState());
 
 export function hasTimelineSnapshot(state: TimelineState, sessionId: string): boolean {
-  return state.sessionId === sessionId && (
-    state.status === 'ready' || state.status === 'empty' || (state.status === 'pending' && state.items.length > 0)
+  return (
+    state.sessionId === sessionId &&
+    (state.status === "ready" ||
+      state.status === "empty" ||
+      (state.status === "pending" && state.items.length > 0))
   );
 }
 
@@ -78,8 +86,13 @@ export async function restoreSessionTimeline(
   const snapshot = await readCachedTimeline(sessionId);
   if (generation !== timelineGeneration) return false;
   const current = get(timelineState);
-  const expectedMode = options.topology === undefined ? null : options.topology ? 'tree' : 'linear';
-  if ((current.sessionId && current.sessionId !== sessionId) || !snapshot || (expectedMode !== null && snapshot.mode !== expectedMode)) return false;
+  const expectedMode = options.topology === undefined ? null : options.topology ? "tree" : "linear";
+  if (
+    (current.sessionId && current.sessionId !== sessionId) ||
+    !snapshot ||
+    (expectedMode !== null && snapshot.mode !== expectedMode)
+  )
+    return false;
 
   timelineState.set({
     sessionId,
@@ -116,7 +129,7 @@ const timelineUpdateQueues = new Map<string, TimelineUpdateQueue>();
 const cachedRefreshCursorSessions = new Set<string>();
 const cachedHistoryCursorSessions = new Set<string>();
 
-export function resetTimelineState(sessionId = ''): void {
+export function resetTimelineState(sessionId = ""): void {
   timelineGeneration += 1;
   if (pendingRetry) clearTimeout(pendingRetry);
   pendingRetry = null;
@@ -128,7 +141,8 @@ export function resetTimelineState(sessionId = ''): void {
     cachedRefreshCursorSessions.clear();
     cachedHistoryCursorSessions.clear();
   }
-  for (const queuedSessionId of timelineUpdateQueues.keys()) clearTimelineUpdateQueue(queuedSessionId);
+  for (const queuedSessionId of timelineUpdateQueues.keys())
+    clearTimelineUpdateQueue(queuedSessionId);
 }
 
 function uniqueTimelineItems(items: TurnTimelineItem[]): TurnTimelineItem[] {
@@ -163,7 +177,9 @@ function replaceReturnedTurnGroups(
   if (firstReturnedIndex < 0) return [...currentItems, ...replacement];
 
   return [
-    ...currentItems.slice(0, firstReturnedIndex).filter((item) => !returnedTurnIds.has(item.turn_id)),
+    ...currentItems
+      .slice(0, firstReturnedIndex)
+      .filter((item) => !returnedTurnIds.has(item.turn_id)),
     ...replacement,
     ...currentItems.slice(firstReturnedIndex).filter((item) => !returnedTurnIds.has(item.turn_id)),
   ];
@@ -198,7 +214,7 @@ function applyTreeUpdates(
 }
 
 function statusForItems(items: TurnTimelineItem[]): TimelineStatus {
-  return items.length ? 'ready' : 'empty';
+  return items.length ? "ready" : "empty";
 }
 
 function errorMessage(error: unknown): string {
@@ -206,27 +222,40 @@ function errorMessage(error: unknown): string {
 }
 
 function errorStatus(error: unknown): TimelineStatus {
-  if (!(error instanceof ApiError)) return 'error';
+  if (!(error instanceof ApiError)) return "error";
   switch (error.code) {
-    case 'invalid_timeline_query': return 'query_error';
-    case 'timeline_capability_unavailable': return 'capability_unavailable';
-    case 'timeline_native_association_unavailable':
-    case 'turn_timeline_unavailable': return 'range_unavailable';
-    case 'turn_timeline_invalid': return 'range_invalid';
-    case 'timeline_pending': return 'pending';
-    case 'timeline_source_identity_mismatch': return 'source_identity_mismatch';
-    case 'timeline_source_unavailable': return 'source_unavailable';
-    case 'turn_topology_unknown':
-    case 'turn_topology_invalid': return 'topology_unavailable';
-    default: return 'error';
+    case "invalid_timeline_query":
+      return "query_error";
+    case "timeline_capability_unavailable":
+      return "capability_unavailable";
+    case "timeline_native_association_unavailable":
+    case "turn_timeline_unavailable":
+      return "range_unavailable";
+    case "turn_timeline_invalid":
+      return "range_invalid";
+    case "timeline_pending":
+      return "pending";
+    case "timeline_source_identity_mismatch":
+      return "source_identity_mismatch";
+    case "timeline_source_unavailable":
+      return "source_unavailable";
+    case "turn_topology_unknown":
+    case "turn_topology_invalid":
+      return "topology_unavailable";
+    default:
+      return "error";
   }
 }
 
 function isPendingHistory(error: unknown): boolean {
-  return error instanceof ApiError && error.code === 'timeline_pending';
+  return error instanceof ApiError && error.code === "timeline_pending";
 }
 
-function applyTimelineError(sessionId: string, error: unknown, retry: () => Promise<unknown>): void {
+function applyTimelineError(
+  sessionId: string,
+  error: unknown,
+  retry: () => Promise<unknown>,
+): void {
   const previous = get(timelineState);
   if (previous.sessionId !== sessionId) return;
   if (pendingRetry) clearTimeout(pendingRetry);
@@ -236,31 +265,40 @@ function applyTimelineError(sessionId: string, error: unknown, retry: () => Prom
     pendingRetry = setTimeout(() => {
       pendingRetry = null;
       const current = get(timelineState);
-      if (current.sessionId === sessionId && current.status === 'pending') {
+      if (current.sessionId === sessionId && current.status === "pending") {
         void retry();
       }
     }, 1000);
   }
-  timelineState.update((state) => state.sessionId !== sessionId ? state : ({
-    ...(pending ? state : emptyState(sessionId)),
-    loading: false,
-    status: errorStatus(error),
-    errorCode: error instanceof ApiError ? error.code : 'request_failed',
-    error: errorMessage(error),
-  }));
+  timelineState.update((state) =>
+    state.sessionId !== sessionId
+      ? state
+      : {
+          ...(pending ? state : emptyState(sessionId)),
+          loading: false,
+          status: errorStatus(error),
+          errorCode: error instanceof ApiError ? error.code : "request_failed",
+          error: errorMessage(error),
+        },
+  );
 }
 
 export async function loadSessionTimeline(
   sessionId: string,
-  options: { mode?: LoadMode; limit?: number; latestTurnId?: string | null; topology?: boolean } = {},
+  options: {
+    mode?: LoadMode;
+    limit?: number;
+    latestTurnId?: string | null;
+    topology?: boolean;
+  } = {},
 ): Promise<TurnTimelinePage | TurnTreeHistoryPage | null> {
   if (!sessionId) {
     resetTimelineState();
     return null;
   }
 
-  const mode = options.mode ?? 'rebuild';
-  if (mode === 'rebuild') {
+  const mode = options.mode ?? "rebuild";
+  if (mode === "rebuild") {
     cachedRefreshCursorSessions.delete(sessionId);
     cachedHistoryCursorSessions.delete(sessionId);
   }
@@ -268,20 +306,20 @@ export async function loadSessionTimeline(
   const sameSession = current.sessionId === sessionId;
   if (!sameSession) timelineGeneration += 1;
   const generation = timelineGeneration;
-  const topology = options.topology ?? (sameSession && current.mode === 'tree');
-  const turnId = mode === 'more' && sameSession ? current.nextOlderTurnId : null;
-  if (mode === 'more' && !turnId) return null;
+  const topology = options.topology ?? (sameSession && current.mode === "tree");
+  const turnId = mode === "more" && sameSession ? current.nextOlderTurnId : null;
+  if (mode === "more" && !turnId) return null;
 
   timelineState.update((state) => {
     const scoped = state.sessionId === sessionId ? state : emptyState(sessionId);
     return {
       ...scoped,
-      mode: topology ? 'tree' : 'linear',
-      latestTurnId: topology ? scoped.latestTurnId : options.latestTurnId ?? scoped.latestTurnId,
-      loading: mode === 'rebuild',
-      refreshing: mode === 'more',
-      refreshKind: mode === 'more' ? 'history' : null,
-      status: mode === 'rebuild' ? 'loading' : scoped.status,
+      mode: topology ? "tree" : "linear",
+      latestTurnId: topology ? scoped.latestTurnId : (options.latestTurnId ?? scoped.latestTurnId),
+      loading: mode === "rebuild",
+      refreshing: mode === "more",
+      refreshKind: mode === "more" ? "history" : null,
+      status: mode === "rebuild" ? "loading" : scoped.status,
       errorCode: null,
       error: null,
     };
@@ -296,9 +334,8 @@ export async function loadSessionTimeline(
       if (generation !== timelineGeneration) return null;
       timelineState.update((state) => {
         if (state.sessionId !== sessionId) return state;
-        const groups = mode === 'more'
-          ? prependUnseenGroups(state.groups, page.groups)
-          : page.groups;
+        const groups =
+          mode === "more" ? prependUnseenGroups(state.groups, page.groups) : page.groups;
         const items = flattenTurnGroups(groups);
         return {
           ...state,
@@ -315,30 +352,32 @@ export async function loadSessionTimeline(
           error: null,
         };
       });
-      if (mode === 'more') cachedHistoryCursorSessions.delete(sessionId);
+      if (mode === "more") cachedHistoryCursorSessions.delete(sessionId);
       await persistTimelineSnapshot(sessionId);
       return page;
     }
 
     const page = await getTurnTimeline(sessionId, {
-      direction: 'backward',
+      direction: "backward",
       ...(turnId ? { turnId } : {}),
       limit: options.limit ?? DEFAULT_HISTORY_LIMIT,
     });
     if (generation !== timelineGeneration) return null;
     timelineState.update((state) => {
       if (state.sessionId !== sessionId) return state;
-      const items = mode === 'more'
-        ? prependUnseenTurnGroups(state.items, page.items)
-        : uniqueTimelineItems(page.items);
+      const items =
+        mode === "more"
+          ? prependUnseenTurnGroups(state.items, page.items)
+          : uniqueTimelineItems(page.items);
       return {
         ...state,
         groups: [],
         items,
         nextOlderTurnId: page.next_turn_id,
-        latestTurnId: mode === 'rebuild' && options.latestTurnId
-          ? options.latestTurnId
-          : items.at(-1)?.turn_id ?? state.latestTurnId,
+        latestTurnId:
+          mode === "rebuild" && options.latestTurnId
+            ? options.latestTurnId
+            : (items.at(-1)?.turn_id ?? state.latestTurnId),
         hasMore: page.next_turn_id !== null,
         loading: false,
         refreshing: false,
@@ -348,35 +387,42 @@ export async function loadSessionTimeline(
         error: null,
       };
     });
-    if (mode === 'more') cachedHistoryCursorSessions.delete(sessionId);
+    if (mode === "more") cachedHistoryCursorSessions.delete(sessionId);
     await persistTimelineSnapshot(sessionId);
     return page;
   } catch (error) {
     if (generation !== timelineGeneration) return null;
-    if (!isPendingHistory(error) && mode === 'more' && cachedHistoryCursorSessions.has(sessionId)) {
+    if (!isPendingHistory(error) && mode === "more" && cachedHistoryCursorSessions.has(sessionId)) {
       if (isStaleCachedCursorError(error)) {
         cachedHistoryCursorSessions.delete(sessionId);
         cachedRefreshCursorSessions.delete(sessionId);
-        return loadSessionTimeline(sessionId, { mode: 'rebuild', topology });
+        return loadSessionTimeline(sessionId, { mode: "rebuild", topology });
       }
       retainCachedTimelineAfterError(sessionId);
       return null;
     }
-    applyTimelineError(sessionId, error, () => loadSessionTimeline(sessionId, { ...options, mode, topology }));
+    applyTimelineError(sessionId, error, () =>
+      loadSessionTimeline(sessionId, { ...options, mode, topology }),
+    );
     return null;
   }
 }
 
-async function loadForwardPages(sessionId: string, initialTurnId: string, generation: number): Promise<TurnTimelineItem[]> {
+async function loadForwardPages(
+  sessionId: string,
+  initialTurnId: string,
+  generation: number,
+): Promise<TurnTimelineItem[]> {
   const items: TurnTimelineItem[] = [];
   const seenAnchors = new Set<string>();
   let turnId: string | null = initialTurnId;
 
   while (turnId && generation === timelineGeneration) {
-    if (seenAnchors.has(turnId)) throw new Error('Turn timeline pagination returned a repeated anchor');
+    if (seenAnchors.has(turnId))
+      throw new Error("Turn timeline pagination returned a repeated anchor");
     seenAnchors.add(turnId);
     const page = await getTurnTimeline(sessionId, {
-      direction: 'forward',
+      direction: "forward",
       turnId,
       limit: FORWARD_LIMIT,
     });
@@ -387,12 +433,15 @@ async function loadForwardPages(sessionId: string, initialTurnId: string, genera
   return items;
 }
 
-async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: string): Promise<boolean> {
+async function refreshSessionTimelineUpdates(
+  sessionId: string,
+  latestTurnId: string,
+): Promise<boolean> {
   const generation = timelineGeneration;
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
     refreshing: true,
-    refreshKind: 'tail',
+    refreshKind: "tail",
     errorCode: null,
     error: null,
   }));
@@ -424,23 +473,28 @@ async function refreshSessionTimelineUpdates(sessionId: string, latestTurnId: st
       if (isStaleCachedCursorError(error)) {
         cachedRefreshCursorSessions.delete(sessionId);
         cachedHistoryCursorSessions.delete(sessionId);
-        return (await loadSessionTimeline(sessionId, { mode: 'rebuild' })) !== null;
+        return (await loadSessionTimeline(sessionId, { mode: "rebuild" })) !== null;
       }
       retainCachedTimelineAfterError(sessionId);
       return false;
     }
-    applyTimelineError(sessionId, error, () => refreshSessionTimelineUpdates(sessionId, latestTurnId));
+    applyTimelineError(sessionId, error, () =>
+      refreshSessionTimelineUpdates(sessionId, latestTurnId),
+    );
     return false;
   }
 }
 
-async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string): Promise<boolean> {
+async function refreshSessionTreeUpdates(
+  sessionId: string,
+  latestTurnId: string,
+): Promise<boolean> {
   const generation = timelineGeneration;
   timelineState.update((state) => ({
     ...(state.sessionId === sessionId ? state : emptyState(sessionId)),
-    mode: 'tree',
+    mode: "tree",
     refreshing: true,
-    refreshKind: 'tail',
+    refreshKind: "tail",
     errorCode: null,
     error: null,
   }));
@@ -450,11 +504,7 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
     if (generation !== timelineGeneration) return false;
     timelineState.update((state) => {
       if (state.sessionId !== sessionId) return state;
-      const groups = applyTreeUpdates(
-        state.groups,
-        updates.retain_through_turn_id,
-        updates.groups,
-      );
+      const groups = applyTreeUpdates(state.groups, updates.retain_through_turn_id, updates.groups);
       const items = flattenTurnGroups(groups);
       return {
         ...state,
@@ -480,7 +530,7 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
       if (isStaleCachedCursorError(error)) {
         cachedRefreshCursorSessions.delete(sessionId);
         cachedHistoryCursorSessions.delete(sessionId);
-        return (await loadSessionTimeline(sessionId, { mode: 'rebuild', topology: true })) !== null;
+        return (await loadSessionTimeline(sessionId, { mode: "rebuild", topology: true })) !== null;
       }
       retainCachedTimelineAfterError(sessionId);
       return false;
@@ -490,7 +540,10 @@ async function refreshSessionTreeUpdates(sessionId: string, latestTurnId: string
   }
 }
 
-export function refreshSessionTimeline(sessionId: string, turnId: string | null = null): Promise<boolean> {
+export function refreshSessionTimeline(
+  sessionId: string,
+  turnId: string | null = null,
+): Promise<boolean> {
   const existing = timelineUpdateQueues.get(sessionId);
   if (existing) {
     existing.dirty = true;
@@ -527,7 +580,10 @@ function scheduleTimelineUpdate(sessionId: string, queue: TimelineUpdateQueue): 
   }, TIMELINE_UPDATE_DEBOUNCE_MS);
 }
 
-async function runTimelineUpdateQueue(sessionId: string, queue: TimelineUpdateQueue): Promise<void> {
+async function runTimelineUpdateQueue(
+  sessionId: string,
+  queue: TimelineUpdateQueue,
+): Promise<void> {
   if (queue.running) return;
   queue.running = true;
   queue.dirty = false;
@@ -556,23 +612,28 @@ function clearTimelineUpdateQueue(sessionId: string): void {
 }
 
 function retainCachedTimelineAfterError(sessionId: string): void {
-  timelineState.update((state) => state.sessionId !== sessionId ? state : ({
-    ...state,
-    loading: false,
-    refreshing: false,
-    refreshKind: null,
-    status: statusForItems(state.items),
-    errorCode: null,
-    error: null,
-  }));
+  timelineState.update((state) =>
+    state.sessionId !== sessionId
+      ? state
+      : {
+          ...state,
+          loading: false,
+          refreshing: false,
+          refreshKind: null,
+          status: statusForItems(state.items),
+          errorCode: null,
+          error: null,
+        },
+  );
 }
 
 function isStaleCachedCursorError(error: unknown): boolean {
-  return error instanceof ApiError && (
-    error.code === 'turn_timeline_unavailable'
-    || error.code === 'turn_timeline_invalid'
-    || error.code === 'turn_topology_unknown'
-    || error.code === 'turn_topology_invalid'
+  return (
+    error instanceof ApiError &&
+    (error.code === "turn_timeline_unavailable" ||
+      error.code === "turn_timeline_invalid" ||
+      error.code === "turn_topology_unknown" ||
+      error.code === "turn_topology_invalid")
   );
 }
 
@@ -590,20 +651,23 @@ async function persistTimelineSnapshot(sessionId: string): Promise<void> {
   });
 }
 
-async function refreshSessionTimelineNow(sessionId: string, turnId: string | null): Promise<boolean> {
+async function refreshSessionTimelineNow(
+  sessionId: string,
+  turnId: string | null,
+): Promise<boolean> {
   const current = get(timelineState);
   if (current.sessionId && current.sessionId !== sessionId) return false;
 
-  if (current.mode === 'tree') {
+  if (current.mode === "tree") {
     if (!current.latestTurnId) {
-      return (await loadSessionTimeline(sessionId, { mode: 'rebuild', topology: true })) !== null;
+      return (await loadSessionTimeline(sessionId, { mode: "rebuild", topology: true })) !== null;
     }
     return refreshSessionTreeUpdates(sessionId, current.latestTurnId);
   }
 
   const forwardAnchorTurnId = turnId ?? current.latestTurnId;
   if (!forwardAnchorTurnId) {
-    return (await loadSessionTimeline(sessionId, { mode: 'rebuild' })) !== null;
+    return (await loadSessionTimeline(sessionId, { mode: "rebuild" })) !== null;
   }
   return refreshSessionTimelineUpdates(sessionId, forwardAnchorTurnId);
 }

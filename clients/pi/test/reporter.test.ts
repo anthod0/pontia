@@ -1,7 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import { buildSessionContextUsageUpdatedEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiContext, contextUsageFromPiEvent, contextUsageFromPiHook } from "../src/events.js";
+import {
+  buildSessionContextUsageUpdatedEvent,
+  buildTurnCompletedEvent,
+  buildTurnFailedEvent,
+  buildTurnOutputEvent,
+  buildTurnStartedEvent,
+  contextUsageFromPiContext,
+  contextUsageFromPiEvent,
+  contextUsageFromPiHook,
+} from "../src/events.js";
 import { RpcError } from "../src/control-socket.js";
 import { EventReporter } from "../src/reporter.js";
 import { tempDir } from "./temp-dir.js";
@@ -70,16 +79,20 @@ describe("event builders", () => {
   });
 
   test("builds session.context_usage_updated observation without null usage fields", () => {
-    const event = buildSessionContextUsageUpdatedEvent(context, {
-      used_tokens: 42,
-      max_tokens: null,
-      remaining_tokens: null,
-      usage_ratio: null,
-      input_tokens: 40,
-      output_tokens: 2,
-      cache_tokens: 0,
-      confidence: "exact",
-    }, "example-model");
+    const event = buildSessionContextUsageUpdatedEvent(
+      context,
+      {
+        used_tokens: 42,
+        max_tokens: null,
+        remaining_tokens: null,
+        usage_ratio: null,
+        input_tokens: 40,
+        output_tokens: 2,
+        cache_tokens: 0,
+        confidence: "exact",
+      },
+      "example-model",
+    );
 
     expect(event).toMatchObject({
       session_id: "sess_1",
@@ -102,9 +115,15 @@ describe("event builders", () => {
   });
 
   test("does not extract context usage from unsupported or empty pi hook payloads", () => {
-    expect(contextUsageFromPiEvent({ assistantMessageEvent: { text_delta: "hello" } })).toBeUndefined();
+    expect(
+      contextUsageFromPiEvent({ assistantMessageEvent: { text_delta: "hello" } }),
+    ).toBeUndefined();
     expect(contextUsageFromPiEvent({ messages: [] })).toBeUndefined();
-    expect(contextUsageFromPiEvent({ context_usage: { used_tokens: null, max_tokens: null, confidence: "estimated" } })).toBeUndefined();
+    expect(
+      contextUsageFromPiEvent({
+        context_usage: { used_tokens: null, max_tokens: null, confidence: "estimated" },
+      }),
+    ).toBeUndefined();
   });
 
   test("extracts context usage only when a hook payload exposes a valid context_usage object", () => {
@@ -209,11 +228,22 @@ describe("event builders", () => {
 
 describe("EventReporter", () => {
   test("reports facts over RPC and returns the canonical turn identity", async () => {
-    const request = vi.fn(async () => ({ accepted: true, event_id: "evt_server", turn_id: "turn_server" }));
+    const request = vi.fn(async () => ({
+      accepted: true,
+      event_id: "evt_server",
+      turn_id: "turn_server",
+    }));
     const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
     const event = buildTurnCompletedEvent(context);
-    expect(await reporter.report(context, event)).toEqual({ accepted: true, eventId: "evt_server", turnId: "turn_server" });
-    expect(request).toHaveBeenCalledWith("event.report", { runtime_instance_id: "rtinst_1", event });
+    expect(await reporter.report(context, event)).toEqual({
+      accepted: true,
+      eventId: "evt_server",
+      turnId: "turn_server",
+    });
+    expect(request).toHaveBeenCalledWith("event.report", {
+      runtime_instance_id: "rtinst_1",
+      event,
+    });
   });
 
   test.each([
@@ -228,9 +258,13 @@ describe("EventReporter", () => {
       return { accepted: true };
     });
     const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
-    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
+    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
+      accepted: false,
+    });
     expect(request).toHaveBeenLastCalledWith("turn.startFailure", {
-      session_id: "sess_1", runtime_instance_id: "rtinst_1", reason,
+      session_id: "sess_1",
+      runtime_instance_id: "rtinst_1",
+      reason,
     });
     expect(request).toHaveBeenCalledTimes(2);
   });
@@ -239,41 +273,61 @@ describe("EventReporter", () => {
     let starts = 0;
     let failures = 0;
     const request = vi.fn(async (method: string) => {
-      if (method === "event.report") { starts++; throw new Error("response lost"); }
+      if (method === "event.report") {
+        starts++;
+        throw new Error("response lost");
+      }
       failures++;
       if (failures < 3) throw new RpcError(-32603, "unavailable");
       return { accepted: true };
     });
     const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
-    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
+    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
+      accepted: false,
+    });
     expect(starts).toBe(1);
     expect(failures).toBe(3);
   });
 
   test("bounds failure-notification retries and reports unconfirmed state when offline", async () => {
     const logFile = await tempLogFile();
-    const request = vi.fn(async () => { throw new Error("offline"); });
+    const request = vi.fn(async () => {
+      throw new Error("offline");
+    });
     const reporter = new EventReporter({ connection: { request }, logFile });
-    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
+    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
+      accepted: false,
+    });
     expect(request).toHaveBeenCalledTimes(4);
     expect(await readFile(logFile, "utf8")).toContain("turn_start_failure_report_failed");
   });
 
   test("does not retry a failure notification rejected by the runtime fence", async () => {
-    const request = vi.fn(async () => { throw new RpcError(-32009, "stale"); });
+    const request = vi.fn(async () => {
+      throw new RpcError(-32009, "stale");
+    });
     const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
-    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
+    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
+      accepted: false,
+    });
     expect(request).toHaveBeenCalledTimes(2);
   });
 
-  test.each([new RpcError(-32603, "server error"), new Error("connection lost")])("logs report failures without inventing acceptance", async (error) => {
-    const logFile = await tempLogFile();
-    const request = vi.fn(async () => { throw error; });
-    const reporter = new EventReporter({ connection: { request }, logFile });
-    expect(await reporter.report(context, buildTurnCompletedEvent(context))).toEqual({ accepted: false });
-    expect(request).toHaveBeenCalledTimes(1);
-    const log = await readFile(logFile, "utf8");
-    expect(log).toContain("pi_event_report_failed");
-    expect(log).toContain(error.message);
-  });
+  test.each([new RpcError(-32603, "server error"), new Error("connection lost")])(
+    "logs report failures without inventing acceptance",
+    async (error) => {
+      const logFile = await tempLogFile();
+      const request = vi.fn(async () => {
+        throw error;
+      });
+      const reporter = new EventReporter({ connection: { request }, logFile });
+      expect(await reporter.report(context, buildTurnCompletedEvent(context))).toEqual({
+        accepted: false,
+      });
+      expect(request).toHaveBeenCalledTimes(1);
+      const log = await readFile(logFile, "utf8");
+      expect(log).toContain("pi_event_report_failed");
+      expect(log).toContain(error.message);
+    },
+  );
 });

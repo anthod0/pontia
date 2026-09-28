@@ -1,11 +1,11 @@
-import { get } from 'svelte/store';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { InboxMessageView, SessionView } from '../../src/api/types';
+import { get } from "svelte/store";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import type { InboxMessageView, SessionView } from "../../src/api/types";
 
 const baseSession: SessionView = {
-  session_id: 'session-current',
-  client_type: 'pi',
-  title: 'Current session',
+  session_id: "session-current",
+  client_type: "pi",
+  title: "Current session",
   handle: null,
   role: null,
   description: null,
@@ -14,13 +14,13 @@ const baseSession: SessionView = {
   workspace: null,
   workspace_id: null,
   workspace_ref: null,
-  state: 'idle',
+  state: "idle",
   current_turn_id: null,
   state_version: 1,
   metadata: {},
   capabilities: {},
-  created_at: '2026-06-22T00:00:00.000Z',
-  updated_at: '2026-06-22T00:00:00.000Z',
+  created_at: "2026-06-22T00:00:00.000Z",
+  updated_at: "2026-06-22T00:00:00.000Z",
 };
 
 function session(overrides: Partial<SessionView>): SessionView {
@@ -47,91 +47,105 @@ const api = vi.hoisted(() => ({
   archiveSession: vi.fn(),
 }));
 
-vi.mock('../../src/api/client', () => api);
+vi.mock("../../src/api/client", () => api);
 
-describe('sessions store management actions', () => {
+describe("sessions store management actions", () => {
   beforeEach(() => {
     vi.resetModules();
     Object.values(api).forEach((mock) => mock.mockReset());
   });
 
-  test('creates an optimistic Inbox submission before the request resolves and upgrades it on acceptance', async () => {
-    const current = session({ session_id: 'session-current' });
+  test("creates an optimistic Inbox submission before the request resolves and upgrades it on acceptance", async () => {
+    const current = session({ session_id: "session-current" });
     const accepted: InboxMessageView = {
-      message_id: 'message-accepted',
-      session_id: 'session-current',
-      state: 'pending',
-      delivery_policy: 'after_idle',
-      input: { summary: 'Follow up' },
-      metadata: { source: 'dashboard_chat' },
+      message_id: "message-accepted",
+      session_id: "session-current",
+      state: "pending",
+      delivery_policy: "after_idle",
+      input: { summary: "Follow up" },
+      metadata: { source: "dashboard_chat" },
       branch_target_turn_id: null,
       turn_id: null,
       steer_target_turn_id: null,
-  retry_of_message_id: null,
-  retried_by_message_id: null,
-  superseded_by_message_id: null,
+      retry_of_message_id: null,
+      retried_by_message_id: null,
+      superseded_by_message_id: null,
       failure_message: null,
-      created_at: '2026-06-22T00:01:00.000Z',
-      updated_at: '2026-06-22T00:01:00.000Z',
+      created_at: "2026-06-22T00:01:00.000Z",
+      updated_at: "2026-06-22T00:01:00.000Z",
       dispatched_at: null,
       cancelled_at: null,
     };
     let resolveRequest: (message: InboxMessageView) => void = () => undefined;
-    api.submitInboxMessage.mockImplementation(() => new Promise((resolve) => { resolveRequest = resolve; }));
+    api.submitInboxMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
+    );
     api.listSessions.mockResolvedValue([current]);
     api.getSession.mockResolvedValue(current);
     api.listTurns.mockResolvedValue([]);
     api.listInboxMessages.mockResolvedValue([accepted]);
     api.listEvents.mockResolvedValue([]);
 
-    const { sessionDetail, submitInboxMessage } = await import('../../src/stores/sessions');
-    const { optimisticInboxSubmissions } = await import('../../src/stores/optimisticInbox');
+    const { sessionDetail, submitInboxMessage } = await import("../../src/stores/sessions");
+    const { optimisticInboxSubmissions } = await import("../../src/stores/optimisticInbox");
     optimisticInboxSubmissions.set({});
     sessionDetail.set({ session: current, turns: [], inboxMessages: [], events: [] });
 
-    const submission = submitInboxMessage('session-current', {
-      input: 'Follow up',
-      delivery_policy: 'after_idle',
-      metadata: { source: 'dashboard_chat' },
+    const submission = submitInboxMessage("session-current", {
+      input: "Follow up",
+      delivery_policy: "after_idle",
+      metadata: { source: "dashboard_chat" },
     });
 
-    expect(get(optimisticInboxSubmissions)['session-current']).toMatchObject([
-      { input: 'Follow up', showInChat: true, acceptedMessage: null },
+    expect(get(optimisticInboxSubmissions)["session-current"]).toMatchObject([
+      { input: "Follow up", showInChat: true, acceptedMessage: null },
     ]);
 
     resolveRequest(accepted);
     await submission;
 
-    expect(get(optimisticInboxSubmissions)['session-current']).toMatchObject([
-      { acceptedMessage: { message_id: 'message-accepted' } },
+    expect(get(optimisticInboxSubmissions)["session-current"]).toMatchObject([
+      { acceptedMessage: { message_id: "message-accepted" } },
     ]);
     expect(get(sessionDetail)?.inboxMessages).toEqual([accepted]);
   });
 
-  test('does not present a busy Session queue submission as a chat message', async () => {
-    const busy = session({ session_id: 'session-current', state: 'busy', current_turn_id: 'turn-active' });
+  test("does not present a busy Session queue submission as a chat message", async () => {
+    const busy = session({
+      session_id: "session-current",
+      state: "busy",
+      current_turn_id: "turn-active",
+    });
     api.submitInboxMessage.mockImplementation(() => new Promise(() => undefined));
 
-    const { sessionDetail, sessions, submitInboxMessage } = await import('../../src/stores/sessions');
-    const { optimisticInboxSubmissions } = await import('../../src/stores/optimisticInbox');
+    const { sessionDetail, sessions, submitInboxMessage } =
+      await import("../../src/stores/sessions");
+    const { optimisticInboxSubmissions } = await import("../../src/stores/optimisticInbox");
     optimisticInboxSubmissions.set({});
     sessions.set([busy]);
     sessionDetail.set({ session: busy, turns: [], inboxMessages: [], events: [] });
 
-    void submitInboxMessage('session-current', {
-      input: 'Queue this follow-up',
-      delivery_policy: 'after_idle',
-      metadata: { source: 'dashboard_chat' },
+    void submitInboxMessage("session-current", {
+      input: "Queue this follow-up",
+      delivery_policy: "after_idle",
+      metadata: { source: "dashboard_chat" },
     });
 
-    expect(get(optimisticInboxSubmissions)['session-current']).toMatchObject([
-      { input: 'Queue this follow-up', showInChat: false, acceptedMessage: null },
+    expect(get(optimisticInboxSubmissions)["session-current"]).toMatchObject([
+      { input: "Queue this follow-up", showInChat: false, acceptedMessage: null },
     ]);
   });
 
-  test('terminating a different session does not replace the current session detail', async () => {
-    const current = session({ session_id: 'session-current', title: 'Current session' });
-    const otherExited = session({ session_id: 'session-other', title: 'Other session', state: 'exited' });
+  test("terminating a different session does not replace the current session detail", async () => {
+    const current = session({ session_id: "session-current", title: "Current session" });
+    const otherExited = session({
+      session_id: "session-other",
+      title: "Other session",
+      state: "exited",
+    });
     api.terminateSession.mockResolvedValue(otherExited);
     api.listSessions.mockResolvedValue([current, otherExited]);
     api.getSession.mockResolvedValue(otherExited);
@@ -139,15 +153,17 @@ describe('sessions store management actions', () => {
     api.listInboxMessages.mockResolvedValue([]);
     api.listEvents.mockResolvedValue([]);
 
-    const { sessionDetail, terminateSession } = await import('../../src/stores/sessions');
+    const { sessionDetail, terminateSession } = await import("../../src/stores/sessions");
     sessionDetail.set({ session: current, turns: [], inboxMessages: [], events: [] });
 
-    await terminateSession('session-other');
+    await terminateSession("session-other");
 
     let detailSessionId: string | null = null;
-    const unsubscribe = sessionDetail.subscribe((detail) => { detailSessionId = detail?.session.session_id ?? null; });
+    const unsubscribe = sessionDetail.subscribe((detail) => {
+      detailSessionId = detail?.session.session_id ?? null;
+    });
     unsubscribe();
-    expect(detailSessionId).toBe('session-current');
-    expect(api.getSession).not.toHaveBeenCalledWith('session-other');
+    expect(detailSessionId).toBe("session-current");
+    expect(api.getSession).not.toHaveBeenCalledWith("session-other");
   });
 });

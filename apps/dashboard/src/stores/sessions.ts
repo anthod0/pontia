@@ -1,7 +1,13 @@
-import { get, writable } from 'svelte/store';
-import { ApiError } from '../api/errors';
-import { getInboxMessage, retryInboxMessage as apiRetryInboxMessage } from '../api/client';
-import { rememberSubmission, forgetSubmission, reconcileSubmissions, SubmissionUnconfirmedError, type UnconfirmedSubmission } from './inboxRecovery';
+import { get, writable } from "svelte/store";
+import { ApiError } from "../api/errors";
+import { getInboxMessage, retryInboxMessage as apiRetryInboxMessage } from "../api/client";
+import {
+  rememberSubmission,
+  forgetSubmission,
+  reconcileSubmissions,
+  SubmissionUnconfirmedError,
+  type UnconfirmedSubmission,
+} from "./inboxRecovery";
 import {
   archiveSession as apiArchiveSession,
   cancelInboxMessage as apiCancelInboxMessage,
@@ -21,13 +27,13 @@ import {
   unarchiveSession as apiUnarchiveSession,
   unpinSession as apiUnpinSession,
   updateSession as apiUpdateSession,
-} from '../api/client';
+} from "../api/client";
 import {
   beginInboxSubmission,
   confirmInboxSubmission,
   failInboxSubmission,
   syncInboxSubmissions,
-} from './optimisticInbox';
+} from "./optimisticInbox";
 import type {
   CreateSessionInput,
   CreateSessionResult,
@@ -36,7 +42,7 @@ import type {
   SessionView,
   SubmitInboxMessageInput,
   TurnView,
-} from '../api/types';
+} from "../api/types";
 
 export interface SessionConsoleDetail {
   session: SessionView;
@@ -51,7 +57,7 @@ export const sessionsError = writable<string | null>(null);
 export const sessionDetail = writable<SessionConsoleDetail | null>(null);
 export const sessionDetailLoading = writable(false);
 export const sessionDetailError = writable<string | null>(null);
-export type SessionDetailErrorKind = 'not_found' | 'authentication' | 'network' | 'request';
+export type SessionDetailErrorKind = "not_found" | "authentication" | "network" | "request";
 export const sessionDetailErrorKind = writable<SessionDetailErrorKind | null>(null);
 export const selectedSessionId = writable<string | null>(null);
 
@@ -99,7 +105,8 @@ export async function loadSessions(options: LoadOptions = {}): Promise<SessionVi
     if (request === listRequest) sessions.set(loaded);
     return loaded;
   } catch (error) {
-    if (request === listRequest) sessionsError.set(error instanceof Error ? error.message : String(error));
+    if (request === listRequest)
+      sessionsError.set(error instanceof Error ? error.message : String(error));
     if (options.throwOnError) throw error;
     return [];
   } finally {
@@ -107,7 +114,10 @@ export async function loadSessions(options: LoadOptions = {}): Promise<SessionVi
   }
 }
 
-export function loadSessionDetail(sessionId: string, options: LoadOptions = {}): Promise<SessionConsoleDetail | null> {
+export function loadSessionDetail(
+  sessionId: string,
+  options: LoadOptions = {},
+): Promise<SessionConsoleDetail | null> {
   const selected = get(selectedSessionId);
   if (!sessionId || (selected && selected !== sessionId)) return Promise.resolve(null);
   if (detailRequest?.sessionId === sessionId && detailRequest.generation === selectionGeneration) {
@@ -149,15 +159,23 @@ export function loadSessionDetail(sessionId: string, options: LoadOptions = {}):
         sessionDetail.set(detail);
         sessionDetailError.set(null);
         sessionDetailErrorKind.set(null);
-        sessions.update((items) => items.map((item) => item.session_id === sessionId ? session : item));
+        sessions.update((items) =>
+          items.map((item) => (item.session_id === sessionId ? session : item)),
+        );
       } catch (error) {
         if (!isCurrent()) return null;
         detail = null;
-        const kind: SessionDetailErrorKind = error instanceof ApiError
-          ? error.status === 404 && !sessionLoaded ? 'not_found'
-            : [401, 403].includes(error.status) ? 'authentication' : 'request'
-          : error instanceof TypeError || error instanceof DOMException ? 'network' : 'request';
-        if (kind === 'not_found' || kind === 'authentication') sessionDetail.set(null);
+        const kind: SessionDetailErrorKind =
+          error instanceof ApiError
+            ? error.status === 404 && !sessionLoaded
+              ? "not_found"
+              : [401, 403].includes(error.status)
+                ? "authentication"
+                : "request"
+            : error instanceof TypeError || error instanceof DOMException
+              ? "network"
+              : "request";
+        if (kind === "not_found" || kind === "authentication") sessionDetail.set(null);
         sessionDetailErrorKind.set(kind);
         sessionDetailError.set(error instanceof Error ? error.message : String(error));
       }
@@ -187,7 +205,10 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
   return result;
 }
 
-export async function updateSessionTitle(sessionId: string, title: string | null): Promise<SessionView> {
+export async function updateSessionTitle(
+  sessionId: string,
+  title: string | null,
+): Promise<SessionView> {
   const session = await apiUpdateSession(sessionId, { title });
   await loadSessions();
   await loadSessionDetail(sessionId);
@@ -202,7 +223,7 @@ function applySessionManagementResult(session: SessionView): void {
     return session.archived_at ? remaining : [session, ...remaining];
   });
   if (get(sessionDetail)?.session.session_id === session.session_id) {
-    sessionDetail.update((detail) => detail ? { ...detail, session } : detail);
+    sessionDetail.update((detail) => (detail ? { ...detail, session } : detail));
   }
   if (detailRequest?.sessionId === session.session_id) detailRequest.dirty = true;
 }
@@ -227,7 +248,7 @@ export async function archiveSession(sessionId: string): Promise<SessionView> {
 
 export async function unarchiveSession(sessionId: string): Promise<SessionView> {
   const session = await apiUnarchiveSession(sessionId);
-  if (session.archived_at) throw new Error('The session is still archived. Refresh and try again.');
+  if (session.archived_at) throw new Error("The session is still archived. Refresh and try again.");
   applySessionManagementResult(session);
   return session;
 }
@@ -238,14 +259,15 @@ export async function submitInboxMessage(
   options: { showInChat?: boolean } = {},
 ): Promise<InboxMessageView> {
   const detailSession = get(sessionDetail)?.session;
-  const currentSession = detailSession?.session_id === sessionId
-    ? detailSession
-    : get(sessions).find((session) => session.session_id === sessionId);
+  const currentSession =
+    detailSession?.session_id === sessionId
+      ? detailSession
+      : get(sessions).find((session) => session.session_id === sessionId);
   const submission = { messageId: `msg_${crypto.randomUUID()}`, sessionId, input };
   const localSubmissionId = beginInboxSubmission(sessionId, input, {
     messageId: submission.messageId,
-    showInChat: options.showInChat
-      ?? (!input.branch_target_turn_id && currentSession?.state !== 'busy'),
+    showInChat:
+      options.showInChat ?? (!input.branch_target_turn_id && currentSession?.state !== "busy"),
   });
   let message: InboxMessageView;
   try {
@@ -259,7 +281,9 @@ export async function submitInboxMessage(
   confirmInboxSubmission(localSubmissionId, message);
   sessionDetail.update((detail) => {
     if (detail?.session.session_id !== sessionId) return detail;
-    const inboxMessages = detail.inboxMessages.filter((item) => item.message_id !== message.message_id);
+    const inboxMessages = detail.inboxMessages.filter(
+      (item) => item.message_id !== message.message_id,
+    );
     return { ...detail, inboxMessages: [...inboxMessages, message] };
   });
   await loadSessions();
@@ -267,23 +291,38 @@ export async function submitInboxMessage(
   return message;
 }
 
-async function deliverSubmission(submission: UnconfirmedSubmission, recovering = false): Promise<InboxMessageView> {
+async function deliverSubmission(
+  submission: UnconfirmedSubmission,
+  recovering = false,
+): Promise<InboxMessageView> {
   let message: InboxMessageView;
   try {
     message = submission.retryOf
-      ? await apiRetryInboxMessage(submission.sessionId, submission.retryOf, submission.messageId, submission.allowUnknown ?? false)
+      ? await apiRetryInboxMessage(
+          submission.sessionId,
+          submission.retryOf,
+          submission.messageId,
+          submission.allowUnknown ?? false,
+        )
       : await apiSubmitInboxMessage(submission.sessionId, submission.input, submission.messageId);
   } catch (error) {
-    if (!recovering && error instanceof ApiError && !error.afterNetworkFailure
-      && [400, 401, 403, 404, 409, 422].includes(error.status)
-      && !['invalid_json', 'missing_data'].includes(error.code)) {
+    if (
+      !recovering &&
+      error instanceof ApiError &&
+      !error.afterNetworkFailure &&
+      [400, 401, 403, 404, 409, 422].includes(error.status) &&
+      !["invalid_json", "missing_data"].includes(error.code)
+    ) {
       forgetSubmission(submission.messageId);
       throw error;
     }
     throw new SubmissionUnconfirmedError();
   }
-  try { forgetSubmission(submission.messageId); }
-  catch { throw new SubmissionUnconfirmedError(); }
+  try {
+    forgetSubmission(submission.messageId);
+  } catch {
+    throw new SubmissionUnconfirmedError();
+  }
   return message;
 }
 
@@ -299,10 +338,17 @@ export async function recoverInboxSubmission(submission: UnconfirmedSubmission):
   await loadSessionDetail(submission.sessionId);
 }
 
-export async function retryInboxMessage(sessionId: string, original: InboxMessageView, allowUnknown = false): Promise<void> {
+export async function retryInboxMessage(
+  sessionId: string,
+  original: InboxMessageView,
+  allowUnknown = false,
+): Promise<void> {
   const submission: UnconfirmedSubmission = {
-    messageId: `msg_${crypto.randomUUID()}`, sessionId,
-    input: { input: original.input.summary }, retryOf: original.message_id, allowUnknown,
+    messageId: `msg_${crypto.randomUUID()}`,
+    sessionId,
+    input: { input: original.input.summary },
+    retryOf: original.message_id,
+    allowUnknown,
   };
   rememberSubmission(submission);
   await deliverSubmission(submission);
@@ -310,14 +356,20 @@ export async function retryInboxMessage(sessionId: string, original: InboxMessag
   await loadSessionDetail(sessionId);
 }
 
-export async function cancelInboxMessage(sessionId: string, messageId: string): Promise<InboxMessageView> {
+export async function cancelInboxMessage(
+  sessionId: string,
+  messageId: string,
+): Promise<InboxMessageView> {
   const message = await apiCancelInboxMessage(sessionId, messageId);
   await loadSessions();
   await loadSessionDetail(sessionId);
   return message;
 }
 
-export async function dismissInboxMessage(sessionId: string, messageId: string): Promise<InboxMessageView> {
+export async function dismissInboxMessage(
+  sessionId: string,
+  messageId: string,
+): Promise<InboxMessageView> {
   const message = await apiDismissInboxMessage(sessionId, messageId);
   await loadSessions();
   await loadSessionDetail(sessionId);

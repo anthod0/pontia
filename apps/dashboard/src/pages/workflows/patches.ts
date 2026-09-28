@@ -1,9 +1,15 @@
-import { writable } from 'svelte/store';
-import { listWorkflowPatches } from '../../api/client';
-import type { WorkflowPatchHistoryView } from '../../api/types';
+import { writable } from "svelte/store";
+import { listWorkflowPatches } from "../../api/client";
+import type { WorkflowPatchHistoryView } from "../../api/types";
 
 export function createPatchHistoryReader() {
-  const state = writable<{ workflowId: string | null; loading: boolean; loaded: boolean; error: string | null; patches: WorkflowPatchHistoryView[] }>({ workflowId: null, loading: false, loaded: false, error: null, patches: [] });
+  const state = writable<{
+    workflowId: string | null;
+    loading: boolean;
+    loaded: boolean;
+    error: string | null;
+    patches: WorkflowPatchHistoryView[];
+  }>({ workflowId: null, loading: false, loaded: false, error: null, patches: [] });
   let workflow: string | null = null;
   let controller: AbortController | null = null;
   let pending: Promise<void> | null = null;
@@ -23,15 +29,35 @@ export function createPatchHistoryReader() {
       pending = (async () => {
         try {
           const patches = await listWorkflowPatches(workflowId, { signal: request.signal });
-          if (!request.signal.aborted) state.set({ workflowId, loading: false, loaded: true, error: null, patches: [...patches].sort((a, b) => Date.parse(b.requested_at) - Date.parse(a.requested_at) || b.patch_id.localeCompare(a.patch_id)) });
+          if (!request.signal.aborted)
+            state.set({
+              workflowId,
+              loading: false,
+              loaded: true,
+              error: null,
+              patches: [...patches].sort(
+                (a, b) =>
+                  Date.parse(b.requested_at) - Date.parse(a.requested_at) ||
+                  b.patch_id.localeCompare(a.patch_id),
+              ),
+            });
         } catch (error) {
-          if (!request.signal.aborted) state.update((value) => ({ ...value, loading: false, error: error instanceof Error ? error.message : String(error) }));
+          if (!request.signal.aborted)
+            state.update((value) => ({
+              ...value,
+              loading: false,
+              error: error instanceof Error ? error.message : String(error),
+            }));
         } finally {
           if (controller === request) pending = null;
         }
       })();
       return pending;
     },
-    cancel() { controller?.abort(); pending = null; workflow = null; },
+    cancel() {
+      controller?.abort();
+      pending = null;
+      workflow = null;
+    },
   };
 }

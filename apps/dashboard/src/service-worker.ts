@@ -1,24 +1,26 @@
 /// <reference lib="webworker" />
 
-import { base, build, files, version } from '$service-worker';
+import { base, build, files, version } from "$service-worker";
 
 const worker = self as unknown as ServiceWorkerGlobalScope;
 const CACHE_NAME = `pontia-dashboard-${version}`;
 const APP_SHELL = `${base}/`;
 const PRECACHED_ASSETS = new Set([...build, ...files]);
 
-worker.addEventListener('install', (event) => {
+worker.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll([...PRECACHED_ASSETS, APP_SHELL])),
   );
 });
 
-worker.addEventListener('activate', (event) => {
+worker.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then(async (cacheNames) => {
       await Promise.all(
         cacheNames
-          .filter((cacheName) => cacheName.startsWith('pontia-dashboard-') && cacheName !== CACHE_NAME)
+          .filter(
+            (cacheName) => cacheName.startsWith("pontia-dashboard-") && cacheName !== CACHE_NAME,
+          )
           .map((cacheName) => caches.delete(cacheName)),
       );
       await worker.clients.claim();
@@ -26,9 +28,9 @@ worker.addEventListener('activate', (event) => {
   );
 });
 
-worker.addEventListener('fetch', (event) => {
+worker.addEventListener("fetch", (event) => {
   const { request } = event;
-  if (request.method !== 'GET') return;
+  if (request.method !== "GET") return;
 
   const url = new URL(request.url);
   const isDashboardRequest =
@@ -36,7 +38,7 @@ worker.addEventListener('fetch', (event) => {
     (url.pathname === base || url.pathname.startsWith(`${base}/`));
   if (!isDashboardRequest) return;
 
-  if (request.mode === 'navigate') {
+  if (request.mode === "navigate") {
     event.respondWith(networkFirstNavigation(request));
     return;
   }

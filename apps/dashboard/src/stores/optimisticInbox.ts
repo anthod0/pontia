@@ -1,13 +1,13 @@
-import { writable } from 'svelte/store';
-import type { InboxMessageView, SubmitInboxMessageInput } from '../api/types';
-import type { SessionChatMessage } from '$lib/session-chat/sessionChat';
+import { writable } from "svelte/store";
+import type { InboxMessageView, SubmitInboxMessageInput } from "../api/types";
+import type { SessionChatMessage } from "$lib/session-chat/sessionChat";
 
 export interface OptimisticInboxSubmission {
   localId: string;
   sessionId: string;
   input: string;
   deliveryPolicy: string | undefined;
-  metadata: SubmitInboxMessageInput['metadata'];
+  metadata: SubmitInboxMessageInput["metadata"];
   branchTargetTurnId: string | null;
   showInChat: boolean;
   submittedAt: string;
@@ -49,14 +49,16 @@ export function confirmInboxSubmission(localId: string, message: InboxMessageVie
     failInboxSubmission(localId);
     return;
   }
-  optimisticInboxSubmissions.update((submissions) => updateSubmission(submissions, localId, (submission) => ({
-    ...submission,
-    input: message.input.summary.trim(),
-    deliveryPolicy: message.delivery_policy,
-    metadata: message.metadata,
-    branchTargetTurnId: message.branch_target_turn_id,
-    acceptedMessage: message,
-  })));
+  optimisticInboxSubmissions.update((submissions) =>
+    updateSubmission(submissions, localId, (submission) => ({
+      ...submission,
+      input: message.input.summary.trim(),
+      deliveryPolicy: message.delivery_policy,
+      metadata: message.metadata,
+      branchTargetTurnId: message.branch_target_turn_id,
+      acceptedMessage: message,
+    })),
+  );
 }
 
 export function consumeInboxSubmission(messageId: string): void {
@@ -66,10 +68,16 @@ export function consumeInboxSubmission(messageId: string): void {
     if (oldestMessageId) consumedInboxMessageIds.delete(oldestMessageId);
   }
   optimisticInboxSubmissions.update((submissions) => {
-    const matchedIds = new Set(Object.values(submissions)
-      .flat()
-      .filter((submission) => submission.acceptedMessage?.message_id === messageId || submission.localId === messageId)
-      .map((submission) => submission.localId));
+    const matchedIds = new Set(
+      Object.values(submissions)
+        .flat()
+        .filter(
+          (submission) =>
+            submission.acceptedMessage?.message_id === messageId ||
+            submission.localId === messageId,
+        )
+        .map((submission) => submission.localId),
+    );
     return matchedIds.size ? removeSubmissions(submissions, matchedIds) : submissions;
   });
 }
@@ -82,21 +90,29 @@ export function syncInboxSubmissions(messages: InboxMessageView[]): void {
       const messageId = submission.acceptedMessage?.message_id;
       const latest = messageId ? messagesById.get(messageId) : undefined;
       if (!latest) continue;
-      if (latest.state !== 'pending' && latest.state !== 'dispatching') {
+      if (latest.state !== "pending" && latest.state !== "dispatching") {
         next = removeSubmissions(next, new Set([submission.localId]));
         continue;
       }
-      next = updateSubmission(next, submission.localId, (current) => ({ ...current, acceptedMessage: latest }));
+      next = updateSubmission(next, submission.localId, (current) => ({
+        ...current,
+        acceptedMessage: latest,
+      }));
     }
     return next;
   });
 }
 
 export function failInboxSubmission(localId: string): void {
-  optimisticInboxSubmissions.update((submissions) => removeSubmissions(submissions, new Set([localId])));
+  optimisticInboxSubmissions.update((submissions) =>
+    removeSubmissions(submissions, new Set([localId])),
+  );
 }
 
-export function reconcileInboxSubmissions(sessionId: string, loadedMessages: SessionChatMessage[]): void {
+export function reconcileInboxSubmissions(
+  sessionId: string,
+  loadedMessages: SessionChatMessage[],
+): void {
   // Inspect the value inside update so concurrent submissions are not lost.
   optimisticInboxSubmissions.update((submissions) => {
     const matchedIds = matchedSubmissionIds(submissions[sessionId] ?? [], loadedMessages);
@@ -112,7 +128,10 @@ export function inboxSubmissionMessages(
   const submissions = submissionsBySessionId[sessionId] ?? [];
   const matched = matchedSubmissionIds(submissions, loadedMessages);
   const optimisticMessages = submissions
-    .filter((submission) => submission.showInChat && !submission.branchTargetTurnId && !matched.has(submission.localId))
+    .filter(
+      (submission) =>
+        submission.showInChat && !submission.branchTargetTurnId && !matched.has(submission.localId),
+    )
     .map(submissionToChatMessage);
   return [...loadedMessages, ...optimisticMessages];
 }
@@ -122,9 +141,9 @@ function submissionToChatMessage(submission: OptimisticInboxSubmission): Session
   return {
     id: `optimistic-inbox:${identity}:user`,
     turnId: submission.acceptedMessage?.turn_id ?? `optimistic-inbox:${identity}`,
-    role: 'user',
+    role: "user",
     content: submission.input,
-    status: 'pending',
+    status: "pending",
     createdAt: submission.acceptedMessage?.created_at ?? submission.submittedAt,
   };
 }
@@ -139,7 +158,7 @@ function matchedSubmissionIds(
     const accepted = submission.acceptedMessage;
     if (!accepted || submission.branchTargetTurnId) continue;
     const matchIndex = loadedMessages.findIndex((message, index) => {
-      if (matchedLoadedIndexes.has(index) || message.role !== 'user') return false;
+      if (matchedLoadedIndexes.has(index) || message.role !== "user") return false;
       return Boolean(accepted.turn_id && message.turnId === accepted.turn_id);
     });
     if (matchIndex < 0) continue;

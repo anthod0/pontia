@@ -1,4 +1,4 @@
-import type { WorkflowNodeView } from '../../api/types';
+import type { WorkflowNodeView } from "../../api/types";
 
 export interface WorkflowPhaseTab {
   ordinal: number;
@@ -8,7 +8,10 @@ export interface WorkflowPhaseTab {
   current: boolean;
 }
 
-export function groupWorkflowPhases(nodes: WorkflowNodeView[], currentNodeId: string | null): WorkflowPhaseTab[] {
+export function groupWorkflowPhases(
+  nodes: WorkflowNodeView[],
+  currentNodeId: string | null,
+): WorkflowPhaseTab[] {
   const phases: WorkflowPhaseTab[] = [];
   for (const node of nodes) {
     let phase = phases.at(-1);
@@ -29,7 +32,10 @@ export function groupWorkflowPhases(nodes: WorkflowNodeView[], currentNodeId: st
   return phases;
 }
 
-export function selectedPhaseOrdinal(raw: string | null, phases: WorkflowPhaseTab[]): number | null {
+export function selectedPhaseOrdinal(
+  raw: string | null,
+  phases: WorkflowPhaseTab[],
+): number | null {
   if (raw === null || !/^\d+$/.test(raw)) return null;
   const ordinal = Number(raw);
   return phases.some((phase) => phase.ordinal === ordinal) ? ordinal : null;

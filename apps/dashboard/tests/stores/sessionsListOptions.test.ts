@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   archiveSession: vi.fn(),
@@ -20,17 +20,17 @@ const api = vi.hoisted(() => ({
   updateSession: vi.fn(),
 }));
 
-vi.mock('../../src/api/client', () => api);
+vi.mock("../../src/api/client", () => api);
 
-describe('sessions store list options', () => {
+describe("sessions store list options", () => {
   beforeEach(() => {
     vi.resetModules();
     Object.values(api).forEach((mock) => mock.mockReset());
     api.listSessions.mockResolvedValue([]);
   });
 
-  test('loads backend-limited recent sessions and includes pinned sessions beyond the limit by default', async () => {
-    const { loadSessions } = await import('../../src/stores/sessions');
+  test("loads backend-limited recent sessions and includes pinned sessions beyond the limit by default", async () => {
+    const { loadSessions } = await import("../../src/stores/sessions");
 
     await loadSessions();
 

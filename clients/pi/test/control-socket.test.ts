@@ -22,7 +22,8 @@ async function server(handler: (socket: Socket, message: any) => void) {
       for (;;) {
         const index = pending.indexOf("\n");
         if (index < 0) break;
-        const line = pending.slice(0, index); pending = pending.slice(index + 1);
+        const line = pending.slice(0, index);
+        pending = pending.slice(index + 1);
         handler(socket, JSON.parse(line));
       }
     });
@@ -35,24 +36,44 @@ async function server(handler: (socket: Socket, message: any) => void) {
   return root;
 }
 
-function reply(socket: Socket, id: unknown, result: unknown) { socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`); }
+function reply(socket: Socket, id: unknown, result: unknown) {
+  socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
+}
 
 test("branch replay can resolve over the same socket and rejects malformed message identifiers", async () => {
   const replies: any[] = [];
   const root = await server((socket, message) => {
-    if (!message.method) { replies.push(message); return; }
+    if (!message.method) {
+      replies.push(message);
+      return;
+    }
     if (message.method === "begin") {
-      for (const [id, inbox_message_id] of [["valid", "msg_replay"], ["invalid", "msg_one extra"]]) {
-        socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, method: "branch.replay", params: { inbox_message_id } })}\n`);
+      for (const [id, inbox_message_id] of [
+        ["valid", "msg_replay"],
+        ["invalid", "msg_one extra"],
+      ]) {
+        socket.write(
+          `${JSON.stringify({ jsonrpc: "2.0", id, method: "branch.replay", params: { inbox_message_id } })}\n`,
+        );
       }
     }
-    reply(socket, message.id, message.method === "branch.resolve" ? { target_entry_id: "native-user" } : {});
+    reply(
+      socket,
+      message.id,
+      message.method === "branch.resolve" ? { target_entry_id: "native-user" } : {},
+    );
   });
   let resolved: Promise<unknown> | undefined;
   const replay = vi.fn((inboxMessageId: string) => {
     resolved = client.request("branch.resolve", { inbox_message_id: inboxMessageId });
   });
-  const client = await connectPi(root, () => {}, () => {}, undefined, replay);
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+    undefined,
+    replay,
+  );
   onTestFinished(() => client.close());
   await client.request("begin", {});
   await vi.waitFor(() => expect(replies).toHaveLength(2));
@@ -67,7 +88,9 @@ test("dispatches daemon requests while a registration request is awaiting its re
   const root = await server((socket, message) => {
     if (message.method === "runtime.register") {
       registrationId = message.id;
-      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "daemon:1", method: "submit", params: { input: "你好", inbox_message_id: "msg_1" } })}\n`);
+      socket.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: "daemon:1", method: "submit", params: { input: "你好", inbox_message_id: "msg_1" } })}\n`,
+      );
     } else {
       expect(message.id).toBe("daemon:1");
       expect(message.result).toEqual({ accepted: true });
@@ -77,7 +100,10 @@ test("dispatches daemon requests while a registration request is awaiting its re
   const submit = vi.fn();
   const client = await connectPi(root, () => {}, submit);
   onTestFinished(() => client.close());
-  await expect(client.request("runtime.register", {})).resolves.toEqual({ session_id: "s", runtime_instance_id: "r" });
+  await expect(client.request("runtime.register", {})).resolves.toEqual({
+    session_id: "s",
+    runtime_instance_id: "r",
+  });
   expect(submit).toHaveBeenCalledWith({ input: "你好", inboxMessageId: "msg_1" });
 });
 
@@ -89,11 +115,19 @@ test("reconnect attaches the confirmed identity without repeating registration",
     else if (message.method === "break") socket.destroy();
     else {
       expect(message.method).toBe("runtime.attach");
-      expect(message.params).toMatchObject({ session_id: "s", runtime_instance_id: "r", client_session_key: "native" });
+      expect(message.params).toMatchObject({
+        session_id: "s",
+        runtime_instance_id: "r",
+        client_session_key: "native",
+      });
       reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" });
     }
   });
-  const client = await connectPi(root, () => {}, () => {});
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+  );
   onTestFinished(() => client.close());
   await client.request("runtime.register", {});
   client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
@@ -101,29 +135,52 @@ test("reconnect attaches the confirmed identity without repeating registration",
   await vi.waitFor(() => expect(methods).toEqual(["runtime.register", "break", "runtime.attach"]));
 });
 
-test.each(["wrong-id", "both", "invalid-json", "oversized"])("rejects %s frames and fails pending calls", async (kind) => {
-  const root = await server((socket, message) => {
-    const frame = kind === "wrong-id" ? JSON.stringify({ jsonrpc: "2.0", id: "wrong", result: {} })
-      : kind === "both" ? JSON.stringify({ jsonrpc: "2.0", id: message.id, result: {}, error: { code: 1, message: "bad" } })
-      : kind === "oversized" ? "x".repeat(MAX_RPC_FRAME_BYTES + 1) : "not-json";
-    socket.write(`${frame}\n`);
-  });
-  const client = await connectPi(root, () => {}, () => {});
-  onTestFinished(() => client.close());
-  await expect(client.request("runtime.register", {})).rejects.toThrow();
-});
+test.each(["wrong-id", "both", "invalid-json", "oversized"])(
+  "rejects %s frames and fails pending calls",
+  async (kind) => {
+    const root = await server((socket, message) => {
+      const frame =
+        kind === "wrong-id"
+          ? JSON.stringify({ jsonrpc: "2.0", id: "wrong", result: {} })
+          : kind === "both"
+            ? JSON.stringify({
+                jsonrpc: "2.0",
+                id: message.id,
+                result: {},
+                error: { code: 1, message: "bad" },
+              })
+            : kind === "oversized"
+              ? "x".repeat(MAX_RPC_FRAME_BYTES + 1)
+              : "not-json";
+      socket.write(`${frame}\n`);
+    });
+    const client = await connectPi(
+      root,
+      () => {},
+      () => {},
+    );
+    onTestFinished(() => client.close());
+    await expect(client.request("runtime.register", {})).rejects.toThrow();
+  },
+);
 
 test("correlates replies that arrive in reverse order", async () => {
   const pending: any[] = [];
   const root = await server((socket, message) => {
     pending.push(message);
-    if (pending.length === 2) for (const request of pending.reverse()) reply(socket, request.id, request.method);
+    if (pending.length === 2)
+      for (const request of pending.reverse()) reply(socket, request.id, request.method);
   });
-  const client = await connectPi(root, () => {}, () => {});
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+  );
   onTestFinished(() => client.close());
-  await expect(Promise.all([client.request("one", {}), client.request("two", {})])).resolves.toEqual(["one", "two"]);
+  await expect(
+    Promise.all([client.request("one", {}), client.request("two", {})]),
+  ).resolves.toEqual(["one", "two"]);
 });
-
 
 test("lost acknowledgements retry only the failure notification over a fresh connection", async () => {
   const methods: string[] = [];
@@ -136,9 +193,14 @@ test("lost acknowledgements retry only the failure notification over a fresh con
     }
     methods.push(message.method);
     if (message.method === "event.report") {
-      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "daemon:submit", method: "submit", params: { input: "next" } })}\n`);
+      socket.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: "daemon:submit", method: "submit", params: { input: "next" } })}\n`,
+      );
     } else if (message.method === "runtime.attach") {
-      setTimeout(() => reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" }), 400);
+      setTimeout(
+        () => reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" }),
+        400,
+      );
     } else {
       expect(message.params.client_session_key).toBe("native");
       if (methods.filter((method) => method === "turn.startFailure").length === 1) socket.destroy();
@@ -151,8 +213,14 @@ test("lost acknowledgements retry only the failure notification over a fresh con
   client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
   const reporter = new EventReporter({ connection: client, logFile: join(root, "hook.log") });
   const context = { sessionId: "s", runtimeInstanceId: "r", clientType: "pi" as const };
-  expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({ accepted: false });
-  expect(methods.filter((method) => method !== "runtime.attach")).toEqual(["event.report", "turn.startFailure", "turn.startFailure"]);
+  expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
+    accepted: false,
+  });
+  expect(methods.filter((method) => method !== "runtime.attach")).toEqual([
+    "event.report",
+    "turn.startFailure",
+    "turn.startFailure",
+  ]);
   expect(submit).toHaveBeenCalledWith({ input: "next", inboxMessageId: undefined });
 });
 
@@ -162,9 +230,15 @@ test("reports large facts without treating normal socket buffering as failure", 
     expect(message.params.event.data.input_summary).toBe(data);
     reply(socket, message.id, { accepted: true, turn_id: "turn_1" });
   });
-  const client = await connectPi(root, () => {}, () => {});
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+  );
   onTestFinished(() => client.close());
-  await expect(client.request("event.report", { event: { data: { input_summary: data } } })).resolves.toMatchObject({ accepted: true });
+  await expect(
+    client.request("event.report", { event: { data: { input_summary: data } } }),
+  ).resolves.toMatchObject({ accepted: true });
 });
 
 test("new event reports wait for reconnect attachment before they are sent", async () => {
@@ -172,7 +246,10 @@ test("new event reports wait for reconnect attachment before they are sent", asy
   const methods: string[] = [];
   const root = await server((socket, message) => {
     methods.push(message.method);
-    if (message.method === "break") { socket.destroy(); return; }
+    if (message.method === "break") {
+      socket.destroy();
+      return;
+    }
     if (message.method === "runtime.attach") {
       setTimeout(() => {
         attached = true;
@@ -183,7 +260,11 @@ test("new event reports wait for reconnect attachment before they are sent", asy
     expect(attached).toBe(true);
     reply(socket, message.id, { accepted: true });
   });
-  const client = await connectPi(root, () => {}, () => {});
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+  );
   onTestFinished(() => client.close());
   client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
   await expect(client.request("break", {})).rejects.toThrow();
@@ -196,24 +277,47 @@ test("model control can report a confirmed fact before replying and refreshes it
   const responses: any[] = [];
   const methods: string[] = [];
   const root = await server((socket, message) => {
-    if (!message.method) { responses.push(message); return; }
+    if (!message.method) {
+      responses.push(message);
+      return;
+    }
     methods.push(message.method);
     if (message.method === "begin") {
       socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "models.list" })}\n`);
-      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "set", method: "model.set", params: { model: "provider/model" } })}\n`);
+      socket.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: "set", method: "model.set", params: { model: "provider/model" } })}\n`,
+      );
     }
-    if (message.method === "break") { socket.destroy(); return; }
-    reply(socket, message.id, message.method === "runtime.attach" ? { session_id: "s", runtime_instance_id: "r" } : { accepted: true });
+    if (message.method === "break") {
+      socket.destroy();
+      return;
+    }
+    reply(
+      socket,
+      message.id,
+      message.method === "runtime.attach"
+        ? { session_id: "s", runtime_instance_id: "r" }
+        : { accepted: true },
+    );
   });
   const model = { id: "provider/model", name: "Model", description: "provider" };
-  const client = await connectPi(root, () => {}, () => {}, {
-    listModels: () => [model],
-    async setModel(id) {
-      expect(id).toBe(model.id);
-      await client.request("event.report", { event: { type: "session.model_updated", data: { model: id } } });
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+    {
+      listModels: () => [model],
+      async setModel(id) {
+        expect(id).toBe(model.id);
+        await client.request("event.report", {
+          event: { type: "session.model_updated", data: { model: id } },
+        });
+      },
+      async onReconnect() {
+        await client.request("event.report", {});
+      },
     },
-    async onReconnect() { await client.request("event.report", {}); },
-  });
+  );
   onTestFinished(() => client.close());
   client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
   await client.request("begin", {});
@@ -224,19 +328,30 @@ test("model control can report a confirmed fact before replying and refreshes it
   await vi.waitFor(() => expect(methods.slice(-2)).toEqual(["runtime.attach", "event.report"]));
 });
 
-
 test("model control preserves uncertain outcomes across the RPC boundary", async () => {
   let result: any;
   const root = await server((socket, message) => {
-    if (!message.method) { result = message; return; }
-    socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "set", method: "model.set", params: { model: "provider/model" } })}\n`);
+    if (!message.method) {
+      result = message;
+      return;
+    }
+    socket.write(
+      `${JSON.stringify({ jsonrpc: "2.0", id: "set", method: "model.set", params: { model: "provider/model" } })}\n`,
+    );
     reply(socket, message.id, {});
   });
-  const client = await connectPi(root, () => {}, () => {}, {
-    listModels: () => [],
-    async setModel() { throw new RpcError(-32007, "Observation acknowledgement lost"); },
-    async onReconnect() {},
-  });
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+    {
+      listModels: () => [],
+      async setModel() {
+        throw new RpcError(-32007, "Observation acknowledgement lost");
+      },
+      async onReconnect() {},
+    },
+  );
   onTestFinished(() => client.close());
   await client.request("begin", {});
   await vi.waitFor(() => expect(result?.error?.code).toBe(-32007));
@@ -259,21 +374,36 @@ test("live output recovers a lost acknowledgement after attaching and keeps cont
     }
     expect(message.method).toBe("liveOutput.publish");
     publications.push(message.params);
-    if (publications.length === 1) { socket.destroy(); return; }
+    if (publications.length === 1) {
+      socket.destroy();
+      return;
+    }
     if (publications.length === 2) {
       socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "daemon:ping", method: "ping" })}\n`);
     }
     reply(socket, message.id, {
-      accepted: true, accepted_sequence: message.params.sequence,
-      duplicate: false, resync_required: false,
+      accepted: true,
+      accepted_sequence: message.params.sequence,
+      duplicate: false,
+      resync_required: false,
     });
   });
-  const client = await connectPi(root, () => {}, () => {});
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+  );
   onTestFinished(() => client.close());
   client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
-  const publisher = new LiveOutputPublisher({
-    sessionId: "s", runtimeInstanceId: "r", turnId: "t", clientType: "pi",
-  }, { connection: client });
+  const publisher = new LiveOutputPublisher(
+    {
+      sessionId: "s",
+      runtimeInstanceId: "r",
+      turnId: "t",
+      clientType: "pi",
+    },
+    { connection: client },
+  );
   onTestFinished(() => publisher.close());
   publisher.appendText("hello");
   await vi.waitFor(() => expect(publications).toHaveLength(1));
@@ -281,10 +411,23 @@ test("live output recovers a lost acknowledgement after attaching and keeps cont
   await vi.waitFor(() => expect(publications).toHaveLength(2), { timeout: 2_000 });
   await vi.waitFor(() => expect(pingAnswered).toBe(true));
   await publisher.close();
-  expect(methods).toEqual(["liveOutput.publish", "runtime.attach", "liveOutput.publish", "liveOutput.publish"]);
+  expect(methods).toEqual([
+    "liveOutput.publish",
+    "runtime.attach",
+    "liveOutput.publish",
+    "liveOutput.publish",
+  ]);
   expect(publications).toEqual([
-    expect.objectContaining({ type: "snapshot", sequence: 1, items: [{ kind: "assistant_text", item_id: "text_1", text: "hello" }] }),
-    expect.objectContaining({ type: "snapshot", sequence: 2, items: [{ kind: "assistant_text", item_id: "text_1", text: "hello world" }] }),
+    expect.objectContaining({
+      type: "snapshot",
+      sequence: 1,
+      items: [{ kind: "assistant_text", item_id: "text_1", text: "hello" }],
+    }),
+    expect.objectContaining({
+      type: "snapshot",
+      sequence: 2,
+      items: [{ kind: "assistant_text", item_id: "text_1", text: "hello world" }],
+    }),
     expect.objectContaining({ type: "stream_closed", sequence: 3 }),
   ]);
 });
@@ -295,12 +438,22 @@ test("oversized live output stops retrying without closing the shared control co
     methods.push(message.method);
     reply(socket, message.id, {});
   });
-  const client = await connectPi(root, () => {}, () => {});
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+  );
   onTestFinished(() => client.close());
   const request = vi.fn(client.request);
-  const publisher = new LiveOutputPublisher({
-    sessionId: "s", runtimeInstanceId: "r", turnId: "t", clientType: "pi",
-  }, { connection: { request } });
+  const publisher = new LiveOutputPublisher(
+    {
+      sessionId: "s",
+      runtimeInstanceId: "r",
+      turnId: "t",
+      clientType: "pi",
+    },
+    { connection: { request } },
+  );
   onTestFinished(() => publisher.close());
   publisher.appendText("x".repeat(MAX_RPC_FRAME_BYTES));
   await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
@@ -311,28 +464,44 @@ test("oversized live output stops retrying without closing the shared control co
   expect(methods).toEqual(["ping"]);
 });
 
-
-test.each(["interrupt", "shutdown"] as const)("%s acknowledges native requests and preserves rejection and uncertainty", async (method) => {
-  const responses: any[] = [];
-  const root = await server((socket, message) => {
-    if (!message.method) { responses.push(message); return; }
-    socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "control", method })}\n`);
-    reply(socket, message.id, {});
-  });
-  const lifecycle = { interrupt: vi.fn(), shutdown: vi.fn() };
-  const callback = lifecycle[method];
-  const client = await connectPi(root, () => {}, () => {}, undefined, undefined, lifecycle);
-  onTestFinished(() => client.close());
-  await client.request("begin", {});
-  await vi.waitFor(() => expect(responses).toHaveLength(1));
-  expect(callback).toHaveBeenCalledOnce();
-  expect(responses[0].result).toEqual({ accepted: true });
-  callback.mockImplementationOnce(() => { throw new Error("Session is no longer current"); });
-  await client.request("begin", {});
-  await vi.waitFor(() => expect(responses).toHaveLength(2));
-  expect(responses[1].error.code).toBe(-32006);
-  callback.mockImplementationOnce(() => { throw new RpcError(-32007, "Native result is unknown"); });
-  await client.request("begin", {});
-  await vi.waitFor(() => expect(responses).toHaveLength(3));
-  expect(responses[2].error.code).toBe(-32007);
-});
+test.each(["interrupt", "shutdown"] as const)(
+  "%s acknowledges native requests and preserves rejection and uncertainty",
+  async (method) => {
+    const responses: any[] = [];
+    const root = await server((socket, message) => {
+      if (!message.method) {
+        responses.push(message);
+        return;
+      }
+      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "control", method })}\n`);
+      reply(socket, message.id, {});
+    });
+    const lifecycle = { interrupt: vi.fn(), shutdown: vi.fn() };
+    const callback = lifecycle[method];
+    const client = await connectPi(
+      root,
+      () => {},
+      () => {},
+      undefined,
+      undefined,
+      lifecycle,
+    );
+    onTestFinished(() => client.close());
+    await client.request("begin", {});
+    await vi.waitFor(() => expect(responses).toHaveLength(1));
+    expect(callback).toHaveBeenCalledOnce();
+    expect(responses[0].result).toEqual({ accepted: true });
+    callback.mockImplementationOnce(() => {
+      throw new Error("Session is no longer current");
+    });
+    await client.request("begin", {});
+    await vi.waitFor(() => expect(responses).toHaveLength(2));
+    expect(responses[1].error.code).toBe(-32006);
+    callback.mockImplementationOnce(() => {
+      throw new RpcError(-32007, "Native result is unknown");
+    });
+    await client.request("begin", {});
+    await vi.waitFor(() => expect(responses).toHaveLength(3));
+    expect(responses[2].error.code).toBe(-32007);
+  },
+);

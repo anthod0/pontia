@@ -13,14 +13,14 @@ export async function copyText(text: string): Promise<boolean> {
 }
 
 function copyTextWithExecCommand(text: string): boolean {
-  if (typeof document.execCommand !== 'function') return false;
+  if (typeof document.execCommand !== "function") return false;
 
-  const textarea = document.createElement('textarea');
+  const textarea = document.createElement("textarea");
   textarea.value = text;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.left = '-9999px';
-  textarea.style.top = '0';
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
   document.body.appendChild(textarea);
 
   const selection = document.getSelection();
@@ -30,7 +30,7 @@ function copyTextWithExecCommand(text: string): boolean {
   textarea.setSelectionRange(0, textarea.value.length);
 
   try {
-    return document.execCommand('copy');
+    return document.execCommand("copy");
   } finally {
     document.body.removeChild(textarea);
     if (selection && previousRange) {

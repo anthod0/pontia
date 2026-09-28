@@ -1,13 +1,13 @@
-import type { ManagedToolUse, SessionView, TimelineItem, TurnView } from '../../api/types';
-import { untitledSessionLabel } from '../sessionTitle';
+import type { ManagedToolUse, SessionView, TimelineItem, TurnView } from "../../api/types";
+import { untitledSessionLabel } from "../sessionTitle";
 
-export type ChatSessionFilter = 'active' | 'all';
-export type ChatMessageRole = 'user' | 'assistant';
-export type ChatMessageStatus = 'sent' | 'pending' | 'failed';
+export type ChatSessionFilter = "active" | "all";
+export type ChatMessageRole = "user" | "assistant";
+export type ChatMessageStatus = "sent" | "pending" | "failed";
 
 export interface SessionChatThoughtStep {
   id: string;
-  kind: 'assistant' | 'thinking' | 'tool_call' | 'tool_result';
+  kind: "assistant" | "thinking" | "tool_call" | "tool_result";
   title: string;
   status: string | null;
   content: string;
@@ -25,14 +25,16 @@ export interface SessionChatMessage {
   thoughtSteps?: SessionChatThoughtStep[];
 }
 
-const terminalStates = new Set(['exited', 'error']);
-const activePendingTurnStates = new Set(['queued', 'running']);
+const terminalStates = new Set(["exited", "error"]);
+const activePendingTurnStates = new Set(["queued", "running"]);
 
-export function isTerminalChatSession(session: Pick<SessionView, 'state'>): boolean {
+export function isTerminalChatSession(session: Pick<SessionView, "state">): boolean {
   return terminalStates.has(session.state);
 }
 
-export function sessionChatTitle(session: Pick<SessionView, 'client_type' | 'title' | 'handle' | 'role' | 'description'>): string {
+export function sessionChatTitle(
+  session: Pick<SessionView, "client_type" | "title" | "handle" | "role" | "description">,
+): string {
   const title = session.title?.trim();
   const handle = session.handle?.trim();
   const role = session.role?.trim();
@@ -47,23 +49,24 @@ export function sessionChatTitle(session: Pick<SessionView, 'client_type' | 'tit
 
 export function titleFromInitialPrompt(prompt: string, maxLength = 60): string | null {
   const normalized = prompt
-    .replace(/^```[\w-]*\s*/i, '')
-    .replace(/```$/i, '')
+    .replace(/^```[\w-]*\s*/i, "")
+    .replace(/```$/i, "")
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find((line) => line.length > 0)
-    ?.replace(/\s+/g, ' ')
+    ?.replace(/\s+/g, " ")
     .trim();
   if (!normalized) return null;
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1).trimEnd()}…` : normalized;
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 1).trimEnd()}…`
+    : normalized;
 }
 
-export function visibleChatSessions<T extends Pick<SessionView, 'state' | 'created_at' | 'pinned_at' | 'session_id'>>(
-  sessions: T[],
-  filter: ChatSessionFilter,
-): T[] {
+export function visibleChatSessions<
+  T extends Pick<SessionView, "state" | "created_at" | "pinned_at" | "session_id">,
+>(sessions: T[], filter: ChatSessionFilter): T[] {
   return sessions
-    .filter((session) => filter === 'all' || !terminalStates.has(session.state))
+    .filter((session) => filter === "all" || !terminalStates.has(session.state))
     .slice()
     .sort((a, b) => {
       const aTerminal = terminalStates.has(a.state);
@@ -84,14 +87,15 @@ export function turnsToChatMessages(turns: TurnView[]): SessionChatMessage[] {
     .slice()
     .sort((a, b) => turnTimestamp(a).localeCompare(turnTimestamp(b)))
     .flatMap((turn) => {
-      const input = textFromUnknown(turn.input?.summary ?? turn.input) || 'No input summary was reported.';
+      const input =
+        textFromUnknown(turn.input?.summary ?? turn.input) || "No input summary was reported.";
       return [
         {
           id: `${turn.turn_id}:user`,
           turnId: turn.turn_id,
-          role: 'user',
+          role: "user",
           content: input,
-          status: 'sent',
+          status: "sent",
           createdAt: turn.created_at,
         },
         assistantMessageForTurn(turn),
@@ -112,10 +116,10 @@ export function timelineItemsToChatMessages(
     for (const item of pendingAssistantItems) {
       pendingThoughtSteps.push({
         id: item.item_id,
-        kind: 'assistant',
-        title: 'Assistant update',
+        kind: "assistant",
+        title: "Assistant update",
         status: item.status,
-        content: item.content_preview?.trim() || 'No details reported.',
+        content: item.content_preview?.trim() || "No details reported.",
         occurredAt: item.occurred_at,
       });
     }
@@ -124,31 +128,32 @@ export function timelineItemsToChatMessages(
 
   const flushPendingTurn = () => {
     if (!pendingAssistantItems.length && !pendingThoughtSteps.length) return;
-    const turnId = pendingTurnId ?? pendingAssistantItems[0]?.item_id ?? pendingThoughtSteps[0]?.id ?? 'pending';
+    const turnId =
+      pendingTurnId ?? pendingAssistantItems[0]?.item_id ?? pendingThoughtSteps[0]?.id ?? "pending";
     const finalAssistant = pendingAssistantItems.at(-1);
 
     if (finalAssistant) {
       const finalContent = pendingAssistantItems
         .map((item) => item.content_preview?.trim())
         .filter(Boolean)
-        .join('\n\n');
+        .join("\n\n");
       messages.push({
         id: finalAssistant.item_id,
         turnId,
-        role: 'assistant',
-        content: finalContent || 'No assistant output was reported.',
-        status: finalAssistant.status === 'error' ? 'failed' : 'sent',
-        createdAt: finalAssistant.occurred_at ?? '',
+        role: "assistant",
+        content: finalContent || "No assistant output was reported.",
+        status: finalAssistant.status === "error" ? "failed" : "sent",
+        createdAt: finalAssistant.occurred_at ?? "",
         ...(pendingThoughtSteps.length ? { thoughtSteps: pendingThoughtSteps } : {}),
       });
     } else {
       messages.push({
         id: `${pendingThoughtSteps[0].id}:working`,
         turnId,
-        role: 'assistant',
-        content: '',
-        status: pendingThoughtSteps.some((step) => step.status === 'error') ? 'failed' : 'pending',
-        createdAt: pendingThoughtSteps[0]?.occurredAt ?? '',
+        role: "assistant",
+        content: "",
+        status: pendingThoughtSteps.some((step) => step.status === "error") ? "failed" : "pending",
+        createdAt: pendingThoughtSteps[0]?.occurredAt ?? "",
         thoughtSteps: pendingThoughtSteps,
       });
     }
@@ -164,25 +169,25 @@ export function timelineItemsToChatMessages(
   for (const item of orderedItems) {
     if (pendingTurnId && item.turn_id && item.turn_id !== pendingTurnId) flushPendingTurn();
 
-    if (item.kind === 'user') {
+    if (item.kind === "user") {
       flushPendingTurn();
-      const content = item.content_preview ?? '';
+      const content = item.content_preview ?? "";
       messages.push({
         id: item.item_id,
         turnId: item.turn_id ?? item.item_id,
         role: item.kind,
-        content: content.trim() ? content : 'No input was reported.',
-        status: item.status === 'error' ? 'failed' : 'sent',
-        createdAt: item.occurred_at ?? '',
+        content: content.trim() ? content : "No input was reported.",
+        status: item.status === "error" ? "failed" : "sent",
+        createdAt: item.occurred_at ?? "",
       });
       continue;
     }
 
-    if (item.kind === 'assistant' || isThoughtStepKind(item.kind)) {
+    if (item.kind === "assistant" || isThoughtStepKind(item.kind)) {
       pendingTurnId ??= item.turn_id ?? item.item_id;
     }
 
-    if (item.kind === 'assistant') {
+    if (item.kind === "assistant") {
       movePendingAssistantToThoughts();
       pendingAssistantItems = [item];
       continue;
@@ -190,13 +195,18 @@ export function timelineItemsToChatMessages(
 
     if (isThoughtStepKind(item.kind)) {
       movePendingAssistantToThoughts();
-      const managedToolUse = item.kind === 'tool_call' ? item.managed_tool_use ?? undefined : undefined;
+      const managedToolUse =
+        item.kind === "tool_call" ? (item.managed_tool_use ?? undefined) : undefined;
       pendingThoughtSteps.push({
         id: item.item_id,
         kind: item.kind,
-        title: managedToolUse ? managedToolUseTitle(managedToolUse) : item.title?.trim() || defaultThoughtStepTitle(item.kind),
-        status: item.status ?? (item.kind === 'tool_call' ? 'started' : null),
-        content: managedToolUse ? managedToolUseContent(managedToolUse) : item.content_preview?.trim() || 'No details reported.',
+        title: managedToolUse
+          ? managedToolUseTitle(managedToolUse)
+          : item.title?.trim() || defaultThoughtStepTitle(item.kind),
+        status: item.status ?? (item.kind === "tool_call" ? "started" : null),
+        content: managedToolUse
+          ? managedToolUseContent(managedToolUse)
+          : item.content_preview?.trim() || "No details reported.",
         occurredAt: item.occurred_at,
         ...(managedToolUse ? { managedToolUse } : {}),
       });
@@ -208,41 +218,66 @@ export function timelineItemsToChatMessages(
   return messages;
 }
 
-export function canSendSessionMessage(session: Pick<SessionView, 'state' | 'capabilities'> | null, input: string): boolean {
-  return Boolean(session && session.state !== 'error' && session.capabilities?.accept_task === true && input.trim());
+export function canSendSessionMessage(
+  session: Pick<SessionView, "state" | "capabilities"> | null,
+  input: string,
+): boolean {
+  return Boolean(
+    session &&
+    session.state !== "error" &&
+    session.capabilities?.accept_task === true &&
+    input.trim(),
+  );
 }
 
-function isThoughtStepKind(kind: string): kind is Exclude<SessionChatThoughtStep['kind'], 'assistant'> {
-  return kind === 'thinking' || kind === 'tool_call' || kind === 'tool_result';
+function isThoughtStepKind(
+  kind: string,
+): kind is Exclude<SessionChatThoughtStep["kind"], "assistant"> {
+  return kind === "thinking" || kind === "tool_call" || kind === "tool_result";
 }
 
-function defaultThoughtStepTitle(kind: Exclude<SessionChatThoughtStep['kind'], 'assistant'>): string {
-  if (kind === 'thinking') return 'Thinking';
-  if (kind === 'tool_call') return 'Tool call';
-  return 'Tool result';
+function defaultThoughtStepTitle(
+  kind: Exclude<SessionChatThoughtStep["kind"], "assistant">,
+): string {
+  if (kind === "thinking") return "Thinking";
+  if (kind === "tool_call") return "Tool call";
+  return "Tool result";
 }
 
 export function managedToolUseTitle(toolUse: ManagedToolUse): string {
   switch (toolUse.input.type) {
-    case 'read': return 'Read file';
-    case 'edit': return 'Edit file';
-    case 'write': return 'Write file';
-    case 'bash': return 'Run command';
+    case "read":
+      return "Read file";
+    case "edit":
+      return "Edit file";
+    case "write":
+      return "Write file";
+    case "bash":
+      return "Run command";
   }
 }
 
 export function managedToolUseContent(toolUse: ManagedToolUse): string {
   const input = toolUse.input;
   switch (input.type) {
-    case 'read': return formatReadTarget(input.path, input.start_line, input.end_line);
-    case 'edit': return `${input.path}${input.edits_count ? ` · ${input.edits_count} edit${input.edits_count === 1 ? '' : 's'}` : ''}`;
-    case 'write': return input.path;
-    case 'bash': return input.command;
+    case "read":
+      return formatReadTarget(input.path, input.start_line, input.end_line);
+    case "edit":
+      return `${input.path}${input.edits_count ? ` · ${input.edits_count} edit${input.edits_count === 1 ? "" : "s"}` : ""}`;
+    case "write":
+      return input.path;
+    case "bash":
+      return input.command;
   }
 }
 
-function formatReadTarget(path: string, startLine?: number | null, endLine?: number | null): string {
-  if (startLine !== undefined && startLine !== null && endLine !== undefined && endLine !== null) return `${path}:${startLine}-${endLine}`;
+function formatReadTarget(
+  path: string,
+  startLine?: number | null,
+  endLine?: number | null,
+): string {
+  if (startLine !== undefined && startLine !== null && endLine !== undefined && endLine !== null)
+    return `${path}:${startLine}-${endLine}`;
   if (startLine !== undefined && startLine !== null) return `${path}:${startLine}`;
   if (endLine !== undefined && endLine !== null) return `${path}:1-${endLine}`;
   return path;
@@ -258,9 +293,9 @@ function assistantMessageForTurn(turn: TurnView): SessionChatMessage {
     return {
       id: `${turn.turn_id}:assistant`,
       turnId: turn.turn_id,
-      role: 'assistant',
+      role: "assistant",
       content: output,
-      status: 'sent',
+      status: "sent",
       createdAt: turn.completed_at ?? turn.created_at,
     };
   }
@@ -269,9 +304,9 @@ function assistantMessageForTurn(turn: TurnView): SessionChatMessage {
     return {
       id: `${turn.turn_id}:assistant`,
       turnId: turn.turn_id,
-      role: 'assistant',
-      content: textFromUnknown(turn.failure) || 'The turn failed without a reported reason.',
-      status: 'failed',
+      role: "assistant",
+      content: textFromUnknown(turn.failure) || "The turn failed without a reported reason.",
+      status: "failed",
       createdAt: turn.completed_at ?? turn.created_at,
     };
   }
@@ -279,19 +314,23 @@ function assistantMessageForTurn(turn: TurnView): SessionChatMessage {
   return {
     id: `${turn.turn_id}:assistant`,
     turnId: turn.turn_id,
-    role: 'assistant',
-    content: activePendingTurnStates.has(turn.state) ? '' : 'No assistant output was reported for this turn.',
-    status: activePendingTurnStates.has(turn.state) ? 'pending' : 'sent',
+    role: "assistant",
+    content: activePendingTurnStates.has(turn.state)
+      ? ""
+      : "No assistant output was reported for this turn.",
+    status: activePendingTurnStates.has(turn.state) ? "pending" : "sent",
     createdAt: turn.completed_at ?? turn.created_at,
   };
 }
 
 function textFromUnknown(value: unknown): string {
-  if (typeof value === 'string') return value.trim();
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'object') {
-    const maybeMessage = (value as { message?: unknown; summary?: unknown }).message ?? (value as { summary?: unknown }).summary;
-    if (typeof maybeMessage === 'string' && maybeMessage.trim()) return maybeMessage.trim();
+  if (typeof value === "string") return value.trim();
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    const maybeMessage =
+      (value as { message?: unknown; summary?: unknown }).message ??
+      (value as { summary?: unknown }).summary;
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) return maybeMessage.trim();
   }
   try {
     return JSON.stringify(value, null, 2);
@@ -301,9 +340,9 @@ function textFromUnknown(value: unknown): string {
 }
 
 function turnTimestamp(turn: TurnView): string {
-  return turn.created_at || turn.started_at || turn.completed_at || '';
+  return turn.created_at || turn.started_at || turn.completed_at || "";
 }
 
 function shortId(id: string): string {
-  return id.split('_').at(-1)?.slice(0, 10) || id.slice(0, 10);
+  return id.split("_").at(-1)?.slice(0, 10) || id.slice(0, 10);
 }

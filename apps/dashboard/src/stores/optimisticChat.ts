@@ -1,6 +1,6 @@
-import { writable } from 'svelte/store';
-import type { TurnView } from '../api/types';
-import type { SessionChatMessage } from '$lib/session-chat/sessionChat';
+import { writable } from "svelte/store";
+import type { TurnView } from "../api/types";
+import type { SessionChatMessage } from "$lib/session-chat/sessionChat";
 
 export const optimisticInitialMessages = writable<Record<string, SessionChatMessage[]>>({});
 
@@ -9,7 +9,7 @@ let optimisticMessageSequence = 0;
 export function rememberOptimisticMessage(
   sessionId: string,
   input: string,
-  turn: Pick<TurnView, 'turn_id' | 'created_at'> | null = null,
+  turn: Pick<TurnView, "turn_id" | "created_at"> | null = null,
 ): string | null {
   const content = input.trim();
   if (!sessionId || !content) return null;
@@ -18,9 +18,9 @@ export function rememberOptimisticMessage(
   const message: SessionChatMessage = {
     id: `optimistic:${localId}:user`,
     turnId,
-    role: 'user',
+    role: "user",
     content,
-    status: 'pending',
+    status: "pending",
     createdAt: turn?.created_at ?? new Date().toISOString(),
   };
   optimisticInitialMessages.update((messages) => ({
@@ -33,7 +33,7 @@ export function rememberOptimisticMessage(
 export function rememberOptimisticInitialMessage(
   sessionId: string,
   input: string,
-  turn: Pick<TurnView, 'turn_id' | 'created_at'> | null = null,
+  turn: Pick<TurnView, "turn_id" | "created_at"> | null = null,
 ): void {
   rememberOptimisticMessage(sessionId, input, turn);
 }
@@ -49,7 +49,10 @@ export function discardOptimisticMessage(sessionId: string, messageId: string): 
   });
 }
 
-export function reconcileOptimisticMessages(sessionId: string, loadedMessages: SessionChatMessage[]): void {
+export function reconcileOptimisticMessages(
+  sessionId: string,
+  loadedMessages: SessionChatMessage[],
+): void {
   optimisticInitialMessages.update((messages) => {
     const optimisticMessages = messages[sessionId] ?? [];
     const matchedIds = matchedOptimisticMessageIds(optimisticMessages, loadedMessages);
@@ -70,7 +73,10 @@ export function chatMessagesWithOptimistic(
   const optimisticMessages = messagesBySessionId[sessionId] ?? [];
   if (!optimisticMessages.length) return loadedMessages;
   const matchedIds = matchedOptimisticMessageIds(optimisticMessages, loadedMessages);
-  return [...loadedMessages, ...optimisticMessages.filter((message) => !matchedIds.has(message.id))];
+  return [
+    ...loadedMessages,
+    ...optimisticMessages.filter((message) => !matchedIds.has(message.id)),
+  ];
 }
 
 function matchedOptimisticMessageIds(
@@ -80,11 +86,13 @@ function matchedOptimisticMessageIds(
   const matchedIds = new Set<string>();
   const matchedLoadedIndexes = new Set<number>();
   for (const optimistic of optimisticMessages) {
-    const matchIndex = loadedMessages.findIndex((message, index) => (
-      !matchedLoadedIndexes.has(index)
-      && message.role === 'user'
-      && (message.turnId === optimistic.turnId || message.content.trim() === optimistic.content.trim())
-    ));
+    const matchIndex = loadedMessages.findIndex(
+      (message, index) =>
+        !matchedLoadedIndexes.has(index) &&
+        message.role === "user" &&
+        (message.turnId === optimistic.turnId ||
+          message.content.trim() === optimistic.content.trim()),
+    );
     if (matchIndex < 0) continue;
     matchedLoadedIndexes.add(matchIndex);
     matchedIds.add(optimistic.id);

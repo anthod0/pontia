@@ -1,5 +1,5 @@
-import { get, writable } from 'svelte/store';
-import type { InboxMessageView, SubmitInboxMessageInput } from '../api/types';
+import { get, writable } from "svelte/store";
+import type { InboxMessageView, SubmitInboxMessageInput } from "../api/types";
 
 export interface UnconfirmedSubmission {
   messageId: string;
@@ -9,16 +9,26 @@ export interface UnconfirmedSubmission {
   allowUnknown?: boolean;
 }
 
-const storageKey = 'pontia:inbox-submissions:v1';
+const storageKey = "pontia:inbox-submissions:v1";
 
 function readSaved(): UnconfirmedSubmission[] {
-  if (typeof localStorage === 'undefined') return [];
+  if (typeof localStorage === "undefined") return [];
   const saved = localStorage.getItem(storageKey);
   if (!saved) return [];
   const items: unknown = JSON.parse(saved);
-  if (!Array.isArray(items) || items.some((item) => !item || typeof item.messageId !== 'string'
-    || typeof item.sessionId !== 'string' || typeof item.input?.input !== 'string')) {
-    throw new Error('Saved Inbox submissions could not be read. Preserve browser storage to recover them.');
+  if (
+    !Array.isArray(items) ||
+    items.some(
+      (item) =>
+        !item ||
+        typeof item.messageId !== "string" ||
+        typeof item.sessionId !== "string" ||
+        typeof item.input?.input !== "string",
+    )
+  ) {
+    throw new Error(
+      "Saved Inbox submissions could not be read. Preserve browser storage to recover them.",
+    );
   }
   return items;
 }
@@ -48,6 +58,6 @@ export function reconcileSubmissions(messages: InboxMessageView[]): void {
 
 export class SubmissionUnconfirmedError extends Error {
   constructor() {
-    super('Submission receipt unknown. Use Check / recover submission to resume this same input.');
+    super("Submission receipt unknown. Use Check / recover submission to resume this same input.");
   }
 }

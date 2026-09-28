@@ -1,10 +1,16 @@
-import { get } from 'svelte/store';
-import { cleanup, render, screen } from '@testing-library/svelte';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { ApiError } from '../src/api/errors';
-import type { TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage, TurnTreeHistoryPage, TurnTreeUpdatesPage } from '../src/api/types';
-import SessionConversation from '../src/lib/components/session-chat/SessionConversation.svelte';
-import { timelineItemsToChatMessages } from '../src/lib/session-chat/sessionChat';
+import { get } from "svelte/store";
+import { cleanup, render, screen } from "@testing-library/svelte";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { ApiError } from "../src/api/errors";
+import type {
+  TurnTimelineGroup,
+  TurnTimelineItem,
+  TurnTimelinePage,
+  TurnTreeHistoryPage,
+  TurnTreeUpdatesPage,
+} from "../src/api/types";
+import SessionConversation from "../src/lib/components/session-chat/SessionConversation.svelte";
+import { timelineItemsToChatMessages } from "../src/lib/session-chat/sessionChat";
 
 const mocks = vi.hoisted(() => ({
   getTurnTimeline: vi.fn(),
@@ -12,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   getTurnTreeUpdates: vi.fn(),
 }));
 
-vi.mock('../src/api/client', () => ({
+vi.mock("../src/api/client", () => ({
   getTurnTimeline: mocks.getTurnTimeline,
   getTurnTreeHistory: mocks.getTurnTreeHistory,
   getTurnTreeUpdates: mocks.getTurnTreeUpdates,
@@ -25,55 +31,59 @@ const {
   restoreSessionTimeline,
   hasTimelineSnapshot,
   timelineState,
-} = await import('../src/stores/timeline');
+} = await import("../src/stores/timeline");
 
 function item(turnId: string, itemId: string, preview: string): TurnTimelineItem {
   return {
     item_id: itemId,
-    kind: 'assistant',
-    role: 'assistant',
+    kind: "assistant",
+    role: "assistant",
     title: null,
     status: null,
-    occurred_at: '2026-07-15T00:00:00Z',
+    occurred_at: "2026-07-15T00:00:00Z",
     content_preview: preview,
     turn_id: turnId,
   };
 }
 
-function group(turnId: string, preview = turnId, parentTurnId: string | null = null): TurnTimelineGroup {
+function group(
+  turnId: string,
+  preview = turnId,
+  parentTurnId: string | null = null,
+): TurnTimelineGroup {
   return {
     turn_id: turnId,
     parent_turn_id: parentTurnId,
-    state: 'completed',
+    state: "completed",
     items: [item(turnId, `item-${turnId}`, preview)],
   };
 }
 
 function historyPage(overrides: Partial<TurnTreeHistoryPage> = {}): TurnTreeHistoryPage {
   return {
-    session_id: 'sess-1',
-    groups: [group('turn-4', 'branch four', 'turn-1'), group('turn-5', 'branch five', 'turn-4')],
-    next_from_turn_id: 'turn-1',
+    session_id: "sess-1",
+    groups: [group("turn-4", "branch four", "turn-1"), group("turn-5", "branch five", "turn-4")],
+    next_from_turn_id: "turn-1",
     ...overrides,
   };
 }
 
 function updatesPage(overrides: Partial<TurnTreeUpdatesPage> = {}): TurnTreeUpdatesPage {
   return {
-    session_id: 'sess-1',
-    current_turn_id: 'turn-5',
-    retain_through_turn_id: 'turn-1',
-    groups: [group('turn-4', 'branch four', 'turn-1'), group('turn-5', 'branch five', 'turn-4')],
+    session_id: "sess-1",
+    current_turn_id: "turn-5",
+    retain_through_turn_id: "turn-1",
+    groups: [group("turn-4", "branch four", "turn-1"), group("turn-5", "branch five", "turn-4")],
     ...overrides,
   };
 }
 
 function page(overrides: Partial<TurnTimelinePage> = {}): TurnTimelinePage {
   return {
-    session_id: 'sess-1',
-    direction: 'backward',
-    items: [item('turn-2', 'item-2', 'newer')],
-    next_turn_id: 'turn-1',
+    session_id: "sess-1",
+    direction: "backward",
+    items: [item("turn-2", "item-2", "newer")],
+    next_turn_id: "turn-1",
     ...overrides,
   };
 }
@@ -92,372 +102,407 @@ afterEach(() => {
   cleanup();
 });
 
-test('tree history follows backend groups and paginates without a duplicate boundary Turn', async () => {
-  mocks.getTurnTreeHistory
-    .mockResolvedValueOnce(historyPage())
-    .mockResolvedValueOnce(historyPage({
-      groups: [group('turn-1', 'root')],
+test("tree history follows backend groups and paginates without a duplicate boundary Turn", async () => {
+  mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage()).mockResolvedValueOnce(
+    historyPage({
+      groups: [group("turn-1", "root")],
       next_from_turn_id: null,
-    }));
+    }),
+  );
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild', topology: true });
-  await loadSessionTimeline('sess-1', { mode: 'more', topology: true });
+  await loadSessionTimeline("sess-1", { mode: "rebuild", topology: true });
+  await loadSessionTimeline("sess-1", { mode: "more", topology: true });
 
-  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(1, 'sess-1', { limit: 20 });
-  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(2, 'sess-1', {
-    fromTurnId: 'turn-1',
+  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(1, "sess-1", { limit: 20 });
+  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(2, "sess-1", {
+    fromTurnId: "turn-1",
     limit: 20,
   });
   expect(get(timelineState).groups.map((entry) => entry.turn_id)).toEqual([
-    'turn-1',
-    'turn-4',
-    'turn-5',
+    "turn-1",
+    "turn-4",
+    "turn-5",
   ]);
   expect(get(timelineState)).toMatchObject({
-    mode: 'tree',
-    latestTurnId: 'turn-5',
+    mode: "tree",
+    latestTurnId: "turn-5",
     nextOlderTurnId: null,
     hasMore: false,
   });
 });
 
-test('recovered ancestry reopens pagination while retaining readable history', async () => {
-  mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage({
-    groups: [{ ...group('turn-2', 'recovered answer'), history_issue: 'topology_unknown' }],
-    next_from_turn_id: null,
-  }));
-  await loadSessionTimeline('sess-1', { topology: true });
-  expect(get(timelineState).status).toBe('ready');
-  expect(get(timelineState).groups[0].history_issue).toBe('topology_unknown');
-  mocks.getTurnTreeUpdates.mockResolvedValueOnce(updatesPage({
-    current_turn_id: 'turn-3', retain_through_turn_id: 'turn-2',
-    groups: [group('turn-2', 'recovered answer', 'turn-1'), group('turn-3', 'next answer', 'turn-2')],
-  }));
-  await refreshSessionTimeline('sess-1', 'turn-3');
+test("recovered ancestry reopens pagination while retaining readable history", async () => {
+  mocks.getTurnTreeHistory.mockResolvedValueOnce(
+    historyPage({
+      groups: [{ ...group("turn-2", "recovered answer"), history_issue: "topology_unknown" }],
+      next_from_turn_id: null,
+    }),
+  );
+  await loadSessionTimeline("sess-1", { topology: true });
+  expect(get(timelineState).status).toBe("ready");
+  expect(get(timelineState).groups[0].history_issue).toBe("topology_unknown");
+  mocks.getTurnTreeUpdates.mockResolvedValueOnce(
+    updatesPage({
+      current_turn_id: "turn-3",
+      retain_through_turn_id: "turn-2",
+      groups: [
+        group("turn-2", "recovered answer", "turn-1"),
+        group("turn-3", "next answer", "turn-2"),
+      ],
+    }),
+  );
+  await refreshSessionTimeline("sess-1", "turn-3");
   expect(get(timelineState).groups.every((entry) => !entry.history_issue)).toBe(true);
-  expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual(['recovered answer', 'next answer']);
-  expect(get(timelineState).nextOlderTurnId).toBe('turn-1');
+  expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual([
+    "recovered answer",
+    "next answer",
+  ]);
+  expect(get(timelineState).nextOlderTurnId).toBe("turn-1");
   expect(get(timelineState).hasMore).toBe(true);
 });
 
-test('tree updates discard a divergent suffix after the LCA and append the replacement branch', async () => {
-  mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage({
-    groups: [
-      group('turn-1', 'root'),
-      group('turn-2', 'old two', 'turn-1'),
-      group('turn-3', 'old three', 'turn-2'),
-    ],
-    next_from_turn_id: null,
-  }));
+test("tree updates discard a divergent suffix after the LCA and append the replacement branch", async () => {
+  mocks.getTurnTreeHistory.mockResolvedValueOnce(
+    historyPage({
+      groups: [
+        group("turn-1", "root"),
+        group("turn-2", "old two", "turn-1"),
+        group("turn-3", "old three", "turn-2"),
+      ],
+      next_from_turn_id: null,
+    }),
+  );
   mocks.getTurnTreeUpdates.mockResolvedValueOnce(updatesPage());
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild', topology: true });
+  await loadSessionTimeline("sess-1", { mode: "rebuild", topology: true });
   const conversation = render(SessionConversation, {
     props: { messages: timelineItemsToChatMessages(get(timelineState).items, true) },
   });
-  expect(screen.getByText('old two')).toBeInTheDocument();
-  expect(screen.getByText('old three')).toBeInTheDocument();
+  expect(screen.getByText("old two")).toBeInTheDocument();
+  expect(screen.getByText("old three")).toBeInTheDocument();
 
-  await refreshSessionTimeline('sess-1');
+  await refreshSessionTimeline("sess-1");
   await conversation.rerender({
     messages: timelineItemsToChatMessages(get(timelineState).items, true),
   });
 
-  expect(mocks.getTurnTreeUpdates).toHaveBeenCalledWith('sess-1', { fromTurnId: 'turn-3' });
+  expect(mocks.getTurnTreeUpdates).toHaveBeenCalledWith("sess-1", { fromTurnId: "turn-3" });
   expect(get(timelineState).groups.map((entry) => entry.turn_id)).toEqual([
-    'turn-1',
-    'turn-4',
-    'turn-5',
+    "turn-1",
+    "turn-4",
+    "turn-5",
   ]);
   expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual([
-    'root',
-    'branch four',
-    'branch five',
+    "root",
+    "branch four",
+    "branch five",
   ]);
-  expect(screen.queryByText('old two')).not.toBeInTheDocument();
-  expect(screen.queryByText('old three')).not.toBeInTheDocument();
-  expect(screen.getByText('branch four')).toBeInTheDocument();
-  expect(screen.getByText('branch five')).toBeInTheDocument();
+  expect(screen.queryByText("old two")).not.toBeInTheDocument();
+  expect(screen.queryByText("old three")).not.toBeInTheDocument();
+  expect(screen.getByText("branch four")).toBeInTheDocument();
+  expect(screen.getByText("branch five")).toBeInTheDocument();
 });
 
-test('realtime refresh uses an inclusive forward Turn anchor and atomically replaces returned groups', async () => {
+test("realtime refresh uses an inclusive forward Turn anchor and atomically replaces returned groups", async () => {
   mocks.getTurnTimeline
-    .mockResolvedValueOnce(page({
-      items: [
-        item('turn-1', 'item-1', 'older'),
-        item('turn-2', 'item-2-stale', 'partial'),
-      ],
-      next_turn_id: null,
-    }))
-    .mockResolvedValueOnce(page({
-      direction: 'forward',
-      items: [
-        item('turn-2', 'item-2-final', 'sealed'),
-        item('turn-3', 'item-3', 'newest'),
-      ],
-      next_turn_id: null,
-    }));
+    .mockResolvedValueOnce(
+      page({
+        items: [item("turn-1", "item-1", "older"), item("turn-2", "item-2-stale", "partial")],
+        next_turn_id: null,
+      }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        direction: "forward",
+        items: [item("turn-2", "item-2-final", "sealed"), item("turn-3", "item-3", "newest")],
+        next_turn_id: null,
+      }),
+    );
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
-  await refreshSessionTimeline('sess-1');
+  await loadSessionTimeline("sess-1", { mode: "rebuild" });
+  await refreshSessionTimeline("sess-1");
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-1', {
-    direction: 'forward',
-    turnId: 'turn-2',
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-1", {
+    direction: "forward",
+    turnId: "turn-2",
     limit: 100,
   });
   expect(get(timelineState).items.map(({ turn_id, item_id }) => [turn_id, item_id])).toEqual([
-    ['turn-1', 'item-1'],
-    ['turn-2', 'item-2-final'],
-    ['turn-3', 'item-3'],
+    ["turn-1", "item-1"],
+    ["turn-2", "item-2-final"],
+    ["turn-3", "item-3"],
   ]);
-  expect(get(timelineState).latestTurnId).toBe('turn-3');
+  expect(get(timelineState).latestTurnId).toBe("turn-3");
 });
 
-test('initial history loads chronological projected Turn items in the backward direction', async () => {
+test("initial history loads chronological projected Turn items in the backward direction", async () => {
   mocks.getTurnTimeline.mockResolvedValueOnce(page());
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
+  await loadSessionTimeline("sess-1", { mode: "rebuild" });
 
-  expect(mocks.getTurnTimeline).toHaveBeenCalledWith('sess-1', {
-    direction: 'backward',
+  expect(mocks.getTurnTimeline).toHaveBeenCalledWith("sess-1", {
+    direction: "backward",
     limit: 20,
   });
   expect(get(timelineState)).toMatchObject({
-    sessionId: 'sess-1',
-    items: [expect.objectContaining({ item_id: 'item-2', turn_id: 'turn-2' })],
-    nextOlderTurnId: 'turn-1',
-    latestTurnId: 'turn-2',
+    sessionId: "sess-1",
+    items: [expect.objectContaining({ item_id: "item-2", turn_id: "turn-2" })],
+    nextOlderTurnId: "turn-1",
+    latestTurnId: "turn-2",
     hasMore: true,
-    status: 'ready',
+    status: "ready",
     error: null,
   });
 });
 
-test('a persisted timeline resumes incremental refresh and older pagination without rebuilding', async () => {
+test("a persisted timeline resumes incremental refresh and older pagination without rebuilding", async () => {
   mocks.getTurnTimeline
-    .mockResolvedValueOnce(page({
-      items: [item('turn-2', 'item-2', 'cached')],
-      next_turn_id: 'turn-1',
-    }))
-    .mockResolvedValueOnce(page({
-      direction: 'forward',
-      items: [
-        item('turn-2', 'item-2-final', 'refreshed'),
-        item('turn-3', 'item-3', 'new'),
-      ],
-      next_turn_id: null,
-    }))
-    .mockResolvedValueOnce(page({
-      items: [item('turn-1', 'item-1', 'older')],
-      next_turn_id: null,
-    }));
+    .mockResolvedValueOnce(
+      page({
+        items: [item("turn-2", "item-2", "cached")],
+        next_turn_id: "turn-1",
+      }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        direction: "forward",
+        items: [item("turn-2", "item-2-final", "refreshed"), item("turn-3", "item-3", "new")],
+        next_turn_id: null,
+      }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        items: [item("turn-1", "item-1", "older")],
+        next_turn_id: null,
+      }),
+    );
 
-  await loadSessionTimeline('sess-cached', { mode: 'rebuild' });
+  await loadSessionTimeline("sess-cached", { mode: "rebuild" });
   resetTimelineState();
 
-  await expect(restoreSessionTimeline('sess-cached', { topology: false })).resolves.toBe(true);
+  await expect(restoreSessionTimeline("sess-cached", { topology: false })).resolves.toBe(true);
   expect(get(timelineState)).toMatchObject({
-    sessionId: 'sess-cached',
-    latestTurnId: 'turn-2',
-    nextOlderTurnId: 'turn-1',
+    sessionId: "sess-cached",
+    latestTurnId: "turn-2",
+    nextOlderTurnId: "turn-1",
     hasMore: true,
-    status: 'ready',
+    status: "ready",
   });
 
-  await refreshSessionTimeline('sess-cached');
-  await loadSessionTimeline('sess-cached', { mode: 'more' });
+  await refreshSessionTimeline("sess-cached");
+  await loadSessionTimeline("sess-cached", { mode: "more" });
 
   expect(mocks.getTurnTimeline).toHaveBeenCalledTimes(3);
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-cached', {
-    direction: 'forward',
-    turnId: 'turn-2',
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-cached", {
+    direction: "forward",
+    turnId: "turn-2",
     limit: 100,
   });
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, 'sess-cached', {
-    direction: 'backward',
-    turnId: 'turn-1',
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, "sess-cached", {
+    direction: "backward",
+    turnId: "turn-1",
     limit: 20,
   });
   expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual([
-    'item-1',
-    'item-2-final',
-    'item-3',
+    "item-1",
+    "item-2-final",
+    "item-3",
   ]);
 });
 
-test('restores a cached timeline when topology is not known yet', async () => {
+test("restores a cached timeline when topology is not known yet", async () => {
   mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage({ next_from_turn_id: null }));
-  await loadSessionTimeline('sess-1', { topology: true });
+  await loadSessionTimeline("sess-1", { topology: true });
   resetTimelineState();
 
-  await expect(restoreSessionTimeline('sess-1')).resolves.toBe(true);
+  await expect(restoreSessionTimeline("sess-1")).resolves.toBe(true);
   expect(get(timelineState)).toMatchObject({
-    sessionId: 'sess-1',
-    mode: 'tree',
-    status: 'ready',
+    sessionId: "sess-1",
+    mode: "tree",
+    status: "ready",
   });
 });
 
-test('a stale persisted refresh cursor falls back to rebuilding the timeline', async () => {
+test("a stale persisted refresh cursor falls back to rebuilding the timeline", async () => {
   mocks.getTurnTimeline
-    .mockResolvedValueOnce(page({ items: [item('turn-stale', 'item-stale', 'cached')], next_turn_id: null }))
-    .mockRejectedValueOnce(new ApiError('Cached range is invalid', 'turn_timeline_invalid', 409))
-    .mockResolvedValueOnce(page({ items: [item('turn-current', 'item-current', 'rebuilt')], next_turn_id: null }));
+    .mockResolvedValueOnce(
+      page({ items: [item("turn-stale", "item-stale", "cached")], next_turn_id: null }),
+    )
+    .mockRejectedValueOnce(new ApiError("Cached range is invalid", "turn_timeline_invalid", 409))
+    .mockResolvedValueOnce(
+      page({ items: [item("turn-current", "item-current", "rebuilt")], next_turn_id: null }),
+    );
 
-  await loadSessionTimeline('sess-stale', { mode: 'rebuild' });
+  await loadSessionTimeline("sess-stale", { mode: "rebuild" });
   resetTimelineState();
-  await restoreSessionTimeline('sess-stale', { topology: false });
+  await restoreSessionTimeline("sess-stale", { topology: false });
 
-  await refreshSessionTimeline('sess-stale');
+  await refreshSessionTimeline("sess-stale");
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-stale', {
-    direction: 'forward',
-    turnId: 'turn-stale',
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-stale", {
+    direction: "forward",
+    turnId: "turn-stale",
     limit: 100,
   });
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, 'sess-stale', {
-    direction: 'backward',
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, "sess-stale", {
+    direction: "backward",
     limit: 20,
   });
   expect(get(timelineState)).toMatchObject({
-    items: [expect.objectContaining({ item_id: 'item-current' })],
-    latestTurnId: 'turn-current',
-    status: 'ready',
+    items: [expect.objectContaining({ item_id: "item-current" })],
+    latestTurnId: "turn-current",
+    status: "ready",
     error: null,
   });
 });
 
-test('a transient refresh failure keeps a restored timeline available for retry', async () => {
+test("a transient refresh failure keeps a restored timeline available for retry", async () => {
   mocks.getTurnTimeline
-    .mockResolvedValueOnce(page({ items: [item('turn-cached', 'item-cached', 'cached')], next_turn_id: null }))
-    .mockRejectedValueOnce(new Error('offline'));
+    .mockResolvedValueOnce(
+      page({ items: [item("turn-cached", "item-cached", "cached")], next_turn_id: null }),
+    )
+    .mockRejectedValueOnce(new Error("offline"));
 
-  await loadSessionTimeline('sess-offline', { mode: 'rebuild' });
+  await loadSessionTimeline("sess-offline", { mode: "rebuild" });
   resetTimelineState();
-  await restoreSessionTimeline('sess-offline', { topology: false });
+  await restoreSessionTimeline("sess-offline", { topology: false });
 
-  await refreshSessionTimeline('sess-offline');
+  await refreshSessionTimeline("sess-offline");
 
   expect(mocks.getTurnTimeline).toHaveBeenCalledTimes(2);
   expect(get(timelineState)).toMatchObject({
-    items: [expect.objectContaining({ item_id: 'item-cached' })],
-    latestTurnId: 'turn-cached',
-    status: 'ready',
+    items: [expect.objectContaining({ item_id: "item-cached" })],
+    latestTurnId: "turn-cached",
+    status: "ready",
     refreshing: false,
     error: null,
   });
 });
 
-test('older history uses next_turn_id and prepends only previously unseen Turn groups', async () => {
-  mocks.getTurnTimeline
-    .mockResolvedValueOnce(page())
-    .mockResolvedValueOnce(page({
+test("older history uses next_turn_id and prepends only previously unseen Turn groups", async () => {
+  mocks.getTurnTimeline.mockResolvedValueOnce(page()).mockResolvedValueOnce(
+    page({
       items: [
-        item('turn-1', 'item-1', 'older'),
-        item('turn-2', 'item-2-boundary', 'duplicate boundary Turn'),
+        item("turn-1", "item-1", "older"),
+        item("turn-2", "item-2-boundary", "duplicate boundary Turn"),
       ],
       next_turn_id: null,
-    }));
+    }),
+  );
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
-  await loadSessionTimeline('sess-1', { mode: 'more' });
+  await loadSessionTimeline("sess-1", { mode: "rebuild" });
+  await loadSessionTimeline("sess-1", { mode: "more" });
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-1', {
-    direction: 'backward',
-    turnId: 'turn-1',
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-1", {
+    direction: "backward",
+    turnId: "turn-1",
     limit: 20,
   });
   expect(get(timelineState).items.map(({ turn_id, item_id }) => [turn_id, item_id])).toEqual([
-    ['turn-1', 'item-1'],
-    ['turn-2', 'item-2'],
+    ["turn-1", "item-1"],
+    ["turn-2", "item-2"],
   ]);
   expect(get(timelineState)).toMatchObject({ nextOlderTurnId: null, hasMore: false });
 });
 
-test('an active Turn grows from empty output and converges on its sealed group through forward replacement', async () => {
+test("an active Turn grows from empty output and converges on its sealed group through forward replacement", async () => {
   mocks.getTurnTimeline
     .mockResolvedValueOnce(page({ items: [], next_turn_id: null }))
-    .mockResolvedValueOnce(page({
-      direction: 'forward',
-      items: [item('turn-active', 'item-partial', 'working')],
-      next_turn_id: null,
-    }))
-    .mockResolvedValueOnce(page({
-      direction: 'forward',
-      items: [item('turn-active', 'item-final', 'done')],
-      next_turn_id: null,
-    }));
+    .mockResolvedValueOnce(
+      page({
+        direction: "forward",
+        items: [item("turn-active", "item-partial", "working")],
+        next_turn_id: null,
+      }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        direction: "forward",
+        items: [item("turn-active", "item-final", "done")],
+        next_turn_id: null,
+      }),
+    );
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild', latestTurnId: 'turn-active' });
-  expect(get(timelineState)).toMatchObject({ items: [], latestTurnId: 'turn-active', status: 'empty' });
+  await loadSessionTimeline("sess-1", { mode: "rebuild", latestTurnId: "turn-active" });
+  expect(get(timelineState)).toMatchObject({
+    items: [],
+    latestTurnId: "turn-active",
+    status: "empty",
+  });
 
-  await refreshSessionTimeline('sess-1', 'turn-active');
-  expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual(['item-partial']);
+  await refreshSessionTimeline("sess-1", "turn-active");
+  expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual(["item-partial"]);
 
-  await refreshSessionTimeline('sess-1', 'turn-active');
-  expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual(['item-final']);
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, 'sess-1', {
-    direction: 'forward',
-    turnId: 'turn-active',
+  await refreshSessionTimeline("sess-1", "turn-active");
+  expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual(["item-final"]);
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, "sess-1", {
+    direction: "forward",
+    turnId: "turn-active",
     limit: 100,
   });
 });
 
-test('an itemless active Turn remains the forward anchor when initial history includes older sealed items', async () => {
+test("an itemless active Turn remains the forward anchor when initial history includes older sealed items", async () => {
   mocks.getTurnTimeline
-    .mockResolvedValueOnce(page({ items: [item('turn-sealed', 'item-sealed', 'done')], next_turn_id: null }))
-    .mockResolvedValueOnce(page({
-      direction: 'forward',
-      items: [item('turn-active', 'item-active', 'working')],
-      next_turn_id: null,
-    }));
+    .mockResolvedValueOnce(
+      page({ items: [item("turn-sealed", "item-sealed", "done")], next_turn_id: null }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        direction: "forward",
+        items: [item("turn-active", "item-active", "working")],
+        next_turn_id: null,
+      }),
+    );
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild', latestTurnId: 'turn-active' });
-  expect(get(timelineState).latestTurnId).toBe('turn-active');
+  await loadSessionTimeline("sess-1", { mode: "rebuild", latestTurnId: "turn-active" });
+  expect(get(timelineState).latestTurnId).toBe("turn-active");
 
-  await refreshSessionTimeline('sess-1');
+  await refreshSessionTimeline("sess-1");
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, 'sess-1', {
-    direction: 'forward',
-    turnId: 'turn-active',
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-1", {
+    direction: "forward",
+    turnId: "turn-active",
     limit: 100,
   });
-  expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual(['item-sealed', 'item-active']);
+  expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual([
+    "item-sealed",
+    "item-active",
+  ]);
 });
 
-test('a Session without Turns is ready with an empty conversation history', async () => {
+test("a Session without Turns is ready with an empty conversation history", async () => {
   mocks.getTurnTimeline.mockResolvedValueOnce(page({ items: [], next_turn_id: null }));
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
+  await loadSessionTimeline("sess-1", { mode: "rebuild" });
 
   expect(get(timelineState)).toMatchObject({
-    sessionId: 'sess-1',
+    sessionId: "sess-1",
     items: [],
     latestTurnId: null,
     nextOlderTurnId: null,
     hasMore: false,
-    status: 'empty',
+    status: "empty",
     error: null,
   });
 });
 
 test.each([
-  ['invalid_timeline_query', 'query_error'],
-  ['timeline_capability_unavailable', 'capability_unavailable'],
-  ['turn_timeline_unavailable', 'range_unavailable'],
-  ['turn_timeline_invalid', 'range_invalid'],
-  ['timeline_source_unavailable', 'source_unavailable'],
-] as const)('surfaces %s as an explicit %s state without partial history', async (code, status) => {
+  ["invalid_timeline_query", "query_error"],
+  ["timeline_capability_unavailable", "capability_unavailable"],
+  ["turn_timeline_unavailable", "range_unavailable"],
+  ["turn_timeline_invalid", "range_invalid"],
+  ["timeline_source_unavailable", "source_unavailable"],
+] as const)("surfaces %s as an explicit %s state without partial history", async (code, status) => {
   mocks.getTurnTimeline
     .mockResolvedValueOnce(page())
     .mockRejectedValueOnce(new ApiError(`timeline failed: ${code}`, code, 409));
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
-  await loadSessionTimeline('sess-1', { mode: 'more' });
+  await loadSessionTimeline("sess-1", { mode: "rebuild" });
+  await loadSessionTimeline("sess-1", { mode: "more" });
 
   expect(get(timelineState)).toMatchObject({
-    sessionId: 'sess-1',
+    sessionId: "sess-1",
     items: [],
     status,
     errorCode: code,
@@ -465,170 +510,237 @@ test.each([
   });
 });
 
-test('forward pagination commits no intermediate page when a later range fails', async () => {
+test("forward pagination commits no intermediate page when a later range fails", async () => {
   mocks.getTurnTimeline
-    .mockResolvedValueOnce(page({ items: [item('turn-1', 'item-stale', 'stale')], next_turn_id: null }))
-    .mockResolvedValueOnce(page({
-      direction: 'forward',
-      items: [item('turn-1', 'item-refreshed', 'refreshed')],
-      next_turn_id: 'turn-2',
-    }))
-    .mockRejectedValueOnce(new ApiError('Turn turn-2 has an invalid timeline range', 'turn_timeline_invalid', 409));
+    .mockResolvedValueOnce(
+      page({ items: [item("turn-1", "item-stale", "stale")], next_turn_id: null }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        direction: "forward",
+        items: [item("turn-1", "item-refreshed", "refreshed")],
+        next_turn_id: "turn-2",
+      }),
+    )
+    .mockRejectedValueOnce(
+      new ApiError("Turn turn-2 has an invalid timeline range", "turn_timeline_invalid", 409),
+    );
 
-  await loadSessionTimeline('sess-1', { mode: 'rebuild' });
-  await refreshSessionTimeline('sess-1');
+  await loadSessionTimeline("sess-1", { mode: "rebuild" });
+  await refreshSessionTimeline("sess-1");
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, 'sess-1', {
-    direction: 'forward',
-    turnId: 'turn-2',
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, "sess-1", {
+    direction: "forward",
+    turnId: "turn-2",
     limit: 100,
   });
   expect(get(timelineState)).toMatchObject({
     items: [],
-    status: 'range_invalid',
-    errorCode: 'turn_timeline_invalid',
+    status: "range_invalid",
+    errorCode: "turn_timeline_invalid",
   });
 });
 
-
-test('pending native history retries after disk persistence without switching sessions', async () => {
+test("pending native history retries after disk persistence without switching sessions", async () => {
   vi.useFakeTimers();
   mocks.getTurnTimeline
-    .mockRejectedValueOnce(new ApiError('History is still being written', 'timeline_pending', 503))
-    .mockResolvedValueOnce(page({ items: [item('turn-2', 'final', 'persisted answer')], next_turn_id: null }));
-  await loadSessionTimeline('sess-1');
-  expect(get(timelineState).status).toBe('pending');
+    .mockRejectedValueOnce(new ApiError("History is still being written", "timeline_pending", 503))
+    .mockResolvedValueOnce(
+      page({ items: [item("turn-2", "final", "persisted answer")], next_turn_id: null }),
+    );
+  await loadSessionTimeline("sess-1");
+  expect(get(timelineState).status).toBe("pending");
   await vi.advanceTimersByTimeAsync(1000);
-  expect(get(timelineState)).toMatchObject({ status: 'ready', items: [expect.objectContaining({ content_preview: 'persisted answer' })] });
-  mocks.getTurnTimeline.mockRejectedValueOnce(new ApiError('Pending', 'timeline_pending', 503));
-  await loadSessionTimeline('sess-1');
-  resetTimelineState('sess-2');
+  expect(get(timelineState)).toMatchObject({
+    status: "ready",
+    items: [expect.objectContaining({ content_preview: "persisted answer" })],
+  });
+  mocks.getTurnTimeline.mockRejectedValueOnce(new ApiError("Pending", "timeline_pending", 503));
+  await loadSessionTimeline("sess-1");
+  resetTimelineState("sess-2");
   await vi.advanceTimersByTimeAsync(2000);
-  expect(get(timelineState)).toMatchObject({ sessionId: 'sess-2', status: 'idle', items: [] });
+  expect(get(timelineState)).toMatchObject({ sessionId: "sess-2", status: "idle", items: [] });
   expect(mocks.getTurnTimeline).toHaveBeenCalledTimes(3);
 });
 
-test.each([false, true])('pending older history preserves loaded pages and retries the same cursor (tree=%s)', async (topology) => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const newest = group('turn-3');
-  const middle = group('turn-2');
-  const oldest = group('turn-1');
-  const api = topology ? mocks.getTurnTreeHistory : mocks.getTurnTimeline;
-  const response = (entry: TurnTimelineGroup, next: string | null) => topology
-    ? historyPage({ groups: [entry], next_from_turn_id: next })
-    : page({ items: entry.items, next_turn_id: next });
-  api.mockResolvedValueOnce(response(newest, 'turn-2'))
-    .mockResolvedValueOnce(response(middle, 'turn-1'))
-    .mockRejectedValueOnce(new ApiError('Pending', 'timeline_pending', 503))
-    .mockRejectedValueOnce(new ApiError('Still pending', 'timeline_pending', 503))
-    .mockResolvedValueOnce(response(oldest, null));
+test.each([false, true])(
+  "pending older history preserves loaded pages and retries the same cursor (tree=%s)",
+  async (topology) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const newest = group("turn-3");
+    const middle = group("turn-2");
+    const oldest = group("turn-1");
+    const api = topology ? mocks.getTurnTreeHistory : mocks.getTurnTimeline;
+    const response = (entry: TurnTimelineGroup, next: string | null) =>
+      topology
+        ? historyPage({ groups: [entry], next_from_turn_id: next })
+        : page({ items: entry.items, next_turn_id: next });
+    api
+      .mockResolvedValueOnce(response(newest, "turn-2"))
+      .mockResolvedValueOnce(response(middle, "turn-1"))
+      .mockRejectedValueOnce(new ApiError("Pending", "timeline_pending", 503))
+      .mockRejectedValueOnce(new ApiError("Still pending", "timeline_pending", 503))
+      .mockResolvedValueOnce(response(oldest, null));
 
-  await loadSessionTimeline('sess-1', { topology });
-  await loadSessionTimeline('sess-1', { mode: 'more', topology });
-  await loadSessionTimeline('sess-1', { mode: 'more', topology, limit: 7 });
-  expect(get(timelineState)).toMatchObject({
-    items: [...middle.items, ...newest.items], nextOlderTurnId: 'turn-1', status: 'pending',
-  });
-  expect(hasTimelineSnapshot(get(timelineState), 'sess-1')).toBe(true);
-  await vi.advanceTimersByTimeAsync(2000);
-  expect(api).toHaveBeenNthCalledWith(5, 'sess-1', topology
-    ? { fromTurnId: 'turn-1', limit: 7 }
-    : { direction: 'backward', turnId: 'turn-1', limit: 7 });
-  expect(get(timelineState)).toMatchObject({
-    items: [...oldest.items, ...middle.items, ...newest.items], nextOlderTurnId: null, status: 'ready',
-  });
-});
+    await loadSessionTimeline("sess-1", { topology });
+    await loadSessionTimeline("sess-1", { mode: "more", topology });
+    await loadSessionTimeline("sess-1", { mode: "more", topology, limit: 7 });
+    expect(get(timelineState)).toMatchObject({
+      items: [...middle.items, ...newest.items],
+      nextOlderTurnId: "turn-1",
+      status: "pending",
+    });
+    expect(hasTimelineSnapshot(get(timelineState), "sess-1")).toBe(true);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(api).toHaveBeenNthCalledWith(
+      5,
+      "sess-1",
+      topology
+        ? { fromTurnId: "turn-1", limit: 7 }
+        : { direction: "backward", turnId: "turn-1", limit: 7 },
+    );
+    expect(get(timelineState)).toMatchObject({
+      items: [...oldest.items, ...middle.items, ...newest.items],
+      nextOlderTurnId: null,
+      status: "ready",
+    });
+  },
+);
 
-test.each([false, true])('pending tail refresh preserves restored history and retries its original anchor (tree=%s)', async (topology) => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const older = group('turn-1', 'turn-1', 'turn-0');
-  const active = group('turn-2', 'partial');
-  const completed = group('turn-2', 'complete');
-  mocks.getTurnTimeline.mockResolvedValueOnce(page({ items: [...older.items, ...active.items], next_turn_id: 'turn-0' }));
-  mocks.getTurnTreeHistory.mockResolvedValueOnce(historyPage({ groups: [older, active], next_from_turn_id: 'turn-0' }));
-  await loadSessionTimeline('sess-1', { topology });
-  resetTimelineState();
-  expect(await restoreSessionTimeline('sess-1', { topology })).toBe(true);
-  const api = topology ? mocks.getTurnTreeUpdates : mocks.getTurnTimeline;
-  api.mockRejectedValueOnce(new ApiError('Pending', 'timeline_pending', 503))
-    .mockResolvedValueOnce(topology
-      ? updatesPage({ groups: [completed], current_turn_id: 'turn-2', retain_through_turn_id: 'turn-1' })
-      : page({ direction: 'forward', items: completed.items, next_turn_id: null }));
-  const refresh = refreshSessionTimeline('sess-1');
-  await vi.advanceTimersByTimeAsync(100);
-  await refresh;
-  expect(get(timelineState).items).toEqual([...older.items, ...active.items]);
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(api).toHaveBeenLastCalledWith('sess-1', topology
-    ? { fromTurnId: 'turn-2' }
-    : { direction: 'forward', turnId: 'turn-2', limit: 100 });
-  expect(get(timelineState)).toMatchObject({
-    items: [...older.items, ...completed.items], nextOlderTurnId: 'turn-0', status: 'ready',
-  });
-});
+test.each([false, true])(
+  "pending tail refresh preserves restored history and retries its original anchor (tree=%s)",
+  async (topology) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const older = group("turn-1", "turn-1", "turn-0");
+    const active = group("turn-2", "partial");
+    const completed = group("turn-2", "complete");
+    mocks.getTurnTimeline.mockResolvedValueOnce(
+      page({ items: [...older.items, ...active.items], next_turn_id: "turn-0" }),
+    );
+    mocks.getTurnTreeHistory.mockResolvedValueOnce(
+      historyPage({ groups: [older, active], next_from_turn_id: "turn-0" }),
+    );
+    await loadSessionTimeline("sess-1", { topology });
+    resetTimelineState();
+    expect(await restoreSessionTimeline("sess-1", { topology })).toBe(true);
+    const api = topology ? mocks.getTurnTreeUpdates : mocks.getTurnTimeline;
+    api
+      .mockRejectedValueOnce(new ApiError("Pending", "timeline_pending", 503))
+      .mockResolvedValueOnce(
+        topology
+          ? updatesPage({
+              groups: [completed],
+              current_turn_id: "turn-2",
+              retain_through_turn_id: "turn-1",
+            })
+          : page({ direction: "forward", items: completed.items, next_turn_id: null }),
+      );
+    const refresh = refreshSessionTimeline("sess-1");
+    await vi.advanceTimersByTimeAsync(100);
+    await refresh;
+    expect(get(timelineState).items).toEqual([...older.items, ...active.items]);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(api).toHaveBeenLastCalledWith(
+      "sess-1",
+      topology ? { fromTurnId: "turn-2" } : { direction: "forward", turnId: "turn-2", limit: 100 },
+    );
+    expect(get(timelineState)).toMatchObject({
+      items: [...older.items, ...completed.items],
+      nextOlderTurnId: "turn-0",
+      status: "ready",
+    });
+  },
+);
 
-
-test('multiple steers within one native Turn keep distinct tool groups renderable', async () => {
+test("multiple steers within one native Turn keep distinct tool groups renderable", async () => {
   const nativeItems = [
-    { ...item('turn-1', 'call-1', 'first work'), kind: 'tool_call', title: 'first tool' },
-    { ...item('turn-1', 'steer-1', 'follow up one'), kind: 'user', role: 'user' },
-    { ...item('turn-1', 'call-2', 'second work'), kind: 'tool_call', title: 'second tool' },
-    { ...item('turn-1', 'steer-2', 'follow up two'), kind: 'user', role: 'user' },
-    item('turn-1', 'answer', 'final answer'),
+    { ...item("turn-1", "call-1", "first work"), kind: "tool_call", title: "first tool" },
+    { ...item("turn-1", "steer-1", "follow up one"), kind: "user", role: "user" },
+    { ...item("turn-1", "call-2", "second work"), kind: "tool_call", title: "second tool" },
+    { ...item("turn-1", "steer-2", "follow up two"), kind: "user", role: "user" },
+    item("turn-1", "answer", "final answer"),
   ];
   render(SessionConversation, { props: { messages: timelineItemsToChatMessages(nativeItems) } });
-  expect(screen.getByText('follow up one')).toBeInTheDocument();
-  expect(screen.getByText('follow up two')).toBeInTheDocument();
-  expect(screen.getByText('final answer')).toBeInTheDocument();
-  expect(screen.getAllByRole('button', { name: 'Show agent work steps' })).toHaveLength(2);
+  expect(screen.getByText("follow up one")).toBeInTheDocument();
+  expect(screen.getByText("follow up two")).toBeInTheDocument();
+  expect(screen.getByText("final answer")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Show agent work steps" })).toHaveLength(2);
 });
 
 test.each([
-  ['linear', 'success'], ['linear', 'failure'], ['tree', 'success'], ['tree', 'failure'],
-])('ignores an old %s history %s after leaving and returning to the same Session', async (mode, outcome) => {
-  const topology = mode === 'tree';
-  const read = topology ? mocks.getTurnTreeHistory : mocks.getTurnTimeline;
-  let finish!: (value: unknown) => void;
-  let fail!: (error: Error) => void;
-  read.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
-  const old = loadSessionTimeline('sess-1', { topology });
-  resetTimelineState('sess-2');
-  resetTimelineState('sess-1');
-  read.mockResolvedValueOnce(topology
-    ? historyPage({ groups: [group('turn-new', 'recovered')], next_from_turn_id: null })
-    : page({ items: [item('turn-new', 'new', 'recovered')], next_turn_id: null }));
-  await loadSessionTimeline('sess-1', { topology });
-  if (outcome === 'success') finish(topology ? historyPage() : page());
-  else fail(new ApiError('Source unavailable', 'timeline_source_unavailable', 503));
-  await old;
-  expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual(['recovered']);
-  expect(get(timelineState).latestTurnId).toBe('turn-new');
-  expect(get(timelineState).error).toBeNull();
-});
+  ["linear", "success"],
+  ["linear", "failure"],
+  ["tree", "success"],
+  ["tree", "failure"],
+])(
+  "ignores an old %s history %s after leaving and returning to the same Session",
+  async (mode, outcome) => {
+    const topology = mode === "tree";
+    const read = topology ? mocks.getTurnTreeHistory : mocks.getTurnTimeline;
+    let finish!: (value: unknown) => void;
+    let fail!: (error: Error) => void;
+    read.mockImplementationOnce(
+      () =>
+        new Promise((resolve, reject) => {
+          finish = resolve;
+          fail = reject;
+        }),
+    );
+    const old = loadSessionTimeline("sess-1", { topology });
+    resetTimelineState("sess-2");
+    resetTimelineState("sess-1");
+    read.mockResolvedValueOnce(
+      topology
+        ? historyPage({ groups: [group("turn-new", "recovered")], next_from_turn_id: null })
+        : page({ items: [item("turn-new", "new", "recovered")], next_turn_id: null }),
+    );
+    await loadSessionTimeline("sess-1", { topology });
+    if (outcome === "success") finish(topology ? historyPage() : page());
+    else fail(new ApiError("Source unavailable", "timeline_source_unavailable", 503));
+    await old;
+    expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual(["recovered"]);
+    expect(get(timelineState).latestTurnId).toBe("turn-new");
+    expect(get(timelineState).error).toBeNull();
+  },
+);
 
 test.each([
-  ['linear', 'success'], ['linear', 'failure'], ['tree', 'success'], ['tree', 'failure'],
-])('ignores an old %s update %s after leaving and returning to the same Session', async (mode, outcome) => {
-  const topology = mode === 'tree';
-  const history = topology ? mocks.getTurnTreeHistory : mocks.getTurnTimeline;
-  history.mockResolvedValueOnce(topology ? historyPage() : page());
-  await loadSessionTimeline('sess-1', { topology });
-  const updates = topology ? mocks.getTurnTreeUpdates : mocks.getTurnTimeline;
-  let finish!: (value: unknown) => void;
-  let fail!: (error: Error) => void;
-  updates.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
-  const old = refreshSessionTimeline('sess-1');
-  await vi.waitFor(() => expect(finish).toBeDefined());
-  resetTimelineState('sess-2');
-  resetTimelineState('sess-1');
-  history.mockResolvedValueOnce(topology
-    ? historyPage({ groups: [group('turn-new', 'recovered')], next_from_turn_id: null })
-    : page({ items: [item('turn-new', 'new', 'recovered')], next_turn_id: null }));
-  await loadSessionTimeline('sess-1', { topology });
-  if (outcome === 'success') finish(topology ? updatesPage() : page());
-  else fail(new ApiError('Pending history', 'timeline_pending', 503));
-  await old;
-  expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual(['recovered']);
-  expect(get(timelineState).latestTurnId).toBe('turn-new');
-  expect(get(timelineState).error).toBeNull();
-});
+  ["linear", "success"],
+  ["linear", "failure"],
+  ["tree", "success"],
+  ["tree", "failure"],
+])(
+  "ignores an old %s update %s after leaving and returning to the same Session",
+  async (mode, outcome) => {
+    const topology = mode === "tree";
+    const history = topology ? mocks.getTurnTreeHistory : mocks.getTurnTimeline;
+    history.mockResolvedValueOnce(topology ? historyPage() : page());
+    await loadSessionTimeline("sess-1", { topology });
+    const updates = topology ? mocks.getTurnTreeUpdates : mocks.getTurnTimeline;
+    let finish!: (value: unknown) => void;
+    let fail!: (error: Error) => void;
+    updates.mockImplementationOnce(
+      () =>
+        new Promise((resolve, reject) => {
+          finish = resolve;
+          fail = reject;
+        }),
+    );
+    const old = refreshSessionTimeline("sess-1");
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    resetTimelineState("sess-2");
+    resetTimelineState("sess-1");
+    history.mockResolvedValueOnce(
+      topology
+        ? historyPage({ groups: [group("turn-new", "recovered")], next_from_turn_id: null })
+        : page({ items: [item("turn-new", "new", "recovered")], next_turn_id: null }),
+    );
+    await loadSessionTimeline("sess-1", { topology });
+    if (outcome === "success") finish(topology ? updatesPage() : page());
+    else fail(new ApiError("Pending history", "timeline_pending", 503));
+    await old;
+    expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual(["recovered"]);
+    expect(get(timelineState).latestTurnId).toBe("turn-new");
+    expect(get(timelineState).error).toBeNull();
+  },
+);

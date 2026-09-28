@@ -1,6 +1,6 @@
-import { writable } from 'svelte/store';
-import { getWorkflowRevision } from '../../api/client';
-import type { WorkflowGraphRevisionView } from '../../api/types';
+import { writable } from "svelte/store";
+import { getWorkflowRevision } from "../../api/client";
+import type { WorkflowGraphRevisionView } from "../../api/types";
 
 export function revisionSelection(raw: string | null, current: number): number | null {
   if (raw === null) return current;
@@ -16,7 +16,11 @@ export function workflowRevisions(current: number): number[] {
 }
 
 export function createRevisionReader() {
-  const state = writable<{ loading: boolean; error: string | null; detail: WorkflowGraphRevisionView | null }>({ loading: false, error: null, detail: null });
+  const state = writable<{
+    loading: boolean;
+    error: string | null;
+    detail: WorkflowGraphRevisionView | null;
+  }>({ loading: false, error: null, detail: null });
   let controller: AbortController | null = null;
   return {
     subscribe: state.subscribe,
@@ -29,9 +33,16 @@ export function createRevisionReader() {
         const detail = await getWorkflowRevision(workflowId, revision, { signal: request.signal });
         if (!request.signal.aborted) state.set({ loading: false, error: null, detail });
       } catch (error) {
-        if (!request.signal.aborted) state.set({ loading: false, error: error instanceof Error ? error.message : String(error), detail: null });
+        if (!request.signal.aborted)
+          state.set({
+            loading: false,
+            error: error instanceof Error ? error.message : String(error),
+            detail: null,
+          });
       }
     },
-    cancel() { controller?.abort(); },
+    cancel() {
+      controller?.abort();
+    },
   };
 }

@@ -1,13 +1,56 @@
 export type JsonObject = Record<string, unknown>;
 
-export type SessionState = 'created' | 'starting' | 'idle' | 'busy' | 'interrupted' | 'exited' | 'error';
-export type TaskState = 'created' | 'routing' | 'needs_confirmation' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
-export type TurnState = 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'abandoned';
-export type TurnTopologyStatus = 'unknown' | 'root' | 'linked';
-export type InboxDeliveryPolicy = 'after_idle' | 'interrupt_now' | 'steer';
-export type InboxMessageState = 'resuming' | 'unknown' | 'pending' | 'dispatching' | 'dispatched' | 'cancelled' | 'superseded' | 'failed' | 'dismissed';
-export type WorkflowState = 'pending' | 'running' | 'paused' | 'replanning' | 'blocked' | 'idle' | 'completed' | 'failed' | 'recovering';
-export type WorkflowAgentStatus = 'pending' | 'starting' | 'running' | 'paused' | 'idle' | 'exiting' | 'submitted' | 'failed' | 'unknown';
+export type SessionState =
+  | "created"
+  | "starting"
+  | "idle"
+  | "busy"
+  | "interrupted"
+  | "exited"
+  | "error";
+export type TaskState =
+  | "created"
+  | "routing"
+  | "needs_confirmation"
+  | "queued"
+  | "running"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type TurnState = "queued" | "running" | "completed" | "failed" | "interrupted" | "abandoned";
+export type TurnTopologyStatus = "unknown" | "root" | "linked";
+export type InboxDeliveryPolicy = "after_idle" | "interrupt_now" | "steer";
+export type InboxMessageState =
+  | "resuming"
+  | "unknown"
+  | "pending"
+  | "dispatching"
+  | "dispatched"
+  | "cancelled"
+  | "superseded"
+  | "failed"
+  | "dismissed";
+export type WorkflowState =
+  | "pending"
+  | "running"
+  | "paused"
+  | "replanning"
+  | "blocked"
+  | "idle"
+  | "completed"
+  | "failed"
+  | "recovering";
+export type WorkflowAgentStatus =
+  | "pending"
+  | "starting"
+  | "running"
+  | "paused"
+  | "idle"
+  | "exiting"
+  | "submitted"
+  | "failed"
+  | "unknown";
 
 export interface WorkflowListItemView {
   workflow_id: string;
@@ -122,12 +165,12 @@ export interface WorkflowRecovery {
   node_id: string;
   session_id: string;
   message_id: string;
-  state: 'requested' | 'preparing' | 'dispatching' | 'completed' | 'failed';
+  state: "requested" | "preparing" | "dispatching" | "completed" | "failed";
   failure_message: string | null;
   created_at: string;
 }
 
-export type ContextUsageCapability = 'unsupported' | 'estimated' | 'exact';
+export type ContextUsageCapability = "unsupported" | "estimated" | "exact";
 
 export interface SessionCapabilities {
   accept_task?: boolean;
@@ -151,11 +194,11 @@ export interface ContextUsageView {
   input_tokens: number | null;
   output_tokens: number | null;
   cache_tokens: number | null;
-  confidence: 'exact' | 'estimated' | 'unknown';
+  confidence: "exact" | "estimated" | "unknown";
   observed_at: string;
 }
 
-export type AgentKind = 'executor';
+export type AgentKind = "executor";
 
 export interface AgentProfileView {
   profile_id: string;
@@ -201,7 +244,7 @@ export interface UpsertAgentProfileInput {
 }
 
 export interface SessionLineageView {
-  relation_type: 'fork' | string;
+  relation_type: "fork" | string;
   parent_session_id: string;
   forked_from_turn_id: string | null;
   forked_from_client_node_id: string | null;
@@ -223,10 +266,10 @@ export interface SessionView {
     profile?: {
       profile_id?: string;
       version?: string;
-      status: 'configured' | 'awaiting_input' | 'unverified';
+      status: "configured" | "awaiting_input" | "unverified";
       error?: string;
     } | null;
-    connection: 'awaiting_input' | 'available' | 'reconciling' | 'unavailable' | 'archived';
+    connection: "awaiting_input" | "available" | "reconciling" | "unavailable" | "archived";
     thread_id?: string;
     tui?: CodexTuiView;
     owned_tui?: CodexTuiView;
@@ -280,7 +323,7 @@ export interface WorkspaceGitStatusView {
   untracked_count: number;
   conflicted_count: number;
   clean: boolean;
-  state: 'unknown' | 'observed' | 'error' | string;
+  state: "unknown" | "observed" | "error" | string;
   failure: string | null;
   observed_at: string | null;
   updated_at: string | null;
@@ -296,7 +339,7 @@ export interface WorkspaceRootView {
 export interface WorkspaceDirectoryEntryView {
   name: string;
   path: string;
-  kind: 'directory' | string;
+  kind: "directory" | string;
   is_workspace: boolean;
 }
 
@@ -312,7 +355,7 @@ export interface WorkspaceDirectoryListingView {
 export interface FilePickerFileView {
   path: string;
   name: string;
-  kind: 'directory' | 'file' | string;
+  kind: "directory" | "file" | string;
 }
 
 export interface FilePickerResultView {
@@ -400,10 +443,10 @@ export interface EventView {
 }
 
 export type ManagedToolUseInput =
-  | { type: 'read'; path: string; start_line?: number | null; end_line?: number | null }
-  | { type: 'edit'; path: string; edits_count: number }
-  | { type: 'write'; path: string }
-  | { type: 'bash'; command: string; timeout?: number | null };
+  | { type: "read"; path: string; start_line?: number | null; end_line?: number | null }
+  | { type: "edit"; path: string; edits_count: number }
+  | { type: "write"; path: string }
+  | { type: "bash"; command: string; timeout?: number | null };
 
 export interface ManagedToolUse {
   tool_name: string;
@@ -423,7 +466,7 @@ export interface TimelineItem {
   managed_tool_use?: ManagedToolUse | null;
 }
 
-export type TurnTimelineDirection = 'forward' | 'backward';
+export type TurnTimelineDirection = "forward" | "backward";
 
 export type TurnTimelineItem = TimelineItem & { turn_id: string };
 
@@ -435,7 +478,7 @@ export interface TurnTimelinePage {
 }
 
 export interface TurnTimelineGroup {
-  history_issue?: 'topology_unknown' | 'range_unavailable' | 'range_invalid';
+  history_issue?: "topology_unknown" | "range_unavailable" | "range_invalid";
   turn_id: string;
   parent_turn_id: string | null;
   state: TurnState | string;
@@ -456,8 +499,8 @@ export interface TurnTreeUpdatesPage {
 }
 
 export type DashboardStreamEvent =
-  | { kind: 'session_event'; id: string; occurred_at: string; event: EventView }
-  | { kind: 'task_event'; id: string; occurred_at: string; event: TaskEventView };
+  | { kind: "session_event"; id: string; occurred_at: string; event: EventView }
+  | { kind: "task_event"; id: string; occurred_at: string; event: TaskEventView };
 
 export interface CreateSessionInput {
   client_type: string;
@@ -499,7 +542,6 @@ export interface ApiEnvelope<T> {
   meta?: JsonObject;
   error?: { code: string; message: string } | null;
 }
-
 
 export interface SessionModel {
   id: string;

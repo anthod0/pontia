@@ -1,1 +1,1 @@
-export { endLogin as POST } from '$lib/server/auth/http';
+export { endLogin as POST } from "$lib/server/auth/http";

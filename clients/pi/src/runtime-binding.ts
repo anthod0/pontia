@@ -3,7 +3,10 @@ import { CONTROL_VERSION, type PiConnection } from "./control-socket.js";
 import { asRecord, optionalString } from "./values.js";
 import type { SessionContext } from "./session.js";
 
-export type PiSessionDetails = Pick<SessionContext, "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd">;
+export type PiSessionDetails = Pick<
+  SessionContext,
+  "clientSessionKey" | "clientSessionFile" | "clientSessionDir" | "clientCwd"
+>;
 
 function callSessionManagerString(sessionManager: unknown, method: string): string | undefined {
   if (!sessionManager || typeof sessionManager !== "object") return undefined;
@@ -17,7 +20,8 @@ function callSessionManagerString(sessionManager: unknown, method: string): stri
 }
 
 export function piSessionDetailsFromHookContext(ctx: unknown): PiSessionDetails {
-  const sessionManager = ctx && typeof ctx === "object" ? (ctx as Record<string, unknown>).sessionManager : undefined;
+  const sessionManager =
+    ctx && typeof ctx === "object" ? (ctx as Record<string, unknown>).sessionManager : undefined;
   return {
     clientSessionKey: callSessionManagerString(sessionManager, "getSessionId"),
     clientSessionFile: callSessionManagerString(sessionManager, "getSessionFile"),
@@ -64,7 +68,8 @@ export async function bindSession(
   const sessionId = optionalString(session?.session_id);
   const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id);
   if (!sessionId) throw new Error("runtime binding upsert response missing session.session_id");
-  if (!resolvedRuntimeInstanceId) throw new Error("runtime binding upsert response missing runtime.runtime_instance_id");
+  if (!resolvedRuntimeInstanceId)
+    throw new Error("runtime binding upsert response missing runtime.runtime_instance_id");
   return {
     sessionId,
     clientType: "pi",
@@ -82,7 +87,9 @@ export async function loadExistingSessionContext(
   sessionDetails: PiSessionDetails,
 ): Promise<ExistingPiSessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
-  const body = await connection.request("session.context", { client_session_key: sessionDetails.clientSessionKey });
+  const body = await connection.request("session.context", {
+    client_session_key: sessionDetails.clientSessionKey,
+  });
   const record = asRecord(asRecord(body)?.session_context);
   if (!record) return undefined;
   const sessionId = optionalString(record?.session_id);

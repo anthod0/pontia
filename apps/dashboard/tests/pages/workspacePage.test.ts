@@ -1,8 +1,13 @@
-import { fireEvent, render, screen, within, waitFor } from '@testing-library/svelte';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, test, vi } from 'vitest';
-import WorkspacePage from '../../src/pages/WorkspacePage.svelte';
-import type { CreateSessionResult, SessionView, TurnView, WorkspaceView } from '../../src/api/types';
+import { fireEvent, render, screen, within, waitFor } from "@testing-library/svelte";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, expect, test, vi } from "vitest";
+import WorkspacePage from "../../src/pages/WorkspacePage.svelte";
+import type {
+  CreateSessionResult,
+  SessionView,
+  TurnView,
+  WorkspaceView,
+} from "../../src/api/types";
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -29,7 +34,7 @@ const mocks = vi.hoisted(() => {
   const sessions = writableStore<SessionView[]>([]);
 
   return {
-    pathParams: { workspaceId: 'workspace-1' } as Record<string, string>,
+    pathParams: { workspaceId: "workspace-1" } as Record<string, string>,
     navigate: vi.fn(),
     workspaces,
     workspacesLoading: writableStore(false),
@@ -48,14 +53,17 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate, routeParam: () => mocks.pathParams.workspaceId ?? null }));
-vi.mock('../../src/stores/workspaces', () => ({
+vi.mock("$lib/navigation", () => ({
+  navigate: mocks.navigate,
+  routeParam: () => mocks.pathParams.workspaceId ?? null,
+}));
+vi.mock("../../src/stores/workspaces", () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
   workspacesError: mocks.workspacesError,
   loadWorkspaces: mocks.loadWorkspaces,
 }));
-vi.mock('../../src/stores/sessions', () => ({
+vi.mock("../../src/stores/sessions", () => ({
   sessions: mocks.sessions,
   sessionsLoading: mocks.sessionsLoading,
   sessionsError: mocks.sessionsError,
@@ -63,68 +71,73 @@ vi.mock('../../src/stores/sessions', () => ({
   createSession: mocks.createSession,
   loadSessionDetail: mocks.loadSessionDetail,
 }));
-vi.mock('../../src/stores/optimisticChat', () => ({ rememberOptimisticInitialMessage: mocks.rememberOptimisticInitialMessage }));
-vi.mock('../../src/stores/chatDraft', () => ({ clearChatDraft: mocks.clearChatDraft }));
-vi.mock('../../src/stores/timeline', () => ({ resetTimelineState: mocks.resetTimelineState, loadSessionTimeline: mocks.loadSessionTimeline }));
+vi.mock("../../src/stores/optimisticChat", () => ({
+  rememberOptimisticInitialMessage: mocks.rememberOptimisticInitialMessage,
+}));
+vi.mock("../../src/stores/chatDraft", () => ({ clearChatDraft: mocks.clearChatDraft }));
+vi.mock("../../src/stores/timeline", () => ({
+  resetTimelineState: mocks.resetTimelineState,
+  loadSessionTimeline: mocks.loadSessionTimeline,
+}));
 
 const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
-  workspace_id: 'workspace-1',
-  name: 'Pontia Dev',
-  canonical_path: '/home/cheny/projects/pontia',
-  display_path: '~/projects/pontia',
-  state: 'active',
+  workspace_id: "workspace-1",
+  name: "Pontia Dev",
+  canonical_path: "/home/cheny/projects/pontia",
+  display_path: "~/projects/pontia",
+  state: "active",
   metadata: {},
-  created_at: '2026-05-14T00:00:00Z',
-  updated_at: '2026-05-14T00:00:00Z',
+  created_at: "2026-05-14T00:00:00Z",
+  updated_at: "2026-05-14T00:00:00Z",
   last_used_at: null,
   ...overrides,
 });
 
 const session = (overrides: Partial<SessionView> = {}): SessionView => ({
-  session_id: 'session-1',
-  client_type: 'pi',
-  title: 'Implement workspace page',
+  session_id: "session-1",
+  client_type: "pi",
+  title: "Implement workspace page",
   handle: null,
   role: null,
   description: null,
   execution_profile_id: null,
   execution_profile_version: null,
-  state: 'idle',
+  state: "idle",
   current_turn_id: null,
-  workspace_id: 'workspace-1',
+  workspace_id: "workspace-1",
   workspace: null,
   pinned_at: null,
   archived_at: null,
-  capabilities: { context_usage: 'unsupported' },
+  capabilities: { context_usage: "unsupported" },
   model: null,
   context_usage: null,
   lineage: null,
-  created_at: '2026-05-14T00:00:00Z',
-  updated_at: '2026-05-15T00:00:00Z',
+  created_at: "2026-05-14T00:00:00Z",
+  updated_at: "2026-05-15T00:00:00Z",
   metadata: {},
   ...overrides,
 });
 
 const initialTurn = (overrides: Partial<TurnView> = {}): TurnView => ({
-  turn_id: 'turn-1',
-  session_id: 'session-new',
-  state: 'queued',
-  input: { summary: 'Start work' },
+  turn_id: "turn-1",
+  session_id: "session-new",
+  state: "queued",
+  input: { summary: "Start work" },
   output: null,
   failure: null,
   started_at: null,
   completed_at: null,
   metadata: {},
-  created_at: '2026-05-15T00:00:00Z',
+  created_at: "2026-05-15T00:00:00Z",
   ...overrides,
 });
 
 beforeEach(() => {
-  mocks.pathParams = { workspaceId: 'workspace-1' };
+  mocks.pathParams = { workspaceId: "workspace-1" };
   mocks.workspaces.set([workspace()]);
   mocks.sessions.set([
-    session({ session_id: 'session-1', title: 'Workspace session', workspace_id: 'workspace-1' }),
-    session({ session_id: 'session-2', title: 'Other session', workspace_id: 'workspace-2' }),
+    session({ session_id: "session-1", title: "Workspace session", workspace_id: "workspace-1" }),
+    session({ session_id: "session-2", title: "Other session", workspace_id: "workspace-2" }),
   ]);
   mocks.workspacesLoading.set(false);
   mocks.workspacesError.set(null);
@@ -140,48 +153,63 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test('renders workspace title, path, and only sessions from that workspace', async () => {
+test("renders workspace title, path, and only sessions from that workspace", async () => {
   render(WorkspacePage);
 
-  expect(await screen.findByRole('heading', { name: 'Pontia Dev' })).toBeInTheDocument();
-  expect(screen.getByText('/home/cheny/projects/pontia')).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Pontia Dev" })).toBeInTheDocument();
+  expect(screen.getByText("/home/cheny/projects/pontia")).toBeInTheDocument();
   expect(mocks.loadWorkspaces).toHaveBeenCalled();
   expect(mocks.loadSessions).toHaveBeenCalledWith({ includePinned: true, limit: 200 });
 
-  const sessionsRegion = screen.getByRole('region', { name: 'Workspace sessions' });
-  const sessionList = within(sessionsRegion).getByTestId('workspace-session-list');
-  const sessionItem = within(sessionList).getByRole('button', { name: /Workspace session/i });
+  const sessionsRegion = screen.getByRole("region", { name: "Workspace sessions" });
+  const sessionList = within(sessionsRegion).getByTestId("workspace-session-list");
+  const sessionItem = within(sessionList).getByRole("button", { name: /Workspace session/i });
   expect(sessionItem).toBeInTheDocument();
-  expect(within(sessionsRegion).queryByText('Other session')).not.toBeInTheDocument();
+  expect(within(sessionsRegion).queryByText("Other session")).not.toBeInTheDocument();
 });
 
-test('creates a new session in the workspace and opens its chat page', async () => {
+test("creates a new session in the workspace and opens its chat page", async () => {
   const user = userEvent.setup();
-  const createdSession = session({ session_id: 'session-new', title: 'Start work', workspace_id: 'workspace-1' });
+  const createdSession = session({
+    session_id: "session-new",
+    title: "Start work",
+    workspace_id: "workspace-1",
+  });
   const createdTurn = initialTurn();
-  mocks.createSession.mockResolvedValue({ session: createdSession, initial_turn: createdTurn } satisfies CreateSessionResult);
+  mocks.createSession.mockResolvedValue({
+    session: createdSession,
+    initial_turn: createdTurn,
+  } satisfies CreateSessionResult);
 
   render(WorkspacePage);
 
-  await user.type(await screen.findByPlaceholderText('What should the agent do?'), 'Start work');
-  await fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+  await user.type(await screen.findByPlaceholderText("What should the agent do?"), "Start work");
+  await fireEvent.click(screen.getByRole("button", { name: "Start session" }));
 
-  await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({
-    client_type: 'pi',
-    workspace_id: 'workspace-1',
-    initial_task: { input: 'Start work', metadata: { source: 'dashboard_workspace' } },
-    metadata: { source: 'dashboard_workspace' },
-  })));
-  expect(mocks.rememberOptimisticInitialMessage).toHaveBeenCalledWith('session-new', 'Start work', createdTurn);
-  expect(mocks.resetTimelineState).toHaveBeenCalledWith('session-new');
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-new');
+  await waitFor(() =>
+    expect(mocks.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client_type: "pi",
+        workspace_id: "workspace-1",
+        initial_task: { input: "Start work", metadata: { source: "dashboard_workspace" } },
+        metadata: { source: "dashboard_workspace" },
+      }),
+    ),
+  );
+  expect(mocks.rememberOptimisticInitialMessage).toHaveBeenCalledWith(
+    "session-new",
+    "Start work",
+    createdTurn,
+  );
+  expect(mocks.resetTimelineState).toHaveBeenCalledWith("session-new");
+  expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-new");
 });
 
-test('opens an existing workspace session in chat', async () => {
+test("opens an existing workspace session in chat", async () => {
   const user = userEvent.setup();
   render(WorkspacePage);
 
-  await user.click(await screen.findByRole('button', { name: /Workspace session/i }));
+  await user.click(await screen.findByRole("button", { name: /Workspace session/i }));
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-1');
+  expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-1");
 });

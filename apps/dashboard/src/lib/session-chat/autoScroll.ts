@@ -1,4 +1,4 @@
-export type ScrollContainer = Pick<HTMLElement, 'scrollHeight' | 'scrollTop'>;
+export type ScrollContainer = Pick<HTMLElement, "scrollHeight" | "scrollTop">;
 
 export function scrollToBottom(element: ScrollContainer | null): void {
   if (!element) return;

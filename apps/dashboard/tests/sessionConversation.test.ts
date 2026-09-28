@@ -1,14 +1,13 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { expect, test, vi } from 'vitest';
-import SessionConversation from '../src/lib/components/session-chat/SessionConversation.svelte';
-import type { SessionChatMessage } from '../src/lib/session-chat/sessionChat';
-
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { expect, test, vi } from "vitest";
+import SessionConversation from "../src/lib/components/session-chat/SessionConversation.svelte";
+import type { SessionChatMessage } from "../src/lib/session-chat/sessionChat";
 
 class TestIntersectionObserver implements IntersectionObserver {
   static instances: TestIntersectionObserver[] = [];
 
   readonly root: Element | Document | null = null;
-  readonly rootMargin = '0px';
+  readonly rootMargin = "0px";
   readonly thresholds = [0];
   private observedElement: Element | null = null;
 
@@ -24,174 +23,223 @@ class TestIntersectionObserver implements IntersectionObserver {
 
   disconnect(): void {}
 
-  takeRecords(): IntersectionObserverEntry[] { return []; }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
 
   trigger(isIntersecting: boolean): void {
     if (!this.observedElement) return;
-    this.callback([{ isIntersecting, target: this.observedElement } as IntersectionObserverEntry], this);
+    this.callback(
+      [{ isIntersecting, target: this.observedElement } as IntersectionObserverEntry],
+      this,
+    );
   }
 }
 
 function installIntersectionObserverMock(): void {
   TestIntersectionObserver.instances = [];
-  Object.defineProperty(window, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
-  Object.defineProperty(globalThis, 'IntersectionObserver', { configurable: true, writable: true, value: TestIntersectionObserver });
+  Object.defineProperty(window, "IntersectionObserver", {
+    configurable: true,
+    writable: true,
+    value: TestIntersectionObserver,
+  });
+  Object.defineProperty(globalThis, "IntersectionObserver", {
+    configurable: true,
+    writable: true,
+    value: TestIntersectionObserver,
+  });
 }
 
 const messages: SessionChatMessage[] = [
   {
-    id: 'message-1',
-    role: 'user',
-    content: 'Please inspect the repo.',
-    status: 'sent',
+    id: "message-1",
+    role: "user",
+    content: "Please inspect the repo.",
+    status: "sent",
   },
   {
-    id: 'message-2',
-    role: 'assistant',
-    content: 'I will inspect it now.',
-    status: 'sent',
+    id: "message-2",
+    role: "assistant",
+    content: "I will inspect it now.",
+    status: "sent",
   },
 ];
 
-test('conversation groups each Turn’s user and assistant messages with its status', () => {
+test("conversation groups each Turn’s user and assistant messages with its status", () => {
   const firstTurn: SessionChatMessage[] = messages.map((message) => ({
-    ...message, turnId: 'turn-1', createdAt: '2026-06-11T00:00:00Z',
+    ...message,
+    turnId: "turn-1",
+    createdAt: "2026-06-11T00:00:00Z",
   }));
   const secondTurn: SessionChatMessage[] = [
-    { id: 'turn-2:user', turnId: 'turn-2', role: 'user', content: 'Next question.', status: 'sent', createdAt: '2026-06-11T00:01:00Z' },
-    { id: 'turn-2:assistant', turnId: 'turn-2', role: 'assistant', content: 'Streaming reply.', status: 'pending', createdAt: '2026-06-11T00:01:00Z' },
+    {
+      id: "turn-2:user",
+      turnId: "turn-2",
+      role: "user",
+      content: "Next question.",
+      status: "sent",
+      createdAt: "2026-06-11T00:01:00Z",
+    },
+    {
+      id: "turn-2:assistant",
+      turnId: "turn-2",
+      role: "assistant",
+      content: "Streaming reply.",
+      status: "pending",
+      createdAt: "2026-06-11T00:01:00Z",
+    },
   ];
   render(SessionConversation, {
-    props: { messages: [...firstTurn, ...secondTurn], sessionState: 'busy', activeTurnId: 'turn-2' },
+    props: {
+      messages: [...firstTurn, ...secondTurn],
+      sessionState: "busy",
+      activeTurnId: "turn-2",
+    },
   });
-  const turns = document.querySelectorAll('[data-chat-turn]');
+  const turns = document.querySelectorAll("[data-chat-turn]");
   expect(turns).toHaveLength(2);
-  expect(turns[0]).toHaveAttribute('data-chat-turn-id', 'turn-1');
-  expect(turns[0]).toContainElement(screen.getByText('Please inspect the repo.'));
-  expect(turns[0]).toContainElement(screen.getByText('I will inspect it now.'));
-  expect(turns[1]).toHaveAttribute('data-chat-turn-id', 'turn-2');
-  expect(turns[1]).toContainElement(screen.getByText('Next question.'));
-  expect(turns[1]).toContainElement(screen.getByText('Streaming reply.'));
-  expect(turns[1]).toContainElement(screen.getByLabelText('Agent status: Agent working'));
+  expect(turns[0]).toHaveAttribute("data-chat-turn-id", "turn-1");
+  expect(turns[0]).toContainElement(screen.getByText("Please inspect the repo."));
+  expect(turns[0]).toContainElement(screen.getByText("I will inspect it now."));
+  expect(turns[1]).toHaveAttribute("data-chat-turn-id", "turn-2");
+  expect(turns[1]).toContainElement(screen.getByText("Next question."));
+  expect(turns[1]).toContainElement(screen.getByText("Streaming reply."));
+  expect(turns[1]).toContainElement(screen.getByLabelText("Agent status: Agent working"));
 });
 
-test('conversation renders messages without role headers', () => {
+test("conversation renders messages without role headers", () => {
   render(SessionConversation, { props: { messages } });
 
-  expect(screen.getByText('Please inspect the repo.')).toBeInTheDocument();
-  expect(screen.getByText('I will inspect it now.')).toBeInTheDocument();
-  expect(screen.queryByText('You')).not.toBeInTheDocument();
-  expect(screen.queryByText('AI')).not.toBeInTheDocument();
+  expect(screen.getByText("Please inspect the repo.")).toBeInTheDocument();
+  expect(screen.getByText("I will inspect it now.")).toBeInTheDocument();
+  expect(screen.queryByText("You")).not.toBeInTheDocument();
+  expect(screen.queryByText("AI")).not.toBeInTheDocument();
 });
 
-test('conversation groups assistant-side items after each user message', () => {
+test("conversation groups assistant-side items after each user message", () => {
   render(SessionConversation, {
     props: {
-      sessionState: 'busy',
+      sessionState: "busy",
       messages: [
         ...messages,
         {
-          id: 'message-3',
-          role: 'user',
-          content: 'Keep going.',
-          status: 'sent',
+          id: "message-3",
+          role: "user",
+          content: "Keep going.",
+          status: "sent",
         },
       ],
     },
   });
 
-  const assistantGroups = document.querySelectorAll('[data-chat-assistant-group]');
+  const assistantGroups = document.querySelectorAll("[data-chat-assistant-group]");
   expect(assistantGroups).toHaveLength(2);
-  expect(assistantGroups[0]).toContainElement(document.querySelector('[data-chat-message-id="message-2"]'));
-  expect(assistantGroups[1]).toContainElement(document.querySelector('[data-chat-agent-status]'));
+  expect(assistantGroups[0]).toContainElement(
+    document.querySelector('[data-chat-message-id="message-2"]'),
+  );
+  expect(assistantGroups[1]).toContainElement(document.querySelector("[data-chat-agent-status]"));
 });
 
-
-test('conversation shows the current agent status above only the latest assistant reply', () => {
+test("conversation shows the current agent status above only the latest assistant reply", () => {
   render(SessionConversation, {
     props: {
-      sessionState: 'busy',
+      sessionState: "busy",
       messages: [
         ...messages,
         {
-          id: 'message-3',
-          role: 'user',
-          content: 'Check one more file.',
-          status: 'sent',
+          id: "message-3",
+          role: "user",
+          content: "Check one more file.",
+          status: "sent",
         },
         {
-          id: 'message-4',
-          role: 'assistant',
-          content: 'I checked it.',
-          status: 'sent',
+          id: "message-4",
+          role: "assistant",
+          content: "I checked it.",
+          status: "sent",
         },
       ],
     },
   });
 
-  expect(screen.getAllByText('Agent working')).toHaveLength(1);
-  const latestAssistantMessage = screen.getByText('I checked it.').closest('[data-chat-message-id]');
-  expect(latestAssistantMessage).toContainElement(screen.getByText('Agent working'));
-  expect(screen.queryByText('Agent working')?.compareDocumentPosition(screen.getByText('I checked it.')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
+  expect(screen.getAllByText("Agent working")).toHaveLength(1);
+  const latestAssistantMessage = screen
+    .getByText("I checked it.")
+    .closest("[data-chat-message-id]");
+  expect(latestAssistantMessage).toContainElement(screen.getByText("Agent working"));
+  expect(
+    screen
+      .queryByText("Agent working")
+      ?.compareDocumentPosition(screen.getByText("I checked it.")) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(screen.getByLabelText("Agent status: Agent working")).toBeInTheDocument();
 });
 
-test('conversation hides the agent status component while the session is idle', () => {
-  render(SessionConversation, { props: { sessionState: 'idle', messages } });
+test("conversation hides the agent status component while the session is idle", () => {
+  render(SessionConversation, { props: { sessionState: "idle", messages } });
 
   expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
-  expect(screen.queryByText('Agent idle')).not.toBeInTheDocument();
+  expect(screen.queryByText("Agent idle")).not.toBeInTheDocument();
 });
 
-test('conversation does not render an interrupt button in the busy agent status', () => {
-  render(SessionConversation, { props: { sessionState: 'busy', messages } });
+test("conversation does not render an interrupt button in the busy agent status", () => {
+  render(SessionConversation, { props: { sessionState: "busy", messages } });
 
-  expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Agent status: Agent working")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
 });
 
-test('conversation renders exited status as a left-aligned bottom status after the conversation', () => {
-  render(SessionConversation, { props: { sessionState: 'exited', messages } });
+test("conversation renders exited status as a left-aligned bottom status after the conversation", () => {
+  render(SessionConversation, { props: { sessionState: "exited", messages } });
 
   expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
-  expect(screen.queryByText('Session exited')).not.toBeInTheDocument();
+  expect(screen.queryByText("Session exited")).not.toBeInTheDocument();
 
-  const bottomStatus = screen.getByText('session exited · send a message to resume');
-  const bottomStatusContainer = bottomStatus.closest('[data-chat-session-bottom-status]');
+  const bottomStatus = screen.getByText("session exited · send a message to resume");
+  const bottomStatusContainer = bottomStatus.closest("[data-chat-session-bottom-status]");
   expect(bottomStatusContainer).toBeInTheDocument();
-  expect(bottomStatusContainer?.querySelector('.h-px')).not.toBeInTheDocument();
-  expect(screen.getByText('I will inspect it now.').compareDocumentPosition(bottomStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(bottomStatusContainer?.querySelector(".h-px")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("I will inspect it now.").compareDocumentPosition(bottomStatus) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 });
 
-test('conversation renders interrupted status as a left-aligned bottom status after the conversation', () => {
-  render(SessionConversation, { props: { sessionState: 'interrupted', messages } });
+test("conversation renders interrupted status as a left-aligned bottom status after the conversation", () => {
+  render(SessionConversation, { props: { sessionState: "interrupted", messages } });
 
   expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
 
-  const bottomStatus = screen.getByText('session interrupted');
-  const bottomStatusContainer = bottomStatus.closest('[data-chat-session-bottom-status]');
+  const bottomStatus = screen.getByText("session interrupted");
+  const bottomStatusContainer = bottomStatus.closest("[data-chat-session-bottom-status]");
   expect(bottomStatusContainer).toBeInTheDocument();
-  expect(bottomStatusContainer?.querySelector('.h-px')).not.toBeInTheDocument();
-  expect(screen.getByText('I will inspect it now.').compareDocumentPosition(bottomStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(bottomStatusContainer?.querySelector(".h-px")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("I will inspect it now.").compareDocumentPosition(bottomStatus) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 });
 
-test('conversation copies assistant reply content with the http-compatible fallback', async () => {
-  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+test("conversation copies assistant reply content with the http-compatible fallback", async () => {
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
   document.execCommand = vi.fn().mockReturnValue(true);
   const execCommand = vi.mocked(document.execCommand);
 
   render(SessionConversation, { props: { messages } });
 
-  const userCopyButton = screen.getByRole('button', { name: /copy user message/i });
-  expect(userCopyButton.closest('[data-user-message-actions]')?.previousElementSibling).toHaveTextContent('Please inspect the repo.');
-  const copyButton = screen.getByRole('button', { name: /copy assistant reply/i });
+  const userCopyButton = screen.getByRole("button", { name: /copy user message/i });
+  expect(
+    userCopyButton.closest("[data-user-message-actions]")?.previousElementSibling,
+  ).toHaveTextContent("Please inspect the repo.");
+  const copyButton = screen.getByRole("button", { name: /copy assistant reply/i });
   await fireEvent.click(copyButton);
 
-  expect(execCommand).toHaveBeenCalledWith('copy');
-  expect(screen.getByRole('button', { name: /assistant reply copied/i })).toBeInTheDocument();
+  expect(execCommand).toHaveBeenCalledWith("copy");
+  expect(screen.getByRole("button", { name: /assistant reply copied/i })).toBeInTheDocument();
 });
 
-test('conversation waits to observe earlier history until history observer is enabled', async () => {
+test("conversation waits to observe earlier history until history observer is enabled", async () => {
   installIntersectionObserverMock();
   const onLoadMoreHistory = vi.fn();
 
@@ -203,47 +251,60 @@ test('conversation waits to observe earlier history until history observer is en
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(onLoadMoreHistory).not.toHaveBeenCalled();
 
-  await rerender({ messages, hasMoreHistory: true, historyObserverEnabled: true, onLoadMoreHistory });
+  await rerender({
+    messages,
+    hasMoreHistory: true,
+    historyObserverEnabled: true,
+    onLoadMoreHistory,
+  });
 
   await waitFor(() => expect(TestIntersectionObserver.instances.length).toBeGreaterThan(0));
   expect(onLoadMoreHistory).not.toHaveBeenCalled();
 });
 
-test('conversation waits for an extra upward pull after the top sentinel intersects before loading history', async () => {
+test("conversation waits for an extra upward pull after the top sentinel intersects before loading history", async () => {
   installIntersectionObserverMock();
   const onLoadMoreHistory = vi.fn();
   render(SessionConversation, {
     props: { messages, hasMoreHistory: true, historyObserverEnabled: true, onLoadMoreHistory },
   });
 
-  expect(screen.queryByRole('button', { name: /load earlier messages/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /load earlier messages/i })).not.toBeInTheDocument();
   await waitFor(() => expect(TestIntersectionObserver.instances.length).toBeGreaterThan(0));
   TestIntersectionObserver.instances.at(-1)?.trigger(false);
-  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -160 }));
+  window.dispatchEvent(new WheelEvent("wheel", { deltaY: -160 }));
   expect(onLoadMoreHistory).not.toHaveBeenCalled();
 
   TestIntersectionObserver.instances.at(-1)?.trigger(true);
-  expect(await screen.findByText('Keep scrolling up to load earlier messages')).toBeInTheDocument();
+  expect(await screen.findByText("Keep scrolling up to load earlier messages")).toBeInTheDocument();
   expect(onLoadMoreHistory).not.toHaveBeenCalled();
 
-  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -64 }));
+  window.dispatchEvent(new WheelEvent("wheel", { deltaY: -64 }));
   expect(onLoadMoreHistory).not.toHaveBeenCalled();
-  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -64 }));
+  window.dispatchEvent(new WheelEvent("wheel", { deltaY: -64 }));
 
   await waitFor(() => expect(onLoadMoreHistory).toHaveBeenCalledTimes(1));
 });
 
-test('conversation preserves the visible history anchor after prepending earlier messages', async () => {
+test("conversation preserves the visible history anchor after prepending earlier messages", async () => {
   installIntersectionObserverMock();
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-    callback(0);
-    return 1;
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const requestAnimationFrame = vi
+    .spyOn(window, "requestAnimationFrame")
+    .mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 120 });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 1000,
   });
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 120 });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 1000 });
   const onLoadMoreHistory = vi.fn(async () => {
-    Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 1400 });
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      value: 1400,
+    });
   });
 
   render(SessionConversation, {
@@ -252,7 +313,7 @@ test('conversation preserves the visible history anchor after prepending earlier
 
   await waitFor(() => expect(TestIntersectionObserver.instances.length).toBeGreaterThan(0));
   TestIntersectionObserver.instances.at(-1)?.trigger(true);
-  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -120 }));
+  window.dispatchEvent(new WheelEvent("wheel", { deltaY: -120 }));
 
   await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 520 }));
   expect(onLoadMoreHistory).toHaveBeenCalledTimes(1);
@@ -260,11 +321,14 @@ test('conversation preserves the visible history anchor after prepending earlier
   requestAnimationFrame.mockRestore();
 });
 
-test('conversation does not scroll the document to the bottom on initial render', async () => {
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 3200 });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
+test("conversation does not scroll the document to the bottom on initial render", async () => {
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 3200 });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 4096,
+  });
 
   render(SessionConversation, { props: { messages } });
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -272,11 +336,14 @@ test('conversation does not scroll the document to the bottom on initial render'
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test('conversation does not scroll the document to the bottom when messages update near the bottom', async () => {
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 3200 });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
+test("conversation does not scroll the document to the bottom when messages update near the bottom", async () => {
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 3200 });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 4096,
+  });
   const { rerender } = render(SessionConversation, { props: { messages: [messages[0]] } });
 
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -287,218 +354,276 @@ test('conversation does not scroll the document to the bottom when messages upda
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test('conversation does not scroll the document to the bottom when refreshing while reading earlier messages', async () => {
-  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: 600 });
-  Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 4096 });
+test("conversation does not scroll the document to the bottom when refreshing while reading earlier messages", async () => {
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 600 });
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 4096,
+  });
   const { rerender } = render(SessionConversation, { props: { messages } });
 
   await new Promise((resolve) => setTimeout(resolve, 0));
   scrollTo.mockClear();
-  await rerender({ messages: [...messages, { id: 'message-3', role: 'assistant', content: 'New background update.', status: 'sent' }] });
+  await rerender({
+    messages: [
+      ...messages,
+      { id: "message-3", role: "assistant", content: "New background update.", status: "sent" },
+    ],
+  });
 
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test('conversation shows agent status for a busy pending assistant message with thought steps', () => {
+test("conversation shows agent status for a busy pending assistant message with thought steps", () => {
   render(SessionConversation, {
     props: {
-      sessionState: 'busy',
+      sessionState: "busy",
       messages: [
         ...messages,
         {
-          id: 'message-3',
-          turnId: 'turn-live',
-          role: 'assistant',
-          content: '',
-          status: 'pending',
-          createdAt: '2026-06-11T00:00:00Z',
+          id: "message-3",
+          turnId: "turn-live",
+          role: "assistant",
+          content: "",
+          status: "pending",
+          createdAt: "2026-06-11T00:00:00Z",
           thoughtSteps: [
-            { id: 'thought-1', kind: 'tool_call', title: 'bash', status: 'started', content: 'rg ThoughtSummary', occurredAt: null },
-            { id: 'thought-2', kind: 'tool_call', title: 'read', status: 'started', content: 'ThoughtSummary.svelte', occurredAt: null },
+            {
+              id: "thought-1",
+              kind: "tool_call",
+              title: "bash",
+              status: "started",
+              content: "rg ThoughtSummary",
+              occurredAt: null,
+            },
+            {
+              id: "thought-2",
+              kind: "tool_call",
+              title: "read",
+              status: "started",
+              content: "ThoughtSummary.svelte",
+              occurredAt: null,
+            },
           ],
         },
       ],
     },
   });
 
-  expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
-  expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
-  expect(screen.getByText('bash')).toBeInTheDocument();
-  expect(screen.getByText('read')).toBeInTheDocument();
-  expect(screen.queryByText('Waiting for the agent to report its next output.')).not.toBeInTheDocument();
-  expect(screen.queryByText('Working…')).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Agent status: Agent working")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Thinking in progress")).not.toBeInTheDocument();
+  expect(screen.getByText("bash")).toBeInTheDocument();
+  expect(screen.getByText("read")).toBeInTheDocument();
+  expect(
+    screen.queryByText("Waiting for the agent to report its next output."),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText("Working…")).not.toBeInTheDocument();
 });
 
-test('conversation keeps the active Turn work collapsed and labeled Working when a queued user message follows it', () => {
+test("conversation keeps the active Turn work collapsed and labeled Working when a queued user message follows it", () => {
   render(SessionConversation, {
     props: {
-      sessionState: 'busy',
-      activeTurnId: 'turn-live',
+      sessionState: "busy",
+      activeTurnId: "turn-live",
       messages: [
         ...messages,
         {
-          id: 'turn-live:assistant',
-          turnId: 'turn-live',
-          role: 'assistant',
-          content: 'Streaming response',
-          status: 'pending',
-          createdAt: '2026-06-11T00:00:00Z',
+          id: "turn-live:assistant",
+          turnId: "turn-live",
+          role: "assistant",
+          content: "Streaming response",
+          status: "pending",
+          createdAt: "2026-06-11T00:00:00Z",
           thoughtSteps: [
-            { id: 'thinking-live', kind: 'thinking', title: 'Thinking', status: 'started', content: 'Inspecting the active turn.', occurredAt: null },
+            {
+              id: "thinking-live",
+              kind: "thinking",
+              title: "Thinking",
+              status: "started",
+              content: "Inspecting the active turn.",
+              occurredAt: null,
+            },
           ],
         },
         {
-          id: 'queued:user',
-          turnId: 'turn-queued',
-          role: 'user',
-          content: 'Queued follow-up',
-          status: 'pending',
-          createdAt: '2026-06-11T00:01:00Z',
+          id: "queued:user",
+          turnId: "turn-queued",
+          role: "user",
+          content: "Queued follow-up",
+          status: "pending",
+          createdAt: "2026-06-11T00:01:00Z",
         },
       ],
     },
   });
 
-  const trigger = screen.getByRole('button', { name: 'Show agent work steps' });
-  expect(trigger).toHaveAttribute('aria-expanded', 'false');
-  expect(trigger).toHaveTextContent('Working');
-  expect(screen.getByText('Inspecting the active turn.')).not.toBeVisible();
+  const trigger = screen.getByRole("button", { name: "Show agent work steps" });
+  expect(trigger).toHaveAttribute("aria-expanded", "false");
+  expect(trigger).toHaveTextContent("Working");
+  expect(screen.getByText("Inspecting the active turn.")).not.toBeVisible();
 });
 
-test('conversation shows agent working only once after an interrupted pending thought summary', () => {
+test("conversation shows agent working only once after an interrupted pending thought summary", () => {
   render(SessionConversation, {
     props: {
-      sessionState: 'busy',
+      sessionState: "busy",
       messages: [
         ...messages,
         {
-          id: 'interrupted-turn:working',
-          turnId: 'interrupted-turn',
-          role: 'assistant',
-          content: '',
-          status: 'pending',
-          createdAt: '2026-06-11T00:00:00Z',
+          id: "interrupted-turn:working",
+          turnId: "interrupted-turn",
+          role: "assistant",
+          content: "",
+          status: "pending",
+          createdAt: "2026-06-11T00:00:00Z",
           thoughtSteps: [
-            { id: 'thought-old', kind: 'thinking', title: 'Thinking', status: null, content: 'Interrupted work', occurredAt: null },
+            {
+              id: "thought-old",
+              kind: "thinking",
+              title: "Thinking",
+              status: null,
+              content: "Interrupted work",
+              occurredAt: null,
+            },
           ],
         },
         {
-          id: 'message-4',
-          turnId: 'next-turn',
-          role: 'user',
-          content: 'Try a smaller change.',
-          status: 'sent',
-          createdAt: '2026-06-11T00:01:00Z',
+          id: "message-4",
+          turnId: "next-turn",
+          role: "user",
+          content: "Try a smaller change.",
+          status: "sent",
+          createdAt: "2026-06-11T00:01:00Z",
         },
       ],
     },
   });
 
-  expect(screen.getAllByText('Agent working')).toHaveLength(1);
-  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
-  expect(screen.queryByText('Thought for 1 step')).not.toBeInTheDocument();
-  expect(screen.getByText('Interrupted work')).not.toBeVisible();
+  expect(screen.getAllByText("Agent working")).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
+  expect(screen.queryByText("Thought for 1 step")).not.toBeInTheDocument();
+  expect(screen.getByText("Interrupted work")).not.toBeVisible();
 });
 
-test('conversation keeps non-trailing empty pending thought summaries idle while the session is busy', () => {
+test("conversation keeps non-trailing empty pending thought summaries idle while the session is busy", () => {
   render(SessionConversation, {
     props: {
-      sessionState: 'busy',
+      sessionState: "busy",
       messages: [
         ...messages,
         {
-          id: 'interrupted-turn:working',
-          turnId: 'interrupted-turn',
-          role: 'assistant',
-          content: '',
-          status: 'pending',
-          createdAt: '2026-06-11T00:00:00Z',
+          id: "interrupted-turn:working",
+          turnId: "interrupted-turn",
+          role: "assistant",
+          content: "",
+          status: "pending",
+          createdAt: "2026-06-11T00:00:00Z",
           thoughtSteps: [
-            { id: 'thought-old-1', kind: 'tool_call', title: 'read', status: 'started', content: 'Reading old file', occurredAt: null },
-            { id: 'thought-old-2', kind: 'tool_call', title: 'bash', status: 'started', content: 'Running old command', occurredAt: null },
+            {
+              id: "thought-old-1",
+              kind: "tool_call",
+              title: "read",
+              status: "started",
+              content: "Reading old file",
+              occurredAt: null,
+            },
+            {
+              id: "thought-old-2",
+              kind: "tool_call",
+              title: "bash",
+              status: "started",
+              content: "Running old command",
+              occurredAt: null,
+            },
           ],
         },
         {
-          id: 'message-4',
-          turnId: 'next-turn',
-          role: 'assistant',
-          content: 'Recovered with a final response.',
-          status: 'sent',
-          createdAt: '2026-06-11T00:01:00Z',
+          id: "message-4",
+          turnId: "next-turn",
+          role: "assistant",
+          content: "Recovered with a final response.",
+          status: "sent",
+          createdAt: "2026-06-11T00:01:00Z",
         },
       ],
     },
   });
 
-  expect(screen.getByText('Agent working')).toBeInTheDocument();
-  expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument();
-  expect(screen.queryByText('Thought for 2 steps')).not.toBeInTheDocument();
-  expect(screen.getByText('Reading old file')).not.toBeVisible();
-  expect(screen.getByText('Running old command')).not.toBeVisible();
+  expect(screen.getByText("Agent working")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Thinking in progress")).not.toBeInTheDocument();
+  expect(screen.queryByText("Thought for 2 steps")).not.toBeInTheDocument();
+  expect(screen.getByText("Reading old file")).not.toBeVisible();
+  expect(screen.getByText("Running old command")).not.toBeVisible();
 });
 
-test('conversation renders agent status without an assistant loading placeholder after the latest user message', async () => {
+test("conversation renders agent status without an assistant loading placeholder after the latest user message", async () => {
   render(SessionConversation, {
     props: {
-      sessionState: 'busy',
+      sessionState: "busy",
       messages: [
         ...messages,
         {
-          id: 'message-3',
-          role: 'user',
-          content: 'Keep going.',
-          status: 'sent',
+          id: "message-3",
+          role: "user",
+          content: "Keep going.",
+          status: "sent",
         },
       ],
     },
   });
 
-  expect(screen.getByLabelText('Agent status: Agent working')).toBeInTheDocument();
-  expect(document.querySelector('[data-chat-message-id="busy:assistant-loading-placeholder"]')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /interrupt agent/i })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Agent status: Agent working")).toBeInTheDocument();
+  expect(
+    document.querySelector('[data-chat-message-id="busy:assistant-loading-placeholder"]'),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
 });
 
-test('conversation renders the starting status as a bottom status after the latest assistant content', () => {
+test("conversation renders the starting status as a bottom status after the latest assistant content", () => {
   render(SessionConversation, {
     props: {
-      sessionState: 'starting',
+      sessionState: "starting",
       messages,
     },
   });
 
   const assistantMessage = document.querySelector('[data-chat-message-id="message-2"]');
-  const response = screen.getByText('I will inspect it now.');
-  const status = screen.getByLabelText('Session starting');
-  const bottomStatus = status.closest('[data-chat-session-bottom-status]');
+  const response = screen.getByText("I will inspect it now.");
+  const status = screen.getByLabelText("Session starting");
+  const bottomStatus = status.closest("[data-chat-session-bottom-status]");
 
   expect(bottomStatus).toBeInTheDocument();
   expect(assistantMessage).not.toContainElement(status);
   expect(response.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test('conversation renders assistant loading placeholder when session is starting and the latest user message has no assistant output', () => {
+test("conversation renders assistant loading placeholder when session is starting and the latest user message has no assistant output", () => {
   render(SessionConversation, {
     props: {
-      sessionState: 'starting',
+      sessionState: "starting",
       messages: [
         ...messages,
         {
-          id: 'message-3',
-          role: 'user',
-          content: 'Now inspect the tests.',
-          status: 'sent',
+          id: "message-3",
+          role: "user",
+          content: "Now inspect the tests.",
+          status: "sent",
         },
       ],
     },
   });
 
-  expect(screen.getByText('Session starting')).toBeInTheDocument();
-  expect(screen.getByLabelText('Session starting')).toHaveAttribute('data-chat-session-bottom-status');
-  expect(screen.queryByLabelText('Agent status: Session starting')).not.toBeInTheDocument();
-  expect(screen.queryByText('Waiting for the agent session to become ready.')).not.toBeInTheDocument();
-  expect(screen.queryByText('Working')).not.toBeInTheDocument();
-  expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
+  expect(screen.getByText("Session starting")).toBeInTheDocument();
+  expect(screen.getByLabelText("Session starting")).toHaveAttribute(
+    "data-chat-session-bottom-status",
+  );
+  expect(screen.queryByLabelText("Agent status: Session starting")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("Waiting for the agent session to become ready."),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText("Working")).not.toBeInTheDocument();
+  expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
 });

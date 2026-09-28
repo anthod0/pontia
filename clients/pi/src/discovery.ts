@@ -13,6 +13,7 @@ export function pontiaHomeFromEnv(env: EnvLike = process.env): string | undefine
 
 function validRoot(value: unknown): string | undefined {
   const path = optionalString(value);
-  if (!path || !isAbsolute(path) || parse(path).root === path || path.split(sep).includes("..")) return undefined;
+  if (!path || !isAbsolute(path) || parse(path).root === path || path.split(sep).includes(".."))
+    return undefined;
   return path;
 }

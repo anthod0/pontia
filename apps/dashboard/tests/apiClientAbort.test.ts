@@ -1,13 +1,26 @@
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { setSessionModel, getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates, listAgentProfiles, listSessions, listTurns, listWorkspaceRootEntries, listWorkspaceRoots, listWorkspaces, refreshWorkspaceGitStatus, terminateSession } from '../src/api/client';
-import { token } from '../src/stores/auth';
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import {
+  setSessionModel,
+  getTurnTimeline,
+  getTurnTreeHistory,
+  getTurnTreeUpdates,
+  listAgentProfiles,
+  listSessions,
+  listTurns,
+  listWorkspaceRootEntries,
+  listWorkspaceRoots,
+  listWorkspaces,
+  refreshWorkspaceGitStatus,
+  terminateSession,
+} from "../src/api/client";
+import { token } from "../src/stores/auth";
 
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
   localStorage.clear();
-  token.set('');
+  token.set("");
 });
 
 afterEach(() => {
@@ -18,28 +31,35 @@ afterEach(() => {
 function jsonResponse(data: unknown): Response {
   return new Response(JSON.stringify({ data }), {
     status: 200,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
-test('passes AbortSignal through settings-related read requests', async () => {
+test("passes AbortSignal through settings-related read requests", async () => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.endsWith('/workspaces')) return jsonResponse({ workspaces: [] });
-    if (url.endsWith('/workspace-roots')) return jsonResponse({ roots: [] });
-    if (url.includes('/workspace-roots/root-1/entries')) {
-      return jsonResponse({ root_id: 'root-1', path: '', canonical_path: '/repo', parent_path: null, entries: [], warnings: [] });
+    if (url.endsWith("/workspaces")) return jsonResponse({ workspaces: [] });
+    if (url.endsWith("/workspace-roots")) return jsonResponse({ roots: [] });
+    if (url.includes("/workspace-roots/root-1/entries")) {
+      return jsonResponse({
+        root_id: "root-1",
+        path: "",
+        canonical_path: "/repo",
+        parent_path: null,
+        entries: [],
+        warnings: [],
+      });
     }
-    if (url.endsWith('/agent-profiles')) return jsonResponse({ agent_profiles: [] });
+    if (url.endsWith("/agent-profiles")) return jsonResponse({ agent_profiles: [] });
     throw new Error(`Unexpected request: ${url}`);
   });
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal("fetch", fetchMock);
 
   const controller = new AbortController();
 
   await listWorkspaces({ signal: controller.signal });
   await listWorkspaceRoots({ signal: controller.signal });
-  await listWorkspaceRootEntries('root-1', '', { signal: controller.signal });
+  await listWorkspaceRootEntries("root-1", "", { signal: controller.signal });
   await listAgentProfiles(false, { signal: controller.signal });
 
   expect(fetchMock).toHaveBeenCalledTimes(4);
@@ -49,106 +69,123 @@ test('passes AbortSignal through settings-related read requests', async () => {
   expect(signals.every((signal) => signal?.aborted)).toBe(true);
 });
 
-test('serializes session list limit and pinned inclusion query options', async () => {
+test("serializes session list limit and pinned inclusion query options", async () => {
   const fetchMock = vi.fn(async () => jsonResponse({ sessions: [] }));
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal("fetch", fetchMock);
 
   await listSessions({ limit: 50, includePinned: true });
 
-  expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions?limit=50&include_pinned=true', expect.any(Object));
-});
-
-test('requests session exit through the lifecycle command endpoint', async () => {
-  const fetchMock = vi.fn(async () => jsonResponse({}));
-  vi.stubGlobal('fetch', fetchMock);
-
-  await terminateSession('session/1');
-
   expect(fetchMock).toHaveBeenCalledWith(
-    '/api/v1/sessions/session%2F1/exit',
-    expect.objectContaining({ method: 'POST' }),
-  );
-});
-
-test('loads projected Turn timeline ranges without exposing client-native cursors', async () => {
-  const fetchMock = vi.fn(async () => jsonResponse({
-    session_id: 'session-1',
-    direction: 'backward',
-    items: [],
-    next_turn_id: 'turn-older',
-  }));
-  vi.stubGlobal('fetch', fetchMock);
-
-  await getTurnTimeline('session-1', { direction: 'backward', turnId: 'turn-latest', limit: 3 });
-
-  expect(fetchMock).toHaveBeenCalledWith(
-    '/api/v1/sessions/session-1/turns/timeline?direction=backward&turn_id=turn-latest&limit=3',
+    "/api/v1/sessions?limit=50&include_pinned=true",
     expect.any(Object),
   );
 });
 
-test('loads topology-aware Turn history and updates with generic Turn identifiers', async () => {
-  const fetchMock = vi.fn(async () => jsonResponse({ session_id: 'session-1', groups: [] }));
-  vi.stubGlobal('fetch', fetchMock);
+test("requests session exit through the lifecycle command endpoint", async () => {
+  const fetchMock = vi.fn(async () => jsonResponse({}));
+  vi.stubGlobal("fetch", fetchMock);
 
-  await getTurnTreeHistory('session-1', { fromTurnId: 'turn-5', limit: 3 });
-  await getTurnTreeUpdates('session-1', { fromTurnId: 'turn-3' });
+  await terminateSession("session/1");
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/v1/sessions/session%2F1/exit",
+    expect.objectContaining({ method: "POST" }),
+  );
+});
+
+test("loads projected Turn timeline ranges without exposing client-native cursors", async () => {
+  const fetchMock = vi.fn(async () =>
+    jsonResponse({
+      session_id: "session-1",
+      direction: "backward",
+      items: [],
+      next_turn_id: "turn-older",
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await getTurnTimeline("session-1", { direction: "backward", turnId: "turn-latest", limit: 3 });
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/v1/sessions/session-1/turns/timeline?direction=backward&turn_id=turn-latest&limit=3",
+    expect.any(Object),
+  );
+});
+
+test("loads topology-aware Turn history and updates with generic Turn identifiers", async () => {
+  const fetchMock = vi.fn(async () => jsonResponse({ session_id: "session-1", groups: [] }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await getTurnTreeHistory("session-1", { fromTurnId: "turn-5", limit: 3 });
+  await getTurnTreeUpdates("session-1", { fromTurnId: "turn-3" });
 
   expect(fetchMock).toHaveBeenNthCalledWith(
     1,
-    '/api/v1/sessions/session-1/turns/tree/history?from_turn_id=turn-5&limit=3',
+    "/api/v1/sessions/session-1/turns/tree/history?from_turn_id=turn-5&limit=3",
     expect.any(Object),
   );
   expect(fetchMock).toHaveBeenNthCalledWith(
     2,
-    '/api/v1/sessions/session-1/turns/tree/updates?from_turn_id=turn-3',
+    "/api/v1/sessions/session-1/turns/tree/updates?from_turn_id=turn-3",
     expect.any(Object),
   );
 });
 
 test.each([
-  new TypeError('Failed to fetch'),
-  new DOMException('NetworkError when attempting to fetch resource.', 'NetworkError'),
-  new Error('net::ERR_NETWORK_CHANGED'),
-])('retries transient fetch failures before surfacing chat data errors: %s', async (networkError) => {
-  vi.useFakeTimers();
-  const fetchMock = vi.fn()
-    .mockRejectedValueOnce(networkError)
-    .mockResolvedValueOnce(jsonResponse({ turns: [] }));
-  vi.stubGlobal('fetch', fetchMock);
+  new TypeError("Failed to fetch"),
+  new DOMException("NetworkError when attempting to fetch resource.", "NetworkError"),
+  new Error("net::ERR_NETWORK_CHANGED"),
+])(
+  "retries transient fetch failures before surfacing chat data errors: %s",
+  async (networkError) => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce(jsonResponse({ turns: [] }));
+    vi.stubGlobal("fetch", fetchMock);
 
-  const request = listTurns('session-1');
+    const request = listTurns("session-1");
+    await vi.advanceTimersByTimeAsync(250);
+
+    await expect(request).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/v1/sessions/session-1/turns",
+      expect.any(Object),
+    );
+  },
+);
+
+test("retries mutating transient fetch failures with the same idempotency key", async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi
+    .fn()
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+    .mockResolvedValueOnce(
+      jsonResponse({
+        git_status: { workspace_id: "workspace-1", state: "observed", observed_at: "now" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("crypto", { randomUUID: () => "idem-1" });
+
+  const request = refreshWorkspaceGitStatus("workspace-1");
   await vi.advanceTimersByTimeAsync(250);
 
-  await expect(request).resolves.toEqual([]);
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-  expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/sessions/session-1/turns', expect.any(Object));
-});
-
-test('retries mutating transient fetch failures with the same idempotency key', async () => {
-  vi.useFakeTimers();
-  const fetchMock = vi.fn()
-    .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-    .mockResolvedValueOnce(jsonResponse({ git_status: { workspace_id: 'workspace-1', state: 'observed', observed_at: 'now' } }));
-  vi.stubGlobal('fetch', fetchMock);
-  vi.stubGlobal('crypto', { randomUUID: () => 'idem-1' });
-
-  const request = refreshWorkspaceGitStatus('workspace-1');
-  await vi.advanceTimersByTimeAsync(250);
-
-  await expect(request).resolves.toMatchObject({ workspace_id: 'workspace-1', state: 'observed' });
+  await expect(request).resolves.toMatchObject({ workspace_id: "workspace-1", state: "observed" });
   expect(fetchMock).toHaveBeenCalledTimes(2);
   const firstHeaders = (fetchMock.mock.calls[0][1] as RequestInit).headers as Headers;
   const secondHeaders = (fetchMock.mock.calls[1][1] as RequestInit).headers as Headers;
-  expect(firstHeaders.get('Idempotency-Key')).toBe('idem-1');
-  expect(secondHeaders.get('Idempotency-Key')).toBe('idem-1');
+  expect(firstHeaders.get("Idempotency-Key")).toBe("idem-1");
+  expect(secondHeaders.get("Idempotency-Key")).toBe("idem-1");
 });
 
-test('does not retry aborted requests', async () => {
+test("does not retry aborted requests", async () => {
   vi.useFakeTimers();
-  const abortError = new DOMException('The operation was aborted.', 'AbortError');
+  const abortError = new DOMException("The operation was aborted.", "AbortError");
   const fetchMock = vi.fn().mockRejectedValueOnce(abortError);
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal("fetch", fetchMock);
 
   const controller = new AbortController();
   await expect(listWorkspaces({ signal: controller.signal })).rejects.toBe(abortError);
@@ -156,25 +193,42 @@ test('does not retry aborted requests', async () => {
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
-test('clears the saved token when an API request is unauthorized', async () => {
-  token.set('stale-token');
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(
-    JSON.stringify({ data: null, error: { code: 'authentication_failed', message: 'missing or invalid bearer token' } }),
-    { status: 401 },
-  )));
+test("clears the saved token when an API request is unauthorized", async () => {
+  token.set("stale-token");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: null,
+            error: { code: "authentication_failed", message: "missing or invalid bearer token" },
+          }),
+          { status: 401 },
+        ),
+    ),
+  );
 
-  await expect(listWorkspaces()).rejects.toMatchObject({ code: 'authentication_failed', status: 401 });
+  await expect(listWorkspaces()).rejects.toMatchObject({
+    code: "authentication_failed",
+    status: 401,
+  });
 
-  expect(localStorage.getItem('pontia.externalApiToken')).toBe('');
+  expect(localStorage.getItem("pontia.externalApiToken")).toBe("");
 });
 
-
-test('does not replay an uncertain model change after a network failure', async () => {
-  const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
-  vi.stubGlobal('fetch', fetchMock);
-  await expect(setSessionModel('session-1', 'model-b', 'runtime-1')).rejects.toThrow('Failed to fetch');
+test("does not replay an uncertain model change after a network failure", async () => {
+  const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+  vi.stubGlobal("fetch", fetchMock);
+  await expect(setSessionModel("session-1", "model-b", "runtime-1")).rejects.toThrow(
+    "Failed to fetch",
+  );
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/session-1/model', expect.objectContaining({
-    method: 'PATCH', body: JSON.stringify({ model: 'model-b', runtime_instance_id: 'runtime-1' }),
-  }));
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/v1/sessions/session-1/model",
+    expect.objectContaining({
+      method: "PATCH",
+      body: JSON.stringify({ model: "model-b", runtime_instance_id: "runtime-1" }),
+    }),
+  );
 });

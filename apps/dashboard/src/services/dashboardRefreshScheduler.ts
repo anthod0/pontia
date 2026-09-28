@@ -1,4 +1,4 @@
-import type { DashboardStreamEvent } from '../api/types';
+import type { DashboardStreamEvent } from "../api/types";
 
 type RefreshOptions = {
   delayMs?: number;
@@ -41,7 +41,16 @@ function emptyPending(): PendingRefresh {
 }
 
 function hasPending(pending: PendingRefresh): boolean {
-  return pending.tasks || pending.workspaces || pending.agentProfiles || pending.sessions || pending.workflows || pending.taskIds.size > 0 || pending.sessionIds.size > 0 || pending.workflowIds.size > 0;
+  return (
+    pending.tasks ||
+    pending.workspaces ||
+    pending.agentProfiles ||
+    pending.sessions ||
+    pending.workflows ||
+    pending.taskIds.size > 0 ||
+    pending.sessionIds.size > 0 ||
+    pending.workflowIds.size > 0
+  );
 }
 
 export function createDashboardRefreshScheduler(options: RefreshOptions) {
@@ -85,10 +94,12 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
         if (taskId === options.getSelectedTaskId()) refreshes.push(options.refreshTask(taskId));
       }
       for (const sessionId of batch.sessionIds) {
-        if (sessionId === options.getSelectedSessionId()) refreshes.push(options.refreshSession(sessionId));
+        if (sessionId === options.getSelectedSessionId())
+          refreshes.push(options.refreshSession(sessionId));
       }
       for (const workflowId of batch.workflowIds) {
-        if (workflowId === options.getSelectedWorkflowId()) refreshes.push(options.refreshWorkflow(workflowId));
+        if (workflowId === options.getSelectedWorkflowId())
+          refreshes.push(options.refreshWorkflow(workflowId));
       }
       await Promise.allSettled(refreshes);
     } finally {
@@ -98,12 +109,12 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
   }
 
   function handleEvent(streamEvent: DashboardStreamEvent): void {
-    if (streamEvent.kind === 'task_event') {
+    if (streamEvent.kind === "task_event") {
       pending.tasks = true;
       const selected = options.getSelectedTaskId();
       if (selected && streamEvent.event.task_id === selected) pending.taskIds.add(selected);
-    } else if (streamEvent.kind === 'session_event') {
-      if (streamEvent.event.type === 'session.message_updated') return;
+    } else if (streamEvent.kind === "session_event") {
+      if (streamEvent.event.type === "session.message_updated") return;
       const selected = options.getSelectedSessionId();
       if (selected && streamEvent.event.session_id === selected) {
         pending.sessionIds.add(selected);
@@ -112,7 +123,10 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
       }
       pending.workflows = true;
       const selectedWorkflow = options.getSelectedWorkflowId();
-      if (selectedWorkflow && options.getSelectedWorkflowSessionIds().includes(streamEvent.event.session_id)) {
+      if (
+        selectedWorkflow &&
+        options.getSelectedWorkflowSessionIds().includes(streamEvent.event.session_id)
+      ) {
         pending.workflowIds.add(selectedWorkflow);
       }
     }

@@ -4,19 +4,58 @@ import { connectPi, RpcError, type PiConnection, type ControlInput } from "./con
 import { defaultHookLogFile, type EnvLike, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv } from "./discovery.js";
-import { buildSessionContextUsageUpdatedEvent, buildSessionExitedEvent, buildSessionMessageUpdatedEvent, buildSessionReadyEvent, buildTurnCompletedEvent, buildTurnFailedEvent, buildTurnInterruptedEvent, buildTurnOutputEvent, buildTurnStartedEvent, contextUsageFromPiHook, type InternalEvent, type PiTopologyContext, type PiTopologyEntryKind, type SessionMessageUpdatedReason } from "./events.js";
+import {
+  buildSessionContextUsageUpdatedEvent,
+  buildSessionExitedEvent,
+  buildSessionMessageUpdatedEvent,
+  buildSessionReadyEvent,
+  buildTurnCompletedEvent,
+  buildTurnFailedEvent,
+  buildTurnInterruptedEvent,
+  buildTurnOutputEvent,
+  buildTurnStartedEvent,
+  contextUsageFromPiHook,
+  type InternalEvent,
+  type PiTopologyContext,
+  type PiTopologyEntryKind,
+  type SessionMessageUpdatedReason,
+} from "./events.js";
 import { asRecord, optionalString } from "./values.js";
-import { completeToolCallFromMessageUpdate, LiveOutputPublisher, type LiveOutputPublisherLike } from "./live-output.js";
-import { hasTmuxPaneEnvironment, isPontiaManagedTmuxPane, loadPontiaManagedRuntimeIdentity, type ManagedRuntimeIdentity } from "./managed-runtime.js";
-import { agentEndWasInterrupted, assistantDeltaFromEvent, assistantTextFromMessage, errorMessageFromAgentEnd, isTranscriptBoundaryMessageUpdate, lastAssistantTextFromMessages } from "./pi-message.js";
+import {
+  completeToolCallFromMessageUpdate,
+  LiveOutputPublisher,
+  type LiveOutputPublisherLike,
+} from "./live-output.js";
+import {
+  hasTmuxPaneEnvironment,
+  isPontiaManagedTmuxPane,
+  loadPontiaManagedRuntimeIdentity,
+  type ManagedRuntimeIdentity,
+} from "./managed-runtime.js";
+import {
+  agentEndWasInterrupted,
+  assistantDeltaFromEvent,
+  assistantTextFromMessage,
+  errorMessageFromAgentEnd,
+  isTranscriptBoundaryMessageUpdate,
+  lastAssistantTextFromMessages,
+} from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
-import { bindSession, loadExistingSessionContext, piSessionDetailsFromHookContext, type PiSessionDetails } from "./runtime-binding.js";
+import {
+  bindSession,
+  loadExistingSessionContext,
+  piSessionDetailsFromHookContext,
+  type PiSessionDetails,
+} from "./runtime-binding.js";
 import type { SessionContext } from "./session.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
 interface ReporterLike {
-  report(context: { runtimeInstanceId: string }, event: InternalEvent): Promise<EventReportResult | boolean>;
+  report(
+    context: { runtimeInstanceId: string },
+    event: InternalEvent,
+  ): Promise<EventReportResult | boolean>;
 }
 
 function reportAccepted(result: EventReportResult | boolean): boolean {
@@ -72,13 +111,12 @@ const NON_MESSAGE_ENTRY_KINDS = new Set([
 function topologyEntryKind(entry: Record<string, unknown>): PiTopologyEntryKind {
   if (entry.type !== "message") {
     return typeof entry.type === "string" && NON_MESSAGE_ENTRY_KINDS.has(entry.type)
-      ? entry.type as PiTopologyEntryKind
+      ? (entry.type as PiTopologyEntryKind)
       : "other";
   }
   const message = entry.message;
-  const role = message && typeof message === "object"
-    ? (message as Record<string, unknown>).role
-    : undefined;
+  const role =
+    message && typeof message === "object" ? (message as Record<string, unknown>).role : undefined;
   if (role === "user") return "user_message";
   if (role === "assistant") return "assistant_message";
   if (role === "toolResult") return "tool_result_message";
@@ -107,7 +145,10 @@ function topologyContextFromHookContext(ctx: unknown): PiTopologyContext | undef
   }
 }
 
-export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPiExtensionDependencies = {}): void {
+export function createPontiaPiExtension(
+  pi: ExtensionAPI,
+  dependencies: PontiaPiExtensionDependencies = {},
+): void {
   const sourceEnv = dependencies.env ?? process.env;
   if (!pontiaHomeFromEnv(sourceEnv) || !hasTmuxPaneEnvironment(sourceEnv)) return;
   // Environment extensions may load PONTIA_HOME after extension registration.
@@ -121,15 +162,20 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       return controlSocket.request(method, params);
     },
   };
-  const makeReporter = dependencies.makeReporter ?? ((logFile: string) => new EventReporter({
-    logFile,
-    connection: rpcConnection,
-  }));
+  const makeReporter =
+    dependencies.makeReporter ??
+    ((logFile: string) =>
+      new EventReporter({
+        logFile,
+        connection: rpcConnection,
+      }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
   const loadManagedRuntime = dependencies.loadManagedRuntime ?? loadPontiaManagedRuntimeIdentity;
   const isManagedPane = dependencies.isManagedPane ?? isPontiaManagedTmuxPane;
-  const makeLiveOutputPublisher = dependencies.makeLiveOutputPublisher
-    ?? ((context: TurnContext & { turnId: string }) => new LiveOutputPublisher(context, { connection: rpcConnection }));
+  const makeLiveOutputPublisher =
+    dependencies.makeLiveOutputPublisher ??
+    ((context: TurnContext & { turnId: string }) =>
+      new LiveOutputPublisher(context, { connection: rpcConnection }));
 
   let activeTurn: ActiveTurnState | undefined;
   let readyReported = false;
@@ -167,10 +213,14 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   function sendControlInput(submission: ControlInput): void {
     if (!boundSessionContext) throw new Error("Pi session is not bound");
     try {
-      directInput.run({ submission, sessionContext: boundSessionContext, consumed: false },
-        () => pi.sendUserMessage(submission.input));
+      directInput.run({ submission, sessionContext: boundSessionContext, consumed: false }, () =>
+        pi.sendUserMessage(submission.input),
+      );
     } catch (error) {
-      throw new RpcError(-32007, `Pi input delivery uncertain: ${error instanceof Error ? error.message : String(error)}`);
+      throw new RpcError(
+        -32007,
+        `Pi input delivery uncertain: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -195,69 +245,102 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     if (controlSocket) return controlSocket;
     const generation = controlGeneration;
     const lifecycleContext = () => {
-      if (generation !== controlGeneration || reportingDisabled || !boundSessionContext || !piContext || !readyReported) {
+      if (
+        generation !== controlGeneration ||
+        reportingDisabled ||
+        !boundSessionContext ||
+        !piContext ||
+        !readyReported
+      ) {
         throw new Error("Pi lifecycle control session is no longer current");
       }
       return piContext;
     };
-    const socket = await (dependencies.connectPi ?? connectPi)(currentPontiaHome(), (error) => {
-      void controlError(error).catch(() => {});
-    }, (submission) => {
-      if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
-        throw new Error("Pi control session is no longer current");
-      }
-      if (queuedControlInput) throw new RpcError(-32010, "Pi already has pending input; input was not submitted");
-      if (!piContext?.isIdle()) {
-        if (!activeTurn?.ended) throw new RpcError(-32010, "Pi is busy; input was not submitted");
-        queuedControlInput = submission;
-        return;
-      }
-      sendControlInput(submission);
-    }, {
-      listModels() {
-        if (generation !== controlGeneration || reportingDisabled || !boundSessionContext || !piContext || !readyReported) {
-          throw new Error("Pi model control session is no longer current");
+    const socket = await (dependencies.connectPi ?? connectPi)(
+      currentPontiaHome(),
+      (error) => {
+        void controlError(error).catch(() => {});
+      },
+      (submission) => {
+        if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
+          throw new Error("Pi control session is no longer current");
         }
-        return piContext.modelRegistry.getAvailable().map((model) => ({
-          id: modelId(model), name: model.name, description: model.provider,
-        }));
+        if (queuedControlInput)
+          throw new RpcError(-32010, "Pi already has pending input; input was not submitted");
+        if (!piContext?.isIdle()) {
+          if (!activeTurn?.ended) throw new RpcError(-32010, "Pi is busy; input was not submitted");
+          queuedControlInput = submission;
+          return;
+        }
+        sendControlInput(submission);
       },
-      async setModel(id) {
-        this.listModels();
-        if (changingModel) throw new Error("Pi already has a model change in progress");
-        const model = piContext!.modelRegistry.getAvailable().find((model) => modelId(model) === id);
-        if (!model) throw new Error("The selected model is not available");
-        changingModel = true;
-        try {
-          if (!await pi.setModel(model)) throw new RpcError(-32006, "Pi could not authenticate the selected model");
+      {
+        listModels() {
+          if (
+            generation !== controlGeneration ||
+            reportingDisabled ||
+            !boundSessionContext ||
+            !piContext ||
+            !readyReported
+          ) {
+            throw new Error("Pi model control session is no longer current");
+          }
+          return piContext.modelRegistry.getAvailable().map((model) => ({
+            id: modelId(model),
+            name: model.name,
+            description: model.provider,
+          }));
+        },
+        async setModel(id) {
           this.listModels();
-          // Selecting the current model does not emit model_select; observe it again.
+          if (changingModel) throw new Error("Pi already has a model change in progress");
+          const model = piContext!.modelRegistry
+            .getAvailable()
+            .find((model) => modelId(model) === id);
+          if (!model) throw new Error("The selected model is not available");
+          changingModel = true;
+          try {
+            if (!(await pi.setModel(model)))
+              throw new RpcError(-32006, "Pi could not authenticate the selected model");
+            this.listModels();
+            // Selecting the current model does not emit model_select; observe it again.
+            await reportModel();
+          } catch (error) {
+            if (error instanceof RpcError) throw error;
+            throw new RpcError(
+              -32007,
+              `Pi model change outcome is unknown: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          } finally {
+            changingModel = false;
+          }
+        },
+        async onReconnect() {
+          if (generation !== controlGeneration)
+            throw new Error("Pi session changed during reconnect");
           await reportModel();
-        } catch (error) {
-          if (error instanceof RpcError) throw error;
-          throw new RpcError(-32007, `Pi model change outcome is unknown: ${error instanceof Error ? error.message : String(error)}`);
-        } finally { changingModel = false; }
+        },
       },
-      async onReconnect() {
-        if (generation !== controlGeneration) throw new Error("Pi session changed during reconnect");
-        await reportModel();
+      (inboxMessageId) => {
+        if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
+          throw new Error("Pi control session is no longer current");
+        }
+        // Command dispatch supplies the native context required by navigateTree.
+        pi.sendUserMessage(`/pontia-edit ${inboxMessageId}`, { expandPromptTemplates: true });
       },
-    }, (inboxMessageId) => {
-      if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
-        throw new Error("Pi control session is no longer current");
-      }
-      // Command dispatch supplies the native context required by navigateTree.
-      pi.sendUserMessage(`/pontia-edit ${inboxMessageId}`, { expandPromptTemplates: true });
-    }, {
-      interrupt() { lifecycleContext().abort(); },
-      shutdown() {
-        const ctx = lifecycleContext();
-        // Ordinary extension context: abort first, then exit after Pi settles.
-        // Unlike double Ctrl+C, this allows turn cleanup before session_shutdown.
-        ctx.abort();
-        ctx.shutdown();
+      {
+        interrupt() {
+          lifecycleContext().abort();
+        },
+        shutdown() {
+          const ctx = lifecycleContext();
+          // Ordinary extension context: abort first, then exit after Pi settles.
+          // Unlike double Ctrl+C, this allows turn cleanup before session_shutdown.
+          ctx.abort();
+          ctx.shutdown();
+        },
       },
-    });
+    );
     if (generation !== controlGeneration) {
       await socket.close();
       throw new Error("Pi session changed during connection initialization");
@@ -367,15 +450,20 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       try {
         ctx.ui.setEditorText("");
         const current = await currentManagedSessionContext();
-        if (current?.sessionId !== commandContext.sessionId ||
-            current?.runtimeInstanceId !== commandContext.runtimeInstanceId) {
+        if (
+          current?.sessionId !== commandContext.sessionId ||
+          current?.runtimeInstanceId !== commandContext.runtimeInstanceId
+        ) {
           throw new Error("branch replay Runtime is no longer current");
         }
-        await directInput.run({
-          submission: { input: replacementInput, inboxMessageId },
-          sessionContext: current,
-          consumed: false,
-        }, () => pi.sendUserMessage(replacementInput));
+        await directInput.run(
+          {
+            submission: { input: replacementInput, inboxMessageId },
+            sessionContext: current,
+            consumed: false,
+          },
+          () => pi.sendUserMessage(replacementInput),
+        );
       } catch (error) {
         await logDiagnostic(loaded.logFile, {
           level: "error",
@@ -389,11 +477,17 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
 
   async function scheduleMessageRefresh(reason: SessionMessageUpdatedReason): Promise<void> {
     if (!activeTurn || activeTurn.ended) return;
-    await activeTurn.reporter.report(activeTurn.context, buildSessionMessageUpdatedEvent(activeTurn.context, reason));
+    await activeTurn.reporter.report(
+      activeTurn.context,
+      buildSessionMessageUpdatedEvent(activeTurn.context, reason),
+    );
   }
 
   async function reportFinalMessageRefresh(state: ActiveTurnState): Promise<void> {
-    await state.reporter.report(state.context, buildSessionMessageUpdatedEvent(state.context, "final"));
+    await state.reporter.report(
+      state.context,
+      buildSessionMessageUpdatedEvent(state.context, "final"),
+    );
   }
 
   async function reportContextUsageFromHookEvent(event: unknown, ctx?: unknown): Promise<void> {
@@ -403,16 +497,22 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const usageJson = JSON.stringify(observation);
     if (usageJson === lastContextUsageJson) return;
     lastContextUsageJson = usageJson;
-    await activeTurn.reporter.report(activeTurn.context, buildSessionContextUsageUpdatedEvent(activeTurn.context, observation.context_usage));
+    await activeTurn.reporter.report(
+      activeTurn.context,
+      buildSessionContextUsageUpdatedEvent(activeTurn.context, observation.context_usage),
+    );
   }
 
   pi.on("before_agent_start", async (event) => {
     const eventRecord = event as unknown as Record<string, unknown>;
     pendingPrompt = optionalString(eventRecord.prompt);
-    if (reportingDisabled || !await confirmManagedPane()) {
-      return { systemPrompt: typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "" };
+    if (reportingDisabled || !(await confirmManagedPane())) {
+      return {
+        systemPrompt: typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "",
+      };
     }
-    const currentSystemPrompt = typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
+    const currentSystemPrompt =
+      typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
     try {
       const profilePrompt = await loadProfileSystemPrompt(
         rpcConnection,
@@ -440,7 +540,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     if (reportingDisabled) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
     if (readyReported && reason !== "fork" && reason !== "resume" && reason !== "new") return;
-    if (reason !== "startup" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
+    if (reason !== "startup" && reason !== "new" && reason !== "resume" && reason !== "fork")
+      return;
     await closeControlSocket();
     const parentSessionId = boundSessionContext?.sessionId;
     boundSessionContext = undefined;
@@ -457,14 +558,18 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       let context: SessionContext | undefined;
       const env = currentEnv();
 
-      const workspaceActive = await isActiveRegisteredWorkspace(await registrationConnection(), sessionDetails.clientCwd);
+      const workspaceActive = await isActiveRegisteredWorkspace(
+        await registrationConnection(),
+        sessionDetails.clientCwd,
+      );
       if (!workspaceActive) {
         await closeControlSocket();
         reportingDisabled = true;
         await logDiagnostic(logFile, {
           level: "info",
           code: "workspace_not_active",
-          message: "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
+          message:
+            "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
           details: { client_cwd: sessionDetails.clientCwd },
         });
         return;
@@ -480,13 +585,19 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           });
           return;
         }
-        context = await bindSession(await registrationConnection(), env, sessionDetails, { startKind: "fork", parentSessionId });
+        context = await bindSession(await registrationConnection(), env, sessionDetails, {
+          startKind: "fork",
+          parentSessionId,
+        });
         readyReported = false;
       } else {
-        const existingSession = await loadExistingSessionContext(await registrationConnection(), sessionDetails);
+        const existingSession = await loadExistingSessionContext(
+          await registrationConnection(),
+          sessionDetails,
+        );
         if (
-          existingSession
-          && ["idle", "busy", "interrupted"].includes(existingSession.sessionState)
+          existingSession &&
+          ["idle", "busy", "interrupted"].includes(existingSession.sessionState)
         ) {
           await closeControlSocket();
           reportingDisabled = true;
@@ -495,7 +606,8 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           await logDiagnostic(logFile, {
             level: "info",
             code: "duplicate_active_client_session",
-            message: "native pi session is already bound to an active pontia session; duplicate TUI reporting disabled",
+            message:
+              "native pi session is already bound to an active pontia session; duplicate TUI reporting disabled",
             details: {
               client_session_key: sessionDetails.clientSessionKey,
               session_id: existingSession.sessionId,
@@ -504,7 +616,7 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
           });
           return;
         }
-        if (!existingSession && !await confirmManagedPane()) {
+        if (!existingSession && !(await confirmManagedPane())) {
           await closeControlSocket();
           boundSessionContext = undefined;
           readyReported = false;
@@ -512,11 +624,14 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
         }
 
         context = await bindSession(await registrationConnection(), env, sessionDetails, {
-          runtimeInstanceId: existingSession?.sessionState === "starting" ? existingSession.runtimeInstanceId : undefined,
+          runtimeInstanceId:
+            existingSession?.sessionState === "starting"
+              ? existingSession.runtimeInstanceId
+              : undefined,
         });
         if (reason === "resume" || reason === "new") readyReported = false;
       }
-      if (!context || !await confirmManagedPane(true)) {
+      if (!context || !(await confirmManagedPane(true))) {
         await closeControlSocket();
         return;
       }
@@ -524,7 +639,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       boundSessionContext = context;
       piContext = ctx;
       controlSocket!.registered(context);
-      readyReported = reportAccepted(await makeReporter(logFile).report(context, buildSessionReadyEvent(context)));
+      readyReported = reportAccepted(
+        await makeReporter(logFile).report(context, buildSessionReadyEvent(context)),
+      );
       await reportModel().catch(controlError);
     } catch (error) {
       await closeControlSocket();
@@ -542,12 +659,15 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     piContext = undefined;
     readyReported = false;
     try {
-      if (reportingDisabled || !await confirmManagedPane()) return;
+      if (reportingDisabled || !(await confirmManagedPane())) return;
       const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
       if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
       const logFile = currentHookLogFile();
       if (!boundSessionContext) return;
-      await makeReporter(logFile).report(boundSessionContext, buildSessionExitedEvent(boundSessionContext, reason));
+      await makeReporter(logFile).report(
+        boundSessionContext,
+        buildSessionExitedEvent(boundSessionContext, reason),
+      );
     } catch (error) {
       const logFile = currentHookLogFile();
       await logDiagnostic(logFile, {
@@ -567,37 +687,54 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     if (reportingDisabled) return;
     try {
       const dispatch = directInput.getStore();
-      const submission = dispatch && !dispatch.consumed && dispatch.sessionContext === boundSessionContext
-        ? dispatch.submission : undefined;
+      const submission =
+        dispatch && !dispatch.consumed && dispatch.sessionContext === boundSessionContext
+          ? dispatch.submission
+          : undefined;
       if (dispatch) dispatch.consumed = true;
       const logFile = currentHookLogFile();
       if (!boundSessionContext) {
         const hookSessionDetails = piSessionDetailsFromHookContext(ctx);
-        const sessionDetails = hookSessionDetails.clientSessionKey ? hookSessionDetails : deferredManualSessionDetails;
+        const sessionDetails = hookSessionDetails.clientSessionKey
+          ? hookSessionDetails
+          : deferredManualSessionDetails;
         if (!sessionDetails) {
           activeTurn = undefined;
           pendingPrompt = undefined;
           return;
         }
-        const workspaceActive = await isActiveRegisteredWorkspace(await registrationConnection(), sessionDetails.clientCwd);
+        const workspaceActive = await isActiveRegisteredWorkspace(
+          await registrationConnection(),
+          sessionDetails.clientCwd,
+        );
         if (!workspaceActive) {
           await closeControlSocket();
           reportingDisabled = true;
           await logDiagnostic(logFile, {
             level: "info",
             code: "workspace_not_active",
-            message: "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
+            message:
+              "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
             details: { client_cwd: sessionDetails.clientCwd },
           });
           activeTurn = undefined;
           pendingPrompt = undefined;
           return;
         }
-        boundSessionContext = await bindSession(await registrationConnection(), currentEnv(), sessionDetails);
+        boundSessionContext = await bindSession(
+          await registrationConnection(),
+          currentEnv(),
+          sessionDetails,
+        );
         if (boundSessionContext && !readyReported) {
           piContext = ctx;
           controlSocket!.registered(boundSessionContext);
-          readyReported = reportAccepted(await makeReporter(logFile).report(boundSessionContext, buildSessionReadyEvent(boundSessionContext)));
+          readyReported = reportAccepted(
+            await makeReporter(logFile).report(
+              boundSessionContext,
+              buildSessionReadyEvent(boundSessionContext),
+            ),
+          );
           await reportModel().catch(controlError);
         }
       }
@@ -614,13 +751,16 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
       };
 
       pendingPrompt = undefined;
-      if (!await confirmManagedPane(true)) {
+      if (!(await confirmManagedPane(true))) {
         activeTurn = undefined;
         return;
       }
       const reporter = makeReporter(logFile);
       lastContextUsageJson = undefined;
-      const started = await reporter.report(turnContext, buildTurnStartedEvent(turnContext, previousLeafId, topologyContext));
+      const started = await reporter.report(
+        turnContext,
+        buildTurnStartedEvent(turnContext, previousLeafId, topologyContext),
+      );
       const canonicalTurnId = typeof started === "boolean" ? turnContext.turnId : started.turnId;
       if (!reportAccepted(started) || !canonicalTurnId) {
         activeTurn = undefined;
@@ -663,7 +803,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     const toolCall = completeToolCallFromMessageUpdate(event);
     if (toolCall) activeTurn.liveOutput.appendToolCall(toolCall);
 
-    const fullText = assistantTextFromMessage((event as unknown as Record<string, unknown> | undefined)?.message);
+    const fullText = assistantTextFromMessage(
+      (event as unknown as Record<string, unknown> | undefined)?.message,
+    );
     if (fullText) {
       activeTurn.output = fullText;
     } else if (delta) {
@@ -684,7 +826,9 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
   pi.on("message_end", async (event, ctx) => {
     if (!activeTurn || activeTurn.ended) return;
     await reportContextUsageFromHookEvent(event, ctx);
-    const fullText = assistantTextFromMessage((event as unknown as Record<string, unknown> | undefined)?.message);
+    const fullText = assistantTextFromMessage(
+      (event as unknown as Record<string, unknown> | undefined)?.message,
+    );
     if (fullText) activeTurn.output = fullText;
     await scheduleMessageRefresh("append");
   });
@@ -705,30 +849,44 @@ export function createPontiaPiExtension(pi: ExtensionAPI, dependencies: PontiaPi
     try {
       const terminalLeafId = leafIdFromHookContext(ctx);
       if (agentEndWasInterrupted(event, ctx?.signal)) {
-        await state.reporter.report(state.context, buildTurnInterruptedEvent(state.context, terminalLeafId));
+        await state.reporter.report(
+          state.context,
+          buildTurnInterruptedEvent(state.context, terminalLeafId),
+        );
         await reportFinalMessageRefresh(state);
         return;
       }
 
       const failureMessage = errorMessageFromAgentEnd(event);
       if (failureMessage) {
-        await state.reporter.report(state.context, buildTurnFailedEvent(state.context, failureMessage, terminalLeafId));
+        await state.reporter.report(
+          state.context,
+          buildTurnFailedEvent(state.context, failureMessage, terminalLeafId),
+        );
         await reportFinalMessageRefresh(state);
         return;
       }
 
       if (!state.output) {
-        const finalText = lastAssistantTextFromMessages((event as unknown as Record<string, unknown> | undefined)?.messages);
+        const finalText = lastAssistantTextFromMessages(
+          (event as unknown as Record<string, unknown> | undefined)?.messages,
+        );
         if (finalText) state.output = finalText;
       }
 
       const output = state.output.trim();
       if (output.length > 0) {
-        const outputResult = await state.reporter.report(state.context, buildTurnOutputEvent(state.context, output));
+        const outputResult = await state.reporter.report(
+          state.context,
+          buildTurnOutputEvent(state.context, output),
+        );
         if (!reportAccepted(outputResult)) return;
       }
 
-      await state.reporter.report(state.context, buildTurnCompletedEvent(state.context, terminalLeafId));
+      await state.reporter.report(
+        state.context,
+        buildTurnCompletedEvent(state.context, terminalLeafId),
+      );
       await reportFinalMessageRefresh(state);
     } finally {
       await state.liveOutput.close();

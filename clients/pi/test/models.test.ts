@@ -21,46 +21,93 @@ async function fixture(failInitialModelReport = false) {
   let current = available[0];
   const context = {
     mode: "tui",
-    get model() { return current; },
+    get model() {
+      return current;
+    },
     modelRegistry: { getAvailable: () => available },
-    sessionManager: { getSessionId: () => "native", getSessionFile: () => join(root, "pi.jsonl"), getCwd: () => workspace },
+    sessionManager: {
+      getSessionId: () => "native",
+      getSessionFile: () => join(root, "pi.jsonl"),
+      getCwd: () => workspace,
+    },
   };
   const setModel = vi.fn(async (model: typeof current) => {
     const previousModel = current;
     current = model;
-    if (previousModel !== model) await handlers.model_select({ model, previousModel, source: "set" }, context);
+    if (previousModel !== model)
+      await handlers.model_select({ model, previousModel, source: "set" }, context);
     return true;
   });
-  createPontiaPiExtension({ on(name: string, handler: any) { handlers[name] = handler; }, registerCommand() {}, setModel } as any, {
-    env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
-    isManagedPane: async () => true,
-    logDiagnostic: vi.fn(async () => {}),
-    connectPi: async (_home, _error, _submit, models) => {
-      controls.push(models!);
-      return { close, registered() {}, async request(method, params) {
-        if (method === "event.report") {
-          const event = (params as any).event;
-          if (failModelReports && event.type === "session.model_updated") throw new Error("Model report acknowledgement lost");
-          events.push(event);
-          return { accepted: true };
-        }
-        if (method === "workspaces.list") return { workspaces: [{ canonical_path: workspace, state: "active" }] };
-        if (method === "session.context") return { session_context: null };
-        return { session: { session_id: "sess_models" }, runtime: { runtime_instance_id: "rt_models" } };
-      } };
+  createPontiaPiExtension(
+    {
+      on(name: string, handler: any) {
+        handlers[name] = handler;
+      },
+      registerCommand() {},
+      setModel,
+    } as any,
+    {
+      env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
+      isManagedPane: async () => true,
+      logDiagnostic: vi.fn(async () => {}),
+      connectPi: async (_home, _error, _submit, models) => {
+        controls.push(models!);
+        return {
+          close,
+          registered() {},
+          async request(method, params) {
+            if (method === "event.report") {
+              const event = (params as any).event;
+              if (failModelReports && event.type === "session.model_updated")
+                throw new Error("Model report acknowledgement lost");
+              events.push(event);
+              return { accepted: true };
+            }
+            if (method === "workspaces.list")
+              return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+            if (method === "session.context") return { session_context: null };
+            return {
+              session: { session_id: "sess_models" },
+              runtime: { runtime_instance_id: "rt_models" },
+            };
+          },
+        };
+      },
     },
-  });
+  );
   await handlers.session_start({ reason: "startup" }, context);
-  return { handlers, events, controls, available, context, setModel, close, failReports(value: boolean) { failModelReports = value; }, get current() { return current; },
-    async nativeSelect(model: typeof current) { current = model; await handlers.model_select({ model, source: "cycle" }, context); },
+  return {
+    handlers,
+    events,
+    controls,
+    available,
+    context,
+    setModel,
+    close,
+    failReports(value: boolean) {
+      failModelReports = value;
+    },
+    get current() {
+      return current;
+    },
+    async nativeSelect(model: typeof current) {
+      current = model;
+      await handlers.model_select({ model, source: "cycle" }, context);
+    },
   };
 }
 
 test("Pi model catalog distinguishes providers and reports startup, native, external and reconnect observations", async () => {
   const f = await fixture();
   const control = f.controls[0];
-  expect(control.listModels().map((model) => model.id)).toEqual(["one/shared/name", "two/shared/name"]);
-  expect(f.events.at(-1)).toMatchObject({ type: "session.model_updated", data: { model: "one/shared/name", runtime_instance_id: "rt_models" } });
+  expect(control.listModels().map((model) => model.id)).toEqual([
+    "one/shared/name",
+    "two/shared/name",
+  ]);
+  expect(f.events.at(-1)).toMatchObject({
+    type: "session.model_updated",
+    data: { model: "one/shared/name", runtime_instance_id: "rt_models" },
+  });
   await control.setModel("two/shared/name");
   expect(f.current).toBe(f.available[1]);
   expect(f.events.at(-1)?.data.model).toBe("two/shared/name");
@@ -97,14 +144,18 @@ test("unavailable models, auth failure and old control callbacks cannot change t
 test("concurrent model changes are rejected while the native API is pending", async () => {
   const f = await fixture();
   let release!: (accepted: boolean) => void;
-  f.setModel.mockImplementationOnce(() => new Promise<boolean>((resolve) => { release = resolve; }));
+  f.setModel.mockImplementationOnce(
+    () =>
+      new Promise<boolean>((resolve) => {
+        release = resolve;
+      }),
+  );
   const first = f.controls[0].setModel("two/shared/name");
   await expect(f.controls[0].setModel("one/shared/name")).rejects.toThrow();
   release(false);
   await expect(first).rejects.toThrow();
   expect(f.setModel).toHaveBeenCalledOnce();
 });
-
 
 test("failed startup model reporting preserves the registered connection for resynchronization", async () => {
   const f = await fixture(true);

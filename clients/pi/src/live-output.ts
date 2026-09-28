@@ -17,11 +17,25 @@ export type ManagedToolUse = {
 
 export type LiveOutputItem =
   | { kind: "assistant_text"; item_id: string; text: string }
-  | { kind: "tool_call"; item_id: string; call_id: string; tool_name: string; arguments: unknown; managed_tool_use?: ManagedToolUse };
+  | {
+      kind: "tool_call";
+      item_id: string;
+      call_id: string;
+      tool_name: string;
+      arguments: unknown;
+      managed_tool_use?: ManagedToolUse;
+    };
 
 export type LiveOutputUpdate =
   | { type: "assistant_text_delta"; item_id: string; delta: string }
-  | { type: "tool_call"; item_id: string; call_id: string; tool_name: string; arguments: unknown; managed_tool_use?: ManagedToolUse };
+  | {
+      type: "tool_call";
+      item_id: string;
+      call_id: string;
+      tool_name: string;
+      arguments: unknown;
+      managed_tool_use?: ManagedToolUse;
+    };
 
 export interface CompleteToolCall {
   callId: string;
@@ -91,7 +105,8 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
       this.closing ||
       this.disabled ||
       this.items.some((item) => item.kind === "tool_call" && item.call_id === toolCall.callId)
-    ) return;
+    )
+      return;
     const managedToolUse = managedToolUseFor(toolCall);
     const item: LiveOutputItem = {
       kind: "tool_call",
@@ -203,11 +218,12 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
 
   private async publishAppend(targetSequence: number): Promise<LiveOutputResponse | undefined> {
     const updates = this.pending.filter((entry) => entry.sequence <= targetSequence);
-    if (updates.length === 0) return {
-      accepted: true,
-      accepted_sequence: targetSequence,
-      resync_required: false,
-    };
+    if (updates.length === 0)
+      return {
+        accepted: true,
+        accepted_sequence: targetSequence,
+        resync_required: false,
+      };
     return this.publish({
       ...this.baseRequest(),
       type: "append",

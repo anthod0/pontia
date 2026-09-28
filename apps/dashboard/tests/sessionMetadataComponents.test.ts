@@ -1,30 +1,30 @@
-import { fireEvent, render, screen, within } from '@testing-library/svelte';
-import { describe, expect, test, vi } from 'vitest';
-import SessionComposerDock from '../src/components/chat/SessionComposerDock.svelte';
-import SessionMetadata from '../src/components/chat/SessionMetadata.svelte';
+import { fireEvent, render, screen, within } from "@testing-library/svelte";
+import { describe, expect, test, vi } from "vitest";
+import SessionComposerDock from "../src/components/chat/SessionComposerDock.svelte";
+import SessionMetadata from "../src/components/chat/SessionMetadata.svelte";
 import {
   sessionMetadataItems,
   sessionMetadataSummary,
-} from '../src/components/chat/sessionMetadata';
-import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../src/api/types';
+} from "../src/components/chat/sessionMetadata";
+import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from "../src/api/types";
 
 function session(overrides: Partial<SessionView> = {}): SessionView {
   return {
-    session_id: 'session-1',
-    client_type: 'pi',
+    session_id: "session-1",
+    client_type: "pi",
     title: null,
-    handle: 'main',
-    role: 'coder',
+    handle: "main",
+    role: "coder",
     description: null,
-    execution_profile_id: 'coder',
-    execution_profile_version: '1',
-    state: 'idle',
+    execution_profile_id: "coder",
+    execution_profile_version: "1",
+    state: "idle",
     current_turn_id: null,
-    workspace_id: 'workspace-1',
-    workspace: '/home/cheny/projects/pontia',
+    workspace_id: "workspace-1",
+    workspace: "/home/cheny/projects/pontia",
     pinned_at: null,
     archived_at: null,
-    capabilities: { accept_task: true, context_usage: 'exact' },
+    capabilities: { accept_task: true, context_usage: "exact" },
     model: null,
     context_usage: {
       used_tokens: 42000,
@@ -34,12 +34,12 @@ function session(overrides: Partial<SessionView> = {}): SessionView {
       input_tokens: null,
       output_tokens: null,
       cache_tokens: null,
-      confidence: 'exact',
-      observed_at: '2026-06-11T00:00:00Z',
+      confidence: "exact",
+      observed_at: "2026-06-11T00:00:00Z",
     },
     lineage: null,
-    created_at: '2026-06-11T00:00:00Z',
-    updated_at: '2026-06-11T00:00:00Z',
+    created_at: "2026-06-11T00:00:00Z",
+    updated_at: "2026-06-11T00:00:00Z",
     metadata: {},
     ...overrides,
   };
@@ -47,25 +47,25 @@ function session(overrides: Partial<SessionView> = {}): SessionView {
 
 function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
   return {
-    workspace_id: 'workspace-1',
-    canonical_path: '/home/cheny/projects/pontia',
-    display_path: '~/projects/pontia',
-    name: 'pontia',
-    state: 'active',
+    workspace_id: "workspace-1",
+    canonical_path: "/home/cheny/projects/pontia",
+    display_path: "~/projects/pontia",
+    name: "pontia",
+    state: "active",
     metadata: {},
-    created_at: '2026-06-11T00:00:00Z',
-    updated_at: '2026-06-11T00:00:00Z',
-    last_used_at: '2026-06-11T00:00:00Z',
+    created_at: "2026-06-11T00:00:00Z",
+    updated_at: "2026-06-11T00:00:00Z",
+    last_used_at: "2026-06-11T00:00:00Z",
     ...overrides,
   };
 }
 
 function gitStatus(overrides: Partial<WorkspaceGitStatusView> = {}): WorkspaceGitStatusView {
   return {
-    workspace_id: 'workspace-1',
-    repo_root: '/home/cheny/projects/pontia',
-    branch: 'main',
-    upstream: 'origin/main',
+    workspace_id: "workspace-1",
+    repo_root: "/home/cheny/projects/pontia",
+    branch: "main",
+    upstream: "origin/main",
     ahead: 0,
     behind: 0,
     staged_count: 0,
@@ -73,10 +73,10 @@ function gitStatus(overrides: Partial<WorkspaceGitStatusView> = {}): WorkspaceGi
     untracked_count: 0,
     conflicted_count: 0,
     clean: true,
-    state: 'observed',
+    state: "observed",
     failure: null,
-    observed_at: '2026-06-11T00:00:00Z',
-    updated_at: '2026-06-11T00:00:00Z',
+    observed_at: "2026-06-11T00:00:00Z",
+    updated_at: "2026-06-11T00:00:00Z",
     ...overrides,
   };
 }
@@ -96,16 +96,14 @@ function metadataProps() {
   };
 }
 
-describe('session metadata component boundaries', () => {
-
-
-  test('composer dock shows metadata without session action buttons', () => {
+describe("session metadata component boundaries", () => {
+  test("composer dock shows metadata without session action buttons", () => {
     render(SessionComposerDock, {
       props: {
         ...metadataProps(),
         queuedMessages: [],
         inboxBusyMessageId: null,
-        input: '',
+        input: "",
         onCancelInboxMessage: vi.fn(),
         onRetryInboxMessage: vi.fn(),
         onDismissInboxMessage: vi.fn(),
@@ -115,25 +113,35 @@ describe('session metadata component boundaries', () => {
       },
     });
 
-    expect(screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /exit session/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /new chat/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /advanced session controls/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /exit session/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /new chat/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /advanced session controls/i }),
+    ).not.toBeInTheDocument();
   });
 
-  test('session metadata details render as an accessible popover dialog', async () => {
+  test("session metadata details render as an accessible popover dialog", async () => {
     render(SessionMetadata, { props: metadataProps() });
 
-    await fireEvent.click(screen.getByRole('button', { name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/ }));
+    await fireEvent.click(
+      screen.getByRole("button", {
+        name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/,
+      }),
+    );
 
-    const dialog = await screen.findByRole('dialog', { name: 'Session details' });
-    expect(within(dialog).getByLabelText('Workspace: /home/cheny/projects/pontia')).toHaveTextContent('pontia');
-    expect(within(dialog).getByLabelText('Git: Git status: main, dirty')).toHaveTextContent('main');
-    expect(within(dialog).getByLabelText(/Usage: Context usage: 33%/)).toHaveTextContent('33%');
-    expect(within(dialog).getByLabelText('Client: pi')).toHaveTextContent('pi');
-    expect(within(dialog).getByLabelText('Profile: coder@1')).toHaveTextContent('coder@1');
-    expect(within(dialog).getByLabelText('Handle: main')).toHaveTextContent('main');
+    const dialog = await screen.findByRole("dialog", { name: "Session details" });
+    expect(
+      within(dialog).getByLabelText("Workspace: /home/cheny/projects/pontia"),
+    ).toHaveTextContent("pontia");
+    expect(within(dialog).getByLabelText("Git: Git status: main, dirty")).toHaveTextContent("main");
+    expect(within(dialog).getByLabelText(/Usage: Context usage: 33%/)).toHaveTextContent("33%");
+    expect(within(dialog).getByLabelText("Client: pi")).toHaveTextContent("pi");
+    expect(within(dialog).getByLabelText("Profile: coder@1")).toHaveTextContent("coder@1");
+    expect(within(dialog).getByLabelText("Handle: main")).toHaveTextContent("main");
   });
-
-
 });

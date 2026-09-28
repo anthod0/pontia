@@ -1,9 +1,9 @@
-import { get } from 'svelte/store';
-import type { LiveOutputEvent } from '../lib/session-chat/liveOutput';
-import { token } from '../stores/auth';
-import { isAuthenticationFailure } from '../api/client';
+import { get } from "svelte/store";
+import type { LiveOutputEvent } from "../lib/session-chat/liveOutput";
+import { token } from "../stores/auth";
+import { isAuthenticationFailure } from "../api/client";
 
-const API_BASE = '/api/v1';
+const API_BASE = "/api/v1";
 const RECONNECT_DELAY_MS = 1_000;
 
 export interface LiveOutputStreamHandlers {
@@ -34,7 +34,7 @@ export function openLiveOutputStream(
       if (stopped || controller.signal.aborted) return;
       if (!response.ok || !response.body) {
         if (isAuthenticationFailure(response.status)) {
-          token.set('');
+          token.set("");
           return;
         }
         throw new Error(`Live output stream failed: ${response.status} ${response.statusText}`);
@@ -72,7 +72,7 @@ async function readSse(
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
 
   while (true) {
     const { done, value } = await reader.read();
@@ -81,7 +81,7 @@ async function readSse(
     let boundary = buffer.search(/\r?\n\r?\n/);
     while (boundary !== -1) {
       const frame = buffer.slice(0, boundary);
-      buffer = buffer.slice(buffer[boundary] === '\r' ? boundary + 4 : boundary + 2);
+      buffer = buffer.slice(buffer[boundary] === "\r" ? boundary + 4 : boundary + 2);
       parseFrame(frame, onEvent);
       boundary = buffer.search(/\r?\n\r?\n/);
     }
@@ -91,13 +91,14 @@ async function readSse(
 function parseFrame(frame: string, onEvent: (event: LiveOutputEvent) => void): void {
   const data = frame
     .split(/\r?\n/)
-    .filter((line) => line.startsWith('data:'))
+    .filter((line) => line.startsWith("data:"))
     .map((line) => line.slice(5).trimStart())
-    .join('\n');
+    .join("\n");
   if (!data) return;
   try {
     const event = JSON.parse(data) as LiveOutputEvent;
-    if (event.type === 'snapshot' || event.type === 'updates' || event.type === 'closed') onEvent(event);
+    if (event.type === "snapshot" || event.type === "updates" || event.type === "closed")
+      onEvent(event);
   } catch {
     // A reconnecting snapshot will recover from malformed or truncated frames.
   }

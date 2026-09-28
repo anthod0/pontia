@@ -26,7 +26,8 @@ export function assistantDeltaFromEvent(event: unknown): string | undefined {
   const streamEvent = record.assistantMessageEvent;
   if (streamEvent && typeof streamEvent === "object") {
     const streamRecord = streamEvent as Record<string, unknown>;
-    if (typeof streamRecord.type === "string" && streamRecord.type !== "text_delta") return undefined;
+    if (typeof streamRecord.type === "string" && streamRecord.type !== "text_delta")
+      return undefined;
     for (const key of ["text_delta", "textDelta", "delta", "text"] as const) {
       const value = streamRecord[key];
       if (typeof value === "string" && value.length > 0) return value;
@@ -56,10 +57,16 @@ interface PiAgentEndEventLike {
   messages: unknown[];
 }
 
-function lastAssistantMessageFromAgentEnd(event: PiAgentEndEventLike): Record<string, unknown> | undefined {
+function lastAssistantMessageFromAgentEnd(
+  event: PiAgentEndEventLike,
+): Record<string, unknown> | undefined {
   for (let index = event.messages.length - 1; index >= 0; index -= 1) {
     const message = event.messages[index];
-    if (message && typeof message === "object" && (message as Record<string, unknown>).role === "assistant") {
+    if (
+      message &&
+      typeof message === "object" &&
+      (message as Record<string, unknown>).role === "assistant"
+    ) {
       return message as Record<string, unknown>;
     }
   }
@@ -67,7 +74,9 @@ function lastAssistantMessageFromAgentEnd(event: PiAgentEndEventLike): Record<st
 }
 
 export function agentEndWasInterrupted(event: PiAgentEndEventLike, signal?: AbortSignal): boolean {
-  return signal?.aborted === true || lastAssistantMessageFromAgentEnd(event)?.stopReason === "aborted";
+  return (
+    signal?.aborted === true || lastAssistantMessageFromAgentEnd(event)?.stopReason === "aborted"
+  );
 }
 
 export function errorMessageFromAgentEnd(event: PiAgentEndEventLike): string | undefined {

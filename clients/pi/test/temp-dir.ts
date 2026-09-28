@@ -8,9 +8,11 @@ interface TempDir {
   remove(): Promise<void>;
 }
 
-const mkdtempDisposable = (fs as typeof fs & {
-  mkdtempDisposable(prefix: string): Promise<TempDir>;
-}).mkdtempDisposable;
+const mkdtempDisposable = (
+  fs as typeof fs & {
+    mkdtempDisposable(prefix: string): Promise<TempDir>;
+  }
+).mkdtempDisposable;
 
 export async function tempDir(prefix: string): Promise<string> {
   const dir = await mkdtempDisposable(join(tmpdir(), prefix));

@@ -18,7 +18,9 @@ function fakePi() {
 describe("pontia pi extension startup boundary", () => {
   test("does not register Pontia behavior with an invalid PONTIA_HOME", async () => {
     const { pi, handlers } = fakePi();
-    const connect = vi.fn(async () => { throw new Error("unexpected connection"); });
+    const connect = vi.fn(async () => {
+      throw new Error("unexpected connection");
+    });
     const makeReporter = vi.fn(() => ({ report: vi.fn(async () => true) }));
 
     createPontiaPiExtension(pi as any, {

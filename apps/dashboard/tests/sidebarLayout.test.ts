@@ -1,11 +1,11 @@
-import { fireEvent, render, screen, within } from '@testing-library/svelte';
-import { tick } from 'svelte';
-import { beforeEach, expect, test, vi } from 'vitest';
-import AppSidebarHost from './components/layout/AppSidebarHost.svelte';
-import AppShellHost from './components/layout/AppShellHost.svelte';
-import TopBarHost from './components/layout/TopBarHost.svelte';
-import SettingsShellHost from './components/settings/SettingsShellHost.svelte';
-import SettingsCommonPage from '../src/pages/SettingsCommonPage.svelte';
+import { fireEvent, render, screen, within } from "@testing-library/svelte";
+import { tick } from "svelte";
+import { beforeEach, expect, test, vi } from "vitest";
+import AppSidebarHost from "./components/layout/AppSidebarHost.svelte";
+import AppShellHost from "./components/layout/AppShellHost.svelte";
+import TopBarHost from "./components/layout/TopBarHost.svelte";
+import SettingsShellHost from "./components/settings/SettingsShellHost.svelte";
+import SettingsCommonPage from "../src/pages/SettingsCommonPage.svelte";
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -46,12 +46,12 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('$lib/navigation', () => ({ navigate: mocks.navigate }));
-vi.mock('../src/services/eventStream', () => ({
+vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
+vi.mock("../src/services/eventStream", () => ({
   startEventStream: mocks.startEventStream,
   stopEventStream: mocks.stopEventStream,
 }));
-vi.mock('../src/stores/sessions', () => ({
+vi.mock("../src/stores/sessions", () => ({
   sessions: mocks.sessions,
   sessionsLoading: mocks.sessionsLoading,
   sessionsError: mocks.sessionsError,
@@ -64,7 +64,7 @@ vi.mock('../src/stores/sessions', () => ({
   archiveSession: mocks.archiveSession,
   terminateSession: mocks.terminateSession,
 }));
-vi.mock('../src/stores/workspaces', () => ({
+vi.mock("../src/stores/workspaces", () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
   workspacesError: mocks.workspacesError,
@@ -72,7 +72,7 @@ vi.mock('../src/stores/workspaces', () => ({
 }));
 
 beforeEach(() => {
-  window.history.pushState({}, '', '/dashboard');
+  window.history.pushState({}, "", "/dashboard");
   mocks.sessions.set([]);
   mocks.sessionsLoading.set(false);
   mocks.sessionsError.set(null);
@@ -81,7 +81,7 @@ beforeEach(() => {
   mocks.workspacesError.set(null);
   mocks.workspacesInitialized.set(true);
   vi.clearAllMocks();
-  Object.defineProperty(window, 'matchMedia', {
+  Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
       matches: false,
@@ -96,10 +96,15 @@ beforeEach(() => {
   });
 });
 
-function chatSession(session_id: string, state: string, updated_at: string, pinned_at: string | null = null) {
+function chatSession(
+  session_id: string,
+  state: string,
+  updated_at: string,
+  pinned_at: string | null = null,
+) {
   return {
     session_id,
-    client_type: 'pi',
+    client_type: "pi",
     handle: session_id,
     role: null,
     description: null,
@@ -107,113 +112,117 @@ function chatSession(session_id: string, state: string, updated_at: string, pinn
     execution_profile_version: null,
     state,
     current_turn_id: null,
-    workspace_id: 'workspace-1',
+    workspace_id: "workspace-1",
     workspace: null,
     capabilities: {},
-    created_at: '2026-05-14T00:00:00Z',
+    created_at: "2026-05-14T00:00:00Z",
     updated_at,
     pinned_at,
     metadata: {},
   };
 }
 
-test('opens the archived sessions page from the sidebar', async () => {
+test("opens the archived sessions page from the sidebar", async () => {
   render(AppSidebarHost);
-  await fireEvent.click(screen.getByRole('button', { name: 'Archived sessions' }));
-  expect(mocks.navigate).toHaveBeenCalledWith('/sessions/archived');
+  await fireEvent.click(screen.getByRole("button", { name: "Archived sessions" }));
+  expect(mocks.navigate).toHaveBeenCalledWith("/sessions/archived");
 });
 
-test('sidebar shows semantic status dots except for terminal sessions, and opens chat for the selected session', async () => {
+test("sidebar shows semantic status dots except for terminal sessions, and opens chat for the selected session", async () => {
   mocks.sessions.set([
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-1',
+      workspace_id: "workspace-1",
       workspace: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
     {
-      session_id: 'session-closed',
-      client_type: 'pi',
-      handle: 'closed',
+      session_id: "session-closed",
+      client_type: "pi",
+      handle: "closed",
       role: null,
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'exited',
+      state: "exited",
       current_turn_id: null,
-      workspace_id: 'workspace-2',
+      workspace_id: "workspace-2",
       workspace: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T02:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T02:00:00Z",
       metadata: {},
     },
     {
-      session_id: 'session-error',
-      client_type: 'pi',
-      handle: 'failed',
+      session_id: "session-error",
+      client_type: "pi",
+      handle: "failed",
       role: null,
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'error',
+      state: "error",
       current_turn_id: null,
-      workspace_id: 'workspace-3',
+      workspace_id: "workspace-3",
       workspace: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T03:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T03:00:00Z",
       metadata: {},
     },
   ]);
 
   render(AppSidebarHost);
 
-  expect(screen.getByText('Recent Sessions')).toBeInTheDocument();
-  const activeSessionButton = screen.getByText('main · coder').closest('button');
-  const closedSessionButton = screen.getByText('closed').closest('button');
+  expect(screen.getByText("Recent Sessions")).toBeInTheDocument();
+  const activeSessionButton = screen.getByText("main · coder").closest("button");
+  const closedSessionButton = screen.getByText("closed").closest("button");
   expect(activeSessionButton).not.toBeNull();
   expect(closedSessionButton).not.toBeNull();
-  expect(screen.getByLabelText('idle session')).toBeInTheDocument();
-  expect(screen.queryByLabelText('exited session')).not.toBeInTheDocument();
-  expect(screen.queryByLabelText('error session')).not.toBeInTheDocument();
-  expect(screen.queryByText('idle')).not.toBeInTheDocument();
-  expect(screen.queryByText('exited')).not.toBeInTheDocument();
+  expect(screen.getByLabelText("idle session")).toBeInTheDocument();
+  expect(screen.queryByLabelText("exited session")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("error session")).not.toBeInTheDocument();
+  expect(screen.queryByText("idle")).not.toBeInTheDocument();
+  expect(screen.queryByText("exited")).not.toBeInTheDocument();
 
-  await fireEvent.click(screen.getByText('main · coder'));
+  await fireEvent.click(screen.getByText("main · coder"));
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/chat/session-active');
+  expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-active");
 });
 
-test('sidebar keeps its empty recent-workspaces state stable during a background workspace refresh', async () => {
+test("sidebar keeps its empty recent-workspaces state stable during a background workspace refresh", async () => {
   render(AppSidebarHost);
 
-  expect(screen.getByText('No recent workspaces')).toBeInTheDocument();
+  expect(screen.getByText("No recent workspaces")).toBeInTheDocument();
 
   mocks.workspacesLoading.set(true);
   await tick();
 
-  expect(screen.getByText('No recent workspaces')).toBeInTheDocument();
+  expect(screen.getByText("No recent workspaces")).toBeInTheDocument();
   expect(document.querySelector('[data-slot="sidebar-menu-skeleton"]')).not.toBeInTheDocument();
 });
 
-test('sidebar scrolls recent workspace and session groups together below fixed primary navigation', () => {
+test("sidebar scrolls recent workspace and session groups together below fixed primary navigation", () => {
   render(AppSidebarHost);
 
-  const newChatGroup = screen.getByText('New Chat').closest('[data-slot="sidebar-group"]');
-  const recentWorkspacesGroup = screen.getByText('Recent Workspaces').closest('[data-slot="sidebar-group"]');
-  const recentSessionsGroup = screen.getByText('Recent Sessions').closest('[data-slot="sidebar-group"]');
+  const newChatGroup = screen.getByText("New Chat").closest('[data-slot="sidebar-group"]');
+  const recentWorkspacesGroup = screen
+    .getByText("Recent Workspaces")
+    .closest('[data-slot="sidebar-group"]');
+  const recentSessionsGroup = screen
+    .getByText("Recent Sessions")
+    .closest('[data-slot="sidebar-group"]');
   expect(newChatGroup).not.toBeNull();
   expect(recentWorkspacesGroup).not.toBeNull();
   expect(recentSessionsGroup).not.toBeNull();
@@ -222,698 +231,720 @@ test('sidebar scrolls recent workspace and session groups together below fixed p
   expect(sharedScrollArea).toContainElement(recentWorkspacesGroup as HTMLElement);
   expect(sharedScrollArea).toContainElement(recentSessionsGroup as HTMLElement);
   expect(sharedScrollArea).not.toContainElement(newChatGroup as HTMLElement);
-
 });
 
-test('sidebar groups recent sessions under non-empty recent workspaces without changing Recent Sessions', async () => {
+test("sidebar groups recent sessions under non-empty recent workspaces without changing Recent Sessions", async () => {
   mocks.workspaces.set([
     {
-      workspace_id: 'workspace-active',
-      canonical_path: '/home/cheny/projects/pontia',
-      display_path: '~/projects/pontia',
-      name: 'Pontia',
-      state: 'active',
+      workspace_id: "workspace-active",
+      canonical_path: "/home/cheny/projects/pontia",
+      display_path: "~/projects/pontia",
+      name: "Pontia",
+      state: "active",
       metadata: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
-      last_used_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
+      last_used_at: "2026-05-14T01:00:00Z",
     },
     {
-      workspace_id: 'workspace-empty',
-      canonical_path: '/home/cheny/projects/empty',
-      display_path: '~/projects/empty',
-      name: 'Empty workspace',
-      state: 'active',
+      workspace_id: "workspace-empty",
+      canonical_path: "/home/cheny/projects/empty",
+      display_path: "~/projects/empty",
+      name: "Empty workspace",
+      state: "active",
       metadata: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       last_used_at: null,
     },
     {
-      workspace_id: 'workspace-archived',
-      canonical_path: '/tmp/old',
-      display_path: '/tmp/old',
-      name: 'Old workspace',
-      state: 'archived',
+      workspace_id: "workspace-archived",
+      canonical_path: "/tmp/old",
+      display_path: "/tmp/old",
+      name: "Old workspace",
+      state: "archived",
       metadata: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       last_used_at: null,
     },
   ]);
   mocks.sessions.set([
     {
-      session_id: 'session-newer-unpinned',
-      client_type: 'pi',
-      title: 'Newer unpinned',
-      handle: 'newer',
-      role: 'coder',
+      session_id: "session-newer-unpinned",
+      client_type: "pi",
+      title: "Newer unpinned",
+      handle: "newer",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-active',
+      workspace_id: "workspace-active",
       pinned_at: null,
       workspace: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T03:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T03:00:00Z",
       metadata: {},
     },
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-active',
-      pinned_at: '2026-05-14T01:30:00Z',
+      workspace_id: "workspace-active",
+      pinned_at: "2026-05-14T01:30:00Z",
       workspace: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
   ]);
 
   render(AppSidebarHost);
 
-  expect(screen.getByText('Recent Workspaces')).toBeInTheDocument();
-  const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
-  expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByText('Empty workspace')).not.toBeInTheDocument();
-  expect(screen.queryByText('Old workspace')).not.toBeInTheDocument();
-  expect(screen.getByText('Recent Sessions')).toBeInTheDocument();
-  expect(screen.getByText('main · coder')).toBeInTheDocument();
-  expect(screen.getByText('Newer unpinned')).toBeInTheDocument();
+  expect(screen.getByText("Recent Workspaces")).toBeInTheDocument();
+  const workspaceButton = screen.getByRole("button", { name: /^pontia$/i });
+  expect(workspaceButton).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByText("Empty workspace")).not.toBeInTheDocument();
+  expect(screen.queryByText("Old workspace")).not.toBeInTheDocument();
+  expect(screen.getByText("Recent Sessions")).toBeInTheDocument();
+  expect(screen.getByText("main · coder")).toBeInTheDocument();
+  expect(screen.getByText("Newer unpinned")).toBeInTheDocument();
 
   await fireEvent.click(workspaceButton);
 
   const workspaceGroup = workspaceButton.closest('[data-slot="sidebar-workspace-group"]');
-  expect(workspaceButton).toHaveAttribute('aria-expanded', 'true');
+  expect(workspaceButton).toHaveAttribute("aria-expanded", "true");
   const workspaceQueries = within(workspaceGroup as HTMLElement);
-  const groupedSessionButton = workspaceQueries.getAllByRole('button', { name: /main · coder/i })
-    .find((button) => button.getAttribute('data-sidebar') === 'menu-button');
+  const groupedSessionButton = workspaceQueries
+    .getAllByRole("button", { name: /main · coder/i })
+    .find((button) => button.getAttribute("data-sidebar") === "menu-button");
   expect(groupedSessionButton).toBeInTheDocument();
-  expect(workspaceQueries.getByLabelText('Pinned session')).toBeInTheDocument();
-  expect(workspaceQueries.getAllByLabelText('idle session')).toHaveLength(2);
-  expect(workspaceQueries.getByRole('button', { name: /open session actions for main · coder/i })).toBeInTheDocument();
+  expect(workspaceQueries.getByLabelText("Pinned session")).toBeInTheDocument();
+  expect(workspaceQueries.getAllByLabelText("idle session")).toHaveLength(2);
+  expect(
+    workspaceQueries.getByRole("button", { name: /open session actions for main · coder/i }),
+  ).toBeInTheDocument();
   const workspaceSessionTitles = workspaceQueries
-    .getAllByRole('button')
-    .filter((button) => button.getAttribute('data-sidebar') === 'menu-button')
+    .getAllByRole("button")
+    .filter((button) => button.getAttribute("data-sidebar") === "menu-button")
     .map((button) => button.textContent?.trim());
-  expect(workspaceSessionTitles).toEqual(['main · coder', 'Newer unpinned']);
+  expect(workspaceSessionTitles).toEqual(["main · coder", "Newer unpinned"]);
 });
 
-test('sidebar recent workspace hover action opens the workspace page without toggling expansion', async () => {
+test("sidebar recent workspace hover action opens the workspace page without toggling expansion", async () => {
   mocks.workspaces.set([
     {
-      workspace_id: 'workspace-active',
-      canonical_path: '/home/cheny/projects/pontia',
-      display_path: '~/projects/pontia',
-      name: 'Pontia',
-      state: 'active',
+      workspace_id: "workspace-active",
+      canonical_path: "/home/cheny/projects/pontia",
+      display_path: "~/projects/pontia",
+      name: "Pontia",
+      state: "active",
       metadata: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
-      last_used_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
+      last_used_at: "2026-05-14T01:00:00Z",
     },
   ]);
   mocks.sessions.set([
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      title: 'Shared session',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      title: "Shared session",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-active',
+      workspace_id: "workspace-active",
       workspace: null,
       pinned_at: null,
       archived_at: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
   ]);
 
   render(AppSidebarHost);
 
-  const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
-  const openWorkspaceButton = screen.getByRole('button', { name: /open pontia workspace page/i });
+  const workspaceButton = screen.getByRole("button", { name: /^pontia$/i });
+  const openWorkspaceButton = screen.getByRole("button", { name: /open pontia workspace page/i });
 
   await fireEvent.click(openWorkspaceButton);
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/workspace/workspace-active');
-  expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
+  expect(mocks.navigate).toHaveBeenCalledWith("/workspace/workspace-active");
+  expect(workspaceButton).toHaveAttribute("aria-expanded", "false");
 });
 
-test('sidebar recent workspace hover action starts a new chat for that workspace without toggling expansion', async () => {
+test("sidebar recent workspace hover action starts a new chat for that workspace without toggling expansion", async () => {
   mocks.workspaces.set([
     {
-      workspace_id: 'workspace-active',
-      canonical_path: '/home/cheny/projects/pontia',
-      display_path: '~/projects/pontia',
-      name: 'Pontia',
-      state: 'active',
+      workspace_id: "workspace-active",
+      canonical_path: "/home/cheny/projects/pontia",
+      display_path: "~/projects/pontia",
+      name: "Pontia",
+      state: "active",
       metadata: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
-      last_used_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
+      last_used_at: "2026-05-14T01:00:00Z",
     },
   ]);
   mocks.sessions.set([
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      title: 'Shared session',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      title: "Shared session",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-active',
+      workspace_id: "workspace-active",
       workspace: null,
       pinned_at: null,
       archived_at: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
   ]);
 
   render(AppSidebarHost);
 
-  const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
-  const newChatButton = screen.getByRole('button', { name: /new chat in pontia/i });
+  const workspaceButton = screen.getByRole("button", { name: /^pontia$/i });
+  const newChatButton = screen.getByRole("button", { name: /new chat in pontia/i });
 
   await fireEvent.click(newChatButton);
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/', { workspace: 'workspace-active' });
-  expect(workspaceButton).toHaveAttribute('aria-expanded', 'false');
+  expect(mocks.navigate).toHaveBeenCalledWith("/", { workspace: "workspace-active" });
+  expect(workspaceButton).toHaveAttribute("aria-expanded", "false");
 });
 
-
-test('sidebar workspace session actions open only for the clicked workspace item', async () => {
+test("sidebar workspace session actions open only for the clicked workspace item", async () => {
   mocks.workspaces.set([
     {
-      workspace_id: 'workspace-active',
-      canonical_path: '/home/cheny/projects/pontia',
-      display_path: '~/projects/pontia',
-      name: 'Pontia',
-      state: 'active',
+      workspace_id: "workspace-active",
+      canonical_path: "/home/cheny/projects/pontia",
+      display_path: "~/projects/pontia",
+      name: "Pontia",
+      state: "active",
       metadata: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
-      last_used_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
+      last_used_at: "2026-05-14T01:00:00Z",
     },
   ]);
   mocks.sessions.set([
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      title: 'Shared session',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      title: "Shared session",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-active',
+      workspace_id: "workspace-active",
       workspace: null,
       pinned_at: null,
       archived_at: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
   ]);
   render(AppSidebarHost);
 
-  const workspaceButton = screen.getByRole('button', { name: /^pontia$/i });
+  const workspaceButton = screen.getByRole("button", { name: /^pontia$/i });
   await fireEvent.click(workspaceButton);
   const workspaceGroup = workspaceButton.closest('[data-slot="sidebar-workspace-group"]');
-  const workspaceAction = within(workspaceGroup as HTMLElement).getByRole('button', { name: /open session actions for shared session/i });
+  const workspaceAction = within(workspaceGroup as HTMLElement).getByRole("button", {
+    name: /open session actions for shared session/i,
+  });
 
   await fireEvent.click(workspaceAction);
 
-  const actionButtons = screen.getAllByRole('button', { name: /open session actions for shared session/i });
-  expect(actionButtons.filter((button) => button.getAttribute('data-state') === 'open')).toEqual([workspaceAction]);
-  expect(screen.getByRole('menuitem', { name: /rename/i })).toBeInTheDocument();
+  const actionButtons = screen.getAllByRole("button", {
+    name: /open session actions for shared session/i,
+  });
+  expect(actionButtons.filter((button) => button.getAttribute("data-state") === "open")).toEqual([
+    workspaceAction,
+  ]);
+  expect(screen.getByRole("menuitem", { name: /rename/i })).toBeInTheDocument();
 });
 
-test('sidebar renames a recent session from the hover edit action without opening it', async () => {
+test("sidebar renames a recent session from the hover edit action without opening it", async () => {
   mocks.sessions.set([
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      title: 'Original title',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      title: "Original title",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-1',
+      workspace_id: "workspace-1",
       workspace: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
   ]);
   render(AppSidebarHost);
 
-  await fireEvent.click(screen.getByRole('button', { name: /open session actions for original title/i }));
-  await fireEvent.click(screen.getByRole('menuitem', { name: /rename/i }));
+  await fireEvent.click(
+    screen.getByRole("button", { name: /open session actions for original title/i }),
+  );
+  await fireEvent.click(screen.getByRole("menuitem", { name: /rename/i }));
 
-  const dialog = screen.getByRole('dialog', { name: 'Rename session' });
-  const titleInput = within(dialog).getByLabelText('Session title');
-  await fireEvent.input(titleInput, { target: { value: 'Renamed session' } });
-  await fireEvent.click(within(dialog).getByRole('button', { name: 'Rename session' }));
+  const dialog = screen.getByRole("dialog", { name: "Rename session" });
+  const titleInput = within(dialog).getByLabelText("Session title");
+  await fireEvent.input(titleInput, { target: { value: "Renamed session" } });
+  await fireEvent.click(within(dialog).getByRole("button", { name: "Rename session" }));
 
-  expect(mocks.updateSessionTitle).toHaveBeenCalledWith('session-active', 'Renamed session');
+  expect(mocks.updateSessionTitle).toHaveBeenCalledWith("session-active", "Renamed session");
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
-test('sidebar session actions menu pins unpinned sessions without opening them', async () => {
+test("sidebar session actions menu pins unpinned sessions without opening them", async () => {
   mocks.sessions.set([
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      title: 'Original title',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      title: "Original title",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-1',
+      workspace_id: "workspace-1",
       workspace: null,
       pinned_at: null,
       archived_at: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
   ]);
   render(AppSidebarHost);
 
-  await fireEvent.click(screen.getByRole('button', { name: /open session actions for original title/i }));
-  await fireEvent.click(screen.getByRole('menuitem', { name: /pin/i }));
-  expect(mocks.pinSession).toHaveBeenCalledWith('session-active');
+  await fireEvent.click(
+    screen.getByRole("button", { name: /open session actions for original title/i }),
+  );
+  await fireEvent.click(screen.getByRole("menuitem", { name: /pin/i }));
+  expect(mocks.pinSession).toHaveBeenCalledWith("session-active");
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
-test('sidebar session actions menu exits sessions without opening them', async () => {
+test("sidebar session actions menu exits sessions without opening them", async () => {
   mocks.sessions.set([
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      title: 'Original title',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      title: "Original title",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-1',
+      workspace_id: "workspace-1",
       workspace: null,
       pinned_at: null,
       archived_at: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
   ]);
   render(AppSidebarHost);
 
-  await fireEvent.click(screen.getByRole('button', { name: /open session actions for original title/i }));
-  const menu = screen.getByRole('menu');
-  const menuItems = within(menu).getAllByRole('menuitem').map((item) => item.textContent?.trim());
+  await fireEvent.click(
+    screen.getByRole("button", { name: /open session actions for original title/i }),
+  );
+  const menu = screen.getByRole("menu");
+  const menuItems = within(menu)
+    .getAllByRole("menuitem")
+    .map((item) => item.textContent?.trim());
   const separator = menu.querySelector('[data-slot="dropdown-menu-separator"]');
 
-  expect(menuItems).toEqual(['Rename', 'Pin', 'Archive', 'Exit']);
+  expect(menuItems).toEqual(["Rename", "Pin", "Archive", "Exit"]);
   expect(separator).not.toBeNull();
-  expect(separator?.compareDocumentPosition(within(menu).getByRole('menuitem', { name: /^exit$/i }))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(
+    separator?.compareDocumentPosition(within(menu).getByRole("menuitem", { name: /^exit$/i })),
+  ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
-  await fireEvent.click(within(menu).getByRole('menuitem', { name: /^exit$/i }));
-  expect(mocks.terminateSession).toHaveBeenCalledWith('session-active');
+  await fireEvent.click(within(menu).getByRole("menuitem", { name: /^exit$/i }));
+  expect(mocks.terminateSession).toHaveBeenCalledWith("session-active");
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
-test('sidebar session actions menu archives sessions without opening them', async () => {
+test("sidebar session actions menu archives sessions without opening them", async () => {
   mocks.sessions.set([
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      title: 'Original title',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      title: "Original title",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-1',
+      workspace_id: "workspace-1",
       workspace: null,
       pinned_at: null,
       archived_at: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
   ]);
   render(AppSidebarHost);
 
-  await fireEvent.click(screen.getByRole('button', { name: /open session actions for original title/i }));
-  await fireEvent.click(screen.getByRole('menuitem', { name: /archive/i }));
-  expect(mocks.archiveSession).toHaveBeenCalledWith('session-active');
+  await fireEvent.click(
+    screen.getByRole("button", { name: /open session actions for original title/i }),
+  );
+  await fireEvent.click(screen.getByRole("menuitem", { name: /archive/i }));
+  expect(mocks.archiveSession).toHaveBeenCalledWith("session-active");
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
-test('sidebar session actions menu unpins pinned sessions', async () => {
+test("sidebar session actions menu unpins pinned sessions", async () => {
   mocks.sessions.set([
     {
-      session_id: 'session-pinned',
-      client_type: 'pi',
-      title: 'Pinned title',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-pinned",
+      client_type: "pi",
+      title: "Pinned title",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-1',
+      workspace_id: "workspace-1",
       workspace: null,
-      pinned_at: '2026-05-14T01:00:00Z',
+      pinned_at: "2026-05-14T01:00:00Z",
       archived_at: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
   ]);
   render(AppSidebarHost);
 
-  await fireEvent.click(screen.getByRole('button', { name: /open session actions for pinned title/i }));
-  await fireEvent.click(screen.getByRole('menuitem', { name: /unpin/i }));
-  expect(mocks.unpinSession).toHaveBeenCalledWith('session-pinned');
+  await fireEvent.click(
+    screen.getByRole("button", { name: /open session actions for pinned title/i }),
+  );
+  await fireEvent.click(screen.getByRole("menuitem", { name: /unpin/i }));
+  expect(mocks.unpinSession).toHaveBeenCalledWith("session-pinned");
   expect(mocks.navigate).not.toHaveBeenCalled();
 });
 
-test('sidebar only marks new chat active on the default route', () => {
-  window.history.pushState({}, '', '/dashboard');
+test("sidebar only marks new chat active on the default route", () => {
+  window.history.pushState({}, "", "/dashboard");
 
   render(AppSidebarHost);
 
-  const chat = screen.getByText('New Chat').closest('button');
+  const chat = screen.getByText("New Chat").closest("button");
 
   expect(chat).not.toBeNull();
 
-  expect(chat).toHaveAttribute('data-active', 'true');
+  expect(chat).toHaveAttribute("data-active", "true");
 });
 
-test('sidebar New Chat notifies mounted route components about the route change', async () => {
-  window.history.pushState({}, '', '/dashboard/chat/session-active');
+test("sidebar New Chat notifies mounted route components about the route change", async () => {
+  window.history.pushState({}, "", "/dashboard/chat/session-active");
   const popstateListener = vi.fn();
-  window.addEventListener('popstate', popstateListener);
+  window.addEventListener("popstate", popstateListener);
 
   render(AppSidebarHost);
-  await fireEvent.click(screen.getByText('New Chat'));
+  await fireEvent.click(screen.getByText("New Chat"));
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/');
+  expect(mocks.navigate).toHaveBeenCalledWith("/");
   expect(popstateListener).toHaveBeenCalledTimes(1);
-  window.removeEventListener('popstate', popstateListener);
+  window.removeEventListener("popstate", popstateListener);
 });
 
-test('sidebar highlights the matching recent session on chat routes', () => {
+test("sidebar highlights the matching recent session on chat routes", () => {
   mocks.sessions.set([
     {
-      session_id: 'session-active',
-      client_type: 'pi',
-      handle: 'main',
-      role: 'coder',
+      session_id: "session-active",
+      client_type: "pi",
+      handle: "main",
+      role: "coder",
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-1',
+      workspace_id: "workspace-1",
       workspace: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T01:00:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
       metadata: {},
     },
     {
-      session_id: 'session-other',
-      client_type: 'pi',
-      handle: 'other',
+      session_id: "session-other",
+      client_type: "pi",
+      handle: "other",
       role: null,
       description: null,
       execution_profile_id: null,
       execution_profile_version: null,
-      state: 'idle',
+      state: "idle",
       current_turn_id: null,
-      workspace_id: 'workspace-2',
+      workspace_id: "workspace-2",
       workspace: null,
       capabilities: {},
-      created_at: '2026-05-14T00:00:00Z',
-      updated_at: '2026-05-14T00:30:00Z',
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T00:30:00Z",
       metadata: {},
     },
   ]);
 
-  window.history.pushState({}, '', '/dashboard/chat/session-active');
+  window.history.pushState({}, "", "/dashboard/chat/session-active");
   render(AppSidebarHost);
 
-  expect(screen.getByText('main · coder').closest('button')).toHaveAttribute('data-active', 'true');
-  expect(screen.getByText('other').closest('button')).not.toHaveAttribute('data-active');
+  expect(screen.getByText("main · coder").closest("button")).toHaveAttribute("data-active", "true");
+  expect(screen.getByText("other").closest("button")).not.toHaveAttribute("data-active");
 });
 
-test('top bar exposes the sidebar trigger', () => {
+test("top bar exposes the sidebar trigger", () => {
   render(TopBarHost);
 
-  const topBar = screen.getByRole('banner');
-  const sidebarTrigger = within(topBar).getByRole('button', { name: /toggle sidebar/i });
-  expect(sidebarTrigger).toHaveAttribute('data-sidebar', 'trigger');
+  const topBar = screen.getByRole("banner");
+  const sidebarTrigger = within(topBar).getByRole("button", { name: /toggle sidebar/i });
+  expect(sidebarTrigger).toHaveAttribute("data-sidebar", "trigger");
 });
 
-test('sidebar settings button navigates directly to common settings without document reload', async () => {
+test("sidebar settings button navigates directly to common settings without document reload", async () => {
   render(AppSidebarHost);
 
-  await fireEvent.click(screen.getByRole('button', { name: /settings/i }));
-  expect(mocks.navigate).toHaveBeenCalledWith('/settings/common');
+  await fireEvent.click(screen.getByRole("button", { name: /settings/i }));
+  expect(mocks.navigate).toHaveBeenCalledWith("/settings/common");
 });
 
-test('settings common page contains controls without owning the section switcher', () => {
-  window.history.pushState({}, '', '/dashboard/settings/common');
+test("settings common page contains controls without owning the section switcher", () => {
+  window.history.pushState({}, "", "/dashboard/settings/common");
 
   render(SettingsCommonPage);
 
-  expect(screen.getByRole('heading', { name: /common settings/i })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /common settings/i })).toBeInTheDocument();
   expect(screen.getByLabelText(/bearer token/i)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /save token/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /save token/i })).toBeInTheDocument();
   expect(screen.getByText(/live stream/i)).toBeInTheDocument();
-  expect(screen.queryByRole('navigation', { name: /settings sections/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: /settings sections/i })).not.toBeInTheDocument();
 });
 
-test('chat shortcuts switch among active sessions on chat routes', async () => {
-  window.history.pushState({}, '', '/dashboard/chat/session-older');
+test("chat shortcuts switch among active sessions on chat routes", async () => {
+  window.history.pushState({}, "", "/dashboard/chat/session-older");
   mocks.sessions.set([
-    chatSession('session-busy', 'busy', '2026-05-14T04:00:00Z'),
-    chatSession('session-error', 'error', '2026-05-14T03:00:00Z'),
-    chatSession('session-older', 'idle', '2026-05-14T02:00:00Z'),
-    chatSession('session-exited', 'exited', '2026-05-14T01:00:00Z'),
+    chatSession("session-busy", "busy", "2026-05-14T04:00:00Z"),
+    chatSession("session-error", "error", "2026-05-14T03:00:00Z"),
+    chatSession("session-older", "idle", "2026-05-14T02:00:00Z"),
+    chatSession("session-exited", "exited", "2026-05-14T01:00:00Z"),
   ]);
 
   render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: 'j', altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat/session-busy');
+  await fireEvent.keyDown(window, { key: "j", altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-busy");
 
-  window.history.pushState({}, '', '/dashboard/chat/session-busy');
-  await fireEvent.keyDown(window, { key: 'k', altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat/session-older');
+  window.history.pushState({}, "", "/dashboard/chat/session-busy");
+  await fireEvent.keyDown(window, { key: "k", altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-older");
 });
 
-test('sidebar shows new chat kbd hint without showing numeric hints beside sessions', () => {
+test("sidebar shows new chat kbd hint without showing numeric hints beside sessions", () => {
   mocks.sessions.set([
-    chatSession('session-recent', 'idle', '2026-05-14T04:00:00Z'),
-    chatSession('session-pinned', 'idle', '2026-05-14T01:00:00Z', '2026-05-14T05:00:00Z'),
+    chatSession("session-recent", "idle", "2026-05-14T04:00:00Z"),
+    chatSession("session-pinned", "idle", "2026-05-14T01:00:00Z", "2026-05-14T05:00:00Z"),
   ]);
 
   render(AppSidebarHost);
 
-  const newChat = screen.getByText('New Chat').closest('button');
+  const newChat = screen.getByText("New Chat").closest("button");
   expect(newChat).not.toBeNull();
-  expect(within(newChat as HTMLElement).getByText('Alt')).toBeInTheDocument();
-  expect(within(newChat as HTMLElement).getByText('N')).toBeInTheDocument();
+  expect(within(newChat as HTMLElement).getByText("Alt")).toBeInTheDocument();
+  expect(within(newChat as HTMLElement).getByText("N")).toBeInTheDocument();
 
-  const pinnedSession = screen.getByText('session-pinned').closest('button');
+  const pinnedSession = screen.getByText("session-pinned").closest("button");
   expect(pinnedSession).not.toBeNull();
-  expect(within(pinnedSession as HTMLElement).queryByText('1')).not.toBeInTheDocument();
-  const recentSession = screen.getByText('session-recent').closest('button');
+  expect(within(pinnedSession as HTMLElement).queryByText("1")).not.toBeInTheDocument();
+  const recentSession = screen.getByText("session-recent").closest("button");
   expect(recentSession).not.toBeNull();
-  expect(within(recentSession as HTMLElement).queryByText('2')).not.toBeInTheDocument();
+  expect(within(recentSession as HTMLElement).queryByText("2")).not.toBeInTheDocument();
 });
 
-test('chat help shortcut opens a kbd shortcut reference dialog', async () => {
+test("chat help shortcut opens a kbd shortcut reference dialog", async () => {
   render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: '?', altKey: true, shiftKey: true });
+  await fireEvent.keyDown(window, { key: "?", altKey: true, shiftKey: true });
 
-  const dialog = screen.getByRole('dialog', { name: /keyboard shortcuts/i });
+  const dialog = screen.getByRole("dialog", { name: /keyboard shortcuts/i });
   expect(within(dialog).getByText(/next active chat/i)).toBeInTheDocument();
   expect(within(dialog).getByText(/focus chat input/i)).toBeInTheDocument();
-  expect(within(dialog).getAllByText('Alt').length).toBeGreaterThan(0);
-  expect(within(dialog).getByText('?')).toBeInTheDocument();
+  expect(within(dialog).getAllByText("Alt").length).toBeGreaterThan(0);
+  expect(within(dialog).getByText("?")).toBeInTheDocument();
 });
 
-test('chat header help button opens the shortcuts dialog and is hidden on mobile', async () => {
+test("chat header help button opens the shortcuts dialog and is hidden on mobile", async () => {
   render(AppShellHost);
 
-  const helpButton = screen.getByRole('button', { name: /keyboard shortcuts/i });
+  const helpButton = screen.getByRole("button", { name: /keyboard shortcuts/i });
 
   await fireEvent.click(helpButton);
 
-  expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: /keyboard shortcuts/i })).toBeInTheDocument();
 });
 
-test('chat numeric shortcuts open active sessions by sidebar order and skip inactive sessions', async () => {
+test("chat numeric shortcuts open active sessions by sidebar order and skip inactive sessions", async () => {
   mocks.sessions.set([
-    chatSession('session-recent', 'idle', '2026-05-14T04:00:00Z'),
-    chatSession('session-pinned', 'idle', '2026-05-14T01:00:00Z', '2026-05-14T05:00:00Z'),
-    chatSession('session-error', 'error', '2026-05-14T06:00:00Z'),
+    chatSession("session-recent", "idle", "2026-05-14T04:00:00Z"),
+    chatSession("session-pinned", "idle", "2026-05-14T01:00:00Z", "2026-05-14T05:00:00Z"),
+    chatSession("session-error", "error", "2026-05-14T06:00:00Z"),
   ]);
 
   render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: '1', altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat/session-pinned');
+  await fireEvent.keyDown(window, { key: "1", altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-pinned");
 
-  await fireEvent.keyDown(window, { key: '2', altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith('/chat/session-recent');
+  await fireEvent.keyDown(window, { key: "2", altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-recent");
 
-  await fireEvent.keyDown(window, { key: '3', altKey: true });
-  expect(mocks.navigate).not.toHaveBeenLastCalledWith('/chat/session-error');
+  await fireEvent.keyDown(window, { key: "3", altKey: true });
+  expect(mocks.navigate).not.toHaveBeenLastCalledWith("/chat/session-error");
 });
 
-test('chat shortcuts are scoped to chat routes and do not interrupt typing', async () => {
-  mocks.sessions.set([chatSession('session-recent', 'idle', '2026-05-14T04:00:00Z')]);
+test("chat shortcuts are scoped to chat routes and do not interrupt typing", async () => {
+  mocks.sessions.set([chatSession("session-recent", "idle", "2026-05-14T04:00:00Z")]);
 
   render(AppShellHost);
 
-  window.history.pushState({}, '', '/dashboard/settings/common');
-  await fireEvent.keyDown(window, { key: '1', altKey: true });
+  window.history.pushState({}, "", "/dashboard/settings/common");
+  await fireEvent.keyDown(window, { key: "1", altKey: true });
   expect(mocks.navigate).not.toHaveBeenCalled();
 
-  window.history.pushState({}, '', '/dashboard');
-  const input = document.createElement('textarea');
+  window.history.pushState({}, "", "/dashboard");
+  const input = document.createElement("textarea");
   document.body.appendChild(input);
   input.focus();
-  await fireEvent.keyDown(window, { key: '1', altKey: true });
+  await fireEvent.keyDown(window, { key: "1", altKey: true });
   expect(mocks.navigate).not.toHaveBeenCalled();
   input.remove();
 });
 
-test('chat new and focus shortcuts work on chat routes', async () => {
+test("chat new and focus shortcuts work on chat routes", async () => {
   render(AppShellHost);
-  const input = document.createElement('textarea');
-  input.setAttribute('data-chat-shortcut-focus-target', 'true');
+  const input = document.createElement("textarea");
+  input.setAttribute("data-chat-shortcut-focus-target", "true");
   document.body.appendChild(input);
 
-  await fireEvent.keyDown(window, { key: 'n', altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith('/');
+  await fireEvent.keyDown(window, { key: "n", altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/");
 
-  await fireEvent.keyDown(window, { key: 'l', altKey: true });
+  await fireEvent.keyDown(window, { key: "l", altKey: true });
   expect(document.activeElement).toBe(input);
   input.remove();
 });
 
-test('chat new shortcut on a session route preserves the current session workspace', async () => {
-  window.history.pushState({}, '', '/dashboard/chat/session-current');
+test("chat new shortcut on a session route preserves the current session workspace", async () => {
+  window.history.pushState({}, "", "/dashboard/chat/session-current");
   mocks.sessions.set([
     {
-      ...chatSession('session-current', 'idle', '2026-05-14T04:00:00Z'),
-      workspace_id: 'workspace-current',
+      ...chatSession("session-current", "idle", "2026-05-14T04:00:00Z"),
+      workspace_id: "workspace-current",
     },
   ]);
 
   render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: 'n', altKey: true });
+  await fireEvent.keyDown(window, { key: "n", altKey: true });
 
-  expect(mocks.navigate).toHaveBeenLastCalledWith('/', { workspace: 'workspace-current' });
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/", { workspace: "workspace-current" });
 });
 
-
-test('settings app shell removes centered main chrome so the settings nav can align left', () => {
-  window.history.pushState({}, '', '/dashboard/settings/common');
+test("settings app shell removes centered main chrome so the settings nav can align left", () => {
+  window.history.pushState({}, "", "/dashboard/settings/common");
 
   render(AppShellHost);
 
-  const main = screen.getByText('App shell page content').closest('main');
+  const main = screen.getByText("App shell page content").closest("main");
   expect(main).not.toBeNull();
 });
 
-test('settings shell renders a persistent vertical side switcher around page content', () => {
-  window.history.pushState({}, '', '/dashboard/settings/workspaces');
+test("settings shell renders a persistent vertical side switcher around page content", () => {
+  window.history.pushState({}, "", "/dashboard/settings/workspaces");
 
   render(SettingsShellHost);
 
-  const nav = screen.getByRole('navigation', { name: /settings sections/i });
-  expect(nav).toHaveAttribute('data-settings-shell-nav', 'persistent');
+  const nav = screen.getByRole("navigation", { name: /settings sections/i });
+  expect(nav).toHaveAttribute("data-settings-shell-nav", "persistent");
 
+  expect(within(nav).getByRole("link", { name: /^common$/i })).toHaveAttribute(
+    "href",
+    "/dashboard/settings/common",
+  );
+  const activeLink = within(nav).getByRole("link", { name: /^workspaces$/i });
+  expect(activeLink).toHaveAttribute("aria-current", "page");
+  expect(within(nav).queryByRole("link", { name: /^agent profiles$/i })).not.toBeInTheDocument();
 
-  expect(within(nav).getByRole('link', { name: /^common$/i })).toHaveAttribute('href', '/dashboard/settings/common');
-  const activeLink = within(nav).getByRole('link', { name: /^workspaces$/i });
-  expect(activeLink).toHaveAttribute('aria-current', 'page');
-  expect(within(nav).queryByRole('link', { name: /^agent profiles$/i })).not.toBeInTheDocument();
-
-  const content = screen.getByText('Current settings page content');
+  const content = screen.getByText("Current settings page content");
   expect(content).toBeInTheDocument();
 });
 
-test('settings shell section switcher uses router navigation instead of a document reload', async () => {
-  window.history.pushState({}, '', '/dashboard/settings/common');
+test("settings shell section switcher uses router navigation instead of a document reload", async () => {
+  window.history.pushState({}, "", "/dashboard/settings/common");
   render(SettingsShellHost);
 
-  await fireEvent.click(screen.getByRole('link', { name: /^workspaces$/i }));
+  await fireEvent.click(screen.getByRole("link", { name: /^workspaces$/i }));
 
-  expect(mocks.navigate).toHaveBeenCalledWith('/settings/workspaces');
+  expect(mocks.navigate).toHaveBeenCalledWith("/settings/workspaces");
 });
 
-test('shows a sidebar loading failure instead of claiming there are no sessions', async () => {
-  mocks.sessionsError.set('Failed to fetch');
+test("shows a sidebar loading failure instead of claiming there are no sessions", async () => {
+  mocks.sessionsError.set("Failed to fetch");
   render(AppSidebarHost);
-  expect(screen.getByRole('alert')).toHaveTextContent('Sidebar refresh failed');
-  expect(screen.queryByText('No active sessions')).not.toBeInTheDocument();
-  expect(screen.queryByText('No recent workspaces')).not.toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent("Sidebar refresh failed");
+  expect(screen.queryByText("No active sessions")).not.toBeInTheDocument();
+  expect(screen.queryByText("No recent workspaces")).not.toBeInTheDocument();
   mocks.sessionsError.set(null);
   await tick();
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });

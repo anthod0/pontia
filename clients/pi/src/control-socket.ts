@@ -12,8 +12,15 @@ export interface ControlIdentity {
   runtimeInstanceId: string;
   clientSessionKey?: string;
 }
-export interface ControlInput { input: string; inboxMessageId?: string }
-export interface PiModel { id: string; name: string; description: string }
+export interface ControlInput {
+  input: string;
+  inboxMessageId?: string;
+}
+export interface PiModel {
+  id: string;
+  name: string;
+  description: string;
+}
 export interface ModelControl {
   listModels(): PiModel[];
   setModel(model: string): Promise<void>;
@@ -30,7 +37,10 @@ export interface PiConnection {
 }
 export class RpcError extends Error {
   readonly code: number;
-  constructor(code: number, message: string) { super(message); this.code = code; }
+  constructor(code: number, message: string) {
+    super(message);
+    this.code = code;
+  }
 }
 
 export function piSocketPath(pontiaHome: string): string {
@@ -43,7 +53,14 @@ export function piSocketPath(pontiaHome: string): string {
 
 class RpcSocket {
   private sequence = 0;
-  private pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
+  private pending = new Map<
+    string,
+    {
+      resolve(value: unknown): void;
+      reject(error: Error): void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   private buffered = Buffer.alloc(0);
   private failed = false;
 
@@ -53,7 +70,13 @@ class RpcSocket {
   private lifecycle?: LifecycleControl;
   private onReplay?: (inboxMessageId: string) => void;
 
-  constructor(socket: Socket, onSubmit: (input: ControlInput) => void, models?: ModelControl, onReplay?: (inboxMessageId: string) => void, lifecycle?: LifecycleControl) {
+  constructor(
+    socket: Socket,
+    onSubmit: (input: ControlInput) => void,
+    models?: ModelControl,
+    onReplay?: (inboxMessageId: string) => void,
+    lifecycle?: LifecycleControl,
+  ) {
     this.socket = socket;
     this.onSubmit = onSubmit;
     this.models = models;
@@ -61,17 +84,24 @@ class RpcSocket {
     this.lifecycle = lifecycle;
     socket.on("data", (chunk: Buffer) => this.receive(chunk));
     socket.on("error", (error) => this.fail(error));
-    socket.on("close", () => this.fail(new Error("Pi RPC connection closed; requests were not replayed")));
+    socket.on("close", () =>
+      this.fail(new Error("Pi RPC connection closed; requests were not replayed")),
+    );
   }
 
-  close(): void { this.fail(new Error("Pi RPC connection closed")); }
+  close(): void {
+    this.fail(new Error("Pi RPC connection closed"));
+  }
 
   request(method: string, params: object): Promise<unknown> {
     if (this.failed) return Promise.reject(new Error("Pi RPC connection is closed"));
     const id = `pi:${this.sequence++}`;
     const encoded = this.encode({ jsonrpc: "2.0", id, method, params });
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => this.fail(new Error("Pi RPC timed out; request was not replayed")), REQUEST_TIMEOUT_MS);
+      const timer = setTimeout(
+        () => this.fail(new Error("Pi RPC timed out; request was not replayed")),
+        REQUEST_TIMEOUT_MS,
+      );
       timer.unref();
       this.pending.set(id, { resolve, reject, timer });
       this.write(encoded);
@@ -80,7 +110,8 @@ class RpcSocket {
 
   private encode(value: object): string {
     const encoded = JSON.stringify(value);
-    if (Buffer.byteLength(encoded) > MAX_RPC_FRAME_BYTES) throw new RpcError(-32602, "Pi RPC frame exceeds size limit");
+    if (Buffer.byteLength(encoded) > MAX_RPC_FRAME_BYTES)
+      throw new RpcError(-32602, "Pi RPC frame exceeds size limit");
     return `${encoded}\n`;
   }
 
@@ -95,7 +126,10 @@ class RpcSocket {
   private fail(error: Error): void {
     if (this.failed) return;
     this.failed = true;
-    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
     this.pending.clear();
     this.socket.destroy();
   }
@@ -107,7 +141,8 @@ class RpcSocket {
         const newline = chunk.indexOf(10, offset);
         const end = newline === -1 ? chunk.length : newline;
         const part = chunk.subarray(offset, end);
-        if (this.buffered.length + part.length > MAX_RPC_FRAME_BYTES) throw new Error("Pi RPC frame exceeds size limit");
+        if (this.buffered.length + part.length > MAX_RPC_FRAME_BYTES)
+          throw new Error("Pi RPC frame exceeds size limit");
         this.buffered = Buffer.concat([this.buffered, part]);
         if (newline === -1) return;
         const frame = this.buffered;
@@ -115,77 +150,137 @@ class RpcSocket {
         this.handle(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(frame)));
         offset = newline + 1;
       }
-    } catch (error) { this.fail(error instanceof Error ? error : new Error(String(error))); }
+    } catch (error) {
+      this.fail(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   private handle(value: unknown): void {
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid Pi RPC frame");
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("Invalid Pi RPC frame");
     const message = value as Record<string, any>;
     if (message.jsonrpc !== "2.0") throw new Error("Invalid Pi RPC version");
     if (Object.hasOwn(message, "method")) {
-      if (typeof message.method !== "string" || Object.hasOwn(message, "result") || Object.hasOwn(message, "error")
-        || (message.id !== undefined && typeof message.id !== "string" && typeof message.id !== "number")) {
+      if (
+        typeof message.method !== "string" ||
+        Object.hasOwn(message, "result") ||
+        Object.hasOwn(message, "error") ||
+        (message.id !== undefined &&
+          typeof message.id !== "string" &&
+          typeof message.id !== "number")
+      ) {
         throw new Error("Invalid Pi RPC request");
       }
       const respond = (body: object) => {
-        if (message.id !== undefined) this.write(this.encode({ jsonrpc: "2.0", id: message.id, ...body }));
+        if (message.id !== undefined)
+          this.write(this.encode({ jsonrpc: "2.0", id: message.id, ...body }));
       };
       const error = (code: number, message: string) => respond({ error: { code, message } });
       const params = message.params === undefined ? {} : message.params;
-      if (!params || typeof params !== "object" || Array.isArray(params)) { error(-32602, "Expected named parameters"); return; }
-      if (message.method === "ping") { respond({ result: { pong: true } }); return; }
+      if (!params || typeof params !== "object" || Array.isArray(params)) {
+        error(-32602, "Expected named parameters");
+        return;
+      }
+      if (message.method === "ping") {
+        respond({ result: { pong: true } });
+        return;
+      }
       if (this.lifecycle && (message.method === "interrupt" || message.method === "shutdown")) {
         try {
           this.lifecycle[message.method as "interrupt" | "shutdown"]();
           respond({ result: { accepted: true } });
         } catch (failure) {
-          error(failure instanceof RpcError ? failure.code : -32006, failure instanceof Error ? failure.message : String(failure));
+          error(
+            failure instanceof RpcError ? failure.code : -32006,
+            failure instanceof Error ? failure.message : String(failure),
+          );
         }
         return;
       }
       if (message.method === "branch.replay" && this.onReplay) {
-        if (typeof params.inbox_message_id !== "string" || !/^msg_[^\s]+$/.test(params.inbox_message_id)) {
-          error(-32602, "branch.replay requires an Inbox Message identifier"); return;
+        if (
+          typeof params.inbox_message_id !== "string" ||
+          !/^msg_[^\s]+$/.test(params.inbox_message_id)
+        ) {
+          error(-32602, "branch.replay requires an Inbox Message identifier");
+          return;
         }
         try {
           this.onReplay(params.inbox_message_id);
           respond({ result: { accepted: true } });
-        } catch (failure) { error(failure instanceof RpcError ? failure.code : -32006, failure instanceof Error ? failure.message : String(failure)); }
+        } catch (failure) {
+          error(
+            failure instanceof RpcError ? failure.code : -32006,
+            failure instanceof Error ? failure.message : String(failure),
+          );
+        }
         return;
       }
       if (this.models && (message.method === "models.list" || message.method === "model.set")) {
         const models = this.models;
-        if (message.method === "model.set" && (typeof params.model !== "string" || !params.model.trim())) {
-          error(-32602, "model.set requires a non-empty model"); return;
+        if (
+          message.method === "model.set" &&
+          (typeof params.model !== "string" || !params.model.trim())
+        ) {
+          error(-32602, "model.set requires a non-empty model");
+          return;
         }
         // Keep reading responses while setModel emits an acknowledged model fact.
         void (async () => {
           try {
-            if (message.method === "models.list") respond({ result: { models: models.listModels() } });
+            if (message.method === "models.list")
+              respond({ result: { models: models.listModels() } });
             else {
               await models.setModel(params.model);
               respond({ result: { accepted: true } });
             }
           } catch (failure) {
-            error(failure instanceof RpcError ? failure.code : -32006, failure instanceof Error ? failure.message : String(failure));
+            error(
+              failure instanceof RpcError ? failure.code : -32006,
+              failure instanceof Error ? failure.message : String(failure),
+            );
           }
         })().catch((failure) => this.fail(failure));
         return;
       }
-      if (message.method !== "submit") { error(-32601, "Unknown Pi control method"); return; }
-      if (Buffer.byteLength(JSON.stringify(message)) > MAX_CONTROL_FRAME_BYTES) { error(-32602, "Pi submit frame exceeds 64 KiB"); return; }
-      if (typeof params.input !== "string" || !params.input.trim()
-        || (params.inbox_message_id != null && (typeof params.inbox_message_id !== "string" || !params.inbox_message_id))) {
-        error(-32602, "submit requires non-empty input and optional inbox_message_id"); return;
+      if (message.method !== "submit") {
+        error(-32601, "Unknown Pi control method");
+        return;
+      }
+      if (Buffer.byteLength(JSON.stringify(message)) > MAX_CONTROL_FRAME_BYTES) {
+        error(-32602, "Pi submit frame exceeds 64 KiB");
+        return;
+      }
+      if (
+        typeof params.input !== "string" ||
+        !params.input.trim() ||
+        (params.inbox_message_id != null &&
+          (typeof params.inbox_message_id !== "string" || !params.inbox_message_id))
+      ) {
+        error(-32602, "submit requires non-empty input and optional inbox_message_id");
+        return;
       }
       try {
-        this.onSubmit({ input: params.input, inboxMessageId: params.inbox_message_id ?? undefined });
+        this.onSubmit({
+          input: params.input,
+          inboxMessageId: params.inbox_message_id ?? undefined,
+        });
         respond({ result: { accepted: true } });
-      } catch (failure) { error(failure instanceof RpcError ? failure.code : -32006, failure instanceof Error ? failure.message : String(failure)); }
+      } catch (failure) {
+        error(
+          failure instanceof RpcError ? failure.code : -32006,
+          failure instanceof Error ? failure.message : String(failure),
+        );
+      }
       return;
     }
-    if (Object.hasOwn(message, "result") === Object.hasOwn(message, "error")
-      || (message.error !== undefined && (!message.error || !Number.isInteger(message.error.code) || typeof message.error.message !== "string"))) {
+    if (
+      Object.hasOwn(message, "result") === Object.hasOwn(message, "error") ||
+      (message.error !== undefined &&
+        (!message.error ||
+          !Number.isInteger(message.error.code) ||
+          typeof message.error.message !== "string"))
+    ) {
       throw new Error("Invalid Pi RPC response");
     }
     const pending = this.pending.get(message.id);
@@ -219,7 +314,11 @@ export async function connectPi(
   async function ready(): Promise<void> {
     if (!identity || attached || stopped || reconnectRejected) return;
     await new Promise<void>((resolve, reject) => {
-      const wake = () => { clearTimeout(timer); waiting.delete(wake); resolve(); };
+      const wake = () => {
+        clearTimeout(timer);
+        waiting.delete(wake);
+        resolve();
+      };
       const timer = setTimeout(() => {
         waiting.delete(wake);
         reject(new Error("Pi reconnect timed out"));
@@ -228,7 +327,9 @@ export async function connectPi(
     });
   }
 
-  function wakeRequests(): void { for (const wake of waiting) wake(); }
+  function wakeRequests(): void {
+    for (const wake of waiting) wake();
+  }
 
   async function open(reportingOnly = false): Promise<RpcSocket> {
     const socket = createConnection(path);
@@ -236,18 +337,47 @@ export async function connectPi(
     socket.unref();
     try {
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => socket.destroy(new Error("Pi socket connection timed out")), REQUEST_TIMEOUT_MS);
+        const timer = setTimeout(
+          () => socket.destroy(new Error("Pi socket connection timed out")),
+          REQUEST_TIMEOUT_MS,
+        );
         socket.once("error", reject);
-        socket.once("connect", () => { clearTimeout(timer); socket.off("error", reject); resolve(); });
-        socket.once("close", () => { clearTimeout(timer); reject(new Error("Pi socket closed during connect")); });
+        socket.once("connect", () => {
+          clearTimeout(timer);
+          socket.off("error", reject);
+          resolve();
+        });
+        socket.once("close", () => {
+          clearTimeout(timer);
+          reject(new Error("Pi socket closed during connect"));
+        });
       });
-    } finally { connecting.delete(socket); }
-    if (stopped) { socket.destroy(); throw new Error("Pi connection is closed"); }
-    const peer = new RpcSocket(socket, reportingOnly ? () => { throw new Error("Pi reporting connection cannot accept input"); } : onSubmit, reportingOnly ? undefined : models, reportingOnly ? undefined : onReplay, reportingOnly ? undefined : lifecycle);
+    } finally {
+      connecting.delete(socket);
+    }
+    if (stopped) {
+      socket.destroy();
+      throw new Error("Pi connection is closed");
+    }
+    const peer = new RpcSocket(
+      socket,
+      reportingOnly
+        ? () => {
+            throw new Error("Pi reporting connection cannot accept input");
+          }
+        : onSubmit,
+      reportingOnly ? undefined : models,
+      reportingOnly ? undefined : onReplay,
+      reportingOnly ? undefined : lifecycle,
+    );
     peers.add(peer);
     socket.once("close", () => {
       peers.delete(peer);
-      if (current === peer) { current = undefined; attached = false; reconnect(); }
+      if (current === peer) {
+        current = undefined;
+        attached = false;
+        reconnect();
+      }
     });
     return peer;
   }
@@ -259,11 +389,16 @@ export async function connectPi(
       try {
         const peer = await open();
         current = peer;
-        const result = await peer.request("runtime.attach", {
-          version: CONTROL_VERSION, session_id: identity!.sessionId,
-          runtime_instance_id: identity!.runtimeInstanceId, client_session_key: identity!.clientSessionKey,
-        }) as Record<string, unknown>;
-        if (result?.session_id !== identity!.sessionId || result?.runtime_instance_id !== identity!.runtimeInstanceId) {
+        const result = (await peer.request("runtime.attach", {
+          version: CONTROL_VERSION,
+          session_id: identity!.sessionId,
+          runtime_instance_id: identity!.runtimeInstanceId,
+          client_session_key: identity!.clientSessionKey,
+        })) as Record<string, unknown>;
+        if (
+          result?.session_id !== identity!.sessionId ||
+          result?.runtime_instance_id !== identity!.runtimeInstanceId
+        ) {
           throw new RpcError(-32009, "Pi reconnect identity mismatch");
         }
         attached = true;
@@ -272,7 +407,10 @@ export async function connectPi(
       } catch (error) {
         onError(error instanceof Error ? error : new Error(String(error)));
         // A rejected identity cannot be repaired by repeating registration.
-        if (error instanceof RpcError && error.code !== -32603) { reconnectRejected = true; wakeRequests(); }
+        if (error instanceof RpcError && error.code !== -32603) {
+          reconnectRejected = true;
+          wakeRequests();
+        }
         current?.close();
         current = undefined;
         reconnect();
@@ -285,17 +423,27 @@ export async function connectPi(
   return {
     async request(method, params) {
       if (method === "turn.startFailure") {
-        if (!identity?.clientSessionKey || stopped) throw new Error("Pi reporting identity is unavailable");
+        if (!identity?.clientSessionKey || stopped)
+          throw new Error("Pi reporting identity is unavailable");
         const peer = await open(true);
         try {
-          return await peer.request(method, { ...params, client_session_key: identity.clientSessionKey });
-        } finally { peer.close(); }
+          return await peer.request(method, {
+            ...params,
+            client_session_key: identity.clientSessionKey,
+          });
+        } finally {
+          peer.close();
+        }
       }
       await ready();
       if (!current || stopped) return Promise.reject(new Error("Pi connection is unavailable"));
       return current.request(method, params);
     },
-    registered(value) { identity = value; attached = !!current; if (!current) reconnect(); },
+    registered(value) {
+      identity = value;
+      attached = !!current;
+      if (!current) reconnect();
+    },
     async close() {
       stopped = true;
       wakeRequests();
