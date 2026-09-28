@@ -29,7 +29,6 @@ pontia-client-pi = { path = "crates/pontia-client-pi" }
 pontia-application = { path = "crates/pontia-application", default-features = false }
 pontia-config = { path = "crates/pontia-config", default-features = false }
 pontia-core = { path = "crates/pontia-core", default-features = false }
-pontia-edge = { path = "crates/pontia-edge" }
 pontia-http = { path = "crates/pontia-http" }
 pontia-runtime = { path = "crates/pontia-runtime", default-features = false }
 pontia-storage-sqlite = { path = "crates/pontia-storage-sqlite" }

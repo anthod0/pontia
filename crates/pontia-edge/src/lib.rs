@@ -1,19 +1,19 @@
 mod connection;
-mod devices;
 mod online;
+mod tickets;
 
 use std::{sync::Arc, time::Duration};
 
 use axum::{Router, routing::get};
 use tokio::sync::{Semaphore, watch};
 
-pub use devices::DeviceRegistry;
 pub use online::OnlineDevices;
+pub use tickets::TicketRedeemer;
 
 #[derive(Clone)]
 pub struct ConnectionLimits {
     pub max_pending: usize,
-    pub auth_timeout: Duration,
+    pub ticket_redeem_timeout: Duration,
     pub heartbeat_interval: Duration,
     pub pong_timeout: Duration,
 }
@@ -22,7 +22,7 @@ impl Default for ConnectionLimits {
     fn default() -> Self {
         Self {
             max_pending: 256,
-            auth_timeout: Duration::from_secs(10),
+            ticket_redeem_timeout: Duration::from_secs(10),
             heartbeat_interval: Duration::from_secs(15),
             pong_timeout: Duration::from_secs(10),
         }
@@ -31,7 +31,7 @@ impl Default for ConnectionLimits {
 
 #[derive(Clone)]
 pub struct Edge {
-    devices: DeviceRegistry,
+    redeemer: TicketRedeemer,
     online: OnlineDevices,
     pending: Arc<Semaphore>,
     limits: ConnectionLimits,
@@ -39,9 +39,9 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub fn new(devices: DeviceRegistry, limits: ConnectionLimits) -> Self {
+    pub fn new(redeemer: TicketRedeemer, limits: ConnectionLimits) -> Self {
         Self {
-            devices,
+            redeemer,
             online: OnlineDevices::default(),
             pending: Arc::new(Semaphore::new(limits.max_pending)),
             limits,

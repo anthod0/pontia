@@ -4,359 +4,209 @@ use std::time::Duration;
 
 use futures_util::SinkExt;
 use pontia_tunnel::{
-    DeviceIdentity, RemoteClient,
+    RemoteClient,
     protocol::{self, Message},
 };
-use support::{TestEdge, closed, receive, send, wait_for};
+use support::{CLI_CREDENTIAL, TestEdge, closed, receive, send, wait_for};
 use tokio::sync::watch;
-use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::Message as WsMessage};
+use tokio_tungstenite::tungstenite::Message as WsMessage;
+use uuid::Uuid;
 
 #[tokio::test]
-async fn authenticated_device_heartbeats_and_disconnects() {
+async fn bearer_ticket_connects_heartbeats_and_disconnects() {
     let server = TestEdge::start().await;
-    let identity = DeviceIdentity::generate().unwrap();
-    server.seed_device(&identity).await;
-    let mut socket = server.authenticate(&identity).await;
-    assert!(
-        server
-            .edge
-            .online()
-            .connection_id(identity.device_id())
-            .is_some()
-    );
+    let device_id = Uuid::new_v4();
+    let mut socket = server.authenticate(device_id).await;
+    wait_for(|| server.edge.online().connection_id(device_id).is_some()).await;
     for _ in 0..3 {
         let Message::Ping { nonce } = receive(&mut socket).await else {
-            panic!()
+            panic!("expected ping")
         };
         send(&mut socket, Message::Pong { nonce }).await;
     }
     socket.close(None).await.unwrap();
-    wait_for(|| {
-        server
-            .edge
-            .online()
-            .connection_id(identity.device_id())
-            .is_none()
-    })
-    .await;
+    wait_for(|| server.edge.online().connection_id(device_id).is_none()).await;
 }
 
 #[tokio::test]
-async fn only_registered_devices_can_connect() {
+async fn missing_invalid_and_replayed_tickets_are_unauthorized() {
     let server = TestEdge::start().await;
-    let unknown = DeviceIdentity::generate().unwrap();
+    let device_id = Uuid::new_v4();
+    let ticket = server.issue_ticket(device_id);
 
-    let mut socket = server.connect().await;
-    let Message::Challenge { nonce, .. } = receive(&mut socket).await else {
-        panic!()
-    };
-    send(&mut socket, unknown.authenticate(&nonce)).await;
-    closed(&mut socket).await;
-    assert!(
-        server
-            .edge
-            .online()
-            .connection_id(unknown.device_id())
-            .is_none()
-    );
-}
-
-#[tokio::test]
-async fn reconnect_checks_the_current_registration() {
-    let server = TestEdge::start().await;
-    let identity = DeviceIdentity::generate().unwrap();
-    server.seed_device(&identity).await;
-    let mut first = server.authenticate(&identity).await;
-    first.close(None).await.unwrap();
-    wait_for(|| {
-        server
-            .edge
-            .online()
-            .connection_id(identity.device_id())
-            .is_none()
-    })
-    .await;
-
-    sqlx::query("DELETE FROM devices WHERE device_id = ?")
-        .bind(identity.device_id().to_string())
-        .execute(&server.records)
-        .await
-        .unwrap();
-    let mut reconnect = server.connect().await;
-    let Message::Challenge { nonce, .. } = receive(&mut reconnect).await else {
-        panic!()
-    };
-    send(&mut reconnect, identity.authenticate(&nonce)).await;
-    closed(&mut reconnect).await;
-    assert!(
-        server
-            .edge
-            .online()
-            .connection_id(identity.device_id())
-            .is_none()
-    );
-}
-
-#[tokio::test]
-async fn unknown_device_invalid_signature_and_replay_never_become_online() {
-    let server = TestEdge::start().await;
-    let identity = DeviceIdentity::generate().unwrap();
-    let mut first = server.connect().await;
-    let Message::Challenge { nonce, .. } = receive(&mut first).await else {
-        panic!()
-    };
-    send(&mut first, identity.authenticate(&nonce)).await;
-    closed(&mut first).await;
-    assert!(
-        server
-            .edge
-            .online()
-            .connection_id(identity.device_id())
-            .is_none()
-    );
-
-    server.seed_device(&identity).await;
-    let mut replay = server.connect().await;
-    let Message::Challenge { nonce: fresh, .. } = receive(&mut replay).await else {
-        panic!()
-    };
-    assert_ne!(nonce, fresh);
-    send(&mut replay, identity.authenticate(&nonce)).await;
-    closed(&mut replay).await;
-    assert!(
-        server
-            .edge
-            .online()
-            .connection_id(identity.device_id())
-            .is_none()
-    );
-
-    let mut wrong_signature = server.connect().await;
-    let Message::Challenge { nonce, .. } = receive(&mut wrong_signature).await else {
-        panic!()
-    };
-    let Message::Authenticate { signature, .. } =
-        DeviceIdentity::generate().unwrap().authenticate(&nonce)
-    else {
-        panic!()
-    };
-    send(
-        &mut wrong_signature,
-        Message::Authenticate {
-            device_id: identity.device_id(),
-            signature,
-        },
-    )
-    .await;
-    closed(&mut wrong_signature).await;
-    assert!(
-        server
-            .edge
-            .online()
-            .connection_id(identity.device_id())
-            .is_none()
-    );
-}
-
-#[tokio::test]
-async fn expired_challenge_cannot_authenticate() {
-    let server = TestEdge::start().await;
-    let identity = DeviceIdentity::generate().unwrap();
-    server.seed_device(&identity).await;
-    let mut socket = server.connect().await;
-    let Message::Challenge { nonce, .. } = receive(&mut socket).await else {
-        panic!()
-    };
-    tokio::time::sleep(Duration::from_millis(600)).await;
-    let _ = socket
-        .send(WsMessage::Text(
-            serde_json::to_string(&identity.authenticate(&nonce))
-                .unwrap()
-                .into(),
-        ))
-        .await;
-    closed(&mut socket).await;
-    assert!(
-        server
-            .edge
-            .online()
-            .connection_id(identity.device_id())
-            .is_none()
-    );
-}
-
-#[tokio::test]
-async fn pending_connections_are_bounded_and_time_out() {
-    let server = TestEdge::start().await;
-    let mut first = server.connect().await;
-    receive(&mut first).await;
-    let mut second = server.connect().await;
-    receive(&mut second).await;
-    let rejected =
-        connect_async_tls_with_config(&server.url, None, false, Some(server.connector.clone()))
-            .await;
-    assert!(
-        matches!(rejected, Err(tokio_tungstenite::tungstenite::Error::Http(response)) if response.status() == 503)
-    );
-    closed(&mut first).await;
-    closed(&mut second).await;
-    let identity = DeviceIdentity::generate().unwrap();
-    server.seed_device(&identity).await;
-    let mut socket = server.authenticate(&identity).await;
-    socket.close(None).await.unwrap();
-}
-
-#[tokio::test]
-async fn premature_business_frames_and_oversized_messages_are_rejected() {
-    let server = TestEdge::start().await;
-    for body in [
-        r#"{"type":"open","stream_id":1}"#.to_owned(),
-        "x".repeat(protocol::MAX_MESSAGE_BYTES + 1),
-    ] {
-        let mut socket = server.connect().await;
-        receive(&mut socket).await;
-        socket.send(WsMessage::Text(body.into())).await.unwrap();
-        closed(&mut socket).await;
+    for candidate in [None, Some("invalid-ticket")] {
+        let rejected = server.connect(candidate).await.unwrap_err();
+        assert!(
+            matches!(rejected, tokio_tungstenite::tungstenite::Error::Http(response)
+            if response.status() == 401
+                && response.headers().get("www-authenticate").unwrap() == "Bearer")
+        );
     }
+
+    let mut accepted = server.connect(Some(&ticket)).await.unwrap();
+    accepted.close(None).await.unwrap();
+    let replayed = server.connect(Some(&ticket)).await.unwrap_err();
+    assert!(
+        matches!(replayed, tokio_tungstenite::tungstenite::Error::Http(response) if response.status() == 401)
+    );
 }
 
 #[tokio::test]
-async fn missing_or_incorrect_pong_removes_online_device() {
+async fn pending_ticket_redemptions_are_bounded_before_consumption() {
     let server = TestEdge::start().await;
-    let identity = DeviceIdentity::generate().unwrap();
-    server.seed_device(&identity).await;
+    server.delay_redemption();
+    let first_ticket = server.issue_ticket(Uuid::new_v4());
+    let second_ticket = server.issue_ticket(Uuid::new_v4());
+    let pending = async {
+        tokio::join!(
+            server.connect(Some(&first_ticket)),
+            server.connect(Some(&second_ticket)),
+        )
+    };
+    tokio::pin!(pending);
+    tokio::select! {
+        _ = tokio::time::sleep(Duration::from_millis(50)) => {}
+        _ = &mut pending => panic!("redemptions should still be pending"),
+    }
+
+    let rejected = server
+        .connect(Some(&server.issue_ticket(Uuid::new_v4())))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(rejected, tokio_tungstenite::tungstenite::Error::Http(response) if response.status() == 503)
+    );
+    let (first, second) = pending.await;
+    let mut first = first.unwrap();
+    let mut second = second.unwrap();
+    first.close(None).await.unwrap();
+    second.close(None).await.unwrap();
+}
+
+#[tokio::test]
+async fn website_failure_blocks_new_connections_but_not_existing_ones() {
+    let server = TestEdge::start().await;
+    let device_id = Uuid::new_v4();
+    let mut existing = server.authenticate(device_id).await;
+    wait_for(|| server.edge.online().connection_id(device_id).is_some()).await;
+    server.stop_website();
+
+    let rejected = server
+        .connect(Some(&server.issue_ticket(Uuid::new_v4())))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(rejected, tokio_tungstenite::tungstenite::Error::Http(response) if response.status() == 503)
+    );
+
+    let Message::Ping { nonce } = receive(&mut existing).await else {
+        panic!("expected ping")
+    };
+    send(&mut existing, Message::Pong { nonce }).await;
+    assert!(server.edge.online().connection_id(device_id).is_some());
+    existing.close(None).await.unwrap();
+}
+
+#[tokio::test]
+async fn oversized_messages_and_incorrect_pongs_remove_online_devices() {
+    let server = TestEdge::start().await;
     for wrong_pong in [false, true] {
-        let mut socket = server.authenticate(&identity).await;
-        assert!(matches!(receive(&mut socket).await, Message::Ping { .. }));
+        let device_id = Uuid::new_v4();
+        let mut socket = server.authenticate(device_id).await;
+        wait_for(|| server.edge.online().connection_id(device_id).is_some()).await;
+        let Message::Ping { .. } = receive(&mut socket).await else {
+            panic!("expected ping")
+        };
         if wrong_pong {
             send(&mut socket, Message::Pong { nonce: [0; 32] }).await;
         }
         closed(&mut socket).await;
-        wait_for(|| {
-            server
-                .edge
-                .online()
-                .connection_id(identity.device_id())
-                .is_none()
-        })
-        .await;
+        wait_for(|| server.edge.online().connection_id(device_id).is_none()).await;
     }
+
+    let device_id = Uuid::new_v4();
+    let mut socket = server.authenticate(device_id).await;
+    socket
+        .send(WsMessage::Text(
+            "x".repeat(protocol::MAX_MESSAGE_BYTES + 1).into(),
+        ))
+        .await
+        .unwrap();
+    closed(&mut socket).await;
 }
 
 #[tokio::test]
-async fn new_authenticated_connection_replaces_old_without_losing_online_record() {
+async fn new_connection_replaces_old_without_losing_new_online_record() {
     let server = TestEdge::start().await;
-    let identity = DeviceIdentity::generate().unwrap();
-    server.seed_device(&identity).await;
-    let mut old = server.authenticate(&identity).await;
-    let old_id = server
-        .edge
-        .online()
-        .connection_id(identity.device_id())
-        .unwrap();
-    let mut new = server.authenticate(&identity).await;
-    let new_id = server
-        .edge
-        .online()
-        .connection_id(identity.device_id())
-        .unwrap();
-    assert_ne!(old_id, new_id);
+    let device_id = Uuid::new_v4();
+    let mut old = server.authenticate(device_id).await;
+    wait_for(|| server.edge.online().connection_id(device_id).is_some()).await;
+    let old_id = server.edge.online().connection_id(device_id).unwrap();
+    let mut new = server.authenticate(device_id).await;
+    wait_for(|| server.edge.online().connection_id(device_id) != Some(old_id)).await;
+    let new_id = server.edge.online().connection_id(device_id).unwrap();
     closed(&mut old).await;
-    assert_eq!(
-        server.edge.online().connection_id(identity.device_id()),
-        Some(new_id)
-    );
+    assert_eq!(server.edge.online().connection_id(device_id), Some(new_id));
     let Message::Ping { nonce } = receive(&mut new).await else {
-        panic!()
+        panic!("expected ping")
     };
     send(&mut new, Message::Pong { nonce }).await;
     new.close(None).await.unwrap();
 }
 
 #[tokio::test]
-async fn production_client_reconnects_reauthenticates_and_stops() {
+async fn production_client_fetches_a_fresh_ticket_when_reconnecting() {
     let server = TestEdge::start().await;
-    let path = server.root.path().join("device/identity.json");
-    let identity = DeviceIdentity::load_or_create(&path).unwrap();
-    let id = identity.device_id();
-    server.seed_device(&identity).await;
-    let client = RemoteClient::new(&server.url, identity, Some(&server.ca_path)).unwrap();
+    let device_id = Uuid::new_v4();
+    let home = server.root.path().join("device");
+    std::fs::create_dir(&home).unwrap();
+    std::fs::write(
+        home.join("auth.json"),
+        serde_json::json!({ "token": CLI_CREDENTIAL }).to_string(),
+    )
+    .unwrap();
+    let client = RemoteClient::with_clients(
+        &server.website_origin,
+        device_id,
+        &home,
+        server.http.clone(),
+        server.connector.clone(),
+    )
+    .unwrap();
     let (stop, shutdown) = watch::channel(false);
     let task = tokio::spawn(client.run(shutdown));
-    wait_for(|| server.edge.online().connection_id(id).is_some()).await;
-    let first = server.edge.online().connection_id(id).unwrap();
-    // A second authenticated connection forces the production client through reconnection.
-    let duplicate = DeviceIdentity::load_or_create(&path).unwrap();
-    let mut replacement = server.authenticate(&duplicate).await;
-    let second = server.edge.online().connection_id(id).unwrap();
-    assert_ne!(first, second);
+    wait_for(|| server.edge.online().connection_id(device_id).is_some()).await;
+    let first = server.edge.online().connection_id(device_id).unwrap();
+    assert_eq!(server.issued_count(), 1);
+
+    let mut replacement = server.authenticate(device_id).await;
+    wait_for(|| server.edge.online().connection_id(device_id) != Some(first)).await;
     replacement.close(None).await.unwrap();
     wait_for(|| {
-        server
-            .edge
-            .online()
-            .connection_id(id)
-            .is_some_and(|value| value != first && value != second)
+        server.issued_count() >= 2 && server.edge.online().connection_id(device_id).is_some()
     })
     .await;
-    let third = server.edge.online().connection_id(id).unwrap();
-    tokio::time::sleep(Duration::from_millis(700)).await;
-    assert_eq!(
-        server.edge.online().connection_id(id),
-        Some(third),
+    tokio::time::sleep(Duration::from_millis(350)).await;
+    assert!(
+        server.edge.online().connection_id(device_id).is_some(),
         "client must answer heartbeats"
     );
+
     stop.send_replace(true);
     tokio::time::timeout(Duration::from_secs(1), task)
         .await
         .unwrap()
         .unwrap();
-    wait_for(|| server.edge.online().connection_id(id).is_none()).await;
+    wait_for(|| server.edge.online().connection_id(device_id).is_none()).await;
 }
 
 #[tokio::test]
-async fn client_checks_server_certificate_and_can_stop_while_retrying() {
+async fn edge_shutdown_closes_authenticated_connections() {
     let server = TestEdge::start().await;
-    let rejected = tokio::time::timeout(
-        Duration::from_secs(3),
-        connect_async_tls_with_config(&server.url, None, false, None),
-    )
-    .await
-    .unwrap();
-    let error = rejected.unwrap_err();
-    assert!(error.to_string().contains("UnknownIssuer"), "{error:?}");
-    let identity = DeviceIdentity::generate().unwrap();
-    let id = identity.device_id();
-    server.seed_device(&identity).await;
-    let client = RemoteClient::new(&server.url, identity, None).unwrap();
-    let (stop, shutdown) = watch::channel(false);
-    let task = tokio::spawn(client.run(shutdown));
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    assert!(server.edge.online().connection_id(id).is_none());
-    stop.send_replace(true);
-    tokio::time::timeout(Duration::from_secs(1), task)
-        .await
-        .unwrap()
-        .unwrap();
-}
-
-#[tokio::test]
-async fn edge_shutdown_closes_pending_and_authenticated_connections() {
-    let server = TestEdge::start().await;
-    let identity = DeviceIdentity::generate().unwrap();
-    server.seed_device(&identity).await;
-    let mut online = server.authenticate(&identity).await;
-    let mut pending = server.connect().await;
-    receive(&mut pending).await;
+    let device_id = Uuid::new_v4();
+    let mut socket = server.authenticate(device_id).await;
+    wait_for(|| server.edge.online().connection_id(device_id).is_some()).await;
     server.edge.shutdown();
-    closed(&mut online).await;
-    closed(&mut pending).await;
-    wait_for(|| {
-        server
-            .edge
-            .online()
-            .connection_id(identity.device_id())
-            .is_none()
-    })
-    .await;
+    closed(&mut socket).await;
+    wait_for(|| server.edge.online().connection_id(device_id).is_none()).await;
 }

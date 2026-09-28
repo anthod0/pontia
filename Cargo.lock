@@ -524,33 +524,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "curve25519-dalek"
-version = "4.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
-dependencies = [
- "cfg-if",
- "cpufeatures 0.2.17",
- "curve25519-dalek-derive",
- "digest 0.10.7",
- "fiat-crypto",
- "rustc_version",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek-derive"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "data-encoding"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -653,30 +626,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
-name = "ed25519"
-version = "2.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
-dependencies = [
- "pkcs8",
- "signature",
-]
-
-[[package]]
-name = "ed25519-dalek"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
-dependencies = [
- "curve25519-dalek",
- "ed25519",
- "serde",
- "sha2",
- "subtle",
- "zeroize",
-]
-
-[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -734,12 +683,6 @@ name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
-
-[[package]]
-name = "fiat-crypto"
-version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
 name = "filetime"
@@ -1773,6 +1716,7 @@ dependencies = [
  "serde",
  "tempfile",
  "toml",
+ "url",
 ]
 
 [[package]]
@@ -1798,9 +1742,10 @@ dependencies = [
  "futures-util",
  "pontia-tunnel",
  "rcgen",
+ "reqwest",
  "rustls",
+ "serde",
  "serde_json",
- "sqlx",
  "tempfile",
  "tokio",
  "tokio-tungstenite 0.30.0",
@@ -1868,16 +1813,15 @@ dependencies = [
 name = "pontia-tunnel"
 version = "0.2.1"
 dependencies = [
- "base64 0.22.1",
- "ed25519-dalek",
  "futures-util",
  "getrandom 0.3.4",
+ "reqwest",
  "rustls",
- "rustls-pemfile",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
+ "time",
  "tokio",
  "tokio-tungstenite 0.30.0",
  "tracing",
@@ -1910,30 +1854,23 @@ name = "pontiad"
 version = "0.2.1"
 dependencies = [
  "axum",
- "axum-server",
- "http-body-util",
  "pontia-application",
  "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",
  "pontia-core",
- "pontia-edge",
  "pontia-http",
  "pontia-runtime",
  "pontia-storage-sqlite",
  "pontia-tunnel",
  "pontia-workflow",
- "rcgen",
- "rustls",
  "serde",
  "serde_json",
  "sqlx",
- "tempfile",
  "thiserror",
  "time",
  "tokio",
  "toml",
- "tower",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -2263,15 +2200,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94300abf3f1ae2e2b8ffb7b58043de3d399c73fa6f4b73826402a5c457614dbe"
 
 [[package]]
-name = "rustc_version"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
-dependencies = [
- "semver",
-]
-
-[[package]]
 name = "rusticata-macros"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2305,15 +2233,6 @@ dependencies = [
  "rustls-webpki",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "rustls-pemfile"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce314e5fee3f39953d46bb63bb8a46d40c2f8fb7cc5a3b6cab2bde9721d6e50"
-dependencies = [
- "rustls-pki-types",
 ]
 
 [[package]]

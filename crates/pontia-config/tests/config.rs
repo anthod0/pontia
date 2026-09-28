@@ -76,6 +76,7 @@ fn loads_config_from_key_value_source() {
         )
     );
     assert_eq!(config.external_api_token.as_deref(), Some("dev-token"));
+    assert_eq!(config.auth_origin, "https://pontia.dev");
     assert_eq!(
         config.dashboard.source.as_deref(),
         Some("https://example.test/dashboard.tar.gz")
@@ -87,6 +88,29 @@ fn loads_config_from_key_value_source() {
     assert_eq!(config.workspace_browser.roots[0].label, "Projects");
     assert_eq!(config.workspace_browser.roots[0].path, "/home/me/projects");
     assert_eq!(config.file_picker, FilePickerConfig::default());
+}
+
+#[test]
+fn auth_origin_uses_the_cli_override_and_requires_a_clean_https_origin() {
+    let home = tempfile::tempdir().expect("Pontia home");
+    let mut vars = vars_for_home(home.path());
+    vars.insert(
+        "PONTIA_AUTH_ORIGIN".to_string(),
+        "https://website.example/development".to_string(),
+    );
+    assert_eq!(
+        AppConfig::from_vars(&vars).unwrap().auth_origin,
+        "https://website.example"
+    );
+
+    for invalid in [
+        "http://website.example",
+        "https://user@website.example",
+        "https://website.example?query=true",
+    ] {
+        vars.insert("PONTIA_AUTH_ORIGIN".to_string(), invalid.to_string());
+        assert!(AppConfig::from_vars(&vars).is_err(), "{invalid}");
+    }
 }
 
 #[test]
@@ -384,47 +408,7 @@ fn provides_development_defaults_for_optional_values() {
 }
 
 #[test]
-fn remote_connection_is_explicitly_configured() {
-    let root = tempfile::tempdir().unwrap();
-    fs::write(
-        root.path().join("config.toml"),
-        "[remote]\nedge_url = 'wss://edge.example/tunnel'\nca_certificate = '/opt/pontia/ca.pem'\n",
-    )
-    .unwrap();
-    let config = AppConfig::from_vars(&vars_for_home(root.path())).unwrap();
-    let remote = config.remote.unwrap();
-    assert_eq!(
-        remote.edge_url.as_deref(),
-        Some("wss://edge.example/tunnel")
-    );
-    assert_eq!(remote.device_id, None);
-    assert_eq!(
-        remote.ca_certificate.unwrap(),
-        std::path::Path::new("/opt/pontia/ca.pem")
-    );
-}
-
-#[test]
-fn remote_connection_needs_only_an_edge_url() {
-    let root = tempfile::tempdir().unwrap();
-    fs::write(
-        root.path().join("config.toml"),
-        "[remote]\nedge_url = 'wss://edge.example/tunnel'\n",
-    )
-    .unwrap();
-    assert_eq!(
-        AppConfig::from_vars(&vars_for_home(root.path()))
-            .unwrap()
-            .remote
-            .unwrap()
-            .edge_url
-            .as_deref(),
-        Some("wss://edge.example/tunnel")
-    );
-}
-
-#[test]
-fn remote_registration_needs_no_connection_configuration() {
+fn remote_registration_configures_only_the_device_id() {
     let root = tempfile::tempdir().unwrap();
     fs::write(
         root.path().join("config.toml"),
@@ -439,5 +423,20 @@ fn remote_registration_needs_no_connection_configuration() {
         remote.device_id.as_deref(),
         Some("0195e7c1-1b22-7c33-9d44-123456789abc")
     );
-    assert_eq!(remote.edge_url, None);
+}
+
+#[test]
+fn legacy_remote_connection_fields_are_rejected() {
+    for field in [
+        "edge_url = 'wss://edge.example/tunnel'",
+        "ca_certificate = '/opt/pontia/ca.pem'",
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(
+            root.path().join("config.toml"),
+            format!("[remote]\ndevice_id = '0195e7c1-1b22-7c33-9d44-123456789abc'\n{field}\n"),
+        )
+        .unwrap();
+        assert!(AppConfig::from_vars(&vars_for_home(root.path())).is_err());
+    }
 }

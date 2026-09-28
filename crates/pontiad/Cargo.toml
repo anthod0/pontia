@@ -28,12 +28,3 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v7", "serde"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
-
-[dev-dependencies]
-axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
-http-body-util = "0.1"
-pontia-edge.workspace = true
-rcgen = "0.14"
-rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
-tempfile = "3"
-tower = { version = "0.5", features = ["util"] }

@@ -4,17 +4,23 @@ pub const SYSTEMD_SERVICE_NAME: &str = "pontia.service";
 pub const CODEX_SYSTEMD_SERVICE_NAME: &str = "pontia-codex.service";
 pub const LAUNCHD_LABEL: &str = "dev.pontia.pontiad";
 
-pub fn render_systemd(pontiad: &Path, pontia_home: &Path) -> Result<String, String> {
-    render_systemd_with_codex(pontiad, pontia_home, None)
+pub fn render_systemd(
+    pontiad: &Path,
+    pontia_home: &Path,
+    auth_origin: &str,
+) -> Result<String, String> {
+    render_systemd_with_codex(pontiad, pontia_home, auth_origin, None)
 }
 
 pub fn render_systemd_with_codex(
     pontiad: &Path,
     pontia_home: &Path,
+    auth_origin: &str,
     codex_home: Option<&Path>,
 ) -> Result<String, String> {
     let pontiad = utf8_path(pontiad, "pontiad executable")?;
     let pontia_home = utf8_path(pontia_home, "PONTIA_HOME")?;
+    let auth_origin = systemd_quote(auth_origin);
     let codex_environment = codex_home
         .map(|path| {
             utf8_path(path, "CODEX_HOME")
@@ -23,9 +29,10 @@ pub fn render_systemd_with_codex(
         .transpose()?
         .unwrap_or_default();
     Ok(format!(
-        "[Unit]\nDescription=Pontia Control Plane\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=\"{}\"\nEnvironment=\"PONTIA_HOME={}\"\n{}Restart=on-failure\n\n[Install]\nWantedBy=default.target\n",
+        "[Unit]\nDescription=Pontia Control Plane\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=\"{}\"\nEnvironment=\"PONTIA_HOME={}\"\nEnvironment=\"PONTIA_AUTH_ORIGIN={}\"\n{}Restart=on-failure\n\n[Install]\nWantedBy=default.target\n",
         systemd_quote(pontiad),
         systemd_quote(pontia_home),
+        auth_origin,
         codex_environment,
     ))
 }
@@ -40,9 +47,14 @@ pub fn render_codex_systemd(codex: &Path, codex_home: &Path) -> Result<String, S
     ))
 }
 
-pub fn render_launchd(pontiad: &Path, pontia_home: &Path) -> Result<String, String> {
+pub fn render_launchd(
+    pontiad: &Path,
+    pontia_home: &Path,
+    auth_origin: &str,
+) -> Result<String, String> {
     let pontiad = xml_escape(utf8_path(pontiad, "pontiad executable")?)?;
     let pontia_home = xml_escape(utf8_path(pontia_home, "PONTIA_HOME")?)?;
+    let auth_origin = xml_escape(auth_origin)?;
     Ok(format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -58,6 +70,8 @@ pub fn render_launchd(pontiad: &Path, pontia_home: &Path) -> Result<String, Stri
   <dict>
     <key>PONTIA_HOME</key>
     <string>{pontia_home}</string>
+    <key>PONTIA_AUTH_ORIGIN</key>
+    <string>{auth_origin}</string>
   </dict>
   <key>KeepAlive</key>
   <true/>

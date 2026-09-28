@@ -49,6 +49,7 @@ impl ServiceManager for FakeManager {
         &self,
         pontiad: &Path,
         pontia_home: &Path,
+        _auth_origin: &str,
         _previous_definition: Option<&str>,
     ) -> Result<String, String> {
         Ok(format!("{}|{}", pontiad.display(), pontia_home.display()))

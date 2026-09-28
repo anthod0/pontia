@@ -14,6 +14,7 @@ pub struct AppConfig {
     pub bind_addr: SocketAddr,
     pub database_url: String,
     pub external_api_token: Option<String>,
+    pub auth_origin: String,
     pub run_migrations: bool,
     pub default_client_type: String,
     pub workspace_browser: WorkspaceBrowserConfig,
@@ -27,8 +28,6 @@ pub struct AppConfig {
 #[serde(deny_unknown_fields)]
 pub struct RemoteConfig {
     pub device_id: Option<String>,
-    pub edge_url: Option<String>,
-    pub ca_certificate: Option<PathBuf>,
 }
 
 const DEFAULT_DASHBOARD_SOURCE: &str = concat!(
@@ -148,6 +147,10 @@ pub struct WorkspaceRootConfig {
     pub root_id: String,
     pub label: String,
     pub path: String,
+}
+
+pub fn auth_origin(vars: &HashMap<String, String>) -> pontia_core::error::Result<String> {
+    loading::auth_origin(vars)
 }
 
 fn default_true() -> bool {

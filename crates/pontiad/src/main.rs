@@ -14,18 +14,30 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 async fn main() -> Result<()> {
     let config = AppConfig::from_env()?;
     init_tracing();
-    let remote = config.remote.as_ref().and_then(|remote| {
-        remote.edge_url.as_deref().map(|edge_url| {
-            let identity = pontia_tunnel::DeviceIdentity::load_or_create(
-                &config.pontia_home.join("state/device-identity.json"),
-            )?;
-            info!(device_id = %identity.device_id(), public_key = ?identity.public_key(), "remote device identity");
-            pontia_tunnel::RemoteClient::new(edge_url, identity, remote.ca_certificate.as_deref())
+    let remote = config
+        .remote
+        .as_ref()
+        .and_then(|remote| remote.device_id.as_deref())
+        .map(|device_id| {
+            let device_id = uuid::Uuid::parse_str(device_id).map_err(|_| {
+                pontia_core::error::Error::InvalidConfig {
+                    key: "remote.device_id",
+                    message: "must be a UUIDv7".to_string(),
+                }
+            })?;
+            if device_id.get_version_num() != 7 {
+                return Err(pontia_core::error::Error::InvalidConfig {
+                    key: "remote.device_id",
+                    message: "must be a UUIDv7".to_string(),
+                });
+            }
+            pontia_tunnel::RemoteClient::new(&config.auth_origin, device_id, &config.pontia_home)
+                .map_err(|error| pontia_core::error::Error::InvalidConfig {
+                    key: "PONTIA_AUTH_ORIGIN",
+                    message: error.to_string(),
+                })
         })
-    }).transpose().map_err(|error| pontia_core::error::Error::InvalidConfig {
-        key: "remote",
-        message: error.to_string(),
-    })?;
+        .transpose()?;
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
     let app_state = initialization::initialize(&config).await?;

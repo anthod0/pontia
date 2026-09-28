@@ -120,6 +120,7 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
         &self,
         pontiad: &Path,
         pontia_home: &Path,
+        auth_origin: &str,
         previous_definition: Option<&str>,
     ) -> Result<String, String> {
         let preserved_codex_home = match self.codex_home.as_deref() {
@@ -129,7 +130,12 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
                 .transpose()?
                 .flatten(),
         };
-        render_systemd_with_codex(pontiad, pontia_home, preserved_codex_home.as_deref())
+        render_systemd_with_codex(
+            pontiad,
+            pontia_home,
+            auth_origin,
+            preserved_codex_home.as_deref(),
+        )
     }
 
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String> {
@@ -253,9 +259,10 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
         &self,
         pontiad: &Path,
         pontia_home: &Path,
+        auth_origin: &str,
         _previous_definition: Option<&str>,
     ) -> Result<String, String> {
-        render_launchd(pontiad, pontia_home)
+        render_launchd(pontiad, pontia_home, auth_origin)
     }
 
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String> {

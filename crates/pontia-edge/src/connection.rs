@@ -4,90 +4,88 @@ use axum::{
         State, WebSocketUpgrade,
         ws::{Message as WsMessage, WebSocket},
     },
-    http::StatusCode,
-    response::Response,
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
 };
 use pontia_tunnel::protocol::{self, Message};
 use tokio::{sync::OwnedSemaphorePermit, time::timeout};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::Edge;
+use crate::{Edge, tickets::RedeemError};
 
 pub(crate) async fn upgrade(
     State(edge): State<Edge>,
+    headers: HeaderMap,
     ws: WebSocketUpgrade,
-) -> Result<Response, StatusCode> {
-    let permit = edge
-        .pending
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
-    Ok(ws
-        .max_message_size(protocol::MAX_MESSAGE_BYTES)
+) -> Response {
+    let permit = match edge.pending.clone().try_acquire_owned() {
+        Ok(permit) => permit,
+        Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+    let ticket = match bearer_ticket(&headers) {
+        Some(ticket) => ticket,
+        None => return unauthorized(),
+    };
+    let device_id = match timeout(
+        edge.limits.ticket_redeem_timeout,
+        edge.redeemer.redeem(ticket),
+    )
+    .await
+    {
+        Ok(Ok(device_id)) => device_id,
+        Ok(Err(RedeemError::Rejected)) => return unauthorized(),
+        Ok(Err(RedeemError::Unavailable)) | Err(_) => {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+    };
+    ws.max_message_size(protocol::MAX_MESSAGE_BYTES)
         .max_frame_size(protocol::MAX_MESSAGE_BYTES)
-        .on_upgrade(move |socket| connection(edge, socket, permit)))
+        .on_upgrade(move |socket| connection(edge, socket, device_id, permit))
 }
 
-async fn connection(edge: Edge, mut socket: WebSocket, permit: OwnedSemaphorePermit) {
+fn bearer_ticket(headers: &HeaderMap) -> Option<&str> {
+    let mut values = headers.get_all(header::AUTHORIZATION).iter();
+    let value = values.next()?.to_str().ok()?;
+    if values.next().is_some() {
+        return None;
+    }
+    let ticket = value.strip_prefix("Bearer ")?;
+    if ticket.is_empty() || ticket.bytes().any(|byte| byte.is_ascii_whitespace()) {
+        return None;
+    }
+    Some(ticket)
+}
+
+fn unauthorized() -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        [(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"))],
+    )
+        .into_response()
+}
+
+async fn connection(
+    edge: Edge,
+    mut socket: WebSocket,
+    device_id: Uuid,
+    permit: OwnedSemaphorePermit,
+) {
+    drop(permit);
+    let (_lease, mut replaced) = edge.online.register(device_id);
+    info!(%device_id, "device online");
     let mut shutdown = edge.shutdown.subscribe();
     tokio::select! {
         biased;
         _ = shutdown.wait_for(|stop| *stop) => {}
-        result = authenticated_connection(&edge, &mut socket, permit) => {
+        _ = replaced.wait_for(|stop| *stop) => {}
+        result = heartbeat(&edge, &mut socket) => {
             if let Err(error) = result {
-                warn!(%error, "device connection closed");
+                warn!(%device_id, %error, "device connection closed");
             }
         }
     }
-    // Dropping the socket also terminates peers that never read a close frame.
-}
-
-async fn authenticated_connection(
-    edge: &Edge,
-    socket: &mut WebSocket,
-    permit: OwnedSemaphorePermit,
-) -> Result<()> {
-    let device_id = timeout(edge.limits.auth_timeout, authenticate(edge, socket)).await??;
-    drop(permit);
-    let (_lease, mut replaced) = edge.online.register(device_id);
-    tokio::select! {
-        biased;
-        _ = replaced.wait_for(|stop| *stop) => {}
-        result = async {
-            timeout(edge.limits.auth_timeout, send(socket, Message::Authenticated { device_id })).await??;
-            info!(%device_id, "device online");
-            heartbeat(edge, socket).await
-        } => { result?; }
-    }
     info!(%device_id, "device disconnected");
-    Ok(())
-}
-
-async fn authenticate(edge: &Edge, socket: &mut WebSocket) -> Result<Uuid> {
-    let nonce = protocol::nonce()?;
-    send(
-        socket,
-        Message::Challenge {
-            version: protocol::VERSION,
-            nonce,
-        },
-    )
-    .await?;
-    let Message::Authenticate {
-        device_id,
-        signature,
-    } = receive(socket).await?
-    else {
-        bail!("expected device authentication");
-    };
-    let public_key = edge
-        .devices
-        .public_key(device_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("device access denied"))?;
-    protocol::verify(&public_key, device_id, &nonce, &signature)?;
-    Ok(device_id)
 }
 
 async fn heartbeat(edge: &Edge, socket: &mut WebSocket) -> Result<()> {

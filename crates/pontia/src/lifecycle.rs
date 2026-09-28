@@ -61,6 +61,7 @@ pub trait ServiceManager {
         &self,
         pontiad: &Path,
         pontia_home: &Path,
+        auth_origin: &str,
         previous_definition: Option<&str>,
     ) -> Result<String, String>;
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String>;
@@ -119,6 +120,7 @@ where
         let rendered = self.manager.render_definition(
             pontiad,
             &config.pontia_home,
+            &config.auth_origin,
             previous_definition.as_deref(),
         )?;
         let definition_changed = self.definitions.install(&path, &rendered)?;

@@ -13,6 +13,7 @@ use super::{
 };
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
+const DEFAULT_AUTH_ORIGIN: &str = "https://pontia.dev";
 
 impl AppConfig {
     pub fn from_env() -> Result<Self> {
@@ -45,6 +46,7 @@ impl AppConfig {
             .or_else(|| file.and_then(|config| config.external_api_token.as_deref()))
             .filter(|value| !value.trim().is_empty())
             .map(ToString::to_string);
+        let auth_origin = auth_origin(vars)?;
 
         let run_migrations = match get(vars, "PONTIA_RUN_MIGRATIONS") {
             Some(value) => parse_bool("PONTIA_RUN_MIGRATIONS", value)?,
@@ -89,6 +91,7 @@ impl AppConfig {
             bind_addr,
             database_url,
             external_api_token,
+            auth_origin,
             run_migrations,
             default_client_type,
             workspace_browser,
@@ -98,4 +101,31 @@ impl AppConfig {
             remote: file.and_then(|config| config.remote.clone()),
         })
     }
+}
+
+pub(super) fn auth_origin(vars: &HashMap<String, String>) -> Result<String> {
+    let value = get(vars, "PONTIA_AUTH_ORIGIN").unwrap_or(DEFAULT_AUTH_ORIGIN);
+    let mut origin = url::Url::parse(value).map_err(|error| Error::InvalidConfig {
+        key: "PONTIA_AUTH_ORIGIN",
+        message: error.to_string(),
+    })?;
+    if origin.scheme() != "https" {
+        return Err(Error::InvalidConfig {
+            key: "PONTIA_AUTH_ORIGIN",
+            message: "must use HTTPS".to_string(),
+        });
+    }
+    if origin.host_str().is_none()
+        || !origin.username().is_empty()
+        || origin.password().is_some()
+        || origin.query().is_some()
+        || origin.fragment().is_some()
+    {
+        return Err(Error::InvalidConfig {
+            key: "PONTIA_AUTH_ORIGIN",
+            message: "must not contain credentials, a query, or a fragment".to_string(),
+        });
+    }
+    origin.set_path("/");
+    Ok(origin.to_string().trim_end_matches('/').to_string())
 }

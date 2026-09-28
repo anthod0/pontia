@@ -9,7 +9,6 @@ use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use tokio::time::{Instant, sleep};
 
-const DEFAULT_AUTH_ORIGIN: &str = "https://pontia.dev";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const SLOW_DOWN_SECONDS: u64 = 5;
 
@@ -174,26 +173,8 @@ pub(super) fn validate_token(token: &str) -> Result<(), String> {
 }
 
 pub(super) fn auth_origin(vars: &HashMap<String, String>) -> Result<Url, String> {
-    let value = vars
-        .get("PONTIA_AUTH_ORIGIN")
-        .map(String::as_str)
-        .unwrap_or(DEFAULT_AUTH_ORIGIN);
-    let mut origin =
-        Url::parse(value).map_err(|error| format!("PONTIA_AUTH_ORIGIN is invalid: {error}"))?;
-    if origin.scheme() != "https" {
-        return Err("PONTIA_AUTH_ORIGIN must use HTTPS".to_string());
-    }
-    if origin.username() != ""
-        || origin.password().is_some()
-        || origin.query().is_some()
-        || origin.fragment().is_some()
-    {
-        return Err(
-            "PONTIA_AUTH_ORIGIN must not contain credentials, a query, or a fragment".to_string(),
-        );
-    }
-    origin.set_path("/");
-    Ok(origin)
+    let origin = pontia_config::auth_origin(vars).map_err(|error| error.to_string())?;
+    Url::parse(&origin).map_err(|error| format!("PONTIA_AUTH_ORIGIN is invalid: {error}"))
 }
 
 pub(super) fn pontia_home(vars: &HashMap<String, String>) -> Result<PathBuf, String> {

@@ -2,18 +2,21 @@ use std::path::Path;
 
 use pontia::definition::{render_codex_systemd, render_launchd, render_systemd_with_codex};
 
+const AUTH_ORIGIN: &str = "https://dev.pontia.example";
+
 #[test]
 fn renders_systemd_user_service() {
     let rendered = render_systemd_with_codex(
         Path::new("/opt/Pontia App/bin/pontiad"),
         Path::new("/home/alice/Pontia Home%dev"),
+        AUTH_ORIGIN,
         None,
     )
     .expect("valid paths");
 
     assert_eq!(
         rendered,
-        "[Unit]\nDescription=Pontia Control Plane\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=\"/opt/Pontia App/bin/pontiad\"\nEnvironment=\"PONTIA_HOME=/home/alice/Pontia Home%%dev\"\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n"
+        "[Unit]\nDescription=Pontia Control Plane\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=\"/opt/Pontia App/bin/pontiad\"\nEnvironment=\"PONTIA_HOME=/home/alice/Pontia Home%%dev\"\nEnvironment=\"PONTIA_AUTH_ORIGIN=https://dev.pontia.example\"\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n"
     );
 }
 
@@ -22,6 +25,7 @@ fn systemd_rendering_escapes_unit_syntax() {
     let rendered = render_systemd_with_codex(
         Path::new("/opt/pontia\\build/\"pontiad\""),
         Path::new("/home/alice/pontia\\\"home"),
+        AUTH_ORIGIN,
         Some(Path::new("/home/alice/codex%home")),
     )
     .expect("valid paths");
@@ -51,6 +55,7 @@ fn renders_launch_agent_plist_with_xml_escaping() {
     let rendered = render_launchd(
         Path::new("/Applications/Pontia & Co/pontiad"),
         Path::new("/Users/alice/Pontia <dev>"),
+        AUTH_ORIGIN,
     )
     .expect("valid paths");
 
@@ -70,6 +75,8 @@ fn renders_launch_agent_plist_with_xml_escaping() {
   <dict>
     <key>PONTIA_HOME</key>
     <string>/Users/alice/Pontia &lt;dev&gt;</string>
+    <key>PONTIA_AUTH_ORIGIN</key>
+    <string>https://dev.pontia.example</string>
   </dict>
   <key>KeepAlive</key>
   <true/>
@@ -82,10 +89,22 @@ fn renders_launch_agent_plist_with_xml_escaping() {
 #[test]
 fn renderers_reject_relative_paths() {
     assert!(
-        render_systemd_with_codex(Path::new("bin/pontiad"), Path::new("/home/alice"), None,)
-            .is_err()
+        render_systemd_with_codex(
+            Path::new("bin/pontiad"),
+            Path::new("/home/alice"),
+            AUTH_ORIGIN,
+            None,
+        )
+        .is_err()
     );
-    assert!(render_launchd(Path::new("/usr/bin/pontiad"), Path::new("pontia")).is_err());
+    assert!(
+        render_launchd(
+            Path::new("/usr/bin/pontiad"),
+            Path::new("pontia"),
+            AUTH_ORIGIN,
+        )
+        .is_err()
+    );
 }
 
 #[cfg(unix)]
@@ -95,6 +114,8 @@ fn renderers_reject_non_utf8_paths() {
     use std::os::unix::ffi::OsStrExt;
 
     let path = Path::new(OsStr::from_bytes(b"/home/alice/\xff"));
-    assert!(render_systemd_with_codex(Path::new("/usr/bin/pontiad"), path, None).is_err());
-    assert!(render_launchd(Path::new("/usr/bin/pontiad"), path).is_err());
+    assert!(
+        render_systemd_with_codex(Path::new("/usr/bin/pontiad"), path, AUTH_ORIGIN, None).is_err()
+    );
+    assert!(render_launchd(Path::new("/usr/bin/pontiad"), path, AUTH_ORIGIN).is_err());
 }

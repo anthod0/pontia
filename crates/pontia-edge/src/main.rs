@@ -1,17 +1,15 @@
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
-use pontia_edge::{ConnectionLimits, DeviceRegistry, Edge};
+use pontia_edge::{ConnectionLimits, Edge, TicketRedeemer};
 
 #[derive(Parser)]
 #[command(about = "Pontia device connection service")]
 struct Args {
     #[arg(long, default_value = "127.0.0.1:8443")]
     bind: SocketAddr,
-    #[arg(long)]
-    database: PathBuf,
     #[arg(long)]
     tls_cert: PathBuf,
     #[arg(long)]
@@ -28,9 +26,13 @@ async fn main() -> Result<()> {
         )
         .init();
     let _ = rustls::crypto::ring::default_provider().install_default();
+    let website_origin =
+        std::env::var("PONTIA_WEBSITE_ORIGIN").context("PONTIA_WEBSITE_ORIGIN is required")?;
+    let service_credential =
+        std::env::var("PONTIA_EDGE_CREDENTIAL").context("PONTIA_EDGE_CREDENTIAL is required")?;
     let tls = RustlsConfig::from_pem_file(args.tls_cert, args.tls_key).await?;
     let edge = Edge::new(
-        DeviceRegistry::open(&args.database).await?,
+        TicketRedeemer::new(&website_origin, service_credential)?,
         ConnectionLimits::default(),
     );
     let handle = axum_server::Handle::new();

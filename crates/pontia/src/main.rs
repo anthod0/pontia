@@ -92,6 +92,7 @@ async fn execute(command: Command) -> Result<bool, String> {
         Command::Remote(command) => {
             let vars: HashMap<String, String> = env::vars().collect();
             remote::run(command, &vars).await?;
+            restart_service_for_remote_config()?;
             Ok(true)
         }
         Command::Up => run_lifecycle(LifecycleCommand::Up),
@@ -123,6 +124,43 @@ fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
                 .to_string(),
         )
     }
+}
+
+fn restart_service_for_remote_config() -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        if !Path::new("/run/systemd/system").is_dir() {
+            return Ok(());
+        }
+        let runner = ProcessCommandRunner;
+        restart_with_manager_if_running(&SystemdManager::new(&runner))
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let runner = ProcessCommandRunner;
+        restart_with_manager_if_running(&LaunchdManager::new(&runner, current_uid(&runner)?))
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    Ok(())
+}
+
+fn restart_with_manager_if_running<M: ServiceManager>(manager: &M) -> Result<(), String> {
+    if manager.status()?.run_state != RunState::Running {
+        return Ok(());
+    }
+    let config = AppConfig::from_env().map_err(|error| error.to_string())?;
+    let definitions = FileDefinitionStore;
+    let health = HttpHealthProbe;
+    Lifecycle::new(manager, &definitions, &health).up(
+        &config,
+        &sibling_pontiad()?,
+        &user_home()?,
+        UpOptions {
+            restart_running: true,
+        },
+    )
 }
 
 fn service_manager_preflight() -> Result<(), String> {
