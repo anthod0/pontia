@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
+import { v7 as uuidv7 } from 'uuid';
 
 export type RegistrationEnvironment = 'production' | 'staging';
 
 export interface RegistrationInput {
 	environment: RegistrationEnvironment;
-	edgeId: string;
 	name: string;
 	tunnelUrl: string;
 }
@@ -47,25 +47,19 @@ export interface RegistrationDependencies {
 	prompter: RegistrationPrompter;
 	write(message: string): void;
 	writeError(message: string): void;
+	createEdgeId(): string;
 	createCredential(edgeId: string): Credential;
 }
 
-const EDGE_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/;
 const WEBSITE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export function validateRegistrationInput(
 	input: RegistrationInput
 ): RegistrationInput {
-	const edgeId = input.edgeId.trim();
 	const name = input.name.trim();
 	const tunnelUrl = input.tunnelUrl.trim();
 
-	if (!EDGE_ID_PATTERN.test(edgeId)) {
-		throw new Error(
-			'Edge ID must be 1-63 lowercase letters, numbers, or hyphens, and cannot start or end with a hyphen.'
-		);
-	}
 	if (!name) throw new Error('Display name is required.');
 	if (CONTROL_CHARACTER_PATTERN.test(name)) {
 		throw new Error('Display name cannot contain control characters.');
@@ -88,10 +82,13 @@ export function validateRegistrationInput(
 
 	return {
 		environment: input.environment,
-		edgeId,
 		name,
 		tunnelUrl: parsedTunnelUrl.toString()
 	};
+}
+
+export function createEdgeId(): string {
+	return uuidv7();
 }
 
 export function createEdgeCredential(
@@ -250,7 +247,8 @@ export class WranglerD1Client implements D1Client {
 export async function runRegistration(
 	dependencies: RegistrationDependencies
 ): Promise<number> {
-	const { d1, prompter, write, writeError, createCredential } = dependencies;
+	const { d1, prompter, write, writeError, createEdgeId, createCredential } =
+		dependencies;
 	try {
 		const environmentAnswer = (
 			await prompter.question(
@@ -269,14 +267,14 @@ export async function runRegistration(
 
 		const input = validateRegistrationInput({
 			environment: environmentAnswer === 'staging' ? 'staging' : 'production',
-			edgeId: await prompter.question('Edge ID: '),
 			name: await prompter.question('Display name: '),
 			tunnelUrl: await prompter.question('WSS tunnel URL: ')
 		});
+		const edgeId = createEdgeId();
 
 		write('\nRegistration summary:');
 		write(`  Environment: ${input.environment}`);
-		write(`  Edge ID: ${input.edgeId}`);
+		write(`  Edge ID: ${edgeId}`);
 		write(`  Display name: ${input.name}`);
 		write(`  Tunnel URL: ${input.tunnelUrl}`);
 		const confirmation = (
@@ -290,15 +288,15 @@ export async function runRegistration(
 		}
 
 		write('Checking whether the edge ID is available...');
-		if (await d1.edgeExists(input.environment, input.edgeId)) {
+		if (await d1.edgeExists(input.environment, edgeId)) {
 			throw new Error(
-				`Edge ID "${input.edgeId}" already exists; no record was changed.`
+				`Edge ID "${edgeId}" already exists; no record was changed.`
 			);
 		}
 
-		const credential = createCredential(input.edgeId);
+		const credential = createCredential(edgeId);
 		await d1.insertEdge(input.environment, {
-			id: input.edgeId,
+			id: edgeId,
 			name: input.name,
 			tunnelUrl: input.tunnelUrl,
 			serviceCredentialHash: credential.hash
@@ -342,6 +340,7 @@ if (import.meta.main) {
 			prompter,
 			write: console.log,
 			writeError: console.error,
+			createEdgeId,
 			createCredential: createEdgeCredential
 		});
 	}

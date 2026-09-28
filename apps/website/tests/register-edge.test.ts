@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
+import { validate as validateUuid, version as uuidVersion } from 'uuid';
 import {
 	buildEdgeInsertSql,
 	createEdgeCredential,
+	createEdgeId,
 	parseWranglerOutput,
 	runRegistration,
 	validateRegistrationInput,
@@ -18,37 +20,20 @@ describe('registration input validation', () => {
 		expect(
 			validateRegistrationInput({
 				environment: 'staging',
-				edgeId: ' edge-eu-1 ',
 				name: ' EU West ',
 				tunnelUrl: ' wss://edge.example:8443/tunnel?region=eu '
 			})
 		).toEqual({
 			environment: 'staging',
-			edgeId: 'edge-eu-1',
 			name: 'EU West',
 			tunnelUrl: 'wss://edge.example:8443/tunnel?region=eu'
 		});
 	});
 
-	test.each(['', '-edge', 'edge-', 'Edge', 'edge_name', 'a'.repeat(64)])(
-		'rejects invalid edge ID %p',
-		(edgeId) => {
-			expect(() =>
-				validateRegistrationInput({
-					environment: 'production',
-					edgeId,
-					name: 'Edge',
-					tunnelUrl: 'wss://edge.example/tunnel'
-				})
-			).toThrow('Edge ID');
-		}
-	);
-
 	test('rejects a blank display name', () => {
 		expect(() =>
 			validateRegistrationInput({
 				environment: 'production',
-				edgeId: 'edge-1',
 				name: '  ',
 				tunnelUrl: 'wss://edge.example/tunnel'
 			})
@@ -64,12 +49,18 @@ describe('registration input validation', () => {
 		expect(() =>
 			validateRegistrationInput({
 				environment: 'production',
-				edgeId: 'edge-1',
 				name: 'Edge',
 				tunnelUrl
 			})
 		).toThrow('Tunnel URL');
 	});
+});
+
+test('edge ID is a UUID v7', () => {
+	const edgeId = createEdgeId();
+
+	expect(validateUuid(edgeId)).toBe(true);
+	expect(uuidVersion(edgeId)).toBe(7);
 });
 
 test('credential uses 32 random bytes and hashes only the encoded secret', () => {
@@ -126,6 +117,7 @@ class Answers implements RegistrationPrompter {
 
 function registrationHarness(options?: {
 	answers?: string[];
+	edgeId?: string;
 	exists?: boolean;
 	queryError?: Error;
 	insertError?: Error;
@@ -134,7 +126,6 @@ function registrationHarness(options?: {
 	const prompter = new Answers(
 		options?.answers ?? [
 			'staging',
-			'edge-1',
 			'Edge One',
 			'wss://edge.example/tunnel',
 			'yes'
@@ -154,8 +145,10 @@ function registrationHarness(options?: {
 			if (options?.insertError) throw options.insertError;
 		}
 	};
+	const edgeId =
+		options?.edgeId ?? '01a0e686-24d4-75e8-866d-5710ffe3b2b5';
 	const credential = options?.credential ?? {
-		value: 'pec_v1_edge-1_test-secret',
+		value: `pec_v1_${edgeId}_test-secret`,
 		hash: 'test-hash'
 	};
 	const dependencies: RegistrationDependencies = {
@@ -166,6 +159,9 @@ function registrationHarness(options?: {
 		},
 		writeError(message) {
 			errors.push(message);
+		},
+		createEdgeId() {
+			return edgeId;
 		},
 		createCredential() {
 			credentialCalls += 1;
@@ -202,7 +198,7 @@ test('successful registration reveals the credential only after insertion', asyn
 	expect(harness.output.join('\n')).toContain(harness.credential.value);
 	expect(harness.inserted).toEqual([
 		{
-			id: 'edge-1',
+			id: '01a0e686-24d4-75e8-866d-5710ffe3b2b5',
 			name: 'Edge One',
 			tunnelUrl: 'wss://edge.example/tunnel',
 			serviceCredentialHash: 'test-hash'
@@ -214,7 +210,6 @@ test('cancellation performs no query and generates no credential', async () => {
 	const harness = registrationHarness({
 		answers: [
 			'production',
-			'edge-1',
 			'Edge One',
 			'wss://edge.example/tunnel',
 			'no'
