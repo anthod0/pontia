@@ -1,10 +1,10 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
-import { v7 as uuidv7 } from 'uuid';
+import { validate as validateUuid, version as uuidVersion } from 'uuid';
 
 export type RegistrationEnvironment = 'production' | 'staging';
 
@@ -22,7 +22,7 @@ export interface EdgeRecord {
 }
 
 export interface Credential {
-	value: string;
+	edgeId: string;
 	hash: string;
 }
 
@@ -47,8 +47,6 @@ export interface RegistrationDependencies {
 	prompter: RegistrationPrompter;
 	write(message: string): void;
 	writeError(message: string): void;
-	createEdgeId(): string;
-	createCredential(edgeId: string): Credential;
 }
 
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/;
@@ -87,27 +85,30 @@ export function validateRegistrationInput(
 	};
 }
 
-export function createEdgeId(): string {
-	return uuidv7();
-}
-
-export function createEdgeCredential(
-	edgeId: string,
-	bytes: (size: number) => Uint8Array = randomBytes
-): Credential {
-	const secretBytes = bytes(32);
-	if (secretBytes.length !== 32)
-		throw new Error('Credential generator must return 32 bytes.');
-
-	try {
-		const secret = Buffer.from(secretBytes).toString('base64url');
-		return {
-			value: `pec_v1_${edgeId}_${secret}`,
-			hash: createHash('sha256').update(secret, 'utf8').digest('base64url')
-		};
-	} finally {
-		secretBytes.fill(0);
+export function parseEdgeCredential(value: string): Credential {
+	const match =
+		/^pec_v1_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_([A-Za-z0-9_-]{43})$/.exec(
+			value
+		);
+	if (!match) throw new Error('Edge credential is invalid.');
+	const [, edgeId, secret] = match;
+	if (!validateUuid(edgeId) || uuidVersion(edgeId) !== 7) {
+		throw new Error('Edge credential is invalid.');
 	}
+
+	let decoded: Buffer;
+	try {
+		decoded = Buffer.from(secret, 'base64url');
+	} catch {
+		throw new Error('Edge credential is invalid.');
+	}
+	if (decoded.length !== 32 || decoded.toString('base64url') !== secret) {
+		throw new Error('Edge credential is invalid.');
+	}
+
+	const hash = createHash('sha256').update(secret, 'utf8').digest('base64url');
+	decoded.fill(0);
+	return { edgeId, hash };
 }
 
 function sqlString(value: string): string {
@@ -247,9 +248,11 @@ export class WranglerD1Client implements D1Client {
 export async function runRegistration(
 	dependencies: RegistrationDependencies
 ): Promise<number> {
-	const { d1, prompter, write, writeError, createEdgeId, createCredential } =
-		dependencies;
+	const { d1, prompter, write, writeError } = dependencies;
 	try {
+		const credential = parseEdgeCredential(
+			await prompter.question('Edge service credential: ')
+		);
 		const environmentAnswer = (
 			await prompter.question(
 				'Target environment (production/staging) [production]: '
@@ -270,7 +273,7 @@ export async function runRegistration(
 			name: await prompter.question('Display name: '),
 			tunnelUrl: await prompter.question('WSS tunnel URL: ')
 		});
-		const edgeId = createEdgeId();
+		const edgeId = credential.edgeId;
 
 		write('\nRegistration summary:');
 		write(`  Environment: ${input.environment}`);
@@ -294,7 +297,6 @@ export async function runRegistration(
 			);
 		}
 
-		const credential = createCredential(edgeId);
 		await d1.insertEdge(input.environment, {
 			id: edgeId,
 			name: input.name,
@@ -302,12 +304,8 @@ export async function runRegistration(
 			serviceCredentialHash: credential.hash
 		});
 
-		write('\nEdge registered successfully. Save this credential now:');
-		write(credential.value);
-		write(
-			'\nThe website stores only its hash, and this script cannot display or recover it again.'
-		);
-		write('Configure the credential on the matching edge manually.');
+		write('\nEdge registered successfully.');
+		write('The website stored only the credential hash.');
 		write(
 			'The edge is registered but is not online until deployment and configuration are complete.'
 		);
@@ -339,9 +337,7 @@ if (import.meta.main) {
 			d1: new WranglerD1Client(),
 			prompter,
 			write: console.log,
-			writeError: console.error,
-			createEdgeId,
-			createCredential: createEdgeCredential
+			writeError: console.error
 		});
 	}
 }

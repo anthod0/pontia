@@ -4,6 +4,8 @@ use reqwest::{Client, StatusCode, Url};
 use serde::Deserialize;
 use uuid::Uuid;
 
+use crate::credential::valid_credential;
+
 const REDEEM_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone)]
@@ -47,7 +49,7 @@ impl TicketRedeemer {
             "website origin must be an HTTPS origin without credentials, query, or fragment"
         );
         anyhow::ensure!(
-            valid_edge_credential(&service_credential),
+            valid_credential(&service_credential),
             "invalid edge service credential"
         );
         origin.set_path("/");
@@ -78,18 +80,4 @@ impl TicketRedeemer {
             _ => Err(RedeemError::Unavailable),
         }
     }
-}
-
-fn valid_edge_credential(value: &str) -> bool {
-    let mut parts = value.split('_');
-    parts.next() == Some("pec")
-        && parts.next() == Some("v1")
-        && parts.next().is_some_and(|id| !id.is_empty())
-        && parts.next().is_some_and(|secret| {
-            secret.len() == 43
-                && secret
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
-        })
-        && parts.next().is_none()
 }

@@ -1,19 +1,23 @@
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { validate as validateUuid, version as uuidVersion } from 'uuid';
 import {
 	buildEdgeInsertSql,
-	createEdgeCredential,
-	createEdgeId,
+	parseEdgeCredential,
 	parseWranglerOutput,
 	runRegistration,
 	validateRegistrationInput,
-	type Credential,
 	type D1Client,
 	type EdgeRecord,
 	type RegistrationDependencies,
 	type RegistrationPrompter
 } from '../scripts/register-edge';
+
+const edgeId = '01a0e686-24d4-75e8-866d-5710ffe3b2b5';
+const secret = Buffer.from(new Uint8Array(32).fill(7)).toString('base64url');
+const pec = `pec_v1_${edgeId}_${secret}`;
+const credentialHash = createHash('sha256')
+	.update(secret, 'utf8')
+	.digest('base64url');
 
 describe('registration input validation', () => {
 	test('trims values and accepts a WSS URL with a path and port', () => {
@@ -56,26 +60,27 @@ describe('registration input validation', () => {
 	});
 });
 
-test('edge ID is a UUID v7', () => {
-	const edgeId = createEdgeId();
-
-	expect(validateUuid(edgeId)).toBe(true);
-	expect(uuidVersion(edgeId)).toBe(7);
+test('credential parser extracts UUID v7 and hashes only the encoded secret', () => {
+	expect(parseEdgeCredential(pec)).toEqual({
+		edgeId,
+		hash: credentialHash
+	});
 });
 
-test('credential uses 32 random bytes and hashes only the encoded secret', () => {
-	const source = new Uint8Array(32).fill(7);
-	const expectedSecret = Buffer.from(source).toString('base64url');
-	const credential = createEdgeCredential('edge-1', (size) => {
-		expect(size).toBe(32);
-		return source;
-	});
-
-	expect(credential.value).toBe(`pec_v1_edge-1_${expectedSecret}`);
-	expect(credential.hash).toBe(
-		createHash('sha256').update(expectedSecret, 'utf8').digest('base64url')
+test.each([
+	` ${pec}`,
+	`${pec} `,
+	`${pec}\n`,
+	`${pec}_extra`,
+	pec.replace('pec_v1_', 'pec_v2_'),
+	pec.replace(edgeId, 'not-a-uuid'),
+	pec.replace(edgeId, '01a0e686-24d4-45e8-866d-5710ffe3b2b5'),
+	pec.replace(secret, `${secret.slice(0, 42)}=`),
+	pec.replace(secret, `${secret.slice(0, 42)}+`)
+])('credential parser rejects non-canonical input', (value) => {
+	expect(() => parseEdgeCredential(value)).toThrow(
+		'Edge credential is invalid.'
 	);
-	expect(source).toEqual(new Uint8Array(32));
 });
 
 test.each([
@@ -90,16 +95,16 @@ test.each([
 
 test('insert SQL escapes values and contains only the credential hash', () => {
 	const sql = buildEdgeInsertSql({
-		id: 'edge-1',
+		id: edgeId,
 		name: "O'Brien's Edge",
 		tunnelUrl: "wss://edge.example/tunnel?label=operator's",
-		serviceCredentialHash: 'safe-hash'
+		serviceCredentialHash: credentialHash
 	});
 
 	expect(sql).toContain("'O''Brien''s Edge'");
 	expect(sql).toContain("'wss://edge.example/tunnel?label=operator''s'");
-	expect(sql).toContain("'safe-hash'");
-	expect(sql).not.toContain('pec_v1_');
+	expect(sql).toContain(`'${credentialHash}'`);
+	expect(sql).not.toContain(secret);
 	expect(sql).not.toMatch(/INSERT\s+OR\s+REPLACE|UPSERT|ON\s+CONFLICT/i);
 });
 
@@ -117,14 +122,13 @@ class Answers implements RegistrationPrompter {
 
 function registrationHarness(options?: {
 	answers?: string[];
-	edgeId?: string;
 	exists?: boolean;
 	queryError?: Error;
 	insertError?: Error;
-	credential?: Credential;
 }) {
 	const prompter = new Answers(
 		options?.answers ?? [
+			pec,
 			'staging',
 			'Edge One',
 			'wss://edge.example/tunnel',
@@ -134,7 +138,6 @@ function registrationHarness(options?: {
 	const output: string[] = [];
 	const errors: string[] = [];
 	const inserted: EdgeRecord[] = [];
-	let credentialCalls = 0;
 	const d1: D1Client = {
 		async edgeExists() {
 			if (options?.queryError) throw options.queryError;
@@ -145,12 +148,6 @@ function registrationHarness(options?: {
 			if (options?.insertError) throw options.insertError;
 		}
 	};
-	const edgeId =
-		options?.edgeId ?? '01a0e686-24d4-75e8-866d-5710ffe3b2b5';
-	const credential = options?.credential ?? {
-		value: `pec_v1_${edgeId}_test-secret`,
-		hash: 'test-hash'
-	};
 	const dependencies: RegistrationDependencies = {
 		d1,
 		prompter,
@@ -159,61 +156,29 @@ function registrationHarness(options?: {
 		},
 		writeError(message) {
 			errors.push(message);
-		},
-		createEdgeId() {
-			return edgeId;
-		},
-		createCredential() {
-			credentialCalls += 1;
-			return credential;
 		}
 	};
-	return {
-		dependencies,
-		prompter,
-		output,
-		errors,
-		inserted,
-		credential,
-		get credentialCalls() {
-			return credentialCalls;
-		}
-	};
+	return { dependencies, output, errors, inserted };
 }
 
-test('successful registration reveals the credential only after insertion', async () => {
+test('successful registration uses the parsed ID and never repeats the credential', async () => {
 	const harness = registrationHarness();
-	let outputAtInsert = '';
-	const d1 = harness.dependencies.d1;
-	harness.dependencies.d1 = {
-		edgeExists: d1.edgeExists,
-		async insertEdge(environment, edge) {
-			outputAtInsert = harness.output.join('\n');
-			await d1.insertEdge(environment, edge);
-		}
-	};
 
 	expect(await runRegistration(harness.dependencies)).toBe(0);
-	expect(outputAtInsert).not.toContain(harness.credential.value);
-	expect(harness.output.join('\n')).toContain(harness.credential.value);
+	expect(harness.output.join('\n')).not.toContain(secret);
 	expect(harness.inserted).toEqual([
 		{
-			id: '01a0e686-24d4-75e8-866d-5710ffe3b2b5',
+			id: edgeId,
 			name: 'Edge One',
 			tunnelUrl: 'wss://edge.example/tunnel',
-			serviceCredentialHash: 'test-hash'
+			serviceCredentialHash: credentialHash
 		}
 	]);
 });
 
-test('cancellation performs no query and generates no credential', async () => {
+test('cancellation performs no query or insert', async () => {
 	const harness = registrationHarness({
-		answers: [
-			'production',
-			'Edge One',
-			'wss://edge.example/tunnel',
-			'no'
-		]
+		answers: [pec, 'production', 'Edge One', 'wss://edge.example/tunnel', 'no']
 	});
 	let queried = false;
 	harness.dependencies.d1 = {
@@ -228,17 +193,38 @@ test('cancellation performs no query and generates no credential', async () => {
 
 	expect(await runRegistration(harness.dependencies)).toBe(0);
 	expect(queried).toBe(false);
-	expect(harness.credentialCalls).toBe(0);
 	expect(harness.output.join('\n')).toContain('cancelled');
 });
 
-test('existing edge ID fails before credential generation', async () => {
+test('an existing parsed edge ID is rejected without insertion', async () => {
 	const harness = registrationHarness({ exists: true });
 
 	expect(await runRegistration(harness.dependencies)).toBe(1);
-	expect(harness.credentialCalls).toBe(0);
 	expect(harness.inserted).toHaveLength(0);
 	expect(harness.errors.join('\n')).toContain('already exists');
+	expect(harness.errors.join('\n')).not.toContain(secret);
+});
+
+test('an invalid credential fails before querying D1 without echoing input', async () => {
+	const invalidCredential = `${pec} `;
+	const harness = registrationHarness({ answers: [invalidCredential] });
+	let queried = false;
+	harness.dependencies.d1 = {
+		async edgeExists() {
+			queried = true;
+			return false;
+		},
+		async insertEdge() {
+			throw new Error('should not insert');
+		}
+	};
+
+	expect(await runRegistration(harness.dependencies)).toBe(1);
+	expect(queried).toBe(false);
+	expect(harness.errors.join('\n')).toBe(
+		'Registration failed: Edge credential is invalid.'
+	);
+	expect(harness.errors.join('\n')).not.toContain(invalidCredential);
 });
 
 test.each([
@@ -250,7 +236,7 @@ test.each([
 		const harness = registrationHarness(options);
 
 		expect(await runRegistration(harness.dependencies)).toBe(1);
-		expect(harness.output.join('\n')).not.toContain(harness.credential.value);
-		expect(harness.errors.join('\n')).not.toContain(harness.credential.value);
+		expect(harness.output.join('\n')).not.toContain(secret);
+		expect(harness.errors.join('\n')).not.toContain(secret);
 	}
 );

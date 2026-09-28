@@ -28,7 +28,8 @@ use uuid::Uuid;
 
 pub type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 pub const CLI_CREDENTIAL: &str = "ptr_v1_session_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-pub const EDGE_CREDENTIAL: &str = "pec_v1_edge_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+pub const EDGE_CREDENTIAL: &str =
+    "pec_v1_01a0e686-24d4-75e8-866d-5710ffe3b2b5_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 #[derive(Clone)]
 struct WebsiteState {

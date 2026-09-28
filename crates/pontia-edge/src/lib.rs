@@ -1,4 +1,5 @@
 mod connection;
+pub mod credential;
 mod online;
 mod tickets;
 
