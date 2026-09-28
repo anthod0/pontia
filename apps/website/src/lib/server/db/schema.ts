@@ -56,6 +56,30 @@ export const devices = sqliteTable(
 	]
 );
 
+export const tunnelTickets = sqliteTable(
+	'tunnel_tickets',
+	{
+		id: text().notNull(),
+		secretHash: text('secret_hash').notNull(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		deviceId: text('device_id')
+			.notNull()
+			.references(() => devices.id, { onDelete: 'cascade' }),
+		edgeId: text('edge_id')
+			.notNull()
+			.references(() => edges.id, { onDelete: 'cascade' }),
+		expiresAt: text('expires_at').notNull(),
+		consumedAt: text('consumed_at'),
+		createdAt: text('created_at').notNull().default(timestamp)
+	},
+	(table) => [
+		primaryKey({ columns: [table.id] }),
+		index('idx_tunnel_tickets_expires_at').on(table.expiresAt)
+	]
+);
+
 export const accounts = sqliteTable(
 	'accounts',
 	{

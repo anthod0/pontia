@@ -3,11 +3,15 @@ import { authenticateCliCredential } from '../auth/cli';
 import { environment } from '../auth/http';
 import { database } from '../db';
 
+export function bearerCredential(request: Request) {
+	const authorization = request.headers.get('authorization');
+	return authorization && /^Bearer ([^\s]+)$/.exec(authorization)?.[1];
+}
+
 export async function cliPrincipal(event: RequestEvent) {
-	const authorization = event.request.headers.get('authorization');
-	const match = authorization && /^Bearer ([^\s]+)$/.exec(authorization);
-	if (!match) return null;
-	return authenticateCliCredential(database(environment(event).DB), match[1]);
+	const credential = bearerCredential(event.request);
+	if (!credential) return null;
+	return authenticateCliCredential(database(environment(event).DB), credential);
 }
 
 export function remoteDatabase(event: RequestEvent) {

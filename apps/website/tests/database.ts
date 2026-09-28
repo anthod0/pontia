@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { Miniflare } from 'miniflare';
 import { database, type Database } from '../src/lib/server/db';
-import { users } from '../src/lib/server/db/schema';
+import { edges, users } from '../src/lib/server/db/schema';
 
 export function testDatabase() {
 	let binding: D1Database;
@@ -65,6 +65,7 @@ export function testDatabase() {
 	}, 30_000);
 	beforeEach(async () => {
 		await db.delete(users);
+		await db.delete(edges);
 	});
 	return {
 		get db() {
