@@ -393,7 +393,11 @@ fn remote_connection_is_explicitly_configured() {
     .unwrap();
     let config = AppConfig::from_vars(&vars_for_home(root.path())).unwrap();
     let remote = config.remote.unwrap();
-    assert_eq!(remote.edge_url, "wss://edge.example/tunnel");
+    assert_eq!(
+        remote.edge_url.as_deref(),
+        Some("wss://edge.example/tunnel")
+    );
+    assert_eq!(remote.device_id, None);
     assert_eq!(
         remote.ca_certificate.unwrap(),
         std::path::Path::new("/opt/pontia/ca.pem")
@@ -413,7 +417,27 @@ fn remote_connection_needs_only_an_edge_url() {
             .unwrap()
             .remote
             .unwrap()
-            .edge_url,
-        "wss://edge.example/tunnel"
+            .edge_url
+            .as_deref(),
+        Some("wss://edge.example/tunnel")
     );
+}
+
+#[test]
+fn remote_registration_needs_no_connection_configuration() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("config.toml"),
+        "[remote]\ndevice_id = '0195e7c1-1b22-7c33-9d44-123456789abc'\n",
+    )
+    .unwrap();
+    let remote = AppConfig::from_vars(&vars_for_home(root.path()))
+        .unwrap()
+        .remote
+        .unwrap();
+    assert_eq!(
+        remote.device_id.as_deref(),
+        Some("0195e7c1-1b22-7c33-9d44-123456789abc")
+    );
+    assert_eq!(remote.edge_url, None);
 }

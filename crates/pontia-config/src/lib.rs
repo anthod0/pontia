@@ -26,7 +26,8 @@ pub struct AppConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RemoteConfig {
-    pub edge_url: String,
+    pub device_id: Option<String>,
+    pub edge_url: Option<String>,
     pub ca_certificate: Option<PathBuf>,
 }
 

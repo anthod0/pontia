@@ -1,4 +1,5 @@
 mod login;
+mod remote;
 mod workflow;
 
 use std::{
@@ -43,6 +44,8 @@ enum Command {
     Init,
     /// Sign in to the Pontia website from a headless terminal
     Login,
+    /// Configure remote device access
+    Remote(remote::RemoteCommand),
     /// Install and start the per-user Pontia service
     Up,
     /// Stop and disable the per-user Pontia service
@@ -84,6 +87,11 @@ async fn execute(command: Command) -> Result<bool, String> {
         Command::Workflow(command) => {
             let config = AppConfig::from_env().map_err(|error| error.to_string())?;
             workflow::run(command, &config).await?;
+            Ok(true)
+        }
+        Command::Remote(command) => {
+            let vars: HashMap<String, String> = env::vars().collect();
+            remote::run(command, &vars).await?;
             Ok(true)
         }
         Command::Up => run_lifecycle(LifecycleCommand::Up),

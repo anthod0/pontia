@@ -530,6 +530,23 @@ fn login_rejects_plaintext_http_without_writing_a_credential() {
 }
 
 #[test]
+fn remote_enable_requires_login_before_creating_a_device_id() {
+    let dir = temp_dir("remote-not-logged-in");
+    let output = pontia()
+        .args(["remote", "enable"])
+        .env("PONTIA_HOME", dir.path())
+        .output()
+        .expect("run remote enable");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("run `pontia login` before enabling remote access")
+    );
+    assert!(!dir.path().join("config.toml").exists());
+}
+
+#[test]
 fn workflow_submit_rejects_a_pane_without_pontia_identity() {
     let dir = temp_dir("unmanaged-pane");
     let bin_dir = dir.path().join("bin");

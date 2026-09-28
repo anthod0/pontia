@@ -160,7 +160,7 @@ fn valid_user_code(value: &str) -> bool {
             .all(|(index, byte)| index == 4 || b"BCDFGHJKLMNPQRSTVWXZ".contains(&byte))
 }
 
-fn validate_token(token: &str) -> Result<(), String> {
+pub(super) fn validate_token(token: &str) -> Result<(), String> {
     let mut parts = token.split('_');
     if parts.next() != Some("ptr")
         || parts.next() != Some("v1")
@@ -173,7 +173,7 @@ fn validate_token(token: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn auth_origin(vars: &HashMap<String, String>) -> Result<Url, String> {
+pub(super) fn auth_origin(vars: &HashMap<String, String>) -> Result<Url, String> {
     let value = vars
         .get("PONTIA_AUTH_ORIGIN")
         .map(String::as_str)
@@ -196,7 +196,7 @@ fn auth_origin(vars: &HashMap<String, String>) -> Result<Url, String> {
     Ok(origin)
 }
 
-fn pontia_home(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
+pub(super) fn pontia_home(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
     let (key, value, append) = match vars.get("PONTIA_HOME") {
         Some(value) => ("PONTIA_HOME", value.as_str(), false),
         None => (
