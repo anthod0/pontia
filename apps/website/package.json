@@ -16,7 +16,8 @@
 		"check:watch": "svelte-kit sync && wrangler types && svelte-check --tsconfig ./tsconfig.json --watch",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "wrangler d1 migrations apply DB --local",
-		"test": "bun test tests"
+		"test": "bun test tests",
+		"register:edge": "bun run scripts/register-edge.ts"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-cloudflare": "^7.2.9",
