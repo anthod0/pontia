@@ -16,7 +16,6 @@ use pontia_core::{
 };
 
 use super::{
-    authentication::authenticate,
     events::{EventStreamQuery, event_view_from_domain_event, is_test_stream_once},
     response::ApiError,
 };
@@ -57,7 +56,6 @@ pub async fn stream_dashboard_events(
     Query(query): Query<EventStreamQuery>,
 ) -> std::result::Result<Sse<impl Stream<Item = std::result::Result<Event, Infallible>>>, ApiError>
 {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     let cursor = match query.after.as_deref() {
         Some(after) => parse_dashboard_stream_cursor(after)?,

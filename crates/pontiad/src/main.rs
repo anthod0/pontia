@@ -74,10 +74,11 @@ async fn main() -> Result<()> {
     let shutdown = state.app().shutdown();
     let cleanup_shutdown = shutdown.clone();
     let codex_root = state.app().pontia_home().to_path_buf();
+    let http_entrypoints = http::HttpEntrypoints::new(state);
     inbox.resume_pending().await?;
     let server_result = http::serve_with_shutdown_timeout(
         listener,
-        http::router(state),
+        http_entrypoints.local_http(),
         async move {
             shutdown_signal().await;
             shutdown.notify();

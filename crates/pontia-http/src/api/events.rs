@@ -12,9 +12,7 @@ use tokio_stream::{Stream, wrappers::ReceiverStream};
 use pontia_application::{AppState, EventStreamScope, EventView};
 use pontia_core::domain::{DomainEvent, EventType};
 
-use super::{
-    authentication::authenticate, response::ApiError, session_guard::ensure_session_exists,
-};
+use super::{response::ApiError, session_guard::ensure_session_exists};
 
 #[derive(Debug, Deserialize)]
 pub struct EventStreamQuery {
@@ -27,7 +25,6 @@ pub async fn stream_session_events(
     Path(session_id): Path<String>,
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     let after_rowid = match query.after.as_deref() {
@@ -59,7 +56,6 @@ pub async fn stream_turn_events(
     Path((session_id, turn_id)): Path<(String, String)>,
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     service

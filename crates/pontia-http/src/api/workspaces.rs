@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
@@ -11,10 +11,7 @@ use pontia_application::{
     AppState, RegisterWorkspaceRequest, RenameWorkspaceRequest, WorkspaceBrowserService,
 };
 
-use super::{
-    authentication::authenticate,
-    response::{ApiError, ApiResponse, ok},
-};
+use super::response::{ApiError, ApiResponse, ok};
 
 #[derive(Debug, Deserialize)]
 pub struct WorkspaceEntriesQuery {
@@ -31,9 +28,7 @@ pub struct FilePickerQuery {
 
 pub async fn list_workspaces(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     let workspaces = service.list_workspaces().await?;
     Ok(ok(json!({ "workspaces": workspaces })))
@@ -41,10 +36,8 @@ pub async fn list_workspaces(
 
 pub async fn get_workspace(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     let workspace = service
         .get_workspace(&workspace_id)
@@ -55,11 +48,9 @@ pub async fn get_workspace(
 
 pub async fn rename_workspace(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workspace_id): Path<String>,
     Json(request): Json<RenameWorkspaceRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let workspace = service.rename_workspace(&workspace_id, request).await?;
     Ok(ok(json!({ "workspace": workspace })))
@@ -67,10 +58,8 @@ pub async fn rename_workspace(
 
 pub async fn delete_workspace(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let workspace = service.delete_workspace(&workspace_id).await?;
     Ok(ok(json!({ "workspace": workspace })))
@@ -78,9 +67,7 @@ pub async fn delete_workspace(
 
 pub async fn list_workspace_roots(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let roots = service.list_roots().await;
     Ok(ok(json!({ "roots": roots })))
@@ -88,11 +75,9 @@ pub async fn list_workspace_roots(
 
 pub async fn list_workspace_root_entries(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(root_id): Path<String>,
     Query(query): Query<WorkspaceEntriesQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let listing = service.list_entries(&root_id, &query.path).await?;
     Ok(ok(json!({
@@ -107,11 +92,9 @@ pub async fn list_workspace_root_entries(
 
 pub async fn pick_workspace_files(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workspace_id): Path<String>,
     Query(query): Query<FilePickerQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = WorkspaceBrowserService::with_file_picker(
         state.db(),
         state.workspace_browser(),
@@ -129,10 +112,8 @@ pub async fn pick_workspace_files(
 
 pub async fn register_workspace(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<RegisterWorkspaceRequest>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = WorkspaceBrowserService::new(state.db(), state.workspace_browser());
     let workspace = service.register_workspace(request).await?;
     Ok((StatusCode::CREATED, ok(json!({ "workspace": workspace }))).into_response())

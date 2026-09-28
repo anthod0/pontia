@@ -10,7 +10,6 @@ use serde_json::{Value, json};
 use pontia_application::{AgentProfileService, AppState, UpsertExecutionProfileRequest};
 
 use super::{
-    authentication::authenticate,
     idempotency::idempotent,
     response::{ApiError, ApiResponse, ok},
 };
@@ -29,10 +28,8 @@ pub struct AgentProfileVersionsQuery {
 
 pub async fn list_agent_profiles(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<AgentProfilesQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let profiles = if query.include_archived {
         service.list_latest_including_archived().await?
@@ -44,10 +41,8 @@ pub async fn list_agent_profiles(
 
 pub async fn get_agent_profile(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(profile_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let profile = service
         .get_latest(&profile_id)
@@ -61,7 +56,6 @@ pub async fn create_agent_profile(
     headers: HeaderMap,
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let outcome = idempotent(&state, &headers, "create_agent_profile", || async move {
         Ok(service.create_profile(request).await?.data)
@@ -80,7 +74,6 @@ pub async fn delete_agent_profile(
     headers: HeaderMap,
     Path(profile_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let operation = format!("archive_agent_profile:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -92,11 +85,9 @@ pub async fn delete_agent_profile(
 
 pub async fn list_agent_profile_versions(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(profile_id): Path<String>,
     Query(query): Query<AgentProfileVersionsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let versions = service
         .list_versions(&profile_id, query.include_archived)
@@ -115,7 +106,6 @@ pub async fn create_agent_profile_version(
     Path(profile_id): Path<String>,
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let operation = format!("create_agent_profile_version:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -135,10 +125,8 @@ pub async fn create_agent_profile_version(
 
 pub async fn get_agent_profile_version(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((profile_id, version)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let profile = service
         .get_version(&profile_id, &version)
@@ -155,7 +143,6 @@ pub async fn update_agent_profile_version(
     Path((profile_id, version)): Path<(String, String)>,
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let operation = format!("update_agent_profile_version:{profile_id}:{version}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -173,7 +160,6 @@ pub async fn delete_agent_profile_version(
     headers: HeaderMap,
     Path((profile_id, version)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = AgentProfileService::new(state.db()).with_clients(state.clients());
     let operation = format!("archive_agent_profile_version:{profile_id}:{version}");
     let outcome = idempotent(&state, &headers, operation, || async move {

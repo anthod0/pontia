@@ -22,6 +22,7 @@ pub use agent_profiles::{
     list_agent_profile_versions, list_agent_profiles, update_agent_profile_version,
 };
 pub use auth::validate_auth;
+pub(crate) use authentication::{TrustedTunnelRequest, authenticate};
 pub use dashboard_events::stream_dashboard_events;
 pub use events::{stream_session_events, stream_turn_events};
 pub use git_status::{get_workspace_git_status, refresh_workspace_git_status};

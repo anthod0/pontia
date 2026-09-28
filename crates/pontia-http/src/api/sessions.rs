@@ -10,7 +10,6 @@ use serde_json::{Value, json};
 use pontia_application::{AppState, CreateSessionRequest, UpdateSessionRequest};
 
 use super::{
-    authentication::authenticate,
     idempotency::idempotent,
     response::{ApiError, ApiResponse, ok},
 };
@@ -20,7 +19,6 @@ pub async fn create_session(
     headers: HeaderMap,
     Json(request): Json<CreateSessionRequest>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     let outcome = idempotent(&state, &headers, "create_session", || async move {
         Ok(service.create_session(request).await?.data)
@@ -36,10 +34,8 @@ pub async fn create_session(
 
 pub async fn open_codex_tui(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     state
         .session_commands()
         .open_client_interface(&session_id)
@@ -60,10 +56,8 @@ pub struct ListSessionsQuery {
 
 pub async fn list_sessions(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<ListSessionsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     let sessions = service
         .list_sessions(query.include_archived, query.limit, query.include_pinned)
@@ -73,11 +67,9 @@ pub async fn list_sessions(
 
 pub async fn update_session(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
     Json(request): Json<UpdateSessionRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     let data = service.update_session(&session_id, request).await?;
     Ok(ok(data))
@@ -85,10 +77,8 @@ pub async fn update_session(
 
 pub async fn pin_session(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     let data = service.pin_session(&session_id).await?;
     Ok(ok(data))
@@ -96,10 +86,8 @@ pub async fn pin_session(
 
 pub async fn unpin_session(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     let data = service.unpin_session(&session_id).await?;
     Ok(ok(data))
@@ -107,10 +95,8 @@ pub async fn unpin_session(
 
 pub async fn archive_session(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     let data = service.archive_session(&session_id).await?;
     Ok(ok(data))
@@ -118,10 +104,8 @@ pub async fn archive_session(
 
 pub async fn unarchive_session(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     let data = service.unarchive_session(&session_id).await?;
     Ok(ok(data))
@@ -129,10 +113,8 @@ pub async fn unarchive_session(
 
 pub async fn get_session(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     let session = service
         .get_session(&session_id)
@@ -146,7 +128,6 @@ pub async fn interrupt_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.turn_commands();
     let operation = format!("interrupt_current:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -161,7 +142,6 @@ pub async fn exit_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     let operation = format!("exit_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -176,7 +156,6 @@ pub async fn restart_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("restart_session:{session_id}");
@@ -195,7 +174,6 @@ pub async fn resume_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("resume_session:{session_id}");
@@ -211,10 +189,8 @@ pub async fn resume_session(
 
 pub async fn list_session_models(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     Ok(ok(serde_json::to_value(
         service.list_session_models(&session_id).await?,
@@ -224,11 +200,9 @@ pub async fn list_session_models(
 
 pub async fn set_session_model(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
     Json(request): Json<pontia_application::sessions::SetSessionModelRequest>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.session_commands();
     service.set_session_model(&session_id, request).await?;
     Ok((StatusCode::ACCEPTED, ok(json!({"accepted":true}))).into_response())

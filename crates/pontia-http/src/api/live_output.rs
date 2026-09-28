@@ -2,7 +2,6 @@ use std::convert::Infallible;
 
 use axum::{
     extract::{Path, State},
-    http::HeaderMap,
     response::sse::{Event, KeepAlive, Sse},
 };
 use tokio::sync::mpsc;
@@ -10,16 +9,12 @@ use tokio_stream::{Stream, wrappers::ReceiverStream};
 
 use pontia_application::{AppState, LiveOutputSnapshot, LiveOutputStreamEvent};
 
-use super::{
-    authentication::authenticate, response::ApiError, session_guard::ensure_session_exists,
-};
+use super::{response::ApiError, session_guard::ensure_session_exists};
 
 pub async fn stream_live_output(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    authenticate(&state, &headers)?;
     ensure_session_exists(&state.queries(), &session_id).await?;
 
     let subscription = state.live_output().subscribe_session(&session_id);

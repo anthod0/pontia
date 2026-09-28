@@ -4,10 +4,15 @@ use std::{
 };
 
 use axum::{
-    Router,
+    Extension, Router,
+    body::Body,
+    http::Request,
+    middleware,
+    response::Response,
     routing::{get, post},
 };
 use tokio::sync::oneshot;
+use tower::ServiceExt;
 use tracing::warn;
 
 use pontia_core::error::Result;
@@ -56,14 +61,66 @@ where
     Ok(())
 }
 
+#[derive(Clone)]
+pub struct HttpEntrypoints {
+    local_http: Router,
+    trusted_tunnel: TrustedTunnelIngress,
+}
+
+impl HttpEntrypoints {
+    pub fn new(state: impl Into<HttpState>) -> Self {
+        let state = state.into();
+        let external_api = external_api_router(state.clone());
+        let trusted_tunnel = TrustedTunnelIngress {
+            router: external_api
+                .clone()
+                .layer(Extension(api::TrustedTunnelRequest)),
+        };
+        let local_http = Router::new()
+            .route("/healthz", get(health::healthz))
+            .route("/dashboard", get(dashboard::dashboard))
+            .route("/dashboard/", get(dashboard::dashboard))
+            .route("/dashboard/assets/{*path}", get(dashboard::dashboard_asset))
+            .route("/dashboard/{*path}", get(dashboard::dashboard_path))
+            .with_state(state)
+            .merge(external_api);
+
+        Self {
+            local_http,
+            trusted_tunnel,
+        }
+    }
+
+    pub fn local_http(&self) -> Router {
+        self.local_http.clone()
+    }
+
+    pub fn trusted_tunnel(&self) -> TrustedTunnelIngress {
+        self.trusted_tunnel.clone()
+    }
+}
+
+#[derive(Clone)]
+pub struct TrustedTunnelIngress {
+    router: Router,
+}
+
+impl TrustedTunnelIngress {
+    pub async fn handle(&self, request: Request<Body>) -> Response {
+        self.router
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("router service is infallible")
+    }
+}
+
 pub fn router(state: impl Into<HttpState>) -> Router {
-    let state = state.into();
+    HttpEntrypoints::new(state).local_http()
+}
+
+fn external_api_router(state: HttpState) -> Router {
     Router::new()
-        .route("/healthz", get(health::healthz))
-        .route("/dashboard", get(dashboard::dashboard))
-        .route("/dashboard/", get(dashboard::dashboard))
-        .route("/dashboard/assets/{*path}", get(dashboard::dashboard_asset))
-        .route("/dashboard/{*path}", get(dashboard::dashboard_path))
         .route(
             "/api/v1/workflow/submissions",
             post(api::submit_workflow_output),
@@ -287,5 +344,9 @@ pub fn router(state: impl Into<HttpState>) -> Router {
             "/api/v1/sessions/{session_id}/turns/{turn_id}/events",
             get(api::list_turn_events),
         )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            api::authenticate,
+        ))
         .with_state(state)
 }

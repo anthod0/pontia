@@ -9,17 +9,11 @@ use serde_json::{Value, json};
 use pontia_application::AppState;
 
 use super::{
-    authentication::authenticate,
     idempotency::idempotent,
     response::{ApiError, ApiResponse, ok},
 };
 
-pub async fn create_task(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(_request): Json<Value>,
-) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
+pub async fn create_task(Json(_request): Json<Value>) -> Result<Response, ApiError> {
     Ok((
         StatusCode::GONE,
         Json(json!({
@@ -39,7 +33,6 @@ pub async fn interrupt_task(
     headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.task_commands();
     let operation = format!("interrupt_task:{task_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -54,7 +47,6 @@ pub async fn cancel_task(
     headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.task_commands();
     let operation = format!("cancel_task:{task_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -66,9 +58,7 @@ pub async fn cancel_task(
 
 pub async fn list_tasks(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     let tasks = service.list_tasks().await?;
     Ok(ok(json!({ "tasks": tasks })))
@@ -76,10 +66,8 @@ pub async fn list_tasks(
 
 pub async fn get_task(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     let task = service
         .get_task(&task_id)
@@ -90,10 +78,8 @@ pub async fn get_task(
 
 pub async fn list_task_events(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     service
         .get_task(&task_id)

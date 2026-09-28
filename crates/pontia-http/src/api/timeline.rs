@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
 };
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -10,18 +10,13 @@ use pontia_application::{
     AppState, TurnTimelineDirection, TurnTimelineService, TurnTimelineServiceError,
 };
 
-use super::{
-    authentication::authenticate,
-    response::{ApiError, ApiResponse, ok},
-};
+use super::response::{ApiError, ApiResponse, ok};
 
 pub async fn get_turn_timeline(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let direction = match query.get("direction").map(String::as_str) {
         Some("forward") => TurnTimelineDirection::Forward,
         Some("backward") => TurnTimelineDirection::Backward,
@@ -56,11 +51,9 @@ pub async fn get_turn_timeline(
 
 pub async fn get_turn_tree_history(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let limit = query
         .get("limit")
         .map(|value| value.parse::<usize>())
@@ -81,11 +74,9 @@ pub async fn get_turn_tree_history(
 
 pub async fn get_turn_tree_updates(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let page = TurnTimelineService::new(state.event_ingest_service())
         .tree_updates(session_id, query.get("from_turn_id").cloned())
         .await

@@ -9,7 +9,6 @@ use serde_json::{Value, json};
 use pontia_application::AppState;
 
 use super::{
-    authentication::authenticate,
     idempotency::idempotent,
     response::{ApiError, ApiResponse, ok},
     session_guard::ensure_session_exists,
@@ -20,7 +19,6 @@ pub async fn interrupt_turn(
     headers: HeaderMap,
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.turn_commands();
     let operation = format!("interrupt_turn:{session_id}:{turn_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -32,10 +30,8 @@ pub async fn interrupt_turn(
 
 pub async fn list_turns(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     let turns = service.list_turns(&session_id).await?;
@@ -44,10 +40,8 @@ pub async fn list_turns(
 
 pub async fn get_turn(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     let turn = service
@@ -59,10 +53,8 @@ pub async fn get_turn(
 
 pub async fn list_session_events(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     let events = service.list_session_events(&session_id).await?;
@@ -71,10 +63,8 @@ pub async fn list_session_events(
 
 pub async fn list_turn_events(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((session_id, turn_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let service = state.queries();
     ensure_session_exists(&service, &session_id).await?;
     service

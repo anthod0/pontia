@@ -1,7 +1,6 @@
 use axum::{
     Json,
     extract::{State, rejection::JsonRejection},
-    http::HeaderMap,
 };
 use pontia_application::AppState;
 use pontia_workflow::{
@@ -12,10 +11,7 @@ use pontia_workflow::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::super::{
-    authentication::authenticate,
-    response::{ApiError, ApiResponse, ok},
-};
+use super::super::response::{ApiError, ApiResponse, ok};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -80,10 +76,8 @@ pub struct WorkflowPatchBlockRequest {
 
 pub async fn run_workflow(
     State(state): State<AppState>,
-    headers: HeaderMap,
     request: Result<Json<WorkflowRunRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let workflow_id = request.workflow_id.clone();
     let scheduler = WorkflowScheduler::new(
@@ -130,10 +124,8 @@ pub async fn run_workflow(
 
 pub async fn request_workflow_patch(
     State(state): State<AppState>,
-    headers: HeaderMap,
     request: Result<Json<WorkflowPatchRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
         .request_patch(RequestWorkflowPatch {
@@ -150,10 +142,8 @@ pub async fn request_workflow_patch(
 
 pub async fn apply_workflow_patch(
     State(state): State<AppState>,
-    headers: HeaderMap,
     request: Result<Json<WorkflowPatchApplyRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
         .apply_patch(ApplyWorkflowPatch {
@@ -172,10 +162,8 @@ pub async fn apply_workflow_patch(
 
 pub async fn block_workflow_patch(
     State(state): State<AppState>,
-    headers: HeaderMap,
     request: Result<Json<WorkflowPatchBlockRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
         .block_patch(BlockWorkflowPatch {
@@ -193,10 +181,8 @@ pub async fn block_workflow_patch(
 
 pub async fn submit_workflow_output(
     State(state): State<AppState>,
-    headers: HeaderMap,
     request: Result<Json<WorkflowSubmissionRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let scheduler = WorkflowScheduler::new(
         state.db(),

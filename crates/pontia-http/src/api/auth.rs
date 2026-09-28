@@ -1,17 +1,8 @@
-use axum::{Json, extract::State, http::HeaderMap};
+use axum::Json;
 use serde_json::json;
 
-use pontia_application::AppState;
+use super::response::{ApiError, ApiResponse, ok};
 
-use super::{
-    authentication::authenticate,
-    response::{ApiError, ApiResponse, ok},
-};
-
-pub async fn validate_auth(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    authenticate(&state, &headers)?;
+pub async fn validate_auth() -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     Ok(ok(json!({ "authenticated": true })))
 }

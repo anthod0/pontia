@@ -19,7 +19,6 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{
-    authentication::authenticate,
     idempotency::idempotent,
     response::{ApiError, ApiResponse, ok},
 };
@@ -36,10 +35,8 @@ pub struct WorkflowDocumentQuery {
 
 pub async fn list_workflows(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<ListWorkflowsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let limit = parse_limit(query.limit.as_deref())?;
     let workflows = WorkflowQueryService::new(state.db())
         .list_workflows(limit)
@@ -50,10 +47,8 @@ pub async fn list_workflows(
 
 pub async fn get_workflow(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workflow_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let workflow = WorkflowQueryService::new(state.db())
         .get_workflow_snapshot(&workflow_id, state.pontia_home())
         .await
@@ -64,10 +59,8 @@ pub async fn get_workflow(
 
 pub async fn get_workflow_revision(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((workflow_id, revision)): Path<(String, i64)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let revision = WorkflowQueryService::new(state.db())
         .get_workflow_revision(&workflow_id, revision)
         .await
@@ -78,10 +71,8 @@ pub async fn get_workflow_revision(
 
 pub async fn list_workflow_patches(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workflow_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let patches = WorkflowQueryService::new(state.db())
         .list_workflow_patches(&workflow_id)
         .await
@@ -92,10 +83,8 @@ pub async fn list_workflow_patches(
 
 pub async fn get_workflow_timeline(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workflow_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let timeline = WorkflowQueryService::new(state.db())
         .get_workflow_timeline(&workflow_id)
         .await
@@ -106,11 +95,9 @@ pub async fn get_workflow_timeline(
 
 pub async fn get_workflow_document(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workflow_id): Path<String>,
     Query(query): Query<WorkflowDocumentQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let document = WorkflowQueryService::new(state.db())
         .read_workflow_document(&workflow_id, &query.r#ref, state.pontia_home())
         .await
@@ -124,7 +111,6 @@ pub async fn pause_workflow(
     headers: HeaderMap,
     Path(workflow_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     control_workflow(state, headers, workflow_id, true).await
 }
 
@@ -133,7 +119,6 @@ pub async fn resume_workflow(
     headers: HeaderMap,
     Path(workflow_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    authenticate(&state, &headers)?;
     control_workflow(state, headers, workflow_id, false).await
 }
 
@@ -144,11 +129,9 @@ pub struct RetryWorkflowRequest {
 
 pub async fn retry_workflow(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workflow_id): Path<String>,
     Json(request): Json<RetryWorkflowRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let recovery = pontia_workflow::WorkflowRecoveryService::new(&state)
         .retry(&workflow_id, &request.failure_event_id)
         .await
@@ -193,10 +176,8 @@ async fn control_workflow(
 
 pub async fn get_workflow_context(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(workflow_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    authenticate(&state, &headers)?;
     let context = WorkflowQueryService::new(state.db())
         .get_workflow_context(&workflow_id, state.pontia_home())
         .await
