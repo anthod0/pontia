@@ -112,6 +112,9 @@ jobs:
           persist-credentials: false
       - name: Build binaries
         run: cargo build --release --locked --package pontia --package pontiad
+      - name: Build Edge
+        if: runner.os == 'Linux'
+        run: cargo build --release --locked --package pontia-edge
       - name: Package binaries
         shell: bash
         env:
@@ -119,7 +122,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir dist
-          for binary in pontia pontiad; do
+          binaries=(pontia pontiad)
+          if [[ "$TARGET" == *-linux-* ]]; then
+            binaries+=(pontia-edge)
+          fi
+          for binary in "${binaries[@]}"; do
             tar -C target/release -czf "dist/$binary-$TARGET.tar.gz" "$binary"
           done
       - uses: actions/upload-artifact@v7
