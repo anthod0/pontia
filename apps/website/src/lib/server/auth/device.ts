@@ -1,6 +1,7 @@
 import { and, eq, gt, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import { base64url } from 'jose';
 import { v7 as uuidv7 } from 'uuid';
+import { sha256Base64url } from '../crypto';
 import type { Database } from '../db';
 import {
 	authSessions,
@@ -30,14 +31,6 @@ function randomBytes(length: number) {
 	return crypto.getRandomValues(new Uint8Array(length));
 }
 
-async function hash(value: string) {
-	return base64url.encode(
-		new Uint8Array(
-			await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
-		)
-	);
-}
-
 function createUserCode() {
 	let code = '';
 	while (code.length < 8) {
@@ -51,9 +44,7 @@ function createUserCode() {
 }
 
 export function parseUserCode(value: string) {
-	return /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/.test(
-		value
-	)
+	return /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/.test(value)
 		? value.replace('-', '')
 		: null;
 }
@@ -73,7 +64,7 @@ export async function beginDeviceAuthorization(
 		try {
 			await db.insert(deviceAuthorizations).values({
 				id: uuidv7(),
-				deviceCodeHash: await hash(deviceCode),
+				deviceCodeHash: await sha256Base64url(deviceCode),
 				userCode,
 				status: 'pending',
 				expiresAt: new Date(
@@ -96,7 +87,7 @@ export async function beginDeviceAuthorization(
 }
 
 async function rateLimitKey(scope: string, subject: string) {
-	return `${scope}:${await hash(subject)}`;
+	return `${scope}:${await sha256Base64url(subject)}`;
 }
 
 async function recordRateLimit(
@@ -195,7 +186,7 @@ export async function pollDeviceAuthorization(
 ): Promise<DevicePollResult> {
 	if (!/^[A-Za-z0-9_-]{43}$/.test(deviceCode))
 		return { status: 'expired_token' };
-	const deviceCodeHash = await hash(deviceCode);
+	const deviceCodeHash = await sha256Base64url(deviceCode);
 	const existing = await db
 		.select({
 			status: deviceAuthorizations.status,
@@ -234,7 +225,7 @@ export async function pollDeviceAuthorization(
 
 	const id = uuidv7();
 	const secret = base64url.encode(randomBytes(32));
-	const tokenHash = await hash(secret);
+	const tokenHash = await sha256Base64url(secret);
 	const [inserted, consumed] = await db.batch([
 		db
 			.insert(authSessions)

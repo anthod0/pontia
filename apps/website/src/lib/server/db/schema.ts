@@ -22,6 +22,40 @@ export const users = sqliteTable(
 	(table) => [primaryKey({ columns: [table.id] })]
 );
 
+export const edges = sqliteTable(
+	'edges',
+	{
+		id: text().notNull(),
+		name: text().notNull(),
+		tunnelUrl: text('tunnel_url').notNull(),
+		serviceCredentialHash: text('service_credential_hash').notNull(),
+		createdAt: text('created_at').notNull().default(timestamp),
+		updatedAt: text('updated_at').notNull().default(timestamp)
+	},
+	(table) => [primaryKey({ columns: [table.id] })]
+);
+
+export const devices = sqliteTable(
+	'devices',
+	{
+		id: text().notNull(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		edgeId: text('edge_id')
+			.notNull()
+			.references(() => edges.id, { onDelete: 'restrict' }),
+		name: text(),
+		createdAt: text('created_at').notNull().default(timestamp),
+		updatedAt: text('updated_at').notNull().default(timestamp)
+	},
+	(table) => [
+		primaryKey({ columns: [table.id] }),
+		index('idx_devices_user_id').on(table.userId),
+		index('idx_devices_edge_id').on(table.edgeId)
+	]
+);
+
 export const accounts = sqliteTable(
 	'accounts',
 	{
