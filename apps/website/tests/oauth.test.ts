@@ -121,6 +121,25 @@ test('OAuth cookies reject state, provider, callback, expiry and signature misma
 	).rejects.toThrow('invalid_oauth');
 });
 
+test('pending binding state carries only its JTI and cannot outlive pending state', async () => {
+	const callback = 'https://example.com/api/auth/google/callback';
+	const pendingExpiry = Math.floor(now.getTime() / 1000) + 300;
+	const started = await beginOAuth(
+		config,
+		'google',
+		callback,
+		{ kind: 'pending_bind', pendingJti: 'pending-jti' },
+		now,
+		pendingExpiry
+	);
+	expect(decodeJwt(started.cookie).exp).toBe(pendingExpiry);
+	const state = new URL(started.url).searchParams.get('state')!;
+	expect(
+		(await readOAuth(config, started.cookie, 'google', state, callback, now))
+			.intent
+	).toEqual({ kind: 'pending_bind', pendingJti: 'pending-jti' });
+});
+
 test('provider failures and missing subjects cannot establish identity', async () => {
 	const callback = 'https://example.com/api/auth/google/callback';
 	const started = await beginOAuth(

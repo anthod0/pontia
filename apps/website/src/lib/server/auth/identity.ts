@@ -1,10 +1,67 @@
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, eq, gt, ne, sql } from 'drizzle-orm';
 import { v7 as uuidv7 } from 'uuid';
 import type { Database } from '../db';
 import { accounts, authSessions, users } from '../db/schema';
 import { AuthError, type AccountProfile } from './types';
 
 export const AUTH_SESSION_SECONDS = 30 * 24 * 60 * 60;
+
+function sessionExpiry(now: Date) {
+	return new Date(now.getTime() + AUTH_SESSION_SECONDS * 1000).toISOString();
+}
+
+export async function accountForProfile(db: Database, profile: AccountProfile) {
+	return db
+		.select()
+		.from(accounts)
+		.where(
+			and(
+				eq(accounts.provider, profile.provider),
+				eq(accounts.providerSubject, profile.providerSubject)
+			)
+		)
+		.get();
+}
+
+export async function accountById(db: Database, id: string) {
+	return db.select().from(accounts).where(eq(accounts.id, id)).get();
+}
+
+async function accountForUserProvider(
+	db: Database,
+	userId: string,
+	provider: AccountProfile['provider']
+) {
+	return db
+		.select({ id: accounts.id })
+		.from(accounts)
+		.where(and(eq(accounts.userId, userId), eq(accounts.provider, provider)))
+		.get();
+}
+
+export async function verifiedEmailCandidate(
+	db: Database,
+	profile: AccountProfile
+) {
+	if (!profile.email || !profile.emailVerified) return null;
+	const matches = await db
+		.select({
+			id: accounts.id,
+			provider: accounts.provider,
+			providerSubject: accounts.providerSubject,
+			userId: accounts.userId
+		})
+		.from(accounts)
+		.where(
+			and(
+				ne(accounts.provider, profile.provider),
+				eq(accounts.email, profile.email),
+				eq(accounts.emailVerified, true)
+			)
+		);
+	if (matches.length > 1) throw new AuthError('account_conflict');
+	return matches[0] ?? null;
+}
 
 export async function login(
 	db: Database,
@@ -64,12 +121,124 @@ export async function login(
 			userId: account.userId,
 			accountId: account.id,
 			createdAt: now.toISOString(),
-			expiresAt: new Date(
-				now.getTime() + AUTH_SESSION_SECONDS * 1000
-			).toISOString()
+			expiresAt: sessionExpiry(now)
 		})
 	]);
 	return id;
+}
+
+export async function completeIndependentAccount(
+	db: Database,
+	profile: AccountProfile,
+	now = new Date()
+) {
+	const userId = uuidv7();
+	const accountId = uuidv7();
+	const loginId = uuidv7();
+	try {
+		await db.batch([
+			db.insert(users).values({
+				id: userId,
+				displayName: profile.displayName,
+				avatarUrl: profile.avatarUrl
+			}),
+			db.insert(accounts).values({
+				id: accountId,
+				userId,
+				provider: profile.provider,
+				providerSubject: profile.providerSubject,
+				email: profile.email,
+				emailVerified: profile.emailVerified
+			}),
+			db.insert(authSessions).values({
+				id: loginId,
+				userId,
+				accountId,
+				createdAt: now.toISOString(),
+				expiresAt: sessionExpiry(now)
+			})
+		]);
+	} catch (cause) {
+		if (await accountForProfile(db, profile))
+			throw new AuthError('account_conflict');
+		throw cause;
+	}
+	return loginId;
+}
+
+export async function completePendingBinding(
+	db: Database,
+	profile: AccountProfile,
+	targetAccountId: string,
+	verifiedProfile: AccountProfile,
+	now = new Date()
+) {
+	const accountId = uuidv7();
+	const loginId = uuidv7();
+	const target = and(
+		eq(accounts.id, targetAccountId),
+		eq(accounts.provider, verifiedProfile.provider),
+		eq(accounts.providerSubject, verifiedProfile.providerSubject)
+	);
+	try {
+		const [linked, session] = await db.batch([
+			db
+				.insert(accounts)
+				.select(
+					db
+						.select({
+							id: sql<string>`${accountId}`.as('id'),
+							userId: accounts.userId,
+							provider: sql<AccountProfile['provider']>`${profile.provider}`.as(
+								'provider'
+							),
+							providerSubject: sql<string>`${profile.providerSubject}`.as(
+								'provider_subject'
+							),
+							email: sql<string | null>`${profile.email}`.as('email'),
+							emailVerified: sql<boolean>`${profile.emailVerified ? 1 : 0}`.as(
+								'email_verified'
+							),
+							createdAt: sql<string>`${now.toISOString()}`.as('created_at'),
+							updatedAt: sql<string>`${now.toISOString()}`.as('updated_at')
+						})
+						.from(accounts)
+						.where(target)
+				)
+				.returning({ id: accounts.id }),
+			db
+				.insert(authSessions)
+				.select(
+					db
+						.select({
+							id: sql<string>`${loginId}`.as('id'),
+							userId: accounts.userId,
+							accountId: accounts.id,
+							kind: sql<'browser'>`'browser'`.as('kind'),
+							tokenHash: sql<string | null>`NULL`.as('token_hash'),
+							expiresAt: sql<string>`${sessionExpiry(now)}`.as('expires_at'),
+							createdAt: sql<string>`${now.toISOString()}`.as('created_at')
+						})
+						.from(accounts)
+						.where(target)
+				)
+				.returning({ id: authSessions.id })
+		]);
+		if (linked.length !== 1 || session.length !== 1)
+			throw new AuthError('invalid_credentials');
+	} catch (cause) {
+		if (cause instanceof AuthError) throw cause;
+		if (await accountForProfile(db, profile))
+			throw new AuthError('account_conflict');
+		const currentTarget = await accountById(db, targetAccountId);
+		if (
+			currentTarget &&
+			(await accountForUserProvider(db, currentTarget.userId, profile.provider))
+		)
+			throw new AuthError('account_conflict');
+		throw cause;
+	}
+	return loginId;
 }
 
 export async function activeLogin(

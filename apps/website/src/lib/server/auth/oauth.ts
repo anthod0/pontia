@@ -10,15 +10,16 @@ export interface OAuthConfig {
 	OAUTH_COOKIE_SECRET: string;
 }
 
-type Intent =
+type OAuthIntent =
 	| { kind: 'login'; returnTo?: string }
-	| { kind: 'bind'; loginId: string; userId: string };
+	| { kind: 'bind'; loginId: string; userId: string }
+	| { kind: 'pending_bind'; pendingJti: string };
 interface OAuthState {
 	provider: Provider;
 	state: string;
 	verifier: string;
 	redirectUri: string;
-	intent: Intent;
+	intent: OAuthIntent;
 }
 
 export const OAUTH_SECONDS = 600;
@@ -48,8 +49,9 @@ export async function beginOAuth(
 	config: OAuthConfig,
 	provider: Provider,
 	redirectUri: string,
-	intent: Intent,
-	now = new Date()
+	intent: OAuthIntent,
+	now = new Date(),
+	expiresAt = Math.floor(now.getTime() / 1000) + OAUTH_SECONDS
 ) {
 	const { id } = client(config, provider);
 	const state = base64url.encode(crypto.getRandomValues(new Uint8Array(32)));
@@ -79,7 +81,9 @@ export async function beginOAuth(
 	})
 		.setProtectedHeader({ alg: 'HS256', typ: 'oauth-state+jwt' })
 		.setIssuedAt(Math.floor(now.getTime() / 1000))
-		.setExpirationTime(Math.floor(now.getTime() / 1000) + OAUTH_SECONDS)
+		.setExpirationTime(
+			Math.min(Math.floor(now.getTime() / 1000) + OAUTH_SECONDS, expiresAt)
+		)
 		.sign(signingKey(config.OAUTH_COOKIE_SECRET));
 	return { url: url.toString(), cookie };
 }
@@ -101,7 +105,7 @@ export async function readOAuth(
 			maxTokenAge: OAUTH_SECONDS,
 			requiredClaims: ['exp', 'iat']
 		});
-		const intent = payload.intent as Intent | undefined;
+		const intent = payload.intent as OAuthIntent | undefined;
 		if (
 			payload.provider !== provider ||
 			payload.state !== state ||
@@ -110,13 +114,17 @@ export async function readOAuth(
 			typeof payload.verifier !== 'string' ||
 			!/^[A-Za-z0-9_-]{43}$/.test(payload.verifier) ||
 			!intent ||
-			(intent.kind !== 'login' && intent.kind !== 'bind') ||
+			(intent.kind !== 'login' &&
+				intent.kind !== 'bind' &&
+				intent.kind !== 'pending_bind') ||
 			(intent.kind === 'login' &&
 				intent.returnTo !== undefined &&
 				typeof intent.returnTo !== 'string') ||
 			(intent.kind === 'bind' &&
 				(typeof intent.loginId !== 'string' ||
-					typeof intent.userId !== 'string'))
+					typeof intent.userId !== 'string')) ||
+			(intent.kind === 'pending_bind' &&
+				(typeof intent.pendingJti !== 'string' || !intent.pendingJti))
 		) {
 			throw new AuthError('invalid_oauth');
 		}

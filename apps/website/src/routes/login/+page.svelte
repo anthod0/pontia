@@ -33,9 +33,9 @@
 		</form>
 	</div>
 	<p class="hint">
-		New here? Your account is created when you first sign in. To use both
-		providers with one Pontia account, sign in first and link the other in your
-		account settings.
+		New here? Your account is created when you first sign in. If both providers
+		share a verified email, you can verify the existing sign-in method and link
+		them.
 	</p>
 	{#if data.hasCredential}
 		<form method="POST" action="/api/auth/logout">

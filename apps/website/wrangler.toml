@@ -33,6 +33,7 @@ required = [
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
   "JWT_SECRET",
+  "OAUTH_COOKIE_SECRET",
 ]
 
 [assets]

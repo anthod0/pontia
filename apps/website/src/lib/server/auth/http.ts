@@ -1,17 +1,34 @@
 import {
 	error,
+	isRedirect,
 	redirect,
 	type Cookies,
 	type RequestEvent
 } from '@sveltejs/kit';
-import { database } from '../db';
-import { activeLogin, bindAccount, login, logout } from './identity';
+import { database, type Database } from '../db';
+import {
+	accountById,
+	accountForProfile,
+	activeLogin,
+	bindAccount,
+	completeIndependentAccount,
+	completePendingBinding,
+	login,
+	logout,
+	verifiedEmailCandidate
+} from './identity';
 import { issueLogin, signedLogin, verifyLogin } from './jwt';
 import { beginOAuth, exchangeAccount, OAUTH_SECONDS, readOAuth } from './oauth';
+import {
+	issuePendingAccount,
+	PENDING_ACCOUNT_SECONDS,
+	readPendingAccount
+} from './pending';
 import { AuthError, type Provider } from './types';
 
 const LOGIN_COOKIE = '_at';
 const OAUTH_COOKIE = '_oauth';
+const PENDING_ACCOUNT_COOKIE = '_pending_account';
 const cookieOptions = {
 	path: '/',
 	httpOnly: true,
@@ -70,13 +87,32 @@ export async function currentLogin(
 	}
 }
 
+export function clearPendingAccount(cookies: Cookies) {
+	cookies.delete(PENDING_ACCOUNT_COOKIE, cookieOptions);
+}
+
 function clearCookies(cookies: Cookies) {
 	cookies.delete(LOGIN_COOKIE, cookieOptions);
 	cookies.delete(OAUTH_COOKIE, cookieOptions);
+	clearPendingAccount(cookies);
+}
+
+async function establishBrowserLogin(
+	event: RequestEvent,
+	db: Database,
+	loginId: string,
+	secret: string
+) {
+	const credential = await issueLogin(db, loginId, secret);
+	event.cookies.set(LOGIN_COOKIE, credential.token, {
+		...cookieOptions,
+		expires: credential.expiresAt
+	});
 }
 
 export async function startLogin(event: RequestEvent) {
 	sameOriginPost(event);
+	clearPendingAccount(event.cookies);
 	const selected = provider(event);
 	const result = await beginOAuth(
 		environment(event),
@@ -114,6 +150,70 @@ export async function startBinding(event: RequestEvent) {
 	redirect(303, result.url);
 }
 
+export async function pendingAccountSummary(event: RequestEvent) {
+	const token = event.cookies.get(PENDING_ACCOUNT_COOKIE);
+	if (!token) throw new AuthError('invalid_oauth');
+	const env = environment(event);
+	const pending = await readPendingAccount(env.OAUTH_COOKIE_SECRET, token);
+	const target = await accountById(database(env.DB), pending.targetAccountId);
+	if (!target || target.provider === pending.profile.provider)
+		throw new AuthError('invalid_oauth');
+	return { email: pending.profile.email!, provider: target.provider };
+}
+
+export async function startPendingBinding(event: RequestEvent) {
+	sameOriginPost(event);
+	const token = event.cookies.get(PENDING_ACCOUNT_COOKIE);
+	try {
+		if (!token) throw new AuthError('invalid_oauth');
+		const env = environment(event);
+		const pending = await readPendingAccount(env.OAUTH_COOKIE_SECRET, token);
+		const target = await accountById(database(env.DB), pending.targetAccountId);
+		if (!target || target.provider === pending.profile.provider)
+			throw new AuthError('invalid_oauth');
+		const result = await beginOAuth(
+			env,
+			target.provider,
+			`${origin(event)}/api/auth/${target.provider}/callback`,
+			{ kind: 'pending_bind', pendingJti: pending.jti },
+			new Date(),
+			pending.exp
+		);
+		event.cookies.set(OAUTH_COOKIE, result.cookie, {
+			...cookieOptions,
+			maxAge: Math.min(
+				OAUTH_SECONDS,
+				Math.max(1, pending.exp - Math.floor(Date.now() / 1000))
+			)
+		});
+		redirect(303, result.url);
+	} catch (cause) {
+		if (isRedirect(cause)) throw cause;
+		clearPendingAccount(event.cookies);
+		if (!(cause instanceof AuthError)) throw cause;
+		redirect(303, `/login?error=${cause.code}`);
+	}
+}
+
+export async function createIndependentAccount(event: RequestEvent) {
+	sameOriginPost(event);
+	const token = event.cookies.get(PENDING_ACCOUNT_COOKIE);
+	try {
+		if (!token) throw new AuthError('invalid_oauth');
+		const env = environment(event);
+		const pending = await readPendingAccount(env.OAUTH_COOKIE_SECRET, token);
+		const db = database(env.DB);
+		const loginId = await completeIndependentAccount(db, pending.profile);
+		await establishBrowserLogin(event, db, loginId, env.JWT_SECRET);
+		clearPendingAccount(event.cookies);
+		redirect(303, pending.returnTo ?? '/account');
+	} catch (cause) {
+		clearPendingAccount(event.cookies);
+		if (!(cause instanceof AuthError)) throw cause;
+		redirect(303, `/login?error=${cause.code}`);
+	}
+}
+
 export async function callback(event: RequestEvent) {
 	const selected = provider(event);
 	const env = environment(event);
@@ -147,17 +247,50 @@ export async function callback(event: RequestEvent) {
 				throw new AuthError('invalid_credentials');
 			const profile = await exchangeAccount(env, oauth, code);
 			await bindAccount(db, profile, claims.sub, claims.user_id);
+		} else if (oauth.intent.kind === 'pending_bind') {
+			const pendingToken = event.cookies.get(PENDING_ACCOUNT_COOKIE);
+			if (!pendingToken) throw new AuthError('invalid_oauth');
+			const pending = await readPendingAccount(
+				env.OAUTH_COOKIE_SECRET,
+				pendingToken
+			);
+			if (pending.jti !== oauth.intent.pendingJti)
+				throw new AuthError('invalid_oauth');
+			const verifiedProfile = await exchangeAccount(env, oauth, code);
+			const loginId = await completePendingBinding(
+				db,
+				pending.profile,
+				pending.targetAccountId,
+				verifiedProfile
+			);
+			await establishBrowserLogin(event, db, loginId, env.JWT_SECRET);
+			clearPendingAccount(event.cookies);
+			destination = pending.returnTo ?? '/account';
 		} else {
 			const profile = await exchangeAccount(env, oauth, code);
-			const id = await login(db, profile);
-			const credential = await issueLogin(db, id, env.JWT_SECRET);
-			event.cookies.set(LOGIN_COOKIE, credential.token, {
-				...cookieOptions,
-				expires: credential.expiresAt
-			});
+			if (!(await accountForProfile(db, profile))) {
+				const candidate = await verifiedEmailCandidate(db, profile);
+				if (candidate) {
+					const pending = await issuePendingAccount(
+						env.OAUTH_COOKIE_SECRET,
+						profile,
+						candidate.id,
+						oauth.intent.returnTo
+					);
+					event.cookies.set(PENDING_ACCOUNT_COOKIE, pending.token, {
+						...cookieOptions,
+						maxAge: PENDING_ACCOUNT_SECONDS
+					});
+					redirect(303, '/auth/account-conflict');
+				}
+			}
+			const loginId = await login(db, profile);
+			await establishBrowserLogin(event, db, loginId, env.JWT_SECRET);
 			destination = oauth.intent.returnTo ?? '/account';
 		}
 	} catch (cause) {
+		if (isRedirect(cause)) throw cause;
+		clearPendingAccount(event.cookies);
 		if (!(cause instanceof AuthError)) throw cause;
 		redirect(303, `${destination}?error=${cause.code}`);
 	}

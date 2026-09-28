@@ -5,8 +5,11 @@ import { accounts, authSessions, users } from '../src/lib/server/db/schema';
 import {
 	activeLogin,
 	bindAccount,
+	completeIndependentAccount,
+	completePendingBinding,
 	login,
-	logout
+	logout,
+	verifiedEmailCandidate
 } from '../src/lib/server/auth/identity';
 import { type AccountProfile } from '../src/lib/server/auth/types';
 import { testDatabase } from './database';
@@ -67,6 +70,88 @@ test('equal emails, missing emails, and different subjects never merge users', a
 	await login(db, { ...profile, providerSubject: 'another', email: null }, now);
 	await login(db, { ...profile, providerSubject: 'third', email: null }, now);
 	expect(await db.select().from(users)).toHaveLength(4);
+});
+
+test('only matching verified email on another provider finds a linking candidate', async () => {
+	const { db } = database;
+	await login(db, { ...profile, emailVerified: true }, now);
+	expect(
+		await verifiedEmailCandidate(db, { ...github, emailVerified: true })
+	).toMatchObject({ provider: 'google', providerSubject: 'google-subject' });
+	expect(
+		await verifiedEmailCandidate(db, { ...github, emailVerified: false })
+	).toBeNull();
+	expect(
+		await verifiedEmailCandidate(db, {
+			...github,
+			email: 'different@example.com',
+			emailVerified: true
+		})
+	).toBeNull();
+});
+
+test('multiple users with the same verified email are rejected as ambiguous', async () => {
+	const { db } = database;
+	await login(db, { ...profile, emailVerified: true }, now);
+	await login(
+		db,
+		{ ...profile, providerSubject: 'other-google', emailVerified: true },
+		now
+	);
+	await expect(
+		verifiedEmailCandidate(db, { ...github, emailVerified: true })
+	).rejects.toThrow('account_conflict');
+});
+
+test('pending completion either links to the verified account or atomically creates an independent user', async () => {
+	const { db } = database;
+	const originalId = await login(db, { ...profile, emailVerified: true }, now);
+	const original = (await activeLogin(db, originalId, undefined, now))!;
+	const target = (await db.select().from(accounts))[0];
+	const linkedId = await completePendingBinding(
+		db,
+		{ ...github, emailVerified: true },
+		target.id,
+		{ ...profile, emailVerified: true },
+		now
+	);
+	expect(await activeLogin(db, linkedId, original.userId, now)).toBeDefined();
+	expect(await db.select().from(users)).toHaveLength(1);
+	await expect(
+		completePendingBinding(
+			db,
+			{ ...github, providerSubject: '456', emailVerified: true },
+			target.id,
+			{ ...profile, providerSubject: 'wrong', emailVerified: true },
+			now
+		)
+	).rejects.toThrow('invalid_credentials');
+	const independentId = await completeIndependentAccount(
+		db,
+		{ ...github, providerSubject: '789', emailVerified: true },
+		now
+	);
+	expect(await activeLogin(db, independentId, undefined, now)).toBeDefined();
+	expect(await db.select().from(users)).toHaveLength(2);
+});
+
+test('replayed or concurrent pending completion cannot create orphan users or another login', async () => {
+	const { db } = database;
+	const pendingProfile = { ...github, emailVerified: true };
+	const results = await Promise.allSettled([
+		completeIndependentAccount(db, pendingProfile, now),
+		completeIndependentAccount(db, pendingProfile, now)
+	]);
+	expect(
+		results.filter((result) => result.status === 'fulfilled')
+	).toHaveLength(1);
+	expect(await db.select().from(users)).toHaveLength(1);
+	expect(await db.select().from(accounts)).toHaveLength(1);
+	expect(await db.select().from(authSessions)).toHaveLength(1);
+	await expect(
+		completeIndependentAccount(db, pendingProfile, now)
+	).rejects.toThrow('account_conflict');
+	expect(await db.select().from(users)).toHaveLength(1);
 });
 
 test('concurrent first logins create one user and Account without orphan users', async () => {

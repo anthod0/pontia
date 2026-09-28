@@ -2,10 +2,13 @@ import { mockProvider } from './provider';
 import { afterEach, expect, test } from 'bun:test';
 import { isRedirect, type RequestEvent } from '@sveltejs/kit';
 import {
-	startLogin,
-	startBinding,
 	callback,
-	endLogin
+	createIndependentAccount,
+	endLogin,
+	pendingAccountSummary,
+	startBinding,
+	startLogin,
+	startPendingBinding
 } from '../src/lib/server/auth/http';
 import { activeLogin, login, logout } from '../src/lib/server/auth/identity';
 import {
@@ -83,6 +86,42 @@ function providerResponses() {
 				: { id: 123, login: 'github-user' }
 		);
 	});
+}
+
+function verifiedConflictResponses(googleSubject: string) {
+	fetchSpy = mockProvider(async (url) => {
+		if (String(url).includes('token'))
+			return Response.json({ access_token: 'transient-provider-token' });
+		if (String(url).endsWith('/emails'))
+			return Response.json([
+				{ email: 'same@example.com', primary: true, verified: true }
+			]);
+		return Response.json(
+			String(url).includes('google')
+				? { sub: googleSubject }
+				: { id: 123, login: 'github-user' }
+		);
+	});
+}
+
+async function beginVerifiedConflict(
+	client: ReturnType<typeof browser>,
+	returnTo?: string
+) {
+	const path = returnTo
+		? `/api/auth/github/login?return_to=${encodeURIComponent(returnTo)}`
+		: '/api/auth/github/login';
+	const authUrl = new URL(await location(startLogin(client.event(path))));
+	expect(
+		await location(
+			callback(
+				client.event(
+					`/api/auth/github/callback?code=code&state=${authUrl.searchParams.get('state')}`,
+					'GET'
+				)
+			)
+		)
+	).toBe('/auth/account-conflict');
 }
 
 async function signedIn(client: ReturnType<typeof browser>) {
@@ -174,11 +213,125 @@ test('device login returns to the confirmation page after provider authenticatio
 	).toBe(returnTo);
 });
 
+test('verified email conflict verifies the existing subject, links, logs in, and preserves the device return', async () => {
+	const originalId = await login(database.db, {
+		provider: 'google',
+		providerSubject: 'google-subject',
+		email: 'same@example.com',
+		emailVerified: true,
+		displayName: 'Original',
+		avatarUrl: null
+	});
+	const original = (await activeLogin(database.db, originalId))!;
+	verifiedConflictResponses('google-subject');
+	const client = browser();
+	const returnTo = '/device?user_code=BCDF-GHJK';
+	await beginVerifiedConflict(client, returnTo);
+	expect(client.options.get('_pending_account')).toMatchObject({
+		httpOnly: true,
+		secure: true,
+		sameSite: 'lax',
+		maxAge: 300
+	});
+	expect(
+		await pendingAccountSummary(client.event('/auth/account-conflict', 'GET'))
+	).toEqual({
+		email: 'same@example.com',
+		provider: 'google'
+	});
+	expect(await database.db.select().from(users)).toHaveLength(1);
+	expect(await database.db.select().from(accounts)).toHaveLength(1);
+	const pendingToken = client.cookies.get('_pending_account')!;
+	const verifyUrl = new URL(
+		await location(startPendingBinding(client.event('/api/auth/pending/bind')))
+	);
+	expect(
+		await location(
+			callback(
+				client.event(
+					`/api/auth/google/callback?code=code&state=${verifyUrl.searchParams.get('state')}`,
+					'GET'
+				)
+			)
+		)
+	).toBe(returnTo);
+	const claims = await verifyLogin(
+		client.cookies.get('_at')!,
+		config.JWT_SECRET
+	);
+	expect(claims.user_id).toBe(original.userId);
+	expect(client.cookies.has('_pending_account')).toBe(false);
+	expect(await database.db.select().from(users)).toHaveLength(1);
+	expect(await database.db.select().from(accounts)).toHaveLength(2);
+
+	client.cookies.set('_pending_account', pendingToken);
+	expect(
+		await location(
+			createIndependentAccount(client.event('/api/auth/pending/create'))
+		)
+	).toBe('/login?error=account_conflict');
+	expect(client.cookies.has('_pending_account')).toBe(false);
+	expect(await database.db.select().from(users)).toHaveLength(1);
+});
+
+test('verified email conflict can create an independent user', async () => {
+	await login(database.db, {
+		provider: 'google',
+		providerSubject: 'google-subject',
+		email: 'same@example.com',
+		emailVerified: true,
+		displayName: 'Original',
+		avatarUrl: null
+	});
+	verifiedConflictResponses('google-subject');
+	const client = browser();
+	await beginVerifiedConflict(client);
+	expect(
+		await location(
+			createIndependentAccount(client.event('/api/auth/pending/create'))
+		)
+	).toBe('/account');
+	expect(await database.db.select().from(users)).toHaveLength(2);
+	expect(await database.db.select().from(accounts)).toHaveLength(2);
+	expect(client.cookies.has('_at')).toBe(true);
+});
+
+test('pending binding rejects a different existing provider subject and clears pending state', async () => {
+	await login(database.db, {
+		provider: 'google',
+		providerSubject: 'expected-google-subject',
+		email: 'same@example.com',
+		emailVerified: true,
+		displayName: null,
+		avatarUrl: null
+	});
+	verifiedConflictResponses('different-google-subject');
+	const client = browser();
+	await beginVerifiedConflict(client);
+	const verifyUrl = new URL(
+		await location(startPendingBinding(client.event('/api/auth/pending/bind')))
+	);
+	expect(
+		await location(
+			callback(
+				client.event(
+					`/api/auth/google/callback?code=code&state=${verifyUrl.searchParams.get('state')}`,
+					'GET'
+				)
+			)
+		)
+	).toBe('/login?error=invalid_credentials');
+	expect(client.cookies.has('_pending_account')).toBe(false);
+	expect(await database.db.select().from(accounts)).toHaveLength(1);
+});
+
 test('HTTP endpoints reject cross-origin actions and tampered callback state before provider access', async () => {
 	const client = browser();
 	for (const [path, handler] of [
 		['/api/auth/google/login', startLogin],
 		['/api/auth/github/bind', startBinding],
+		['/api/auth/pending/bind', startPendingBinding],
+		['/api/auth/pending/create', createIndependentAccount],
 		['/api/auth/logout', endLogin]
 	] as const) {
 		await expect(

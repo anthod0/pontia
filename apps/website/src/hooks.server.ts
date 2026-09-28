@@ -1,6 +1,11 @@
 import type { Handle } from '@sveltejs/kit';
 
-const privatePages = ['/login', '/account', '/device'];
+const privatePages = [
+	'/login',
+	'/account',
+	'/device',
+	'/auth/account-conflict'
+];
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
