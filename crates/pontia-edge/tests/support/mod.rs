@@ -31,6 +31,10 @@ pub const CLI_CREDENTIAL: &str = "ptr_v1_session_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 pub const EDGE_CREDENTIAL: &str =
     "pec_v1_01a0e686-24d4-75e8-866d-5710ffe3b2b5_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
+fn new_ticket() -> String {
+    format!("pet_v1_{}{}", Uuid::new_v4().simple(), "A".repeat(11))
+}
+
 #[derive(Clone)]
 struct WebsiteState {
     tickets: Arc<Mutex<HashMap<String, Uuid>>>,
@@ -182,7 +186,7 @@ impl TestEdge {
     }
 
     pub fn issue_ticket(&self, device_id: Uuid) -> String {
-        let ticket = format!("ptt_v1_{}_{}", Uuid::new_v4(), "A".repeat(43));
+        let ticket = new_ticket();
         self.tickets
             .lock()
             .unwrap()
@@ -239,7 +243,7 @@ async fn issue(
     {
         return Err(StatusCode::UNAUTHORIZED);
     }
-    let ticket = format!("ptt_v1_{}_{}", Uuid::new_v4(), "B".repeat(43));
+    let ticket = new_ticket();
     state.issued.fetch_add(1, Ordering::SeqCst);
     state
         .tickets

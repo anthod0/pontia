@@ -56,27 +56,31 @@ export const devices = sqliteTable(
   ],
 );
 
-export const tunnelTickets = sqliteTable(
-  "tunnel_tickets",
+export const edgeTickets = sqliteTable(
+  "edge_tickets",
   {
-    id: text().notNull(),
+    id: integer().notNull().primaryKey(),
+    purpose: text({
+      enum: ["edge_deployment", "device_tunnel", "dashboard_access"],
+    }).notNull(),
     secretHash: text("secret_hash").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    deviceId: text("device_id")
-      .notNull()
-      .references(() => devices.id, { onDelete: "cascade" }),
-    edgeId: text("edge_id")
-      .notNull()
-      .references(() => edges.id, { onDelete: "cascade" }),
+    expectedEdgeId: text("expected_edge_id").notNull(),
+    payload: text().notNull(),
     expiresAt: text("expires_at").notNull(),
     consumedAt: text("consumed_at"),
     createdAt: text("created_at").notNull().default(timestamp),
   },
   (table) => [
-    primaryKey({ columns: [table.id] }),
-    index("idx_tunnel_tickets_expires_at").on(table.expiresAt),
+    check(
+      "edge_tickets_purpose_check",
+      sql`${table.purpose} IN ('edge_deployment', 'device_tunnel', 'dashboard_access')`,
+    ),
+    check("edge_tickets_payload_json_check", sql`json_valid(${table.payload})`),
+    uniqueIndex("idx_edge_tickets_secret_hash").on(table.secretHash),
+    index("idx_edge_tickets_expires_at").on(table.expiresAt),
   ],
 );
 

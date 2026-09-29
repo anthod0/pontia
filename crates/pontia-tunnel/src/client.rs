@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use futures_util::{SinkExt, StreamExt};
 use reqwest::{Client, StatusCode};
 use rustls::{ClientConfig, RootCertStore};
@@ -311,17 +312,19 @@ fn valid_credential(value: &str) -> bool {
 }
 
 fn valid_ticket(value: &str) -> bool {
-    let mut parts = value.split('_');
-    parts.next() == Some("ptt")
-        && parts.next() == Some("v1")
-        && parts.next().is_some_and(|id| Uuid::parse_str(id).is_ok())
-        && parts.next().is_some_and(|secret| {
-            secret.len() == 43
-                && secret
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
-        })
-        && parts.next().is_none()
+    let Some(secret) = value.strip_prefix("pet_v1_") else {
+        return false;
+    };
+    if secret.len() != 43
+        || !secret
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return false;
+    }
+    URL_SAFE_NO_PAD
+        .decode(secret)
+        .is_ok_and(|decoded| decoded.len() == 32 && URL_SAFE_NO_PAD.encode(decoded) == secret)
 }
 
 fn validate_tunnel_url(value: &str) -> Result<Url> {
@@ -375,14 +378,22 @@ mod tests {
 
     #[test]
     fn credentials_and_tickets_use_distinct_strict_formats() {
-        let secret = "A".repeat(43);
-        let credential = format!("ptr_v1_session_{secret}");
-        let ticket = format!("ptt_v1_0195e7c1-1b22-7c33-9d44-123456789abc_{secret}");
+        let secret = "v7-_".repeat(10) + "v78";
+        let credential = format!("ptr_v1_session_{}", "A".repeat(43));
+        let ticket = format!("pet_v1_{secret}");
         assert!(valid_credential(&credential));
         assert!(!valid_credential(&ticket));
         assert!(valid_ticket(&ticket));
         assert!(!valid_ticket(&credential));
-        assert!(!valid_ticket(&format!("{ticket}_extra")));
+        for invalid in [
+            format!("ptt_v1_0195e7c1-1b22-7c33-9d44-123456789abc_{secret}"),
+            format!("pet_v2_{secret}"),
+            format!("{ticket}_extra"),
+            format!("pet_v1_{}=", &secret[..42]),
+            format!("pet_v1_{}", &secret[..42]),
+        ] {
+            assert!(!valid_ticket(&invalid), "{invalid}");
+        }
     }
 
     #[test]

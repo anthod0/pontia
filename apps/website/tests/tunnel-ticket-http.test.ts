@@ -86,7 +86,7 @@ test("ticket issue endpoint authenticates the CLI owner and returns its edge tar
   });
 
   const result = await issueTicket();
-  expect(result.ticket).toMatch(/^ptt_v1_[0-9a-f-]+_[A-Za-z0-9_-]{43}$/);
+  expect(result.ticket).toMatch(/^pet_v1_[A-Za-z0-9_-]{43}$/);
   expect(result.tunnel_url).toBe("wss://edge-http.example/tunnel");
   expect(Date.parse(result.expires_at)).toBeGreaterThan(Date.now());
 });

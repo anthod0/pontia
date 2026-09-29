@@ -65,18 +65,19 @@ CREATE TABLE `device_rate_limits` (
 	`attempt_count` integer NOT NULL
 );
 
-CREATE TABLE `tunnel_tickets` (
-	`id` text PRIMARY KEY NOT NULL,
+CREATE TABLE `edge_tickets` (
+	`id` integer PRIMARY KEY,
+	`purpose` text NOT NULL,
 	`secret_hash` text NOT NULL,
 	`user_id` text NOT NULL,
-	`device_id` text NOT NULL,
-	`edge_id` text NOT NULL,
+	`expected_edge_id` text NOT NULL,
+	`payload` text NOT NULL,
 	`expires_at` text NOT NULL,
 	`consumed_at` text,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
-	CONSTRAINT `fk_tunnel_tickets_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-	CONSTRAINT `fk_tunnel_tickets_device_id_devices_id_fk` FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON DELETE CASCADE,
-	CONSTRAINT `fk_tunnel_tickets_edge_id_edges_id_fk` FOREIGN KEY (`edge_id`) REFERENCES `edges`(`id`) ON DELETE CASCADE
+	CONSTRAINT `fk_edge_tickets_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+	CONSTRAINT "edge_tickets_purpose_check" CHECK("purpose" IN ('edge_deployment', 'device_tunnel', 'dashboard_access')),
+	CONSTRAINT "edge_tickets_payload_json_check" CHECK(json_valid("payload"))
 );
 
 CREATE TABLE `users` (
@@ -94,5 +95,6 @@ CREATE INDEX `idx_devices_edge_id` ON `devices` (`edge_id`);
 CREATE UNIQUE INDEX `idx_device_authorizations_device_code` ON `device_authorizations` (`device_code_hash`);
 CREATE UNIQUE INDEX `idx_device_authorizations_user_code` ON `device_authorizations` (`user_code`);
 CREATE INDEX `idx_device_authorizations_expires_at` ON `device_authorizations` (`expires_at`);
-CREATE INDEX `idx_tunnel_tickets_expires_at` ON `tunnel_tickets` (`expires_at`);
+CREATE UNIQUE INDEX `idx_edge_tickets_secret_hash` ON `edge_tickets` (`secret_hash`);
+CREATE INDEX `idx_edge_tickets_expires_at` ON `edge_tickets` (`expires_at`);
 ```
