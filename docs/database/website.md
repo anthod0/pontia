@@ -28,11 +28,15 @@ CREATE TABLE `auth_sessions` (
 
 CREATE TABLE `edges` (
 	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`access_scope` text DEFAULT 'private' NOT NULL,
 	`name` text NOT NULL,
 	`tunnel_url` text NOT NULL,
 	`service_credential_hash` text NOT NULL,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
-	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL
+	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	CONSTRAINT `fk_edges_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+	CONSTRAINT "edges_access_scope_check" CHECK("access_scope" IN ('private', 'public'))
 );
 
 CREATE TABLE `devices` (
@@ -90,6 +94,9 @@ CREATE TABLE `users` (
 CREATE UNIQUE INDEX `idx_accounts_provider_subject` ON `accounts` (`provider`,`provider_subject`);
 CREATE UNIQUE INDEX `idx_accounts_user_provider` ON `accounts` (`user_id`,`provider`);
 CREATE INDEX `idx_auth_sessions_user_id` ON `auth_sessions` (`user_id`);
+CREATE INDEX `idx_edges_user_id` ON `edges` (`user_id`);
+CREATE INDEX `idx_edges_access_scope` ON `edges` (`access_scope`);
+CREATE UNIQUE INDEX `idx_edges_tunnel_url` ON `edges` (`tunnel_url`);
 CREATE INDEX `idx_devices_user_id` ON `devices` (`user_id`);
 CREATE INDEX `idx_devices_edge_id` ON `devices` (`edge_id`);
 CREATE UNIQUE INDEX `idx_device_authorizations_device_code` ON `device_authorizations` (`device_code_hash`);

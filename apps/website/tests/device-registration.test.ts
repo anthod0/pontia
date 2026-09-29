@@ -15,23 +15,45 @@ const conflictEdge = "0195e7ba-91c2-73d4-a560-2f78b90c1234";
 const conflictOtherEdge = "0195e7bb-91c2-73d4-a560-2f78b90c1234";
 const deviceId = "0195e7c1-1b22-7c33-9d44-123456789abc";
 
-async function insertEdge(id: string, name: string) {
+async function insertEdge(
+  id: string,
+  name: string,
+  userId = "user-owner",
+  accessScope: "private" | "public" = "private",
+) {
   await database.db.insert(edges).values({
     id,
+    userId,
+    accessScope,
     name,
     tunnelUrl: `wss://${id}.example/tunnel`,
     serviceCredentialHash: "hash",
   });
 }
 
-test("registration edges expose only IDs and names in stable order", async () => {
+test("registration edges expose owned and public edges only in stable order", async () => {
+  await database.db.insert(users).values([{ id: "user-owner" }, { id: "user-other" }]);
   await insertEdge(edgeTokyo, "Tokyo");
-  await insertEdge(edgeSingapore, "Singapore");
+  await insertEdge(edgeSingapore, "Singapore", "user-other", "public");
+  await insertEdge(conflictEdge, "Hidden", "user-other");
 
-  expect(await registrationEdges(database.db)).toEqual([
+  expect(await registrationEdges(database.db, "user-owner")).toEqual([
     { id: edgeSingapore, name: "Singapore" },
     { id: edgeTokyo, name: "Tokyo" },
   ]);
+});
+
+test("a user can register a device only to an owned or public edge", async () => {
+  await database.db.insert(users).values([{ id: "user-owner" }, { id: "user-other" }]);
+  await insertEdge(edgeTokyo, "Private", "user-other");
+  await insertEdge(edgeSingapore, "Public", "user-other", "public");
+
+  expect(
+    await registerDevice(database.db, "user-owner", deviceId, "Private target", edgeTokyo),
+  ).toEqual({ status: "edge_not_found" });
+  expect(
+    await registerDevice(database.db, "user-owner", deviceId, "Public target", edgeSingapore),
+  ).toMatchObject({ status: "created", device: { edgeId: edgeSingapore } });
 });
 
 test("device registration creates once and returns the stored record on retry", async () => {
@@ -71,7 +93,7 @@ test("device registration creates once and returns the stored record on retry", 
 test("registration rejects invalid edges and device conflicts", async () => {
   await database.db.insert(users).values([{ id: "user-owner" }, { id: "user-other" }]);
   await insertEdge(conflictEdge, "Tokyo");
-  await insertEdge(conflictOtherEdge, "Singapore");
+  await insertEdge(conflictOtherEdge, "Singapore", "user-other");
   await database.db.insert(devices).values({
     id: deviceId,
     userId: "user-owner",
@@ -91,7 +113,16 @@ test("registration rejects invalid edges and device conflicts", async () => {
       "user-owner",
       "0195e7c2-1b22-7c33-9d44-123456789abc",
       "New",
+      conflictOtherEdge,
+    ),
+  ).toEqual({ status: "edge_not_found" });
+  expect(
+    await registerDevice(
+      database.db,
+      "user-owner",
       "0195e7c3-1b22-7c33-9d44-123456789abc",
+      "Missing",
+      "0195e7c4-1b22-7c33-9d44-123456789abc",
     ),
   ).toEqual({ status: "edge_not_found" });
   expect(await findRegisteredDevice(database.db, "user-other", deviceId)).toEqual({

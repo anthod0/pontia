@@ -31,12 +31,14 @@ async function seedTicketFixture() {
   await database.db.insert(edges).values([
     {
       id: "edge-target",
+      userId: "user-owner",
       name: "Target Edge",
       tunnelUrl: "wss://target.example/tunnel",
       serviceCredentialHash: "target-hash",
     },
     {
       id: "edge-other",
+      userId: "user-other",
       name: "Other Edge",
       tunnelUrl: "wss://other.example/tunnel",
       serviceCredentialHash: "other-hash",
@@ -155,8 +157,9 @@ test("redemption rejects wrong secrets, purpose, expiry, payload, and stale bind
     "stale-binding",
   ];
   for (const testCase of cases) {
-    await database.db.delete(users);
+    await database.db.delete(devices);
     await database.db.delete(edges);
+    await database.db.delete(users);
     await seedTicketFixture();
     const issued = await issuedTicket();
     const stored = await database.db.select().from(edgeTickets).get();

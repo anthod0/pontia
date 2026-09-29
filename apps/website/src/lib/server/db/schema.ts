@@ -26,13 +26,25 @@ export const edges = sqliteTable(
   "edges",
   {
     id: text().notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    accessScope: text("access_scope", { enum: ["private", "public"] })
+      .notNull()
+      .default("private"),
     name: text().notNull(),
     tunnelUrl: text("tunnel_url").notNull(),
     serviceCredentialHash: text("service_credential_hash").notNull(),
     createdAt: text("created_at").notNull().default(timestamp),
     updatedAt: text("updated_at").notNull().default(timestamp),
   },
-  (table) => [primaryKey({ columns: [table.id] })],
+  (table) => [
+    primaryKey({ columns: [table.id] }),
+    index("idx_edges_user_id").on(table.userId),
+    index("idx_edges_access_scope").on(table.accessScope),
+    uniqueIndex("idx_edges_tunnel_url").on(table.tunnelUrl),
+    check("edges_access_scope_check", sql`${table.accessScope} IN ('private', 'public')`),
+  ],
 );
 
 export const devices = sqliteTable(

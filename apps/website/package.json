@@ -18,8 +18,7 @@
     "check:watch": "svelte-kit sync && wrangler types && svelte-check --tsconfig ./tsconfig.json --watch",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply DB --local",
-    "test": "bun test tests",
-    "register:edge": "bun run scripts/register-edge.ts"
+    "test": "bun test tests"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",

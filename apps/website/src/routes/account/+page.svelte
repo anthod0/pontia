@@ -46,6 +46,7 @@
 			</li>
 		{/each}
 	</ul>
+	<p><a href="/edges">Deploy a self-hosted edge</a></p>
 	<form method="POST" action="/api/auth/logout">
 		<Button type="submit" class="button">Sign out</Button>
 	</form>

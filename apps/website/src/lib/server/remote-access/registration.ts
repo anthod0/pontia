@@ -1,7 +1,8 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
 import { isUuidV7 } from "../uuid";
+import { edgeIsAccessibleTo } from "./resources";
 
 export type RegistrationEdge = {
   id: string;
@@ -28,10 +29,11 @@ function validName(value: string) {
   return value.trim() === value && value.length > 0 && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
 }
 
-export async function registrationEdges(db: Database): Promise<RegistrationEdge[]> {
+export async function registrationEdges(db: Database, userId: string): Promise<RegistrationEdge[]> {
   return db
     .select({ id: edges.id, name: edges.name })
     .from(edges)
+    .where(edgeIsAccessibleTo(userId))
     .orderBy(asc(edges.name), asc(edges.id));
 }
 
@@ -97,7 +99,7 @@ export async function registerDevice(
           updatedAt: sql<string>`${now}`.as("updated_at"),
         })
         .from(edges)
-        .where(eq(edges.id, edgeId)),
+        .where(and(eq(edges.id, edgeId), edgeIsAccessibleTo(userId))),
     )
     .onConflictDoNothing()
     .returning({ id: devices.id });

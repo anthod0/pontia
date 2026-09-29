@@ -18,46 +18,49 @@ async function hash(value: string) {
   );
 }
 
-async function insertEdge(id: string, credentialSecret = secret) {
+async function insertEdge(id: string, credentialSecret = secret, userId = "edge-owner") {
   await database.db.insert(edges).values({
     id,
+    userId,
     name: `Edge ${id}`,
     tunnelUrl: `wss://${id}.example.com/tunnel`,
     serviceCredentialHash: await hash(credentialSecret),
   });
 }
 
-async function insertUserAndDevice(userId: string, deviceId: string, edgeId: string) {
-  await database.db.insert(users).values({ id: userId });
-  await database.db.insert(devices).values({ id: deviceId, userId, edgeId });
-}
-
 test("edge credentials authenticate only a strict matching credential", async () => {
-  await insertEdge("edge-auth");
-  await insertEdge("edge_auth_extra");
-  const credential = `pec_v1_edge-auth_${secret}`;
+  await database.db.insert(users).values({ id: "edge-owner" });
+  const edgeId = "0199791c-6600-7000-8000-000000000010";
+  await insertEdge(edgeId);
+  const credential = `pec_v1_${edgeId}_${secret}`;
 
   expect(await authenticateEdgeCredential(database.db, credential)).toEqual({
-    edgeId: "edge-auth",
+    edgeId,
   });
   expect(
     await authenticateEdgeCredential(
       database.db,
-      `pec_v1_edge-auth_${base64url.encode(new Uint8Array(32).fill(8))}`,
+      `pec_v1_${edgeId}_${base64url.encode(new Uint8Array(32).fill(8))}`,
     ),
   ).toBeNull();
-  expect(await authenticateEdgeCredential(database.db, `pec_v2_edge-auth_${secret}`)).toBeNull();
-  expect(await authenticateEdgeCredential(database.db, `pec_v1_unknown_${secret}`)).toBeNull();
-  expect(await authenticateEdgeCredential(database.db, `${credential}_extra`)).toBeNull();
+  expect(await authenticateEdgeCredential(database.db, `pec_v2_${edgeId}_${secret}`)).toBeNull();
   expect(
-    await authenticateEdgeCredential(database.db, `pec_v1_edge_auth_extra_${secret}`),
+    await authenticateEdgeCredential(
+      database.db,
+      `pec_v1_0199791c-6600-7000-8000-000000000099_${secret}`,
+    ),
   ).toBeNull();
+  expect(await authenticateEdgeCredential(database.db, `${credential}_extra`)).toBeNull();
 });
 
 test("owned device lookup returns its current edge target", async () => {
-  await insertEdge("edge-target");
-  await insertUserAndDevice("user-owner", "device-owned", "edge-target");
-  await database.db.insert(users).values({ id: "user-other" });
+  await database.db
+    .insert(users)
+    .values([{ id: "edge-owner" }, { id: "user-owner" }, { id: "user-other" }]);
+  await insertEdge("edge-target", secret, "user-owner");
+  await database.db
+    .insert(devices)
+    .values({ id: "device-owned", userId: "user-owner", edgeId: "edge-target" });
 
   expect(await findOwnedDeviceTarget(database.db, "user-owner", "device-owned")).toEqual({
     deviceId: "device-owned",
@@ -69,9 +72,12 @@ test("owned device lookup returns its current edge target", async () => {
 });
 
 test("device binding checks owner, device, and edge together", async () => {
-  await insertEdge("edge-binding");
+  await database.db.insert(users).values([{ id: "edge-owner" }, { id: "user-binding" }]);
+  await insertEdge("edge-binding", secret, "user-binding");
   await insertEdge("edge-other");
-  await insertUserAndDevice("user-binding", "device-binding", "edge-binding");
+  await database.db
+    .insert(devices)
+    .values({ id: "device-binding", userId: "user-binding", edgeId: "edge-binding" });
 
   expect(
     await deviceBindingIsCurrent(database.db, "user-binding", "device-binding", "edge-binding"),
@@ -85,8 +91,11 @@ test("device binding checks owner, device, and edge together", async () => {
 });
 
 test("device foreign keys cascade owners and restrict deleting assigned edges", async () => {
+  await database.db.insert(users).values([{ id: "edge-owner" }, { id: "user-constraints" }]);
   await insertEdge("edge-constraints");
-  await insertUserAndDevice("user-constraints", "device-constraints", "edge-constraints");
+  await database.db
+    .insert(devices)
+    .values({ id: "device-constraints", userId: "user-constraints", edgeId: "edge-constraints" });
 
   await expect(
     Promise.resolve(database.db.delete(edges).where(eq(edges.id, "edge-constraints"))),

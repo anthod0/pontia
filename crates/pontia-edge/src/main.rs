@@ -1,12 +1,14 @@
-use std::{io::IsTerminal, net::SocketAddr, path::PathBuf, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::{Args, Parser, Subcommand};
 use pontia_edge::{
     ConnectionLimits, Edge, TicketRedeemer,
-    credential::{CREDENTIAL_PATH, ensure_root, initialize_credential, read_credential},
+    credential::{CREDENTIAL_PATH, ensure_root, read_edge_credential},
+    enrollment::{HttpWebsiteClient, InitializationResult, initialize_and_enroll},
 };
+use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(
@@ -22,8 +24,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Generate and save this edge's service credential.
-    Init,
+    /// Initialize this edge's service credential and register it with Pontia.
+    Init(InitArgs),
+}
+
+#[derive(Args)]
+struct InitArgs {
+    #[arg(long)]
+    website_origin: String,
+    #[arg(long, value_parser = parse_edge_id)]
+    edge_id: Uuid,
+    #[arg(long)]
+    ticket: String,
 }
 
 #[derive(Args)]
@@ -40,20 +52,37 @@ struct ServeArgs {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Some(Command::Init) => init(),
+        Some(Command::Init(args)) => init(args).await,
         None => serve(cli.serve).await,
     }
 }
 
-fn init() -> Result<()> {
-    anyhow::ensure!(
-        std::io::stdout().is_terminal(),
-        "pontia-edge init requires an interactive terminal"
-    );
+fn parse_edge_id(value: &str) -> std::result::Result<Uuid, String> {
+    let id = Uuid::parse_str(value).map_err(|_| "edge ID must be a UUID v7".to_owned())?;
+    if id.get_version_num() != 7 || id.to_string() != value {
+        return Err("edge ID must be a canonical UUID v7".to_owned());
+    }
+    Ok(id)
+}
+
+async fn init(args: InitArgs) -> Result<()> {
     ensure_root(rustix::process::geteuid().as_raw())?;
-    let credential = initialize_credential(CREDENTIAL_PATH.as_ref())?;
-    println!("Edge ID: {}", credential.edge_id);
-    println!("Credential: {}", credential.value);
+    let client = HttpWebsiteClient::new(&args.website_origin)?;
+    let result = initialize_and_enroll(
+        &client,
+        CREDENTIAL_PATH.as_ref(),
+        args.edge_id,
+        &args.ticket,
+    )
+    .await?;
+    match result {
+        InitializationResult::AlreadyRegistered(identity) => {
+            println!("Edge {} is already registered.", identity.name);
+        }
+        InitializationResult::Enrolled(identity) => {
+            println!("Edge {} registered successfully.", identity.name);
+        }
+    }
     Ok(())
 }
 
@@ -67,7 +96,7 @@ async fn serve(args: ServeArgs) -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let website_origin =
         std::env::var("PONTIA_WEBSITE_ORIGIN").context("PONTIA_WEBSITE_ORIGIN is required")?;
-    let service_credential = read_credential(CREDENTIAL_PATH.as_ref())?;
+    let service_credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?.value;
     let tls_cert = args.tls_cert.context("--tls-cert is required")?;
     let tls_key = args.tls_key.context("--tls-key is required")?;
     let tls = RustlsConfig::from_pem_file(tls_cert, tls_key).await?;
@@ -116,8 +145,18 @@ mod tests {
 
     #[test]
     fn command_line_accepts_init_and_the_existing_service_invocation() {
-        let init = Cli::try_parse_from(["pontia-edge", "init"]).unwrap();
-        assert!(matches!(init.command, Some(Command::Init)));
+        let init = Cli::try_parse_from([
+            "pontia-edge",
+            "init",
+            "--website-origin",
+            "https://pontia.example",
+            "--edge-id",
+            "0199791c-6600-7000-8000-000000000001",
+            "--ticket",
+            "pet_v1_example",
+        ])
+        .unwrap();
+        assert!(matches!(init.command, Some(Command::Init(_))));
 
         let service = Cli::try_parse_from([
             "pontia-edge",

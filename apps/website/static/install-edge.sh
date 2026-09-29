@@ -79,4 +79,3 @@ mv -f "$staged_binary" "$INSTALL_DIR/pontia-edge"
 staged_binary=""
 
 printf 'Installed pontia-edge to %s/pontia-edge\n' "$INSTALL_DIR"
-printf '\nInitialize this edge with:\n  sudo pontia-edge init\n'

@@ -1,8 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { base64url } from "jose";
 import { sha256Base64url } from "../crypto";
 import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
+import { isUuidV7 } from "../uuid";
 
 export type EdgePrincipal = {
   edgeId: string;
@@ -14,10 +15,15 @@ export type DeviceTarget = {
   tunnelUrl: string;
 };
 
-function parseCredential(credential: string) {
-  const match = /^pec_v1_([A-Za-z0-9-]+)_([A-Za-z0-9_-]{43})$/.exec(credential);
+export function edgeIsAccessibleTo(userId: string) {
+  return or(eq(edges.accessScope, "public"), eq(edges.userId, userId));
+}
+
+export function parseEdgeCredential(credential: string) {
+  const match = /^pec_v1_([0-9a-f-]{36})_([A-Za-z0-9_-]{43})$/.exec(credential);
   if (!match) return null;
   const [, edgeId, secret] = match;
+  if (!isUuidV7(edgeId)) return null;
 
   try {
     const decoded = base64url.decode(secret);
@@ -32,7 +38,7 @@ export async function authenticateEdgeCredential(
   db: Database,
   credential: string,
 ): Promise<EdgePrincipal | null> {
-  const parsed = parseCredential(credential);
+  const parsed = parseEdgeCredential(credential);
   if (!parsed) return null;
   const edge = await db
     .select({
@@ -59,7 +65,7 @@ export async function findOwnedDeviceTarget(
     })
     .from(devices)
     .innerJoin(edges, eq(devices.edgeId, edges.id))
-    .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)))
+    .where(and(eq(devices.id, deviceId), eq(devices.userId, userId), edgeIsAccessibleTo(userId)))
     .get();
   return target ?? null;
 }
@@ -74,7 +80,14 @@ export async function deviceBindingIsCurrent(
     .select({ deviceId: devices.id })
     .from(devices)
     .innerJoin(edges, eq(devices.edgeId, edges.id))
-    .where(and(eq(devices.id, deviceId), eq(devices.userId, userId), eq(devices.edgeId, edgeId)))
+    .where(
+      and(
+        eq(devices.id, deviceId),
+        eq(devices.userId, userId),
+        eq(devices.edgeId, edgeId),
+        edgeIsAccessibleTo(userId),
+      ),
+    )
     .get();
   return binding !== undefined;
 }

@@ -12,7 +12,7 @@ const callRedeem = redeem as unknown as (event: RequestEvent) => Promise<Respons
 const database = testDatabase();
 const sessionId = "0195e7d1-1b22-7c33-9d44-123456789abc";
 const deviceId = "0195e7d3-1b22-7c33-9d44-123456789abc";
-const edgeId = "edge-http";
+const edgeId = "0195e7d2-1b22-7c33-9d44-123456789abc";
 const cliSecret = base64url.encode(new Uint8Array(32).fill(31));
 const edgeSecret = base64url.encode(new Uint8Array(32).fill(32));
 const cliCredential = `ptr_v1_${sessionId}_${cliSecret}`;
@@ -51,6 +51,7 @@ async function seedHttpTicketFixture() {
   });
   await database.db.insert(edges).values({
     id: edgeId,
+    userId: "user-http",
     name: "HTTP Edge",
     tunnelUrl: "wss://edge-http.example/tunnel",
     serviceCredentialHash: await sha256Base64url(edgeSecret),

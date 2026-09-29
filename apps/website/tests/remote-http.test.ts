@@ -50,6 +50,7 @@ async function authenticatedRecords() {
   });
   await database.db.insert(edges).values({
     id: edgeId,
+    userId: "user-http",
     name: "HTTP Edge",
     tunnelUrl: "wss://http-edge.example/tunnel",
     serviceCredentialHash: "hash",
