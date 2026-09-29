@@ -13,6 +13,7 @@ use crate::credential::{
 pub struct EdgeIdentity {
     pub edge_id: Uuid,
     pub name: String,
+    pub tunnel_url: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,9 +29,15 @@ pub enum InitializationResult {
 }
 
 #[allow(async_fn_in_trait)]
-pub trait WebsiteClient {
+pub trait EnrollmentClient {
     async fn identity(&self, credential: &str) -> Result<IdentityLookup>;
     async fn enroll(&self, ticket: &str, credential: &str) -> Result<EdgeIdentity>;
+}
+
+#[allow(async_fn_in_trait)]
+pub trait EdgeNetworkClient {
+    async fn configure_network(&self, credential: &str, candidate_ipv4: &str) -> Result<String>;
+    async fn verify_health(&self, credential: &str) -> Result<String>;
 }
 
 pub struct HttpWebsiteClient {
@@ -62,6 +69,10 @@ impl HttpWebsiteClient {
         })
     }
 
+    pub fn origin(&self) -> &Url {
+        &self.origin
+    }
+
     fn endpoint(&self, path: &str) -> Result<Url> {
         self.origin
             .join(path)
@@ -75,7 +86,17 @@ struct EnrollmentRequest<'a> {
     service_credential: &'a str,
 }
 
-impl WebsiteClient for HttpWebsiteClient {
+#[derive(Serialize)]
+struct NetworkRequest<'a> {
+    candidate_ipv4: &'a str,
+}
+
+#[derive(Deserialize)]
+struct HostnameResponse {
+    hostname: String,
+}
+
+impl EnrollmentClient for HttpWebsiteClient {
     async fn identity(&self, credential: &str) -> Result<IdentityLookup> {
         let response = self
             .client
@@ -118,7 +139,48 @@ impl WebsiteClient for HttpWebsiteClient {
     }
 }
 
-pub async fn initialize_and_enroll<C: WebsiteClient>(
+impl EdgeNetworkClient for HttpWebsiteClient {
+    async fn configure_network(&self, credential: &str, candidate_ipv4: &str) -> Result<String> {
+        let response = self
+            .client
+            .post(self.endpoint("api/edge/network/configure")?)
+            .bearer_auth(credential)
+            .json(&NetworkRequest { candidate_ipv4 })
+            .send()
+            .await
+            .context("failed to request edge network configuration")?;
+        anyhow::ensure!(
+            response.status() == StatusCode::OK,
+            "Website rejected edge network configuration"
+        );
+        Ok(response
+            .json::<HostnameResponse>()
+            .await
+            .context("Website returned an invalid network configuration response")?
+            .hostname)
+    }
+
+    async fn verify_health(&self, credential: &str) -> Result<String> {
+        let response = self
+            .client
+            .post(self.endpoint("api/edge/network/health")?)
+            .bearer_auth(credential)
+            .send()
+            .await
+            .context("failed to request public edge health verification")?;
+        anyhow::ensure!(
+            response.status() == StatusCode::OK,
+            "Website could not verify public edge health"
+        );
+        Ok(response
+            .json::<HostnameResponse>()
+            .await
+            .context("Website returned an invalid health response")?
+            .hostname)
+    }
+}
+
+pub async fn initialize_and_enroll<C: EnrollmentClient>(
     client: &C,
     credential_path: &Path,
     expected_edge_id: Uuid,
@@ -144,7 +206,7 @@ pub async fn initialize_and_enroll<C: WebsiteClient>(
     enroll_credential(client, ticket, expected_edge_id, credential).await
 }
 
-async fn enroll_credential<C: WebsiteClient>(
+async fn enroll_credential<C: EnrollmentClient>(
     client: &C,
     ticket: &str,
     expected_edge_id: Uuid,
@@ -184,7 +246,7 @@ mod tests {
         enrolled_credentials: Mutex<Vec<String>>,
     }
 
-    impl WebsiteClient for StubClient {
+    impl EnrollmentClient for StubClient {
         async fn identity(&self, _credential: &str) -> Result<IdentityLookup> {
             self.lookup.clone().map_err(anyhow::Error::msg)
         }
@@ -202,6 +264,7 @@ mod tests {
         EdgeIdentity {
             edge_id: Uuid::parse_str(id).unwrap(),
             name: "brave-silver-atlas".to_owned(),
+            tunnel_url: "wss://brave-silver-atlas.edge.pontia.dev/tunnel".to_owned(),
         }
     }
 
@@ -228,7 +291,7 @@ mod tests {
             return Err(StatusCode::UNAUTHORIZED);
         }
         Ok(Json(
-            json!({ "edge_id": FIRST_ID, "name": "brave-silver-atlas" }),
+            json!({ "edge_id": FIRST_ID, "name": "brave-silver-atlas", "tunnel_url": "wss://brave-silver-atlas.edge.pontia.dev/tunnel" }),
         ))
     }
 
@@ -249,7 +312,7 @@ mod tests {
             .unwrap()
             .push((ticket.to_owned(), credential.to_owned()));
         Ok(Json(
-            json!({ "edge_id": FIRST_ID, "name": "brave-silver-atlas" }),
+            json!({ "edge_id": FIRST_ID, "name": "brave-silver-atlas", "tunnel_url": "wss://brave-silver-atlas.edge.pontia.dev/tunnel" }),
         ))
     }
 

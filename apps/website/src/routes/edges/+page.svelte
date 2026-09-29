@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import AuthLayout from "$lib/components/AuthLayout.svelte";
   import type { ActionData, PageData } from "./$types";
 
@@ -36,6 +37,16 @@
     </section>
   {:else}
     <form method="POST">
+      <label class="agreement">
+        <Checkbox name="subscriber_agreement" value="accepted" required />
+        <span>
+          I agree to the
+          <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">
+            Let's Encrypt Subscriber Agreement
+          </a>
+          for certificate issuance on this server.
+        </span>
+      </label>
       <Button type="submit">Generate deployment command</Button>
     </form>
   {/if}
@@ -51,6 +62,18 @@
   h2 {
     font-size: 18px;
     margin-bottom: 8px;
+  }
+
+  .agreement {
+    align-items: flex-start;
+    display: flex;
+    gap: 10px;
+    margin-block: 20px;
+    max-width: 620px;
+  }
+
+  .agreement :global([data-slot="checkbox"]) {
+    margin-top: 4px;
   }
 
   pre {

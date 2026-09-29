@@ -1,7 +1,13 @@
+pub mod acme;
+pub mod challenge;
+pub mod config;
 mod connection;
 pub mod credential;
 pub mod enrollment;
+mod files;
+pub mod network;
 mod online;
+pub mod systemd;
 mod tickets;
 
 use std::{sync::Arc, time::Duration};

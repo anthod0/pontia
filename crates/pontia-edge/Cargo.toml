@@ -11,16 +11,20 @@ axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
 getrandom = "0.3"
+instant-acme = { version = "=0.8.5", default-features = false, features = ["hyper-rustls", "ring", "rcgen"] }
+nix = { version = "0.30", features = ["net", "socket"] }
 pontia-tunnel.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rustix = { version = "1", features = ["process"] }
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { features = ["v4", "v7"], version = "1.23.1" }
+webpki-roots = "1"
 
 [dev-dependencies]
 futures-util = { version = "0.3", features = ["sink"] }

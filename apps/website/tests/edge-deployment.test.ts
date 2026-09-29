@@ -64,7 +64,7 @@ test("issuing a deployment creates a one-hour bound ticket and copyable command"
     expiresAt: "2099-01-01T01:00:00.000Z",
   });
   expect(deployment.command).toBe(
-    `curl -fsSL 'https://pontia.example/install-edge.sh' | sudo sh &&\nsudo pontia-edge init \\\n  --website-origin 'https://pontia.example' \\\n  --edge-id '${edgeId}' \\\n  --ticket '${ticket}'`,
+    `curl -fsSL 'https://pontia.example/install-edge.sh' | sudo sh &&\nsudo pontia-edge init \\\n  --website-origin 'https://pontia.example' \\\n  --edge-id '${edgeId}' \\\n  --ticket '${ticket}' \\\n  --agree-to-lets-encrypt-subscriber-agreement`,
   );
   const stored = await database.db.select().from(edgeTickets).get();
   expect(stored).toMatchObject({
@@ -85,7 +85,11 @@ test("enrollment atomically creates a private owned edge and supports an identic
 
   expect(await enrollEdge(database.db, ticket, credential)).toEqual({
     status: "created",
-    edge: { edgeId, name: "brave-silver-atlas" },
+    edge: {
+      edgeId,
+      name: "brave-silver-atlas",
+      tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+    },
   });
   expect(await database.db.select().from(edges).get()).toMatchObject({
     id: edgeId,
@@ -98,7 +102,11 @@ test("enrollment atomically creates a private owned edge and supports an identic
   expect((await database.db.select().from(edgeTickets).get())?.consumedAt).not.toBeNull();
   expect(await enrollEdge(database.db, ticket, credential)).toEqual({
     status: "existing",
-    edge: { edgeId, name: "brave-silver-atlas" },
+    edge: {
+      edgeId,
+      name: "brave-silver-atlas",
+      tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+    },
   });
   expect(await database.db.select().from(edges)).toHaveLength(1);
 });

@@ -9,12 +9,18 @@ use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use uuid::Uuid;
 
+use crate::files::ensure_private_directory;
+
 pub const CREDENTIAL_PATH: &str = "/etc/pontia/edge/credential";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EdgeCredential {
     pub edge_id: Uuid,
     pub value: String,
+}
+
+pub fn ensure_managed_directory() -> Result<()> {
+    ensure_private_directory(Path::new("/etc/pontia/edge"))
 }
 
 pub fn ensure_root(effective_user_id: u32) -> Result<()> {

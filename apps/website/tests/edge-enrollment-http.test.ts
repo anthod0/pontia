@@ -88,6 +88,7 @@ test("edge enrollment requires HTTPS and accepts only ticket and credential", as
   expect((await response.json()) as Record<string, string>).toEqual({
     edge_id: edgeId,
     name: "silent-crimson-orion",
+    tunnel_url: "wss://silent-crimson-orion.edge.pontia.dev/tunnel",
   });
 });
 
@@ -113,5 +114,6 @@ test("edge identity uses only the long-lived bearer credential", async () => {
   expect((await response.json()) as Record<string, string>).toEqual({
     edge_id: edgeId,
     name: "silent-crimson-orion",
+    tunnel_url: "wss://silent-crimson-orion.edge.pontia.dev/tunnel",
   });
 });

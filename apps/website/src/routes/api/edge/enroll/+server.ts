@@ -31,7 +31,11 @@ export const POST: RequestHandler = async (event) => {
     if (result.status === "invalid") {
       return json({ error: "invalid_enrollment" }, { status: 401 });
     }
-    return json({ edge_id: result.edge.edgeId, name: result.edge.name });
+    return json({
+      edge_id: result.edge.edgeId,
+      name: result.edge.name,
+      tunnel_url: result.edge.tunnelUrl,
+    });
   } catch {
     return json({ error: "service_unavailable" }, { status: 503 });
   }

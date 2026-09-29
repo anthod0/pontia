@@ -22,6 +22,10 @@ export const actions: Actions = {
   default: async (event) => {
     const authenticated = await activeUser(event);
     if (!authenticated) return fail(401, { error: "Sign in to create an edge deployment." });
+    const form = await event.request.formData();
+    if (form.get("subscriber_agreement") !== "accepted") {
+      return fail(400, { error: "Accept the Let's Encrypt Subscriber Agreement to continue." });
+    }
     try {
       return {
         deployment: await issueEdgeDeployment(

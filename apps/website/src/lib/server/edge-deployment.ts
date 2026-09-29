@@ -39,7 +39,7 @@ function shellQuote(value: string) {
 }
 
 export function deploymentCommand(origin: string, edgeId: string, ticket: string) {
-  return `curl -fsSL ${shellQuote(`${origin}/install-edge.sh`)} | sudo sh &&\nsudo pontia-edge init \\\n  --website-origin ${shellQuote(origin)} \\\n  --edge-id ${shellQuote(edgeId)} \\\n  --ticket ${shellQuote(ticket)}`;
+  return `curl -fsSL ${shellQuote(`${origin}/install-edge.sh`)} | sudo sh &&\nsudo pontia-edge init \\\n  --website-origin ${shellQuote(origin)} \\\n  --edge-id ${shellQuote(edgeId)} \\\n  --ticket ${shellQuote(ticket)} \\\n  --agree-to-lets-encrypt-subscriber-agreement`;
 }
 
 async function unusedHeroName(db: Database, dependencies: DeploymentDependencies) {
@@ -99,7 +99,10 @@ export async function issueEdgeDeployment(
 }
 
 export type EnrollmentResult =
-  | { status: "created" | "existing"; edge: { edgeId: string; name: string } }
+  | {
+      status: "created" | "existing";
+      edge: { edgeId: string; name: string; tunnelUrl: string };
+    }
   | { status: "invalid" };
 
 function storedEdge(db: Database, edgeId: string) {
@@ -167,7 +170,10 @@ export async function enrollEdge(
     edge.serviceCredentialHash === serviceCredentialHash;
   if (candidate.consumedAt !== null) {
     if (isMatchingEdge(existing)) {
-      return { status: "existing", edge: { edgeId: existing.edgeId, name: existing.name } };
+      return {
+        status: "existing",
+        edge: { edgeId: existing.edgeId, name: existing.name, tunnelUrl: existing.tunnelUrl },
+      };
     }
     return { status: "invalid" };
   }
@@ -204,7 +210,7 @@ export async function enrollEdge(
             .from(edgeTickets)
             .where(condition),
         )
-        .returning({ edgeId: edges.id, name: edges.name }),
+        .returning({ edgeId: edges.id, name: edges.name, tunnelUrl: edges.tunnelUrl }),
       db
         .update(edgeTickets)
         .set({ consumedAt: databaseTimestamp })
@@ -227,7 +233,10 @@ export async function enrollEdge(
       .get(),
   ]);
   if (retryTicket?.consumedAt && isMatchingEdge(retryEdge)) {
-    return { status: "existing", edge: { edgeId: retryEdge.edgeId, name: retryEdge.name } };
+    return {
+      status: "existing",
+      edge: { edgeId: retryEdge.edgeId, name: retryEdge.name, tunnelUrl: retryEdge.tunnelUrl },
+    };
   }
   return { status: "invalid" };
 }

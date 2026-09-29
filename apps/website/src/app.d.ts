@@ -13,6 +13,9 @@ declare global {
         GITHUB_CLIENT_SECRET: string;
         JWT_SECRET: string;
         OAUTH_COOKIE_SECRET: string;
+        CLOUDFLARE_DNS_TOKEN: string;
+        CLOUDFLARE_DNS_ZONE_ID: string;
+        EDGE_NETWORK_RATE_LIMIT: RateLimit;
       };
       ctx: ExecutionContext;
       caches: CacheStorage;

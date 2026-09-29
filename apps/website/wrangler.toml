@@ -34,7 +34,17 @@ required = [
   "GITHUB_CLIENT_SECRET",
   "JWT_SECRET",
   "OAUTH_COOKIE_SECRET",
+  "CLOUDFLARE_DNS_TOKEN",
+  "CLOUDFLARE_DNS_ZONE_ID",
 ]
+
+[[ratelimits]]
+name = "EDGE_NETWORK_RATE_LIMIT"
+namespace_id = "1001"
+
+[ratelimits.simple]
+limit = 3
+period = 60
 
 [assets]
 binding = "ASSETS"
