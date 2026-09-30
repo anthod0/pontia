@@ -1,13 +1,9 @@
-use anyhow::{Result, bail};
 use axum::{
-    extract::{
-        State, WebSocketUpgrade,
-        ws::{Message as WsMessage, WebSocket},
-    },
+    extract::{State, WebSocketUpgrade, ws::WebSocket},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use pontia_tunnel::protocol::{self, Message};
+use pontia_tunnel::{connect_edge, protocol};
 use tokio::{sync::OwnedSemaphorePermit, time::timeout};
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -19,6 +15,9 @@ pub(crate) async fn upgrade(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
+    if !offers_protocol(&headers, protocol::SUBPROTOCOL) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
     let permit = match edge.pending.clone().try_acquire_owned() {
         Ok(permit) => permit,
         Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
@@ -39,9 +38,21 @@ pub(crate) async fn upgrade(
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
     };
-    ws.max_message_size(protocol::MAX_MESSAGE_BYTES)
-        .max_frame_size(protocol::MAX_MESSAGE_BYTES)
+    ws.protocols([protocol::SUBPROTOCOL])
+        .max_message_size(protocol::MAX_WEBSOCKET_MESSAGE_BYTES)
+        .max_frame_size(protocol::MAX_WEBSOCKET_MESSAGE_BYTES)
+        .write_buffer_size(protocol::ADAPTER_BUFFER_BYTES)
+        .max_write_buffer_size(protocol::MAX_WRITER_BUFFER_BYTES)
         .on_upgrade(move |socket| connection(edge, socket, device_id, permit))
+}
+
+fn offers_protocol(headers: &HeaderMap, expected: &str) -> bool {
+    headers
+        .get_all(header::SEC_WEBSOCKET_PROTOCOL)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .any(|value| value.trim() == expected)
 }
 
 fn bearer_ticket(headers: &HeaderMap) -> Option<&str> {
@@ -65,57 +76,27 @@ fn unauthorized() -> Response {
         .into_response()
 }
 
-async fn connection(
-    edge: Edge,
-    mut socket: WebSocket,
-    device_id: Uuid,
-    permit: OwnedSemaphorePermit,
-) {
+async fn connection(edge: Edge, socket: WebSocket, device_id: Uuid, permit: OwnedSemaphorePermit) {
+    let (handle, runtime) = match connect_edge(socket).await {
+        Ok(connection) => connection,
+        Err(error) => {
+            warn!(%device_id, %error, "device HTTP/2 initialization failed");
+            return;
+        }
+    };
     drop(permit);
-    let (_lease, mut replaced) = edge.online.register(device_id);
+    let (_lease, mut replaced) = edge.online.register(device_id, handle.clone());
     info!(%device_id, "device online");
     let mut shutdown = edge.shutdown.subscribe();
     tokio::select! {
         biased;
-        _ = shutdown.wait_for(|stop| *stop) => {}
-        _ = replaced.wait_for(|stop| *stop) => {}
-        result = heartbeat(&edge, &mut socket) => {
+        _ = shutdown.wait_for(|stop| *stop) => handle.mark_unavailable(),
+        _ = replaced.wait_for(|stop| *stop) => handle.mark_unavailable(),
+        result = runtime.run() => {
             if let Err(error) = result {
                 warn!(%device_id, %error, "device connection closed");
             }
         }
     }
     info!(%device_id, "device disconnected");
-}
-
-async fn heartbeat(edge: &Edge, socket: &mut WebSocket) -> Result<()> {
-    loop {
-        tokio::select! {
-            _ = tokio::time::sleep(edge.limits.heartbeat_interval) => {}
-            _ = socket.recv() => bail!("unexpected device message or disconnect"),
-        }
-        let nonce = protocol::nonce()?;
-        timeout(edge.limits.pong_timeout, async {
-            send(socket, Message::Ping { nonce }).await?;
-            match receive(socket).await? {
-                Message::Pong { nonce: response } if response == nonce => Ok(()),
-                _ => bail!("invalid heartbeat response"),
-            }
-        })
-        .await??;
-    }
-}
-
-async fn receive(socket: &mut WebSocket) -> Result<Message> {
-    match socket.recv().await {
-        Some(Ok(WsMessage::Text(text))) => Ok(serde_json::from_str(&text)?),
-        _ => bail!("expected tunnel control message"),
-    }
-}
-
-async fn send(socket: &mut WebSocket, message: Message) -> Result<()> {
-    socket
-        .send(WsMessage::Text(serde_json::to_string(&message)?.into()))
-        .await?;
-    Ok(())
 }

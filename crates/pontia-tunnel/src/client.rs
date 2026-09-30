@@ -8,36 +8,27 @@ use std::{
 };
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use futures_util::{SinkExt, StreamExt};
+
 use reqwest::{Client, StatusCode};
 use rustls::{ClientConfig, RootCertStore};
 use serde::Deserialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::{
-    net::TcpStream,
     sync::watch,
     time::{Instant, timeout},
 };
 use tokio_tungstenite::{
-    Connector, MaybeTlsStream, WebSocketStream, connect_async_tls_with_config,
-    tungstenite::{
-        Message as WsMessage, client::IntoClientRequest, http::HeaderValue,
-        protocol::WebSocketConfig,
-    },
+    Connector, connect_async_tls_with_config,
+    tungstenite::{client::IntoClientRequest, http::HeaderValue, protocol::WebSocketConfig},
 };
 use tracing::{info, warn};
 use url::Url;
 use uuid::Uuid;
 
-use crate::{
-    Error, Result,
-    protocol::{self, Message},
-};
+use crate::{DeviceRequestHandler, Error, Result, protocol, transport::serve_device};
 
-type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const IDLE_TIMEOUT: Duration = Duration::from_secs(45);
 #[cfg(not(test))]
 const CREDENTIAL_WATCH_INTERVAL: Duration = Duration::from_secs(5);
 #[cfg(test)]
@@ -50,6 +41,7 @@ pub struct RemoteClient {
     credential_path: PathBuf,
     http: Client,
     connector: Connector,
+    handler: DeviceRequestHandler,
 }
 
 #[derive(Deserialize)]
@@ -77,7 +69,12 @@ enum AttemptError {
 struct CredentialFingerprint(Option<u64>);
 
 impl RemoteClient {
-    pub fn new(website_origin: &str, device_id: Uuid, pontia_home: &Path) -> Result<Self> {
+    pub fn new(
+        website_origin: &str,
+        device_id: Uuid,
+        pontia_home: &Path,
+        handler: DeviceRequestHandler,
+    ) -> Result<Self> {
         let http = Client::builder()
             .timeout(REQUEST_TIMEOUT)
             .build()
@@ -95,6 +92,7 @@ impl RemoteClient {
             pontia_home,
             http,
             Connector::Rustls(Arc::new(tls)),
+            handler,
         )
     }
 
@@ -104,6 +102,7 @@ impl RemoteClient {
         pontia_home: &Path,
         http: Client,
         connector: Connector,
+        handler: DeviceRequestHandler,
     ) -> Result<Self> {
         let mut website_origin =
             Url::parse(website_origin).map_err(|_| Error::Protocol("invalid website origin"))?;
@@ -125,6 +124,7 @@ impl RemoteClient {
             credential_path: pontia_home.join("auth.json"),
             http,
             connector,
+            handler,
         })
     }
 
@@ -132,11 +132,10 @@ impl RemoteClient {
         let mut backoff = Duration::from_secs(1);
         loop {
             let started = Instant::now();
-            let outcome = tokio::select! {
-                biased;
-                _ = shutdown.wait_for(|stop| *stop) => return,
-                result = self.attempt() => result,
-            };
+            let outcome = self.attempt(shutdown.clone()).await;
+            if *shutdown.borrow() {
+                return;
+            }
             let connected_for = started.elapsed();
             let delay = match outcome {
                 AttemptError::AuthenticationPaused(fingerprint) => {
@@ -172,12 +171,17 @@ impl RemoteClient {
         }
     }
 
-    async fn attempt(&self) -> AttemptError {
-        let (ticket, tunnel_url) = match self.issue_ticket().await {
+    async fn attempt(&self, mut shutdown: watch::Receiver<bool>) -> AttemptError {
+        let ticket = tokio::select! {
+            biased;
+            _ = shutdown.wait_for(|stop| *stop) => return AttemptError::ConnectionEnded,
+            ticket = self.issue_ticket() => ticket,
+        };
+        let (ticket, tunnel_url) = match ticket {
             Ok(ticket) => ticket,
             Err(error) => return error,
         };
-        match self.connection(&tunnel_url, &ticket).await {
+        match self.connection(&tunnel_url, &ticket, shutdown).await {
             Ok(()) => AttemptError::ConnectionEnded,
             Err(error) => error,
         }
@@ -224,6 +228,7 @@ impl RemoteClient {
         &self,
         tunnel_url: &Url,
         ticket: &str,
+        shutdown: watch::Receiver<bool>,
     ) -> std::result::Result<(), AttemptError> {
         let mut request = tunnel_url
             .as_str()
@@ -232,14 +237,20 @@ impl RemoteClient {
         let value = HeaderValue::from_str(&format!("Bearer {ticket}"))
             .map_err(|_| AttemptError::Temporary("invalid tunnel ticket"))?;
         request.headers_mut().insert("authorization", value);
-        let (mut socket, _) = timeout(
+        request.headers_mut().insert(
+            "sec-websocket-protocol",
+            HeaderValue::from_static(protocol::SUBPROTOCOL),
+        );
+        let (socket, response) = timeout(
             CONNECT_TIMEOUT,
             connect_async_tls_with_config(
                 request,
                 Some(
                     WebSocketConfig::default()
-                        .max_message_size(Some(protocol::MAX_MESSAGE_BYTES))
-                        .max_frame_size(Some(protocol::MAX_MESSAGE_BYTES)),
+                        .max_message_size(Some(protocol::MAX_WEBSOCKET_MESSAGE_BYTES))
+                        .max_frame_size(Some(protocol::MAX_WEBSOCKET_MESSAGE_BYTES))
+                        .write_buffer_size(protocol::ADAPTER_BUFFER_BYTES)
+                        .max_write_buffer_size(protocol::MAX_WRITER_BUFFER_BYTES),
                 ),
                 false,
                 Some(self.connector.clone()),
@@ -248,18 +259,20 @@ impl RemoteClient {
         .await
         .map_err(|_| AttemptError::Temporary("edge connection timed out"))?
         .map_err(|_| AttemptError::Temporary("edge connection failed"))?;
-        info!(device_id = %self.device_id, "remote device connected");
-        loop {
-            timeout(IDLE_TIMEOUT, async {
-                match receive(&mut socket).await {
-                    Ok(Message::Ping { nonce }) => send(&mut socket, Message::Pong { nonce }).await,
-                    _ => Err(()),
-                }
-            })
-            .await
-            .map_err(|_| AttemptError::ConnectionEnded)?
-            .map_err(|_| AttemptError::ConnectionEnded)?;
+        if response
+            .headers()
+            .get("sec-websocket-protocol")
+            .and_then(|value| value.to_str().ok())
+            != Some(protocol::SUBPROTOCOL)
+        {
+            return Err(AttemptError::Temporary(
+                "edge selected an invalid tunnel protocol",
+            ));
         }
+        info!(device_id = %self.device_id, "remote device connected");
+        serve_device(socket, self.handler.clone(), shutdown)
+            .await
+            .map_err(|_| AttemptError::ConnectionEnded)
     }
 }
 
@@ -345,26 +358,11 @@ fn validate_tunnel_url(value: &str) -> Result<Url> {
 }
 
 fn jittered(base: Duration) -> Duration {
-    let jitter = protocol::nonce()
-        .map(|bytes| u16::from_be_bytes([bytes[0], bytes[1]]) as u64 % 1000)
+    let mut bytes = [0; 2];
+    let jitter = getrandom::fill(&mut bytes)
+        .map(|()| u16::from_be_bytes(bytes) as u64 % 1000)
         .unwrap_or(0);
     base + Duration::from_millis(jitter)
-}
-
-async fn receive(socket: &mut Socket) -> std::result::Result<Message, ()> {
-    match socket.next().await {
-        Some(Ok(WsMessage::Text(text))) => serde_json::from_str(&text).map_err(|_| ()),
-        _ => Err(()),
-    }
-}
-
-async fn send(socket: &mut Socket, message: Message) -> std::result::Result<(), ()> {
-    socket
-        .send(WsMessage::Text(
-            serde_json::to_string(&message).map_err(|_| ())?.into(),
-        ))
-        .await
-        .map_err(|_| ())
 }
 
 #[cfg(test)]

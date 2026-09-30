@@ -1884,6 +1884,7 @@ dependencies = [
  "clap",
  "futures-util",
  "getrandom 0.3.4",
+ "http-body-util",
  "instant-acme",
  "nix",
  "pontia-tunnel",
@@ -1965,9 +1966,14 @@ dependencies = [
 name = "pontia-tunnel"
 version = "0.2.1"
 dependencies = [
+ "axum",
  "base64 0.22.1",
+ "bytes",
  "futures-util",
  "getrandom 0.3.4",
+ "http-body",
+ "hyper",
+ "hyper-util",
  "reqwest",
  "rustls",
  "serde",

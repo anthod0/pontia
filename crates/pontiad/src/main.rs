@@ -14,38 +14,12 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 async fn main() -> Result<()> {
     let config = AppConfig::from_env()?;
     init_tracing();
-    let remote = config
-        .remote
-        .as_ref()
-        .and_then(|remote| remote.device_id.as_deref())
-        .map(|device_id| {
-            let device_id = uuid::Uuid::parse_str(device_id).map_err(|_| {
-                pontia_core::error::Error::InvalidConfig {
-                    key: "remote.device_id",
-                    message: "must be a UUIDv7".to_string(),
-                }
-            })?;
-            if device_id.get_version_num() != 7 {
-                return Err(pontia_core::error::Error::InvalidConfig {
-                    key: "remote.device_id",
-                    message: "must be a UUIDv7".to_string(),
-                });
-            }
-            pontia_tunnel::RemoteClient::new(&config.auth_origin, device_id, &config.pontia_home)
-                .map_err(|error| pontia_core::error::Error::InvalidConfig {
-                    key: "PONTIA_AUTH_ORIGIN",
-                    message: error.to_string(),
-                })
-        })
-        .transpose()?;
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
     let app_state = initialization::initialize(&config).await?;
     let pi_listener = pontia_client_pi::ipc::PiIpcListener::bind(&config.pontia_home).await?;
     let pi_task =
         tokio::spawn(pi_listener.run(app_state.clone(), app_state.shutdown().subscribe()));
-    let remote_task =
-        remote.map(|remote| tokio::spawn(remote.run(app_state.shutdown().subscribe())));
     let codex_task = tokio::spawn(
         pontia_client_codex::CodexObserver::new(
             app_state.event_ingest_service(),
@@ -75,6 +49,41 @@ async fn main() -> Result<()> {
     let cleanup_shutdown = shutdown.clone();
     let codex_root = state.app().pontia_home().to_path_buf();
     let http_entrypoints = http::HttpEntrypoints::new(state);
+    let remote = config
+        .remote
+        .as_ref()
+        .and_then(|remote| remote.device_id.as_deref())
+        .map(|device_id| {
+            let device_id = uuid::Uuid::parse_str(device_id).map_err(|_| {
+                pontia_core::error::Error::InvalidConfig {
+                    key: "remote.device_id",
+                    message: "must be a UUIDv7".to_string(),
+                }
+            })?;
+            if device_id.get_version_num() != 7 {
+                return Err(pontia_core::error::Error::InvalidConfig {
+                    key: "remote.device_id",
+                    message: "must be a UUIDv7".to_string(),
+                });
+            }
+            let ingress = http_entrypoints.trusted_tunnel();
+            let handler = pontia_tunnel::DeviceRequestHandler::new(move |request| {
+                let ingress = ingress.clone();
+                async move { ingress.handle(request).await }
+            });
+            pontia_tunnel::RemoteClient::new(
+                &config.auth_origin,
+                device_id,
+                &config.pontia_home,
+                handler,
+            )
+            .map_err(|error| pontia_core::error::Error::InvalidConfig {
+                key: "PONTIA_AUTH_ORIGIN",
+                message: error.to_string(),
+            })
+        })
+        .transpose()?;
+    let remote_task = remote.map(|remote| tokio::spawn(remote.run(cleanup_shutdown.subscribe())));
     inbox.resume_pending().await?;
     let server_result = http::serve_with_shutdown_timeout(
         listener,

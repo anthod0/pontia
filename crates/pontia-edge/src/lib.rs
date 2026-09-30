@@ -30,8 +30,6 @@ pub use tickets::TicketRedeemer;
 pub struct ConnectionLimits {
     pub max_pending: usize,
     pub ticket_redeem_timeout: Duration,
-    pub heartbeat_interval: Duration,
-    pub pong_timeout: Duration,
 }
 
 impl Default for ConnectionLimits {
@@ -39,8 +37,6 @@ impl Default for ConnectionLimits {
         Self {
             max_pending: 256,
             ticket_redeem_timeout: Duration::from_secs(10),
-            heartbeat_interval: Duration::from_secs(15),
-            pong_timeout: Duration::from_secs(10),
         }
     }
 }

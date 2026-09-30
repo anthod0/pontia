@@ -2,6 +2,7 @@
 
 use std::{
     collections::HashMap,
+    future::Future,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -11,17 +12,18 @@ use std::{
 
 use axum::{
     Json, Router,
+    body::Body,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode, header},
+    http::{HeaderMap, Request, Response, StatusCode, header},
     routing::post,
 };
 use axum_server::{Handle, tls_rustls::RustlsConfig};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use pontia_edge::{BrowserAccess, BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer};
-use pontia_tunnel::protocol::Message;
+use pontia_tunnel::{DeviceRequestHandler, protocol, serve_device};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, pki_types::PrivatePkcs8KeyDer};
 use serde::Deserialize;
-use tokio::{net::TcpStream, task::JoinHandle, time::timeout};
+use tokio::{net::TcpStream, sync::watch, task::JoinHandle, time::timeout};
 use tokio_tungstenite::{
     Connector, MaybeTlsStream, WebSocketStream, connect_async_tls_with_config,
     tungstenite::{Message as WsMessage, client::IntoClientRequest},
@@ -157,8 +159,6 @@ impl TestEdge {
             ConnectionLimits {
                 max_pending: 2,
                 ticket_redeem_timeout: Duration::from_millis(500),
-                heartbeat_interval: Duration::from_millis(100),
-                pong_timeout: Duration::from_millis(200),
             },
         );
         let edge_handle = Handle::new();
@@ -235,12 +235,26 @@ impl TestEdge {
         &self,
         ticket: Option<&str>,
     ) -> Result<Socket, tokio_tungstenite::tungstenite::Error> {
+        self.connect_with_protocol(ticket, Some(protocol::SUBPROTOCOL))
+            .await
+    }
+
+    pub async fn connect_with_protocol(
+        &self,
+        ticket: Option<&str>,
+        subprotocol: Option<&str>,
+    ) -> Result<Socket, tokio_tungstenite::tungstenite::Error> {
         let mut request = self.tunnel_url.as_str().into_client_request().unwrap();
         if let Some(ticket) = ticket {
             request.headers_mut().insert(
                 header::AUTHORIZATION,
                 format!("Bearer {ticket}").parse().unwrap(),
             );
+        }
+        if let Some(subprotocol) = subprotocol {
+            request
+                .headers_mut()
+                .insert(header::SEC_WEBSOCKET_PROTOCOL, subprotocol.parse().unwrap());
         }
         timeout(
             Duration::from_secs(3),
@@ -255,6 +269,22 @@ impl TestEdge {
         self.connect(Some(&self.issue_ticket(device_id)))
             .await
             .unwrap()
+    }
+
+    pub async fn device<F, Fut>(&self, device_id: Uuid, handler: F) -> TestDevice
+    where
+        F: Fn(Request<Body>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Response<Body>> + Send + 'static,
+    {
+        let socket = self.authenticate(device_id).await;
+        let (stop, shutdown) = watch::channel(false);
+        let task = tokio::spawn(serve_device(
+            socket,
+            DeviceRequestHandler::new(handler),
+            shutdown,
+        ));
+        wait_for(|| self.edge.online().connection_id(device_id).is_some()).await;
+        TestDevice { stop, task }
     }
 }
 
@@ -339,35 +369,36 @@ fn authenticate_edge(headers: &HeaderMap) -> Result<(), StatusCode> {
     }
 }
 
-pub async fn receive(socket: &mut Socket) -> Message {
-    let message = timeout(Duration::from_secs(3), socket.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    let WsMessage::Text(text) = message else {
-        panic!("expected text, got {message:?}")
-    };
-    serde_json::from_str(&text).unwrap()
+pub struct TestDevice {
+    stop: watch::Sender<bool>,
+    task: JoinHandle<Result<(), pontia_tunnel::TunnelError>>,
 }
 
-pub async fn send(socket: &mut Socket, message: Message) {
-    socket
-        .send(WsMessage::Text(
-            serde_json::to_string(&message).unwrap().into(),
-        ))
-        .await
-        .unwrap();
-}
-
-pub async fn closed(socket: &mut Socket) {
-    match timeout(Duration::from_secs(3), socket.next())
-        .await
-        .unwrap()
-    {
-        None | Some(Err(_)) | Some(Ok(WsMessage::Close(_))) => {}
-        other => panic!("expected closed connection, got {other:?}"),
+impl Drop for TestDevice {
+    fn drop(&mut self) {
+        self.stop.send_replace(true);
+        self.task.abort();
     }
+}
+
+pub async fn protocol_closed(socket: &mut Socket) {
+    timeout(Duration::from_secs(3), async {
+        loop {
+            match socket.next().await {
+                Some(Ok(WsMessage::Close(Some(frame)))) => {
+                    assert_eq!(
+                        frame.code,
+                        tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Protocol
+                    );
+                    return;
+                }
+                Some(Ok(WsMessage::Binary(_))) => {}
+                other => panic!("expected binary handshake bytes or protocol close, got {other:?}"),
+            }
+        }
+    })
+    .await
+    .unwrap();
 }
 
 pub async fn wait_for(mut condition: impl FnMut() -> bool) {

@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use pontia_tunnel::TunnelConnection;
 use tokio::sync::watch;
 use uuid::Uuid;
 
@@ -11,6 +12,7 @@ pub struct OnlineDevices(Arc<Mutex<HashMap<Uuid, Connection>>>);
 
 struct Connection {
     id: Uuid,
+    tunnel: TunnelConnection,
     cancel: watch::Sender<bool>,
 }
 
@@ -29,11 +31,23 @@ impl OnlineDevices {
             .map(|entry| entry.id)
     }
 
-    pub(crate) fn register(&self, device_id: Uuid) -> (ConnectionLease, watch::Receiver<bool>) {
+    pub(crate) fn connection(&self, device_id: Uuid) -> Option<TunnelConnection> {
+        self.0
+            .lock()
+            .expect("online devices lock")
+            .get(&device_id)
+            .map(|entry| entry.tunnel.clone())
+    }
+
+    pub(crate) fn register(
+        &self,
+        device_id: Uuid,
+        tunnel: TunnelConnection,
+    ) -> (ConnectionLease, watch::Receiver<bool>) {
         let id = Uuid::new_v4();
         let (cancel, receiver) = watch::channel(false);
         let mut devices = self.0.lock().expect("online devices lock");
-        if let Some(old) = devices.insert(device_id, Connection { id, cancel }) {
+        if let Some(old) = devices.insert(device_id, Connection { id, tunnel, cancel }) {
             old.cancel.send_replace(true);
         }
         (

@@ -1,9 +1,23 @@
 mod support;
 
-use axum::http::{StatusCode, header};
+use std::{
+    convert::Infallible,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
+
+use axum::{
+    body::{Body, Bytes},
+    http::{Response, StatusCode, header},
+};
+use futures_util::stream::{self, StreamExt};
+use http_body_util::BodyExt;
 use serde_json::json;
 use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 use support::TestEdge;
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 fn cookie_value(response: &reqwest::Response) -> String {
@@ -74,7 +88,7 @@ async fn bootstrap_sets_a_host_cookie_redirects_and_authorizes_only_redeemed_dev
         .send()
         .await
         .unwrap();
-    assert_eq!(authorized.status(), StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(authorized.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(
         authorized
             .headers()
@@ -120,7 +134,7 @@ async fn bootstrap_sets_a_host_cookie_redirects_and_authorizes_only_redeemed_dev
             .send()
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }
 
@@ -312,4 +326,235 @@ async fn device_boundary_enforces_cors_and_csrf_before_proxying() {
             .unwrap(),
         "https://app.pontia.dev"
     );
+}
+
+#[tokio::test]
+async fn authorized_requests_stream_through_the_device_and_filter_headers_both_ways() {
+    let server = TestEdge::start().await;
+    let device = Uuid::new_v4();
+    let _device = server
+        .device(device, |request| async move {
+            assert_eq!(request.uri(), "/api/v1/echo?raw=a%2Fb");
+            assert_eq!(
+                request.headers().get(header::ACCEPT).unwrap(),
+                "application/json"
+            );
+            assert_eq!(
+                request.headers().get("idempotency-key").unwrap(),
+                "request-1"
+            );
+            assert!(request.headers().get(header::AUTHORIZATION).is_none());
+            assert!(request.headers().get(header::COOKIE).is_none());
+            assert!(request.headers().get(header::ORIGIN).is_none());
+            let body = request.into_body().collect().await.unwrap().to_bytes();
+            Response::builder()
+                .status(StatusCode::CREATED)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::ETAG, "device-etag")
+                .header(header::SET_COOKIE, "device=must-not-escape")
+                .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "https://evil.example")
+                .body(Body::from(body))
+                .unwrap()
+        })
+        .await;
+    let ticket = server.issue_dashboard_ticket(device, "stream-device");
+    let cookie = cookie_value(&bootstrap(&server, &ticket, None).await);
+    let response = server
+        .http
+        .post(format!(
+            "{}/devices/{device}/api/v1/echo?raw=a%2Fb",
+            server.edge_origin
+        ))
+        .header(header::ORIGIN, "https://app.pontia.dev")
+        .header(header::COOKIE, &cookie)
+        .header(header::AUTHORIZATION, "must-not-enter-device")
+        .header(header::ACCEPT, "application/json")
+        .header("idempotency-key", "request-1")
+        .body("streamed request")
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.headers().get(header::ETAG).unwrap(), "device-etag");
+    assert!(response.headers().get(header::SET_COOKIE).is_none());
+    assert_eq!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .unwrap(),
+        "https://app.pontia.dev"
+    );
+    assert_eq!(response.text().await.unwrap(), "streamed request");
+}
+
+#[tokio::test]
+async fn two_long_lived_sse_streams_do_not_block_short_requests_or_each_other() {
+    let server = TestEdge::start().await;
+    let device = Uuid::new_v4();
+    let open_streams = Arc::new(AtomicUsize::new(0));
+    let observed = open_streams.clone();
+    let _device = server
+        .device(device, move |request| {
+            let observed = observed.clone();
+            async move {
+                if request.uri().path().starts_with("/api/v1/events/") {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    let body = stream::iter([Ok::<_, Infallible>(Bytes::from_static(
+                        b"event: ready\n\n",
+                    ))])
+                    .chain(stream::pending());
+                    Response::builder()
+                        .header(header::CONTENT_TYPE, "text/event-stream")
+                        .body(Body::from_stream(body))
+                        .unwrap()
+                } else {
+                    Response::new(Body::from("short response"))
+                }
+            }
+        })
+        .await;
+    let ticket = server.issue_dashboard_ticket(device, "sse-device");
+    let cookie = cookie_value(&bootstrap(&server, &ticket, None).await);
+    let first = server
+        .http
+        .get(format!(
+            "{}/devices/{device}/api/v1/events/one",
+            server.edge_origin
+        ))
+        .header(header::COOKIE, &cookie)
+        .send();
+    let second = server
+        .http
+        .get(format!(
+            "{}/devices/{device}/api/v1/events/two",
+            server.edge_origin
+        ))
+        .header(header::COOKIE, &cookie)
+        .send();
+    let (first, second) = tokio::join!(first, second);
+    let first = first.unwrap();
+    let second = second.unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(second.status(), StatusCode::OK);
+    assert_eq!(open_streams.load(Ordering::SeqCst), 2);
+
+    let short = server
+        .http
+        .get(format!(
+            "{}/devices/{device}/api/v1/short",
+            server.edge_origin
+        ))
+        .header(header::COOKIE, &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(short.text().await.unwrap(), "short response");
+
+    drop(first);
+    drop(second);
+    let after_cancel = server
+        .http
+        .get(format!(
+            "{}/devices/{device}/api/v1/after-cancel",
+            server.edge_origin
+        ))
+        .header(header::COOKIE, &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(after_cancel.text().await.unwrap(), "short response");
+}
+
+#[tokio::test]
+async fn sixty_fifth_active_stream_is_rejected_without_buffering() {
+    let server = TestEdge::start().await;
+    let device = Uuid::new_v4();
+    let _device = server
+        .device(device, |_| async {
+            let body = stream::iter([Ok::<_, Infallible>(Bytes::from_static(b"event: ready\n\n"))])
+                .chain(stream::pending());
+            Response::builder()
+                .header(header::CONTENT_TYPE, "text/event-stream")
+                .body(Body::from_stream(body))
+                .unwrap()
+        })
+        .await;
+    let ticket = server.issue_dashboard_ticket(device, "capacity-device");
+    let cookie = cookie_value(&bootstrap(&server, &ticket, None).await);
+    let mut active = Vec::new();
+    for index in 0..64 {
+        active.push(
+            server
+                .http
+                .get(format!(
+                    "{}/devices/{device}/api/v1/events/{index}",
+                    server.edge_origin
+                ))
+                .header(header::COOKIE, &cookie)
+                .send()
+                .await
+                .unwrap(),
+        );
+    }
+
+    let overloaded = server
+        .http
+        .get(format!(
+            "{}/devices/{device}/api/v1/events/overflow",
+            server.edge_origin
+        ))
+        .header(header::COOKIE, &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(overloaded.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(overloaded.headers().get(header::RETRY_AFTER).unwrap(), "1");
+    assert_eq!(
+        overloaded.json::<serde_json::Value>().await.unwrap()["error"]["code"],
+        "tunnel_overloaded"
+    );
+    drop(active);
+}
+
+#[tokio::test]
+async fn connection_replacement_maps_pending_response_head_to_device_unavailable() {
+    let server = TestEdge::start().await;
+    let device = Uuid::new_v4();
+    let started = Arc::new(Notify::new());
+    let observed = started.clone();
+    let old = server
+        .device(device, move |_| {
+            let observed = observed.clone();
+            async move {
+                observed.notify_one();
+                std::future::pending::<Response<Body>>().await
+            }
+        })
+        .await;
+    let ticket = server.issue_dashboard_ticket(device, "replacement-device");
+    let cookie = cookie_value(&bootstrap(&server, &ticket, None).await);
+    let client = server.http.clone();
+    let url = format!("{}/devices/{device}/api/v1/waiting", server.edge_origin);
+    let request = tokio::spawn(async move {
+        client
+            .get(url)
+            .header(header::COOKIE, cookie)
+            .send()
+            .await
+            .unwrap()
+    });
+    started.notified().await;
+    let replacement = server
+        .device(device, |_| async { Response::new(Body::from("new")) })
+        .await;
+
+    let response = request.await.unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        response.json::<serde_json::Value>().await.unwrap()["error"]["code"],
+        "device_unavailable"
+    );
+    drop(old);
+    drop(replacement);
 }
