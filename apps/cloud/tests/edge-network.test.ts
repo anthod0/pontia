@@ -30,9 +30,10 @@ function socketResponse(response: string, request?: (value: string) => void) {
     writable: new WritableStream<Uint8Array>({
       write(chunk) {
         written += new TextDecoder().decode(chunk);
+        request?.(written);
       },
       close() {
-        request?.(written);
+        throw new Error("closing the writer discards the response");
       },
     }),
     async close() {},

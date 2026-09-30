@@ -163,7 +163,7 @@ async function probeIpv4(
           `GET ${CHALLENGE_PREFIX}${challenge} HTTP/1.1\r\nHost: ${candidateIpv4}\r\nAccept: text/plain\r\nConnection: close\r\n\r\n`,
         ),
       );
-      await writer.close();
+      writer.releaseLock();
       return readSocket(socket, MAX_PROBE_RESPONSE_BYTES);
     })();
     const response = await Promise.race([
