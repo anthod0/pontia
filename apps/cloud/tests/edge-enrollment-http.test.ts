@@ -7,7 +7,7 @@ import {
   issueEdgeDeployment,
   type DeploymentDependencies,
 } from "../src/lib/server/edge-deployment";
-import { users } from "../src/lib/server/db/schema";
+import { edgeTickets, edges, users } from "../src/lib/server/db/schema";
 import { testDatabase } from "./database";
 
 const database = testDatabase();
@@ -92,7 +92,7 @@ test("edge enrollment requires HTTPS and accepts only ticket and credential", as
   });
 });
 
-test("edge identity uses only the long-lived bearer credential", async () => {
+test("enrollment does not establish the long-lived edge identity", async () => {
   const deploymentTicket = await ticket();
   await callEnroll(
     event("/api/edge/enroll", {
@@ -101,19 +101,8 @@ test("edge identity uses only the long-lived bearer credential", async () => {
     }),
   );
 
-  const missing = await callMe(event("/api/edge/me"));
-  expect(missing.status).toBe(401);
-  const wrong = await callMe(
-    event("/api/edge/me", {
-      token: `pec_v1_${edgeId}_${base64url.encode(new Uint8Array(32).fill(53))}`,
-    }),
-  );
-  expect(wrong.status).toBe(401);
-  const response = await callMe(event("/api/edge/me", { token: credential }));
-  expect(response.status).toBe(200);
-  expect((await response.json()) as Record<string, string>).toEqual({
-    edge_id: edgeId,
-    name: "silent-crimson-orion",
-    tunnel_url: "wss://silent-crimson-orion.edge.pontia.dev/tunnel",
-  });
+  expect((await callMe(event("/api/edge/me"))).status).toBe(401);
+  expect((await callMe(event("/api/edge/me", { token: credential }))).status).toBe(401);
+  expect(await database.db.select().from(edges)).toHaveLength(0);
+  expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();
 });

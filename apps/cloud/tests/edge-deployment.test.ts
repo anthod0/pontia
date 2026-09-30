@@ -1,14 +1,16 @@
 import { expect, test } from "bun:test";
-import { base64url } from "jose";
 import { eq } from "drizzle-orm";
+import { base64url } from "jose";
+import { sha256Base64url } from "../src/lib/server/crypto";
+import { edgeTickets, edges, users } from "../src/lib/server/db/schema";
 import {
+  confirmEdgeDeployment,
   decodeDeploymentPayload,
   enrollEdge,
   issueEdgeDeployment,
   type DeploymentDependencies,
 } from "../src/lib/server/edge-deployment";
-import { sha256Base64url } from "../src/lib/server/crypto";
-import { edgeTickets, edges, users } from "../src/lib/server/db/schema";
+import { cleanupExpiredEdgeTickets } from "../src/lib/server/edge-tickets";
 import { testDatabase } from "./database";
 
 const database = testDatabase();
@@ -63,9 +65,8 @@ test("issuing a deployment creates a one-hour bound ticket and copyable command"
     name: "brave-silver-atlas",
     expiresAt: "2099-01-01T01:00:00.000Z",
   });
-  expect(deployment.command).toBe(
-    `curl -fsSL 'https://pontia.example/install-edge.sh' | sudo sh &&\nsudo pontia-edge init \\\n  --cloud-origin 'https://pontia.example' \\\n  --edge-id '${edgeId}' \\\n  --ticket '${ticket}' \\\n  --agree-to-lets-encrypt-subscriber-agreement`,
-  );
+  expect(deployment.command).toContain(`--edge-id '${edgeId}'`);
+  expect(deployment.command).toContain(`--ticket '${ticket}'`);
   const stored = await database.db.select().from(edgeTickets).get();
   expect(stored).toMatchObject({
     purpose: "edge_deployment",
@@ -79,18 +80,45 @@ test("issuing a deployment creates a one-hour bound ticket and copyable command"
   expect(JSON.stringify(stored)).not.toContain(ticket);
 });
 
-test("enrollment atomically creates a private owned edge and supports an identical retry", async () => {
-  const deployment = await issuedDeployment();
-  const ticket = ticketFrom(deployment.command);
-
-  expect(await enrollEdge(database.db, ticket, credential)).toEqual({
-    status: "created",
+test("enrollment is retryable authorization and does not register or consume the deployment", async () => {
+  const ticket = ticketFrom((await issuedDeployment()).command);
+  const expected = {
+    status: "authorized" as const,
     edge: {
       edgeId,
       name: "brave-silver-atlas",
       tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
     },
+  };
+
+  expect(await enrollEdge(database.db, ticket, credential)).toEqual(expected);
+  expect(await enrollEdge(database.db, ticket, credential)).toEqual(expected);
+  expect(await database.db.select().from(edges)).toHaveLength(0);
+  expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();
+});
+
+test("health failure leaves the deployment unregistered and unconsumed", async () => {
+  const ticket = ticketFrom((await issuedDeployment()).command);
+
+  expect(await confirmEdgeDeployment(database.db, ticket, credential, async () => false)).toEqual({
+    status: "unhealthy",
   });
+  expect(await database.db.select().from(edges)).toHaveLength(0);
+  expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();
+});
+
+test("successful health verification atomically registers the edge and supports response-loss retry", async () => {
+  const ticket = ticketFrom((await issuedDeployment()).command);
+  let verifications = 0;
+
+  const result = await confirmEdgeDeployment(database.db, ticket, credential, async (identity) => {
+    verifications += 1;
+    expect(identity.tunnelUrl).toBe("wss://brave-silver-atlas.edge.pontia.dev/tunnel");
+    expect(await database.db.select().from(edges)).toHaveLength(0);
+    expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();
+    return true;
+  });
+  expect(result.status).toBe("created");
   expect(await database.db.select().from(edges).get()).toMatchObject({
     id: edgeId,
     userId: "user-owner",
@@ -100,48 +128,59 @@ test("enrollment atomically creates a private owned edge and supports an identic
     serviceCredentialHash: await sha256Base64url(credentialSecret),
   });
   expect((await database.db.select().from(edgeTickets).get())?.consumedAt).not.toBeNull();
-  expect(await enrollEdge(database.db, ticket, credential)).toEqual({
-    status: "existing",
-    edge: {
-      edgeId,
-      name: "brave-silver-atlas",
-      tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
-    },
-  });
+
+  expect(
+    await confirmEdgeDeployment(database.db, ticket, credential, async () => {
+      verifications += 1;
+      return false;
+    }),
+  ).toMatchObject({ status: "existing", edge: { edgeId } });
+  expect(verifications).toBe(1);
   expect(await database.db.select().from(edges)).toHaveLength(1);
 });
 
-test("concurrent identical enrollment requests create one edge", async () => {
-  const deployment = await issuedDeployment();
-  const ticket = ticketFrom(deployment.command);
+test("concurrent final confirmations deterministically return the same edge", async () => {
+  const ticket = ticketFrom((await issuedDeployment()).command);
+  let arrivals = 0;
+  let release: (() => void) | undefined;
+  const bothVerifying = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const verify = async () => {
+    arrivals += 1;
+    if (arrivals === 2) release?.();
+    await bothVerifying;
+    return true;
+  };
 
   const results = await Promise.all([
-    enrollEdge(database.db, ticket, credential),
-    enrollEdge(database.db, ticket, credential),
+    confirmEdgeDeployment(database.db, ticket, credential, verify),
+    confirmEdgeDeployment(database.db, ticket, credential, verify),
   ]);
 
   expect(results.map((result) => result.status).sort()).toEqual(["created", "existing"]);
   expect(await database.db.select().from(edges)).toHaveLength(1);
 });
 
-test("enrollment rejects a different credential without changing the consumed result", async () => {
-  const deployment = await issuedDeployment();
-  const ticket = ticketFrom(deployment.command);
-  await enrollEdge(database.db, ticket, credential);
+test("a different credential cannot retry or replace a completed deployment", async () => {
+  const ticket = ticketFrom((await issuedDeployment()).command);
+  await confirmEdgeDeployment(database.db, ticket, credential, async () => true);
   const different = `pec_v1_${edgeId}_${base64url.encode(new Uint8Array(32).fill(43))}`;
 
   expect(await enrollEdge(database.db, ticket, different)).toEqual({ status: "invalid" });
+  expect(await confirmEdgeDeployment(database.db, ticket, different, async () => true)).toEqual({
+    status: "invalid",
+  });
   expect((await database.db.select().from(edges).get())?.serviceCredentialHash).toBe(
     await sha256Base64url(credentialSecret),
   );
 });
 
-test("wrong edge, purpose, malformed payload, and expired tickets are not consumed", async () => {
+test("wrong edge, purpose, malformed payload, and expired tickets never register", async () => {
   for (const testCase of ["wrong-edge", "purpose", "payload", "expired"]) {
     await database.db.delete(edges);
     await database.db.delete(users);
-    const deployment = await issuedDeployment();
-    const ticket = ticketFrom(deployment.command);
+    const ticket = ticketFrom((await issuedDeployment()).command);
     const stored = await database.db.select().from(edgeTickets).get();
     if (!stored) throw new Error("Expected ticket");
 
@@ -168,6 +207,9 @@ test("wrong edge, purpose, malformed payload, and expired tickets are not consum
     expect(await enrollEdge(database.db, ticket, submittedCredential)).toEqual({
       status: "invalid",
     });
+    expect(
+      await confirmEdgeDeployment(database.db, ticket, submittedCredential, async () => true),
+    ).toEqual({ status: "invalid" });
     expect(await database.db.select().from(edges)).toHaveLength(0);
     expect(
       (
@@ -179,4 +221,45 @@ test("wrong edge, purpose, malformed payload, and expired tickets are not consum
       )?.consumedAt,
     ).toBeNull();
   }
+});
+
+test("a failed registration batch does not consume the deployment ticket", async () => {
+  const ticket = ticketFrom((await issuedDeployment()).command);
+  await database.db.insert(edges).values({
+    id: "0199791c-6600-7000-8000-000000000002",
+    userId: "user-owner",
+    name: "conflicting-edge",
+    tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+    serviceCredentialHash: "unrelated",
+  });
+
+  expect(await confirmEdgeDeployment(database.db, ticket, credential, async () => true)).toEqual({
+    status: "invalid",
+  });
+  expect(await database.db.select().from(edges)).toHaveLength(1);
+  expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();
+});
+
+test("expired deployment records survive cleanup and reserve their DNS names", async () => {
+  await issuedDeployment();
+  await database.db
+    .update(edgeTickets)
+    .set({ expiresAt: "2000-01-01T00:00:00.000Z" })
+    .where(eq(edgeTickets.purpose, "edge_deployment"));
+  await database.db.insert(edgeTickets).values({
+    purpose: "dashboard_access",
+    secretHash: "expired-dashboard-ticket",
+    userId: "user-owner",
+    expectedEdgeId: edgeId,
+    payload: "{}",
+    expiresAt: "2000-01-01T00:00:00.000Z",
+  });
+
+  await cleanupExpiredEdgeTickets(database.db, now);
+
+  expect(await database.db.select().from(edgeTickets)).toHaveLength(1);
+  expect((await database.db.select().from(edgeTickets).get())?.purpose).toBe("edge_deployment");
+  await expect(
+    issueEdgeDeployment(database.db, "user-owner", "https://pontia.example", dependencies()),
+  ).rejects.toThrow("Unable to allocate an edge name");
 });

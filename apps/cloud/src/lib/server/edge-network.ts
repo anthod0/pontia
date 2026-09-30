@@ -1,6 +1,3 @@
-import { eq } from "drizzle-orm";
-import type { Database } from "./db";
-import { edges } from "./db/schema";
 import { isHeroName } from "./hero-name";
 
 const EDGE_ZONE = "edge.pontia.dev";
@@ -220,10 +217,6 @@ export async function verifyEdgeHealth(identity: EdgeNetworkIdentity, fetcher: H
   } catch {
     return false;
   }
-}
-
-export async function edgeNetworkIdentity(db: Database, edgeId: string) {
-  return db.select({ tunnelUrl: edges.tunnelUrl }).from(edges).where(eq(edges.id, edgeId)).get();
 }
 
 export class CloudflareDnsProvider implements DnsProvider {

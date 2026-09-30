@@ -95,8 +95,14 @@ async fn init(args: InitArgs) -> Result<()> {
     )
     .await?;
     let identity = match enrollment {
-        InitializationResult::AlreadyRegistered(identity)
-        | InitializationResult::Enrolled(identity) => identity,
+        InitializationResult::AlreadyRegistered(identity) => {
+            println!(
+                "Edge {} is available at {}.",
+                identity.name, identity.tunnel_url
+            );
+            return Ok(());
+        }
+        InitializationResult::Enrolled(identity) => identity,
     };
     let hostname = hostname_from_tunnel_url(&identity.tunnel_url)?;
     let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
@@ -117,7 +123,7 @@ async fn init(args: InitArgs) -> Result<()> {
     };
 
     let configured_hostname = client
-        .configure_network(&credential.value, &candidate_ipv4.to_string())
+        .configure_network(&args.ticket, &credential.value, &candidate_ipv4.to_string())
         .await?;
     anyhow::ensure!(
         configured_hostname == hostname,
@@ -148,7 +154,7 @@ async fn init(args: InitArgs) -> Result<()> {
     }
 
     systemd.install_and_start(Path::new(UNIT_PATH))?;
-    wait_for_health(&client, &credential.value, &hostname).await?;
+    wait_for_health(&client, &args.ticket, &credential.value, &hostname).await?;
     println!(
         "Edge {} is available at {}.",
         identity.name, identity.tunnel_url
@@ -211,9 +217,15 @@ async fn wait_for_dns(hostname: &str, candidate: Ipv4Addr) -> Result<()> {
     anyhow::bail!("assigned hostname did not resolve to the verified IPv4 address")
 }
 
-async fn wait_for_health(client: &HttpCloudClient, credential: &str, hostname: &str) -> Result<()> {
+async fn wait_for_health(
+    client: &HttpCloudClient,
+    ticket: &str,
+    credential: &str,
+    hostname: &str,
+) -> Result<()> {
     for _ in 0..HEALTH_WAIT_ATTEMPTS {
-        if matches!(client.verify_health(credential).await, Ok(value) if value == hostname) {
+        if matches!(client.verify_health(ticket, credential).await, Ok(value) if value == hostname)
+        {
             return Ok(());
         }
         tokio::time::sleep(RETRY_DELAY).await;

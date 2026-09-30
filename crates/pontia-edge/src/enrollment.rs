@@ -36,8 +36,13 @@ pub trait EnrollmentClient {
 
 #[allow(async_fn_in_trait)]
 pub trait EdgeNetworkClient {
-    async fn configure_network(&self, credential: &str, candidate_ipv4: &str) -> Result<String>;
-    async fn verify_health(&self, credential: &str) -> Result<String>;
+    async fn configure_network(
+        &self,
+        ticket: &str,
+        credential: &str,
+        candidate_ipv4: &str,
+    ) -> Result<String>;
+    async fn verify_health(&self, ticket: &str, credential: &str) -> Result<String>;
 }
 
 pub struct HttpCloudClient {
@@ -83,6 +88,8 @@ struct EnrollmentRequest<'a> {
 
 #[derive(Serialize)]
 struct NetworkRequest<'a> {
+    ticket: &'a str,
+    service_credential: &'a str,
     candidate_ipv4: &'a str,
 }
 
@@ -135,12 +142,20 @@ impl EnrollmentClient for HttpCloudClient {
 }
 
 impl EdgeNetworkClient for HttpCloudClient {
-    async fn configure_network(&self, credential: &str, candidate_ipv4: &str) -> Result<String> {
+    async fn configure_network(
+        &self,
+        ticket: &str,
+        credential: &str,
+        candidate_ipv4: &str,
+    ) -> Result<String> {
         let response = self
             .client
             .post(self.endpoint("api/edge/network/configure")?)
-            .bearer_auth(credential)
-            .json(&NetworkRequest { candidate_ipv4 })
+            .json(&NetworkRequest {
+                ticket,
+                service_credential: credential,
+                candidate_ipv4,
+            })
             .send()
             .await
             .context("failed to request edge network configuration")?;
@@ -155,11 +170,14 @@ impl EdgeNetworkClient for HttpCloudClient {
             .hostname)
     }
 
-    async fn verify_health(&self, credential: &str) -> Result<String> {
+    async fn verify_health(&self, ticket: &str, credential: &str) -> Result<String> {
         let response = self
             .client
             .post(self.endpoint("api/edge/network/health")?)
-            .bearer_auth(credential)
+            .json(&EnrollmentRequest {
+                ticket,
+                service_credential: credential,
+            })
             .send()
             .await
             .context("failed to request public edge health verification")?;

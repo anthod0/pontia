@@ -52,13 +52,7 @@ async function unusedHeroName(db: Database, dependencies: DeploymentDependencies
       db
         .select({ id: edgeTickets.id })
         .from(edgeTickets)
-        .where(
-          and(
-            eq(edgeTickets.purpose, "edge_deployment"),
-            eq(edgeTickets.payload, payload),
-            gt(edgeTickets.expiresAt, databaseTimestamp),
-          ),
-        )
+        .where(and(eq(edgeTickets.purpose, "edge_deployment"), eq(edgeTickets.payload, payload)))
         .get(),
     ]);
     if (!edge && !ticket) return name;
@@ -98,12 +92,18 @@ export async function issueEdgeDeployment(
   };
 }
 
-export type EnrollmentResult =
-  | {
-      status: "created" | "existing";
-      edge: { edgeId: string; name: string; tunnelUrl: string };
-    }
-  | { status: "invalid" };
+export type DeploymentIdentity = { edgeId: string; name: string; tunnelUrl: string };
+
+type DeploymentAuthorization = {
+  ticketId: number;
+  ticketSecretHash: string;
+  userId: string;
+  identity: DeploymentIdentity;
+  payload: string;
+  serviceCredentialHash: string;
+};
+
+type StoredEdge = Awaited<ReturnType<typeof storedEdge>>;
 
 function storedEdge(db: Database, edgeId: string) {
   return db
@@ -120,36 +120,61 @@ function storedEdge(db: Database, edgeId: string) {
     .get();
 }
 
-export async function enrollEdge(
+function matchesDeployment(edge: StoredEdge, deployment: DeploymentAuthorization) {
+  return (
+    edge !== undefined &&
+    edge.edgeId === deployment.identity.edgeId &&
+    edge.userId === deployment.userId &&
+    edge.name === deployment.identity.name &&
+    edge.tunnelUrl === deployment.identity.tunnelUrl &&
+    edge.accessScope === "private" &&
+    edge.serviceCredentialHash === deployment.serviceCredentialHash
+  );
+}
+
+async function completedDeployment(db: Database, deployment: DeploymentAuthorization) {
+  const [edge, ticket] = await Promise.all([
+    storedEdge(db, deployment.identity.edgeId),
+    db
+      .select({ consumedAt: edgeTickets.consumedAt })
+      .from(edgeTickets)
+      .where(eq(edgeTickets.id, deployment.ticketId))
+      .get(),
+  ]);
+  return ticket?.consumedAt && matchesDeployment(edge, deployment) ? deployment.identity : null;
+}
+
+async function deploymentAuthorization(
   db: Database,
   ticketValue: string,
   credentialValue: string,
-): Promise<EnrollmentResult> {
+  includeConsumed: boolean,
+): Promise<{ deployment: DeploymentAuthorization; consumed: boolean } | null> {
   const ticket = parseEdgeTicket(ticketValue);
   const credential = parseEdgeCredential(credentialValue);
-  if (!ticket || !credential) return { status: "invalid" };
+  if (!ticket || !credential) return null;
 
-  const secretHash = await sha256Base64url(ticket.secret);
-  const serviceCredentialHash = await sha256Base64url(credential.secret);
+  const ticketSecretHash = await sha256Base64url(ticket.secret);
   const candidate = await db
     .select({
       id: edgeTickets.id,
       userId: edgeTickets.userId,
       expectedEdgeId: edgeTickets.expectedEdgeId,
       payload: edgeTickets.payload,
-      expiresAt: edgeTickets.expiresAt,
       consumedAt: edgeTickets.consumedAt,
     })
     .from(edgeTickets)
     .where(
       and(
-        eq(edgeTickets.secretHash, secretHash),
+        eq(edgeTickets.secretHash, ticketSecretHash),
         eq(edgeTickets.purpose, "edge_deployment"),
         eq(edgeTickets.expectedEdgeId, credential.edgeId),
+        includeConsumed ? undefined : isNull(edgeTickets.consumedAt),
+        includeConsumed ? undefined : gt(edgeTickets.expiresAt, databaseTimestamp),
       ),
     )
     .get();
-  if (!candidate) return { status: "invalid" };
+  if (!candidate) return null;
 
   let payload: DeploymentPayload | null;
   try {
@@ -157,35 +182,89 @@ export async function enrollEdge(
   } catch {
     payload = null;
   }
-  if (!payload) return { status: "invalid" };
+  if (!payload) return null;
 
-  const existing = await storedEdge(db, credential.edgeId);
-  const tunnelUrl = `wss://${payload.name}.edge.pontia.dev/tunnel`;
-  const isMatchingEdge = (edge: typeof existing): edge is NonNullable<typeof existing> =>
-    edge !== undefined &&
-    edge.userId === candidate.userId &&
-    edge.name === payload.name &&
-    edge.tunnelUrl === tunnelUrl &&
-    edge.accessScope === "private" &&
-    edge.serviceCredentialHash === serviceCredentialHash;
-  if (candidate.consumedAt !== null) {
-    if (isMatchingEdge(existing)) {
-      return {
-        status: "existing",
-        edge: { edgeId: existing.edgeId, name: existing.name, tunnelUrl: existing.tunnelUrl },
-      };
-    }
-    return { status: "invalid" };
+  return {
+    consumed: candidate.consumedAt !== null,
+    deployment: {
+      ticketId: candidate.id,
+      ticketSecretHash,
+      userId: candidate.userId,
+      identity: {
+        edgeId: credential.edgeId,
+        name: payload.name,
+        tunnelUrl: `wss://${payload.name}.edge.pontia.dev/tunnel`,
+      },
+      payload: candidate.payload,
+      serviceCredentialHash: await sha256Base64url(credential.secret),
+    },
+  };
+}
+
+export async function authorizeEdgeDeployment(
+  db: Database,
+  ticketValue: string,
+  credentialValue: string,
+): Promise<DeploymentIdentity | null> {
+  const authorized = await deploymentAuthorization(db, ticketValue, credentialValue, false);
+  return authorized?.deployment.identity ?? null;
+}
+
+export async function enrollEdge(
+  db: Database,
+  ticketValue: string,
+  credentialValue: string,
+): Promise<
+  { status: "authorized" | "existing"; edge: DeploymentIdentity } | { status: "invalid" }
+> {
+  const authorized = await deploymentAuthorization(db, ticketValue, credentialValue, true);
+  if (!authorized) return { status: "invalid" };
+  if (authorized.consumed) {
+    const existing = await completedDeployment(db, authorized.deployment);
+    return existing ? { status: "existing", edge: existing } : { status: "invalid" };
   }
-  if (existing) return { status: "invalid" };
+  const active = await authorizeEdgeDeployment(db, ticketValue, credentialValue);
+  if (active) return { status: "authorized", edge: active };
+  const existing = await completedDeployment(db, authorized.deployment);
+  return existing ? { status: "existing", edge: existing } : { status: "invalid" };
+}
+
+export type ConfirmationResult =
+  | { status: "created" | "existing"; edge: DeploymentIdentity }
+  | { status: "invalid" }
+  | { status: "unhealthy" };
+
+export async function confirmEdgeDeployment(
+  db: Database,
+  ticketValue: string,
+  credentialValue: string,
+  verifyHealth: (identity: DeploymentIdentity) => Promise<boolean>,
+): Promise<ConfirmationResult> {
+  const authorized = await deploymentAuthorization(db, ticketValue, credentialValue, true);
+  if (!authorized) return { status: "invalid" };
+  const { deployment } = authorized;
+  if (authorized.consumed) {
+    const existing = await completedDeployment(db, deployment);
+    return existing ? { status: "existing", edge: existing } : { status: "invalid" };
+  }
+
+  const existing = await storedEdge(db, deployment.identity.edgeId);
+  if (existing) {
+    const completed = await completedDeployment(db, deployment);
+    return completed ? { status: "existing", edge: completed } : { status: "invalid" };
+  }
+
+  const active = await authorizeEdgeDeployment(db, ticketValue, credentialValue);
+  if (!active) return { status: "invalid" };
+  if (!(await verifyHealth(active))) return { status: "unhealthy" };
 
   const condition = and(
-    eq(edgeTickets.id, candidate.id),
-    eq(edgeTickets.secretHash, secretHash),
+    eq(edgeTickets.id, deployment.ticketId),
+    eq(edgeTickets.secretHash, deployment.ticketSecretHash),
     eq(edgeTickets.purpose, "edge_deployment"),
-    eq(edgeTickets.userId, candidate.userId),
-    eq(edgeTickets.expectedEdgeId, credential.edgeId),
-    eq(edgeTickets.payload, candidate.payload),
+    eq(edgeTickets.userId, deployment.userId),
+    eq(edgeTickets.expectedEdgeId, deployment.identity.edgeId),
+    eq(edgeTickets.payload, deployment.payload),
     isNull(edgeTickets.consumedAt),
     gt(edgeTickets.expiresAt, databaseTimestamp),
   );
@@ -196,12 +275,12 @@ export async function enrollEdge(
         .select(
           db
             .select({
-              id: sql<string>`${credential.edgeId}`.as("id"),
+              id: sql<string>`${deployment.identity.edgeId}`.as("id"),
               userId: edgeTickets.userId,
               accessScope: sql<"private">`'private'`.as("access_scope"),
-              name: sql<string>`${payload.name}`.as("name"),
-              tunnelUrl: sql<string>`${tunnelUrl}`.as("tunnel_url"),
-              serviceCredentialHash: sql<string>`${serviceCredentialHash}`.as(
+              name: sql<string>`${deployment.identity.name}`.as("name"),
+              tunnelUrl: sql<string>`${deployment.identity.tunnelUrl}`.as("tunnel_url"),
+              serviceCredentialHash: sql<string>`${deployment.serviceCredentialHash}`.as(
                 "service_credential_hash",
               ),
               createdAt: databaseTimestamp.as("created_at"),
@@ -221,22 +300,9 @@ export async function enrollEdge(
       return { status: "created", edge: inserted[0] };
     }
   } catch {
-    // A concurrent identical request may have completed the atomic batch first.
+    // The batch rolls back on failure; an identical concurrent request may have won the race.
   }
 
-  const [retryEdge, retryTicket] = await Promise.all([
-    storedEdge(db, credential.edgeId),
-    db
-      .select({ consumedAt: edgeTickets.consumedAt })
-      .from(edgeTickets)
-      .where(eq(edgeTickets.id, candidate.id))
-      .get(),
-  ]);
-  if (retryTicket?.consumedAt && isMatchingEdge(retryEdge)) {
-    return {
-      status: "existing",
-      edge: { edgeId: retryEdge.edgeId, name: retryEdge.name, tunnelUrl: retryEdge.tunnelUrl },
-    };
-  }
-  return { status: "invalid" };
+  const completed = await completedDeployment(db, deployment);
+  return completed ? { status: "existing", edge: completed } : { status: "invalid" };
 }
