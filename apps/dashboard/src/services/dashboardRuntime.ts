@@ -1,9 +1,11 @@
 import { startEventStream, stopEventStream } from "./eventStream";
-import { loadAgentProfiles } from "../stores/agentProfiles";
-import { loadSessions } from "../stores/sessions";
-import { loadTasks } from "../stores/tasks";
-import { loadWorkspaces } from "../stores/workspaces";
-import { loadWorkflows } from "../stores/workflows";
+import { loadAgentProfiles, resetAgentProfiles } from "../stores/agentProfiles";
+import { resetConnectionState } from "../stores/connection";
+import { loadSessions, resetSessions } from "../stores/sessions";
+import { loadTasks, resetTasks } from "../stores/tasks";
+import { resetTimelineState } from "../stores/timeline";
+import { loadWorkspaces, resetWorkspaces } from "../stores/workspaces";
+import { loadWorkflows, resetWorkflows } from "../stores/workflows";
 
 export function startDashboardRuntime(): void {
   void Promise.all([
@@ -18,4 +20,14 @@ export function startDashboardRuntime(): void {
 
 export function stopDashboardRuntime(): void {
   stopEventStream();
+}
+
+export function clearDashboardRuntimeState(): void {
+  resetConnectionState();
+  resetTimelineState();
+  resetAgentProfiles();
+  resetSessions();
+  resetTasks();
+  resetWorkspaces();
+  resetWorkflows();
 }

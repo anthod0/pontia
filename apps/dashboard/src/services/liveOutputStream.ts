@@ -1,6 +1,8 @@
 import type { LiveOutputEvent } from "../lib/session-chat/liveOutput";
 import {
   apiCredentials,
+  apiSignal,
+  apiUrl,
   applyApiAuthentication,
   handleApiAuthenticationFailure,
 } from "$dashboard-mode/apiAccess";
@@ -28,11 +30,11 @@ export function openLiveOutputStream(
     controller = new AbortController();
     try {
       const response = await fetch(
-        `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/live-output/stream`,
+        apiUrl(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}/live-output/stream`),
         {
           headers,
           credentials: apiCredentials,
-          signal: controller.signal,
+          signal: apiSignal(controller.signal),
         },
       );
       if (stopped || controller.signal.aborted) return;

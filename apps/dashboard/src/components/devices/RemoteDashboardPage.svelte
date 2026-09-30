@@ -17,7 +17,8 @@
     state?: RemoteDashboardState;
     dashboard?: Snippet;
     onRetry?: () => void;
-    onReauthorize?: () => void;
+    unavailableMessage?: string | null;
+    reauthorizationUrl?: string;
   };
 
   let {
@@ -25,7 +26,8 @@
     state = 'connecting',
     dashboard,
     onRetry,
-    onReauthorize,
+    unavailableMessage,
+    reauthorizationUrl,
   }: Props = $props();
 
   const effectiveState = $derived(
@@ -79,7 +81,7 @@
                 <Card.Description>Your browser needs renewed access before it can connect to this device.</Card.Description>
               {:else if effectiveState === 'unavailable'}
                 <Card.Title role="heading" aria-level={1}>Device unavailable</Card.Title>
-                <Card.Description>The device is offline or temporarily unable to accept connections.</Card.Description>
+                <Card.Description>Pontia could not confirm access to this device.</Card.Description>
               {:else}
                 <Card.Title role="heading" aria-level={1}>Invalid device</Card.Title>
                 <Card.Description>This link does not contain a valid Pontia device handle.</Card.Description>
@@ -104,15 +106,17 @@
           {:else if effectiveState === 'authorization-required'}
             <p class="text-sm text-muted-foreground">Return to Pontia to authorize this browser again. No access credentials are entered on this page.</p>
           {:else if effectiveState === 'unavailable'}
-            <p class="text-sm text-muted-foreground">Check that Pontia is running on the target device, then try the connection again.</p>
+            <p class="text-sm text-muted-foreground">{unavailableMessage ?? 'Try confirming the device target again.'}</p>
           {:else}
             <p class="text-sm text-muted-foreground">Open the device from Pontia again or check that the complete link was copied.</p>
           {/if}
         </Card.Content>
 
-        {#if effectiveState === 'authorization-required' && onReauthorize}
+        {#if effectiveState === 'authorization-required' && reauthorizationUrl}
           <Card.Footer class="justify-end border-t border-border bg-muted/30 px-4 py-3">
-            <Button onclick={onReauthorize}>Authorize again</Button>
+            <form method="POST" action={reauthorizationUrl}>
+              <Button type="submit">Authorize again</Button>
+            </form>
           </Card.Footer>
         {:else if effectiveState === 'unavailable' && onRetry}
           <Card.Footer class="justify-end border-t border-border bg-muted/30 px-4 py-3">

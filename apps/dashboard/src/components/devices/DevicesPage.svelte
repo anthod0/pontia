@@ -11,7 +11,21 @@
     name: string;
   };
 
-  let { devices = [] }: { devices?: DeviceListItem[] } = $props();
+  type Props = {
+    devices?: DeviceListItem[];
+    loading?: boolean;
+    error?: string | null;
+    onRetry?: () => void;
+    openAction?: (handle: string) => string;
+  };
+
+  let {
+    devices = [],
+    loading = false,
+    error = null,
+    onRetry,
+    openAction,
+  }: Props = $props();
   const validDevices = $derived(devices.filter((device) => isValidDeviceHandle(device.handle)));
 </script>
 
@@ -30,7 +44,34 @@
       </Button>
     </header>
 
-    {#if validDevices.length}
+    {#if loading}
+      <Card.Root>
+        <Card.Content>
+          <Empty.Root class="min-h-72 border border-dashed border-border">
+            <Empty.Header>
+              <Empty.Media variant="icon"><DesktopTowerIcon /></Empty.Media>
+              <Empty.Title>Loading devices</Empty.Title>
+              <Empty.Description>Checking the devices available to your Pontia account.</Empty.Description>
+            </Empty.Header>
+          </Empty.Root>
+        </Card.Content>
+      </Card.Root>
+    {:else if error}
+      <Card.Root>
+        <Card.Content>
+          <Empty.Root class="min-h-72 border border-dashed border-border">
+            <Empty.Header>
+              <Empty.Media variant="icon"><DesktopTowerIcon /></Empty.Media>
+              <Empty.Title>Could not load devices</Empty.Title>
+              <Empty.Description>{error}</Empty.Description>
+            </Empty.Header>
+            {#if onRetry}
+              <Empty.Content><Button onclick={onRetry}>Try again</Button></Empty.Content>
+            {/if}
+          </Empty.Root>
+        </Card.Content>
+      </Card.Root>
+    {:else if validDevices.length}
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {#each validDevices as device (device.handle)}
           <Card.Root>
@@ -44,7 +85,11 @@
               </div>
             </Card.Header>
             <Card.Footer class="border-t border-border bg-muted/30 px-4 py-3">
-              <Button href={`/${device.handle}`} class="ml-auto">Open Dashboard</Button>
+              {#if openAction}
+                <form method="POST" action={openAction(device.handle)} class="ml-auto">
+                  <Button type="submit">Open Dashboard</Button>
+                </form>
+              {/if}
             </Card.Footer>
           </Card.Root>
         {/each}

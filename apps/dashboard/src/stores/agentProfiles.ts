@@ -14,6 +14,13 @@ function isAbortError(error: unknown): boolean {
 
 let listRequest = 0;
 
+export function resetAgentProfiles(): void {
+  listRequest += 1;
+  agentProfiles.set([]);
+  agentProfilesLoading.set(false);
+  agentProfilesError.set(null);
+}
+
 export async function loadAgentProfiles(
   includeArchived = false,
   options: ReadRequestOptions = {},

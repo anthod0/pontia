@@ -53,12 +53,18 @@ test("renders valid devices as handle-scoped dashboard links", () => {
         { handle, name: "Office Mac" },
         { handle: "2invalid_handle", name: "Invalid" },
       ],
+      openAction: (deviceHandle: string) =>
+        `https://pontia.dev/api/dashboard/devices/${deviceHandle}/bootstrap`,
     },
   });
 
-  expect(screen.getByRole("link", { name: "Open Dashboard" })).toHaveAttribute(
-    "href",
-    `/${handle}`,
+  expect(screen.getByRole("button", { name: "Open Dashboard" }).closest("form")).toHaveAttribute(
+    "action",
+    `https://pontia.dev/api/dashboard/devices/${handle}/bootstrap`,
+  );
+  expect(screen.getByRole("button", { name: "Open Dashboard" }).closest("form")).toHaveAttribute(
+    "method",
+    "POST",
   );
   expect(screen.getByText("Office Mac")).toBeInTheDocument();
   expect(screen.queryByText("Invalid")).not.toBeInTheDocument();
@@ -100,12 +106,19 @@ test("exposes retry and reauthorization actions without inventing credential han
   expect(onRetry).toHaveBeenCalledOnce();
   unavailable.unmount();
 
-  const onReauthorize = vi.fn();
   render(RemoteDashboardPage, {
-    props: { handle, state: "authorization-required", onReauthorize },
+    props: {
+      handle,
+      state: "authorization-required",
+      reauthorizationUrl: `https://pontia.dev/api/dashboard/devices/${handle}/bootstrap`,
+    },
   });
-  await fireEvent.click(screen.getByRole("button", { name: "Authorize again" }));
-  expect(onReauthorize).toHaveBeenCalledOnce();
+  const form = screen.getByRole("button", { name: "Authorize again" }).closest("form");
+  expect(form).toHaveAttribute(
+    "action",
+    `https://pontia.dev/api/dashboard/devices/${handle}/bootstrap`,
+  );
+  expect(form).toHaveAttribute("method", "POST");
 });
 
 test("does not read or persist a local token on a public page", () => {

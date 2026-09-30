@@ -71,6 +71,21 @@ let detailRequest: {
 } | null = null;
 let listRequest = 0;
 
+export function resetSessions(): void {
+  selectionGeneration += 1;
+  listRequest += 1;
+  detailRequest?.controller.abort();
+  detailRequest = null;
+  sessions.set([]);
+  sessionsLoading.set(false);
+  sessionsError.set(null);
+  selectedSessionId.set(null);
+  sessionDetail.set(null);
+  sessionDetailLoading.set(false);
+  sessionDetailError.set(null);
+  sessionDetailErrorKind.set(null);
+}
+
 export function selectSession(sessionId: string | null): void {
   if (get(selectedSessionId) === sessionId) return;
   selectionGeneration += 1;

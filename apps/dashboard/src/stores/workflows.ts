@@ -42,6 +42,20 @@ export async function loadWorkflows(options: LoadOptions = {}): Promise<Workflow
 let detailRequest = 0;
 let appliedDetailRequest = 0;
 
+export function resetWorkflows(): void {
+  listRequest += 1;
+  detailRequest += 1;
+  appliedDetailRequest = detailRequest;
+  workflows.set([]);
+  workflowsLoading.set(false);
+  workflowsError.set(null);
+  selectedWorkflowId.set(null);
+  selectedWorkflowHistorySessionIds.set([]);
+  workflowDetail.set(null);
+  workflowDetailLoading.set(false);
+  workflowDetailError.set(null);
+}
+
 export async function refreshWorkflow(
   workflowId: string,
   options: LoadOptions = {},

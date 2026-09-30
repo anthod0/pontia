@@ -1,5 +1,7 @@
 import {
   apiCredentials,
+  apiSignal,
+  apiUrl,
   applyApiAuthentication,
   handleApiAuthenticationFailure,
 } from "$dashboard-mode/apiAccess";
@@ -111,7 +113,11 @@ async function fetchWithTransientNetworkRetry(
 export async function validateExternalApiToken(candidateToken: string): Promise<void> {
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${candidateToken}`);
-  const response = await fetchWithTransientNetworkRetry(`${API_BASE}/auth/validate`, { headers });
+  const response = await fetchWithTransientNetworkRetry(apiUrl(`${API_BASE}/auth/validate`), {
+    headers,
+    credentials: apiCredentials,
+    signal: apiSignal(),
+  });
   const text = await response.text();
   let envelope: ApiEnvelope<unknown> | null = null;
   try {
@@ -146,10 +152,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
           fetchWithTransientNetworkRetry(input, init, () => {
             afterNetworkFailure = true;
           });
-  const response = await fetchRequest(`${API_BASE}${path}`, {
+  const response = await fetchRequest(apiUrl(`${API_BASE}${path}`), {
     ...options,
     headers,
     credentials: apiCredentials,
+    signal: apiSignal(options.signal),
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   const text = await response.text();

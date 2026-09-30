@@ -21,6 +21,19 @@ export const taskError = writable<string | null>(null);
 let listRequest = 0;
 let detailRequest = 0;
 
+export function resetTasks(): void {
+  listRequest += 1;
+  detailRequest += 1;
+  tasks.set([]);
+  tasksLoading.set(false);
+  tasksError.set(null);
+  selectedTaskId.set(null);
+  task.set(null);
+  taskEvents.set([]);
+  taskLoading.set(false);
+  taskError.set(null);
+}
+
 export async function loadTasks(): Promise<void> {
   const request = ++listRequest;
   tasksLoading.set(true);

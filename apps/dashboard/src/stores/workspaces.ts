@@ -33,6 +33,17 @@ function isAbortError(error: unknown): boolean {
 
 let workspaceListRequest = 0;
 
+export function resetWorkspaces(): void {
+  workspaceListRequest += 1;
+  workspaces.set([]);
+  workspacesLoading.set(false);
+  workspacesInitialized.set(false);
+  workspacesError.set(null);
+  workspaceRoots.set([]);
+  workspaceGitStatuses.set({});
+  workspaceGitStatusErrors.set({});
+}
+
 export async function loadWorkspaces(options: ReadRequestOptions = {}): Promise<void> {
   const request = ++workspaceListRequest;
   workspacesLoading.set(true);
