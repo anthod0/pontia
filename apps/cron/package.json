@@ -1,0 +1,22 @@
+{
+  "name": "@pontia/cron",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "module": "src/index.ts",
+  "scripts": {
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "check": "tsc --noEmit && wrangler deploy --dry-run",
+    "test": "bun test tests",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260927.1",
+    "@types/bun": "latest",
+    "miniflare": "5.20260926.0-alpha",
+    "oxfmt": "^0.70.0",
+    "typescript": "6.0.3",
+    "wrangler": "^4.97.0"
+  }
+}

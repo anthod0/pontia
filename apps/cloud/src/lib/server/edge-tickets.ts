@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, lte, ne, type SQL, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, type SQL, sql } from "drizzle-orm";
 import { base64url } from "jose";
 import { sha256Base64url } from "./crypto";
 import type { Database } from "./db";
@@ -68,7 +68,6 @@ export async function issueEdgeTicket<T>(
     expiresAt: input.expiresAt.toISOString(),
     createdAt: (input.createdAt ?? dependencies.now()).toISOString(),
   });
-  await cleanupExpiredEdgeTickets(db, dependencies.now());
 
   return `${TICKET_PREFIX}${secret}`;
 }
@@ -152,15 +151,4 @@ export async function consumeEdgeTicket<T>(
     .get();
 
   return consumed ? ticket : null;
-}
-
-export async function cleanupExpiredEdgeTickets(db: Database, now = new Date()) {
-  await db
-    .delete(edgeTickets)
-    .where(
-      and(
-        ne(edgeTickets.purpose, "edge_deployment"),
-        lte(edgeTickets.expiresAt, now.toISOString()),
-      ),
-    );
 }

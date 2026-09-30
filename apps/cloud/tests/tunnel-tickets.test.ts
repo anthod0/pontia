@@ -224,7 +224,7 @@ test("concurrent redemption consumes a ticket at most once", async () => {
   expect(results.filter((result) => result !== null)).toEqual([{ deviceId }]);
 });
 
-test("issuing removes expired edge ticket records", async () => {
+test("issuing does not clean up unrelated expired edge ticket records", async () => {
   await seedTicketFixture();
   await database.db.insert(edgeTickets).values({
     purpose: "device_tunnel",
@@ -243,5 +243,5 @@ test("issuing removes expired edge ticket records", async () => {
       .from(edgeTickets)
       .where(eq(edgeTickets.secretHash, "expired-hash"))
       .get(),
-  ).toBeUndefined();
+  ).toBeDefined();
 });

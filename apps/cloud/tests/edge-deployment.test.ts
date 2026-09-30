@@ -10,7 +10,6 @@ import {
   issueEdgeDeployment,
   type DeploymentDependencies,
 } from "../src/lib/server/edge-deployment";
-import { cleanupExpiredEdgeTickets } from "../src/lib/server/edge-tickets";
 import { testDatabase } from "./database";
 
 const database = testDatabase();
@@ -240,25 +239,13 @@ test("a failed registration batch does not consume the deployment ticket", async
   expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();
 });
 
-test("expired deployment records survive cleanup and reserve their DNS names", async () => {
+test("expired deployment records reserve their DNS names until cron deletes them", async () => {
   await issuedDeployment();
   await database.db
     .update(edgeTickets)
     .set({ expiresAt: "2000-01-01T00:00:00.000Z" })
     .where(eq(edgeTickets.purpose, "edge_deployment"));
-  await database.db.insert(edgeTickets).values({
-    purpose: "dashboard_access",
-    secretHash: "expired-dashboard-ticket",
-    userId: "user-owner",
-    expectedEdgeId: edgeId,
-    payload: "{}",
-    expiresAt: "2000-01-01T00:00:00.000Z",
-  });
 
-  await cleanupExpiredEdgeTickets(database.db, now);
-
-  expect(await database.db.select().from(edgeTickets)).toHaveLength(1);
-  expect((await database.db.select().from(edgeTickets).get())?.purpose).toBe("edge_deployment");
   await expect(
     issueEdgeDeployment(database.db, "user-owner", "https://pontia.example", dependencies()),
   ).rejects.toThrow("Unable to allocate an edge name");
