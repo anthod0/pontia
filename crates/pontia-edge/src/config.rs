@@ -7,11 +7,24 @@ use serde::{Deserialize, Serialize};
 use crate::files::atomic_write;
 
 pub const CONFIG_PATH: &str = "/etc/pontia/edge/config.json";
+pub const DATABASE_PATH: &str = "/etc/pontia/edge/edge.sqlite3";
+
+fn default_bootstrap_origin() -> String {
+    "https://pontia.dev".to_owned()
+}
+
+fn default_dashboard_origin() -> String {
+    "https://app.pontia.dev".to_owned()
+}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ServiceConfig {
     pub website_origin: String,
     pub hostname: String,
+    #[serde(default = "default_bootstrap_origin")]
+    pub browser_bootstrap_origin: String,
+    #[serde(default = "default_dashboard_origin")]
+    pub browser_dashboard_origin: String,
 }
 
 impl ServiceConfig {
@@ -33,8 +46,26 @@ impl ServiceConfig {
             origin.scheme() == "https" && origin.path() == "/",
             "configured Website origin is invalid"
         );
+        validate_browser_origin(&config.browser_bootstrap_origin)?;
+        validate_browser_origin(&config.browser_dashboard_origin)?;
         Ok(config)
     }
+}
+
+fn validate_browser_origin(value: &str) -> Result<()> {
+    let origin = Url::parse(value).context("configured browser origin is invalid")?;
+    anyhow::ensure!(
+        matches!(origin.scheme(), "http" | "https")
+            && origin.host_str().is_some()
+            && origin.username().is_empty()
+            && origin.password().is_none()
+            && origin.path() == "/"
+            && origin.query().is_none()
+            && origin.fragment().is_none()
+            && origin.as_str().strip_suffix('/') == Some(value),
+        "configured browser origin is invalid"
+    );
+    Ok(())
 }
 
 pub fn hostname_from_tunnel_url(tunnel_url: &str) -> Result<String> {

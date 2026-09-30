@@ -9,10 +9,10 @@ use anyhow::{Context, Result};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::{Args, Parser, Subcommand};
 use pontia_edge::{
-    ConnectionLimits, Edge, TicketRedeemer,
+    BrowserAccess, BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer,
     acme::{ACCOUNT_PATH, InstantAcmeIssuer, TLS_PATH, issue_and_save},
     challenge::ChallengeServer,
-    config::{CONFIG_PATH, ServiceConfig, hostname_from_tunnel_url},
+    config::{CONFIG_PATH, DATABASE_PATH, ServiceConfig, hostname_from_tunnel_url},
     credential::{CREDENTIAL_PATH, ensure_managed_directory, ensure_root, read_edge_credential},
     enrollment::{
         EdgeNetworkClient, HttpWebsiteClient, InitializationResult, initialize_and_enroll,
@@ -106,6 +106,8 @@ async fn init(args: InitArgs) -> Result<()> {
     let expected_config = ServiceConfig {
         website_origin: args.website_origin,
         hostname: hostname.clone(),
+        browser_bootstrap_origin: "https://pontia.dev".to_owned(),
+        browser_dashboard_origin: "https://app.pontia.dev".to_owned(),
     };
     let reusable_certificate = existing_certificate_matches(&expected_config).await;
     let systemd = Systemd::default();
@@ -236,8 +238,15 @@ async fn serve() -> Result<()> {
     let service_credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?.value;
     let tls = RustlsConfig::from_pem_file(TLS_PATH, TLS_PATH).await?;
     let challenge_server = ChallengeServer::start("0.0.0.0:80".parse().unwrap()).await?;
+    let access = BrowserAccess::open(Path::new(DATABASE_PATH)).await?;
+    let origins = BrowserOrigins {
+        bootstrap: config.browser_bootstrap_origin.clone(),
+        dashboard: config.browser_dashboard_origin.clone(),
+    };
     let edge = Edge::new(
         TicketRedeemer::new(&config.website_origin, service_credential)?,
+        access,
+        origins,
         ConnectionLimits::default(),
     );
     let handle = axum_server::Handle::<SocketAddr>::new();

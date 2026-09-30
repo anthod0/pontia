@@ -1,6 +1,3 @@
-# Edge database
-
-```sql
 CREATE TABLE browser_device_access (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     secret_hash BLOB NOT NULL,
@@ -13,4 +10,3 @@ CREATE UNIQUE INDEX idx_browser_device_access_secret_device
 
 CREATE INDEX idx_browser_device_access_expires_at
     ON browser_device_access (expires_at);
-```
