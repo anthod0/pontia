@@ -3,13 +3,9 @@
   import { get } from 'svelte/store';
   import AuthGate from '../../components/auth/AuthGate.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
-  import { startEventStream, stopEventStream } from '../../services/eventStream';
-  import { loadAgentProfiles } from '../../stores/agentProfiles';
+  import { startEventStream } from '../../services/eventStream';
+  import { startDashboardRuntime, stopDashboardRuntime } from '../../services/dashboardRuntime';
   import { consumeTokenFromUrl, loadTokenFromStorage, token } from '$dashboard-mode/auth';
-  import { loadSessions } from '../../stores/sessions';
-  import { loadTasks } from '../../stores/tasks';
-  import { loadWorkspaces } from '../../stores/workspaces';
-  import { loadWorkflows } from '../../stores/workflows';
 
   let { children, handle: _handle }: { children: Snippet; handle?: string } = $props();
   let unsubscribeToken: (() => void) | null = null;
@@ -18,8 +14,7 @@
   let authenticatedToken = $state(get(token).trim());
 
   function startDashboard(): void {
-    void Promise.all([loadTasks(), loadWorkspaces(), loadAgentProfiles(), loadSessions(), loadWorkflows({ showLoading: false })]);
-    startEventStream();
+    startDashboardRuntime();
     dashboardStarted = true;
   }
 
@@ -31,7 +26,7 @@
       authenticatedToken = trimmed;
       if (!trimmed) {
         if (dashboardStarted) {
-          stopEventStream();
+          stopDashboardRuntime();
           dashboardStarted = false;
         }
         return;
@@ -41,7 +36,7 @@
         return;
       }
       if (trimmed !== previousToken) {
-        stopEventStream();
+        stopDashboardRuntime();
         startEventStream();
       }
     });
@@ -49,7 +44,7 @@
 
   onDestroy(() => {
     unsubscribeToken?.();
-    stopEventStream();
+    stopDashboardRuntime();
   });
 </script>
 

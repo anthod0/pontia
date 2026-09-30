@@ -1,6 +1,11 @@
 import { get } from "svelte/store";
 import type { DashboardStreamEvent } from "../api/types";
-import { token } from "$dashboard-mode/auth";
+import {
+  apiCredentials,
+  apiStreamUnavailableMessage,
+  applyApiAuthentication,
+  handleApiAuthenticationFailure,
+} from "$dashboard-mode/apiAccess";
 import {
   dashboardStreamCursor,
   lastConnectionError,
@@ -129,10 +134,10 @@ export function startEventStream(): void {
 
 async function connect(streamGeneration: number): Promise<void> {
   if (!started || streamGeneration !== generation) return;
-  const bearer = get(token).trim();
-  if (!bearer) {
+  const headers = new Headers();
+  if (!applyApiAuthentication(headers)) {
     sseStatus.set("idle");
-    lastConnectionError.set("Set an API token in Settings to open the dashboard event stream.");
+    lastConnectionError.set(apiStreamUnavailableMessage);
     started = false;
     detachLifecycleListeners();
     streamedSessionId.set(null);
@@ -148,7 +153,8 @@ async function connect(streamGeneration: number): Promise<void> {
     const after = get(dashboardStreamCursor);
     const query = after ? `?after=${encodeURIComponent(after)}` : "";
     const response = await fetch(`${API_BASE}/dashboard/events/stream${query}`, {
-      headers: { Authorization: `Bearer ${bearer}` },
+      headers,
+      credentials: apiCredentials,
       signal: localController.signal,
     });
 
@@ -156,7 +162,7 @@ async function connect(streamGeneration: number): Promise<void> {
 
     if (!response.ok || !response.body) {
       if (isAuthenticationFailure(response.status)) {
-        token.set("");
+        handleApiAuthenticationFailure();
         stopEventStream();
         return;
       }

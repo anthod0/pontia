@@ -1,5 +1,8 @@
-import { get } from "svelte/store";
-import { token } from "$dashboard-mode/auth";
+import {
+  apiCredentials,
+  applyApiAuthentication,
+  handleApiAuthenticationFailure,
+} from "$dashboard-mode/apiAccess";
 import { ApiError } from "./errors";
 import type {
   AgentProfileView,
@@ -127,8 +130,7 @@ export async function validateExternalApiToken(candidateToken: string): Promise<
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
-  const bearer = get(token).trim();
-  if (bearer) headers.set("Authorization", `Bearer ${bearer}`);
+  applyApiAuthentication(headers);
   if (options.body !== undefined) headers.set("Content-Type", "application/json");
   if (
     (options.mutating || (options.method && options.method !== "GET")) &&
@@ -147,6 +149,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const response = await fetchRequest(`${API_BASE}${path}`, {
     ...options,
     headers,
+    credentials: apiCredentials,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   const text = await response.text();
@@ -157,7 +160,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw new ApiError(text || response.statusText, "invalid_json", response.status);
   }
   if (!response.ok || envelope?.error) {
-    if (isAuthenticationFailure(response.status)) token.set("");
+    if (isAuthenticationFailure(response.status)) handleApiAuthenticationFailure();
     throw new ApiError(
       envelope?.error?.message ?? response.statusText,
       envelope?.error?.code ?? "request_failed",

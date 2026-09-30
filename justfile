@@ -10,6 +10,9 @@ dev-backend:
 dev-dashboard:
     bun run --cwd apps/dashboard dev
 
+dev-dashboard-public:
+    VITE_DASHBOARD_MODE=public bun run --cwd apps/dashboard dev
+
 dev-website:
     bun run --cwd apps/website dev
 

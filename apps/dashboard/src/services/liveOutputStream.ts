@@ -1,6 +1,9 @@
-import { get } from "svelte/store";
 import type { LiveOutputEvent } from "../lib/session-chat/liveOutput";
-import { token } from "$dashboard-mode/auth";
+import {
+  apiCredentials,
+  applyApiAuthentication,
+  handleApiAuthenticationFailure,
+} from "$dashboard-mode/apiAccess";
 import { isAuthenticationFailure } from "../api/client";
 
 const API_BASE = "/api/v1";
@@ -20,21 +23,22 @@ export function openLiveOutputStream(
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   const connect = async () => {
-    const bearer = get(token).trim();
-    if (stopped || !bearer) return;
+    const headers = new Headers();
+    if (stopped || !applyApiAuthentication(headers)) return;
     controller = new AbortController();
     try {
       const response = await fetch(
         `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/live-output/stream`,
         {
-          headers: { Authorization: `Bearer ${bearer}` },
+          headers,
+          credentials: apiCredentials,
           signal: controller.signal,
         },
       );
       if (stopped || controller.signal.aborted) return;
       if (!response.ok || !response.body) {
         if (isAuthenticationFailure(response.status)) {
-          token.set("");
+          handleApiAuthenticationFailure();
           return;
         }
         throw new Error(`Live output stream failed: ${response.status} ${response.statusText}`);
