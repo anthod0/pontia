@@ -1,6 +1,6 @@
 {
   "name": "@pontia/pi-client-plugin",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Pi extension that connects coding-agent sessions to Pontia.",
   "keywords": [
     "pi-package",
