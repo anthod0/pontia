@@ -1,6 +1,7 @@
 import { isValidDeviceHandle } from "$lib/remoteDashboard";
 
 const CLOUD_ORIGIN = "https://pontia.dev";
+const PUBLIC_DASHBOARD_ORIGIN = "https://app.pontia.dev";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const EDGE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.edge\.pontia\.dev$/;
 
@@ -128,6 +129,16 @@ export async function resolvePublicDeviceTarget(
     deviceId: value.device_id,
     edgeApiOrigin: parseEdgeOrigin(value.edge_api_origin),
   };
+}
+
+export function dashboardSignInUrl(returnPath: string): string {
+  const destination = new URL(returnPath, PUBLIC_DASHBOARD_ORIGIN);
+  if (destination.origin !== PUBLIC_DASHBOARD_ORIGIN) {
+    throw new Error("Invalid dashboard return path.");
+  }
+  const login = new URL("/login", CLOUD_ORIGIN);
+  login.searchParams.set("return_to", destination.href);
+  return login.href;
 }
 
 export function dashboardBootstrapUrl(handle: string): string {

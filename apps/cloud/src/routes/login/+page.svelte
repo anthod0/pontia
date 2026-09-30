@@ -7,6 +7,9 @@
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	const message = $derived(authError(data.error));
+	const returnToQuery = $derived(
+		data.returnTo ? `?return_to=${encodeURIComponent(data.returnTo)}` : ''
+	);
 </script>
 
 <svelte:head
@@ -21,12 +24,12 @@
 	<p>Sign in or create your account to get started.</p>
 	{#if message}<p class="auth-error" role="alert">{message}</p>{/if}
 	<div class="providers">
-		<form method="POST" action="/api/auth/google/login">
+		<form method="POST" action={`/api/auth/google/login${returnToQuery}`}>
 			<Button type="submit" class="button button-secondary"
 				><GoogleLogoIcon size={20} />Continue with Google</Button
 			>
 		</form>
-		<form method="POST" action="/api/auth/github/login">
+		<form method="POST" action={`/api/auth/github/login${returnToQuery}`}>
 			<Button type="submit" class="button button-secondary"
 				><GithubLogoIcon size={20} />Continue with GitHub</Button
 			>

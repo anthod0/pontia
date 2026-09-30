@@ -7,6 +7,7 @@
   import { clearPublicApiTarget, setPublicApiTarget } from './apiTarget';
   import {
     dashboardBootstrapUrl,
+    dashboardSignInUrl,
     listPublicDevices,
     resolvePublicDeviceTarget,
     CloudRequestError,
@@ -18,9 +19,14 @@
   let runtimeHandle = $state<string | null>(null);
   let failedHandle = $state<string | null>(null);
   let targetFailureMessage = $state<string | null>(null);
+  let targetSignInRequired = $state(false);
   let devices = $state<PublicDevice[]>([]);
   let devicesLoading = $state(false);
   let devicesError = $state<string | null>(null);
+  let devicesSignInRequired = $state(false);
+  const signInUrl = dashboardSignInUrl(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+  );
 
   const dashboardState = $derived.by((): RemoteDashboardState => {
     if (!handle) return 'invalid';
@@ -43,8 +49,11 @@
   }
 
   function cloudFailureMessage(error: unknown, operation: 'list' | 'target'): string {
-    if (error instanceof CloudRequestError && [401, 403].includes(error.status ?? 0)) {
-      return 'Sign in to Pontia again, then retry.';
+    if (error instanceof CloudRequestError && error.status === 401) {
+      return 'Sign in to Pontia to continue.';
+    }
+    if (error instanceof CloudRequestError && error.status === 403) {
+      return 'Pontia refused this Dashboard request.';
     }
     if (error instanceof CloudRequestError) {
       return operation === 'list'
@@ -66,12 +75,16 @@
     const controller = new AbortController();
     devicesLoading = true;
     devicesError = null;
+    devicesSignInRequired = false;
     void listPublicDevices(controller.signal)
       .then((loaded) => {
         if (!controller.signal.aborted) devices = loaded;
       })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted) devicesError = cloudFailureMessage(error, 'list');
+        if (!controller.signal.aborted) {
+          devicesError = cloudFailureMessage(error, 'list');
+          devicesSignInRequired = error instanceof CloudRequestError && error.status === 401;
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) devicesLoading = false;
@@ -87,6 +100,7 @@
     teardownRuntime();
     failedHandle = null;
     targetFailureMessage = null;
+    targetSignInRequired = false;
     if (!isValidDeviceHandle(requestedHandle)) return;
 
     if (import.meta.env.DEV && import.meta.env.MODE === 'development') {
@@ -107,6 +121,7 @@
         if (controller.signal.aborted || handle !== requestedHandle) return;
         failedHandle = requestedHandle;
         targetFailureMessage = cloudFailureMessage(error, 'target');
+        targetSignInRequired = error instanceof CloudRequestError && error.status === 401;
       });
 
     return () => {
@@ -123,6 +138,7 @@
     onRetry={retry}
     unavailableMessage={targetFailureMessage}
     reauthorizationUrl={isValidDeviceHandle(handle) ? dashboardBootstrapUrl(handle) : undefined}
+    signInUrl={targetSignInRequired ? signInUrl : undefined}
   >
     {#snippet dashboard()}
       {@render children()}
@@ -135,5 +151,6 @@
     error={devicesError}
     onRetry={retry}
     openAction={dashboardBootstrapUrl}
+    signInUrl={devicesSignInRequired ? signInUrl : undefined}
   />
 {/if}

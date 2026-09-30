@@ -13,6 +13,7 @@ import {
 } from "./identity";
 import { issueLogin, signedLogin, verifyLogin } from "./jwt";
 import { beginOAuth, exchangeAccount, OAUTH_SECONDS, readOAuth } from "./oauth";
+import { normalizeLoginReturnTo } from "./return-to";
 import { issuePendingAccount, PENDING_ACCOUNT_SECONDS, readPendingAccount } from "./pending";
 import { AuthError, type Provider } from "./types";
 
@@ -45,13 +46,12 @@ export function origin(event: RequestEvent) {
   return configured;
 }
 
-function deviceReturnPath(event: RequestEvent) {
+export function loginReturnTo(event: RequestEvent) {
   const value = event.url.searchParams.get("return_to");
   if (!value) return undefined;
-  const destination = new URL(value, origin(event));
-  if (destination.origin !== origin(event) || destination.pathname !== "/device")
-    error(400, "Invalid sign-in destination");
-  return `${destination.pathname}${destination.search}`;
+  const destination = normalizeLoginReturnTo(value, origin(event));
+  if (!destination) error(400, "Invalid sign-in destination");
+  return destination;
 }
 
 function sameOriginPost(event: RequestEvent) {
@@ -100,7 +100,7 @@ export async function startLogin(event: RequestEvent) {
     environment(event),
     selected,
     `${origin(event)}/api/auth/${selected}/callback`,
-    { kind: "login", returnTo: deviceReturnPath(event) },
+    { kind: "login", returnTo: loginReturnTo(event) },
   );
   event.cookies.set(OAUTH_COOKIE, result.cookie, {
     ...cookieOptions,

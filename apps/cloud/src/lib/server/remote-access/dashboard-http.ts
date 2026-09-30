@@ -1,9 +1,10 @@
 import { json, type RequestEvent } from "@sveltejs/kit";
 import { currentLogin } from "../auth/http";
 import { activeLogin } from "../auth/identity";
+import { PUBLIC_DASHBOARD_ORIGIN } from "../auth/return-to";
 import { remoteDatabase } from "./http";
 
-export const PUBLIC_DASHBOARD_ORIGIN = "https://app.pontia.dev";
+export { PUBLIC_DASHBOARD_ORIGIN } from "../auth/return-to";
 export const CLOUD_ORIGIN = "https://pontia.dev";
 
 function corsHeaders(): Headers {

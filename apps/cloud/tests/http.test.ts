@@ -183,6 +183,40 @@ test("device login returns to the confirmation page after provider authenticatio
   ).toBe(returnTo);
 });
 
+test("Dashboard login returns to the exact public Dashboard URL", async () => {
+  providerResponses();
+  const client = browser();
+  const returnTo = "https://app.pontia.dev/office-mac/workspaces?view=recent#active";
+  const authUrl = new URL(
+    await location(
+      startLogin(client.event(`/api/auth/google/login?return_to=${encodeURIComponent(returnTo)}`)),
+    ),
+  );
+  expect(
+    await location(
+      callback(
+        client.event(
+          `/api/auth/google/callback?code=code&state=${authUrl.searchParams.get("state")}`,
+          "GET",
+        ),
+      ),
+    ),
+  ).toBe(returnTo);
+});
+
+test("login rejects return destinations outside the device flow and public Dashboard", async () => {
+  const client = browser();
+  for (const returnTo of [
+    "https://attacker.example/path",
+    "https://user@app.pontia.dev/path",
+    "/account",
+  ]) {
+    await expect(
+      startLogin(client.event(`/api/auth/google/login?return_to=${encodeURIComponent(returnTo)}`)),
+    ).rejects.toMatchObject({ status: 400 });
+  }
+});
+
 test("verified email conflict verifies the existing subject, links, logs in, and preserves the device return", async () => {
   const originalId = await login(database.db, {
     provider: "google",

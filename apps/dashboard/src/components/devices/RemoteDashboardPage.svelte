@@ -19,6 +19,7 @@
     onRetry?: () => void;
     unavailableMessage?: string | null;
     reauthorizationUrl?: string;
+    signInUrl?: string;
   };
 
   let {
@@ -28,6 +29,7 @@
     onRetry,
     unavailableMessage,
     reauthorizationUrl,
+    signInUrl,
   }: Props = $props();
 
   const effectiveState = $derived(
@@ -117,6 +119,10 @@
             <form method="POST" action={reauthorizationUrl}>
               <Button type="submit">Authorize again</Button>
             </form>
+          </Card.Footer>
+        {:else if effectiveState === 'unavailable' && signInUrl}
+          <Card.Footer class="justify-end border-t border-border bg-muted/30 px-4 py-3">
+            <Button href={signInUrl}>Sign in</Button>
           </Card.Footer>
         {:else if effectiveState === 'unavailable' && onRetry}
           <Card.Footer class="justify-end border-t border-border bg-muted/30 px-4 py-3">

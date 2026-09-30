@@ -13,6 +13,13 @@ const profile: AccountProfile = {
   avatarUrl: null,
 };
 
+test("pending account state preserves an allowed public Dashboard return", async () => {
+  const returnTo = "https://app.pontia.dev/office-mac/workspaces?view=recent";
+  const pending = await issuePendingAccount(secret, profile, "target-account", returnTo, now);
+
+  expect(await readPendingAccount(secret, pending.token, now)).toMatchObject({ returnTo });
+});
+
 test("pending account state is encrypted, authenticated, and expires after five minutes", async () => {
   const pending = await issuePendingAccount(
     secret,

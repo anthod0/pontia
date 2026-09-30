@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   dashboardBootstrapUrl,
+  dashboardSignInUrl,
   listPublicDevices,
   resolvePublicDeviceTarget,
 } from "../src/modes/public/remoteAccess";
@@ -129,6 +130,15 @@ describe("target validation", () => {
     );
     await expect(resolvePublicDeviceTarget(handle)).rejects.toThrow("invalid device target");
   });
+});
+
+test("constructs a Cloud sign-in URL that returns only to the public Dashboard", () => {
+  expect(dashboardSignInUrl(`/${handle}/workspaces?view=recent#active`)).toBe(
+    `https://pontia.dev/login?return_to=${encodeURIComponent(`https://app.pontia.dev/${handle}/workspaces?view=recent#active`)}`,
+  );
+  expect(() => dashboardSignInUrl("//attacker.example/path")).toThrow(
+    "Invalid dashboard return path",
+  );
 });
 
 test("constructs fixed bootstrap and edge proxy paths without bearer authentication", () => {

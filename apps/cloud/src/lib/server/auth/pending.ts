@@ -1,5 +1,6 @@
 import { base64url, EncryptJWT, jwtDecrypt } from "jose";
 import type { AccountProfile, Provider } from "./types";
+import { isValidLoginReturnTo } from "./return-to";
 import { AuthError } from "./types";
 
 export interface PendingAccountLink {
@@ -31,13 +32,6 @@ function isProvider(value: unknown): value is Provider {
 
 function nullableText(value: unknown): value is string | null {
   return value === null || typeof value === "string";
-}
-
-function validReturnTo(value: unknown): value is string | undefined {
-  if (value === undefined) return true;
-  if (typeof value !== "string") return false;
-  const url = new URL(value, "https://pending.invalid");
-  return url.origin === "https://pending.invalid" && url.pathname === "/device";
 }
 
 export async function issuePendingAccount(
@@ -93,7 +87,7 @@ export async function readPendingAccount(
       !nullableText(profile.avatarUrl) ||
       typeof payload.targetAccountId !== "string" ||
       !payload.targetAccountId ||
-      !validReturnTo(payload.returnTo) ||
+      !isValidLoginReturnTo(payload.returnTo) ||
       typeof payload.jti !== "string" ||
       !payload.jti ||
       !Number.isSafeInteger(payload.iat) ||

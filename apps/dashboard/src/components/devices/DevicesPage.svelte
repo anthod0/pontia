@@ -17,6 +17,7 @@
     error?: string | null;
     onRetry?: () => void;
     openAction?: (handle: string) => string;
+    signInUrl?: string;
   };
 
   let {
@@ -25,6 +26,7 @@
     error = null,
     onRetry,
     openAction,
+    signInUrl,
   }: Props = $props();
   const validDevices = $derived(devices.filter((device) => isValidDeviceHandle(device.handle)));
 </script>
@@ -65,7 +67,9 @@
               <Empty.Title>Could not load devices</Empty.Title>
               <Empty.Description>{error}</Empty.Description>
             </Empty.Header>
-            {#if onRetry}
+            {#if signInUrl}
+              <Empty.Content><Button href={signInUrl}>Sign in</Button></Empty.Content>
+            {:else if onRetry}
               <Empty.Content><Button onclick={onRetry}>Try again</Button></Empty.Content>
             {/if}
           </Empty.Root>

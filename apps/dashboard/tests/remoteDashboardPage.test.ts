@@ -46,6 +46,16 @@ test("renders the public device list empty state", () => {
   expect(screen.queryByLabelText(/bearer token/i)).not.toBeInTheDocument();
 });
 
+test("renders a sign-in action when loading devices requires authentication", () => {
+  const signInUrl = "https://pontia.dev/login?return_to=https%3A%2F%2Fapp.pontia.dev%2F";
+  render(DevicesPage, {
+    props: { error: "Sign in to Pontia to continue.", signInUrl },
+  });
+
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", signInUrl);
+  expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+});
+
 test("renders valid devices as handle-scoped dashboard links", () => {
   render(DevicesPage, {
     props: {
@@ -119,6 +129,22 @@ test("exposes retry and reauthorization actions without inventing credential han
     `https://pontia.dev/api/dashboard/devices/${handle}/bootstrap`,
   );
   expect(form).toHaveAttribute("method", "POST");
+});
+
+test("offers sign-in instead of retry when a device target requires authentication", () => {
+  const signInUrl = `https://pontia.dev/login?return_to=${encodeURIComponent(`https://app.pontia.dev/${handle}`)}`;
+  render(RemoteDashboardPage, {
+    props: {
+      handle,
+      state: "unavailable",
+      unavailableMessage: "Sign in to Pontia to continue.",
+      signInUrl,
+      onRetry: vi.fn(),
+    },
+  });
+
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", signInUrl);
+  expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
 });
 
 test("does not read or persist a local token on a public page", () => {
