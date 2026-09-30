@@ -7,6 +7,8 @@ apps/web/dist/
 /data/
 /ref/
 .env
+.env.*
+!.env.example
 *.db
 *.db-shm
 *.db-wal
